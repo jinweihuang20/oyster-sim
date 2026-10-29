@@ -56,3 +56,4 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 #ppop{position:fixed;left:50%;bottom:calc(18% + 70px);transform:translateX(-50%);font-size:26px;font-weight:800;pointer-events:none;opacity:0;text-shadow:0 2px 4px #000}
 #ppop.ok{color:#b8ff8a;animation:pp .8s ease-out}#ppop.bad{color:#bbb;animation:pp .6s ease-out}
 @keyframes pp{0%{opacity:1;transform:translateX(-50%) scale(1.4)}20%{transform:translateX(-50%) scale(1)}70%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-20px)}}
+@media (max-width:600px){#hint{bottom:auto;top:84px;font-size:13px;padding:0 10px;box-sizing:border-box}}

@@ -184,10 +184,10 @@ const leanFaces: THREE.Group[] = [];
 for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x2a7a5a : 0xb04050, s < 0 ? 0x333333 : 0xcccccc).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
-type Mix = { master: number; amb: number; sfx: number; mute: boolean ; gore: boolean; sens: number; invX: boolean; invY: boolean };
-const mix: Mix = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, gore: true, sens: 1, invX: false, invY: false, ...JSON.parse(localStorage.getItem('oyster-mix') || '{}') };
-let ac: AudioContext | null = null, masterG: GainNode, ambG: GainNode, sfxG: GainNode;
-function applyMix() { if (!ac) return; masterG.gain.value = mix.mute ? 0 : mix.master; ambG.gain.value = mix.amb; sfxG.gain.value = mix.sfx; localStorage.setItem('oyster-mix', JSON.stringify(mix)); }
+type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; sens: number; invX: boolean; invY: boolean };
+const mix: Mix = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, sens: 1, invX: false, invY: false, ...JSON.parse(localStorage.getItem('oyster-mix') || '{}') };
+let ac: AudioContext | null = null, masterG: GainNode, ambG: GainNode, sfxG: GainNode, musG: GainNode;
+function applyMix() { if (!ac) return; masterG.gain.value = mix.mute ? 0 : mix.master; ambG.gain.value = mix.amb; sfxG.gain.value = mix.sfx; musG.gain.value = mix.music * 0.5; localStorage.setItem('oyster-mix', JSON.stringify(mix)); }
 function noiseBuf(a: AudioContext, sec: number) { const n = a.sampleRate * sec, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }
 function lfo(a: AudioContext, rate: number, depth: number, target: AudioParam) { const o = a.createOscillator(), g = a.createGain(); o.frequency.value = rate; g.gain.value = depth; o.connect(g).connect(target); o.start(); }
 function startAmbience(a: AudioContext) {
@@ -209,8 +209,38 @@ function startAmbience(a: AudioContext) {
     s.connect(f).connect(g).connect(ambG); s.start(t); s.stop(t + 1.6); setTimeout(radio, 9000 + Math.random() * 12000); };
   setTimeout(radio, 6000);
 }
+// ----- 台式電子琴 BGM（那卡西／廟口風，全部 WebAudio 合成） -----
+function startMusic(a: AudioContext) {
+  const BPM = 128, st = 60 / BPM / 2; // 8 分音符
+  const N = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
+  // 五聲音階旋律（C D E G A），0 = 休止；32 步 × 2 段
+  const mel = [76, 0, 79, 76, 74, 0, 72, 74, 76, 79, 81, 0, 79, 76, 74, 0, 72, 0, 74, 72, 69, 0, 67, 69, 72, 74, 76, 74, 72, 0, 0, 0,
+               81, 0, 79, 81, 84, 0, 81, 79, 76, 79, 81, 0, 79, 0, 76, 74, 72, 74, 76, 79, 76, 74, 72, 69, 67, 0, 69, 72, 72, 0, 0, 0];
+  const chords = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50], [48, 52, 55], [45, 48, 52], [43, 47, 50], [48, 52, 55]]; // C Am F G C Am G C
+  const out = a.createGain(); out.connect(musG);
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; lp.connect(out);
+  const nb = noiseBuf(a, 0.3);
+  const organ = (f: number, t: number, d: number, v: number) => { const g = a.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.01); g.gain.setValueAtTime(v, t + d * 0.8); g.gain.linearRampToValueAtTime(0, t + d);
+    for (const [ty, det, mul] of [['square', 0, 1], ['sawtooth', 7, 1], ['triangle', 0, 2]] as [OscillatorType, number, number][]) { const o = a.createOscillator(); o.type = ty; o.frequency.value = f * mul; o.detune.value = det; const vib = a.createOscillator(), vg = a.createGain(); vib.frequency.value = 5.5; vg.gain.value = 9; vib.connect(vg).connect(o.detune); o.connect(g); o.start(t); o.stop(t + d + 0.02); vib.start(t); vib.stop(t + d + 0.02); }
+    g.connect(lp); };
+  const bass = (f: number, t: number) => { const o = a.createOscillator(), g = a.createGain(); o.type = 'triangle'; o.frequency.value = f; g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + st * 1.6); o.connect(g).connect(out); o.start(t); o.stop(t + st * 1.7); };
+  const stab = (ns: number[], t: number) => ns.forEach(n => { const o = a.createOscillator(), g = a.createGain(); o.type = 'square'; o.frequency.value = N(n + 12); g.gain.setValueAtTime(0.05, t); g.gain.exponentialRampToValueAtTime(0.001, t + st * 0.8); o.connect(g).connect(lp); o.start(t); o.stop(t + st); });
+  const kick = (t: number) => { const o = a.createOscillator(), g = a.createGain(); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.12); g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18); o.connect(g).connect(out); o.start(t); o.stop(t + 0.2); };
+  const hit = (t: number, hp: number, v: number, d: number) => { const s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain(); s.buffer = nb; f.type = 'highpass'; f.frequency.value = hp; g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); s.connect(f).connect(g).connect(out); s.start(t); s.stop(t + d); };
+  let step = 0, next = a.currentTime + 0.1;
+  setInterval(() => {
+    while (next < a.currentTime + 0.25) {
+      const i = step % 64, beat = i % 8, ch = chords[Math.floor(i / 8)];
+      const m = mel[i]; if (m) organ(N(m), next, st * (mel[(i + 1) % 64] ? 0.95 : 1.9), 0.06);
+      if (beat === 0 || beat === 4) { bass(N(ch[0] - 12), next); kick(next); }
+      if (beat === 2 || beat === 6) { stab(ch, next); hit(next, 1500, 0.25, 0.12); }
+      hit(next, 7000, beat % 2 ? 0.05 : 0.08, 0.04);
+      next += st; step++;
+    }
+  }, 60);
+}
 function audio() {
-  if (!ac) { ac = new AudioContext(); masterG = ac.createGain(); ambG = ac.createGain(); sfxG = ac.createGain(); ambG.connect(masterG); sfxG.connect(masterG); masterG.connect(ac.destination); applyMix(); startAmbience(ac); }
+  if (!ac) { ac = new AudioContext(); masterG = ac.createGain(); ambG = ac.createGain(); sfxG = ac.createGain(); musG = ac.createGain(); musG.connect(masterG); ambG.connect(masterG); sfxG.connect(masterG); masterG.connect(ac.destination); applyMix(); startAmbience(ac); startMusic(ac); }
   if (ac.state === 'suspended') ac.resume();
   return ac;
 }
@@ -723,6 +753,7 @@ $('setBtn').onclick = () => $('settings').classList.add('show');
 $('setClose').onclick = () => $('settings').classList.remove('show');
 for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as HTMLInputElement; el.value = String(mix[k]); el.oninput = () => { mix[k] = Number(el.value); applyMix(); if (k === 'sfx' && ac) SFX.plop(); }; }
 for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { const c = $(id) as HTMLInputElement; c.checked = mix[key]; c.onchange = () => { mix[key] = c.checked; applyMix(); }; }
+{ const mv = $('v_music') as HTMLInputElement; mv.value = String(mix.music); mv.oninput = () => { mix.music = +mv.value; applyMix(); }; }
 { const g = $('v_gore') as HTMLInputElement; g.checked = mix.gore; g.onchange = () => { mix.gore = g.checked; applyMix(); }; }
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
