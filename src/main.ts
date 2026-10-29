@@ -185,9 +185,11 @@ for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x2a7a5a : 0xb04050, s < 0 
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
 type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; sens: number; invX: boolean; invY: boolean };
-const mix: Mix = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, sens: 1, invX: false, invY: false, ...JSON.parse(localStorage.getItem('oyster-mix') || '{}') };
+const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, sens: 1, invX: false, invY: false };
+const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(localStorage.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
+  const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
 let ac: AudioContext | null = null, masterG: GainNode, ambG: GainNode, sfxG: GainNode, musG: GainNode;
-function applyMix() { if (!ac) return; masterG.gain.value = mix.mute ? 0 : mix.master; ambG.gain.value = mix.amb; sfxG.gain.value = mix.sfx; musG.gain.value = mix.music * 0.5; localStorage.setItem('oyster-mix', JSON.stringify(mix)); }
+function applyMix() { if (!ac) { try { localStorage.setItem('oyster-mix', JSON.stringify(mix)); } catch { } return; } masterG.gain.value = mix.mute ? 0 : mix.master; ambG.gain.value = mix.amb; sfxG.gain.value = mix.sfx; musG.gain.value = mix.music * 0.5; try { localStorage.setItem('oyster-mix', JSON.stringify(mix)); } catch { } }
 function noiseBuf(a: AudioContext, sec: number) { const n = a.sampleRate * sec, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }
 function lfo(a: AudioContext, rate: number, depth: number, target: AudioParam) { const o = a.createOscillator(), g = a.createGain(); o.frequency.value = rate; g.gain.value = depth; o.connect(g).connect(target); o.start(); }
 function startAmbience(a: AudioContext) {
@@ -298,10 +300,29 @@ const ODD = [
   { name: '小螃蟹', css: '#e05a3a', w: 30, price: 0, line: '螃蟹夾手矣！！', cry: ['緊甩！緊甩！', '哈哈哈，伊夾牢牢'] },
 ];
 const OYSTER_PRICE = 3, CRACK_PRICE = 1;
-type Save = { dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number };
-const save: Save = { dex: [0, 0, 0, 0], odd: [0, 0, 0, 0], best: 0, money: 0, days: 0, queen: 0, ...JSON.parse(localStorage.getItem('oyster-sim') || '{}') };
-save.odd ??= [0, 0, 0, 0];
-const persist = () => localStorage.setItem('oyster-sim', JSON.stringify(save));
+// ----- 存檔（有版本號；舊存檔會自動補欄位，壞去就用預設） -----
+const SAVE_V = 2;
+const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
+type Life = Record<typeof LIFE_KEYS[number], number>;
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> } };
+function defaultSave(): Save { return { v: SAVE_V, dex: [0, 0, 0, 0], odd: [0, 0, 0, 0], best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} } }; }
+function loadSave(): Save {
+  const d = defaultSave(); let raw: any = null;
+  try { raw = JSON.parse(localStorage.getItem('oyster-sim') || 'null'); } catch { raw = null; }
+  if (!raw || typeof raw !== 'object') return d;
+  const num = (x: any, def = 0) => (typeof x === 'number' && isFinite(x) ? x : def);
+  const arr4 = (a: any) => [0, 1, 2, 3].map(i => num(Array.isArray(a) ? a[i] : 0));
+  // v1（無 v 欄位）→ v2：加 life／titles／shop
+  const out: Save = { ...d, dex: arr4(raw.dex), odd: arr4(raw.odd), best: num(raw.best), money: num(raw.money), days: num(raw.days), queen: num(raw.queen) };
+  for (const k of LIFE_KEYS) out.life[k] = num(raw.life?.[k]);
+  if (raw.titles && typeof raw.titles === 'object') for (const [k, v] of Object.entries(raw.titles)) out.titles[k] = num(v);
+  if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
+  if (raw.shop?.equipped && typeof raw.shop.equipped === 'object') for (const [k, v] of Object.entries(raw.shop.equipped)) if (typeof v === 'string') out.shop.equipped[k] = v;
+  return out;
+}
+const save: Save = loadSave();
+const persist = () => { try { localStorage.setItem('oyster-sim', JSON.stringify(save)); } catch { /* 私密模式等 */ } };
+persist();
 let dry = 0;
 const wpick = (arr: { w: number }[]) => { let r = Math.random() * arr.reduce((s, x) => s + x.w, 0); for (let i = 0; i < arr.length; i++) { r -= arr[i].w; if (r < 0) return i; } return 0; };
 function rollFind(): { kind: 'pearl' | 'odd' | 'none'; i: number } {
@@ -498,7 +519,7 @@ function pry(ms = performance.now()) {
   const n = needle(ms), w = PRY[diff].w + PRY_GRACE * 2; (window as any).__pryLog = ((window as any).__pryLog || []).concat([[+n.toFixed(3), Math.abs(n - PRY_C) <= w / 2]]); strokeDir = -strokeDir || 1; tension = 0.9;
   const need = PRY_NEED[diff];
   if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('傷大力，殼碎去矣！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
-  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; combo++; SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！手路真好！' : '好！閣一下'; }
+  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; combo++; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！手路真好！' : '好！閣一下'; }
   else { combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 無著'); hint.textContent = '無著時機，等指針行到綠區'; tension = 0.3; return; }
   shellTop.rotation.z = -progress * 0.4;
   if (progress >= 0.999) openOyster();
@@ -650,6 +671,9 @@ function stealOne(n: Npc) {
   fly(m, n.bowl.clone(), BOWL.clone().add(new THREE.Vector3(rnd(-0.08, 0.08), 0.06, rnd(-0.08, 0.08))), 0.5, 0.3, () => bowlMeat.push(m));
   SFX.sneak(); toast('偷著一粒！', '#c9a0ff'); updHud();
 }
+function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.round((L.missed + L.wasteShells) / (L.opened + L.wasteShells) * 100) : 0;
+  const tl = Object.entries(save.titles).map(([k, v]) => `${k} ×${v}`).join('、') || '（猶無）';
+  return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">做工 ${save.days} 工・累積收入 $${save.money}・最佳 ${save.best} 粒<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美出手 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/掠 ${L.caught}・擲著阿婆 ${L.shellHits}・予人擲 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
 function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (state === 'end') return; state = 'end'; setPhase('busy'); on('umbBtn', false); on('stealBtn', false); stopSteal();
   const all = [{ name: '你（阿婆）', count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
@@ -661,7 +685,10 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
   const earn = Math.max(0, count * OYSTER_PRICE + pearlMoney + bonus - penalty);
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
-  save.days++; save.best = Math.max(save.best, count); save.money += earn; if (queen) save.queen++; persist();
+  save.days++; save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日蚵后'); }
+  const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
+  for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
+  persist();
   $('resTitle').textContent = handPain ? '🩹 手痛收工' : queen ? '👑 今日蚵后！' : '收工矣～';
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 粒入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美出手 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
@@ -685,7 +712,7 @@ function revealPearl(r: number) {
 function renderDex() {
   const item = (has: number, name: string, css: string, price: number) => `<div class="dexItem"><div class="dot" style="background:${has ? css : '#333'};box-shadow:0 0 8px ${has ? css : 'transparent'}"></div><div><b>${has ? name : '？？？'}</b><br><small>收集 ${has} 件・值 $${price}</small></div></div>`;
   $('dexList').innerHTML = '<h3>珍珠</h3>' + RAR.map((r, i) => item(save.dex[i], r.name, r.css, r.price)).join('') + '<h3>奇物</h3>' + ODD.map((o, i) => item(save.odd[i], o.name, o.css, o.price)).join('') +
-    `<p style="font-size:13px">已收集 ${save.dex.filter(x => x).length + save.odd.filter(x => x).length} / 8 種</p>`;
+    `<p style="font-size:13px">已收集 ${save.dex.filter(x => x).length + save.odd.filter(x => x).length} / 8 種</p>` + lifeHtml();
 }
 renderDex();
 
@@ -750,6 +777,7 @@ $('start').onclick = () => { audio(); startDay(); };
 $('again').onclick = startDay;
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => $('settings').classList.add('show');
+$('resetSave').onclick = () => { if (confirm('確定欲重置存檔？錢、圖鑑、生涯紀錄、設定攏會清掉，無法度復原。')) { localStorage.removeItem('oyster-sim'); localStorage.removeItem('oyster-mix'); location.reload(); } };
 $('setClose').onclick = () => $('settings').classList.remove('show');
 for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as HTMLInputElement; el.value = String(mix[k]); el.oninput = () => { mix[k] = Number(el.value); applyMix(); if (k === 'sfx' && ac) SFX.plop(); }; }
 for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { const c = $(id) as HTMLInputElement; c.checked = mix[key]; c.onchange = () => { mix[key] = c.checked; applyMix(); }; }
