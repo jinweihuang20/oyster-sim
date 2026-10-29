@@ -77,9 +77,16 @@ const basinOy: THREE.Mesh[] = [];
 const basinShells = new THREE.InstancedMesh(shellGeo, shellMat, 1);
 { const d = new THREE.Object3D(); for (let i = 0; i < 25; i++) { const a = Math.random() * 6.28, r = Math.random() * 0.24; d.position.set(-0.35 + Math.cos(a) * r, 0.12 + Math.random() * 0.05, 1.45 + Math.sin(a) * r); d.rotation.set(Math.random(), Math.random() * 3, Math.random()); d.updateMatrix(); basinShells.setMatrixAt(i, d.matrix); } }
 scene.add(basinShells);
-const BOWL = new THREE.Vector3(0.55, 0.12, 1.0), BOWL_R = 0.17;
-mesh(new THREE.CylinderGeometry(0.2, 0.13, 0.14, 18, 1, true), mat(0x4a8ac0, { side: THREE.DoubleSide, roughness: 0.4 }), [BOWL.x, 0.07, BOWL.z]);
-mesh(new THREE.CircleGeometry(0.13, 18), mat(0x3a6a90), [BOWL.x, 0.005, BOWL.z]).rotation.x = -Math.PI / 2;
+const BOWL0 = new THREE.Vector3(0.55, 0.12, 1.0), BOWL = BOWL0.clone(); let BOWL_R = 0.17;
+const bowlG = new THREE.Group(); scene.add(bowlG);
+function buildBowl(b: { r: number; h: number; color: number; metal?: number }) {
+  bowlG.clear(); const bot = b.r * 0.72;
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(b.r + 0.03, bot, b.h, 22, 1, true), new THREE.MeshStandardMaterial({ color: b.color, side: THREE.DoubleSide, roughness: b.metal ? 0.25 : 0.45, metalness: b.metal ?? 0 }));
+  wall.position.y = b.h / 2; bowlG.add(wall);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(b.r + 0.03, 0.012, 6, 24), wall.material); rim.rotation.x = Math.PI / 2; rim.position.y = b.h; bowlG.add(rim);
+  const fl = new THREE.Mesh(new THREE.CircleGeometry(bot, 18), new THREE.MeshStandardMaterial({ color: new THREE.Color(b.color).multiplyScalar(0.75), metalness: b.metal ?? 0, roughness: 0.5 })); fl.rotation.x = -Math.PI / 2; fl.position.y = 0.005; bowlG.add(fl);
+  bowlG.position.set(BOWL.x, 0, BOWL.z); BOWL.y = Math.max(0.08, b.h - 0.02);
+}
 const bowlMeat: THREE.Mesh[] = [], splats: THREE.Mesh[] = [];
 const meatMat = mat(0xd8cbb0, { roughness: 0.3, metalness: 0.1 }), splatMat = mat(0x8a7a60, { roughness: 0.2 });
 const meatGeo = new THREE.SphereGeometry(0.035, 8, 6); meatGeo.scale(1.4, 0.6, 1);
@@ -366,7 +373,7 @@ type Phase = 'pick' | 'scoop' | 'seam' | 'twist' | 'aim' | 'empty' | 'crab' | 'b
 let state: 'menu' | 'play' | 'end' = 'menu';
 let phase: Phase = 'busy';
 let hp = 100, stabs = 0, flinch = 0, hurtT = 0, handPain = false;
-let timeLeft = SHIFT, count = 0, cracked = 0, opened = 0, missed = 0, abandoned = 0, perfects = 0, dayPearls: number[] = [], dayOdd: number[] = [];
+let timeLeft = SHIFT, count = 0, bowlBonus = 0, cracked = 0, opened = 0, missed = 0, abandoned = 0, perfects = 0, dayPearls: number[] = [], dayOdd: number[] = [];
 let reflects = 0, wasteShells = 0, thrown = 0, lost = 0, blockStreak = 0;
 let steals = 0, caught = 0, penalty = 0, meatHits = 0, shellHits = 0, blocks = 0, hitsTaken = 0, crackedNow = false;
 let holding = false, hold = 0, diff = 1, slowmo = 0, shake = 0, pearlShow = 0;
@@ -381,7 +388,7 @@ const fly = (m: THREE.Object3D, p0: THREE.Vector3, p1: THREE.Vector3 | (() => TH
 const gauge = $('gauge'), fill = $('fill'), zone = $('zone'), label = $('label'), hint = $('hint'), toastEl = $('toast');
 let toastT = 0;
 function toast(t: string, c = '#ffe080') { toastEl.textContent = t; toastEl.style.color = c; toastEl.classList.add('on'); toastT = 1.1; }
-const PERF0 = 0.7, PERF1 = 0.8, IDEAL = 0.75;
+const IDEAL = 0.75; let PERF0 = 0.7, PERF1 = 0.8;
 const HINTS: Record<Phase, string> = {
   pick: '看家己的紅面盆，點一粒蚵仔提起來（細粒較好撬，烏閣粗的較硬）',
   scoop: '撈蚵仔中…',
@@ -419,7 +426,7 @@ function holdOyster(dd: number) {
 }
 function startDay() {
   state = 'play'; handPain = false; timeLeft = SHIFT; hp = 100;
-  count = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = [];
+  count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = [];
   npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
   ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
@@ -538,6 +545,20 @@ const UMBS: Umb[] = [
 ];
 const umbNow = () => UMBS.find(u => u.id === save.shop.equipped.umb) ?? UMBS[0];
 function applyUmb() { const u = umbNow(); buildUmb(u.look, u.size); }
+// ----- 盆仔（投肉用） -----
+type Bowl = { id: string; n: string; price: number; r: number; bounce: number; dist: number; perf: number; bonus: number; h: number; color: number; metal?: number; desc: string };
+const BOWLS: Bowl[] = [
+  { id: 'plastic', n: '塑膠面盆', price: 0, r: 0.17, bounce: 0, dist: 1, perf: 0.10, bonus: 0, h: 0.14, color: 0x4a8ac0, desc: '藍色塑膠盆，普通' },
+  { id: 'wide', n: '大面盆', price: 120, r: 0.27, bounce: 0.3, dist: 1, perf: 0.10, bonus: 0, h: 0.06, color: 0xd04a3a, desc: '闊閣淺，好投，毋過無準會彈出來' },
+  { id: 'bucket', n: '深桶', price: 180, r: 0.12, bounce: 0, dist: 1.1, perf: 0.08, bonus: 1, h: 0.34, color: 0x3a8a4a, desc: '深閣窄，入去就袂走，肉較鮮一粒加 $1' },
+  { id: 'low', n: '矮盆', price: 150, r: 0.16, bounce: 0.1, dist: 0.7, perf: 0.16, bonus: 0, h: 0.08, color: 0xe0b030, desc: '囥較近、較矮，拋物線好抓，完美窗闊' },
+  { id: 'steel', n: '不銹鋼盆', price: 900, r: 0.21, bounce: 0.05, dist: 0.9, perf: 0.13, bonus: 1, h: 0.15, color: 0xd8dde4, metal: 0.9, desc: '專業級，樣樣好，就是貴' },
+];
+const bowlNow = () => BOWLS.find(b => b.id === save.shop.equipped.bowl) ?? BOWLS[0];
+function applyBowl() {
+  const b = bowlNow(); BOWL_R = b.r; PERF0 = IDEAL - b.perf / 2; PERF1 = IDEAL + b.perf / 2;
+  BOWL.set(SEAT.x + (BOWL0.x - SEAT.x) * b.dist, BOWL0.y, SEAT.z + (BOWL0.z - SEAT.z) * b.dist); buildBowl(b);
+}
 const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
 const pryW = () => Math.min(0.6, PRY[diff].w * knifeNow().green);
 const prySp = () => PRY[diff].sp * knifeNow().speed;
@@ -559,6 +580,18 @@ function renderShop() {
     const own = save.shop.owned.includes(u.id);
     const btn = u.id === cu ? '<b>使用中</b>' : own ? `<button data-ueq="${u.id}">換</button>` : `<button data-ubuy="${u.id}" ${save.money < u.price ? 'disabled' : ''}>$${u.price}</button>`;
     return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small></td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(u.cd, B.cd, false, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+  if (!save.shop.owned.includes('plastic')) save.shop.owned.push('plastic');
+  const cb = bowlNow().id, P = BOWLS[0];
+  $('shopList').innerHTML += `<h3>🥣 盆仔</h3><table class="kt"><tr><th>盆</th><th>盆口</th><th>彈出</th><th>距離</th><th>完美窗</th><th>加價</th><th></th></tr>` + BOWLS.map(b => {
+    const own = save.shop.owned.includes(b.id);
+    const btn = b.id === cb ? '<b>使用中</b>' : own ? `<button data-beq="${b.id}">換</button>` : `<button data-bbuy="${b.id}" ${save.money < b.price ? 'disabled' : ''}>$${b.price}</button>`;
+    return `<tr><td><b>${b.n}</b><br><small>${b.desc}</small></td><td>${rel(Math.round(b.r / P.r * 100), 100, true, '%')}</td><td>${rel(Math.round(b.bounce * 100), 0, false, '%')}</td><td>${rel(Math.round(b.dist * 100), 100, false, '%')}</td><td>${rel(Math.round(b.perf * 100), 10, true, '%')}</td><td>${rel(b.bonus, 0, true, '$')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+  $('shopList').querySelectorAll('button[data-bbuy],button[data-beq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+    const id = b.getAttribute('data-bbuy') || b.getAttribute('data-beq')!; const w = BOWLS.find(x => x.id === id)!;
+    if (b.hasAttribute('data-bbuy')) { if (save.money < w.price) return; save.money -= w.price; save.shop.owned.push(id); if (ac) SFX.jingle(); }
+    if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; }
+    save.shop.equipped.bowl = id; persist(); applyBowl(); renderShop();
+  });
   $('shopList').querySelectorAll('button[data-ubuy],button[data-ueq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const id = b.getAttribute('data-ubuy') || b.getAttribute('data-ueq')!; const u = UMBS.find(x => x.id === id)!;
     if (b.hasAttribute('data-ubuy')) { if (save.money < u.price) return; save.money -= u.price; save.shop.owned.push(id); if (ac) SFX.jingle(); }
@@ -644,7 +677,9 @@ function shoot(power: number) {
   const aim = aimPoint(), origin = camera.position.clone().setY(BOWL.y);
   const land = origin.clone().lerp(aim, perfect ? 1 : power / IDEAL);
   if (!perfect) land.add(new THREE.Vector3(rnd(-0.05, 0.05), 0, rnd(-0.05, 0.05)));
-  const inBowl = Math.hypot(land.x - BOWL.x, land.z - BOWL.z) < BOWL_R;
+  let inBowl = Math.hypot(land.x - BOWL.x, land.z - BOWL.z) < BOWL_R;
+  const bounced = inBowl && !perfect && Math.random() < bowlNow().bounce;
+  if (bounced) { inBowl = false; const d = land.clone().sub(BOWL).setY(0); if (d.lengthSq() < 1e-4) d.set(1, 0, 0); land.copy(BOWL).addScaledVector(d.normalize(), BOWL_R + rnd(0.15, 0.3)); }
   const victim = inBowl ? undefined : npcNear(land, 0.5);
   meatInHand.visible = false;
   const wasCracked = crackedNow;
@@ -654,8 +689,8 @@ function shoot(power: number) {
   SFX.whoosh();
   if (victim) { fly(m, from, () => worldOf(victim.head).add(new THREE.Vector3(0, 0.14, 0)), 0.7, 0.4, () => meatOnHead(victim, m)); missed++; }
   else fly(m, from, land, 0.45 + dist * 0.15, 0.25 + dist * 0.2, () => {
-    if (inBowl) { count++; if (wasCracked) penalty += OYSTER_PRICE - CRACK_PRICE; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!); SFX.plop(); if (!perfect) toast(wasCracked ? '入碗（有殼屑）' : '入碗！'); if (Math.random() < 0.15) say(pick(npcs), pick(PRAISE), 2); }
-    else { missed++; m.material = splatMat; m.scale.set(1.5, 0.25, 1.5); splats.push(m); if (splats.length > 30) scene.remove(splats.shift()!); SFX.splat(); toast('無入！', '#ff8a7a'); nag(NAG_MISS); }
+    if (inBowl) { count++; bowlBonus += bowlNow().bonus; if (wasCracked) penalty += OYSTER_PRICE - CRACK_PRICE; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!); SFX.plop(); if (!perfect) toast(wasCracked ? '入碗（有殼屑）' : '入碗！'); if (Math.random() < 0.15) say(pick(npcs), pick(PRAISE), 2); }
+    else { missed++; if (bounced) { SFX.plop(); later(0.05, () => toast('彈出來矣！', '#ff8a7a')); } m.material = splatMat; m.scale.set(1.5, 0.25, 1.5); splats.push(m); if (splats.length > 30) scene.remove(splats.shift()!); SFX.splat(); toast('無入！', '#ff8a7a'); nag(NAG_MISS); }
     updHud();
   });
   later(0.35, () => { emptyT = 2.2; setPhase('empty'); });
@@ -752,7 +787,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (thrown === 0) { titles.push('🕊 和平阿婆（+$50）'); bonus = 50; }
   if (shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
   if (blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
-  const earn = Math.max(0, count * OYSTER_PRICE + pearlMoney + bonus - penalty);
+  const earn = Math.max(0, count * OYSTER_PRICE + bowlBonus + pearlMoney + bonus - penalty);
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
   save.days++; save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日蚵后'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
@@ -762,7 +797,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 粒入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美出手 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
     `偷 ${steals}・予人掠著 ${caught}・肉擲著阿婆 ${meatHits}・殼擲著阿婆 ${shellHits}<br>雨傘擋 ${blocks}・完美反彈 ${reflects}・予人擲著 ${hitsTaken}・擲殼 ${thrown}・蚵仔落塗跤 ${lost}</p>` + (titles.length ? `<p style="font-size:18px"><b>${titles.join('　')}</b></p>` : '') +
-    `<p>蚵仔 ${count} 粒 × $${OYSTER_PRICE}（殼屑 ${cracked} 粒只 $${CRACK_PRICE}）<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
+    `<p>蚵仔 ${count} 粒 × $${OYSTER_PRICE}（殼屑 ${cracked} 粒只 $${CRACK_PRICE}）${bowlBonus ? `<br>盆仔加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
     `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 粒・做蚵后 ${save.queen} 擺</p>` +
     `<p>${caught >= 2 ? '阿婆們：「明仔載你家己坐一角！」' : waste >= 30 ? '阿婆們：「塗跤攏是蚵仔肉，明仔載較準咧！」' : queen ? '阿婆們：「哎唷，今仔日予你贏去矣！」' : `${all[0].name}：「明仔載閣來拚喔～」`}</p>`;
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
@@ -850,7 +885,7 @@ $('resetSave').onclick = () => { if (confirm('確定欲重置存檔？錢、圖�
 $('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); renderShop(); $('shop').classList.add('show'); };
 $('shopBtn2').onclick = () => { renderShop(); $('shop').classList.add('show'); };
 $('shopClose').onclick = () => $('shop').classList.remove('show');
-applyKnife(); applyUmb();
+applyKnife(); applyUmb(); applyBowl();
 $('setClose').onclick = () => $('settings').classList.remove('show');
 for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as HTMLInputElement; el.value = String(mix[k]); el.oninput = () => { mix[k] = Number(el.value); applyMix(); if (k === 'sfx' && ac) SFX.plop(); }; }
 for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { const c = $(id) as HTMLInputElement; c.checked = mix[key]; c.onchange = () => { mix[key] = c.checked; applyMix(); }; }
@@ -990,6 +1025,9 @@ if (SHOT) {
   if (SHOT === 'grudge') { look(0.15, -0.25); [30, 65, 100].forEach((g, i) => { npcs[i].grudge = g; grudgeUI(npcs[i]); }); npcs[2].angry = 99; say(npcs[2], '看我連環殼！', 99); }
   if (SHOT === 'reflect') { const n = npcs[2]; look(0.6, -0.3); n.windup = 0.25; later(0.62, () => { umbT = umbLen = 0.9; umbCd = 0; umb.visible = true; }); }
   if (SHOT === 'shop') { save.money = 600; save.shop.owned = ['basic', 'seam']; save.shop.equipped.knife = 'seam'; applyKnife(); renderShop(); $('shop').classList.add('show'); }
+  if (SHOT === 'bowl') { save.shop.equipped.bowl = params.get('b') || 'steel'; applyBowl(); look(0.35, -0.75); }
+  if (SHOT === 'dex') { renderDex(); $('dex').classList.add('show'); }
+  if (SHOT === 'settings') $('settings').classList.add('show');
   if (SHOT === 'pick') look(-0.25, -0.85);
   if (SHOT === 'scoop') { look(0, -0.5); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; scoop(); }
   const shotHold = () => holdOyster(2);
