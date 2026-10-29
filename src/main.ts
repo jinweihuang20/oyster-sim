@@ -184,8 +184,8 @@ const leanFaces: THREE.Group[] = [];
 for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x2a7a5a : 0xb04050, s < 0 ? 0x333333 : 0xcccccc).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
-type Mix = { master: number; amb: number; sfx: number; mute: boolean ; gore: boolean };
-const mix: Mix = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, gore: true, ...JSON.parse(localStorage.getItem('oyster-mix') || '{}') };
+type Mix = { master: number; amb: number; sfx: number; mute: boolean ; gore: boolean; sens: number };
+const mix: Mix = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, gore: true, sens: 1, ...JSON.parse(localStorage.getItem('oyster-mix') || '{}') };
 let ac: AudioContext | null = null, masterG: GainNode, ambG: GainNode, sfxG: GainNode;
 function applyMix() { if (!ac) return; masterG.gain.value = mix.mute ? 0 : mix.master; ambG.gain.value = mix.amb; sfxG.gain.value = mix.sfx; localStorage.setItem('oyster-mix', JSON.stringify(mix)); }
 function noiseBuf(a: AudioContext, sec: number) { const n = a.sampleRate * sec, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }
@@ -333,7 +333,7 @@ const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
 function setPhase(p: Phase) {
   phase = p; holding = false; hold = 0; gauge.classList.remove('on', 'aim', 'tw');
   if (p === 'aim') gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
-  on('reticle', p === 'aim' || p === 'empty' || p === 'pick'); on('giveUp', p === 'seam' && state === 'play'); on('prog', p === 'twist' || p === 'crab');
+  on('reticle', p === 'aim' || p === 'empty' || p === 'pick' || (document.pointerLockElement === canvas && p !== 'busy')); on('giveUp', p === 'seam' && state === 'play'); on('prog', p === 'twist' || p === 'crab');
   on('rotL', p === 'seam'); on('rotR', p === 'seam'); on('throwBtn', (p === 'seam' || p === 'empty') && state === 'play');
   if (p !== 'busy') hint.textContent = HINTS[p];
   const d = DIFF[diff];
@@ -359,7 +359,7 @@ function startDay() {
   count = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = 0; dayPearls = []; dayOdd = [];
   npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
-  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); updHud();
+  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
 }
 function updHud() {
   ($('hpFill') as HTMLElement).style.width = `${hp}%`;
@@ -405,6 +405,7 @@ function fillBasin(animate: boolean) {
 }
 function pickAt(cx: number, cy: number) {
   if (phase !== 'pick' || state !== 'play') return;
+  camera.updateMatrixWorld();
   ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), camera);
   const hit = ray.intersectObjects(basinOy, true)[0];
   if (hit) { let o: THREE.Object3D = hit.object; while (!basinOy.includes(o as THREE.Mesh)) o = o.parent!; grab(o as THREE.Mesh); return; }
@@ -559,7 +560,7 @@ function stealOne(n: Npc) {
   fly(m, n.bowl.clone(), BOWL.clone().add(new THREE.Vector3(rnd(-0.08, 0.08), 0.06, rnd(-0.08, 0.08))), 0.5, 0.3, () => bowlMeat.push(m));
   SFX.sneak(); toast('偷著一粒！', '#c9a0ff'); updHud();
 }
-function endDay() {
+function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (state === 'end') return; state = 'end'; setPhase('busy'); on('umbBtn', false); on('stealBtn', false); stopSteal();
   const all = [{ name: '你（阿婆）', count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const queen = all[0].me;
@@ -602,6 +603,7 @@ const swipePhase = () => phase === 'twist' || phase === 'crab';
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (state !== 'play') return; audio().resume();
+  if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
   if (e.button === 2) { throwShell(); return; }
   down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && e.clientY > innerHeight * 0.6, lx: e.clientX, lt: performance.now() };
   if (phase === 'aim') { holding = true; hold = 0; }
@@ -612,7 +614,8 @@ window.addEventListener('pointermove', e => {
   if (e.pointerType === 'mouse' && state === 'play') {
     if (swipePhase()) { twistInput(e.movementX, now - lastMoveT); lastMoveT = now; return; }
     lastMoveT = now;
-    tYaw = -(e.clientX / innerWidth - 0.5) * 2 * YAW; tPitch = clamp(P0 + (1 - e.clientY / innerHeight) * (P1 - P0) * 1.15 - 0.05, P0, P1); return;
+    if (document.pointerLockElement === canvas) { const k = 0.0022 * mix.sens; yaw = tYaw = clamp(tYaw - e.movementX * k, -YAW, YAW); pitch = tPitch = clamp(tPitch - e.movementY * k, P0, P1); camera.rotation.set(pitch, yaw, 0); camera.updateMatrixWorld(); }
+    return;
   }
   if (!down || down.id !== e.pointerId) return;
   const dx = e.clientX - down.x, dy = e.clientY - down.y;
@@ -622,7 +625,7 @@ window.addEventListener('pointermove', e => {
   if (down.drag) { tYaw = clamp(down.yaw + dx * 0.006, -YAW, YAW); tPitch = clamp(down.pitch + dy * 0.006, P0, P1); }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); if (phase === 'aim' && state === 'play') shoot(h); }
-const up = (e: PointerEvent) => { if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') pickAt(e.clientX, e.clientY); else release(); } else release(); down = null; } };
+const up = (e: PointerEvent) => { if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else release(); } else release(); down = null; } };
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
@@ -654,6 +657,8 @@ $('setBtn').onclick = () => $('settings').classList.add('show');
 $('setClose').onclick = () => $('settings').classList.remove('show');
 for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as HTMLInputElement; el.value = String(mix[k]); el.oninput = () => { mix[k] = Number(el.value); applyMix(); if (k === 'sfx' && ac) SFX.plop(); }; }
 { const g = $('v_gore') as HTMLInputElement; g.checked = mix.gore; g.onchange = () => { mix.gore = g.checked; applyMix(); }; }
+{ const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
+document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => $('dex').classList.remove('show');
@@ -762,7 +767,7 @@ function frame() {
   const ch = holding && phase === 'aim' ? Math.min(1, hold) : 0;
   if (phase === 'aim' || ch) { handL.position.y += 0.05 + ch * 0.06; handL.position.z -= ch * 0.05; handL.rotation.x = 0.4 - ch * 0.5; } else handL.rotation.x = 0.4;
   if (flinch > 0) { handL.position.y -= flinch * 0.1; handL.rotation.z = 0.3 + flinch * 0.8; } else handL.rotation.z = 0.3;
-  if (!swipePhase()) { yaw += (tYaw - yaw) * Math.min(1, rdt * 8); pitch += (tPitch - pitch) * Math.min(1, rdt * 8); }
+  if (!swipePhase()) { yaw = tYaw; pitch = tPitch; }
   shake = Math.max(0, shake - rdt);
   camera.rotation.set(pitch - pe * 0.08, yaw, 0);
   camera.position.copy(SEAT); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
