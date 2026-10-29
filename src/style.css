@@ -26,9 +26,23 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 #gauge.aim{border-color:#9fe0ff}#gauge.aim #zone{background:rgba(120,220,255,.7)}
 #toast{position:absolute;top:40%;width:100%;text-align:center;font-size:30px;font-weight:900;color:#ffe080;opacity:0;transition:opacity .25s;text-shadow:0 2px 6px #000}
 #toast.on{opacity:1}
-#giveUp{position:absolute;right:12px;bottom:12px;pointer-events:auto;background:rgba(120,60,40,.85);color:#fff;font-size:14px;display:none}
-#giveUp.on{display:block}
+
 
 #hpWrap{display:flex;align-items:center;gap:4px}#hpBar{width:60px;height:8px;background:rgba(0,0,0,.5);border-radius:4px;overflow:hidden;display:inline-block}
 #hpFill{display:block;height:100%;width:100%;background:#e8735a;transition:width .3s}
 #hurt{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(150,10,10,.75) 100%);transition:opacity .15s}
+
+#btns{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+#btns button{pointer-events:auto;display:none;font-size:14px;padding:8px 12px;background:rgba(120,60,40,.85);color:#fff}
+#btns button.on{display:block}#umbBtn{background:#c0392b!important;font-size:18px!important;padding:12px 16px!important}#umbBtn.cd{opacity:.45}
+#stealBtn{background:#5a3a8a!important}
+.mb{position:fixed!important;bottom:22%;}#rotL{left:12px}#rotR{right:12px}
+#prog{position:absolute;bottom:calc(18% + 44px);left:50%;width:min(50vw,240px);height:6px;transform:translateX(-50%);background:rgba(0,0,0,.5);border-radius:3px;overflow:hidden;display:none}
+#prog.on{display:block}#progFill{height:100%;width:0;background:#9be37a}
+#gauge.tw{border-color:#9be37a}#gauge.tw #zone{background:rgba(120,220,120,.55)}
+#warn{position:absolute;top:45%;font-size:54px;color:#ffcc33;text-shadow:0 0 10px #000;display:none;transform:translate(-50%,-50%)}#warn.on{display:block}
+#splat{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .6s;background:radial-gradient(circle at 40% 45%,rgba(200,190,160,.75) 0 8%,transparent 9%),radial-gradient(circle at 55% 52%,rgba(190,180,150,.7) 0 5%,transparent 6%),radial-gradient(circle at 46% 60%,rgba(200,190,160,.6) 0 3%,transparent 4%)}
+
+#aid{position:fixed;left:30%;bottom:22%;font-size:72px;pointer-events:none;opacity:0;transform:scale(.2)}
+#aid.pop{animation:aidpop 1.6s ease-out}
+@keyframes aidpop{0%{opacity:0;transform:scale(.2) rotate(-30deg)}20%{opacity:1;transform:scale(1.25) rotate(10deg)}35%{transform:scale(1) rotate(0)}80%{opacity:1}100%{opacity:0}}
