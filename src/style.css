@@ -115,3 +115,9 @@ button{touch-action:manipulation}
  #gauge{width:min(56vw,420px)}
  #ppop{font-size:18px}
 }
+#standBtn{background:rgba(40,90,140,.85)!important}
+#joy{position:absolute;left:calc(env(safe-area-inset-left) + 24px);bottom:calc(env(safe-area-inset-bottom) + 28px);width:130px;height:130px;border-radius:50%;background:rgba(0,0,0,.3);border:2px solid rgba(255,230,180,.5);display:none;pointer-events:auto;touch-action:none}
+#joy.on{display:block}@media (pointer:fine){#joy.on{display:none}}
+#joyK{position:absolute;left:35px;top:35px;width:60px;height:60px;border-radius:50%;background:rgba(255,230,180,.7)}
+#seatCard{position:absolute;left:50%;top:44%;transform:translateX(-50%);background:rgba(36,22,10,.92);border:2px solid #9fe0ff;border-radius:14px;padding:10px 14px;font-size:15px;line-height:1.5;text-align:center;display:none;pointer-events:auto;max-width:calc(100vw - 24px)}
+#seatCard.on{display:block}#sitBtn{margin-top:8px;min-height:48px;background:#3a8ad0;color:#fff}
