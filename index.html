@@ -3,12 +3,13 @@
 <title>剝蚵仔模擬器</title><link rel="stylesheet" href="./src/style.css"/></head>
 <body><canvas id="c"></canvas>
 <div id="hud">
- <div id="top"><span id="timer">03:00</span><span id="count">🦪 0</span><span id="pearls">⚪ 0</span><button id="dexBtn">珍珠圖鑑</button></div>
+ <div id="top"><span id="timer">03:00</span><span id="count">🦪 0</span><span id="pearls">⚪ 0</span><span id="hpWrap">✋<span id="hpBar"><span id="hpFill"></span></span></span><button id="dexBtn">珍珠圖鑑</button></div>
  <div id="gauge"><div id="zone"></div><div id="fill"></div></div>
+ <div id="diff"></div><div id="stats"></div><div id="reticle"></div><div id="toast"></div><button id="giveUp">放棄 (Q)</button>
  <div id="hint">按住撬開蚵仔，在金色區間放開！</div>
  <div id="label"></div>
 </div>
-<div id="bubbles"></div>
+<div id="hurt"></div><div id="bubbles"></div>
 <div id="overlay" class="panel show"><h1>剝蚵仔模擬器</h1>
  <p>暗暝的巷仔口，你是厝邊阿婆之一，坐佇細條椅仔頂，佮大家圍咧剝蚵仔。</p>
  <ul><li>電腦：移動滑鼠看四周；按住滑鼠（或空白鍵）撬蚵仔，在<b>金色區間</b>放開</li>
