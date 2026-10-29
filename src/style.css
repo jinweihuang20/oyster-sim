@@ -121,3 +121,6 @@ button{touch-action:manipulation}
 #joyK{position:absolute;left:35px;top:35px;width:60px;height:60px;border-radius:50%;background:rgba(255,230,180,.7)}
 #seatCard{position:absolute;left:50%;top:44%;transform:translateX(-50%);background:rgba(36,22,10,.92);border:2px solid #9fe0ff;border-radius:14px;padding:10px 14px;font-size:15px;line-height:1.5;text-align:center;display:none;pointer-events:auto;max-width:calc(100vw - 24px)}
 #seatCard.on{display:block}#sitBtn{margin-top:8px;min-height:48px;background:#3a8ad0;color:#fff}
+/* ◀▶ 轉蚵仔：囥畫面中央兩邊，永遠袂佮右下角動作按鈕相疊 */
+.mb{bottom:auto!important;top:42%}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){.mb{top:30%}}
