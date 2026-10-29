@@ -102,3 +102,16 @@ button{touch-action:manipulation}
  .kt td:first-child{min-width:84px;max-width:110px}
  .kt button{min-width:52px;padding:6px 4px;font-size:14px;margin:0}
 }
+/* 撬殼量表：手機有家己的一區，無佮按鈕／提示相疊 */
+@media (pointer:coarse){
+ :root{--gb:calc(env(safe-area-inset-bottom) + 214px)}
+ #gauge{bottom:var(--gb);width:calc(100vw - 32px);max-width:420px;height:20px}
+ #diff{bottom:calc(var(--gb) + 26px);font-size:14px}
+ #prog{bottom:calc(var(--gb) + 48px);width:min(60vw,260px);height:7px}
+ #ppop{bottom:calc(var(--gb) + 60px);font-size:22px}
+}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
+ :root{--gb:calc(env(safe-area-inset-bottom) + 92px)}
+ #gauge{width:min(56vw,420px)}
+ #ppop{font-size:18px}
+}
