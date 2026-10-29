@@ -323,15 +323,15 @@ const HINTS: Record<Phase, string> = {
   pick: '看家己的紅面盆，點一粒蚵仔提起來（細粒較好撬，烏閣粗的較硬）',
   scoop: '撈蚵仔中…',
   seam: '轉蚵仔揣殼縫（滾輪／A D｜手機：拖下半畫面或 ◀ ▶），縫對著刀尖時點一下插刀',
-  twist: '左右來回扭手腕（滑鼠左右甩／A D 輪流｜手機：左右滑），張力保持佇綠區',
+  twist: '看指針！行到綠區就點一下（Space／點滑鼠｜手機：點螢幕）撬一下；紅區傷大力會碎殼',
   aim: '轉頭對準藍色碗，按住蓄力，藍色區間放開投肉！',
   empty: '空殼仔：F／右鍵／「丟殼」對準阿婆擲過去，或者等一下自動擲掉',
-  crab: '螃蟹夾手矣！左右緊甩（滑鼠／A D／手機左右滑）共甩掉！',
+  crab: '螃蟹夾手矣！緊連點（滑鼠／Space｜手機：狂點螢幕）共甩掉！',
   busy: '',
 };
 const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
 function setPhase(p: Phase) {
-  phase = p; holding = false; hold = 0; gauge.classList.remove('on', 'aim', 'tw');
+  phase = p; holding = false; hold = 0; fill.style.marginLeft = '0'; zone.style.left = ''; zone.style.width = ''; if (p === 'twist') needleT = 0; gauge.classList.remove('on', 'aim', 'tw');
   if (p === 'aim') gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
   on('reticle', p === 'aim' || p === 'empty' || p === 'pick' || (document.pointerLockElement === canvas && p !== 'busy')); on('giveUp', p === 'seam' && state === 'play'); on('prog', p === 'twist' || p === 'crab');
   on('rotL', p === 'seam'); on('rotR', p === 'seam'); on('throwBtn', (p === 'seam' || p === 'empty') && state === 'play');
@@ -341,7 +341,7 @@ function setPhase(p: Phase) {
   if (p === 'twist') { zone.style.left = `${d.lo * 100}%`; zone.style.width = `${(d.hi - d.lo) * 100}%`; progress = 0; strokeDir = 0; strokeLen = 0; strokePeak = 0; }
   if (p === 'seam' || p === 'twist') updDiff();
 }
-function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・愛扭 ${d.need} 擺` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
+function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・愛撬 ${PRY_NEED[diff]} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
 function goPick() { if (state !== 'play') return; oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = '面盆空矣！轉頭看中央的蚵殼山，點一下撈一把'; }
 function holdOyster(dd: number) {
   if (state !== 'play') return;
@@ -430,7 +430,7 @@ function tryInsert() {
   else { tone(140, 0.08, 0.2, 'square'); hint.textContent = '無對縫，刀仔滑開矣！閣揣看覓'; if (Math.random() < 0.3) nag(NAG_SLIP); shake = 0.08; }
 }
 // ----- 2. 扭手腕 -----
-function twistInput(dx: number, dtMs: number) {
+function twistInput(dx: number, dtMs: number) { if (swipePhase()) return;
   if (Math.abs(dx) < 0.5) return;
   const dir = Math.sign(dx), speed = Math.abs(dx) / Math.max(1, dtMs) * 1000 / (innerWidth * 2.2);
   tension = Math.max(tension, Math.min(1.2, speed));
@@ -438,6 +438,20 @@ function twistInput(dx: number, dtMs: number) {
   if (phase !== 'twist') return;
   if (dir !== strokeDir) { if (strokeDir !== 0 && strokeLen > innerWidth * 0.05) halfTwist(strokePeak); strokeDir = dir; strokeLen = 0; strokePeak = 0; }
   strokeLen += Math.abs(dx); strokePeak = Math.max(strokePeak, tension);
+}
+const PRY = [{ w: 0.3, sp: 0.8 }, { w: 0.22, sp: 1.05 }, { w: 0.15, sp: 1.35 }, { w: 0.1, sp: 1.7 }];
+const PRY_NEED = [2, 3, 4, 5], PRY_C = 0.55, PRY_RED = 0.86;
+let needleT = 0;
+const needle = () => 0.5 - 0.5 * Math.cos(needleT * Math.PI * 2 * PRY[diff].sp);
+function pry() {
+  if (phase === 'crab') { crabShakes++; tone(600 + crabShakes * 40, 0.05, 0.1); strokeDir = -strokeDir || 1; flinch = 0.3; if (crabShakes >= 8) crabOff(); return; }
+  if (phase !== 'twist') return;
+  const n = needle(), w = PRY[diff].w; strokeDir = -strokeDir || 1; tension = 0.9;
+  if (n > PRY_RED) { progress += 1 / PRY_NEED[diff]; SFX.creak(); if (!crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('傷大力，殼碎去矣！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
+  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / PRY_NEED[diff]; SFX.creak(); hint.textContent = '好！閣一下'; }
+  else { tone(220, 0.08, 0.06, 'triangle'); hint.textContent = '無著時機，等指針行到綠區'; tension = 0.3; return; }
+  shellTop.rotation.z = -progress * 0.4;
+  if (progress >= 0.999) openOyster();
 }
 function halfTwist(peak: number) {
   const d = DIFF[diff];
@@ -448,7 +462,7 @@ function halfTwist(peak: number) {
   shellTop.rotation.z = -progress * 0.4;
   if (progress >= 0.999) openOyster();
 }
-function keyTwist(k: string) {
+function keyTwist(k: string) { if (swipePhase()) return;
   const now = performance.now(), dt = now - lastKeyT; lastKeyT = now;
   if (k === lastKey) return; lastKey = k;
   const t = Math.min(1.2, 220 / Math.max(80, dt)); tension = Math.max(tension, t);
@@ -612,25 +626,25 @@ let lastMoveT = performance.now();
 window.addEventListener('pointermove', e => {
   const now = performance.now();
   if (e.pointerType === 'mouse' && state === 'play') {
-    if (swipePhase()) { twistInput(e.movementX, now - lastMoveT); lastMoveT = now; return; }
+    if (swipePhase()) { lastMoveT = now; return; }
     lastMoveT = now;
     if (document.pointerLockElement === canvas) { const k = 0.0022 * mix.sens; yaw = tYaw = clamp(tYaw - e.movementX * k, -YAW, YAW); pitch = tPitch = clamp(tPitch - e.movementY * k, P0, P1); camera.rotation.set(pitch, yaw, 0); camera.updateMatrixWorld(); }
     return;
   }
   if (!down || down.id !== e.pointerId) return;
   const dx = e.clientX - down.x, dy = e.clientY - down.y;
-  if (swipePhase()) { twistInput(e.clientX - down.lx, now - down.lt); down.lx = e.clientX; down.lt = now; down.drag = true; return; }
+  if (swipePhase()) return;
   if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; if (Math.abs(dx) > 8) down.drag = true; return; }
   if (!down.drag && Math.hypot(dx, dy) > 14) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
   if (down.drag) { tYaw = clamp(down.yaw + dx * 0.006, -YAW, YAW); tPitch = clamp(down.pitch + dy * 0.006, P0, P1); }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); if (phase === 'aim' && state === 'play') shoot(h); }
-const up = (e: PointerEvent) => { if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else release(); } else release(); down = null; } };
+const up = (e: PointerEvent) => { if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else release(); } else release(); down = null; } };
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
   if (state !== 'play') return; audio().resume();
-  if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (phase === 'aim') { holding = true; hold = 0; } }
+  if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(); else if (phase === 'aim') { holding = true; hold = 0; } }
   if (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
     const l = e.code === 'KeyA' || e.code === 'ArrowLeft';
     if (phase === 'seam') rotKey = l ? -1 : 1; else if (!e.repeat && swipePhase()) keyTwist(l ? 'L' : 'R');
@@ -709,7 +723,8 @@ function frame() {
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
       knife.position.y = 0.03 + (e < d.tol * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
     } else knife.position.y = 0.03;
-    if (phase === 'twist' || phase === 'crab') { fill.style.width = `${Math.min(1, tension) * 100}%`; fill.style.background = tension > DIFF[diff].hi ? 'rgba(255,120,90,.9)' : 'rgba(255,255,255,.75)'; ($('progFill') as HTMLElement).style.width = `${(phase === 'crab' ? crabShakes / 6 : progress) * 100}%`; }
+    if (phase === 'twist') { needleT += rdt; const n = needle(), w = PRY[diff].w; zone.style.left = `${(PRY_C - w / 2) * 100}%`; zone.style.width = `${w * 100}%`; fill.style.width = '4px'; fill.style.marginLeft = `calc(${n * 100}% - 2px)`; fill.style.background = n > PRY_RED ? '#ff5a4a' : Math.abs(n - PRY_C) <= w / 2 ? '#d8ffb0' : '#fff'; }
+    if (phase === 'twist' || phase === 'crab') { ($('progFill') as HTMLElement).style.width = `${(phase === 'crab' ? crabShakes / 6 : progress) * 100}%`; }
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
     updBlood(rdt);
     if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / 1.5) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.6, goPick); setPhase('busy'); } }
@@ -787,6 +802,7 @@ if (SHOT) {
   const shotHold = () => holdOyster(2);
   if (SHOT !== 'pick' && SHOT !== 'scoop' && SHOT !== 'end') shotHold();
   if (SHOT === 'seam') { diff = 2; seamGlow.visible = true; rot = 0.3; }
+  if (SHOT === 'pry') { twistSetup(); later(0.05, () => { needleT = Math.acos(1 - 2 * PRY_C) / (Math.PI * 2 * PRY[2].sp); hint.textContent = HINTS.twist; }); }
   if (SHOT === 'twist') { twistSetup(); later(0.05, () => { tension = 0.5; }); }
   if (SHOT === 'crack') { twistSetup(); halfTwist(1.1); }
   if (SHOT === 'hitnpc') { look(0.1, -0.25); later(0.05, () => { const m = new THREE.Mesh(meatGeo, meatMat); scene.add(m); meatOnHead(npcs[1], m); }); }

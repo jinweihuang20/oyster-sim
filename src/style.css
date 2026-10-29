@@ -48,3 +48,5 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 @keyframes aidpop{0%{opacity:0;transform:scale(.2) rotate(-30deg)}20%{opacity:1;transform:scale(1.25) rotate(10deg)}35%{transform:scale(1) rotate(0)}80%{opacity:1}100%{opacity:0}}
 #lockHint{position:fixed;left:50%;top:40%;transform:translateX(-50%);background:rgba(0,0,0,.65);color:#ffe6a0;padding:10px 18px;border-radius:12px;font-size:18px;pointer-events:none;display:none}
 #lockHint.on{display:block}
+#gauge.tw:after{content:'';position:absolute;left:86%;right:0;top:0;bottom:0;background:rgba(255,80,60,.6)}
+#gauge.tw #fill{transition:none}
