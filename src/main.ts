@@ -104,9 +104,9 @@ type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: nu
   cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[] };
 const npcs: Npc[] = [];
 const NPC_DEF = [
-  { name: '快手阿桃', rate: 1.9, chatty: 0.1, peek: false, top: 0x6a3a8a, hair: 0x999999, a: -1.1 },
+  { name: '快手阿桃', rate: 1.9, chatty: 0.1, peek: false, top: 0x6a3a8a, hair: 0x999999, a: -1.9 },
   { name: '講話阿春', rate: 2.8, chatty: 0.6, peek: false, top: 0x2a7a5a, hair: 0x333333, a: Math.PI },
-  { name: '好奇阿嬌', rate: 2.4, chatty: 0.3, peek: true, top: 0xb04050, hair: 0xcccccc, a: 1.1 },
+  { name: '好奇阿嬌', rate: 2.4, chatty: 0.3, peek: true, top: 0xb04050, hair: 0xcccccc, a: 1.9 },
 ];
 for (const d of NPC_DEF) {
   const a = makeAma(d.top, d.hair); const ang = Math.PI / 2 + d.a; const r = 1.9;
@@ -859,7 +859,8 @@ function frame() {
   pearlMesh.rotation.y += rdt * 2;
   oyster.scale.setScalar(DIFF[diff].scale * (1 + pe * (narrow ? 0.25 : 0.6)));
   handL.position.set(HL.x + (narrow ? 0.12 : 0.05) * pe, HL.y + 0.06 * pe, HL.z);
-  leanFaces.forEach(f => { f.position.x = f.userData.s * ((narrow ? 0.75 : 1.2) - (narrow ? 0.35 : 0.62) * pe); f.position.y = 0.05 - 0.08 * pe; f.rotation.z = -f.userData.s * 0.35 * pe; });
+  const restX = 0.75 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect + 0.3; // 平常囥佇畫面外
+  leanFaces.forEach(f => { f.visible = pe > 0.02; f.position.x = f.userData.s * (restX + ((narrow ? 0.4 : 0.58) - restX) * pe); f.position.y = 0.05 - 0.08 * pe; f.rotation.z = -f.userData.s * 0.35 * pe; });
   // 手勢
   const tw = phase === 'twist' ? strokeDir * Math.min(1, tension) : 0;
   handR.rotation.z = -0.2 + tw * 0.4; handR.rotation.y = -0.3 + tw * 0.2; handR.position.x = 0.2 - (phase === 'twist' || phase === 'seam' ? 0.07 : 0);
