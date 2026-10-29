@@ -323,7 +323,7 @@ const PERF0 = 0.7, PERF1 = 0.8, IDEAL = 0.75;
 const HINTS: Record<Phase, string> = {
   pick: '看家己的紅面盆，點一粒蚵仔提起來（細粒較好撬，烏閣粗的較硬）',
   scoop: '撈蚵仔中…',
-  seam: '轉蚵仔揣殼縫（滾輪／A D｜手機：拖下半畫面或 ◀ ▶），縫對著刀尖時點一下插刀',
+  seam: '轉蚵仔揣殼縫（滾輪／A D｜手機：按牢 ◀ ▶ 或直接拖蚵仔；拖別位是看四周），縫對著刀尖時點一下插刀',
   twist: '看指針！行到綠區就點一下（Space／點滑鼠｜手機：點螢幕）撬一下；紅區傷大力會碎殼',
   aim: '轉頭對準藍色碗，按住蓄力，藍色區間放開投肉！',
   empty: '空殼仔：F／右鍵／「丟殼」對準阿婆擲過去，或者等一下自動擲掉',
@@ -412,12 +412,17 @@ function fillBasin(animate: boolean) {
   for (let i = 0; i < 8; i++) { const m = makeBasinOyster(wpick(DIFF_W.map(w => ({ w })))); const slot = basinSlot(i); m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2)); basinOy.push(m);
     if (animate) { const p0 = pileSpot(); fly(m, p0, slot, 0.4 + i * 0.05, 0.4, () => m.position.copy(slot)); } else { m.position.copy(slot); scene.add(m); } }
 }
+function hitsOyster(cx: number, cy: number) { camera.updateMatrixWorld(); ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), camera); return ray.intersectObject(oyster, true).length > 0; }
 function pickAt(cx: number, cy: number) {
   if (phase !== 'pick' || state !== 'play') return;
   camera.updateMatrixWorld();
   ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), camera);
   const hit = ray.intersectObjects(basinOy, true)[0];
   if (hit) { let o: THREE.Object3D = hit.object; while (!basinOy.includes(o as THREE.Mesh)) o = o.parent!; grab(o as THREE.Mesh); return; }
+  // 點著家己的手／手骨（或附近）：揀螢幕上上近的蚵仔
+  let best: THREE.Mesh | null = null, bd = Math.max(110, innerWidth * 0.12);
+  for (const m of basinOy) { const p = m.position.clone().project(camera); if (p.z > 1) continue; const d = Math.hypot((p.x + 1) / 2 * innerWidth - cx, (1 - p.y) / 2 * innerHeight - cy); if (d < bd) { bd = d; best = m; } }
+  if (best) { grab(best); return; }
   if (ray.intersectObject(pileHit, false).length || ray.intersectObject(pile, false).length) { scoop(); return; }
   hint.textContent = basinOy.length ? '點面盆內的蚵仔' : '面盆空矣！點中央的蚵殼山撈一把';
 }
@@ -665,7 +670,7 @@ canvas.addEventListener('pointerdown', e => {
   if (swipePhase()) { pry(e.timeStamp); if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) canvas.requestPointerLock(); return; }
   if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
   if (e.button === 2) { throwShell(); return; }
-  down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && e.clientY > innerHeight * 0.6, lx: e.clientX, lt: performance.now() };
+  down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && hitsOyster(e.clientX, e.clientY), lx: e.clientX, lt: performance.now() };
   if (phase === 'aim') { holding = true; hold = 0; }
 });
 let lastMoveT = performance.now();

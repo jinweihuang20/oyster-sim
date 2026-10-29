@@ -36,7 +36,7 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 #btns button{pointer-events:auto;display:none;font-size:14px;padding:8px 12px;background:rgba(120,60,40,.85);color:#fff}
 #btns button.on{display:block}#umbBtn{background:#c0392b!important;font-size:18px!important;padding:12px 16px!important}#umbBtn.cd{opacity:.45}
 #stealBtn{background:#5a3a8a!important}
-.mb{position:fixed!important;bottom:22%;}#rotL{left:12px}#rotR{right:12px}
+.mb{position:fixed!important;bottom:22%;width:64px;height:64px;font-size:28px!important;border-radius:50%!important;touch-action:none;user-select:none;-webkit-user-select:none}#rotL{left:12px}#rotR{right:12px}
 #prog{position:absolute;bottom:calc(18% + 44px);left:50%;width:min(50vw,240px);height:6px;transform:translateX(-50%);background:rgba(0,0,0,.5);border-radius:3px;overflow:hidden;display:none}
 #prog.on{display:block}#progFill{height:100%;width:0;background:#9be37a}
 #gauge.tw{border-color:#9be37a}#gauge.tw #zone{background:rgba(120,220,120,.55)}
