@@ -103,10 +103,12 @@ function makeAma(top: number, hair: number) {
 type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: number; peek: boolean; count: number; pause: number; look: number; bubble: HTMLDivElement; bubT: number; lean: number;
   cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[] };
 const npcs: Npc[] = [];
+// 阿婆每粒秒數 = rate × 難度倍率（易 0.75／普通 1／硬 1.3／超硬 1.6）
+const NPC_DIFF_T = [0.75, 1, 1.3, 1.6];
 const NPC_DEF = [
-  { name: '快手阿桃', rate: 1.9, chatty: 0.1, peek: false, top: 0x6a3a8a, hair: 0x999999, a: -1.9 },
-  { name: '講話阿春', rate: 2.8, chatty: 0.6, peek: false, top: 0x2a7a5a, hair: 0x333333, a: Math.PI },
-  { name: '好奇阿嬌', rate: 2.4, chatty: 0.3, peek: true, top: 0xb04050, hair: 0xcccccc, a: 1.9 },
+  { name: '快手阿桃', rate: 4.2, chatty: 0.1, peek: false, top: 0x6a3a8a, hair: 0x999999, a: -1.9 },
+  { name: '講話阿春', rate: 7.5, chatty: 0.6, peek: false, top: 0x2a7a5a, hair: 0x333333, a: Math.PI },
+  { name: '好奇阿嬌', rate: 5.8, chatty: 0.3, peek: true, top: 0xb04050, hair: 0xcccccc, a: 1.9 },
 ];
 for (const d of NPC_DEF) {
   const a = makeAma(d.top, d.hair); const ang = Math.PI / 2 + d.a; const r = 1.9;
@@ -344,10 +346,19 @@ const oddMeshes: THREE.Object3D[] = ODD.map((_, i) => {
 });
 // 紅白雨傘（傳統菜市仔款）
 const umb = new THREE.Group(); camera.add(umb); umb.visible = false;
-{ const cv = document.createElement('canvas'); cv.width = 256; cv.height = 32; const x = cv.getContext('2d')!; for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#f4f0e8' : '#c8302a'; x.fillRect(i * 32, 0, 32, 32); }
+let umbSize = 1;
+function buildUmb(look: string, size: number) {
+  while (umb.children.length) umb.remove(umb.children[0]); umbSize = size;
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 32; const x = cv.getContext('2d')!;
+  const pal: Record<string, string[]> = { stripe: ['#c8302a', '#f4f0e8'], clear: ['#cfe6ff', '#e4f2ff'], navy: ['#1f2b4a', '#24335a'], beach: ['#e83a3a', '#f6c33a', '#3ab0e8', '#5ac85a'], temple: ['#b0141a', '#e8b030'] };
+  const cols = pal[look] ?? pal.stripe; for (let i = 0; i < 8; i++) { x.fillStyle = cols[i % cols.length]; x.fillRect(i * 32, 0, 32, 32); }
+  if (look === 'temple') { x.fillStyle = '#ffe28a'; x.fillRect(0, 26, 256, 6); }
   const tex = new THREE.CanvasTexture(cv);
-  const c = mesh(new THREE.ConeGeometry(0.9, 0.35, 16, 1, true), new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.8 }), [0, 0, 0], umb); c.rotation.x = Math.PI / 2;
-  mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.7, 5), mat(0x6a4a2a), [0, -0.05, 0.35], umb).rotation.x = Math.PI / 2; }
+  const m = new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: look === 'clear' ? 0.1 : 0.8, transparent: look === 'clear', opacity: look === 'clear' ? 0.45 : 1 });
+  const c = mesh(new THREE.ConeGeometry(0.9 * size, 0.35 * size, look === 'temple' ? 24 : 16, 1, true), m, [0, 0, 0], umb); c.rotation.x = Math.PI / 2;
+  mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.7, 5), mat(look === 'temple' ? 0xd8a020 : 0x6a4a2a), [0, -0.05, 0.35], umb).rotation.x = Math.PI / 2;
+}
+buildUmb('stripe', 1);
 umb.position.set(0, 0, -0.75);
 
 // ---------- 遊戲狀態 ----------
@@ -428,12 +439,12 @@ const decalGeo = new THREE.CircleGeometry(1, 10);
 const wound = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.012), new THREE.MeshBasicMaterial({ color: 0xa00818, transparent: true })); wound.position.set(0.03, 0.06, -0.02); wound.rotation.set(-1.2, 0, 0.4); wound.visible = false; handL.add(wound);
 let woundT = 0;
 function emojiSprite(t: string, sz = 0.18) { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d')!; g.font = '100px serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(t, 64, 70); const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); sp.scale.setScalar(sz); return sp; }
-function npcHurt(n: Npc) {
-  n.clutch = rnd(3, 5); n.pause = Math.max(n.pause, n.clutch); n.windup = 0; SFX.aia(); later(0.15, () => tone(380, 0.6, 0.12, 'sawtooth', 0, 220)); say(n, pick(['哎唷喂啊！我的頭！', '夭壽喔！流血矣啦！', '你這囡仔！擲我頭殼！']));
+function npcHurt(n: Npc, power = 1) {
+  n.clutch = rnd(3, 5) * power; n.pause = Math.max(n.pause, n.clutch); n.windup = 0; SFX.aia(); later(0.15, () => tone(380, 0.6, 0.12, 'sawtooth', 0, 220)); say(n, pick(['哎唷喂啊！我的頭！', '夭壽喔！流血矣啦！', '你這囡仔！擲我頭殼！']));
   if (n.bump) n.head.remove(n.bump);
   n.bump = mix.gore ? new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), mat(0xd86a5a)) : emojiSprite('🩹', 0.14); n.bump.position.set(0.02, 0.12, 0.03); n.head.add(n.bump); n.bumpT = 20;
   if (!mix.gore) { const st = emojiSprite('💫', 0.22); st.position.set(0, 0.2, 0); n.head.add(st); later(2.5, () => n.head.remove(st)); return; }
-  bleed(18, worldOf(n.head).add(new THREE.Vector3(0, 0.1, 0)), false);
+  bleed(Math.round(18 * power), worldOf(n.head).add(new THREE.Vector3(0, 0.1, 0)), false);
 }
 function bleed(n: number, at?: THREE.Vector3, me = true) {
   if (!mix.gore) { if (me) { const b = $('aid') as HTMLElement; b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); } return; }
@@ -517,6 +528,16 @@ const KNIVES: Knife[] = [
   { id: 'seam', n: '揣縫刀', price: 180, green: 0.9, speed: 1.1, steps: 0, stab: 0.8, seam: 1.6, blade: 0xc8e0b0, desc: '揣縫真簡單，撬的時陣較食力' },
   { id: 'master', n: '師傅刀', price: 1200, green: 1.2, speed: 0.95, steps: -1, stab: 0.6, seam: 1.25, blade: 0xffe28a, desc: '老師傅手工，樣樣好，就是貴' },
 ];
+type Umb = { id: string; n: string; price: number; open: number; dur: number; perf: number; cd: number; cover: number; reflect: number; look: string; size: number; desc: string };
+const UMBS: Umb[] = [
+  { id: 'stripe', n: '紅白傘', price: 0, open: 0.05, dur: 0.9, perf: 0.28, cd: 2.5, cover: 0.95, reflect: 1, look: 'stripe', size: 1, desc: '工寮門口撿著的，普通好用' },
+  { id: 'clear', n: '超商透明傘', price: 30, open: 0.05, dur: 0.7, perf: 0.2, cd: 1.5, cover: 0.85, reflect: 0.6, look: 'clear', size: 0.8, desc: '俗閣輕，緊閣會當連開，毋過細支、反彈無力' },
+  { id: 'fold', n: '自動摺疊傘', price: 160, open: 0, dur: 0.6, perf: 0.4, cd: 2, cover: 0.8, reflect: 1.2, look: 'navy', size: 0.7, desc: '一揤就開，完美時機寬，毋過傘面細' },
+  { id: 'beach', n: '海灘陽傘', price: 260, open: 0.25, dur: 1.8, perf: 0.15, cd: 3.5, cover: 1, reflect: 0.8, look: 'beach', size: 1.3, desc: '大支閣撐久，毋過開較慢、歇較久' },
+  { id: 'temple', n: '廟會涼傘', price: 1500, open: 0.05, dur: 1.1, perf: 0.35, cd: 2.2, cover: 1, reflect: 1.6, look: 'temple', size: 1.05, desc: '神明的涼傘，反彈有夠力，就是貴' },
+];
+const umbNow = () => UMBS.find(u => u.id === save.shop.equipped.umb) ?? UMBS[0];
+function applyUmb() { const u = umbNow(); buildUmb(u.look, u.size); }
 const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
 const pryW = () => Math.min(0.6, PRY[diff].w * knifeNow().green);
 const prySp = () => PRY[diff].sp * knifeNow().speed;
@@ -527,11 +548,23 @@ function pctTxt(v: number, goodHigh: boolean) { if (v === 1) return '<span style
 function renderShop() {
   if (!save.shop.owned.includes('basic')) save.shop.owned.push('basic');
   const cur = knifeNow().id;
-  $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>揣縫</th><th></th></tr>` + KNIVES.map(k => {
+  $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><h3>🔪 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>揣縫</th><th></th></tr>` + KNIVES.map(k => {
     const own = save.shop.owned.includes(k.id);
     const btn = k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < k.price ? 'disabled' : ''}>$${k.price}</button>`;
     return `<tr><td><b>${k.n}</b><br><small>${k.desc}</small></td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
-  $('shopList').querySelectorAll('button').forEach(b => (b as HTMLButtonElement).onclick = () => {
+  if (!save.shop.owned.includes('stripe')) save.shop.owned.push('stripe');
+  const cu = umbNow().id, B = UMBS[0];
+  const rel = (v: number, b: number, goodHigh: boolean, unit: string) => { if (v === b) return `<span style="opacity:.6">${v}${unit}</span>`; const good = goodHigh ? v > b : v < b; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${v}${unit}</b>`; };
+  $('shopList').innerHTML += `<h3>☂ 雨傘</h3><table class="kt"><tr><th>傘</th><th>開傘</th><th>撐</th><th>完美窗</th><th>冷卻</th><th>遮</th><th>反彈力</th><th></th></tr>` + UMBS.map(u => {
+    const own = save.shop.owned.includes(u.id);
+    const btn = u.id === cu ? '<b>使用中</b>' : own ? `<button data-ueq="${u.id}">換</button>` : `<button data-ubuy="${u.id}" ${save.money < u.price ? 'disabled' : ''}>$${u.price}</button>`;
+    return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small></td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(u.cd, B.cd, false, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+  $('shopList').querySelectorAll('button[data-ubuy],button[data-ueq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+    const id = b.getAttribute('data-ubuy') || b.getAttribute('data-ueq')!; const u = UMBS.find(x => x.id === id)!;
+    if (b.hasAttribute('data-ubuy')) { if (save.money < u.price) return; save.money -= u.price; save.shop.owned.push(id); if (ac) SFX.jingle(); }
+    save.shop.equipped.umb = id; persist(); applyUmb(); renderShop();
+  });
+  $('shopList').querySelectorAll('button[data-buy],button[data-eq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const id = b.getAttribute('data-buy') || b.getAttribute('data-eq')!; const k = KNIVES.find(x => x.id === id)!;
     if (b.hasAttribute('data-buy')) { if (save.money < k.price) return; save.money -= k.price; save.shop.owned.push(id); if (ac) SFX.jingle(); }
     save.shop.equipped.knife = id; persist(); applyKnife(); renderShop();
@@ -541,6 +574,7 @@ function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.Mes
 const PRY_GRACE = 0.04;
 // 視覺佮判定攏用同一个時間公式（事件 timeStamp），毋免等下一格
 const needle = (ms = performance.now()) => 0.5 - 0.5 * Math.cos(((ms - needleStart) / 1000) * Math.PI * 2 * prySp());
+(window as any).__sim = () => ({ t: SHIFT - timeLeft, c: npcs.map(n => n.count), names: npcs.map(n => n.name) });
 (window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
 (window as any).__pry = () => { if (phase !== 'twist') return null; const f = prySp(), per = 1000 / f, th = Math.acos(1 - 2 * PRY_C) / (Math.PI * 2) * per; const el = (performance.now() - needleStart) % per; let w = th - el; if (w < 5) w += per / 2 > th ? per - 2 * th + th * 2 - th : per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
 function pryFx(ok: boolean, txt: string) { gauge.classList.remove('hit', 'miss'); void gauge.offsetWidth; gauge.classList.add(ok ? 'hit' : 'miss'); const pp = $('ppop'); pp.textContent = txt; pp.className = ''; void pp.offsetWidth; pp.className = ok ? 'ok' : 'bad'; }
@@ -671,10 +705,12 @@ function throwOne(n: Npc) {
   if (state !== 'play') return;
   const sh = new THREE.Mesh(halfGeo, shellMat); const from = worldOf(n.head); SFX.whoosh();
   fly(sh, from, () => camera.position.clone().add(new THREE.Vector3(0, -0.05, 0)), 0.55, 0.4, () => {
-    if (umbT > 0.62) { // 拄開傘 0.25 秒內 = 完美反彈
+    const U = umbNow(), up = umbT > 0 && umbAge() >= U.open, covered = up && Math.random() < U.cover;
+    if (up && !covered) toast('傘傷細，殼仔對邊仔鑽入來！', '#ff9a8a');
+    if (covered && umbAge() - U.open < U.perf) { // 拄開好的時陣 = 完美反彈
       reflects++; blockStreak++; SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
-      fly(sh, sh.position.clone(), () => worldOf(n.head), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); addGrudge(n, 20); npcHurt(n); });
-    } else if (umbT > 0) { scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋著！波嗯～', '#9be37a'); say(n, pick(['哪會有雨傘啦！', '狡怪喔你！', '啥物時陣提出來的！']), 2.5); }
+      fly(sh, sh.position.clone(), () => worldOf(n.head), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); addGrudge(n, Math.round(20 * U.reflect)); npcHurt(n, U.reflect); });
+    } else if (covered) { scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋著！波嗯～', '#9be37a'); say(n, pick(['哪會有雨傘啦！', '狡怪喔你！', '啥物時陣提出來的！']), 2.5); }
     else { scene.remove(sh); blockStreak = 0; hitsTaken++; ($('splat') as HTMLElement).style.opacity = '1'; later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0'); hurt(8, '哎唷！擲著矣！'); hitInHand(); }
     if (blockStreak >= 3) { blockStreak = 0; npcs.forEach((m, i) => { m.calm = 45; if (i === 0) later(0.8, () => say(m, '這个阿婆有夠勇……', 3)); }); toast('阿婆們驚你矣，暫時較少擲', '#9fe0ff'); }
     updHud();
@@ -686,7 +722,9 @@ function hitInHand() {
     else if (phase === 'twist') { progress = 0; shellTop.rotation.z = 0; combo = 0; toast('撬一半閣合倒轉去矣…', '#ff9a8a'); }
   }
 }
-function openUmbrella() { if (state !== 'play' || umbCd > 0) return; umbT = 0.9; umbCd = 2.5; umb.visible = true; SFX.pop(); }
+function openUmbrella() { if (state !== 'play' || umbCd > 0) return; const u = umbNow(); umbT = umbLen = u.open + u.dur; umbCd = u.cd; umb.visible = true; SFX.pop(); }
+let umbLen = 0.9;
+const umbAge = () => umbLen - umbT;
 // ----- 4. 偷蚵仔 -----
 function stealTarget() { for (const n of npcs) { const p = n.bowl.clone().project(camera); if (p.z < 1 && Math.abs(p.x) < 0.3 && Math.abs(p.y) < 0.35) return n; } return null; }
 function startSteal() { if (state !== 'play') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n); }
@@ -812,7 +850,7 @@ $('resetSave').onclick = () => { if (confirm('確定欲重置存檔？錢、圖�
 $('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); renderShop(); $('shop').classList.add('show'); };
 $('shopBtn2').onclick = () => { renderShop(); $('shop').classList.add('show'); };
 $('shopClose').onclick = () => $('shop').classList.remove('show');
-applyKnife();
+applyKnife(); applyUmb();
 $('setClose').onclick = () => $('settings').classList.remove('show');
 for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as HTMLInputElement; el.value = String(mix[k]); el.oninput = () => { mix[k] = Number(el.value); applyMix(); if (k === 'sfx' && ac) SFX.plop(); }; }
 for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { const c = $(id) as HTMLInputElement; c.checked = mix[key]; c.onchange = () => { mix[key] = c.checked; applyMix(); }; }
@@ -841,7 +879,7 @@ function npcShuck(n: Npc, dt: number, t: number) {
       n.count++; n.bowlMeat.push(m); if (n.bowlMeat.length > 25) scene.remove(n.bowlMeat.shift()!); }); }
   if (c >= 0.85 && n.ev === 2) { n.ev = 3; n.oy.visible = false; const sh = new THREE.Mesh(halfGeo, shellMat); fly(sh, worldOf(n.oy), pileSpot(), 0.5, 0.4, () => scene.remove(sh)); }
   if (c >= 1 && (n.basinN = (n.basinN ?? 6) - 1) <= 0) { n.basinN = 6; n.pause = 1.5; n.scoopT = 1.5; }
-  if (c >= 1) { n.cyc = 0; n.ev = 0; n.dur = n.rate * rnd(0.8, 1.2); n.oy.visible = true; n.meat.visible = true; n.top.rotation.z = 0; n.top.position.set(0, 0.04, 0); }
+  if (c >= 1) { n.cyc = 0; n.ev = 0; n.dur = n.rate * NPC_DIFF_T[wpick(DIFF_W.map(w => ({ w })))] * rnd(0.9, 1.1); n.oy.visible = true; n.meat.visible = true; n.top.rotation.z = 0; n.top.position.set(0, 0.04, 0); }
 }
 
 // ---------- 主迴圈 ----------
@@ -860,7 +898,7 @@ function frame() {
   toastT -= rdt; if (toastT <= 0) toastEl.classList.remove('on');
   tension = Math.max(0, tension - rdt * 1.6);
   umbT = Math.max(0, umbT - rdt); umbCd = Math.max(0, umbCd - rdt); $('umbBtn').classList.toggle('cd', umbCd > 0);
-  const us = umbT > 0 ? Math.min(1, (0.9 - umbT) * 10, umbT * 6) : 0; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
+  const us = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
   let warnNpc: Npc | null = null;
   if (state === 'play') {
     timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); }
@@ -950,7 +988,7 @@ if (SHOT) {
   if (SHOT === 'blood' || SHOT === 'aid') { if (SHOT === 'aid') mix.gore = false; later(0.3, () => { flinch = 0.6; bleed(16); hurt(15, '割著手矣！'); }); }
   if (SHOT === 'npcblood' || SHOT === 'npcaid') { if (SHOT === 'npcaid') mix.gore = false; const n = npcs[0]; look(Math.atan2(-(worldOf(n.head).x - camera.position.x), -(worldOf(n.head).z - camera.position.z)), -0.2); later(0.2, () => npcHurt(n)); }
   if (SHOT === 'grudge') { look(0.15, -0.25); [30, 65, 100].forEach((g, i) => { npcs[i].grudge = g; grudgeUI(npcs[i]); }); npcs[2].angry = 99; say(npcs[2], '看我連環殼！', 99); }
-  if (SHOT === 'reflect') { const n = npcs[2]; look(0.6, -0.3); n.windup = 0.25; later(0.62, () => { umbT = 0.9; umbCd = 0; umb.visible = true; }); }
+  if (SHOT === 'reflect') { const n = npcs[2]; look(0.6, -0.3); n.windup = 0.25; later(0.62, () => { umbT = umbLen = 0.9; umbCd = 0; umb.visible = true; }); }
   if (SHOT === 'shop') { save.money = 600; save.shop.owned = ['basic', 'seam']; save.shop.equipped.knife = 'seam'; applyKnife(); renderShop(); $('shop').classList.add('show'); }
   if (SHOT === 'pick') look(-0.25, -0.85);
   if (SHOT === 'scoop') { look(0, -0.5); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; scoop(); }
@@ -967,7 +1005,7 @@ if (SHOT) {
   if (SHOT === 'crab') { setPhase('busy'); seamMark.visible = false; shellTop.visible = false; revealOdd(3); }
   if (SHOT === 'throw') { look(0.1, -0.3); setPhase('empty'); emptyT = 99; later(0.05, throwShell); }
   if (SHOT === 'warning') { look(-0.3, -0.5); windUp(npcs[2]); npcs[2].windup = 99; }
-  if (SHOT === 'umbrella') { look(0.6, -0.3); windUp(npcs[2]); npcs[2].windup = 0.3; later(0.25, () => { umbT = 0.9; umbCd = 0; umb.visible = true; }); later(0.6, () => { umbT = 0.6; }); }
+  if (SHOT === 'umbrella') { look(0.6, -0.3); windUp(npcs[2]); npcs[2].windup = 0.3; later(0.25, () => { umbT = umbLen = 0.9; umbCd = 0; umb.visible = true; }); later(0.6, () => { umbT = 0.6; }); }
   if (SHOT === 'harbor') look(0, -0.05);
   if (SHOT === 'end') { count = 38; opened = 47; missed = 9; abandoned = 3; perfects = 12; cracked = 4; steals = 3; caught = 1; meatHits = 2; shellHits = 4; thrown = 5; blocks = 3; reflects = 2; lost = 1; hitsTaken = 1; penalty = 28; dayPearls = [0]; dayOdd = [1]; endDay(); }
 }
