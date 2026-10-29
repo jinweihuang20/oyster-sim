@@ -101,7 +101,7 @@ function makeAma(top: number, hair: number) {
   return { g, body, head, armL: arm(-1), armR: arm(1) };
 }
 type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: number; peek: boolean; count: number; pause: number; look: number; bubble: HTMLDivElement; bubT: number; lean: number;
-  cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[] };
+  cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[] };
 const npcs: Npc[] = [];
 const NPC_DEF = [
   { name: '快手阿桃', rate: 1.9, chatty: 0.1, peek: false, top: 0x6a3a8a, hair: 0x999999, a: -1.1 },
@@ -305,6 +305,7 @@ let state: 'menu' | 'play' | 'end' = 'menu';
 let phase: Phase = 'busy';
 let hp = 100, stabs = 0, flinch = 0, hurtT = 0, handPain = false;
 let timeLeft = SHIFT, count = 0, cracked = 0, opened = 0, missed = 0, abandoned = 0, perfects = 0, dayPearls: number[] = [], dayOdd: number[] = [];
+let reflects = 0, wasteShells = 0, thrown = 0, lost = 0, blockStreak = 0;
 let steals = 0, caught = 0, penalty = 0, meatHits = 0, shellHits = 0, blocks = 0, hitsTaken = 0, crackedNow = false;
 let holding = false, hold = 0, diff = 1, slowmo = 0, shake = 0, pearlShow = 0;
 let rot = 0, seamA = 0, lastTick = 0, progress = 0, tension = 0, strokeDir = 0, strokeLen = 0, strokePeak = 0, crabShakes = 0, lastKeyT = 0, lastKey = '';
@@ -331,9 +332,9 @@ const HINTS: Record<Phase, string> = {
 };
 const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
 function setPhase(p: Phase) {
-  phase = p; holding = false; hold = 0; fill.style.marginLeft = '0'; zone.style.left = ''; zone.style.width = ''; if (p === 'twist') needleT = 0; gauge.classList.remove('on', 'aim', 'tw');
+  phase = p; holding = false; hold = 0; fill.style.marginLeft = '0'; zone.style.left = ''; zone.style.width = ''; if (p === 'twist') { needleStart = performance.now(); combo = 0; } gauge.classList.remove('on', 'aim', 'tw');
   if (p === 'aim') gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
-  on('reticle', p === 'aim' || p === 'empty' || p === 'pick' || (document.pointerLockElement === canvas && p !== 'busy')); on('giveUp', p === 'seam' && state === 'play'); on('prog', p === 'twist' || p === 'crab');
+  on('reticle', p === 'aim' || p === 'empty' || p === 'pick' || (document.pointerLockElement === canvas && p !== 'busy')); on('giveUp', (p === 'seam' || p === 'twist') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
   on('rotL', p === 'seam'); on('rotR', p === 'seam'); on('throwBtn', (p === 'seam' || p === 'empty') && state === 'play');
   if (p !== 'busy') hint.textContent = HINTS[p];
   const d = DIFF[diff];
@@ -356,8 +357,8 @@ function holdOyster(dd: number) {
 }
 function startDay() {
   state = 'play'; handPain = false; timeLeft = SHIFT; hp = 100;
-  count = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = 0; dayPearls = []; dayOdd = [];
-  npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
+  count = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = [];
+  npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
   ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
 }
@@ -365,7 +366,7 @@ function updHud() {
   ($('hpFill') as HTMLElement).style.width = `${hp}%`;
   const s = Math.max(0, Math.ceil(timeLeft)); $('timer').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   $('count').textContent = `🦪 ${count}`; $('pearls').textContent = `⚪ ${dayPearls.length + dayOdd.length}`;
-  $('stats').textContent = `開 ${opened}・入碗 ${count}・浪費率 ${opened ? Math.round(missed / opened * 100) : 0}%・殼屑 ${cracked}・偷 ${steals}/掠 ${caught}・割手 ${stabs}`;
+  $('stats').textContent = `開 ${opened}・入碗 ${count}・浪費率 ${opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0}%・殼屑 ${cracked}・偷 ${steals}/掠 ${caught}・割手 ${stabs}`;
 }
 function worldOf(o: THREE.Object3D) { return o.getWorldPosition(new THREE.Vector3()); }
 function nagFrom(n: Npc, lines: string[], dur = 3) { let t = pick(lines); if (t === lastNag && lines.length > 1) t = lines[(lines.indexOf(t) + 1) % lines.length]; lastNag = t; n.look = dur; say(n, t, dur); }
@@ -375,11 +376,19 @@ const dropGeo = new THREE.SphereGeometry(0.005, 6, 4), dropMat = new THREE.MeshB
 const decalGeo = new THREE.CircleGeometry(1, 10);
 const wound = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.012), new THREE.MeshBasicMaterial({ color: 0xa00818, transparent: true })); wound.position.set(0.03, 0.06, -0.02); wound.rotation.set(-1.2, 0, 0.4); wound.visible = false; handL.add(wound);
 let woundT = 0;
-function bleed(n: number) {
-  if (!mix.gore) { const b = $('aid') as HTMLElement; b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); return; }
-  const o = new THREE.Vector3(); handL.getWorldPosition(o); o.y += 0.05;
+function emojiSprite(t: string, sz = 0.18) { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d')!; g.font = '100px serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(t, 64, 70); const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); sp.scale.setScalar(sz); return sp; }
+function npcHurt(n: Npc) {
+  n.clutch = rnd(3, 5); n.pause = Math.max(n.pause, n.clutch); n.windup = 0; SFX.aia(); later(0.15, () => tone(380, 0.6, 0.12, 'sawtooth', 0, 220)); say(n, pick(['哎唷喂啊！我的頭！', '夭壽喔！流血矣啦！', '你這囡仔！擲我頭殼！']));
+  if (n.bump) n.head.remove(n.bump);
+  n.bump = mix.gore ? new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), mat(0xd86a5a)) : emojiSprite('🩹', 0.14); n.bump.position.set(0.02, 0.12, 0.03); n.head.add(n.bump); n.bumpT = 20;
+  if (!mix.gore) { const st = emojiSprite('💫', 0.22); st.position.set(0, 0.2, 0); n.head.add(st); later(2.5, () => n.head.remove(st)); return; }
+  bleed(18, worldOf(n.head).add(new THREE.Vector3(0, 0.1, 0)), false);
+}
+function bleed(n: number, at?: THREE.Vector3, me = true) {
+  if (!mix.gore) { if (me) { const b = $('aid') as HTMLElement; b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); } return; }
+  const o = at ?? new THREE.Vector3(); if (!at) { handL.getWorldPosition(o); o.y += 0.05; }
   for (let i = 0; i < n; i++) { const m = new THREE.Mesh(dropGeo, dropMat); m.position.copy(o); m.scale.setScalar(rnd(0.6, 1.6)); scene.add(m); drops.push({ m, v: new THREE.Vector3(rnd(-0.8, 0.8), rnd(0.8, 2), rnd(-0.9, 0.2)) }); }
-  woundT = 8; wound.visible = true;
+  if (me) { woundT = 8; wound.visible = true; }
 }
 function landY(p: THREE.Vector3) { if (Math.hypot(p.x - BOWL.x, p.z - BOWL.z) < BOWL_R + 0.03) return BOWL.y + 0.06; if (Math.hypot(p.x - BASIN.x, p.z - BASIN.z) < 0.3) return 0.15; if (Math.hypot(p.x, p.z) < 0.9) return 0.15 * (1 - Math.hypot(p.x, p.z) / 0.9) + 0.01; return 0.005; }
 function updBlood(dt: number) {
@@ -441,15 +450,21 @@ function twistInput(dx: number, dtMs: number) { if (swipePhase()) return;
 }
 const PRY = [{ w: 0.3, sp: 0.8 }, { w: 0.22, sp: 1.05 }, { w: 0.15, sp: 1.35 }, { w: 0.1, sp: 1.7 }];
 const PRY_NEED = [2, 3, 4, 5], PRY_C = 0.55, PRY_RED = 0.86;
-let needleT = 0;
-const needle = () => 0.5 - 0.5 * Math.cos(needleT * Math.PI * 2 * PRY[diff].sp);
-function pry() {
+let needleStart = 0, combo = 0;
+const PRY_GRACE = 0.04;
+// 視覺佮判定攏用同一个時間公式（事件 timeStamp），毋免等下一格
+const needle = (ms = performance.now()) => 0.5 - 0.5 * Math.cos(((ms - needleStart) / 1000) * Math.PI * 2 * PRY[diff].sp);
+(window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
+(window as any).__pry = () => { if (phase !== 'twist') return null; const f = PRY[diff].sp, per = 1000 / f, th = Math.acos(1 - 2 * PRY_C) / (Math.PI * 2) * per; const el = (performance.now() - needleStart) % per; let w = th - el; if (w < 5) w += per / 2 > th ? per - 2 * th + th * 2 - th : per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
+function pryFx(ok: boolean, txt: string) { gauge.classList.remove('hit', 'miss'); void gauge.offsetWidth; gauge.classList.add(ok ? 'hit' : 'miss'); const pp = $('ppop'); pp.textContent = txt; pp.className = ''; void pp.offsetWidth; pp.className = ok ? 'ok' : 'bad'; }
+function pry(ms = performance.now()) {
   if (phase === 'crab') { crabShakes++; tone(600 + crabShakes * 40, 0.05, 0.1); strokeDir = -strokeDir || 1; flinch = 0.3; if (crabShakes >= 8) crabOff(); return; }
   if (phase !== 'twist') return;
-  const n = needle(), w = PRY[diff].w; strokeDir = -strokeDir || 1; tension = 0.9;
-  if (n > PRY_RED) { progress += 1 / PRY_NEED[diff]; SFX.creak(); if (!crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('傷大力，殼碎去矣！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
-  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / PRY_NEED[diff]; SFX.creak(); hint.textContent = '好！閣一下'; }
-  else { tone(220, 0.08, 0.06, 'triangle'); hint.textContent = '無著時機，等指針行到綠區'; tension = 0.3; return; }
+  const n = needle(ms), w = PRY[diff].w + PRY_GRACE * 2; (window as any).__pryLog = ((window as any).__pryLog || []).concat([[+n.toFixed(3), Math.abs(n - PRY_C) <= w / 2]]); strokeDir = -strokeDir || 1; tension = 0.9;
+  const need = PRY_NEED[diff];
+  if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('傷大力，殼碎去矣！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
+  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; combo++; SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！手路真好！' : '好！閣一下'; }
+  else { combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 無著'); hint.textContent = '無著時機，等指針行到綠區'; tension = 0.3; return; }
   shellTop.rotation.z = -progress * 0.4;
   if (progress >= 0.999) openOyster();
 }
@@ -526,7 +541,7 @@ function shoot(power: number) {
 }
 function discardShell() { if (phase !== 'empty') return; oyster.visible = false; const sh = new THREE.Mesh(halfGeo, shellBotMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.5, () => scene.remove(sh)); setPhase('busy'); later(0.5, goPick); }
 function meatOnHead(n: Npc, m: THREE.Mesh) {
-  meatHits++; if (n.stuck) n.stuck.removeFromParent(); m.removeFromParent(); m.position.set(0, 0.15, 0); m.scale.setScalar(1.6); n.head.add(m); n.stuck = m;
+  meatHits++; addGrudge(n, 25); if (n.stuck) n.stuck.removeFromParent(); m.removeFromParent(); m.position.set(0, 0.15, 0); m.scale.setScalar(1.6); n.head.add(m); n.stuck = m;
   later(8, () => { if (n.stuck === m) { m.removeFromParent(); n.stuck = null; } });
   toast(`擲著${n.name}的頭！`, '#ffb070'); SFX.splat();
   anger(n, SCOLD_HIT, 0.85); updHud();
@@ -535,41 +550,67 @@ function anger(n: Npc, lines: string[], retaliate: number) {
   n.angry = 2.5; n.mood = Math.max(n.mood, 35); nagFrom(n, lines, 3); tone(220, 0.3, 0.2, 'square');
   if (Math.random() < retaliate) later(0.6, () => windUp(n));
 }
+const stunned = (n: Npc) => (n.clutch ?? 0) > 0;
+const freeToSteal = (n: Npc) => n.distract > 0 || stunned(n);
+function addGrudge(n: Npc, v: number) { n.grudge = Math.min(100, (n.grudge ?? 0) + v); }
+function grudgeUI(n: Npc) {
+  if (!n.gIcon) { n.gIcon = emojiSprite('💢', 0.12); n.gIcon.position.set(-0.1, 0.32, 0); n.head.add(n.gIcon); const bar = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff3b2f, depthTest: false })); bar.center.set(0, 0.5); bar.position.set(-0.03, 0.32, 0); n.head.add(bar); n.gBar = bar; }
+  const g = n.grudge ?? 0; n.gIcon.visible = n.gBar!.visible = g > 4; n.gIcon.scale.setScalar(0.12 + g * 0.0015); n.gBar!.scale.set(0.006 + g * 0.0032, 0.035, 1);
+  (n.gBar!.material as THREE.SpriteMaterial).color.setHSL(0.12 - g * 0.0012, 1, 0.5);
+}
 // ----- 6. 擲殼仔 -----
 function throwShell() {
   if (state !== 'play' || (phase !== 'empty' && phase !== 'seam')) return;
-  if (phase === 'seam') abandoned++;
+  thrown++; if (phase === 'seam') { abandoned++; wasteShells++; }
   const from = worldOf(oyster); oyster.visible = false;
   let target: Npc | undefined;
   for (const n of npcs) { const p = worldOf(n.head).project(camera); if (p.z < 1 && Math.abs(p.x) < 0.25 && Math.abs(p.y) < 0.45) target = n; }
   const sh = new THREE.Mesh(halfGeo, shellBotMat); SFX.whoosh();
-  if (target) { const t = target; fly(sh, from, () => worldOf(t.head), 0.5, 0.3, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`擲著${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); updHud(); }); }
-  else { const a = aimPoint(); a.y = 0.02; fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh))); }
+  if (target) { const t = target; fly(sh, from, () => worldOf(t.head), 0.5, 0.3, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`擲著${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 35); npcHurt(t); updHud(); }); }
+  else { let stray: Npc | undefined; for (const n of npcs) { const p = worldOf(n.head).project(camera); if (p.z < 1 && Math.abs(p.x) < 0.7 && Math.abs(p.y) < 0.8 && Math.random() < 0.4) stray = n; }
+    if (stray) { const t = stray; fly(sh, from, () => worldOf(t.head), 0.55, 0.35, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`歪去擲著${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 30); npcHurt(t); updHud(); }); }
+    else { const a = aimPoint(); a.y = 0.02; fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh))); } }
   setPhase('busy'); later(0.6, goPick);
 }
 // ----- 7. 阿婆擲殼仔 + 雨傘 -----
-function windUp(n: Npc) { if (n.windup > 0 || state !== 'play') return; n.windup = 1.0; n.look = 1.6; SFX.alert(); }
+function windUp(n: Npc) { if (n.windup > 0 || state !== 'play' || stunned(n)) return; n.windup = Math.max(0.45, 1.0 - (n.grudge ?? 0) * 0.005); n.look = 1.6; SFX.alert(); }
 function npcThrow(n: Npc) {
-  const sh = new THREE.Mesh(halfGeo, shellMat); const from = worldOf(n.head);
+  if (stunned(n)) return;
+  const shots = (n.grudge ?? 0) >= 90 ? 3 : 1;
+  if (shots > 1) { addGrudge(n, -35); say(n, '看我連環殼！', 2); }
+  for (let i = 0; i < shots; i++) later(i * 0.4, () => throwOne(n));
+}
+function throwOne(n: Npc) {
+  if (state !== 'play') return;
+  const sh = new THREE.Mesh(halfGeo, shellMat); const from = worldOf(n.head); SFX.whoosh();
   fly(sh, from, () => camera.position.clone().add(new THREE.Vector3(0, -0.05, 0)), 0.55, 0.4, () => {
-    scene.remove(sh);
-    if (umbT > 0) { blocks++; SFX.boing(); toast('擋著！波嗯～', '#9be37a'); say(n, pick(['哪會有雨傘啦！', '狡怪喔你！', '啥物時陣提出來的！']), 2.5); }
-    else { hitsTaken++; ($('splat') as HTMLElement).style.opacity = '1'; later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0'); hurt(8, '哎唷！擲著矣！'); }
+    if (umbT > 0.62) { // 拄開傘 0.25 秒內 = 完美反彈
+      reflects++; blockStreak++; SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
+      fly(sh, sh.position.clone(), () => worldOf(n.head), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); addGrudge(n, 20); npcHurt(n); });
+    } else if (umbT > 0) { scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋著！波嗯～', '#9be37a'); say(n, pick(['哪會有雨傘啦！', '狡怪喔你！', '啥物時陣提出來的！']), 2.5); }
+    else { scene.remove(sh); blockStreak = 0; hitsTaken++; ($('splat') as HTMLElement).style.opacity = '1'; later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0'); hurt(8, '哎唷！擲著矣！'); hitInHand(); }
+    if (blockStreak >= 3) { blockStreak = 0; npcs.forEach((m, i) => { m.calm = 45; if (i === 0) later(0.8, () => say(m, '這个阿婆有夠勇……', 3)); }); toast('阿婆們驚你矣，暫時較少擲', '#9fe0ff'); }
     updHud();
   });
+}
+function hitInHand() {
+  if (phase === 'twist' || phase === 'seam') {
+    if (Math.random() < 0.5) { lost++; abandoned++; const sh = new THREE.Mesh(shellGeo, shellTopMat); oyster.visible = false; const a = worldOf(oyster); fly(sh, a, a.clone().setY(0.02).add(new THREE.Vector3(rnd(-0.3, 0.3), 0, -0.3)), 0.5, 0.2, () => later(3, () => scene.remove(sh))); toast('蚵仔落落去塗跤矣！', '#ff9a8a'); progress = 0; shellTop.rotation.z = 0; setPhase('busy'); later(0.8, goPick); }
+    else if (phase === 'twist') { progress = 0; shellTop.rotation.z = 0; combo = 0; toast('撬一半閣合倒轉去矣…', '#ff9a8a'); }
+  }
 }
 function openUmbrella() { if (state !== 'play' || umbCd > 0) return; umbT = 0.9; umbCd = 2.5; umb.visible = true; SFX.pop(); }
 // ----- 4. 偷蚵仔 -----
 function stealTarget() { for (const n of npcs) { const p = n.bowl.clone().project(camera); if (p.z < 1 && Math.abs(p.x) < 0.3 && Math.abs(p.y) < 0.35) return n; } return null; }
-function startSteal() { if (state !== 'play') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (n.distract <= 0) caughtBy(n); }
+function startSteal() { if (state !== 'play') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n); }
 function stopSteal() { stealNpc = null; stealT = 0; }
 function caughtBy(n: Npc) {
   caught++; stopSteal(); const back = Math.min(count, 2); count -= back; n.count += back; penalty += 20;
-  n.distract = 0; n.pause = 0; anger(n, SCOLD_STEAL, 0.5); toast('予人掠著矣！-2 粒、罰 $20', '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
+  n.distract = 0; n.pause = 0; addGrudge(n, 20); anger(n, SCOLD_STEAL, 0.5); toast('予人掠著矣！-2 粒、罰 $20', '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
 }
 function stealOne(n: Npc) {
   if (n.count <= 0) { toast('碗內無肉矣'); stopSteal(); return; }
-  n.count--; count++; steals++; const m = new THREE.Mesh(meatGeo, meatMat);
+  n.count--; count++; steals++; addGrudge(n, 12); const m = new THREE.Mesh(meatGeo, meatMat);
   const lm = n.bowlMeat.pop(); if (lm) scene.remove(lm);
   fly(m, n.bowl.clone(), BOWL.clone().add(new THREE.Vector3(rnd(-0.08, 0.08), 0.06, rnd(-0.08, 0.08))), 0.5, 0.3, () => bowlMeat.push(m));
   SFX.sneak(); toast('偷著一粒！', '#c9a0ff'); updHud();
@@ -579,14 +620,18 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   const all = [{ name: '你（阿婆）', count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const queen = all[0].me;
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
-  const earn = Math.max(0, count * OYSTER_PRICE + pearlMoney - penalty);
-  const waste = opened ? Math.round(missed / opened * 100) : 0;
+  const titles: string[] = []; let bonus = 0;
+  if (thrown === 0) { titles.push('🕊 和平阿婆（+$50）'); bonus = 50; }
+  if (shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
+  if (blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
+  const earn = Math.max(0, count * OYSTER_PRICE + pearlMoney + bonus - penalty);
+  const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
   save.days++; save.best = Math.max(save.best, count); save.money += earn; if (queen) save.queen++; persist();
   $('resTitle').textContent = handPain ? '🩹 手痛收工' : queen ? '👑 今日蚵后！' : '收工矣～';
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 粒入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美出手 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
-    `偷 ${steals}・予人掠著 ${caught}・肉擲著阿婆 ${meatHits}・殼擲著阿婆 ${shellHits}<br>雨傘擋 ${blocks}・予人擲著 ${hitsTaken}</p>` +
-    `<p>蚵仔 ${count} 粒 × $${OYSTER_PRICE}（殼屑 ${cracked} 粒只 $${CRACK_PRICE}）<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
+    `偷 ${steals}・予人掠著 ${caught}・肉擲著阿婆 ${meatHits}・殼擲著阿婆 ${shellHits}<br>雨傘擋 ${blocks}・完美反彈 ${reflects}・予人擲著 ${hitsTaken}・擲殼 ${thrown}・蚵仔落塗跤 ${lost}</p>` + (titles.length ? `<p style="font-size:18px"><b>${titles.join('　')}</b></p>` : '') +
+    `<p>蚵仔 ${count} 粒 × $${OYSTER_PRICE}（殼屑 ${cracked} 粒只 $${CRACK_PRICE}）<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
     `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 粒・做蚵后 ${save.queen} 擺</p>` +
     `<p>${caught >= 2 ? '阿婆們：「明仔載你家己坐一角！」' : waste >= 30 ? '阿婆們：「塗跤攏是蚵仔肉，明仔載較準咧！」' : queen ? '阿婆們：「哎唷，今仔日予你贏去矣！」' : `${all[0].name}：「明仔載閣來拚喔～」`}</p>`;
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
@@ -617,6 +662,7 @@ const swipePhase = () => phase === 'twist' || phase === 'crab';
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (state !== 'play') return; audio().resume();
+  if (swipePhase()) { pry(e.timeStamp); if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) canvas.requestPointerLock(); return; }
   if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
   if (e.button === 2) { throwShell(); return; }
   down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && e.clientY > innerHeight * 0.6, lx: e.clientX, lt: performance.now() };
@@ -639,12 +685,12 @@ window.addEventListener('pointermove', e => {
   if (down.drag) { tYaw = clamp(down.yaw + dx * 0.006, -YAW, YAW); tPitch = clamp(down.pitch + dy * 0.006, P0, P1); }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); if (phase === 'aim' && state === 'play') shoot(h); }
-const up = (e: PointerEvent) => { if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else release(); } else release(); down = null; } };
+const up = (e: PointerEvent) => { if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else release(); } else release(); down = null; } };
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
   if (state !== 'play') return; audio().resume();
-  if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(); else if (phase === 'aim') { holding = true; hold = 0; } }
+  if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim') { holding = true; hold = 0; } }
   if (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
     const l = e.code === 'KeyA' || e.code === 'ArrowLeft';
     if (phase === 'seam') rotKey = l ? -1 : 1; else if (!e.repeat && swipePhase()) keyTwist(l ? 'L' : 'R');
@@ -659,8 +705,9 @@ const btn = (id: string, f: () => void, upF?: () => void) => { $(id).addEventLis
 btn('giveUp', giveUp); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella); btn('stealBtn', startSteal, stopSteal);
 btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, () => rotKey = 0);
 function giveUp() {
-  if (state !== 'play' || phase !== 'seam') return;
-  abandoned++; setPhase('busy'); oyster.visible = false;
+  if (state !== 'play' || (phase !== 'seam' && phase !== 'twist')) return;
+  abandoned++; setPhase('busy'); oyster.visible = false; gauge.classList.remove('hit', 'miss', 'hitHold');
+  later(0.05, () => { progress = 0; combo = 0; crackedNow = false; tension = 0; shellTop.rotation.z = 0; rotKey = 0; });
   const sh = new THREE.Mesh(shellGeo, shellTopMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.6, () => scene.remove(sh));
   hint.textContent = '擲掉矣…'; nag(NAG_GIVEUP); updHud(); later(0.6, goPick);
 }
@@ -685,6 +732,8 @@ function npcShuck(n: Npc, dt: number, t: number) {
   n.armR.rotation.x = n.windup > 0 ? -2.4 : n.angry > 0 ? -1.6 + Math.sin(t * 12) * 0.3 : prying ? -0.25 + Math.sin(t * 28) * 0.12 : -0.05;
   n.armR.rotation.z = prying ? Math.sin(t * 14) * 0.08 : 0;
   if ((n.scoopT ?? 0) > 0) { n.scoopT! -= dt; n.armL.rotation.x = n.armR.rotation.x = -0.9 + Math.sin(t * 8) * 0.2; n.body.rotation.x = 0.35; return; }
+  if (n.bump && (n.bumpT = (n.bumpT ?? 0) - dt) <= 0) { n.head.remove(n.bump); n.bump = undefined; }
+  if ((n.clutch ?? 0) > 0) { n.clutch! -= dt; n.armL.rotation.x = n.armR.rotation.x = -2.7; n.body.rotation.z = Math.sin(t * 18) * 0.08; return; }
   n.armL.rotation.x = n.angry > 0 ? -1.4 : c < 0.15 ? -0.4 * (1 - c / 0.15) : -0.15;
   if (c >= 0.6 && n.ev === 0) { n.ev = 1; n.top.rotation.z = -1.3; n.top.position.set(-0.05, 0.07, 0); }
   if (c >= 0.7 && n.ev === 1) { n.ev = 2; n.meat.visible = false; const m = new THREE.Mesh(meatGeo, meatMat);
@@ -723,7 +772,7 @@ function frame() {
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
       knife.position.y = 0.03 + (e < d.tol * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
     } else knife.position.y = 0.03;
-    if (phase === 'twist') { needleT += rdt; const n = needle(), w = PRY[diff].w; zone.style.left = `${(PRY_C - w / 2) * 100}%`; zone.style.width = `${w * 100}%`; fill.style.width = '4px'; fill.style.marginLeft = `calc(${n * 100}% - 2px)`; fill.style.background = n > PRY_RED ? '#ff5a4a' : Math.abs(n - PRY_C) <= w / 2 ? '#d8ffb0' : '#fff'; }
+    if (phase === 'twist') { if (SHOT === 'pry') needleStart = performance.now() - Math.acos(1 - 2 * PRY_C) / (Math.PI * 2 * PRY[diff].sp) * 1000; const n = needle(), w = PRY[diff].w; zone.style.left = `${(PRY_C - w / 2) * 100}%`; zone.style.width = `${w * 100}%`; fill.style.width = '4px'; fill.style.marginLeft = `calc(${n * 100}% - 2px)`; fill.style.background = n > PRY_RED ? '#ff5a4a' : Math.abs(n - PRY_C) <= w / 2 ? '#d8ffb0' : '#fff'; }
     if (phase === 'twist' || phase === 'crab') { ($('progFill') as HTMLElement).style.width = `${(phase === 'crab' ? crabShakes / 6 : progress) * 100}%`; }
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
     updBlood(rdt);
@@ -733,13 +782,14 @@ function frame() {
     // 偷蚵仔
     const tgt = stealTarget(); on('stealBtn', !!tgt);
     if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}越頭咧講話！按住 E／「偷」偷伊的肉` : `${tgt.name}咧看，毋通偷…`;
-    if (stealNpc) { if (stealNpc.distract <= 0) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
+    if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
     chatTimer -= dt; if (chatTimer <= 0) { chatTimer = 3 + Math.random() * 4; const n = pick(npcs);
       if (n.bubT <= 0 && n.windup <= 0) { if (n.mood > 0) say(n, pick(GRUDGE)); else if (Math.random() < 0.5) { n.distract = rnd(3, 5.5); n.turnDir = Math.random() < 0.5 ? -1 : 1; say(n, pick(TURN_CHAT), n.distract); } else { say(n, pick(GOSSIP)); if (Math.random() < n.chatty) n.pause = 2.5; } } }
     for (const n of npcs) {
       n.distract -= dt; n.angry -= dt; n.mood -= dt;
       npcShuck(n, dt, t);
-      n.throwCd -= dt * (n.mood > 0 ? 4 : 1); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); windUp(n); }
+      n.grudge = Math.max(0, (n.grudge ?? 0) - dt * 1.2); n.calm = Math.max(0, (n.calm ?? 0) - dt); grudgeUI(n);
+      n.throwCd -= dt * (n.calm! > 0 ? 0.3 : (1 + n.grudge! / 25) * (n.mood > 0 ? 2 : 1)); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); windUp(n); }
       if (n.windup > 0) { warnNpc = n; n.windup -= rdt; if (n.windup <= 0) npcThrow(n); }
       if (n.peek && n.look <= 0 && n.distract <= 0 && Math.random() < dt * 0.05) { n.look = 2.5; say(n, pick(PEEK), 2.5); }
     }
@@ -797,12 +847,16 @@ if (SHOT) {
   const look = (y: number, p: number) => { tYaw = yaw = y; tPitch = pitch = p; };
   const twistSetup = () => { diff = 2; setPhase('twist'); seamGlow.visible = false; progress = 0.6; tension = 0.5; strokeDir = 1; shellTop.rotation.z = -0.25; };
   if (SHOT === 'blood' || SHOT === 'aid') { if (SHOT === 'aid') mix.gore = false; later(0.3, () => { flinch = 0.6; bleed(16); hurt(15, '割著手矣！'); }); }
+  if (SHOT === 'npcblood' || SHOT === 'npcaid') { if (SHOT === 'npcaid') mix.gore = false; const n = npcs[0]; look(Math.atan2(-(worldOf(n.head).x - camera.position.x), -(worldOf(n.head).z - camera.position.z)), -0.2); later(0.2, () => npcHurt(n)); }
+  if (SHOT === 'grudge') { look(0.15, -0.25); [30, 65, 100].forEach((g, i) => { npcs[i].grudge = g; grudgeUI(npcs[i]); }); npcs[2].angry = 99; say(npcs[2], '看我連環殼！', 99); }
+  if (SHOT === 'reflect') { const n = npcs[2]; look(0.6, -0.3); n.windup = 0.25; later(0.62, () => { umbT = 0.9; umbCd = 0; umb.visible = true; }); }
   if (SHOT === 'pick') look(-0.25, -0.85);
   if (SHOT === 'scoop') { look(0, -0.5); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; scoop(); }
   const shotHold = () => holdOyster(2);
   if (SHOT !== 'pick' && SHOT !== 'scoop' && SHOT !== 'end') shotHold();
   if (SHOT === 'seam') { diff = 2; seamGlow.visible = true; rot = 0.3; }
-  if (SHOT === 'pry') { twistSetup(); later(0.05, () => { needleT = Math.acos(1 - 2 * PRY_C) / (Math.PI * 2 * PRY[2].sp); hint.textContent = HINTS.twist; }); }
+  if (SHOT === 'prytest') twistSetup();
+  if (SHOT === 'pry') { twistSetup(); later(0.05, () => { needleStart = performance.now() - Math.acos(1 - 2 * PRY_C) / (Math.PI * 2 * PRY[2].sp) * 1000 - 20000 / PRY[2].sp * 0; progress = 0.5; pryFx(true, '✓ 2/4　連擊 x2'); gauge.classList.add('hitHold'); hint.textContent = HINTS.twist; }); }
   if (SHOT === 'twist') { twistSetup(); later(0.05, () => { tension = 0.5; }); }
   if (SHOT === 'crack') { twistSetup(); halfTwist(1.1); }
   if (SHOT === 'hitnpc') { look(0.1, -0.25); later(0.05, () => { const m = new THREE.Mesh(meatGeo, meatMat); scene.add(m); meatOnHead(npcs[1], m); }); }
@@ -813,6 +867,6 @@ if (SHOT) {
   if (SHOT === 'warning') { look(-0.3, -0.5); windUp(npcs[2]); npcs[2].windup = 99; }
   if (SHOT === 'umbrella') { look(0.6, -0.3); windUp(npcs[2]); npcs[2].windup = 0.3; later(0.25, () => { umbT = 0.9; umbCd = 0; umb.visible = true; }); later(0.6, () => { umbT = 0.6; }); }
   if (SHOT === 'harbor') look(0, -0.05);
-  if (SHOT === 'end') { count = 38; opened = 47; missed = 9; abandoned = 3; perfects = 12; cracked = 4; steals = 3; caught = 1; meatHits = 2; shellHits = 1; blocks = 2; hitsTaken = 1; penalty = 28; dayPearls = [0]; dayOdd = [1]; endDay(); }
+  if (SHOT === 'end') { count = 38; opened = 47; missed = 9; abandoned = 3; perfects = 12; cracked = 4; steals = 3; caught = 1; meatHits = 2; shellHits = 4; thrown = 5; blocks = 3; reflects = 2; lost = 1; hitsTaken = 1; penalty = 28; dayPearls = [0]; dayOdd = [1]; endDay(); }
 }
 frame();

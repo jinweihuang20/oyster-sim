@@ -50,3 +50,9 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 #lockHint.on{display:block}
 #gauge.tw:after{content:'';position:absolute;left:86%;right:0;top:0;bottom:0;background:rgba(255,80,60,.6)}
 #gauge.tw #fill{transition:none}
+#gauge.hit #zone,#gauge.hitHold #zone{animation:gz .25s}#gauge.hitHold #zone{background:#b8ff8a!important;box-shadow:0 0 10px #9f6}
+@keyframes gz{0%{background:#d8ffb0;box-shadow:0 0 12px #9f6}100%{}}
+#gauge.miss{animation:gm .25s}@keyframes gm{25%{transform:translateX(calc(-50% - 5px))}75%{transform:translateX(calc(-50% + 5px))}}
+#ppop{position:fixed;left:50%;bottom:calc(18% + 70px);transform:translateX(-50%);font-size:26px;font-weight:800;pointer-events:none;opacity:0;text-shadow:0 2px 4px #000}
+#ppop.ok{color:#b8ff8a;animation:pp .8s ease-out}#ppop.bad{color:#bbb;animation:pp .6s ease-out}
+@keyframes pp{0%{opacity:1;transform:translateX(-50%) scale(1.4)}20%{transform:translateX(-50%) scale(1)}70%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-20px)}}
