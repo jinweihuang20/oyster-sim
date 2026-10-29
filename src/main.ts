@@ -61,12 +61,31 @@ for (let i = 0; i < 5; i++) {
 }
 
 // 中央蚵殼山
-const shellGeo = new THREE.DodecahedronGeometry(0.09, 0); shellGeo.scale(1.3, 0.45, 1);
-const halfGeo = new THREE.DodecahedronGeometry(0.09, 0); halfGeo.scale(1.3, 0.25, 1);
-const shellMat = mat(0x8a8478);
-mesh(new THREE.ConeGeometry(0.9, 0.55, 10), shellMat, [0, 0.27, 0]);
-const pile = new THREE.InstancedMesh(shellGeo, shellMat, 260); pile.castShadow = true;
-{ const d = new THREE.Object3D(); for (let i = 0; i < 260; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 1.0, h = Math.max(0, 0.55 * (1 - r / 0.95)); d.position.set(Math.cos(a) * r, h + 0.03, Math.sin(a) * r); d.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); d.updateMatrix(); pile.setMatrixAt(i, d.matrix); } }
+// 蚵殼：灰色為主，偶爾帶烏（頂點色：烏斑、烏紋、烏邊）
+function shellPaint(g: THREE.BufferGeometry, seed: number) {
+  const pos = g.attributes.position, col = new Float32Array(pos.count * 3); let r = seed * 9301 + 49297;
+  const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+  const blotch = new THREE.Vector3(rn() - 0.5, rn() - 0.5, rn() - 0.5).normalize(), streak = rn() * 6.28, dark = rn() < 0.45;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), v = new THREE.Vector3(x, y, z).normalize();
+    let c = 0.82 + rn() * 0.22;
+    const ry = Math.abs(y) / 0.04; if (ry < 0.35) c *= 0.55 + ry;           // 烏邊
+    if (dark && v.dot(blotch) > 0.55) c *= 0.35;                             // 烏斑
+    if (Math.sin(x * 60 * Math.cos(streak) + z * 60 * Math.sin(streak)) > 0.82) c *= 0.5; // 烏紋
+    col[i * 3] = c * 0.62; col[i * 3 + 1] = c * 0.8; col[i * 3 + 2] = Math.min(1, c * 1.15); // 偏冷補償黃燈
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3)); return g;
+}
+const mkShell = (sy: number, seed: number) => { const g = new THREE.DodecahedronGeometry(0.09, 0); g.scale(1.3, sy, 1); return shellPaint(g, seed); };
+const SHELL_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.45, i + 1)), HALF_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.25, i + 11));
+const shellGeo = SHELL_GEOS[0], halfGeo = HALF_GEOS[0];
+const GREYS = [0xc2c2be, 0xa4a4a2, 0x8a8a8a, 0x6c6c6e, 0x4a4a4e];
+const greyPick = () => GREYS[Math.min(4, Math.floor(Math.random() * Math.random() * 6.2))];
+const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.92, metalness: 0 }); m.emissive.setHex(0x2a2c30); return m; };
+const shellMat = shellM(0xa0a0a0);
+mesh(new THREE.ConeGeometry(0.9, 0.55, 10), mat(0x6a7c94, { roughness: 0.95, emissive: 0x24262a }), [0, 0.27, 0]);
+const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo, pileMat, 260); pile.castShadow = true;
+{ const d = new THREE.Object3D(); for (let i = 0; i < 260; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 1.0, h = Math.max(0, 0.55 * (1 - r / 0.95)); d.position.set(Math.cos(a) * r, h + 0.03, Math.sin(a) * r); d.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); d.updateMatrix(); pile.setMatrixAt(i, d.matrix); pile.setColorAt(i, new THREE.Color(greyPick())); } }
 scene.add(pile);
 const pileSpot = () => { const a = Math.random() * 6.28, r = rnd(0.2, 0.7); return new THREE.Vector3(Math.cos(a) * r, 0.5 * (1 - r) + 0.05, Math.sin(a) * r); };
 
@@ -74,8 +93,8 @@ const pileSpot = () => { const a = Math.random() * 6.28, r = rnd(0.2, 0.7); retu
 mesh(new THREE.CylinderGeometry(0.33, 0.26, 0.18, 16, 1, true), mat(0xc84030, { side: THREE.DoubleSide }), [-0.35, 0.1, 1.45]);
 const BASIN = new THREE.Vector3(-0.35, 0.1, 1.45);
 const basinOy: THREE.Mesh[] = [];
-const basinShells = new THREE.InstancedMesh(shellGeo, shellMat, 1);
-{ const d = new THREE.Object3D(); for (let i = 0; i < 25; i++) { const a = Math.random() * 6.28, r = Math.random() * 0.24; d.position.set(-0.35 + Math.cos(a) * r, 0.12 + Math.random() * 0.05, 1.45 + Math.sin(a) * r); d.rotation.set(Math.random(), Math.random() * 3, Math.random()); d.updateMatrix(); basinShells.setMatrixAt(i, d.matrix); } }
+const basinShells = new THREE.InstancedMesh(shellGeo, pileMat, 1);
+{ const d = new THREE.Object3D(); for (let i = 0; i < 25; i++) { const a = Math.random() * 6.28, r = Math.random() * 0.24; d.position.set(-0.35 + Math.cos(a) * r, 0.12 + Math.random() * 0.05, 1.45 + Math.sin(a) * r); d.rotation.set(Math.random(), Math.random() * 3, Math.random()); d.updateMatrix(); basinShells.setMatrixAt(i, d.matrix); basinShells.setColorAt(i, new THREE.Color(greyPick())); } }
 scene.add(basinShells);
 const BOWL0 = new THREE.Vector3(0.55, 0.12, 1.0), BOWL = BOWL0.clone(); let BOWL_R = 0.17;
 const bowlG = new THREE.Group(); scene.add(bowlG);
@@ -88,7 +107,7 @@ function buildBowl(b: { r: number; h: number; color: number; metal?: number }) {
   bowlG.position.set(BOWL.x, 0, BOWL.z); BOWL.y = Math.max(0.08, b.h - 0.02);
 }
 const bowlMeat: THREE.Mesh[] = [], splats: THREE.Mesh[] = [];
-const meatMat = mat(0xd8cbb0, { roughness: 0.3, metalness: 0.1 }), splatMat = mat(0x8a7a60, { roughness: 0.2 });
+const meatMat = mat(0xd8cbb0, { roughness: 0.3, metalness: 0.1 }), splatMat = mat(0x8a8680, { roughness: 0.6 });
 const meatGeo = new THREE.SphereGeometry(0.035, 8, 6); meatGeo.scale(1.4, 0.6, 1);
 
 // ---------- 阿婆 ----------
@@ -124,7 +143,7 @@ for (const d of NPC_DEF) {
   const oy = new THREE.Group(); oy.position.set(0, -0.15, -0.32); a.armL.add(oy);
   mesh(halfGeo, mat(0x6a6458), [0, 0, 0], oy);
   const meat = mesh(meatGeo, meatMat, [0, 0.025, 0], oy);
-  const top = mesh(halfGeo, mat(0x9a9488), [0, 0.04, 0], oy);
+  const top = mesh(HALF_GEOS[npcs.length % 6], shellM(greyPick()), [0, 0.04, 0], oy);
   const kn = new THREE.Group(); kn.position.set(0, -0.18, -0.34); a.armR.add(kn);
   mesh(new THREE.BoxGeometry(0.03, 0.03, 0.09), mat(0x7a4a20), [0, 0, 0], kn);
   mesh(new THREE.BoxGeometry(0.02, 0.006, 0.09), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [0, 0, -0.09], kn);
@@ -178,12 +197,13 @@ const knife = new THREE.Group(); handR.add(knife); knife.position.set(-0.02, 0.0
 mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.11, 6), mat(0x7a4a20), [0, 0, 0], knife).rotation.z = Math.PI / 2;
 mesh(new THREE.BoxGeometry(0.1, 0.006, 0.025), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [-0.1, 0, 0], knife);
 const oyster = new THREE.Group(); handL.add(oyster); oyster.position.set(0.02, 0.05, -0.16);
-const shellBotMat = mat(0x7a7468), shellTopMat = mat(0x9a9488);
+const shellBotMat = shellM(0x8a8a8a), shellTopMat = shellM(0xa4a4a2);
 const shellBot = mesh(halfGeo, shellBotMat, [0, -0.01, 0], oyster);
 const meatInHand = mesh(meatGeo, meatMat, [0, 0.015, 0], oyster);
 const shellTop = mesh(halfGeo, shellTopMat, [0, 0.025, 0], oyster);
 const barnacles: THREE.Mesh[] = [];
-for (let i = 0; i < 6; i++) barnacles.push(mesh(new THREE.ConeGeometry(0.012, 0.02, 5), mat(0x5a5448), [rnd(-0.08, 0.08), 0.045, rnd(-0.05, 0.05)], oyster));
+mesh(new THREE.CircleGeometry(0.075, 14), mat(0xeeeae4, { roughness: 0.35, metalness: 0.15 }), [0, 0.008, 0], oyster).scale.set(1.25, 0.9, 1); (oyster.children[oyster.children.length - 1] as THREE.Mesh).rotation.x = -Math.PI / 2;
+for (let i = 0; i < 6; i++) barnacles.push(mesh(new THREE.ConeGeometry(0.012, 0.02, 5), mat(0x6e6e70), [rnd(-0.08, 0.08), 0.045, rnd(-0.05, 0.05)], oyster));
 const seamMark = mesh(new THREE.BoxGeometry(0.035, 0.012, 0.012), new THREE.MeshBasicMaterial({ color: 0x201810 }), [0, 0.012, 0], oyster);
 const seamGlow = mesh(new THREE.BoxGeometry(0.05, 0.02, 0.02), new THREE.MeshBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0, depthWrite: false }), [0, 0.012, 0], oyster);
 const shimmer = mesh(new THREE.SphereGeometry(0.11, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }), [0, 0, 0], oyster);
@@ -420,7 +440,7 @@ function holdOyster(dd: number) {
   seamA = rnd(0, 6.28); const r = 0.115; seamMark.position.set(Math.cos(seamA) * r, 0.012, Math.sin(seamA) * r); seamMark.rotation.y = -seamA + Math.PI / 2; seamGlow.position.copy(seamMark.position); seamGlow.rotation.copy(seamMark.rotation);
   seamMark.visible = seamGlow.visible = true;
   shellTop.visible = true; shellTop.position.set(0, 0.025, 0); shellTop.rotation.set(0, 0, 0); meatInHand.visible = true; meatInHand.material = meatMat; pearlMesh.visible = false; oddMeshes.forEach(m => m.visible = false);
-  shellTopMat.color.setHex([0xb0aa9c, 0x9a9488, 0x7e786c, 0x625c52][diff]);
+  { const base = [0xc2c2be, 0xa0a09e, 0x7c7c7e, 0x58585c][diff]; shellTopMat.color.setHex(base); shellBotMat.color.setHex(base).multiplyScalar(0.85); const gi = Math.floor(Math.random() * 6); shellTop.geometry = HALF_GEOS[gi]; shellBot.geometry = HALF_GEOS[(gi + 3) % 6]; }
   barnacles.forEach((b, i) => b.visible = i < d.rough);
   find = rollFind(); setPhase('seam');
 }
@@ -472,7 +492,7 @@ function hurt(dmg: number, txt: string) { hp = Math.max(0, hp - dmg); shake = 0.
 const ray = new THREE.Raycaster();
 const pileHit = scene.children.find(o => (o as THREE.Mesh).geometry instanceof THREE.ConeGeometry && o.position.y > 0.2 && o.position.y < 0.3)!;
 function makeBasinOyster(dd: number) {
-  const m = new THREE.Mesh(shellGeo, mat([0xb0aa9c, 0x9a9488, 0x7e786c, 0x625c52][dd])); m.scale.setScalar(DIFF[dd].scale * 0.95); m.userData.diff = dd; m.castShadow = true;
+  const m = new THREE.Mesh(SHELL_GEOS[Math.floor(Math.random() * 6)], shellM([0xc2c2be, 0xa0a09e, 0x7c7c7e, 0x58585c][dd])); m.scale.setScalar(DIFF[dd].scale * 0.95); m.userData.diff = dd; m.castShadow = true;
   for (let i = 0; i < DIFF[dd].rough; i++) { const b = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.025, 5), mat(0x5a5448)); b.position.set(rnd(-0.08, 0.08), 0.04, rnd(-0.05, 0.05)); m.add(b); }
   return m;
 }
@@ -738,7 +758,7 @@ function npcThrow(n: Npc) {
 }
 function throwOne(n: Npc) {
   if (state !== 'play') return;
-  const sh = new THREE.Mesh(halfGeo, shellMat); const from = worldOf(n.head); SFX.whoosh();
+  const sh = new THREE.Mesh(pick(HALF_GEOS), shellM(greyPick())); const from = worldOf(n.head); SFX.whoosh();
   fly(sh, from, () => camera.position.clone().add(new THREE.Vector3(0, -0.05, 0)), 0.55, 0.4, () => {
     const U = umbNow(), up = umbT > 0 && umbAge() >= U.open, covered = up && Math.random() < U.cover;
     if (up && !covered) toast('傘傷細，殼仔對邊仔鑽入來！', '#ff9a8a');
@@ -912,7 +932,7 @@ function npcShuck(n: Npc, dt: number, t: number) {
   if (c >= 0.7 && n.ev === 1) { n.ev = 2; n.meat.visible = false; const m = new THREE.Mesh(meatGeo, meatMat);
     fly(m, worldOf(n.meat), n.bowl.clone().add(new THREE.Vector3(rnd(-0.06, 0.06), Math.min(n.bowlMeat.length, 30) * 0.002, rnd(-0.06, 0.06))), 0.35, 0.15, () => {
       n.count++; n.bowlMeat.push(m); if (n.bowlMeat.length > 25) scene.remove(n.bowlMeat.shift()!); }); }
-  if (c >= 0.85 && n.ev === 2) { n.ev = 3; n.oy.visible = false; const sh = new THREE.Mesh(halfGeo, shellMat); fly(sh, worldOf(n.oy), pileSpot(), 0.5, 0.4, () => scene.remove(sh)); }
+  if (c >= 0.85 && n.ev === 2) { n.ev = 3; n.oy.visible = false; const sh = new THREE.Mesh(pick(HALF_GEOS), shellMat); fly(sh, worldOf(n.oy), pileSpot(), 0.5, 0.4, () => scene.remove(sh)); }
   if (c >= 1 && (n.basinN = (n.basinN ?? 6) - 1) <= 0) { n.basinN = 6; n.pause = 1.5; n.scoopT = 1.5; }
   if (c >= 1) { n.cyc = 0; n.ev = 0; n.dur = n.rate * NPC_DIFF_T[wpick(DIFF_W.map(w => ({ w })))] * rnd(0.9, 1.1); n.oy.visible = true; n.meat.visible = true; n.top.rotation.z = 0; n.top.position.set(0, 0.04, 0); }
 }
