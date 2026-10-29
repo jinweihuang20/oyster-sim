@@ -58,3 +58,5 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 @keyframes pp{0%{opacity:1;transform:translateX(-50%) scale(1.4)}20%{transform:translateX(-50%) scale(1)}70%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-20px)}}
 @media (max-width:600px){#hint{bottom:auto;top:84px;font-size:13px;padding:0 10px;box-sizing:border-box}}
 @media (pointer:fine){.mb{width:44px;height:44px;font-size:20px!important}}
+.kt{width:100%;border-collapse:collapse;font-size:13px}.kt td,.kt th{padding:4px 3px;border-bottom:1px solid rgba(255,255,255,.12);text-align:center}.kt td:first-child{text-align:left}.kt small{opacity:.7;font-size:11px}#shop{width:min(96vw,640px);z-index:30}
+.kt button:disabled{opacity:.35;cursor:not-allowed}

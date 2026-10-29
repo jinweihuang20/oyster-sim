@@ -393,7 +393,7 @@ function setPhase(p: Phase) {
   if (p === 'twist') { zone.style.left = `${d.lo * 100}%`; zone.style.width = `${(d.hi - d.lo) * 100}%`; progress = 0; strokeDir = 0; strokeLen = 0; strokePeak = 0; }
   if (p === 'seam' || p === 'twist') updDiff();
 }
-function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・愛撬 ${PRY_NEED[diff]} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
+function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・愛撬 ${pryNeed()} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
 function goPick() { if (state !== 'play') return; oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = '面盆空矣！轉頭看中央的蚵殼山，點一下撈一把'; }
 function holdOyster(dd: number) {
   if (state !== 'play') return;
@@ -490,8 +490,8 @@ function seamErr() { const c = scr(oyster), m = scr(seamMark).sub(c), k = scr(kn
 function tryInsert() {
   if (phase !== 'seam') return;
   const d = DIFF[diff];
-  if (Math.abs(seamErr()) < d.tol) { noise(0.06, 3000, 0.4); tone(320, 0.08, 0.2, 'triangle', 0, 200); toast('插入去矣！', '#9be37a'); seamGlow.visible = false; setPhase('twist'); }
-  else if (Math.random() < d.slip) { stabs++; flinch = 0.6; nag(NAG_STAB); hint.textContent = '刀仔滑去，割著手矣！'; setPhase('busy'); bleed(16); hurt(10 + diff * 5, 'aiā！'); if (hp > 0) later(0.7, () => setPhase('seam')); }
+  if (Math.abs(seamErr()) < tolNow()) { noise(0.06, 3000, 0.4); tone(320, 0.08, 0.2, 'triangle', 0, 200); toast('插入去矣！', '#9be37a'); seamGlow.visible = false; setPhase('twist'); }
+  else if (Math.random() < slipNow()) { stabs++; flinch = 0.6; nag(NAG_STAB); hint.textContent = '刀仔滑去，割著手矣！'; setPhase('busy'); bleed(16); hurt(10 + diff * 5, 'aiā！'); if (hp > 0) later(0.7, () => setPhase('seam')); }
   else { tone(140, 0.08, 0.2, 'square'); hint.textContent = '無對縫，刀仔滑開矣！閣揣看覓'; if (Math.random() < 0.3) nag(NAG_SLIP); shake = 0.08; }
 }
 // ----- 2. 扭手腕 -----
@@ -507,17 +507,48 @@ function twistInput(dx: number, dtMs: number) { if (swipePhase()) return;
 const PRY = [{ w: 0.3, sp: 0.8 }, { w: 0.22, sp: 1.05 }, { w: 0.15, sp: 1.35 }, { w: 0.1, sp: 1.7 }];
 const PRY_NEED = [2, 3, 4, 5], PRY_C = 0.55, PRY_RED = 0.86;
 let needleStart = 0, combo = 0;
+// ----- 剝殼刀（各有利弊） -----
+type Knife = { id: string; n: string; price: number; green: number; speed: number; steps: number; stab: number; seam: number; blade: number; desc: string };
+const KNIVES: Knife[] = [
+  { id: 'basic', n: '舊蚵刀', price: 0, green: 1, speed: 1, steps: 0, stab: 1, seam: 1, blade: 0xd0d0d8, desc: '阿母留落來的，普普仔' },
+  { id: 'dull', n: '俗鈍刀', price: 20, green: 0.7, speed: 0.85, steps: 0, stab: 1.5, seam: 1, blade: 0x8a8a80, desc: '夜市 20 箍，指針較慢，毋過綠區細、真捷割著手' },
+  { id: 'wide', n: '闊喙刀', price: 150, green: 1.5, speed: 1.35, steps: 0, stab: 1, seam: 0.85, blade: 0xe8e0c8, desc: '刀面闊，綠區大，毋過指針緊、揣縫較歹' },
+  { id: 'point', n: '尖喙刀', price: 200, green: 0.9, speed: 1, steps: -1, stab: 1.6, seam: 1, blade: 0xb0c8e0, desc: '尖尖一下就入去，少撬一下，毋過較危險' },
+  { id: 'seam', n: '揣縫刀', price: 180, green: 0.9, speed: 1.1, steps: 0, stab: 0.8, seam: 1.6, blade: 0xc8e0b0, desc: '揣縫真簡單，撬的時陣較食力' },
+  { id: 'master', n: '師傅刀', price: 1200, green: 1.2, speed: 0.95, steps: -1, stab: 0.6, seam: 1.25, blade: 0xffe28a, desc: '老師傅手工，樣樣好，就是貴' },
+];
+const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
+const pryW = () => Math.min(0.6, PRY[diff].w * knifeNow().green);
+const prySp = () => PRY[diff].sp * knifeNow().speed;
+const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
+const tolNow = () => DIFF[diff].tol * knifeNow().seam;
+const slipNow = () => Math.min(0.9, DIFF[diff].slip * knifeNow().stab);
+function pctTxt(v: number, goodHigh: boolean) { if (v === 1) return '<span style="opacity:.6">—</span>'; const p = Math.round((v - 1) * 100), good = goodHigh ? p > 0 : p < 0; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${p > 0 ? '+' : ''}${p}%</b>`; }
+function renderShop() {
+  if (!save.shop.owned.includes('basic')) save.shop.owned.push('basic');
+  const cur = knifeNow().id;
+  $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>揣縫</th><th></th></tr>` + KNIVES.map(k => {
+    const own = save.shop.owned.includes(k.id);
+    const btn = k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < k.price ? 'disabled' : ''}>$${k.price}</button>`;
+    return `<tr><td><b>${k.n}</b><br><small>${k.desc}</small></td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+  $('shopList').querySelectorAll('button').forEach(b => (b as HTMLButtonElement).onclick = () => {
+    const id = b.getAttribute('data-buy') || b.getAttribute('data-eq')!; const k = KNIVES.find(x => x.id === id)!;
+    if (b.hasAttribute('data-buy')) { if (save.money < k.price) return; save.money -= k.price; save.shop.owned.push(id); if (ac) SFX.jingle(); }
+    save.shop.equipped.knife = id; persist(); applyKnife(); renderShop();
+  });
+}
+function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : 1); }
 const PRY_GRACE = 0.04;
 // 視覺佮判定攏用同一个時間公式（事件 timeStamp），毋免等下一格
-const needle = (ms = performance.now()) => 0.5 - 0.5 * Math.cos(((ms - needleStart) / 1000) * Math.PI * 2 * PRY[diff].sp);
+const needle = (ms = performance.now()) => 0.5 - 0.5 * Math.cos(((ms - needleStart) / 1000) * Math.PI * 2 * prySp());
 (window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
-(window as any).__pry = () => { if (phase !== 'twist') return null; const f = PRY[diff].sp, per = 1000 / f, th = Math.acos(1 - 2 * PRY_C) / (Math.PI * 2) * per; const el = (performance.now() - needleStart) % per; let w = th - el; if (w < 5) w += per / 2 > th ? per - 2 * th + th * 2 - th : per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
+(window as any).__pry = () => { if (phase !== 'twist') return null; const f = prySp(), per = 1000 / f, th = Math.acos(1 - 2 * PRY_C) / (Math.PI * 2) * per; const el = (performance.now() - needleStart) % per; let w = th - el; if (w < 5) w += per / 2 > th ? per - 2 * th + th * 2 - th : per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
 function pryFx(ok: boolean, txt: string) { gauge.classList.remove('hit', 'miss'); void gauge.offsetWidth; gauge.classList.add(ok ? 'hit' : 'miss'); const pp = $('ppop'); pp.textContent = txt; pp.className = ''; void pp.offsetWidth; pp.className = ok ? 'ok' : 'bad'; }
 function pry(ms = performance.now()) {
   if (phase === 'crab') { crabShakes++; tone(600 + crabShakes * 40, 0.05, 0.1); strokeDir = -strokeDir || 1; flinch = 0.3; if (crabShakes >= 8) crabOff(); return; }
   if (phase !== 'twist') return;
-  const n = needle(ms), w = PRY[diff].w + PRY_GRACE * 2; (window as any).__pryLog = ((window as any).__pryLog || []).concat([[+n.toFixed(3), Math.abs(n - PRY_C) <= w / 2]]); strokeDir = -strokeDir || 1; tension = 0.9;
-  const need = PRY_NEED[diff];
+  const n = needle(ms), w = pryW() + PRY_GRACE * 2; (window as any).__pryLog = ((window as any).__pryLog || []).concat([[+n.toFixed(3), Math.abs(n - PRY_C) <= w / 2]]); strokeDir = -strokeDir || 1; tension = 0.9;
+  const need = pryNeed();
   if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('傷大力，殼碎去矣！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
   else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; combo++; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！手路真好！' : '好！閣一下'; }
   else { combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 無著'); hint.textContent = '無著時機，等指針行到綠區'; tension = 0.3; return; }
@@ -778,6 +809,10 @@ $('again').onclick = startDay;
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => $('settings').classList.add('show');
 $('resetSave').onclick = () => { if (confirm('確定欲重置存檔？錢、圖鑑、生涯紀錄、設定攏會清掉，無法度復原。')) { localStorage.removeItem('oyster-sim'); localStorage.removeItem('oyster-mix'); location.reload(); } };
+$('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); renderShop(); $('shop').classList.add('show'); };
+$('shopBtn2').onclick = () => { renderShop(); $('shop').classList.add('show'); };
+$('shopClose').onclick = () => $('shop').classList.remove('show');
+applyKnife();
 $('setClose').onclick = () => $('settings').classList.remove('show');
 for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as HTMLInputElement; el.value = String(mix[k]); el.oninput = () => { mix[k] = Number(el.value); applyMix(); if (k === 'sfx' && ac) SFX.plop(); }; }
 for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { const c = $(id) as HTMLInputElement; c.checked = mix[key]; c.onchange = () => { mix[key] = c.checked; applyMix(); }; }
@@ -832,12 +867,12 @@ function frame() {
     hp = Math.min(100, hp + dt / 6);
     if (phase === 'seam') {
       rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
-      const e = Math.abs(seamErr()), d = DIFF[diff], close = clamp(1 - e / (d.tol * 3), 0, 1);
+      const e = Math.abs(seamErr()), d = DIFF[diff], close = clamp(1 - e / (tolNow() * 3), 0, 1);
       (seamGlow.material as THREE.MeshBasicMaterial).opacity = close * 0.55;
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
-      knife.position.y = 0.03 + (e < d.tol * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
+      knife.position.y = 0.03 + (e < tolNow() * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
     } else knife.position.y = 0.03;
-    if (phase === 'twist') { if (SHOT === 'pry') needleStart = performance.now() - Math.acos(1 - 2 * PRY_C) / (Math.PI * 2 * PRY[diff].sp) * 1000; const n = needle(), w = PRY[diff].w; zone.style.left = `${(PRY_C - w / 2) * 100}%`; zone.style.width = `${w * 100}%`; fill.style.width = '4px'; fill.style.marginLeft = `calc(${n * 100}% - 2px)`; fill.style.background = n > PRY_RED ? '#ff5a4a' : Math.abs(n - PRY_C) <= w / 2 ? '#d8ffb0' : '#fff'; }
+    if (phase === 'twist') { if (SHOT === 'pry') needleStart = performance.now() - Math.acos(1 - 2 * PRY_C) / (Math.PI * 2 * prySp()) * 1000; const n = needle(), w = pryW(); zone.style.left = `${(PRY_C - w / 2) * 100}%`; zone.style.width = `${w * 100}%`; fill.style.width = '4px'; fill.style.marginLeft = `calc(${n * 100}% - 2px)`; fill.style.background = n > PRY_RED ? '#ff5a4a' : Math.abs(n - PRY_C) <= w / 2 ? '#d8ffb0' : '#fff'; }
     if (phase === 'twist' || phase === 'crab') { ($('progFill') as HTMLElement).style.width = `${(phase === 'crab' ? crabShakes / 6 : progress) * 100}%`; }
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
     updBlood(rdt);
@@ -916,6 +951,7 @@ if (SHOT) {
   if (SHOT === 'npcblood' || SHOT === 'npcaid') { if (SHOT === 'npcaid') mix.gore = false; const n = npcs[0]; look(Math.atan2(-(worldOf(n.head).x - camera.position.x), -(worldOf(n.head).z - camera.position.z)), -0.2); later(0.2, () => npcHurt(n)); }
   if (SHOT === 'grudge') { look(0.15, -0.25); [30, 65, 100].forEach((g, i) => { npcs[i].grudge = g; grudgeUI(npcs[i]); }); npcs[2].angry = 99; say(npcs[2], '看我連環殼！', 99); }
   if (SHOT === 'reflect') { const n = npcs[2]; look(0.6, -0.3); n.windup = 0.25; later(0.62, () => { umbT = 0.9; umbCd = 0; umb.visible = true; }); }
+  if (SHOT === 'shop') { save.money = 600; save.shop.owned = ['basic', 'seam']; save.shop.equipped.knife = 'seam'; applyKnife(); renderShop(); $('shop').classList.add('show'); }
   if (SHOT === 'pick') look(-0.25, -0.85);
   if (SHOT === 'scoop') { look(0, -0.5); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; scoop(); }
   const shotHold = () => holdOyster(2);
