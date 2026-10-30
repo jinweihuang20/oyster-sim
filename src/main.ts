@@ -390,7 +390,7 @@ function renderDaily() {
   const b = document.getElementById('daily') as HTMLButtonElement | null; if (!b) return;
   const done = save.bonusDay === todayKey();
   b.disabled = done; b.classList.toggle('done', done);
-  b.innerHTML = done ? `✅ 今仔日上工費領過矣・明天再來領<small>身軀邊 $${save.money}</small>` : `💰 領今日上工費 $${DAILY_PAY}<small>阿姨講：今仔日嘛愛拚喔！</small>`;
+  b.innerHTML = done ? `✅ 今天的上工費已經領過了・明天再來領<small>身上有 $${save.money}</small>` : `💰 領今日上工費 $${DAILY_PAY}<small>阿姨說：今天也要加油喔！</small>`;
 }
 function claimDaily(ev?: Event) {
   if (save.bonusDay === todayKey()) { renderDaily(); return; }
