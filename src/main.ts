@@ -198,7 +198,7 @@ const sleeve = mat(0x3a5a8a);
 const handSkin = mat(skin), cuffMat = mat(0x3a6fc0); cuffMat.visible = false;
 const fingerMeshes: THREE.Mesh[] = [];
 function applyGloves() { const g = gearOn('glove'); handSkin.color.set(g ? 0xe8e4d8 : skin); handSkin.roughness = g ? 1 : 0.85; cuffMat.visible = g; fingerMeshes.forEach(f => f.scale.set(g ? 1.25 : 1, g ? 1.2 : 1, g ? 1.05 : 1)); applyGlasses(); }
-function applyGlasses() { const g = gearOn('glasses'); (seamMark.material as THREE.MeshBasicMaterial).color.set(g ? 0xc8803a : 0x7a4a1e); seamMark.scale.setScalar(g ? 1.35 : 1); seamGlow.scale.setScalar(g ? 1.3 : 1); document.getElementById('vign')?.classList.toggle('on', g && state === 'play'); }
+function applyGlasses() { const g = gearOn('glasses'); (seamMark.material as THREE.MeshBasicMaterial).color.set(g ? 0xe8a050 : 0x7a4a1e); seamMark.scale.setScalar(g ? 1.7 : 1); seamGlow.scale.setScalar(g ? 1.6 : 1); document.getElementById('vign')?.classList.toggle('on', g && state === 'play'); }
 function makeHand(s: number) {
   const h = new THREE.Group();
   mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.7, 8), sleeve, [0, 0, 0.32], h).rotation.x = Math.PI / 2; // 長前臂延伸到畫面角落，兩手呈 A 字
@@ -564,7 +564,7 @@ let nightShift = false, walkHintShown = false, saltNext = false;
 const GEAR = [
   { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
   { id: 'radio', n: '📻 收音機', price: 300, good: '整工阿婆怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：沒有丟殼預警聲和 ⚠ 提示' },
-  { id: 'glasses', n: '👓 老花眼鏡', price: 200, good: '蚵仔縫更亮更粗、光暈更明顯', bad: '看遠有點霧：畫面邊緣微暗' }];
+  { id: 'glasses', n: '👓 老花眼鏡', price: 200, good: '蚵仔縫更亮更粗、光暈更大；插刀判定範圍 +25%', bad: '看遠有點霧：畫面邊緣微暗' }];
 function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '📻<i></i>' : `📻 ${on ? '開' : '關'}<span class="key"> (V)</span>`; b.title = on ? '收音機：開' : '收音機：關'; }
 function toggleRadio() { if (!save.shop.owned.includes('radio') || state !== 'play' || tut) return; save.gear = save.gear ?? {}; save.gear.radio = !gearOn('radio'); persist(); drawRadio(); toast(gearOn('radio') ? '📻 收音機打開：阿婆心情好，但聽不到丟殼預警' : '📻 收音機關掉：聽得到丟殼預警了', '#cfc3ff'); }
 const gearOn = (id: string) => save.shop.owned.includes(id) && save.gear?.[id] !== false;
@@ -752,7 +752,7 @@ const pryW = () => Math.min(0.6, PRY[diff].w * knifeNow().green * medM('green'))
 const PRY_SLOW = 0.8; // 整體放慢 20%
 const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * knifeNow().speed * medM('speed');
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
-const tolNow = () => DIFF[diff].tol * knifeNow().seam;
+const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? 1.25 : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip'));
 function pctTxt(v: number, goodHigh: boolean) { if (v === 1) return '<span style="opacity:.6">—</span>'; const p = Math.round((v - 1) * 100), good = goodHigh ? p > 0 : p < 0; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${p > 0 ? '+' : ''}${p}%</b>`; }
 function renderShop() {
@@ -1230,11 +1230,11 @@ function frame() {
     if (phase === 'seam') {
       rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
       const e = Math.abs(seamErr()), d = DIFF[diff], close = clamp(1 - e / (tolNow() * 3), 0, 1);
-      (seamGlow.material as THREE.MeshBasicMaterial).opacity = gearOn('glasses') ? Math.min(0.85, 0.36 + 0.06 * Math.sin(performance.now() * 0.0042) + clamp(1 - e / (tolNow() * 4), 0, 1) * 0.45) : 0.24 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.4;
-      { const inZ = e < tolNow(), gl = gearOn('glasses') ? 1.3 : 1, gm = seamGlow.material as THREE.MeshBasicMaterial;
+      (seamGlow.material as THREE.MeshBasicMaterial).opacity = gearOn('glasses') ? Math.min(1, 0.5 + 0.06 * Math.sin(performance.now() * 0.0042) + clamp(1 - e / (tolNow() * 5), 0, 1) * 0.5) : 0.24 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.4;
+      { const inZ = e < tolNow(), gl = gearOn('glasses') ? 1.6 : 1, gm = seamGlow.material as THREE.MeshBasicMaterial;
         if (inZ && !sweet) { sweetT = 0.25; navigator.vibrate?.(15); tone(1400, 0.05, 0.12, 'triangle', 0, 2100); }
         sweet = inZ; sweetT = Math.max(0, sweetT - rdt); const snap = sweetT / 0.25;
-        gm.color.set(inZ ? 0xd8ff80 : 0xffc878); if (inZ) gm.opacity = 0.8;
+        gm.color.set(inZ ? 0xd8ff80 : 0xffc878); if (inZ) gm.opacity = gearOn('glasses') ? 1 : 0.8;
         seamGlow.scale.setScalar(gl * (inZ ? 1.5 + snap * 0.6 : 1));
         seamRing.visible = inZ && seamMark.visible; seamRing.scale.setScalar(1 + snap * 0.8); (seamRing.material as THREE.MeshBasicMaterial).opacity = 0.85 - snap * 0.4; }
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
