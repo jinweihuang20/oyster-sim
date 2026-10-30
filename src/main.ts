@@ -790,7 +790,7 @@ function applySeat(id: string) {
 }
 const bowlNow = () => BOWLS.find(b => b.id === save.shop.equipped.bowl) ?? BOWLS[0];
 function applyBowl() {
-  const b = bowlNow(), S = seatNow(); BOWL_R = b.r; const pw = b.perf + S.perf; PERF0 = IDEAL - pw / 2; PERF1 = IDEAL + pw / 2;
+  const b = bowlNow(), S = seatNow(); BOWL_R = b.r * (newbie() ? 1.2 : 1); const pw = (b.perf + S.perf) * (newbie() ? 1.4 : 1); PERF0 = IDEAL - pw / 2; PERF1 = IDEAL + pw / 2;
   BOWL_L.set(SEAT0.x + (BOWL0.x - SEAT0.x) * b.dist * S.bowl, BOWL0.y, SEAT0.z + (BOWL0.z - SEAT0.z) * b.dist * S.bowl); buildBowl(b);
   seatRig.updateMatrixWorld(true); const w = seatRig.localToWorld(BOWL_L.clone()); BOWL.x = w.x; BOWL.z = w.z;
 }
@@ -1308,7 +1308,7 @@ function frame() {
     updBlood(rdt);
     if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.6, goPick); setPhase('busy'); } }
     if (phase === 'empty') { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
-    if (holding && phase === 'aim') { gauge.classList.add('on'); hold += dt * 1.1; if (hold > 1.25) { hold = 1.3; release(); } fill.style.width = `${Math.min(1, hold) * 100}%`; fill.style.background = 'rgba(255,255,255,.75)'; }
+    if (holding && phase === 'aim') { gauge.classList.add('on'); hold += dt * 1.1 * (newbie() ? 0.75 : 1); if (hold > 1.25) { hold = 1.3; release(); } fill.style.width = `${Math.min(1, hold) * 100}%`; fill.style.background = 'rgba(255,255,255,.75)'; }
     // 偷蚵仔
     on('standBtn', !walking); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     const tgt = walking ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
