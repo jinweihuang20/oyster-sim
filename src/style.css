@@ -228,3 +228,4 @@ body.tutOn .ntag{display:none!important}
  #btns button.mb{min-width:52px!important;min-height:52px!important;width:52px;height:52px}
 }
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#rotR{right:calc(env(safe-area-inset-right) + 110px)!important}#joy{bottom:calc(env(safe-area-inset-bottom) + 56px)!important}}
+.dexN{display:inline-block;background:#d9952b;color:#2a1600;border-radius:10px;padding:0 7px;font-size:13px;font-weight:800}

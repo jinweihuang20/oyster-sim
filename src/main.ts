@@ -513,7 +513,21 @@ function holdOyster(dd: number) {
   meatsLeft = 1; showExtra();
   find = tut ? { kind: 'none', i: 0 } : rollFind(); setPhase('seam');
 }
+// 每次上工隨機換阿婆衣服顏色與花樣
+const CLOTH = [0xc94f4f, 0x3f7cc9, 0x4fa36b, 0xd98c2b, 0x8a5bc2, 0xd65f9a, 0x2f9a9a, 0xb8863b, 0x5a6fb0, 0xe0c341];
+function dressAma(n: Npc) {
+  const pick = () => CLOTH[Math.floor(Math.random() * CLOTH.length)]; const base = pick(); let acc = pick(); if (acc === base) acc = 0xf4ecd8;
+  const kind = Math.floor(Math.random() * 4), cv = document.createElement('canvas'); cv.width = cv.height = 64; const x = cv.getContext('2d')!;
+  const hex = (c: number) => '#' + c.toString(16).padStart(6, '0'); x.fillStyle = hex(base); x.fillRect(0, 0, 64, 64); x.fillStyle = hex(acc);
+  if (kind === 1) for (let y = 0; y < 64; y += 16) x.fillRect(0, y, 64, 6);
+  else if (kind === 2) for (let y = 4; y < 64; y += 16) for (let i = 4; i < 64; i += 16) { x.beginPath(); x.arc(i + (y % 32 ? 8 : 0), y, 3.5, 0, 7); x.fill(); }
+  else if (kind === 3) for (let k = 0; k < 7; k++) { const cx = Math.random() * 64, cy = Math.random() * 64; for (let a = 0; a < 5; a++) { x.beginPath(); x.arc(cx + Math.cos(a * 1.26) * 4, cy + Math.sin(a * 1.26) * 4, 3, 0, 7); x.fill(); } x.fillStyle = '#ffe680'; x.beginPath(); x.arc(cx, cy, 2, 0, 7); x.fill(); x.fillStyle = hex(acc); }
+  const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 1); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = n.body.material as THREE.MeshStandardMaterial; m.map?.dispose(); m.map = tex; m.color.set(0xffffff); m.needsUpdate = true;
+  for (const a of [n.armL, n.armR]) { const sl = a.children[0] as THREE.Mesh; (sl.material as THREE.MeshStandardMaterial).color.set(base); }
+}
 function startDay() {
+  npcs.forEach(dressAma);
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = SHIFT; hp = 100; dayCombo = 0;
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); if (!tut) track('start', { seat: save.seat ?? 'door' });
@@ -774,7 +788,7 @@ function openOyster() {
 function revealOdd(i: number) {
   const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
-  label.innerHTML = `${o.name}！<small>${o.line}</small>`; label.style.color = o.css; label.classList.add('on');
+  label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.css; label.classList.add('on');
   npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
   if (i === 3) { later(0.6, () => { flinch = 1; SFX.pinch(); bleed(8); hurt(4, '夾！'); crabShakes = 0; strokeDir = 0; strokeLen = 0; setPhase('crab'); }); }
   else later(2.2, () => { oddMeshes[i].visible = false; setPhase('aim'); });
@@ -937,7 +951,7 @@ function revealPearl(r: number) {
   (pearlMesh.material as THREE.MeshStandardMaterial).color.setHex(RAR[r].color);
   (pearlMesh.material as THREE.MeshStandardMaterial).emissive.setHex(r === 3 ? 0x302050 : RAR[r].color).multiplyScalar(0.25);
   pearlMesh.visible = true; ding(r);
-  label.innerHTML = `${RAR[r].name}！<small>${['阿婆們攏越頭來看矣！', '哇～粉紅仔，真媠！', '金光閃閃，今仔日發矣！', '烏珍珠！！全港仔攏轟動！'][r]}</small>`;
+  label.innerHTML = `${RAR[r].name}！<small>${save.dex[r] === 1 ? '🆕 第一次找到！' : `你的第 ${save.dex[r]} 個`}</small><small>${['阿婆們攏越頭來看矣！', '哇～粉紅仔，真媠！', '金光閃閃，今仔日發矣！', '烏珍珠！！全港仔攏轟動！'][r]}</small>`;
   label.style.color = RAR[r].css === '#3a3548' ? '#c9b8ff' : RAR[r].css; label.classList.add('on');
   const cries = ['哎唷！珍珠！', '予我看覓咧！', '好運喔你！', '天公伯仔有保庇！'];
   npcs.forEach((n, i) => { n.look = 2.6; say(n, cries[(i + r) % cries.length], 2.6); });
@@ -945,10 +959,10 @@ function revealPearl(r: number) {
 function renderDex() {
   const RZ: Record<string, string> = { common: '普通', uncommon: '少見', rare: '稀有', legend: '傳說' };
   const all = [...RAR.map((r, i) => ({ ...r, has: save.dex[i] ?? 0 })), ...ODD.map((o, i) => ({ ...o, has: save.odd[i] ?? 0 }))];
-  const item = (x: typeof all[number]) => { const rr = rarOf(x.w); return `<div class="dexItem ${x.has ? '' : 'locked'}"><div class="dot" style="background:${x.has ? x.css : '#222'};box-shadow:0 0 8px ${x.has ? x.css : 'transparent'}">${x.emo}</div><div><b>${x.has ? x.name : '？？？'}</b> <span class="rb r-${rr}">${RZ[rr]}</span><br><small>${x.has ? `收集 ${x.has} 件・值 $${x.price}${'line' in x ? `<br>「${(x as any).line}」` : ''}` : `💭 ${x.tease}`}</small></div></div>`; };
+  const item = (x: typeof all[number]) => { const rr = rarOf(x.w); return `<div class="dexItem ${x.has ? '' : 'locked'}"><div class="dot" style="background:${x.has ? x.css : '#222'};box-shadow:0 0 8px ${x.has ? x.css : 'transparent'}">${x.emo}</div><div><b>${x.has ? x.name : '？？？'}</b>${x.has ? ` <span class="dexN">×${x.has}</span>` : ''} <span class="rb r-${rr}">${RZ[rr]}</span><br><small>${x.has ? `收集 ${x.has} 件・值 $${x.price}${'line' in x ? `<br>「${(x as any).line}」` : ''}` : `💭 ${x.tease}`}</small></div></div>`; };
   const got = all.filter(x => x.has).length;
   const per = (['common', 'uncommon', 'rare', 'legend'] as const).map(r => { const xs = all.filter(x => rarOf(x.w) === r); return `<span class="rb r-${r}">${RZ[r]} ${xs.filter(x => x.has).length}/${xs.length}</span>`; }).join(' ');
-  $('dexList').innerHTML = `<div class="dexProg"><b>已收集 ${got} / ${all.length} 種</b><div class="dexBar"><i style="width:${got / all.length * 100}%"></i></div>${per}</div>` +
+  $('dexList').innerHTML = `<div class="dexProg"><b>已收集 ${got} / ${all.length} 種</b>・累計挖到 <b>${all.reduce((a, x) => a + x.has, 0)}</b> 個<div class="dexBar"><i style="width:${got / all.length * 100}%"></i></div>${per}</div>` +
     '<h3>珍珠</h3>' + all.slice(0, RAR.length).map(item).join('') + '<h3>奇物</h3>' + all.slice(RAR.length).map(item).join('') + lifeHtml();
 }
 renderDex();
