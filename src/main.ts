@@ -225,8 +225,8 @@ const shellTop = mesh(halfGeo, shellTopMat, [0, 0.025, 0], oyster);
 const barnacles: THREE.Mesh[] = [];
 mesh(new THREE.CircleGeometry(0.075, 14), mat(0xeeeae4, { roughness: 0.35, metalness: 0.15 }), [0, 0.008, 0], oyster).scale.set(1.25, 0.9, 1); (oyster.children[oyster.children.length - 1] as THREE.Mesh).rotation.x = -Math.PI / 2;
 for (let i = 0; i < 6; i++) barnacles.push(mesh(new THREE.ConeGeometry(0.012, 0.02, 5), mat(0x6e6e70), [rnd(-0.08, 0.08), 0.045, rnd(-0.05, 0.05)], oyster));
-const seamMark = mesh(new THREE.BoxGeometry(0.035, 0.012, 0.012), new THREE.MeshBasicMaterial({ color: 0x201810 }), [0, 0.012, 0], oyster);
-const seamGlow = mesh(new THREE.BoxGeometry(0.05, 0.02, 0.02), new THREE.MeshBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0, depthWrite: false }), [0, 0.012, 0], oyster);
+const seamMark = mesh(new THREE.BoxGeometry(0.042, 0.016, 0.016), new THREE.MeshBasicMaterial({ color: 0x3a2210 }), [0, 0.012, 0], oyster);
+const seamGlow = mesh(new THREE.BoxGeometry(0.062, 0.026, 0.026), new THREE.MeshBasicMaterial({ color: 0xffc878, transparent: true, opacity: 0, depthWrite: false }), [0, 0.012, 0], oyster);
 const shimmer = mesh(new THREE.SphereGeometry(0.11, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }), [0, 0, 0], oyster);
 const pearlMesh = mesh(new THREE.SphereGeometry(0.03, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.3 }), [0, 0.05, 0], oyster);
 pearlMesh.visible = false;
@@ -1225,7 +1225,7 @@ function frame() {
     if (phase === 'seam') {
       rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
       const e = Math.abs(seamErr()), d = DIFF[diff], close = clamp(1 - e / (tolNow() * 3), 0, 1);
-      (seamGlow.material as THREE.MeshBasicMaterial).opacity = close * 0.55;
+      (seamGlow.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.42;
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
       knife.position.y = 0.03 + (e < tolNow() * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
     } else knife.position.y = 0.03;
