@@ -1121,6 +1121,7 @@ function renderLocs() {
   el.querySelectorAll<HTMLButtonElement>('[data-lbuy]').forEach(b => b.onclick = () => { const l = LOCS.find(x => x.id === b.dataset.lbuy)!; if (save.money < l.price || tot < l.need) return; save.money -= l.price; save.locs!.push(l.id); save.loc = l.id; persist(); track('buy', { item: 'loc-' + l.id, price: l.price }); toast(`解鎖 ${l.n}！`); renderLocs(); updSky(); });
 }
 renderLocs();
+$('rLoc').onclick = () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; };
 $('start').onclick = () => { audio(); if (!save.tutDone) tutStart(); else startDay(); };
 $('again').onclick = startDay;
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
