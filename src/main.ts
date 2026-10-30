@@ -254,7 +254,7 @@ const statsDevice = COARSE ? 'mobile' : 'pc';
 function track(t: string, d: Record<string, unknown> = {}) {
   if (!mix.stats || SHOT) return;
   try {
-    const body = JSON.stringify({ game: 'oyster-sim', id: statsId, platform: 'web', version: '1', test: params.get('stattest') === '1', events: [{ t, sid: statsSid || statsId, ts: Date.now(), dev: statsDevice, ...d }] });
+    const body = JSON.stringify({ game: 'oyster-sim', id: statsId, platform: 'web', version: __BUILD__, test: params.get('stattest') === '1', events: [{ t, sid: statsSid || statsId, ts: Date.now(), dev: statsDevice, ...d }] });
     fetch(STATS_URL, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' }, keepalive: true, mode: 'cors' }).catch(() => { });
   } catch { }
 }
@@ -396,9 +396,9 @@ const DIFF_W = [30, 40, 22, 8];
 type Loc = { id: string; n: string; m: number; w: number[]; thr: number; ang: number; price: number; need: number; tint: number | null; d: string };
 const LOCS: Loc[] = [
   { id: 'home', n: '🏠 自家蚵寮', m: 1, w: DIFF_W, thr: 1, ang: 1, price: 0, need: 0, tint: null, d: '熟悉的老位子，阿婆們都很和氣' },
-  { id: 'wanggong', n: '⚓ 王功漁港', m: 1.2, w: [22, 40, 28, 10], thr: 1.2, ang: 1.15, price: 800, need: 150, tint: 0x5f8fb0, d: '海風大、硬殼多一點，阿婆稍微兇' },
-  { id: 'dongshi', n: '🎡 東石漁人碼頭', m: 1.4, w: [14, 34, 36, 16], thr: 1.4, ang: 1.3, price: 2500, need: 500, tint: 0xd08a5a, d: '觀光客多、蚵仔偏硬，阿婆丟殼更勤' },
-  { id: 'budai', n: '🏭 布袋蚵寮大廠', m: 1.7, w: [8, 26, 40, 26], thr: 1.7, ang: 1.5, price: 6000, need: 1200, tint: 0x8a9a7a, d: '工錢最高，但蚵仔超硬、阿婆最兇' }];
+  { id: 'wanggong', n: '⚓ 王功漁港', m: 1.2, w: [22, 40, 28, 10], thr: 1.2, ang: 1.15, price: 800, need: 60, tint: 0x5f8fb0, d: '海風大、硬殼多一點，阿婆稍微兇' },
+  { id: 'dongshi', n: '🎡 東石漁人碼頭', m: 1.4, w: [14, 34, 36, 16], thr: 1.4, ang: 1.3, price: 2500, need: 200, tint: 0xd08a5a, d: '觀光客多、蚵仔偏硬，阿婆丟殼更勤' },
+  { id: 'budai', n: '🏭 布袋蚵寮大廠', m: 1.7, w: [8, 26, 40, 26], thr: 1.7, ang: 1.5, price: 6000, need: 500, tint: 0x8a9a7a, d: '工錢最高，但蚵仔超硬、阿婆最兇' }];
 const locNow = () => LOCS.find(l => l.id === save.loc && (l.price === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
 const locW = () => locNow().w;
 const RAR = [
@@ -424,7 +424,12 @@ const ODD = [
 ];
 const dexN = () => save.dex.filter(x => x).length + save.odd.filter(x => x).length;
 const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'uncommon' : 'common';
-const OYSTER_PRICE = 3, CRACK_PRICE = 1;
+const OYSTER_PRICE = 8, CRACK_PRICE = 2, PERFECT_PAY = 2;
+// 新手保護：生涯收工未滿 3 班 → 只出易／普通、綠區 +30%、割手率 -40%
+const newbie = () => !tut && save.days < 3;
+// 統計：本班各難度 [開殼, 插刀失敗, 割手, 殼碎]、收工原因
+let dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], endReason = 'time';
+const dstatStr = () => dStat.flat().join(',');
 // ----- 存檔（有版本號；舊存檔會自動補欄位，壞去就用預設） -----
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
@@ -633,7 +638,7 @@ function startDay() {
   state = 'play'; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = SHIFT; hp = 100; dayCombo = 0;
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); if (!tut) track('start', { seat: save.seat ?? 'door', loc: locNow().id });
   const sidNow = statsSid; const pingT = setInterval(() => { if (tut || state !== 'play' || statsSid !== sidNow || document.hidden) { if (statsSid !== sidNow || state !== 'play') clearInterval(pingT); return; } track('ping'); }, 60_000);
-  count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
+  count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
   ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); drawMeds(); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
@@ -685,7 +690,7 @@ function makeBasinOyster(dd: number) {
 }
 function basinSlot(i: number) { const a = i * 2.4, r = 0.06 + (i % 4) * 0.05; return new THREE.Vector3(BASIN.x + Math.cos(a) * r, 0.14 + Math.floor(i / 6) * 0.04, BASIN.z + Math.sin(a) * r); }
 function fillBasin(animate: boolean) {
-  for (let i = 0; i < 8; i++) { const m = makeBasinOyster(wpick(locW().map(w => ({ w })))); const slot = basinSlot(i); m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2)); basinOy.push(m);
+  for (let i = 0; i < 8; i++) { const m = makeBasinOyster(wpick((newbie() ? [50, 50, 0, 0] : locW()).map(w => ({ w })))); const slot = basinSlot(i); m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2)); basinOy.push(m);
     if (animate) { const p0 = pileSpot(); fly(m, p0, slot, 0.4 + i * 0.05, 0.4, () => m.position.copy(slot)); } else { m.position.copy(slot); scene.add(m); } }
 }
 function hitsOyster(cx: number, cy: number) { camera.updateMatrixWorld(); ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), camera); return ray.intersectObject(oyster, true).length > 0; }
@@ -716,8 +721,8 @@ function tryInsert() {
   if (phase !== 'seam') return;
   const d = DIFF[diff];
   if (Math.abs(seamErr()) < tolNow()) { noise(0.06, 3000, 0.4); tone(320, 0.08, 0.2, 'triangle', 0, 200); toast('插進去了！', '#9be37a'); seamGlow.visible = false; seamRing.visible = false; sweet = false; setPhase('twist'); }
-  else if (Math.random() < slipNow()) { stabs++; flinch = 0.6; nag(NAG_STAB); hint.textContent = '刀子滑掉，割到手了！'; setPhase('busy'); bleed(16); hurt((10 + diff * 5) * (gearOn('glove') ? 0.5 : 1), gearOn('glove') ? '哎呀！（有手套）' : '哎呀！'); if (hp > 0) later(0.7, () => setPhase('seam')); }
-  else { tone(140, 0.08, 0.2, 'square'); hint.textContent = '沒對準縫，刀子滑開了！再找找看'; if (Math.random() < 0.3) nag(NAG_SLIP); shake = 0.08; }
+  else if (Math.random() < slipNow()) { stabs++; dStat[diff][1]++; dStat[diff][2]++; flinch = 0.6; nag(NAG_STAB); hint.textContent = '刀子滑掉，割到手了！'; setPhase('busy'); bleed(16); hurt((10 + diff * 5) * (gearOn('glove') ? 0.5 : 1), gearOn('glove') ? '哎呀！（有手套）' : '哎呀！'); if (hp > 0) later(0.7, () => setPhase('seam')); }
+  else { dStat[diff][1]++; tone(140, 0.08, 0.2, 'square'); hint.textContent = '沒對準縫，刀子滑開了！再找找看'; if (Math.random() < 0.3) nag(NAG_SLIP); shake = 0.08; }
 }
 // ----- 2. 扭手腕 -----
 function twistInput(dx: number, dtMs: number) { if (swipePhase()) return;
@@ -790,12 +795,12 @@ function applyBowl() {
   seatRig.updateMatrixWorld(true); const w = seatRig.localToWorld(BOWL_L.clone()); BOWL.x = w.x; BOWL.z = w.z;
 }
 const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
-const pryW = () => Math.min(0.6, PRY[diff].w * knifeNow().green * medM('green'));
+const pryW = () => Math.min(0.6, PRY[diff].w * knifeNow().green * medM('green') * (newbie() ? 1.3 : 1));
 const PRY_SLOW = 0.8; // 整體放慢 20%
 const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * knifeNow().speed * medM('speed');
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
 const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? 1.25 : 1);
-const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip'));
+const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
 function pctTxt(v: number, goodHigh: boolean) { if (v === 1) return '<span style="opacity:.6">—</span>'; const p = Math.round((v - 1) * 100), good = goodHigh ? p > 0 : p < 0; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${p > 0 ? '+' : ''}${p}%</b>`; }
 function renderShop() {
   if (!save.shop.owned.includes('basic')) save.shop.owned.push('basic');
@@ -856,7 +861,7 @@ function pry(ms = performance.now()) {
   if (phase !== 'twist') return;
   const n = needle(ms), w = pryW() + PRY_GRACE * 2; (window as any).__pryLog = ((window as any).__pryLog || []).concat([[+n.toFixed(3), Math.abs(n - PRY_C) <= w / 2]]); strokeDir = -strokeDir || 1; tension = 0.9;
   const need = pryNeed();
-  if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('太大力，殼碎掉了！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
+  if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; dStat[diff][3]++; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('太大力，殼碎掉了！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
   else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; combo++; if (combo > dayCombo) dayCombo = combo; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！功夫真好！' : '好！再一下'; }
   else { combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 沒中'); hint.textContent = '時機不對，等指針走到綠區再點'; tension = 0.3; return; }
   shellTop.rotation.z = -progress * 0.4;
@@ -866,7 +871,7 @@ function halfTwist(peak: number) {
   const d = DIFF[diff];
   if (peak < d.lo) { hint.textContent = '力氣不夠，再用力一點！'; return; }
   progress += 1 / d.need; SFX.creak();
-  if (peak > d.hi && !crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('殼碎掉了！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); }
+  if (peak > d.hi && !crackedNow) { crackedNow = true; dStat[diff][3]++; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('殼碎掉了！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); }
   else hint.textContent = HINTS.twist;
   shellTop.rotation.z = -progress * 0.4;
   if (progress >= 0.999) openOyster();
@@ -886,7 +891,7 @@ function showExtra() {
 function openOyster() {
   { const l = luckNow(), r = Math.random(); meatsLeft = tut ? 1 : r < 0.02 + 0.0025 * l ? 3 : r < 0.10 + 0.0075 * l ? 2 : 1; showExtra();
     if (meatsLeft > 1) { if (meatsLeft === 3) dayMulti3++; else dayMulti2++; later(0.3, () => { toast(meatsLeft === 3 ? '三仁！一顆有三塊肉！' : '雙仁！一顆有兩塊肉！', '#ffd76a'); tone(880, 0.12, 0.15, 'triangle'); tone(1320, 0.18, 0.12, 'triangle', 0.1); if (meatsLeft === 3) tone(1760, 0.22, 0.12, 'triangle', 0.2); }); } }
-  crackSound(); shake = 0.25; opened++; setPhase('busy'); seamMark.visible = false;
+  crackSound(); shake = 0.25; opened++; dStat[diff][0]++; setPhase('busy'); seamMark.visible = false;
   if (crackedNow) cracked++;
   shellTop.visible = false;
   const top = new THREE.Mesh(halfGeo, shellTopMat); fly(top, worldOf(oyster), pileSpot(), 0.6, 0.5, () => scene.remove(top));
@@ -1041,19 +1046,19 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (thrown === 0) { titles.push(`🕊 和平${esc(myName())}（+$50）`); bonus = 50; }
   if (shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
   if (blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
-  const LC = locNow(), base0 = count * OYSTER_PRICE + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
+  const LC = locNow(), base0 = count * OYSTER_PRICE + perfects * PERFECT_PAY + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
   const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty);
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
   save.days++; save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
   for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
   persist();
-  track('day', { loc: locNow().id,  count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, maxAnger: Math.round(dayMaxGrudge), double: dayMulti2, triple: dayMulti3, dur: Math.round(SHIFT - Math.max(0, timeLeft)), dex: dexN(), seat: save.seat ?? 'door' });
+  track('day', { loc: locNow().id,  count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, maxAnger: Math.round(dayMaxGrudge), double: dayMulti2, triple: dayMulti3, dur: Math.round(SHIFT - Math.max(0, timeLeft)), dex: dexN(), seat: save.seat ?? 'door', reason: handPain ? 'hand' : endReason, dstat: dstatStr() });
   $('resTitle').textContent = handPain ? '🩹 手痛收工' : queen ? '👑 今日剝蚵冠軍！' : '收工了～';
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 顆入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美出手 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
     `偷 ${steals}・被抓到 ${caught}・肉丟中阿婆 ${meatHits}・殼丟中阿婆 ${shellHits}<br>雨傘擋 ${blocks}・完美反彈 ${reflects}・被丟中 ${hitsTaken}・丟殼 ${thrown}・蚵仔掉地上 ${lost}</p>` + (titles.length ? `<p style="font-size:18px"><b>${titles.join('　')}</b></p>` : '') +
-    `<p>蚵仔 ${count} 顆 × $${OYSTER_PRICE}（殼屑 ${cracked} 顆只 $${CRACK_PRICE}）${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
+    `<p>蚵仔 ${count} 顆 × $${OYSTER_PRICE}（殼屑 ${cracked} 顆只 $${CRACK_PRICE}）${perfects ? `<br>完美出手 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
     `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>` +
     `<p>${caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
@@ -1147,7 +1152,7 @@ const btn = (id: string, f: () => void, upF?: () => void) => {
   el.addEventListener('pointercancel', () => ok = false);
   el.addEventListener('pointerup', e => { e.stopPropagation(); if (ok && performance.now() - st < 800) f(); ok = false; });
 };
-btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); if (confirm('確定要翹班嗎？這一工會直接收工結算。')) endDay(); }); btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
+btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); if (confirm('確定要翹班嗎？這一工會直接收工結算。')) { endReason = 'quit'; endDay(); } }); btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
@@ -1606,6 +1611,8 @@ document.querySelectorAll<HTMLElement>('.panel').forEach(pn => {
   pn.addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd);
   new MutationObserver(() => requestAnimationFrame(upd)).observe(pn, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }); upd();
 });
+// 上工中關掉／離開頁面：記一筆中途離開
+addEventListener('pagehide', () => { if (state === 'play' && !tut) track('abandon', { reason: 'abandon', count, opened, dur: Math.round(SHIFT - Math.max(0, timeLeft)), loc: locNow().id, dstat: dstatStr() }); });
 installBackGuard(() => {
   const open = (id: string) => document.getElementById(id)?.classList.contains('show');
   if (open('npcTip')) { $('npcTip').classList.remove('show'); return 'handled'; }
