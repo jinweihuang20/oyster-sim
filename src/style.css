@@ -189,3 +189,28 @@ body.tutOn .ntag{display:none!important}
 @media (pointer:coarse) and (orientation:portrait){#gauge{bottom:auto;top:55%;width:min(84vw,340px)}#diff{bottom:auto;top:calc(55% - 26px)}#gauge.miss{animation:gm .25s}}
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#gauge{left:calc(env(safe-area-inset-left) + 25vw);width:min(42vw,300px);bottom:26%}#diff{width:50vw;left:env(safe-area-inset-left);bottom:calc(26% + 22px)}}
 #shopTabs{flex-wrap:nowrap!important}#shopTabs button{flex:1 1 0!important;min-width:0!important;white-space:nowrap!important;word-break:keep-all;padding:6px 4px!important;font-size:clamp(12px,3.6vw,15px)!important;overflow:hidden;text-overflow:ellipsis}
+/* 手機按鈕重新排版：右下主要（偷/丟殼/雨傘），左下次要一排（藥品/放棄/換位置） */
+#btnsL{display:none}
+@media (pointer:coarse){
+ #btnsL{position:fixed;left:calc(env(safe-area-inset-left) + 8px);bottom:calc(env(safe-area-inset-bottom) + 12px);display:flex;flex-direction:column;gap:8px;align-items:flex-start;pointer-events:none;z-index:5}
+ #btnsL button{display:none;pointer-events:auto;min-height:44px;font-size:15px;padding:8px 12px;border-radius:14px;background:rgba(120,60,40,.85);color:#fff;white-space:nowrap}
+ #btnsL button.on{display:block}#btnsL #medBtn{background:#6a3fa0}#btnsL #medBtn small{display:none}
+ #btns{gap:8px}#btns button{min-width:92px}
+ #stealBtn{min-height:60px!important;min-width:104px!important;font-size:19px!important}
+ .mb{top:40%!important;bottom:auto!important}
+ #medList{bottom:calc(env(safe-area-inset-bottom) + 130px)}
+}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
+ #btns{flex-direction:column;flex-wrap:nowrap;max-width:none}
+ #btnsL{flex-direction:row}
+ .mb{top:22%!important}#rotL{left:calc(env(safe-area-inset-left) + 12px)!important}#rotR{right:calc(env(safe-area-inset-right) + 140px)!important}
+ #medList{bottom:70px}
+}
+
+/* 撐傘倒數 */
+#umbBtn{position:relative;overflow:hidden}#umbCd{margin-left:6px;font-variant-numeric:tabular-nums;font-size:.85em}
+#umbBtn.held{background:linear-gradient(90deg,#2e9e4f var(--p,100%),rgba(30,60,40,.9) var(--p,100%))!important}
+#umbBtn.held.low{background:linear-gradient(90deg,#e0392b var(--p,100%),rgba(70,20,20,.9) var(--p,100%))!important;animation:ulow .3s infinite alternate}
+@keyframes ulow{to{filter:brightness(1.35)}}
+#shopTabs button{overflow:visible!important;text-overflow:clip!important;padding:4px 2px!important;font-size:14px!important;line-height:1.15;white-space:normal!important;word-break:keep-all!important;min-width:56px!important}
+#shopTabs .ti{display:block;font-size:16px}#shopTabs .tl{display:block;white-space:nowrap}
