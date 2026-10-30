@@ -1,3 +1,4 @@
+import { installBackGuard } from './backguard';
 import { checkCode, REDEEM_MESSAGES } from './redeem';
 import type { RedeemCodeDef } from './redeemCodes';
 import * as THREE from 'three';
@@ -1472,3 +1473,13 @@ function shopTabs() {
   bar.querySelectorAll('button').forEach(b => (b as HTMLButtonElement).onclick = () => { shopTab = +b.getAttribute('data-tab')!; shopTabs2(groups, bar!); });
 }
 function shopTabs2(groups: HTMLElement[], bar: HTMLElement) { groups.forEach((g, i) => g.style.display = i === shopTab ? '' : 'none'); bar.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === shopTab)); $('shop').scrollTop = 0; }
+
+// 手機返回鍵：關掉最上層的視窗；上工中不離開；主畫面連按兩次才離開（同核心回收）
+installBackGuard(() => {
+  const open = (id: string) => document.getElementById(id)?.classList.contains('show');
+  if (open('npcTip')) { $('npcTip').classList.remove('show'); return 'handled'; }
+  if (open('medList')) { $('medList').classList.remove('show'); return 'handled'; }
+  for (const [id, close] of [['redeem', 'rdClose'], ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose']]) if (open(id)) { ($(close) as HTMLElement).click(); return 'handled'; }
+  if (state === 'play') { toast('上工中按返回不會離開；要收工請按「放棄」或等時間到', '#ffcf8a'); return 'handled'; }
+  return 'confirm-exit';
+}, () => state === 'play');
