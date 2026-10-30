@@ -102,7 +102,7 @@ const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo,
 scene.add(pile);
 const pileSpot = () => { const a = Math.random() * 6.28, r = rnd(0.2, 0.7); return new THREE.Vector3(Math.cos(a) * r, 0.5 * (1 - r) + 0.05, Math.sin(a) * r); };
 
-// 玩家前面：生蚵面盆、裝肉的碗（愛投準）
+// 玩家前面：生蚵臉盆、裝肉的碗（愛投準）
 const basinMesh = mesh(new THREE.CylinderGeometry(0.33, 0.26, 0.18, 16, 1, true), mat(0xc84030, { side: THREE.DoubleSide }), [-0.35, 0.1, 1.45]);
 const BASIN0 = new THREE.Vector3(-0.35, 0.1, 1.45), BASIN = BASIN0.clone();
 const basinOy: THREE.Mesh[] = [];
@@ -182,8 +182,8 @@ const SCOLD_HIT = ['誰丟的！？', '蚵仔肉黏在我頭上啦！', '你是�
 const SCOLD_SHELL = ['要命喔！丟殼！', '你皮在癢喔？', '好啊，你來啊！', '跟你說，我年輕時是投手呢'];
 const SCOLD_STEAL = ['抓到了！偷蚵仔賊！', '你在幹嘛！我的蚵仔！', '還來！加倍還來！', '左鄰右舍也敢偷！'];
 const GRUDGE = ['哼，我不想跟你講話', '某人喔，手腳不乾淨', '我會記住的', '今天真倒楣，坐你旁邊'];
-const TURN_CHAT = ['欸欸，你聽我講…', '阿春，你知不知道…', '跟你說一個秘密', '那個阿雄喔…'];
-const PRAISE = ['好手路！', '真的很準喔！', '那顆丟得真漂亮！'];
+const TURN_CHAT = ['欸欸，你聽我說…', '阿春，你知不知道…', '跟你說一個秘密', '那個阿雄喔…'];
+const PRAISE = ['好功夫！', '真的很準喔！', '那顆丟得真漂亮！'];
 function say(n: Npc, t: string, dur = 3.2) { if (ac) SFX.murmur([300, 230, 380][npcs.indexOf(n)] ?? 300); n.bubble.textContent = t; n.bubble.style.opacity = '1'; n.bubT = dur; }
 let lastNag = '';
 function nag(lines: string[]) {
@@ -366,7 +366,7 @@ const RAR = [
   { name: '白珍珠', color: 0xf4f1ea, css: '#f4f1ea', w: 70, price: 200, emo: '⚪', tease: '最常見的珍珠，多剝幾顆就有' },
   { name: '粉珍珠', color: 0xf3b5c8, css: '#f3b5c8', w: 20, price: 600, emo: '🩷', tease: '聽說有粉紅色的，很漂亮' },
   { name: '金珍珠', color: 0xf2c440, css: '#f2c440', w: 8, price: 1800, emo: '🟡', tease: '金光閃閃的…有人說過' },
-  { name: '烏珍珠', color: 0x22202a, css: '#3a3548', w: 2, price: 6000, emo: '⚫', tease: '傳說中的黑色寶貝，剝一輩子才看到一次' },
+  { name: '黑珍珠', color: 0x22202a, css: '#3a3548', w: 2, price: 6000, emo: '⚫', tease: '傳說中的黑色寶貝，剝一輩子才看到一次' },
 ];
 const ODD = [
   { name: '假牙', css: '#f0e8e0', w: 30, emo: '🦷', tease: '聽說有人在蚵裡挖到…會笑的東西', price: 50, line: '誰的假牙啦！？', cry: ['哎唷，那不是阿雄伯的嗎？', '笑死，假牙也會長蚵仔'] },
@@ -374,12 +374,12 @@ const ODD = [
   { name: '金戒指', css: '#f2c440', w: 10, emo: '💍', tease: '某人的定情物遺落在海裡…', price: 2500, line: '金戒指！誰的定情物？', cry: ['金的耶！給我看看！', '這要不要報警？'] },
   { name: '小螃蟹', css: '#e05a3a', w: 30, emo: '🦀', tease: '小心，會夾手！', price: 0, line: '螃蟹夾手了！！', cry: ['快甩！快甩！', '哈哈哈，牠夾得好緊'] },
   { name: '統一發票', css: '#f4f4f0', w: 24, price: 5, emo: '🧾', tease: '溼溼的紙…上面有號碼', line: '誰的發票塞進蚵仔裡！', cry: ['快對對看有沒有中！', '溼答答的，號碼看不清了'] },
-  { name: '幾枚銅板', css: '#c89a50', w: 24, price: 20, emo: '🪙', tease: '叮叮噹噹的零錢聲', line: '十塊、五塊…發財了！', cry: ['蚵仔也會存錢喔', '提去買飲料'] },
+  { name: '幾枚銅板', css: '#c89a50', w: 24, price: 20, emo: '🪙', tease: '叮叮噹噹的零錢聲', line: '十塊、五塊…發財了！', cry: ['蚵仔也會存錢喔', '拿去買飲料'] },
   { name: '機車鎖匙', css: '#a8b0b8', w: 16, price: 0, emo: '🔑', tease: '某人一直在找的東西', line: '誰的機車鑰匙？！', cry: ['阿明找一整天了！', '快去廣播！'] },
   { name: '珍奶吸管', css: '#3a6ad8', w: 16, price: 1, emo: '🥤', tease: '粗粗的、塑膠的…海洋垃圾', line: '珍珠奶茶的粗吸管…', cry: ['海洋垃圾啦！', '不是那種珍珠啦'] },
   { name: '紅包', css: '#d8282a', w: 9, price: 600, emo: '🧧', tease: '紅紅的、過年才有', line: '紅包！裡面有錢！', cry: ['恭喜發財！', '分我一半啦'] },
-  { name: '媽祖平安符', css: '#e8b030', w: 7, price: 888, emo: '🏮', tease: '有神明保庇的東西', line: '媽祖的平安符！', cry: ['媽祖保庇！', '今天一定好運'] },
-  { name: '筊杯', css: '#c0302a', w: 6, price: 400, emo: '🌙', tease: '一對紅紅的半月', line: '一對筊杯！聖筊！', cry: ['問神明今天會不會贏', '笑筊啦哈哈'] },
+  { name: '媽祖平安符', css: '#e8b030', w: 7, price: 888, emo: '🏮', tease: '有神明保佑的東西', line: '媽祖的平安符！', cry: ['媽祖保佑！', '今天一定好運'] },
+  { name: '筊杯', css: '#c0302a', w: 6, price: 400, emo: '🌙', tease: '一對紅紅的半月', line: '一對筊杯！聖筊！', cry: ['問神明今天會不會贏', '笑死人了哈哈'] },
   { name: '大同電鍋公仔', css: '#e04a3a', w: 4, price: 1200, emo: '🍚', tease: '台灣人家家都有一台的…迷你版', line: '大同電鍋迷你公仔！', cry: ['收藏價值高喔！', '我家那台用三十年了'] },
   { name: '中獎發票', css: '#ffe07a', w: 1, price: 8000, emo: '🎫', tease: '傳說有人在蚵裡挖到千萬…', line: '中獎了！！是頭獎！', cry: ['快去領！快去領！', '請客！請客！'] },
 ];
@@ -658,7 +658,7 @@ function pickAt(cx: number, cy: number) {
   for (const m of basinOy) { const p = m.position.clone().project(camera); if (p.z > 1) continue; const d = Math.hypot((p.x + 1) / 2 * innerWidth - cx, (1 - p.y) / 2 * innerHeight - cy); if (d < bd) { bd = d; best = m; } }
   if (best) { grab(best); return; }
   if (ray.intersectObject(pileHit, false).length || ray.intersectObject(pile, false).length) { scoop(); return; }
-  hint.textContent = basinOy.length ? '點面盆內的蚵仔' : '臉盆空了！點中間的蚵殼山撈一把';
+  hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : '臉盆空了！點中間的蚵殼山撈一把';
 }
 function grab(m: THREE.Mesh) {
   basinOy.splice(basinOy.indexOf(m), 1); setPhase('busy'); reach = 0.35; tone(500, 0.05, 0.08, 'triangle'); noise(0.05, 1200, 0.2);
@@ -713,8 +713,8 @@ function applyUmb() { const u = umbNow(); buildUmb(u.look, u.size); }
 // ----- 盆仔（投肉用） -----
 type Bowl = { id: string; n: string; price: number; r: number; bounce: number; dist: number; perf: number; bonus: number; h: number; color: number; metal?: number; desc: string };
 const BOWLS: Bowl[] = [
-  { id: 'plastic', n: '塑膠面盆', price: 0, r: 0.17, bounce: 0, dist: 1, perf: 0.10, bonus: 0, h: 0.14, color: 0x4a8ac0, desc: '藍色塑膠盆，普通' },
-  { id: 'wide', n: '大面盆', price: 120, r: 0.27, bounce: 0.3, dist: 1, perf: 0.10, bonus: 0, h: 0.06, color: 0xd04a3a, desc: '寬又淺，好投，但不準會彈出來' },
+  { id: 'plastic', n: '塑膠臉盆', price: 0, r: 0.17, bounce: 0, dist: 1, perf: 0.10, bonus: 0, h: 0.14, color: 0x4a8ac0, desc: '藍色塑膠盆，普通' },
+  { id: 'wide', n: '大臉盆', price: 120, r: 0.27, bounce: 0.3, dist: 1, perf: 0.10, bonus: 0, h: 0.06, color: 0xd04a3a, desc: '寬又淺，好投，但不準會彈出來' },
   { id: 'bucket', n: '深桶', price: 180, r: 0.12, bounce: 0, dist: 1.1, perf: 0.08, bonus: 1, h: 0.34, color: 0x3a8a4a, desc: '深又窄，進去就跑不掉，肉比較鮮一顆加 $1' },
   { id: 'low', n: '矮盆', price: 150, r: 0.16, bounce: 0.1, dist: 0.7, perf: 0.16, bonus: 0, h: 0.08, color: 0xe0b030, desc: '放比較近、比較矮，拋物線好抓，完美窗較寬' },
   { id: 'steel', n: '不銹鋼盆', price: 900, r: 0.21, bounce: 0.05, dist: 0.9, perf: 0.13, bonus: 1, h: 0.15, color: 0xd8dde4, metal: 0.9, desc: '專業級，樣樣好，就是貴' },
@@ -815,7 +815,7 @@ function pry(ms = performance.now()) {
   const n = needle(ms), w = pryW() + PRY_GRACE * 2; (window as any).__pryLog = ((window as any).__pryLog || []).concat([[+n.toFixed(3), Math.abs(n - PRY_C) <= w / 2]]); strokeDir = -strokeDir || 1; tension = 0.9;
   const need = pryNeed();
   if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('太大力，殼碎掉了！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
-  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; combo++; if (combo > dayCombo) dayCombo = combo; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！手路真好！' : '好！再一下'; }
+  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; combo++; if (combo > dayCombo) dayCombo = combo; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！功夫真好！' : '好！再一下'; }
   else { combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 沒中'); hint.textContent = '時機不對，等指針走到綠區再點'; tension = 0.3; return; }
   shellTop.rotation.z = -progress * 0.4;
   if (progress >= 0.999) openOyster();
@@ -951,7 +951,7 @@ function throwOne(n: Npc) {
     if (covered && umbAge() - U.open < U.perf) { // 拄開好的時陣 = 完美反彈
       reflects++; blockStreak++; SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
       fly(sh, sh.position.clone(), () => worldOf(n.head), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); addGrudge(n, Math.round(20 * U.reflect)); npcHurt(n, U.reflect); });
-    } else if (covered) { scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋住了！啵嗯～', '#9be37a'); say(n, pick(['哪會有雨傘啦！', '狡怪喔你！', '什麼時候拿出來的！']), 2.5); }
+    } else if (covered) { scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋住了！啵嗯～', '#9be37a'); say(n, pick(['怎麼會有雨傘啦！', '狡怪喔你！', '什麼時候拿出來的！']), 2.5); }
     else { scene.remove(sh); blockStreak = 0; hitsTaken++; ($('splat') as HTMLElement).style.opacity = '1'; later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0'); hurt(8, '哎唷！被丟中了！'); hitInHand(); }
     if (blockStreak >= 3) { blockStreak = 0; npcs.forEach((m, i) => { m.calm = 45; if (i === 0) later(0.8, () => say(m, `這個${myName()}真勇敢……`, 3)); }); toast('阿婆們怕你了，暫時比較少丟', '#9fe0ff'); }
     updHud();
@@ -986,7 +986,7 @@ function stealOne(n: Npc) {
 }
 function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.round((L.missed + L.wasteShells) / (L.opened + L.wasteShells) * 100) : 0;
   const tl = Object.entries(save.titles).map(([k, v]) => `${k} ×${v}`).join('、') || '（猶無）';
-  return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">做工 ${save.days} 工・累積收入 $${save.money}・最佳 ${save.best} 顆<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美出手 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/被抓 ${L.caught}・丟中阿婆 ${L.shellHits}・被丟中 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
+  return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">工作 ${save.days} 天・累積收入 $${save.money}・最佳 ${save.best} 顆<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美出手 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/被抓 ${L.caught}・丟中阿婆 ${L.shellHits}・被丟中 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
 function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
   if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
@@ -1022,7 +1022,7 @@ function revealPearl(r: number) {
   pearlMesh.visible = true; ding(r);
   label.innerHTML = `${RAR[r].name}！<small>${save.dex[r] === 1 ? '🆕 第一次找到！' : `你的第 ${save.dex[r]} 個`}</small><small>${['阿婆們都轉頭來看了！', '哇～粉紅色的，好漂亮！', '金光閃閃，今天發了！', '黑珍珠！！整個漁港都轟動了！'][r]}</small>`;
   label.style.color = RAR[r].css === '#3a3548' ? '#c9b8ff' : RAR[r].css; label.classList.add('on');
-  const cries = ['哎唷！珍珠！', '給我看看！', '好運喔你！', '天公伯仔有保庇！'];
+  const cries = ['哎唷！珍珠！', '給我看看！', '好運喔你！', '老天爺保佑！'];
   npcs.forEach((n, i) => { n.look = 2.6; say(n, cries[(i + r) % cries.length], 2.6); });
 }
 function renderDex() {

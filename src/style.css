@@ -250,4 +250,4 @@ body.tutOn .ntag{display:none!important}
  #btnsL #radioBtn.off i{background:#888;box-shadow:none}#btnsL #radioBtn.off{filter:grayscale(1)}#btnsL #radioBtn:after{display:none}}
 #vign{position:fixed;inset:0;pointer-events:none;z-index:1;display:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(20,14,8,.32) 100%)}
 #vign.on{display:block}
-#nameEdit{color:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer;display:inline-block;padding:10px 2px;margin:-10px 0;-webkit-tap-highlight-color:transparent}#nameEdit i{font-style:normal;opacity:.7;font-size:.85em}
+#nameEdit{color:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer;display:inline-block;padding:14px 2px;margin:-14px 0;line-height:16px;-webkit-tap-highlight-color:transparent}#nameEdit i{font-style:normal;opacity:.7;font-size:.85em}
