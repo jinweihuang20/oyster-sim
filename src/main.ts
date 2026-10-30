@@ -1130,7 +1130,7 @@ const up = (e: PointerEvent) => { if (down && down.id === e.pointerId && walking
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
-  if ((e.target as HTMLElement)?.tagName === 'INPUT' && (e.target as HTMLInputElement).type === 'text') return;
+  if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
   if (e.code === 'KeyV' && !e.repeat) toggleRadio();
   if (state === 'play' && !tut && e.code === 'KeyM') { const L = $('medList'); if (document.pointerLockElement) document.exitPointerLock(); L.classList.toggle('show'); if (L.classList.contains('show')) renderMedList(); return; }
   if (state === 'play' && $('medList').classList.contains('show') && /^Digit[1-9]$/.test(e.code)) { const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0); const m = own[+e.code.slice(5) - 1]; if (m) { useMed(m.id); renderMedList(); } return; }
@@ -1623,11 +1623,30 @@ document.querySelectorAll<HTMLElement>('.panel').forEach(pn => {
 });
 // 上工中關掉／離開頁面：記一筆中途離開
 addEventListener('pagehide', () => { if (state === 'play' && !tut) track('abandon', { reason: 'abandon', count, opened, dur: Math.round(shiftLen - Math.max(0, timeLeft)), loc: locNow().id, dstat: dstatStr() }); });
+// 💬 意見回饋
+const FB_URL = STATS_URL.replace(/\/e$/, '/feedback');
+let fbCat = '', fbFrom = '', fbLast = 0;
+const fbCount = () => { $('fbCount').textContent = `${($('fbText') as HTMLTextAreaElement).value.length}/500`; };
+function openFb(from: string) { fbFrom = from; $(from).classList.remove('show'); $('fb').classList.add('show'); fbCount(); }
+document.querySelectorAll<HTMLButtonElement>('[data-fc]').forEach(b => b.onclick = () => { fbCat = b.dataset.fc!; document.querySelectorAll<HTMLButtonElement>('[data-fc]').forEach(x => x.style.outline = x === b ? '3px solid #ffd24a' : ''); });
+$('fbText').addEventListener('input', fbCount);
+$('setFb').onclick = () => openFb('settings'); $('rFb').onclick = () => openFb('result');
+$('fbClose').onclick = () => { $('fb').classList.remove('show'); if (fbFrom) $(fbFrom).classList.add('show'); };
+$('fbSend').onclick = () => {
+  const ta = $('fbText') as HTMLTextAreaElement, text = ta.value.trim().slice(0, 500);
+  if (!fbCat) { toast('先選一個類別喔'); return; }
+  if (!text) { toast('寫點什麼再送出吧'); return; }
+  if (Date.now() - fbLast < 60_000) { toast('送太快了，等一分鐘再試'); return; }
+  fbLast = Date.now();
+  const ua = navigator.userAgent, uaS = (/(iPhone|iPad|Android|Windows|Mac OS X|Linux)/.exec(ua)?.[1] ?? '?') + ' ' + (/(Edg|Chrome|Firefox|Safari)\/[\d]+/.exec(ua)?.[0] ?? '');
+  const body = JSON.stringify({ uid: statsId, cat: fbCat, text, contact: ($('fbContact') as HTMLInputElement).value.trim().slice(0, 120), meta: { ver: __BUILD__, dev: COARSE ? 'mobile' : 'pc', screen: `${innerWidth}x${innerHeight}`, loc: locNow().id, days: save.days, ua: uaS } });
+  fetch(FB_URL, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(r => { if (!r.ok) throw 0; toast('謝謝你的回饋！'); ta.value = ''; fbCount(); $('fbClose').click(); }).catch(() => { fbLast = 0; toast('送出失敗，稍後再試'); });
+};
 installBackGuard(() => {
   const open = (id: string) => document.getElementById(id)?.classList.contains('show');
   if (open('npcTip')) { $('npcTip').classList.remove('show'); return 'handled'; }
   if (open('medList')) { $('medList').classList.remove('show'); return 'handled'; }
-  for (const [id, close] of [['redeem', 'rdClose'], ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose']]) if (open(id)) { ($(close) as HTMLElement).click(); return 'handled'; }
+  for (const [id, close] of [['fb', 'fbClose'], ['redeem', 'rdClose'], ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose']]) if (open(id)) { ($(close) as HTMLElement).click(); return 'handled'; }
   if (state === 'play') { toast('上工中按返回不會離開；要收工請按「🏃 翹班」或等時間到', '#ffcf8a'); return 'handled'; }
   return 'confirm-exit';
 }, () => state === 'play');

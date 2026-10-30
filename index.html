@@ -38,10 +38,11 @@
  <label class="row">血腥效果 <input id="v_gore" type="checkbox"></label>
  <label class="row">傳送匿名統計 <input id="v_stats" type="checkbox"></label>
  <label class="row">全部靜音 <input id="v_mute" type="checkbox"></label>
- <button id="setRedeem">🎁 兌換碼</button> <button id="tutReplay">📘 重看教學</button> <button id="resetSave" style="background:#8a2a2a;color:#fff">重置存檔</button> <button id="setClose">關閉</button></div>
+ <button id="setRedeem">🎁 兌換碼</button> <button id="setFb">💬 意見回饋</button> <button id="tutReplay">📘 重看教學</button> <button id="resetSave" style="background:#8a2a2a;color:#fff">重置存檔</button> <button id="setClose">關閉</button></div>
+<div id="fb" class="panel"><h2>💬 意見回饋</h2><p style="font-size:14px;opacity:.85">遇到問題或有想法？告訴我們！</p><div id="fbCats" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center"><button data-fc="bug">🐛 Bug</button><button data-fc="idea">💡 建議</button><button data-fc="fun">😊 好玩</button><button data-fc="hard">😣 太難</button></div><textarea id="fbText" maxlength="500" rows="5" placeholder="想說什麼都可以…" style="width:100%;box-sizing:border-box;font-size:16px;margin-top:8px"></textarea><div id="fbCount" style="font-size:12px;opacity:.7;text-align:right">0/500</div><input id="fbContact" type="email" maxlength="120" autocomplete="email" placeholder="想收到回覆可留 Email（選填）" style="width:100%;box-sizing:border-box;font-size:16px"><p><button id="fbSend">送出</button> <button id="fbClose">返回</button></p></div>
 <div id="redeem" class="panel"><h2>🎁 兌換碼</h2><p style="font-size:14px;opacity:.85">輸入活動送的兌換碼，領取獎勵（每組碼每人限兌換一次，不分大小寫）</p><input id="rdInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="請輸入兌換碼"><div id="rdMsg"></div><button id="rdSubmit">兌換</button> <button id="rdClose">關閉</button></div>
 <div id="shop" class="panel"><h2>🏪 蚵寮雜貨店</h2><div id="shopList"></div><p style="font-size:12px;opacity:.75">刀：綠區大、撬的次數少、割手率低、容易找縫、幸運🍀多（比較會開到珍珠奇物）＝好；指針速慢＝好。傘（按住撐開、放開收起，沒有冷卻）：開傘快、可撐久、完美窗寬、遮得多、反彈力大＝好</p><button id="shopClose">關閉</button></div>
-<div id="result" class="panel"><h2 id="resTitle"></h2><div id="resBody"></div><button id="shopBtn2">🏪 雜貨店</button> <button id="rDex">📖 圖鑑</button> <button id="rSet">⚙ 設定</button> <button id="rLoc">📍 換地點</button> <button id="again">🌅 再次上工</button></div>
+<div id="result" class="panel"><h2 id="resTitle"></h2><div id="resBody"></div><button id="shopBtn2">🏪 雜貨店</button> <button id="rDex">📖 圖鑑</button> <button id="rSet">⚙ 設定</button> <button id="rLoc">📍 換地點</button> <button id="rFb" style="font-size:13px;padding:6px 10px">💬 意見回饋</button> <button id="again">🌅 再次上工</button></div>
 <script type="module" src="./src/main.ts"></script><div id="back-toast" class="hidden">再按一次返回就會離開遊戲</div>
 <div id="vign"></div>
 <div id="pauseTag">⏸ 暫停中</div>
