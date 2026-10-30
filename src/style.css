@@ -138,3 +138,13 @@ button{touch-action:manipulation}
  .ph h2{margin:4px 0;font-size:20px}
  .panel .px{display:block;position:absolute;right:6px;bottom:4px;width:44px;height:44px;min-width:44px!important;min-height:44px!important;margin:0!important;padding:0;border-radius:50%;font-size:20px;background:#8a3a1a;color:#fff}
 }
+
+.daily{display:block;margin:10px auto;min-height:56px;padding:10px 22px;font-size:18px;font-weight:700;border:2px solid #ffd76a;border-radius:14px;background:linear-gradient(#ffcf4a,#e89a1c);color:#3a2200;box-shadow:0 0 18px #ffb43a88;animation:dailyPulse 1.6s ease-in-out infinite;cursor:pointer}
+.daily small{display:block;font-size:12px;font-weight:400;opacity:.8}
+.daily.done{background:#3a3a3a;color:#ccc;border-color:#666;box-shadow:none;animation:none;cursor:default;font-size:15px}
+@keyframes dailyPulse{50%{transform:scale(1.04)}}
+.coinfx{position:fixed;z-index:99;font-size:26px;pointer-events:none;transform:translate(-50%,-50%);animation:coinFly 1.2s ease-out forwards}
+@keyframes coinFly{0%{opacity:1;transform:translate(-50%,-50%)}100%{opacity:0;transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) rotate(540deg)}}
+.coinplus{position:fixed;z-index:99;pointer-events:none;transform:translate(-50%,-100%);font:700 28px sans-serif;color:#ffd76a;text-shadow:0 2px 4px #000;animation:coinUp 1.4s ease-out forwards}
+@keyframes coinUp{to{opacity:0;transform:translate(-50%,-220%)}}
+@media (pointer:coarse){.daily{width:100%;max-width:360px;min-height:60px;font-size:19px;touch-action:manipulation}}

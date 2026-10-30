@@ -348,7 +348,7 @@ const OYSTER_PRICE = 3, CRACK_PRICE = 1;
 const SAVE_V = 2;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number };
 function defaultSave(): Save { return { v: SAVE_V, dex: [0, 0, 0, 0], odd: [0, 0, 0, 0], best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} } }; }
 function loadSave(): Save {
   const d = defaultSave(); let raw: any = null;
@@ -363,9 +363,30 @@ function loadSave(): Save {
   if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
   if (raw.shop?.equipped && typeof raw.shop.equipped === 'object') for (const [k, v] of Object.entries(raw.shop.equipped)) if (typeof v === 'string') out.shop.equipped[k] = v;
   if (typeof raw.seat === 'string') out.seat = raw.seat;
+  if (typeof raw.bonusDay === 'string') out.bonusDay = raw.bonusDay;
+  out.bonusN = num(raw.bonusN);
   return out;
 }
 const save: Save = loadSave();
+// 每日上工費：用裝置本地日曆日判斷
+const DAILY_PAY = 100;
+const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function renderDaily() {
+  const b = document.getElementById('daily') as HTMLButtonElement | null; if (!b) return;
+  const done = save.bonusDay === todayKey();
+  b.disabled = done; b.classList.toggle('done', done);
+  b.innerHTML = done ? `✅ 今仔日上工費領過矣・明天再來領<small>身軀邊 $${save.money}</small>` : `💰 領今日上工費 $${DAILY_PAY}<small>阿姨講：今仔日嘛愛拚喔！</small>`;
+}
+function claimDaily(ev?: Event) {
+  if (save.bonusDay === todayKey()) { renderDaily(); return; }
+  save.bonusDay = todayKey(); save.bonusN = (save.bonusN ?? 0) + 1; save.money += DAILY_PAY; persist();
+  track('daily_bonus', { amount: DAILY_PAY, streak: save.bonusN, money: save.money });
+  try { audio(); for (let k = 0; k < 6; k++) tone(1200 + k * 180, 0.12, 0.09, 'square', k * 0.07, 1800 + k * 180); tone(523, 0.4, 0.12, 'triangle', 0.45); tone(784, 0.5, 0.12, 'triangle', 0.55); } catch { }
+  const b = document.getElementById('daily')!; const r = b.getBoundingClientRect();
+  for (let i = 0; i < 14; i++) { const c = document.createElement('div'); c.className = 'coinfx'; c.textContent = '🪙'; c.style.left = `${r.left + r.width / 2}px`; c.style.top = `${r.top + r.height / 2}px`; c.style.setProperty('--dx', `${(Math.random() - 0.5) * 260}px`); c.style.setProperty('--dy', `${-80 - Math.random() * 160}px`); c.style.animationDelay = `${i * 0.03}s`; document.body.appendChild(c); setTimeout(() => c.remove(), 1400); }
+  const plus = document.createElement('div'); plus.className = 'coinplus'; plus.textContent = `+$${DAILY_PAY}`; plus.style.left = `${r.left + r.width / 2}px`; plus.style.top = `${r.top}px`; document.body.appendChild(plus); setTimeout(() => plus.remove(), 1500);
+  ev?.stopPropagation(); renderDaily();
+}
 const persist = () => { try { localStorage.setItem('oyster-sim', JSON.stringify(save)); } catch { /* 私密模式等 */ } };
 persist();
 let dry = 0;
@@ -984,6 +1005,8 @@ $('start').onclick = () => { audio(); startDay(); };
 $('again').onclick = startDay;
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => $('settings').classList.add('show');
+$('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
+if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
 $('resetSave').onclick = () => { if (confirm('確定欲重置存檔？錢、圖鑑、生涯紀錄、設定攏會清掉，無法度復原。')) { localStorage.removeItem('oyster-sim'); localStorage.removeItem('oyster-mix'); location.reload(); } };
 $('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); renderShop(); $('shop').classList.add('show'); };
 $('shopBtn2').onclick = () => { renderShop(); $('shop').classList.add('show'); };
