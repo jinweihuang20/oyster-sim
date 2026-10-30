@@ -331,16 +331,25 @@ const DIFF = [
 ];
 const DIFF_W = [30, 40, 22, 8];
 const RAR = [
-  { name: '白珍珠', color: 0xf4f1ea, css: '#f4f1ea', w: 70, price: 200 },
-  { name: '粉珍珠', color: 0xf3b5c8, css: '#f3b5c8', w: 20, price: 600 },
-  { name: '金珍珠', color: 0xf2c440, css: '#f2c440', w: 8, price: 1800 },
-  { name: '烏珍珠', color: 0x22202a, css: '#3a3548', w: 2, price: 6000 },
+  { name: '白珍珠', color: 0xf4f1ea, css: '#f4f1ea', w: 70, price: 200, emo: '⚪', tease: '最常見的珍珠，多剝幾粒就有' },
+  { name: '粉珍珠', color: 0xf3b5c8, css: '#f3b5c8', w: 20, price: 600, emo: '🩷', tease: '聽說有粉紅色的，真媠' },
+  { name: '金珍珠', color: 0xf2c440, css: '#f2c440', w: 8, price: 1800, emo: '🟡', tease: '金光閃閃的…有人講過' },
+  { name: '烏珍珠', color: 0x22202a, css: '#3a3548', w: 2, price: 6000, emo: '⚫', tease: '傳說中的烏色寶貝，剝一世人才看一擺' },
 ];
 const ODD = [
-  { name: '假牙', css: '#f0e8e0', w: 30, price: 50, line: '啥人的假喙齒啦！？', cry: ['哎唷，彼毋是阿雄伯的？', '笑死人，假喙齒嘛會生蚵仔'] },
-  { name: '古早硬幣', css: '#c08a40', w: 30, price: 300, line: '日本時代的銀角仔！', cry: ['古董喔！會使賣錢！', '阮阿公以前嘛有收'] },
-  { name: '金戒指', css: '#f2c440', w: 10, price: 2500, line: '金戒指！啥人的定情物？', cry: ['金的呢！予我看覓！', '這愛去報警無？'] },
-  { name: '小螃蟹', css: '#e05a3a', w: 30, price: 0, line: '螃蟹夾手矣！！', cry: ['緊甩！緊甩！', '哈哈哈，伊夾牢牢'] },
+  { name: '假牙', css: '#f0e8e0', w: 30, emo: '🦷', tease: '聽說有人在蚵裡挖到…會笑的東西', price: 50, line: '啥人的假喙齒啦！？', cry: ['哎唷，彼毋是阿雄伯的？', '笑死人，假喙齒嘛會生蚵仔'] },
+  { name: '古早硬幣', css: '#c08a40', w: 30, emo: '🪙', tease: '圓圓的、銀色的，老古董', price: 300, line: '日本時代的銀角仔！', cry: ['古董喔！會使賣錢！', '阮阿公以前嘛有收'] },
+  { name: '金戒指', css: '#f2c440', w: 10, emo: '💍', tease: '某人的定情物遺落在海裡…', price: 2500, line: '金戒指！啥人的定情物？', cry: ['金的呢！予我看覓！', '這愛去報警無？'] },
+  { name: '小螃蟹', css: '#e05a3a', w: 30, emo: '🦀', tease: '小心，會夾手！', price: 0, line: '螃蟹夾手矣！！', cry: ['緊甩！緊甩！', '哈哈哈，伊夾牢牢'] },
+  { name: '統一發票', css: '#f4f4f0', w: 24, price: 5, emo: '🧾', tease: '溼溼的紙…上面有號碼', line: '啥人的發票塞入去蚵仔內！', cry: ['緊對看覓有中無！', '溼漉漉，號碼看無矣'] },
+  { name: '幾枚銅板', css: '#c89a50', w: 24, price: 20, emo: '🪙', tease: '叮叮噹噹的零錢聲', line: '十箍、五箍…發財矣！', cry: ['蚵仔嘛會儉錢喔', '提去買飲料'] },
+  { name: '機車鎖匙', css: '#a8b0b8', w: 16, price: 0, emo: '🔑', tease: '某人一直在找的東西', line: '啥人的機車鎖匙？！', cry: ['阿明仔揣規工矣！', '緊去廣播！'] },
+  { name: '珍奶吸管', css: '#3a6ad8', w: 16, price: 1, emo: '🥤', tease: '粗粗的、塑膠的…海洋垃圾', line: '珍珠奶茶的粗吸管…', cry: ['海洋垃圾啦！', '毋是彼種珍珠啦'] },
+  { name: '紅包', css: '#d8282a', w: 9, price: 600, emo: '🧧', tease: '紅紅的、過年才有', line: '紅包！內底有錢！', cry: ['恭喜發財！', '分一半予我啦'] },
+  { name: '媽祖平安符', css: '#e8b030', w: 7, price: 888, emo: '🏮', tease: '有神明保庇的東西', line: '媽祖婆的平安符！', cry: ['媽祖保庇！', '今仔日一定好運'] },
+  { name: '筊杯', css: '#c0302a', w: 6, price: 400, emo: '🌙', tease: '一對紅紅的半月', line: '一對筊杯！聖筊！', cry: ['問神明今仔日會贏無', '笑筊啦哈哈'] },
+  { name: '大同電鍋公仔', css: '#e04a3a', w: 4, price: 1200, emo: '🍚', tease: '台灣人家家都有一台的…迷你版', line: '大同電鍋迷你公仔！', cry: ['收藏價值高喔！', '阮兜彼台用三十冬矣'] },
+  { name: '中獎發票', css: '#ffe07a', w: 1, price: 8000, emo: '🎫', tease: '傳說有人在蚵裡挖到千萬…', line: '中獎矣！！是頭獎！', cry: ['緊去領！緊去領！', '請客！請客！'] },
 ];
 const dexN = () => save.dex.filter(x => x).length + save.odd.filter(x => x).length;
 const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'uncommon' : 'common';
@@ -350,7 +359,7 @@ const SAVE_V = 2;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
 type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number };
-function defaultSave(): Save { return { v: SAVE_V, dex: [0, 0, 0, 0], odd: [0, 0, 0, 0], best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} } }; }
+function defaultSave(): Save { return { v: SAVE_V, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} } }; }
 function loadSave(): Save {
   const d = defaultSave(); let raw: any = null;
   try { raw = JSON.parse(localStorage.getItem('oyster-sim') || 'null'); } catch { raw = null; }
@@ -358,7 +367,7 @@ function loadSave(): Save {
   const num = (x: any, def = 0) => (typeof x === 'number' && isFinite(x) ? x : def);
   const arr4 = (a: any) => [0, 1, 2, 3].map(i => num(Array.isArray(a) ? a[i] : 0));
   // v1（無 v 欄位）→ v2：加 life／titles／shop
-  const out: Save = { ...d, dex: arr4(raw.dex), odd: arr4(raw.odd), best: num(raw.best), money: num(raw.money), days: num(raw.days), queen: num(raw.queen) };
+  const out: Save = { ...d, dex: arr4(raw.dex), odd: ODD.map((_, i) => num(Array.isArray(raw.odd) ? raw.odd[i] : 0)), best: num(raw.best), money: num(raw.money), days: num(raw.days), queen: num(raw.queen) };
   for (const k of LIFE_KEYS) out.life[k] = num(raw.life?.[k]);
   if (raw.titles && typeof raw.titles === 'object') for (const [k, v] of Object.entries(raw.titles)) out.titles[k] = num(v);
   if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
@@ -396,17 +405,28 @@ function rollFind(): { kind: 'pearl' | 'odd' | 'none'; i: number } {
   const p = 1 / 50 + Math.max(0, dry - 40) * 0.01;
   if (Math.random() < p) { dry = 0; return { kind: 'pearl', i: wpick(RAR) }; }
   dry++;
-  if (Math.random() < 1 / 30) return { kind: 'odd', i: wpick(ODD) };
+  if (Math.random() < 1 / 24) return { kind: 'odd', i: wpick(ODD) };
   return { kind: 'none', i: 0 };
 }
 
 // 奇物模型
-const oddMeshes: THREE.Object3D[] = ODD.map((_, i) => {
+const oddMeshes: THREE.Object3D[] = ODD.map((o, i) => {
   const g = new THREE.Group(); oyster.add(g); g.position.set(0, 0.05, 0); g.visible = false;
   if (i === 0) { mesh(new THREE.BoxGeometry(0.07, 0.02, 0.03), mat(0xe89a9a), [0, 0, 0], g); for (let k = 0; k < 5; k++) mesh(new THREE.BoxGeometry(0.011, 0.018, 0.012), mat(0xffffff), [-0.028 + k * 0.014, 0.017, -0.01], g); }
   if (i === 1) mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.006, 16), mat(0xb0b0b8, { metalness: 0.7, roughness: 0.3 }), [0, 0, 0], g);
   if (i === 2) { const r = mesh(new THREE.TorusGeometry(0.022, 0.006, 8, 16), mat(0xf2c440, { metalness: 0.9, roughness: 0.2 }), [0, 0.01, 0], g); r.rotation.x = 1.2; mesh(new THREE.OctahedronGeometry(0.01), mat(0xffffff, { roughness: 0.1 }), [0, 0.034, 0], g); }
   if (i === 3) { const b = mesh(new THREE.SphereGeometry(0.035, 8, 6), mat(0xd04a2a), [0, 0, 0], g); b.scale.y = 0.5; for (const s of [-1, 1]) { mesh(new THREE.SphereGeometry(0.016, 6, 5), mat(0xe05a3a), [s * 0.045, 0.005, -0.03], g); for (let k = 0; k < 3; k++) mesh(new THREE.BoxGeometry(0.03, 0.004, 0.004), mat(0xc04a2a), [s * 0.04, -0.005, -0.01 + k * 0.015], g); } }
+  if (i >= 4) { const c = parseInt(o.css.slice(1), 16), M = mat(c, { roughness: 0.5 });
+    if (o.name.includes('發票')) { const b = mesh(new THREE.BoxGeometry(0.05, 0.002, 0.07), M, [0, 0.005, 0], g); b.rotation.z = 0.15; }
+    else if (o.name.includes('銅板')) for (let k = 0; k < 3; k++) mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.004, 14), mat(c, { metalness: 0.8, roughness: 0.3 }), [k * 0.02 - 0.02, k * 0.004, k % 2 * 0.01], g);
+    else if (o.name.includes('鎖匙')) { mesh(new THREE.TorusGeometry(0.012, 0.004, 6, 12), mat(c, { metalness: 0.8 }), [-0.02, 0, 0], g).rotation.x = Math.PI / 2; mesh(new THREE.BoxGeometry(0.04, 0.004, 0.008), mat(c, { metalness: 0.8 }), [0.012, 0, 0], g); }
+    else if (o.name.includes('吸管')) mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.09, 8), M, [0, 0.01, 0], g).rotation.z = Math.PI / 2.4;
+    else if (o.name === '紅包') { mesh(new THREE.BoxGeometry(0.04, 0.006, 0.065), M, [0, 0.005, 0], g); mesh(new THREE.BoxGeometry(0.016, 0.007, 0.016), mat(0xf2c440, { metalness: 0.7 }), [0, 0.006, 0], g); }
+    else if (o.name.includes('平安符')) { mesh(new THREE.BoxGeometry(0.03, 0.004, 0.05), mat(0xe8b030), [0, 0.005, 0], g); mesh(new THREE.BoxGeometry(0.02, 0.005, 0.012), mat(0xc0302a), [0, 0.006, 0.012], g); }
+    else if (o.name === '筊杯') for (const sx of [-1, 1]) { const h = mesh(new THREE.SphereGeometry(0.022, 10, 6, 0, Math.PI), M, [sx * 0.018, 0.008, 0], g); h.scale.set(0.6, 1, 1.4); h.rotation.set(-Math.PI / 2, 0, sx * 0.3); }
+    else if (o.name.includes('電鍋')) { mesh(new THREE.CylinderGeometry(0.024, 0.026, 0.035, 16), M, [0, 0.018, 0], g); mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.006, 16), mat(0xf4f0e8), [0, 0.038, 0], g); mesh(new THREE.SphereGeometry(0.006, 6, 4), mat(0x222222), [0, 0.044, 0], g); }
+    else { mesh(new THREE.BoxGeometry(0.055, 0.003, 0.075), mat(0xffe07a, { emissive: 0x806010, roughness: 0.3 } as any), [0, 0.005, 0], g); }
+  }
   return g;
 });
 // 紅白雨傘（傳統菜市仔款）
@@ -901,9 +921,13 @@ function revealPearl(r: number) {
   npcs.forEach((n, i) => { n.look = 2.6; say(n, cries[(i + r) % cries.length], 2.6); });
 }
 function renderDex() {
-  const item = (has: number, name: string, css: string, price: number) => `<div class="dexItem"><div class="dot" style="background:${has ? css : '#333'};box-shadow:0 0 8px ${has ? css : 'transparent'}"></div><div><b>${has ? name : '？？？'}</b><br><small>收集 ${has} 件・值 $${price}</small></div></div>`;
-  $('dexList').innerHTML = '<h3>珍珠</h3>' + RAR.map((r, i) => item(save.dex[i], r.name, r.css, r.price)).join('') + '<h3>奇物</h3>' + ODD.map((o, i) => item(save.odd[i], o.name, o.css, o.price)).join('') +
-    `<p style="font-size:13px">已收集 ${save.dex.filter(x => x).length + save.odd.filter(x => x).length} / 8 種</p>` + lifeHtml();
+  const RZ: Record<string, string> = { common: '普通', uncommon: '少見', rare: '稀有', legend: '傳說' };
+  const all = [...RAR.map((r, i) => ({ ...r, has: save.dex[i] ?? 0 })), ...ODD.map((o, i) => ({ ...o, has: save.odd[i] ?? 0 }))];
+  const item = (x: typeof all[number]) => { const rr = rarOf(x.w); return `<div class="dexItem ${x.has ? '' : 'locked'}"><div class="dot" style="background:${x.has ? x.css : '#222'};box-shadow:0 0 8px ${x.has ? x.css : 'transparent'}">${x.emo}</div><div><b>${x.has ? x.name : '？？？'}</b> <span class="rb r-${rr}">${RZ[rr]}</span><br><small>${x.has ? `收集 ${x.has} 件・值 $${x.price}${'line' in x ? `<br>「${(x as any).line}」` : ''}` : `💭 ${x.tease}`}</small></div></div>`; };
+  const got = all.filter(x => x.has).length;
+  const per = (['common', 'uncommon', 'rare', 'legend'] as const).map(r => { const xs = all.filter(x => rarOf(x.w) === r); return `<span class="rb r-${r}">${RZ[r]} ${xs.filter(x => x.has).length}/${xs.length}</span>`; }).join(' ');
+  $('dexList').innerHTML = `<div class="dexProg"><b>已收集 ${got} / ${all.length} 種</b><div class="dexBar"><i style="width:${got / all.length * 100}%"></i></div>${per}</div>` +
+    '<h3>珍珠</h3>' + all.slice(0, RAR.length).map(item).join('') + '<h3>奇物</h3>' + all.slice(RAR.length).map(item).join('') + lifeHtml();
 }
 renderDex();
 
@@ -1151,17 +1175,17 @@ function frame() {
 // ---------- 新手教學 ----------
 type TutStep = { id: string; line: string; pc: string; mb: string; hi?: string[]; next?: string; done?: () => boolean; enter?: () => void };
 const TUT: TutStep[] = [
-  { id: 'grab', line: '來，阿姨教你！先提一粒蚵仔起來。', pc: '點紅面盆內的蚵仔（或按 Space）', mb: '點紅面盆內的蚵仔，或者點家己的手', done: () => phase === 'seam' },
-  { id: 'seam', line: '蚵仔殼有一條縫，愛轉予伊對著刀尖。', pc: '滾輪／A D 轉蚵仔，金色的縫對著刀尖時點一下（或 Space）插刀', mb: '按牢 ◀ ▶ 或拖蚵仔來轉，縫對著刀尖時點一下蚵仔插刀', hi: ['rotL', 'rotR'], done: () => phase === 'twist' || phase === 'aim' },
-  { id: 'pry', line: '刀插入去矣！看指針，綠區才撬，毋通傷大力喔～', pc: '指針行到綠區就點滑鼠／Space，撬到殼開', mb: '指針行到綠區就點一下螢幕，撬到殼開', hi: ['gauge'], done: () => phase === 'aim' },
-  { id: 'toss', line: '蚵仔肉出來矣！擲入藍色的碗仔才有算錢。', pc: '轉頭對準藍色碗，按牢滑鼠／Space 蓄力，藍色區間放開', mb: '拖畫面對準藍色碗，按牢螢幕蓄力，藍色區間放開', hi: ['gauge'], done: () => count > tut!.c0 },
-  { id: 'steal', line: '偷偷仔講：阿婆越頭講話的時陣，會使偷伊碗內的肉…', pc: '看著阿婆咧講話，對準伊的碗按住 E 偷（予看著會受氣）', mb: '看著阿婆咧講話，對準伊的碗按牢「偷」（予看著會受氣）', hi: ['stealBtn'], next: '知矣 ▶', done: () => steals > tut!.s0 },
-  { id: 'shell', line: '撬出空殼仔，也會使擲去予人！', pc: '空殼仔佇手的時陣，對準阿婆按 F 或右鍵擲過去', mb: '空殼仔佇手的時陣，對準阿婆按「丟殼」擲過去', hi: ['throwBtn'], next: '知矣 ▶', done: () => thrown > tut!.t0 },
-  { id: 'umb', line: '小心！阿婆欲擲殼仔過來矣！', pc: '看著 ⚠ 緊按 R 開雨傘擋', mb: '看著 ⚠ 緊按「雨傘」擋', hi: ['umbBtn'], next: '知矣 ▶', done: () => umbT > 0, enter: () => later(1.2, () => { if (tut && TUT[tut.i].id === 'umb') windUp(npcs[0]); }) },
-  { id: 'stand', line: '坐傷久腳會麻，起來行行咧，揣別的位。', pc: '按 G 徛起來', mb: '按「🚶 徛起來」', hi: ['standBtn'], next: '知矣 ▶', done: () => walking },
-  { id: 'sit', line: '每一个位有無仝款的好處，看予清楚才坐。', pc: 'WASD 行到藍色板凳邊仔，按 E 坐落（或按下面的按鈕坐轉去）', mb: '用搖桿行到藍色板凳邊仔，按「坐落」（或按下面的按鈕坐轉去）', hi: ['sitBtn'], next: '坐轉去 ▶', done: () => !walking },
-  { id: 'menu', line: '賺的錢會使去雜貨店買好刀、雨傘、碗；珍珠會記佇圖鑑。', pc: '上面的 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面嘛有', mb: '上面的 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面嘛有', hi: ['shopBtn', 'dexBtn', 'setBtn'], next: '下一步 ▶' },
-  { id: 'daily', line: '閣有，每日來上工，阿姨攏發 $100 上工費予你！', pc: '開始畫面按「💰 領今日上工費」，一工領一擺', mb: '開始畫面按「💰 領今日上工費」，一工領一擺', next: '學會矣！🎉' },
+  { id: 'grab', line: '來，阿姨教你！先拿一顆蚵仔起來。', pc: '點紅色臉盆裡的蚵仔（或按 Space）', mb: '點紅色臉盆裡的蚵仔，或點自己的手', done: () => phase === 'seam' },
+  { id: 'seam', line: '蚵仔殼有一條縫，要轉到對準刀尖喔。', pc: '用滾輪／A D 轉蚵仔，金色的縫對準刀尖時點一下（或按 Space）插刀', mb: '按住 ◀ ▶ 或拖動蚵仔來轉，縫對準刀尖時點一下蚵仔插刀', hi: ['rotL', 'rotR'], done: () => phase === 'twist' || phase === 'aim' },
+  { id: 'pry', line: '刀插進去了！看指針，到綠區再撬，不要太用力喔～', pc: '指針走到綠區就點滑鼠／按 Space，撬到殼打開', mb: '指針走到綠區就點一下螢幕，撬到殼打開', hi: ['gauge'], done: () => phase === 'aim' },
+  { id: 'toss', line: '蚵仔肉出來了！丟進藍色的碗裡才算錢。', pc: '轉頭對準藍色碗，按住滑鼠／Space 蓄力，到藍色區間放開', mb: '拖動畫面對準藍色碗，按住螢幕蓄力，到藍色區間放開', hi: ['gauge'], done: () => count > tut!.c0 },
+  { id: 'steal', line: '偷偷跟你說：阿婆轉頭聊天的時候，可以偷她碗裡的肉…', pc: '看到阿婆在聊天，對準她的碗按住 E 偷（被看到她會生氣）', mb: '看到阿婆在聊天，對準她的碗按住「偷」（被看到她會生氣）', hi: ['stealBtn'], next: '知道了 ▶', done: () => steals > tut!.s0 },
+  { id: 'shell', line: '撬出空殼，也可以丟向別人！', pc: '手上有空殼時，對準阿婆按 F 或右鍵丟過去', mb: '手上有空殼時，對準阿婆按「丟殼」丟過去', hi: ['throwBtn'], next: '知道了 ▶', done: () => thrown > tut!.t0 },
+  { id: 'umb', line: '小心！阿婆要丟殼過來了！', pc: '看到 ⚠ 趕快按 R 打開雨傘擋', mb: '看到 ⚠ 趕快按「雨傘」擋', hi: ['umbBtn'], next: '知道了 ▶', done: () => umbT > 0, enter: () => later(1.2, () => { if (tut && TUT[tut.i].id === 'umb') windUp(npcs[0]); }) },
+  { id: 'stand', line: '坐太久腳會麻，起來走走，找別的位子。', pc: '按 G 站起來', mb: '按「🚶 站起來」按鈕', hi: ['standBtn'], next: '知道了 ▶', done: () => walking },
+  { id: 'sit', line: '每個位子的好處都不一樣，看清楚再坐。', pc: '用 WASD 走到藍色板凳旁邊，按 E 坐下（或按下面的按鈕坐回原位）', mb: '用搖桿走到藍色板凳旁邊，按「坐落」坐下（或按下面的按鈕坐回原位）', hi: ['sitBtn'], next: '坐回去 ▶', done: () => !walking },
+  { id: 'menu', line: '賺的錢可以去雜貨店買好刀、雨傘、碗；開到的珍珠會記在圖鑑裡。', pc: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面也有', mb: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面也有', hi: ['shopBtn', 'dexBtn', 'setBtn'], next: '下一步 ▶' },
+  { id: 'daily', line: '還有，每天來上工，阿姨都發 $100 上工費給你！', pc: '在開始畫面按「💰 領今日上工費」，每天可以領一次', mb: '在開始畫面按「💰 領今日上工費」，每天可以領一次', next: '學會了！🎉' },
 ];
 let tutHi: string[] = [];
 function tutShow() {
@@ -1186,19 +1210,19 @@ function tutEnd(done: boolean) {
   if (document.pointerLockElement) document.exitPointerLock();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); }
   stopSteal(); state = 'menu'; setPhase('busy'); oyster.visible = false; on('umbBtn', false); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
-  if (done) toast('出師矣！來去剝蚵仔賺錢～', '#9be37a');
+  if (done) toast('出師了！去剝蚵仔賺錢吧～', '#9be37a');
   renderDaily(); $('overlay').classList.add('show');
 }
 setInterval(() => {
   if (!tut || state !== 'play') return; const st = TUT[tut.i];
-  if (st.id === 'toss' && phase !== 'busy' && phase !== 'aim' && count === tut.c0 && missed > tut.b0) { toast('無要緊，閣來一粒！', '#ffe080'); tutGo(0); return; }
+  if (st.id === 'toss' && phase !== 'busy' && phase !== 'aim' && count === tut.c0 && missed > tut.b0) { toast('沒關係，再來一顆！', '#ffe080'); tutGo(0); return; }
   if (st.done?.()) tutGo(tut.i + 1);
 }, 120);
 $('tutNext').onclick = e => { e.stopPropagation(); if (!tut) return; const st = TUT[tut.i]; if (st.id === 'sit' && walking) sitDown(save.seat ?? 'door'); tutGo(tut.i + 1); };
 $('tutSkip').onclick = e => { e.stopPropagation(); tutEnd(false); };
 ['tutNext', 'tutSkip'].forEach(id => $(id).addEventListener('pointerdown', e => e.stopPropagation()));
 $('oTut').onclick = () => tutStart();
-$('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這班會放掉，確定欲重看教學？')) return; if (state === 'play' && !tut) { state = 'menu'; } tutStart(); };
+$('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; } tutStart(); };
 (window as any).__oy = { get phase() { return phase; }, get tut() { return tut && TUT[tut.i].id; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, P0, P1); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
 // ---------- 截圖模式 ----------
 if (SHOT) {

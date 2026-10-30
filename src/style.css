@@ -159,3 +159,16 @@ body.tutOn #hint{display:none!important}
 @media (pointer:coarse){#tut{top:calc(env(safe-area-inset-top) + 56px);padding:8px 12px}#tutLine{font-size:15px}#tutDo{font-size:13px}#tut .tb button{min-height:48px;min-width:96px}}
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#tut{width:min(46vw,420px);left:auto;right:calc(env(safe-area-inset-right) + 8px);transform:none;top:calc(env(safe-area-inset-top) + 52px)}#tutLine{font-size:13px}#tutDo{font-size:12px}}
 #tutKeys{font-size:11px;opacity:.6;margin-top:2px}
+/* 開始剝蚵：主要按鈕，固定貼在面板底部，免捲動 */
+#overlay #start{position:sticky;bottom:calc(-14px - env(safe-area-inset-bottom));display:block;width:100%;margin:12px 0 0;min-height:60px;font-size:22px;font-weight:800;letter-spacing:2px;background:linear-gradient(#5fd35a,#2e9a35);color:#fff;text-shadow:0 1px 2px #0006;border:2px solid #b9ffb0;border-radius:16px;box-shadow:0 -10px 16px rgba(36,22,10,.95),0 4px 14px #0008;z-index:2}
+#overlay #start:active{transform:translateY(1px)}
+#overlay{padding-bottom:14px}
+@media (pointer:coarse){.key{display:none}#overlay #start{min-height:64px;font-size:23px}}
+@media (max-height:700px){#overlay h1{font-size:24px;margin:4px 0}#overlay p,#overlay ul{font-size:13px;line-height:1.45}}
+@media (orientation:landscape) and (max-height:500px){#overlay #start{min-height:52px;font-size:19px}}
+
+.dexItem .dot{display:flex;align-items:center;justify-content:center;font-size:20px;min-width:34px;min-height:34px}
+.dexItem.locked .dot{filter:brightness(0) drop-shadow(0 0 1px #888);opacity:.75}.dexItem.locked b{color:#888}
+.rb{display:inline-block;font-size:11px;padding:1px 6px;border-radius:8px;font-weight:700;margin:1px}
+.r-common{background:#555;color:#eee}.r-uncommon{background:#2a7a4a;color:#dfffe8}.r-rare{background:#2a5ab0;color:#e0ecff}.r-legend{background:#b07a10;color:#fff3c0}
+.dexProg{margin:6px 0 10px}.dexBar{height:10px;background:#333;border-radius:6px;overflow:hidden;margin:6px 0}.dexBar i{display:block;height:100%;background:linear-gradient(90deg,#9be37a,#f2c440)}
