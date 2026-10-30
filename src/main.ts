@@ -637,14 +637,72 @@ function updSky() {
   const d = new Date(), h = d.getHours() + d.getMinutes() / 60; let i = 0; while (SKY[i + 1][0] <= h) i++;
   const a = SKY[i], b = SKY[i + 1], f = (h - a[0]) / (b[0] - a[0]);
   const L = (k: number) => _c1.setHex(a[k]).lerp(_c2.setHex(b[k]), f).getHex();
-  const tn = locNow().tint; (scene.background as THREE.Color).setHex(L(1)); (scene.fog as THREE.Fog).color.setHex(L(2)); if (tn !== null) { _c2.setHex(tn); (scene.background as THREE.Color).lerp(_c2, 0.3); (scene.fog as THREE.Fog).color.lerp(_c2, 0.3); } hemi.color.setHex(L(3));
+  try { showLand(); } catch { /* 尚未初始化 */ } const tn = locNow().tint; (scene.background as THREE.Color).setHex(L(1)); (scene.fog as THREE.Fog).color.setHex(L(2)); if (tn !== null) { _c2.setHex(tn); (scene.background as THREE.Color).lerp(_c2, 0.3); (scene.fog as THREE.Fog).color.lerp(_c2, 0.3); } hemi.color.setHex(L(3));
   hemi.intensity = a[4] + (b[4] - a[4]) * f; sun.intensity = a[5] + (b[5] - a[5]) * f;
   const nn = document.getElementById('nightNote'); if (nn) nn.textContent = isNight() ? '🌙 現在是夜班時段：這一工收入 +20%' : '💡 晚上 8 點到早上 5 點上工是夜班，收入 +20%';
 }
-updSky(); setInterval(updSky, 30000);
+
+// ---------- 各漁港：遠景地標 + 不同的鄰座 ----------
+const LAND: Record<string, THREE.Group> = {};
+{
+  const G = (id: string) => { const g = new THREE.Group(); g.visible = false; scene.add(g); LAND[id] = g; return g; };
+  const B = (w: number, h: number, d: number, c: number, p: [number, number, number], g: THREE.Object3D, o: Record<string, unknown> = {}) => mesh(new THREE.BoxGeometry(w, h, d), mat(c, o), p, g);
+  // 王功：紅白燈塔 + 防波堤
+  const wg = G('wanggong');
+  for (let i = 0; i < 6; i++) mesh(new THREE.CylinderGeometry(0.55 - i * 0.05, 0.6 - i * 0.05, 1.2, 12), mat(i % 2 ? 0xf2f2ee : 0xc8302a), [-9, 0.1 + i * 1.2, -24], wg);
+  mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.7, 10), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }), [-9, 7.6, -24], wg);
+  mesh(new THREE.ConeGeometry(0.5, 0.6, 10), mat(0x2a2a2a), [-9, 8.25, -24], wg);
+  B(30, 0.6, 1.2, 0x8a8a84, [3, -0.2, -21], wg);
+  for (let i = 0; i < 9; i++) B(0.8, 0.8, 0.8, 0x9a9a90, [-10 + i * 2.6, 0.3, -20.3], wg);
+  // 東石：蚵棚 + 漁人碼頭木棧道與風車
+  const ds = G('dongshi');
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 10; c++) mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.4, 5), mat(0x8a6a3a), [-12 + c * 1.6, 0, -18 - r * 2], ds);
+  for (let r = 0; r < 4; r++) B(16, 0.06, 0.08, 0x6a5030, [-4.8, 0.65, -18 - r * 2], ds);
+  B(12, 0.25, 2.5, 0x9a6a3a, [8, 0.2, -23], ds);
+  mesh(new THREE.CylinderGeometry(0.15, 0.25, 5, 8), mat(0xf0ece0), [11, 2.5, -25], ds);
+  const bl = new THREE.Group(); bl.position.set(11, 5, -24.7); ds.add(bl); for (let k = 0; k < 4; k++) { const b = B(0.25, 2.4, 0.05, 0xe8e0d0, [0, 1.2, 0], new THREE.Group()); const h = b.parent!; h.rotation.z = k * Math.PI / 2; bl.add(h); }
+  // 布袋：鹽田方格 + 白鹽山 + 濕地蘆葦
+  const bd = G('budai');
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 6; c++) B(3, 0.05, 2, (r + c) % 2 ? 0xc8d8e0 : 0xb0c8d4, [-12 + c * 3.4, -0.35, -17 - r * 2.4], bd, { roughness: 0.2, metalness: 0.2 });
+  for (let i = 0; i < 4; i++) mesh(new THREE.ConeGeometry(1.2 + i * 0.2, 1.6 + i * 0.3, 10), mat(0xfafafa), [7 + i * 2.6, 0.5, -22 - (i % 2) * 2], bd);
+  for (let i = 0; i < 40; i++) mesh(new THREE.CylinderGeometry(0.02, 0.03, 1.2, 4), mat(0x8a9a4a), [-14 + Math.random() * 28, 0.2, -26 - Math.random() * 3], bd);
+  // 自家：竹竿曬衣 + 小漁船
+  const hm = G('home');
+  B(3, 0.5, 1.2, 0x2a6aa0, [6, -0.25, -22], hm); B(1, 0.8, 0.8, 0xf0f0e8, [6.5, 0.4, -22], hm);
+}
+const WATER_C: Record<string, number> = { home: 0x3a4a6a, wanggong: 0x2a4a7a, dongshi: 0x4a5a5a, budai: 0x5a7a7a };
+type Crew = { name: string; hair: number; look: 'ama' | 'agong' | 'dajie' | 'fisher' | 'ama2'; pal: number[] };
+const CREW: Record<string, Crew[]> = {
+  home: [{ name: '快手阿桃', hair: 0x999999, look: 'ama', pal: [] }, { name: '講話阿春', hair: 0x333333, look: 'ama', pal: [] }, { name: '好奇阿嬌', hair: 0xcccccc, look: 'ama', pal: [] }],
+  wanggong: [{ name: '漁夫阿伯', hair: 0x555555, look: 'fisher', pal: [0x2a4a7a, 0x3a6a9a, 0xe8e0c8] }, { name: '燈塔阿公', hair: 0xdddddd, look: 'agong', pal: [0xe8e8e0, 0x6a7a8a, 0x8a5a3a] }, { name: '海口阿嬤', hair: 0xaaaaaa, look: 'ama2', pal: [0x4a6a9a, 0xc8d8e8, 0x2a5a7a] }],
+  dongshi: [{ name: '碼頭大姐', hair: 0x2a1a10, look: 'dajie', pal: [0xe07a4a, 0xf0c050, 0xd04a6a] }, { name: '蚵棚阿伯', hair: 0x444444, look: 'fisher', pal: [0x6a5a3a, 0x8a7a4a, 0x4a4a3a] }, { name: '愛聊阿嬤', hair: 0xbbbbbb, look: 'ama2', pal: [0xc06a8a, 0xe0a0b0, 0x8a4a6a] }],
+  budai: [{ name: '鹽田阿公', hair: 0xeeeeee, look: 'agong', pal: [0xf0f0f0, 0xc8c8c0, 0x6a6a5a] }, { name: '大廠組長大姐', hair: 0x1a1a1a, look: 'dajie', pal: [0x3a7a5a, 0x2a5a4a, 0xe8e8d8] }, { name: '老師傅阿伯', hair: 0x666666, look: 'fisher', pal: [0x4a4a5a, 0x5a5a6a, 0x7a6a4a] }],
+};
+const crewHats: THREE.Object3D[] = [];
+function showLand() { const id = locNow().id; for (const k in LAND) LAND[k].visible = k === id; (water.material as THREE.MeshStandardMaterial).color.setHex(WATER_C[id] ?? 0x3a4a6a); }
+function applyCrew() {
+  const id = locNow().id, set = CREW[id] ?? CREW.home;
+  showLand();
+  crewHats.forEach(h => h.removeFromParent()); crewHats.length = 0;
+  npcs.forEach((n, i) => {
+    const c = set[i % set.length]; n.name = c.name; n.tag.textContent = c.name;
+    const head = n.g.children.find(o => o instanceof THREE.Group && Math.abs(o.position.y - 1.02) < 0.01) as THREE.Group | undefined; if (!head) return;
+    const hair = head.children[1] as THREE.Mesh, bun = head.children[2] as THREE.Mesh;
+    (hair.material as THREE.MeshStandardMaterial).color.setHex(c.hair); (bun.material as THREE.MeshStandardMaterial).color.setHex(c.hair);
+    bun.visible = c.look === 'ama' || c.look === 'ama2'; hair.scale.set(1, c.look === 'agong' ? 0.6 : 1, 1);
+    let hat: THREE.Object3D | null = null;
+    if (c.look === 'fisher') { hat = new THREE.Group(); mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.08, 12), mat(c.pal[2] ?? 0xe8e0c8), [0, 0, 0], hat); mesh(new THREE.BoxGeometry(0.16, 0.015, 0.12), mat(c.pal[0]), [0, -0.035, 0.14], hat); hat.position.set(0, 0.12, 0); }
+    else if (c.look === 'agong') { hat = mesh(new THREE.ConeGeometry(0.3, 0.14, 14), mat(0xd8c080), [0, 0.16, 0]); } // 斗笠
+    else if (c.look === 'dajie') { hat = mesh(new THREE.TorusGeometry(0.15, 0.025, 6, 16), mat(c.pal[1]), [0, 0.06, 0]); hat.rotation.x = Math.PI / 2; } // 髮箍
+    else if (c.look === 'ama2') { hat = mesh(new THREE.SphereGeometry(0.165, 10, 6, 0, Math.PI * 2, 0, 1.2), mat(c.pal[1]), [0, 0.03, 0]); } // 頭巾
+    if (hat) { head.add(hat); crewHats.push(hat); }
+    if (c.pal.length) { const m = n.body.material as THREE.MeshStandardMaterial; const base = c.pal[Math.floor(Math.random() * 2)]; m.map?.dispose(); m.map = null; m.color.setHex(base); m.needsUpdate = true; for (const a of [n.armL, n.armR]) ((a.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(base); }
+  });
+}
+updSky(); showLand(); applyCrew(); setInterval(updSky, 30000);
 function startDay() {
   nightShift = isNight(); updSky(); $('nightTag').style.display = nightShift ? '' : 'none'; if (nightShift) later(1.5, () => toast('🌙 夜班上工！這一工收入 +20%', '#b8c8ff'));
-  npcs.forEach(dressAma);
+  npcs.forEach(dressAma); applyCrew();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); if (!tut) track('start', { seat: save.seat ?? 'door', loc: locNow().id });
