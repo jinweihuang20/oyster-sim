@@ -401,7 +401,7 @@ const LOCS: Loc[] = [
   { id: 'wanggong', n: '⚓ 王功漁港', m: 1.2, w: [22, 40, 28, 10], thr: 1.2, ang: 1.15, price: 800, need: 60, tint: 0x5f8fb0, d: '海風大、硬殼多一點，阿婆稍微兇' },
   { id: 'dongshi', n: '🎡 東石漁人碼頭', m: 1.4, w: [14, 34, 36, 16], thr: 1.4, ang: 1.3, price: 2500, need: 200, tint: 0xd08a5a, d: '觀光客多、蚵仔偏硬，阿婆丟殼更勤' },
   { id: 'budai', n: '🏭 布袋蚵寮大廠', m: 1.7, w: [8, 26, 40, 26], thr: 1.7, ang: 1.5, price: 6000, need: 500, tint: 0x8a9a7a, d: '工錢最高，但蚵仔超硬、阿婆最兇' }];
-const locNow = () => LOCS.find(l => l.id === save.loc && (l.price === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
+const locNow = () => LOCS.find(l => l.id === save.loc && (l.need === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
 const locW = () => locNow().w;
 const RAR = [
   { name: '白珍珠', color: 0xf4f1ea, css: '#f4f1ea', w: 70, price: 200, emo: '⚪', tease: '最常見的珍珠，多剝幾顆就有' },
@@ -1057,7 +1057,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   const LC = locNow(), base0 = count * PAY + perfects * PERFECT_PAY + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
   const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty);
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
-  save.days++; save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
+  save.days++; autoUnlock(); save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
   for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
   persist();
@@ -1208,21 +1208,21 @@ function giveUp() {
   const sh = new THREE.Mesh(shellGeo, shellTopMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.6, () => scene.remove(sh));
   hint.textContent = '丟掉了…'; nag(NAG_GIVEUP); updHud(); later(0.6, goPick);
 }
-function renderLocs() {
+// 入碗數達標自動解鎖地點（不用錢）
+function autoUnlock() { const tot = save.life.inBowl ?? 0; save.locs ??= []; for (const l of LOCS) if (l.need && tot >= l.need && !save.locs.includes(l.id)) { save.locs.push(l.id); persist(); track('buy', { item: 'loc-' + l.id, price: 0 }); toast(`📍 新地點解鎖：${l.n}`); } }
+function renderLocs() { autoUnlock();
   const el = $('locPick'); const tot = save.life.inBowl ?? 0;
   const seen = save.locSeen ?? (save.locSeen = ['home']); const cl = locNow();
-  const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && (save.locs!.includes(l.id) || (tot >= l.need && save.money >= l.price));
+  const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && save.locs!.includes(l.id);
   const anyNew = LOCS.some(isNew);
-  el.innerHTML = `<div class="locHead"><b>📍 上工地點：${cl.n} ×${cl.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small></div><div class="locRow">` + LOCS.map(l => { const own = l.price === 0 || save.locs!.includes(l.id), cur = cl.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
+  el.innerHTML = `<div class="locHead"><b>📍 上工地點：${cl.n} ×${cl.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small></div><div class="locRow">` + LOCS.map(l => { const own = l.need === 0 || save.locs!.includes(l.id), cur = cl.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
     if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small>${cur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${l.d}</small></button>`;
-    const ok = tot >= l.need && save.money >= l.price;
-    return `<button class="loc locked ${ok ? 'can' : ''}" data-lbuy="${l.id}" ${ok ? '' : 'disabled'}>${head}<small>${ok ? `🔓 點一下用 $${l.price} 解鎖` : '解鎖條件：'}</small><small>入碗 ${tot}/${l.need} 顆・$${save.money}/${l.price}</small><small class="ld">${l.d}</small></button>`; }).join('') + '</div>';
+    return `<button class="loc locked" disabled>${head}<small>🔒 解鎖條件：入碗 ${tot}/${l.need} 顆</small><small class="ld">${l.d}</small></button>`; }).join('') + '</div>';
   const mark = (id?: string) => { if (id && !seen.includes(id)) { seen.push(id); persist(); } };
   el.querySelectorAll<HTMLButtonElement>('button.loc').forEach(b => b.addEventListener('click', () => mark(b.dataset.loc || b.dataset.lbuy), { capture: true }));
   requestAnimationFrame(() => el.querySelector('.loc.cur')?.scrollIntoView({ block: 'nearest', inline: 'center' }));
   el.querySelectorAll<HTMLButtonElement>('[data-loc]').forEach(b => b.onclick = () => { save.loc = b.dataset.loc; persist(); renderLocs(); updSky(); });
-  el.querySelectorAll<HTMLButtonElement>('[data-lbuy]').forEach(b => b.onclick = () => { const l = LOCS.find(x => x.id === b.dataset.lbuy)!; if (save.money < l.price || tot < l.need) return; save.money -= l.price; save.locs!.push(l.id); save.loc = l.id; persist(); track('buy', { item: 'loc-' + l.id, price: l.price }); toast(`解鎖 ${l.n}！`); renderLocs(); updSky(); });
 }
 renderLocs();
 $('rLoc').onclick = () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; };
