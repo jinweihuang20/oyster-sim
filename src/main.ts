@@ -214,10 +214,22 @@ const leanFaces: THREE.Group[] = [];
 for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x2a7a5a : 0xb04050, s < 0 ? 0x333333 : 0xcccccc).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
-type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; sens: number; invX: boolean; invY: boolean };
-const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, sens: 1, invX: false, invY: false };
+type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; sens: number; invX: boolean; invY: boolean };
+const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, sens: 1, invX: false, invY: false };
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(localStorage.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
   const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
+// ---------- 匿名統計（無個資；可於設定關閉） ----------
+const STATS_URL = 'https://core-recycle-stats.jinweihuang1020.workers.dev/e';
+const statsId = (() => { try { let v = localStorage.getItem('oyster-stats-id'); if (!v) { v = crypto.randomUUID(); localStorage.setItem('oyster-stats-id', v); } return v; } catch { return 'anon-' + Math.random().toString(36).slice(2, 14); } })();
+let statsSid = '';
+const statsDevice = matchMedia('(pointer: coarse)').matches ? 'mobile' : 'pc';
+function track(t: string, d: Record<string, unknown> = {}) {
+  if (!mix.stats || SHOT) return;
+  try {
+    const body = JSON.stringify({ game: 'oyster-sim', id: statsId, platform: 'web', version: '1', test: params.get('stattest') === '1', events: [{ t, sid: statsSid || statsId, ts: Date.now(), dev: statsDevice, ...d }] });
+    fetch(STATS_URL, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' }, keepalive: true, mode: 'cors' }).catch(() => { });
+  } catch { }
+}
 let ac: AudioContext | null = null, masterG: GainNode, ambG: GainNode, sfxG: GainNode, musG: GainNode;
 function applyMix() { if (!ac) { try { localStorage.setItem('oyster-mix', JSON.stringify(mix)); } catch { } return; } masterG.gain.value = mix.mute ? 0 : mix.master; ambG.gain.value = mix.amb; sfxG.gain.value = mix.sfx; musG.gain.value = mix.music * 0.5; try { localStorage.setItem('oyster-mix', JSON.stringify(mix)); } catch { } }
 function noiseBuf(a: AudioContext, sec: number) { const n = a.sampleRate * sec, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }
@@ -448,7 +460,8 @@ function holdOyster(dd: number) {
 }
 function startDay() {
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
-  state = 'play'; handPain = false; timeLeft = SHIFT; hp = 100;
+  state = 'play'; handPain = false; timeLeft = SHIFT; hp = 100; dayCombo = 0;
+  statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); track('start', { seat: save.seat ?? 'door' });
   count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = [];
   npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
@@ -547,7 +560,7 @@ function twistInput(dx: number, dtMs: number) { if (swipePhase()) return;
 }
 const PRY = [{ w: 0.3, sp: 0.8 }, { w: 0.22, sp: 1.05 }, { w: 0.15, sp: 1.35 }, { w: 0.1, sp: 1.7 }];
 const PRY_NEED = [2, 3, 4, 5], PRY_C = 0.55, PRY_RED = 0.86;
-let needleStart = 0, combo = 0;
+let needleStart = 0, combo = 0, dayCombo = 0;
 // ----- 剝殼刀（各有利弊） -----
 type Knife = { id: string; n: string; price: number; green: number; speed: number; steps: number; stab: number; seam: number; blade: number; desc: string };
 const KNIVES: Knife[] = [
@@ -634,18 +647,18 @@ function renderShop() {
     return `<tr><td><b>${b.n}</b><br><small>${b.desc}</small></td><td>${rel(Math.round(b.r / P.r * 100), 100, true, '%')}</td><td>${rel(Math.round(b.bounce * 100), 0, false, '%')}</td><td>${rel(Math.round(b.dist * 100), 100, false, '%')}</td><td>${rel(Math.round(b.perf * 100), 10, true, '%')}</td><td>${rel(b.bonus, 0, true, '$')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   $('shopList').querySelectorAll('button[data-bbuy],button[data-beq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const id = b.getAttribute('data-bbuy') || b.getAttribute('data-beq')!; const w = BOWLS.find(x => x.id === id)!;
-    if (b.hasAttribute('data-bbuy')) { if (save.money < w.price) return; save.money -= w.price; save.shop.owned.push(id); if (ac) SFX.jingle(); }
+    if (b.hasAttribute('data-bbuy')) { if (save.money < w.price) return; save.money -= w.price; save.shop.owned.push(id); track('buy', { item: id, price: w.price }); if (ac) SFX.jingle(); }
     if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; }
     save.shop.equipped.bowl = id; persist(); applyBowl(); renderShop();
   });
   $('shopList').querySelectorAll('button[data-ubuy],button[data-ueq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const id = b.getAttribute('data-ubuy') || b.getAttribute('data-ueq')!; const u = UMBS.find(x => x.id === id)!;
-    if (b.hasAttribute('data-ubuy')) { if (save.money < u.price) return; save.money -= u.price; save.shop.owned.push(id); if (ac) SFX.jingle(); }
+    if (b.hasAttribute('data-ubuy')) { if (save.money < u.price) return; save.money -= u.price; save.shop.owned.push(id); track('buy', { item: id, price: u.price }); if (ac) SFX.jingle(); }
     save.shop.equipped.umb = id; persist(); applyUmb(); renderShop();
   });
   $('shopList').querySelectorAll('button[data-buy],button[data-eq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const id = b.getAttribute('data-buy') || b.getAttribute('data-eq')!; const k = KNIVES.find(x => x.id === id)!;
-    if (b.hasAttribute('data-buy')) { if (save.money < k.price) return; save.money -= k.price; save.shop.owned.push(id); if (ac) SFX.jingle(); }
+    if (b.hasAttribute('data-buy')) { if (save.money < k.price) return; save.money -= k.price; save.shop.owned.push(id); track('buy', { item: id, price: k.price }); if (ac) SFX.jingle(); }
     save.shop.equipped.knife = id; persist(); applyKnife(); renderShop();
   });
 }
@@ -663,7 +676,7 @@ function pry(ms = performance.now()) {
   const n = needle(ms), w = pryW() + PRY_GRACE * 2; (window as any).__pryLog = ((window as any).__pryLog || []).concat([[+n.toFixed(3), Math.abs(n - PRY_C) <= w / 2]]); strokeDir = -strokeDir || 1; tension = 0.9;
   const need = pryNeed();
   if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('傷大力，殼碎去矣！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
-  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; combo++; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！手路真好！' : '好！閣一下'; }
+  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; combo++; if (combo > dayCombo) dayCombo = combo; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！手路真好！' : '好！閣一下'; }
   else { combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 無著'); hint.textContent = '無著時機，等指針行到綠區'; tension = 0.3; return; }
   shellTop.rotation.z = -progress * 0.4;
   if (progress >= 0.999) openOyster();
@@ -839,6 +852,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
   for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
   persist();
+  track('day', { count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, seat: save.seat ?? 'door' });
   $('resTitle').textContent = handPain ? '🩹 手痛收工' : queen ? '👑 今日蚵后！' : '收工矣～';
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 粒入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美出手 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
@@ -936,7 +950,7 @@ function standUp() {
 }
 function sitDown(id: string) {
   walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear(); stools.forEach(g => g.userData.tag.visible = false);
-  applySeat(id); persist(); handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.85; toast(`坐落${seatNow().n}`, '#9fe0ff'); SFX.pop(); later(0.3, goPick);
+  if (id !== save.seat) track('seat', { seat: id }); applySeat(id); persist(); handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.85; toast(`坐落${seatNow().n}`, '#9fe0ff'); SFX.pop(); later(0.3, goPick);
 }
 function walkStep(dt: number) {
   const k = (c: string) => walkKeys.has(c) ? 1 : 0;
@@ -976,6 +990,7 @@ $('setClose').onclick = () => $('settings').classList.remove('show');
 for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as HTMLInputElement; el.value = String(mix[k]); el.oninput = () => { mix[k] = Number(el.value); applyMix(); if (k === 'sfx' && ac) SFX.plop(); }; }
 for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { const c = $(id) as HTMLInputElement; c.checked = mix[key]; c.onchange = () => { mix[key] = c.checked; applyMix(); }; }
 { const mv = $('v_music') as HTMLInputElement; mv.value = String(mix.music); mv.oninput = () => { mix.music = +mv.value; applyMix(); }; }
+{ const g = $('v_stats') as HTMLInputElement; g.checked = mix.stats; g.onchange = () => { mix.stats = g.checked; applyMix(); }; }
 { const g = $('v_gore') as HTMLInputElement; g.checked = mix.gore; g.onchange = () => { mix.gore = g.checked; applyMix(); }; }
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
