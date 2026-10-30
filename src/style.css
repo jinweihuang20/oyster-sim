@@ -276,3 +276,10 @@ body.tutOn .ntag{display:none!important}
 #shop .ph .px{top:6px}
 #shopClose,#dexClose,#setClose,#rdClose,#fbClose{display:none!important}
 @media (pointer:fine){.panel:has(.ph){padding-top:0}.ph{margin:0 -20px 12px;padding-top:10px;padding-bottom:8px}}
+/* 手機直式：夜班標籤移到頂列下方，不擠掉 ⚙ 設定 */
+@media (pointer:coarse) and (orientation:portrait){
+ #top{position:absolute}
+ #top #nightTag{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;font-size:12px;padding:1px 8px;border-radius:10px;background:rgba(20,12,6,.6);pointer-events:none}
+ #top #setBtn,#top #shopBtn,#top #dexBtn{position:relative;z-index:2;flex-shrink:0}
+ #top #timer,#top #count,#top #pearls{flex-shrink:1;min-width:0}
+}
