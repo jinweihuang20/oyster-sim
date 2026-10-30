@@ -372,7 +372,7 @@ const OYSTER_PRICE = 3, CRACK_PRICE = 1;
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; redeemed: string[]; meds: Record<string, number> };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number> };
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} } }; }
 function loadSave(): Save {
   const d = defaultSave(); let raw: any = null;
@@ -391,6 +391,7 @@ function loadSave(): Save {
   out.bonusN = num(raw.bonusN); out.tutDone = num(raw.tutDone);
   if (raw.meds && typeof raw.meds === 'object') for (const [k, v] of Object.entries(raw.meds)) out.meds[k] = Math.max(0, Math.floor(num(v)));
   out.locs = Array.isArray(raw.locs) ? raw.locs.filter((x: any) => typeof x === 'string') : []; if (typeof raw.loc === 'string') out.loc = raw.loc;
+  out.gear = {}; if (raw.gear && typeof raw.gear === 'object') for (const [k, v] of Object.entries(raw.gear)) out.gear[k] = !!v;
   if (Array.isArray(raw.redeemed)) out.redeemed = raw.redeemed.filter((x: any) => typeof x === 'string');
   return out;
 }
@@ -515,6 +516,7 @@ function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.cs
 function goPick() { if (state !== 'play' || walking) return; oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = '面盆空矣！轉頭看中央的蚵殼山，點一下撈一把'; }
 function holdOyster(dd: number) {
   if (state !== 'play' || walking) return;
+  if (saltNext && !tut) { saltNext = false; if (dd > 1) dd = Math.random() < 0.5 ? 0 : 1; toast('🧂 粗鹽搓過，這粒比較好開', '#cfc3ff'); drawMeds(); }
   diff = tut ? 0 : dd; const d = DIFF[diff];
   oyster.visible = true; oyster.rotation.set(0, 0, 0); rot = rnd(0, 6.28); crackedNow = false;
   seamA = rnd(0, 6.28); const r = 0.115; seamMark.position.set(Math.cos(seamA) * r, 0.012, Math.sin(seamA) * r); seamMark.rotation.y = -seamA + Math.PI / 2; seamGlow.position.copy(seamMark.position); seamGlow.rotation.copy(seamMark.rotation);
@@ -538,7 +540,12 @@ function dressAma(n: Npc) {
   const m = n.body.material as THREE.MeshStandardMaterial; m.map?.dispose(); m.map = tex; m.color.set(0xffffff); m.needsUpdate = true;
   for (const a of [n.armL, n.armR]) { const sl = a.children[0] as THREE.Mesh; (sl.material as THREE.MeshStandardMaterial).color.set(base); }
 }
-let nightShift = false, walkHintShown = false;
+let nightShift = false, walkHintShown = false, saltNext = false;
+// 器具（手套、收音機）：買了可開關
+const GEAR = [
+  { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
+  { id: 'radio', n: '📻 收音機', price: 300, good: '整工阿婆怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：沒有丟殼預警聲和 ⚠ 提示' }];
+const gearOn = (id: string) => save.shop.owned.includes(id) && save.gear?.[id] !== false;
 const isNight = () => { const h = new Date().getHours(); return h >= 20 || h < 5; };
 // 天色跟著玩家裝置的時間（黎明／白天／黃昏／夜晚，平滑過渡）
 const SKY: [number, number, number, number, number, number][] = [ // 時, 天空, 霧, 半球光, 強度, 太陽強度
@@ -645,7 +652,7 @@ function tryInsert() {
   if (phase !== 'seam') return;
   const d = DIFF[diff];
   if (Math.abs(seamErr()) < tolNow()) { noise(0.06, 3000, 0.4); tone(320, 0.08, 0.2, 'triangle', 0, 200); toast('插入去矣！', '#9be37a'); seamGlow.visible = false; setPhase('twist'); }
-  else if (Math.random() < slipNow()) { stabs++; flinch = 0.6; nag(NAG_STAB); hint.textContent = '刀仔滑去，割著手矣！'; setPhase('busy'); bleed(16); hurt(10 + diff * 5, 'aiā！'); if (hp > 0) later(0.7, () => setPhase('seam')); }
+  else if (Math.random() < slipNow()) { stabs++; flinch = 0.6; nag(NAG_STAB); hint.textContent = '刀仔滑去，割著手矣！'; setPhase('busy'); bleed(16); hurt((10 + diff * 5) * (gearOn('glove') ? 0.5 : 1), gearOn('glove') ? 'aiā！（有手套）' : 'aiā！'); if (hp > 0) later(0.7, () => setPhase('seam')); }
   else { tone(140, 0.08, 0.2, 'square'); hint.textContent = '無對縫，刀仔滑開矣！閣揣看覓'; if (Math.random() < 0.3) nag(NAG_SLIP); shake = 0.08; }
 }
 // ----- 2. 扭手腕 -----
@@ -721,7 +728,7 @@ function applyBowl() {
 const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
 const pryW = () => Math.min(0.6, PRY[diff].w * knifeNow().green * medM('green'));
 const PRY_SLOW = 0.8; // 整體放慢 20%
-const prySp = () => PRY[diff].sp * PRY_SLOW * knifeNow().speed * medM('speed');
+const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * knifeNow().speed * medM('speed');
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
 const tolNow = () => DIFF[diff].tol * knifeNow().seam;
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip'));
@@ -761,6 +768,14 @@ function renderShop() {
     const id = b.getAttribute('data-buy') || b.getAttribute('data-eq')!; const k = KNIVES.find(x => x.id === id)!;
     if (b.hasAttribute('data-buy')) { if (save.money < k.price) return; save.money -= k.price; save.shop.owned.push(id); track('buy', { item: id, price: k.price }); if (ac) SFX.jingle(); }
     save.shop.equipped.knife = id; persist(); applyKnife(); renderShop();
+  });
+  $('shopList').insertAdjacentHTML('beforeend', '<h4 style="margin:12px 0 4px">🧰 其他器具（買了可以開關）</h4><table class="kt">' + GEAR.map(g => { const own = save.shop.owned.includes(g.id), on = gearOn(g.id);
+    return `<tr><td><b>${g.n}</b><br><small style="color:#9be37a">${g.good}</small><small style="color:#ff8a7a">${g.bad}</small></td><td>${own ? `<button data-gtog="${g.id}">${on ? '✅ 使用中' : '⬜ 沒用'}</button>` : `<button data-gbuy="${g.id}" ${save.money < g.price ? 'disabled' : ''}>$${g.price}</button>`}</td></tr>`; }).join('') + '</table>');
+  $('shopList').querySelectorAll('button[data-gbuy],button[data-gtog]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+    const id = b.getAttribute('data-gbuy') || b.getAttribute('data-gtog')!; const g = GEAR.find(x => x.id === id)!; save.gear = save.gear ?? {};
+    if (b.hasAttribute('data-gbuy')) { if (save.money < g.price) return; save.money -= g.price; save.shop.owned.push(id); save.gear[id] = true; track('buy', { item: id, price: g.price }); if (ac) SFX.jingle(); }
+    else save.gear[id] = !gearOn(id);
+    persist(); renderShop();
   });
   renderMedShop(); shopTabs();
 }
@@ -877,7 +892,7 @@ function anger(n: Npc, lines: string[], retaliate: number) {
 const stunned = (n: Npc) => (n.clutch ?? 0) > 0;
 const freeToSteal = (n: Npc) => n.distract > 0 || stunned(n);
 let dayMaxGrudge = 0;
-function addGrudge(n: Npc, v: number) { if (v > 0) v *= medM('grudge') * locNow().ang; const g0 = n.grudge ?? 0; n.grudge = Math.max(0, Math.min(100, g0 + v)); if (v > 0) { n.gAt = performance.now(); if (g0 < 60 && n.grudge >= 60 && state === 'play') toast(`${n.name}很生氣！會更常丟你（一陣子不惹她就會消氣）`, '#ff7a6a'); } dayMaxGrudge = Math.max(dayMaxGrudge, n.grudge); }
+function addGrudge(n: Npc, v: number) { if (v > 0) v *= medM('grudge') * locNow().ang * (gearOn('radio') ? 0.7 : 1); const g0 = n.grudge ?? 0; n.grudge = Math.max(0, Math.min(100, g0 + v)); if (v > 0) { n.gAt = performance.now(); if (g0 < 60 && n.grudge >= 60 && state === 'play') toast(`${n.name}很生氣！會更常丟你（一陣子不惹她就會消氣）`, '#ff7a6a'); } dayMaxGrudge = Math.max(dayMaxGrudge, n.grudge); }
 function grudgeUI(n: Npc) {
   if (!n.gIcon) { n.gIcon = emojiSprite('💢', 0.12); n.gIcon.position.set(-0.1, 0.32, 0); n.head.add(n.gIcon); const bar = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff3b2f, depthTest: false })); bar.center.set(0, 0.5); bar.position.set(-0.03, 0.32, 0); n.head.add(bar); n.gBar = bar; }
   const g = n.grudge ?? 0; n.gIcon.visible = n.gBar!.visible = g > 4; n.gIcon.scale.setScalar(0.12 + g * 0.0015); n.gBar!.scale.set(0.006 + g * 0.0032, 0.035, 1);
@@ -898,7 +913,7 @@ function throwShell() {
   setPhase('busy'); later(0.6, goPick);
 }
 // ----- 7. 阿婆擲殼仔 + 雨傘 -----
-function windUp(n: Npc) { if (n.windup > 0 || state !== 'play' || stunned(n)) return; n.windup = Math.max(0.45, 1.0 - (n.grudge ?? 0) * 0.005); n.look = 1.6; SFX.alert(); }
+function windUp(n: Npc) { if (n.windup > 0 || state !== 'play' || stunned(n)) return; n.windup = Math.max(0.45, 1.0 - (n.grudge ?? 0) * 0.005); n.look = 1.6; if (!gearOn('radio')) SFX.alert(); }
 function npcThrow(n: Npc) {
   if (stunned(n)) return;
   const shots = (n.grudge ?? 0) >= 90 ? 3 : 1;
@@ -1220,6 +1235,7 @@ function frame() {
     updHud();
   }
   // ⚠ 方向提示
+  if (warnNpc && gearOn('radio')) warnNpc = null;
   if (warnNpc) { const rel = warnNpc.g.position.clone().sub(camera.position); const fwd = camera.getWorldDirection(new THREE.Vector3()); let a = Math.atan2(rel.x, rel.z) - Math.atan2(fwd.x, fwd.z); a = Math.atan2(Math.sin(a), Math.cos(a));
     warnEl.classList.add('on'); warnEl.style.left = `${clamp(50 - a / 1.2 * 45, 6, 94)}%`; warnEl.style.opacity = String(0.6 + 0.4 * Math.sin(t * 14)); warnEl.textContent = a > 0.5 ? '⚠◀' : a < -0.5 ? '▶⚠' : '⚠'; hint.textContent = `${warnNpc.name}欲擲殼仔過來矣！緊按 R／「雨傘」！`; }
   else warnEl.classList.remove('on');
@@ -1432,6 +1448,8 @@ const MEDS: Med[] = [
   { id: 'patch', n: '痠痛貼布', emo: '🩹', price: 25, dur: 90, m: { dmg: 0.5, regen: 3, speed: 1.1 }, good: '受到的傷害減半、手痛恢復 3 倍', bad: '手腕貼太緊，指針速度 +10%' },
   { id: 'soup', n: '轉運雞精', emo: '🍵', price: 80, dur: 60, m: { green: 0.85 }, luck: 2, good: '幸運 +2（較容易開到珍珠奇物）', bad: '補過頭有點暈，綠區 -15%' },
   { id: 'okb', n: 'OK繃', emo: '🩹', price: 15, dur: 0, heal: 25, good: '立刻補 25 點手的體力', bad: '只是包起來，沒有持續效果' },
+  { id: 'sweet', n: '古早味糖果', emo: '🍬', price: 35, dur: 0, good: '送給最生氣的阿婆，她的怒氣立刻 -40', bad: '只有一位阿婆有份' },
+  { id: 'salt', n: '粗鹽', emo: '🧂', price: 25, dur: 0, good: '下一粒蚵仔一定是易或普通', bad: '只對下一粒有效' },
   { id: 'candy', n: '潤喉糖', emo: '🍬', price: 20, dur: 90, m: { grudge: 0.5, regen: 0.5 }, good: '跟阿婆有說有笑，怒氣增加減半', bad: '只顧講話，手痛恢復變慢一半' },
 ];
 const medT: Record<string, number> = {};
@@ -1441,13 +1459,16 @@ function medA(_k: 'luck') { let v = 0; for (const m of medOn()) v += m.luck ?? 0
 let medDrawT = 0;
 function tickMeds(dt: number) { let ch = false; for (const k in medT) { const was = medT[k] > 0; medT[k] = Math.max(0, medT[k] - dt); if (was && medT[k] <= 0) { ch = true; const m = MEDS.find(x => x.id === k); if (m) toast(`${m.emo}${m.n} 效果結束了`, '#cfc3ff'); } } medDrawT -= dt; if (ch || medDrawT <= 0) { medDrawT = 1; drawMeds(); } }
 function drawMeds() {
-  const el = document.getElementById('medAct'); if (el) el.innerHTML = medOn().map(m => `<span>${m.emo}${Math.ceil(medT[m.id])}s</span>`).join('');
+  const el = document.getElementById('medAct'); if (el) el.innerHTML = medOn().map(m => `<span>${m.emo}${Math.ceil(medT[m.id])}s</span>`).join('') + (saltNext ? '<span>🧂下一粒</span>' : '');
   const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0); const b = document.getElementById('medBtn'); if (b) { b.innerHTML = (n ? `💊 藥品 ×${n}` : '💊 藥品') + '<span class="key"> (M)</span>' + (n ? '' : '<small>去雜貨店買藥</small>'); b.classList.toggle('empty', !n); }
   const L = document.getElementById('medList'); if (L && L.classList.contains('show')) renderMedList();
 }
 function useMed(id: string) {
   const m = MEDS.find(x => x.id === id); if (!m || state !== 'play' || tut || !(save.meds[id] > 0)) return;
-  save.meds[id]--; persist(); if (m.heal) { hp = Math.min(100, hp + m.heal); updHud(); } if (m.dur) medT[id] = (medT[id] ?? 0) + m.dur; track('use', { item: id }); toast(`${m.emo}使用${m.n}：${m.good}；${m.bad}${m.dur ? `（${m.dur} 秒）` : ''}`, '#cfc3ff'); if (ac) SFX.pop(); drawMeds();
+  let who = '';
+  if (id === 'sweet') { const t = npcs.reduce((a, b) => ((b.grudge ?? 0) > (a.grudge ?? 0) ? b : a)); if ((t.grudge ?? 0) < 1) { toast('阿婆們現在都不生氣，糖果先留著', '#cfc3ff'); return; } t.grudge = Math.max(0, (t.grudge ?? 0) - 40); t.calm = Math.max(t.calm ?? 0, 3); grudgeUI(t); say(t, '哎唷，古早味！好啦不跟你計較', 2.6); who = `（給${t.name}）`; }
+  if (id === 'salt') { if (saltNext) { toast('粗鹽已經用了，等下一粒', '#cfc3ff'); return; } saltNext = true; }
+  save.meds[id]--; persist(); if (m.heal) { hp = Math.min(100, hp + m.heal); updHud(); } if (m.dur) medT[id] = (medT[id] ?? 0) + m.dur; track('use', { item: id }); toast(`${m.emo}使用${m.n}${who}：${m.good}；${m.bad}${m.dur ? `（${m.dur} 秒）` : ''}`, '#cfc3ff'); if (ac) SFX.pop(); drawMeds();
 }
 function renderMedList() {
   const L = $('medList'); const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0);
