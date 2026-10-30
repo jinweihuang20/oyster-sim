@@ -12,6 +12,7 @@
  *            items: ['商品 id', ...]         刀／傘等雜貨店商品，直接擁有（id 見 src/main.ts 的 KNIVES、UMBS 等）
  *            pearls: [白, 粉, 金, 烏]          各給幾顆珍珠，會登錄進圖鑑，例 { pearls: [0, 0, 1, 0] }
  *            odd: { 奇物編號: 數量 }          奇物編號＝src/main.ts ODD 陣列的順序（從 0 開始），例 { odd: { 2: 1 } }
+ *            meds: { 藥品 id: 數量 }        例 { meds: { patch: 3 } }（id：tonic 提神補酒、oil 風油精、patch 痠痛貼布、soup 轉運雞精、candy 潤喉糖）
  *      - start / end（可省略）：活動期間，ISO 時間並寫時區，例 '2026-11-01T00:00:00+08:00'。
  *            未到 start 顯示「活動還沒開始」，過了 end 顯示「已經過期」。
  *      - label（可省略）：顯示在成功訊息裡的活動名稱。
@@ -19,7 +20,7 @@
  *
  * 注意：這裡只放 SHA-256 雜湊，絕對不要放明碼。
  */
-export type RedeemReward = { money?: number; items?: string[]; pearls?: number[]; odd?: Record<number, number> };
+export type RedeemReward = { money?: number; items?: string[]; pearls?: number[]; odd?: Record<number, number>; meds?: Record<string, number> };
 export type RedeemCodeDef = { id: string; hash: string; reward: RedeemReward; start?: string; end?: string; label?: string };
 
 export const REDEEM_CODES: RedeemCodeDef[] = [
