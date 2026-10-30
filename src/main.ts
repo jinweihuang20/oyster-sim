@@ -39,6 +39,16 @@ const roofMat = mat(0x8a9aa0, { side: THREE.DoubleSide, metalness: 0.4 });
 for (let i = 0; i < 12; i++) { const r = mesh(new THREE.BoxGeometry(0.62, 0.03, 8), i % 2 ? roofMat : mat(0x7a8a90, { metalness: 0.4 }), [-3.4 + i * 0.62, 3.05 + (i % 2) * 0.03, 0]); r.rotation.z = 0.06; }
 for (const x of [-3.5, 3.5]) for (const z of [-3.5, 0, 3.5]) mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.1, 6), mat(0x5a4a3a), [x, 1.55, z]);
 for (const z of [-3.5, 3.5]) mesh(new THREE.BoxGeometry(7.2, 0.1, 0.1), mat(0x5a4a3a), [0, 3.0, z]);
+// 柱仔頂的指針時鐘（跟著裝置時間）
+const clockG = new THREE.Group(); clockG.position.set(3.5, 2.35, -3.5); scene.add(clockG); clockG.lookAt(0, 2.0, 2.0); clockG.translateZ(0.09);
+mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 24), mat(0x6a4a2a), [0, 0, -0.02], clockG).rotation.x = Math.PI / 2;
+mesh(new THREE.CircleGeometry(0.26, 24), mat(0xfff6dc, { emissive: 0xfff0c8, emissiveIntensity: 0.35 }), [0, 0, 0.01], clockG);
+for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, L = i % 3 ? 0.03 : 0.06; mesh(new THREE.BoxGeometry(i % 3 ? 0.012 : 0.02, L, 0.005), mat(0x222222), [Math.sin(a) * (0.23 - L / 2), Math.cos(a) * (0.23 - L / 2), 0.015], clockG).rotation.z = -a; }
+const hand = (len: number, w: number, c: number, z: number) => { const p = new THREE.Group(); p.position.z = z; clockG.add(p); mesh(new THREE.BoxGeometry(w, len, 0.006), mat(c), [0, len / 2 - 0.02, 0], p); return p; };
+const clkH = hand(0.14, 0.022, 0x1a1a1a, 0.02), clkM = hand(0.2, 0.014, 0x1a1a1a, 0.026), clkS = hand(0.21, 0.006, 0xc0392b, 0.032);
+mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.02, 8), mat(0x111111), [0, 0, 0.035], clockG).rotation.x = Math.PI / 2;
+function updClock() { const d = new Date(), sec = d.getSeconds(), m = d.getMinutes() + sec / 60, h = (d.getHours() % 12) + m / 60; clkS.rotation.z = -sec / 60 * Math.PI * 2; clkM.rotation.z = -m / 60 * Math.PI * 2; clkH.rotation.z = -h / 12 * Math.PI * 2; }
+updClock(); setInterval(updClock, 1000);
 // 保麗龍箱、水桶、網仔、索仔、塑膠椅
 for (let i = 0; i < 7; i++) mesh(new THREE.BoxGeometry(0.6, 0.35, 0.4), mat(0xf2f2ee), [-3 + (i % 3) * 0.62, 0.18 + Math.floor(i / 3) * 0.36, -3.0]);
 for (const [x, z, c] of [[2.9, -2.5, 0x2f6fbf], [3.1, -1.9, 0xd07a2a], [-2.9, 2.6, 0x3a8a4a]] as const) mesh(new THREE.CylinderGeometry(0.2, 0.16, 0.4, 10), mat(c), [x, 0.2, z]);
@@ -185,15 +195,20 @@ function nag(lines: string[]) {
 // ---------- 玩家的雙手（掛佇鏡頭） ----------
 const handRig = new THREE.Group(); camera.add(handRig);
 const sleeve = mat(0x3a5a8a);
+const handSkin = mat(skin), cuffMat = mat(0x3a6fc0); cuffMat.visible = false;
+const fingerMeshes: THREE.Mesh[] = [];
+function applyGloves() { const g = gearOn('glove'); handSkin.color.set(g ? 0xe8e4d8 : skin); handSkin.roughness = g ? 1 : 0.85; cuffMat.visible = g; fingerMeshes.forEach(f => f.scale.set(g ? 1.25 : 1, g ? 1.2 : 1, g ? 1.05 : 1)); }
 function makeHand(s: number) {
   const h = new THREE.Group();
   mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.7, 8), sleeve, [0, 0, 0.32], h).rotation.x = Math.PI / 2; // 長前臂延伸到畫面角落，兩手呈 A 字
-  mesh(new THREE.BoxGeometry(0.11, 0.05, 0.13), mat(skin), [0, 0, -0.1], h);
-  for (let i = 0; i < 4; i++) mesh(new THREE.BoxGeometry(0.022, 0.03, 0.07), mat(skin), [-0.04 + i * 0.026, -0.01, -0.19], h);
-  mesh(new THREE.BoxGeometry(0.03, 0.03, 0.07), mat(skin), [s * -0.06, 0, -0.12], h).rotation.y = s * 0.6;
+  mesh(new THREE.BoxGeometry(0.11, 0.05, 0.13), handSkin, [0, 0, -0.1], h);
+  mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.035, 8), cuffMat, [0, 0, -0.03], h).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 4; i++) mesh(new THREE.BoxGeometry(0.022, 0.03, 0.07), handSkin, [-0.04 + i * 0.026, -0.01, -0.19], h);
+  mesh(new THREE.BoxGeometry(0.03, 0.03, 0.07), handSkin, [s * -0.06, 0, -0.12], h).rotation.y = s * 0.6;
   return h;
 }
 const handL = makeHand(-1), handR = makeHand(1);
+[handL, handR].forEach(h => h.children.forEach(c => { const m = c as THREE.Mesh; if (m.material === handSkin && (m.geometry as THREE.BoxGeometry).parameters?.width < 0.05) fingerMeshes.push(m); }));
 const HL = new THREE.Vector3(-0.16, -0.24, -0.42);
 handL.position.copy(HL); handL.rotation.set(0.4, -0.5, 0.3);
 handR.position.set(0.2, -0.26, -0.45); handR.rotation.set(0.3, 0.5, -0.2);
@@ -545,6 +560,8 @@ let nightShift = false, walkHintShown = false, saltNext = false;
 const GEAR = [
   { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
   { id: 'radio', n: '📻 收音機', price: 300, good: '整工阿婆怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：沒有丟殼預警聲和 ⚠ 提示' }];
+function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = `📻 ${on ? '開' : '關'}<span class="key"> (V)</span>`; }
+function toggleRadio() { if (!save.shop.owned.includes('radio') || state !== 'play' || tut) return; save.gear = save.gear ?? {}; save.gear.radio = !gearOn('radio'); persist(); drawRadio(); toast(gearOn('radio') ? '📻 收音機打開：阿婆心情好，但聽不到丟殼預警' : '📻 收音機關掉：聽得到丟殼預警了', '#cfc3ff'); }
 const gearOn = (id: string) => save.shop.owned.includes(id) && save.gear?.[id] !== false;
 const isNight = () => { const h = new Date().getHours(); return h >= 20 || h < 5; };
 // 天色跟著玩家裝置的時間（黎明／白天／黃昏／夜晚，平滑過渡）
@@ -572,7 +589,7 @@ function startDay() {
   count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
-  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawMeds(); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
+  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); drawMeds(); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
 }
 function updHud() {
   ($('hpFill') as HTMLElement).style.width = `${hp}%`;
@@ -775,7 +792,7 @@ function renderShop() {
     const id = b.getAttribute('data-gbuy') || b.getAttribute('data-gtog')!; const g = GEAR.find(x => x.id === id)!; save.gear = save.gear ?? {};
     if (b.hasAttribute('data-gbuy')) { if (save.money < g.price) return; save.money -= g.price; save.shop.owned.push(id); save.gear[id] = true; track('buy', { item: id, price: g.price }); if (ac) SFX.jingle(); }
     else save.gear[id] = !gearOn(id);
-    persist(); renderShop();
+    persist(); renderShop(); drawRadio(); applyGloves();
   });
   renderMedShop(); shopTabs();
 }
@@ -967,7 +984,7 @@ function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.r
   return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">做工 ${save.days} 工・累積收入 $${save.money}・最佳 ${save.best} 粒<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美出手 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/掠 ${L.caught}・擲著阿婆 ${L.shellHits}・予人擲 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
 function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
-  if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
+  if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
   const all = [{ name: '你（阿婆）', count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const queen = all[0].me;
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
@@ -1052,6 +1069,7 @@ window.addEventListener('pointerup', up); window.addEventListener('pointercancel
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
   if ((e.target as HTMLElement)?.tagName === 'INPUT' && (e.target as HTMLInputElement).type === 'text') return;
+  if (e.code === 'KeyV' && !e.repeat) toggleRadio();
   if (state === 'play' && !tut && e.code === 'KeyM') { const L = $('medList'); if (document.pointerLockElement) document.exitPointerLock(); L.classList.toggle('show'); if (L.classList.contains('show')) renderMedList(); return; }
   if (state === 'play' && $('medList').classList.contains('show') && /^Digit[1-9]$/.test(e.code)) { const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0); const m = own[+e.code.slice(5) - 1]; if (m) { useMed(m.id); renderMedList(); } return; }
   if (tut && e.code === 'Enter' && TUT[tut.i].next) { $('tutNext').click(); return; }
@@ -1080,7 +1098,7 @@ const btn = (id: string, f: () => void, upF?: () => void) => {
   el.addEventListener('pointercancel', () => ok = false);
   el.addEventListener('pointerup', e => { e.stopPropagation(); if (ok && performance.now() - st < 800) f(); ok = false; });
 };
-btn('giveUp', giveUp); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); if (confirm('確定要翹班嗎？這一工會直接收工結算。')) endDay(); }); btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
+btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); if (confirm('確定要翹班嗎？這一工會直接收工結算。')) endDay(); }); btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
@@ -1325,7 +1343,7 @@ function tutEnd(done: boolean) {
   tutHi.forEach(id => $(id).classList.remove('tutHi')); tutHi = []; document.body.classList.remove('tutOn'); on('tut', false);
   if (document.pointerLockElement) document.exitPointerLock();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); }
-  stopSteal(); state = 'menu'; renderLocs(); setPhase('busy'); oyster.visible = false; closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('medList').classList.remove('show'); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
+  stopSteal(); state = 'menu'; renderLocs(); setPhase('busy'); oyster.visible = false; closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; $('medList').classList.remove('show'); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
   if (done) toast('出師了！去剝蚵仔賺錢吧～', '#9be37a');
   renderDaily(); $('overlay').classList.add('show');
 }
