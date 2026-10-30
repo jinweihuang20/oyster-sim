@@ -234,3 +234,8 @@ body.tutOn .ntag{display:none!important}
 #quitBtn{background:#5a5a66!important}
 #radioBtn{position:relative;font-size:14px;padding:4px 10px;background:#3f8f5a;color:#fff}#radioBtn.off{background:#555;opacity:.6;text-decoration:line-through}#radioBtn:not(.off):after{content:'♪';position:absolute;right:-4px;top:-10px;color:#9be37a;animation:rnote 1.2s infinite}@keyframes rnote{0%{transform:translateY(4px);opacity:0}40%{opacity:1}100%{transform:translateY(-8px);opacity:0}}
 @media (pointer:coarse){#top #radioBtn{min-width:44px;padding:0 8px;font-size:13px}}
+/* 收音機按鈕：手機改成左下列最前面的圓形圖示 */
+#btns #radioBtn{display:block}
+@media (pointer:coarse){#btnsL #radioBtn{display:block;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;font-size:20px;text-decoration:none;position:relative}
+ #btnsL #radioBtn i{position:absolute;right:3px;top:3px;width:9px;height:9px;border-radius:50%;background:#7dff8a;box-shadow:0 0 6px #7dff8a}
+ #btnsL #radioBtn.off i{background:#888;box-shadow:none}#btnsL #radioBtn.off{filter:grayscale(1)}#btnsL #radioBtn:after{display:none}}

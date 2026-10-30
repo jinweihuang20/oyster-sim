@@ -560,7 +560,7 @@ let nightShift = false, walkHintShown = false, saltNext = false;
 const GEAR = [
   { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
   { id: 'radio', n: '📻 收音機', price: 300, good: '整工阿婆怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：沒有丟殼預警聲和 ⚠ 提示' }];
-function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = `📻 ${on ? '開' : '關'}<span class="key"> (V)</span>`; }
+function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '📻<i></i>' : `📻 ${on ? '開' : '關'}<span class="key"> (V)</span>`; b.title = on ? '收音機：開' : '收音機：關'; }
 function toggleRadio() { if (!save.shop.owned.includes('radio') || state !== 'play' || tut) return; save.gear = save.gear ?? {}; save.gear.radio = !gearOn('radio'); persist(); drawRadio(); toast(gearOn('radio') ? '📻 收音機打開：阿婆心情好，但聽不到丟殼預警' : '📻 收音機關掉：聽得到丟殼預警了', '#cfc3ff'); }
 const gearOn = (id: string) => save.shop.owned.includes(id) && save.gear?.[id] !== false;
 const isNight = () => { const h = new Date().getHours(); return h >= 20 || h < 5; };
@@ -1103,7 +1103,8 @@ btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
 // 手機：次要按鈕放左下一排（不收選單）
-if (matchMedia('(pointer:coarse)').matches) { const L = $('btnsL'); for (const id of ['medBtn', 'quitBtn', 'giveUp', 'standBtn']) L.appendChild($(id)); }
+if (matchMedia('(pointer:coarse)').matches) { const L = $('btnsL'); for (const id of ['radioBtn', 'medBtn', 'quitBtn', 'giveUp', 'standBtn']) L.appendChild($(id)); }
+else $('btns').insertBefore($('radioBtn'), $('medBtn'));
 btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, () => rotKey = 0);
 // ----- 徛起來行路、換位 -----
 let walking = false, nearSeat: Seat | null = null; const walkPos = new THREE.Vector3(), walkKeys = new Set<string>(), joy = { x: 0, y: 0 };
