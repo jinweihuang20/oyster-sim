@@ -390,7 +390,7 @@ const OYSTER_PRICE = 3, CRACK_PRICE = 1;
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number> };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number> };
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} } }; }
 function loadSave(): Save {
   const d = defaultSave(); let raw: any = null;
@@ -1153,11 +1153,17 @@ function giveUp() {
 }
 function renderLocs() {
   const el = $('locPick'); const tot = save.life.inBowl ?? 0;
-  el.innerHTML = '<b>上工地點</b>' + LOCS.map(l => { const own = l.price === 0 || save.locs!.includes(l.id), cur = locNow().id === l.id;
-    const info = `<small>工錢 ×${l.m}・${l.d}</small>`;
-    if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${l.n}${cur ? '（選擇中）' : ''}<br>${info}</button>`;
+  const seen = save.locSeen ?? (save.locSeen = ['home']); const cl = locNow();
+  const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && (save.locs!.includes(l.id) || (tot >= l.need && save.money >= l.price));
+  const anyNew = LOCS.some(isNew);
+  el.innerHTML = `<div class="locHead"><b>📍 上工地點：${cl.n} ×${cl.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small></div><div class="locRow">` + LOCS.map(l => { const own = l.price === 0 || save.locs!.includes(l.id), cur = cl.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
+    const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
+    if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small>${cur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${l.d}</small></button>`;
     const ok = tot >= l.need && save.money >= l.price;
-    return `<button class="loc locked" data-lbuy="${l.id}" ${ok ? '' : 'disabled'}>🔒 ${l.n}<br>${info}<br><small>解鎖：累計入碗 ${l.need} 粒（目前 ${tot}）＋ $${l.price}（有 $${save.money}）</small></button>`; }).join('');
+    return `<button class="loc locked ${ok ? 'can' : ''}" data-lbuy="${l.id}" ${ok ? '' : 'disabled'}>${head}<small>${ok ? `🔓 點一下用 $${l.price} 解鎖` : '解鎖條件：'}</small><small>入碗 ${tot}/${l.need} 粒・$${save.money}/${l.price}</small><small class="ld">${l.d}</small></button>`; }).join('') + '</div>';
+  const mark = (id?: string) => { if (id && !seen.includes(id)) { seen.push(id); persist(); } };
+  el.querySelectorAll<HTMLButtonElement>('button.loc').forEach(b => b.addEventListener('click', () => mark(b.dataset.loc || b.dataset.lbuy), { capture: true }));
+  requestAnimationFrame(() => el.querySelector('.loc.cur')?.scrollIntoView({ block: 'nearest', inline: 'center' }));
   el.querySelectorAll<HTMLButtonElement>('[data-loc]').forEach(b => b.onclick = () => { save.loc = b.dataset.loc; persist(); renderLocs(); updSky(); });
   el.querySelectorAll<HTMLButtonElement>('[data-lbuy]').forEach(b => b.onclick = () => { const l = LOCS.find(x => x.id === b.dataset.lbuy)!; if (save.money < l.price || tot < l.need) return; save.money -= l.price; save.locs!.push(l.id); save.loc = l.id; persist(); track('buy', { item: 'loc-' + l.id, price: l.price }); toast(`解鎖 ${l.n}！`); renderLocs(); updSky(); });
 }
@@ -1537,7 +1543,7 @@ function shopTabs2(groups: HTMLElement[], bar: HTMLElement) { groups.forEach((g,
 function cleanName(v: string) { return [...v.replace(/[\u0000-\u001f\u007f<>&"'`]/g, '').trim()].slice(0, 8).join('').trim() || '阿婆'; }
 function myName() { return save.name ? cleanName(save.name) : '阿婆'; }
 function esc(v: string) { return v.replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';'); }
-function drawName() { const n = myName(); const m = document.getElementById('meLine'); if (m) { m.textContent = ''; m.append(`夜晚的巷口，你是鄰居阿婆之一——「${n}」`); const b = document.createElement('button'); b.id = 'nameEdit'; b.textContent = '✏️'; b.title = '改名字'; b.style.cssText = 'padding:2px 6px;font-size:14px;margin:0 4px'; b.onclick = () => { ($('setBtn') as HTMLButtonElement).click(); setTimeout(() => ($('myName') as HTMLInputElement).focus(), 50); }; m.append(b, '，坐在小板凳上，和大家圍在一起剝蚵仔。'); } const i = document.getElementById('myName') as HTMLInputElement | null; if (i && document.activeElement !== i) i.value = save.name ? n : ''; }
+function drawName() { const n = myName(); const m = document.getElementById('meLine'); if (m) { m.textContent = ''; m.append('夜晚的巷口，你是鄰居阿婆之一「'); const b = document.createElement('span'); b.id = 'nameEdit'; b.setAttribute('role', 'button'); b.tabIndex = 0; b.title = '點一下改名字'; b.textContent = n; const g = document.createElement('i'); g.textContent = ' ✎'; b.append(g); b.onkeydown = e => { if (e.key === 'Enter') b.click(); }; b.onclick = () => { ($('setBtn') as HTMLButtonElement).click(); setTimeout(() => ($('myName') as HTMLInputElement).focus(), 50); }; m.append(b, '」，坐在小板凳上，和大家圍在一起剝蚵仔。'); } const i = document.getElementById('myName') as HTMLInputElement | null; if (i && document.activeElement !== i) i.value = save.name ? n : ''; }
 { const i = $('myName') as HTMLInputElement; const commit = () => { const v = cleanName(i.value); save.name = v === '阿婆' ? undefined : v; i.value = save.name ? v : ''; persist(); drawName(); };
   i.addEventListener('change', commit); i.addEventListener('blur', commit); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
   for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend']) i.addEventListener(ev, e => e.stopPropagation()); drawName(); }

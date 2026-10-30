@@ -229,7 +229,16 @@ body.tutOn .ntag{display:none!important}
 }
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#rotR{right:calc(env(safe-area-inset-right) + 110px)!important}#joy{bottom:calc(env(safe-area-inset-bottom) + 56px)!important}}
 .dexN{display:inline-block;background:#d9952b;color:#2a1600;border-radius:10px;padding:0 7px;font-size:13px;font-weight:800}
-#locPick{display:flex;flex-direction:column;gap:6px;margin:8px auto;max-width:420px;text-align:left}#locPick .loc{background:rgba(120,60,40,.85);color:#fff;text-align:left;font-size:15px;padding:8px 12px;line-height:1.3}#locPick .loc.cur{background:#d9952b;color:#2a1600}#locPick .loc.locked{opacity:.75}#locPick .loc:disabled{opacity:.45}#locPick small{font-weight:400;font-size:12px}
+#locPick{margin:8px auto;max-width:640px;text-align:left}
+#locPick .locHead{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:6px 10px;border:2px solid #f2c440;border-radius:10px;background:rgba(60,30,10,.7)}
+#locPick .locHead small{flex-basis:100%;color:#ffe9a8;font-size:13px}
+#locPick .locRow{display:flex;gap:8px;overflow-x:auto;padding:8px 2px 6px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+#locPick .loc{flex:0 0 auto;width:150px;scroll-snap-align:center;display:flex;flex-direction:column;gap:3px;position:relative;background:rgba(120,60,40,.9);color:#fff;text-align:left;font-size:14px;padding:8px 10px;line-height:1.3;border:2px solid transparent;border-radius:10px}
+#locPick .loc .ln{font-weight:700}#locPick .loc .lm{color:#ffd76a;font-weight:700}#locPick .loc small{font-size:12px}#locPick .loc .ld{opacity:.8}
+#locPick .loc.cur{background:#d9952b;color:#2a1600;border-color:#fff2c0;box-shadow:0 0 0 2px #d9952b}#locPick .loc.cur .lm{color:#5a2a00}
+#locPick .loc.locked{background:rgba(70,70,70,.85);opacity:.75}#locPick .loc.locked.can{opacity:1;border-color:#9be37a}
+#locPick .nb{background:#e8463a;color:#fff;font-size:11px;font-weight:800;border-radius:8px;padding:1px 6px;align-self:flex-start}
+#locPick .loc .nb{position:absolute;top:-6px;right:-4px}
 #back-toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:rgba(20,12,6,.92);color:#ffe080;padding:10px 16px;border-radius:14px;font-size:15px;z-index:99;pointer-events:none}#back-toast.hidden{display:none}
 #quitBtn{background:#5a5a66!important}
 #radioBtn{position:relative;font-size:14px;padding:4px 10px;background:#3f8f5a;color:#fff}#radioBtn.off{background:#555;opacity:.6;text-decoration:line-through}#radioBtn:not(.off):after{content:'♪';position:absolute;right:-4px;top:-10px;color:#9be37a;animation:rnote 1.2s infinite}@keyframes rnote{0%{transform:translateY(4px);opacity:0}40%{opacity:1}100%{transform:translateY(-8px);opacity:0}}
@@ -241,3 +250,4 @@ body.tutOn .ntag{display:none!important}
  #btnsL #radioBtn.off i{background:#888;box-shadow:none}#btnsL #radioBtn.off{filter:grayscale(1)}#btnsL #radioBtn:after{display:none}}
 #vign{position:fixed;inset:0;pointer-events:none;z-index:1;display:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(20,14,8,.32) 100%)}
 #vign.on{display:block}
+#nameEdit{color:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer;display:inline-block;padding:10px 2px;margin:-10px 0;-webkit-tap-highlight-color:transparent}#nameEdit i{font-style:normal;opacity:.7;font-size:.85em}
