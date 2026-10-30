@@ -390,7 +390,7 @@ const OYSTER_PRICE = 3, CRACK_PRICE = 1;
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number> };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number> };
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} } }; }
 function loadSave(): Save {
   const d = defaultSave(); let raw: any = null;
@@ -953,7 +953,7 @@ function throwOne(n: Npc) {
       fly(sh, sh.position.clone(), () => worldOf(n.head), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); addGrudge(n, Math.round(20 * U.reflect)); npcHurt(n, U.reflect); });
     } else if (covered) { scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋著！波嗯～', '#9be37a'); say(n, pick(['哪會有雨傘啦！', '狡怪喔你！', '啥物時陣提出來的！']), 2.5); }
     else { scene.remove(sh); blockStreak = 0; hitsTaken++; ($('splat') as HTMLElement).style.opacity = '1'; later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0'); hurt(8, '哎唷！擲著矣！'); hitInHand(); }
-    if (blockStreak >= 3) { blockStreak = 0; npcs.forEach((m, i) => { m.calm = 45; if (i === 0) later(0.8, () => say(m, '這个阿婆有夠勇……', 3)); }); toast('阿婆們驚你矣，暫時較少擲', '#9fe0ff'); }
+    if (blockStreak >= 3) { blockStreak = 0; npcs.forEach((m, i) => { m.calm = 45; if (i === 0) later(0.8, () => say(m, `這个${myName()}有夠勇……`, 3)); }); toast('阿婆們驚你矣，暫時較少擲', '#9fe0ff'); }
     updHud();
   });
 }
@@ -990,11 +990,11 @@ function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.r
 function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
   if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
-  const all = [{ name: '你（阿婆）', count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
+  const all = [{ name: `你（${esc(myName())}）`, count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const queen = all[0].me;
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
   const titles: string[] = []; let bonus = 0;
-  if (thrown === 0) { titles.push('🕊 和平阿婆（+$50）'); bonus = 50; }
+  if (thrown === 0) { titles.push(`🕊 和平${esc(myName())}（+$50）`); bonus = 50; }
   if (shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
   if (blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
   const LC = locNow(), base0 = count * OYSTER_PRICE + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
@@ -1534,6 +1534,13 @@ function shopTabs() {
 function shopTabs2(groups: HTMLElement[], bar: HTMLElement) { groups.forEach((g, i) => g.style.display = i === shopTab ? '' : 'none'); bar.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === shopTab)); $('shop').scrollTop = 0; }
 
 // 手機返回鍵：關掉最上層的視窗；上工中不離開；主畫面連按兩次才離開（同核心回收）
+function cleanName(v: string) { return [...v.replace(/[\u0000-\u001f\u007f<>&"'`]/g, '').trim()].slice(0, 8).join('').trim() || '阿婆'; }
+function myName() { return save.name ? cleanName(save.name) : '阿婆'; }
+function esc(v: string) { return v.replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';'); }
+function drawName() { const n = myName(); const m = document.getElementById('meLine'); if (m) { m.textContent = ''; m.append(`夜晚的巷口，你是鄰居阿婆之一——「${n}」`); const b = document.createElement('button'); b.id = 'nameEdit'; b.textContent = '✏️'; b.title = '改名字'; b.style.cssText = 'padding:2px 6px;font-size:14px;margin:0 4px'; b.onclick = () => { ($('setBtn') as HTMLButtonElement).click(); setTimeout(() => ($('myName') as HTMLInputElement).focus(), 50); }; m.append(b, '，坐在小板凳上，和大家圍在一起剝蚵仔。'); } const i = document.getElementById('myName') as HTMLInputElement | null; if (i && document.activeElement !== i) i.value = save.name ? n : ''; }
+{ const i = $('myName') as HTMLInputElement; const commit = () => { const v = cleanName(i.value); save.name = v === '阿婆' ? undefined : v; i.value = save.name ? v : ''; persist(); drawName(); };
+  i.addEventListener('change', commit); i.addEventListener('blur', commit); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
+  for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend']) i.addEventListener(ev, e => e.stopPropagation()); drawName(); }
 installBackGuard(() => {
   const open = (id: string) => document.getElementById(id)?.classList.contains('show');
   if (open('npcTip')) { $('npcTip').classList.remove('show'); return 'handled'; }
