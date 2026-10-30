@@ -426,6 +426,9 @@ const ODD = [
 ];
 const dexN = () => save.dex.filter(x => x).length + save.odd.filter(x => x).length;
 const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'uncommon' : 'common';
+// 入碗工錢依難度：易／普通／硬／超硬；殼屑 = 25%（至少 $1）
+const DPAY = [6, 8, 12, 18], DSHORT = ['易', '普', '硬', '超硬'];
+let meatPay = 0, dCnt = [0, 0, 0, 0];
 const OYSTER_PRICE = 8, CRACK_PRICE = 2, PERFECT_PAY = 2;
 // 新手保護：生涯收工未滿 3 班 → 只出易／普通、綠區 +30%、割手率 -40%
 const newbie = () => !tut && save.days < 3;
@@ -646,7 +649,7 @@ function startDay() {
   state = 'play'; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); if (!tut) track('start', { seat: save.seat ?? 'door', loc: locNow().id });
   const sidNow = statsSid; const pingT = setInterval(() => { if (tut || state !== 'play' || statsSid !== sidNow || document.hidden) { if (statsSid !== sidNow || state !== 'play') clearInterval(pingT); return; } track('ping'); }, 60_000);
-  count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
+  count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
   ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); drawMeds(); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
@@ -942,14 +945,14 @@ function shoot(power: number) {
   if (bounced) { inBowl = false; const d = land.clone().sub(BOWL).setY(0); if (d.lengthSq() < 1e-4) d.set(1, 0, 0); land.copy(BOWL).addScaledVector(d.normalize(), BOWL_R + rnd(0.15, 0.3)); }
   const victim = inBowl ? undefined : npcNear(land, 0.5);
   meatInHand.visible = false;
-  const wasCracked = crackedNow;
+  const wasCracked = crackedNow, md = diff;
   const from = worldOf(oyster); const m = new THREE.Mesh(meatGeo, wasCracked ? splatMat : meatMat);
   const dist = from.distanceTo(land);
   if (inBowl) land.set(BOWL.x + rnd(-0.08, 0.08), 0.06 + Math.min(bowlMeat.length, 40) * 0.0015, BOWL.z + rnd(-0.08, 0.08)); else land.y = 0.01;
   SFX.whoosh();
   if (victim) { fly(m, from, () => worldOf(victim.head).add(new THREE.Vector3(0, 0.14, 0)), 0.7, 0.4, () => meatOnHead(victim, m)); missed++; }
   else fly(m, from, land, 0.45 + dist * 0.15, 0.25 + dist * 0.2, () => {
-    if (inBowl) { count++; bowlBonus += bowlNow().bonus; if (wasCracked) penalty += OYSTER_PRICE - CRACK_PRICE; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!); SFX.plop(); if (!perfect) toast(wasCracked ? '入碗（有殼屑）' : '入碗！'); if (Math.random() < 0.15) say(pick(npcs), pick(PRAISE), 2); }
+    if (inBowl) { count++; bowlBonus += bowlNow().bonus; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.25)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!); SFX.plop(); toast(`${wasCracked ? '入碗（有殼屑）' : '入碗！'} +$${pv} ${DIFF[md].n}`, DIFF[md].css); if (Math.random() < 0.15) say(pick(npcs), pick(PRAISE), 2); }
     else { missed++; if (bounced) { SFX.plop(); later(0.05, () => toast('彈出來了！', '#ff8a7a')); } m.material = splatMat; m.scale.set(1.5, 0.25, 1.5); splats.push(m); if (splats.length > 30) scene.remove(splats.shift()!); SFX.splat(); toast('無入！', '#ff8a7a'); nag(NAG_MISS); }
     updHud();
   });
@@ -1031,12 +1034,12 @@ function stealTarget() { for (const n of npcs) { const p = n.bowl.clone().projec
 function startSteal() { if (state !== 'play' || umbHeld) return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n); }
 function stopSteal() { stealNpc = null; stealT = 0; on('prog', phase === 'twist' || phase === 'crab' || phase === 'scoop'); }
 function caughtBy(n: Npc) {
-  caught++; stopSteal(); const back = Math.min(count, 2); count -= back; n.count += back; penalty += 20;
-  n.distract = 0; n.pause = 0; addGrudge(n, 20); anger(n, SCOLD_STEAL, 0.5); toast('被抓到了！-2 顆、罰 $20', '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
+  caught++; stopSteal(); const back = Math.min(count, 2); count -= back; n.count += back; meatPay = Math.max(0, meatPay - back * DPAY[1]); penalty += 5;
+  n.distract = 0; n.pause = 0; addGrudge(n, 20); anger(n, SCOLD_STEAL, 0.5); toast('被抓到了！-2 顆、罰 $5', '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
 }
 function stealOne(n: Npc) {
   if (n.count <= 0) { toast('碗裡沒肉了'); stopSteal(); return; }
-  n.count--; count++; steals++; addGrudge(n, 12); const m = new THREE.Mesh(meatGeo, meatMat);
+  n.count--; count++; meatPay += DPAY[1]; steals++; addGrudge(n, 12); const m = new THREE.Mesh(meatGeo, meatMat);
   const lm = n.bowlMeat.pop(); if (lm) scene.remove(lm);
   fly(m, n.bowl.clone(), BOWL.clone().add(new THREE.Vector3(rnd(-0.08, 0.08), 0.06, rnd(-0.08, 0.08))), 0.5, 0.3, () => bowlMeat.push(m));
   SFX.sneak(); toast('偷到一顆！', '#c9a0ff'); updHud();
@@ -1054,7 +1057,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (thrown === 0 && !temp) { titles.push(`🕊 和平${esc(myName())}（+$50）`); bonus = 50; }
   if (shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
   if (blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
-  const LC = locNow(), base0 = count * PAY + perfects * PERFECT_PAY + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
+  const LC = locNow(), base0 = meatPay + perfects * PERFECT_PAY + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
   const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty);
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
   save.days++; autoUnlock(); save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
@@ -1066,7 +1069,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 顆入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美出手 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
     `偷 ${steals}・被抓到 ${caught}・肉丟中阿婆 ${meatHits}・殼丟中阿婆 ${shellHits}<br>雨傘擋 ${blocks}・完美反彈 ${reflects}・被丟中 ${hitsTaken}・丟殼 ${thrown}・蚵仔掉地上 ${lost}</p>` + (titles.length ? `<p style="font-size:18px"><b>${titles.join('　')}</b></p>` : '') +
-    `<p>蚵仔 ${count} 顆 × $${PAY}${temp ? `（臨時工抽成 -$${TEMP_CUT}／顆）` : ''}（殼屑 ${cracked} 顆只 $${CRACK_PRICE}）${perfects ? `<br>完美出手 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
+    `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 易$6・普$8・硬$12・超硬$18，殼屑 ${cracked} 顆只算 25%${temp ? `，臨時工抽成 -$${TEMP_CUT}／顆` : ''}</small>${perfects ? `<br>完美出手 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
     `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>` +
     `<p>${caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
