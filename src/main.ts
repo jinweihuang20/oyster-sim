@@ -436,7 +436,7 @@ function loadSave(): Save {
   // v1（無 v 欄位）→ v2：加 life／titles／shop
   const out: Save = { ...d, dex: arr4(raw.dex), odd: ODD.map((_, i) => num(Array.isArray(raw.odd) ? raw.odd[i] : 0)), best: num(raw.best), money: num(raw.money), days: num(raw.days), queen: num(raw.queen) };
   for (const k of LIFE_KEYS) out.life[k] = num(raw.life?.[k]);
-  if (raw.titles && typeof raw.titles === 'object') for (const [k, v] of Object.entries(raw.titles)) out.titles[k] = num(v);
+  if (raw.titles && typeof raw.titles === 'object') for (const [k0, v] of Object.entries(raw.titles)) { const k = k0 === '👑 今日蚵后' ? '👑 今日剝蚵冠軍' : k0; out.titles[k] = (out.titles[k] ?? 0) + num(v); }
   if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
   if (raw.shop?.equipped && typeof raw.shop.equipped === 'object') for (const [k, v] of Object.entries(raw.shop.equipped)) if (typeof v === 'string') out.shop.equipped[k] = v;
   if (typeof raw.seat === 'string') out.seat = raw.seat;
@@ -1039,17 +1039,17 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   const LC = locNow(), base0 = count * OYSTER_PRICE + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
   const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty);
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
-  save.days++; save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日蚵后'); }
+  save.days++; save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
   for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
   persist();
   track('day', { loc: locNow().id,  count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, maxAnger: Math.round(dayMaxGrudge), double: dayMulti2, triple: dayMulti3, dur: Math.round(SHIFT - Math.max(0, timeLeft)), dex: dexN(), seat: save.seat ?? 'door' });
-  $('resTitle').textContent = handPain ? '🩹 手痛收工' : queen ? '👑 今日蚵后！' : '收工了～';
+  $('resTitle').textContent = handPain ? '🩹 手痛收工' : queen ? '👑 今日剝蚵冠軍！' : '收工了～';
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 顆入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美出手 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
     `偷 ${steals}・被抓到 ${caught}・肉丟中阿婆 ${meatHits}・殼丟中阿婆 ${shellHits}<br>雨傘擋 ${blocks}・完美反彈 ${reflects}・被丟中 ${hitsTaken}・丟殼 ${thrown}・蚵仔掉地上 ${lost}</p>` + (titles.length ? `<p style="font-size:18px"><b>${titles.join('　')}</b></p>` : '') +
     `<p>蚵仔 ${count} 顆 × $${OYSTER_PRICE}（殼屑 ${cracked} 顆只 $${CRACK_PRICE}）${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
-    `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・做蚵后 ${save.queen} 次</p>` +
+    `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>` +
     `<p>${caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
 }
@@ -1468,7 +1468,7 @@ for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings
 }
 
 const NPC_TIP: Record<string, string> = {
-  '快手阿桃': '剝蚵仔最快，很少轉頭聊天，所以很難偷她的肉。想贏今日蚵后，主要對手就是她。',
+  '快手阿桃': '剝蚵仔最快，很少轉頭聊天，所以很難偷她的肉。想贏今日剝蚵冠軍，主要對手就是她。',
   '講話阿春': '很愛聊天，常常轉頭跟別人講話，是最好偷肉的對象；但偷太多次她會記仇。',
   '好奇阿嬌': '很好奇，常常偷看你在做什麼，偷她的肉比較容易被抓到，要等她確實轉頭再動手。',
 };
@@ -1586,12 +1586,12 @@ function shopTabs() {
 function shopTabs2(groups: HTMLElement[], bar: HTMLElement) { groups.forEach((g, i) => g.style.display = i === shopTab ? '' : 'none'); bar.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === shopTab)); $('shop').scrollTop = 0; }
 
 // 手機返回鍵：關掉最上層的視窗；上工中不離開；主畫面連按兩次才離開（同核心回收）
-function cleanName(v: string) { return [...v.replace(/[\u0000-\u001f\u007f<>&"'`]/g, '').trim()].slice(0, 8).join('').trim() || '阿婆'; }
-function myName() { return save.name ? cleanName(save.name) : '阿婆'; }
+function cleanName(v: string) { return [...v.replace(/[\u0000-\u001f\u007f<>&"'`]/g, '').trim()].slice(0, 8).join('').trim() || '剝蚵人'; }
+function myName() { return save.name ? cleanName(save.name) : '剝蚵人'; }
 function esc(v: string) { return v.replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';'); }
-function drawName() { const n = myName(); const m = document.getElementById('meLine'); if (m) { m.textContent = ''; m.append('夜晚的巷口，你是鄰居阿婆之一「'); const b = document.createElement('span'); b.id = 'nameEdit'; b.setAttribute('role', 'button'); b.tabIndex = 0; b.title = '點一下改名字'; b.textContent = n; const g = document.createElement('i'); g.textContent = ' ✎'; b.append(g); b.onkeydown = e => { if (e.key === 'Enter') b.click(); }; b.onclick = () => { ($('setBtn') as HTMLButtonElement).click(); setTimeout(() => ($('myName') as HTMLInputElement).focus(), 50); }; m.append(b, '」，坐在小板凳上，和大家圍在一起剝蚵仔。'); } const i = document.getElementById('myName') as HTMLInputElement | null; if (i && document.activeElement !== i) i.value = save.name ? n : ''; }
-{ const i = $('myName') as HTMLInputElement; const commit = () => { const v = cleanName(i.value); save.name = v === '阿婆' ? undefined : v; i.value = save.name ? v : ''; persist(); drawName(); };
-  i.addEventListener('change', commit); i.addEventListener('blur', commit); i.addEventListener('input', () => { const v = cleanName(i.value); save.name = v === '阿婆' ? undefined : v; persist(); }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
+function drawName() { const n = myName(); const m = document.getElementById('meLine'); if (m) { m.textContent = ''; m.append('夜晚的巷口，「'); const b = document.createElement('span'); b.id = 'nameEdit'; b.setAttribute('role', 'button'); b.tabIndex = 0; b.title = '點一下改名字'; b.textContent = n; const g = document.createElement('i'); g.textContent = ' ✎'; b.append(g); b.onkeydown = e => { if (e.key === 'Enter') b.click(); }; b.onclick = () => { ($('setBtn') as HTMLButtonElement).click(); setTimeout(() => ($('myName') as HTMLInputElement).focus(), 50); }; m.append(b, '」和鄰居阿婆們坐在小板凳上，圍在一起剝蚵仔。'); } const i = document.getElementById('myName') as HTMLInputElement | null; if (i && document.activeElement !== i) i.value = save.name ? n : ''; }
+{ const i = $('myName') as HTMLInputElement; const commit = () => { const v = cleanName(i.value); save.name = v === '剝蚵人' ? undefined : v; i.value = save.name ? v : ''; persist(); drawName(); };
+  i.addEventListener('change', commit); i.addEventListener('blur', commit); i.addEventListener('input', () => { const v = cleanName(i.value); save.name = v === '剝蚵人' ? undefined : v; persist(); }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
   for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend']) i.addEventListener(ev, e => e.stopPropagation()); drawName(); }
 // 面板可捲動提示：內容超出且還沒捲到底時，底部顯示 ⌄
 document.querySelectorAll<HTMLElement>('.panel').forEach(pn => {
