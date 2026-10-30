@@ -11,6 +11,7 @@
  <div id="hint">按住撬開蚵仔，在金色區間放開！</div>
  <div id="label"></div>
 </div>
+<div id="tut"><div id="tutStep"></div><div id="tutLine"></div><div id="tutDo"></div><div id="tutKeys">滑鼠鎖牢的時陣按 Esc 放開，才點會著按鈕</div><div class="tb"><button id="tutSkip">跳過教學</button><button id="tutNext"></button></div></div>
 <div id="hurt"></div><div id="ppop"></div><div id="lockHint">🖱 點畫面開始操作（Esc 放開滑鼠）</div><div id="aid">🩹</div><div id="bubbles"></div>
 <div id="overlay" class="panel show"><h1>剝蚵仔模擬器</h1>
  <p>暗暝的巷仔口，你是厝邊阿婆之一，坐佇細條椅仔頂，佮大家圍咧剝蚵仔。</p>
@@ -20,7 +21,7 @@
  <li><b>惡趣味</b>：阿婆越頭講話時看伊的碗按住 E／「偷」偷肉；F／右鍵／「丟殼」擲殼仔；看著 ⚠ 緊按 R／「雨傘」</li>
  <li>一班 3 分鐘，比入碗數搶「今日蚵后」！偶爾撬出珍珠佮奇怪的物件～</li></ul>
  <button id="daily" class="daily"></button>
- <div class="mbtns"><button id="oShop">🏪 雜貨店</button><button id="oDex">📖 圖鑑</button><button id="oSet">⚙ 設定</button></div>
+ <div class="mbtns"><button id="oShop">🏪 雜貨店</button><button id="oDex">📖 圖鑑</button><button id="oSet">⚙ 設定</button><button id="oTut">📘 教學</button></div>
  <button id="start">開始剝蚵</button></div>
 <div id="dex" class="panel"><h2>珍珠圖鑑</h2><div id="dexList"></div><button id="dexClose">關閉</button></div>
 <div id="settings" class="panel"><h2>聲音設定</h2>
@@ -34,7 +35,7 @@
  <label class="row">血腥效果 <input id="v_gore" type="checkbox"></label>
  <label class="row">傳送匿名統計 <input id="v_stats" type="checkbox"></label>
  <label class="row">全部靜音 <input id="v_mute" type="checkbox"></label>
- <button id="resetSave" style="background:#8a2a2a;color:#fff">重置存檔</button> <button id="setClose">關閉</button></div>
+ <button id="tutReplay">📘 重看教學</button> <button id="resetSave" style="background:#8a2a2a;color:#fff">重置存檔</button> <button id="setClose">關閉</button></div>
 <div id="shop" class="panel"><h2>🏪 蚵寮雜貨店</h2><div id="shopList"></div><p style="font-size:12px;opacity:.75">刀：綠區大、撬較少下、割手率低、揣縫易＝好；指針速慢＝好。傘：開傘快、撐久、完美窗寬、冷卻短、遮較濟、反彈力大＝好</p><button id="shopClose">關閉</button></div>
 <div id="result" class="panel"><h2 id="resTitle"></h2><div id="resBody"></div><button id="shopBtn2">🏪 雜貨店</button> <button id="rDex">📖 圖鑑</button> <button id="rSet">⚙ 設定</button> <button id="again">再剝一工</button></div>
 <script type="module" src="./src/main.ts"></script></body></html>

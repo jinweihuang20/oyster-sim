@@ -148,3 +148,14 @@ button{touch-action:manipulation}
 .coinplus{position:fixed;z-index:99;pointer-events:none;transform:translate(-50%,-100%);font:700 28px sans-serif;color:#ffd76a;text-shadow:0 2px 4px #000;animation:coinUp 1.4s ease-out forwards}
 @keyframes coinUp{to{opacity:0;transform:translate(-50%,-220%)}}
 @media (pointer:coarse){.daily{width:100%;max-width:360px;min-height:60px;font-size:19px;touch-action:manipulation}}
+
+#tut{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 64px);z-index:25;width:min(92vw,520px);background:rgba(30,18,8,.92);border:2px solid #ffd76a;border-radius:16px;padding:10px 14px;color:#fff;display:none;box-shadow:0 4px 18px #0008;pointer-events:auto}
+#tut.on{display:block}
+#tutStep{font-size:12px;color:#ffd76a;font-weight:700}#tutLine{font-size:16px;font-weight:700;margin:4px 0}#tutDo{font-size:14px;color:#ffe9b0;line-height:1.4}
+#tut .tb{display:flex;justify-content:space-between;gap:8px;margin-top:8px}#tutSkip{background:#555;color:#ddd;font-size:13px;padding:6px 12px}#tutNext{background:#9be37a;color:#1a3000}
+body.tutOn #hint{display:none!important}
+.tutHi{outline:3px solid #ffd76a!important;outline-offset:3px;box-shadow:0 0 0 6px #ffd76a55,0 0 24px #ffd76a!important;animation:tutPulse 1s ease-in-out infinite!important}
+@keyframes tutPulse{50%{outline-color:#fff3b0}}
+@media (pointer:coarse){#tut{top:calc(env(safe-area-inset-top) + 56px);padding:8px 12px}#tutLine{font-size:15px}#tutDo{font-size:13px}#tut .tb button{min-height:48px;min-width:96px}}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#tut{width:min(46vw,420px);left:auto;right:calc(env(safe-area-inset-right) + 8px);transform:none;top:calc(env(safe-area-inset-top) + 52px)}#tutLine{font-size:13px}#tutDo{font-size:12px}}
+#tutKeys{font-size:11px;opacity:.6;margin-top:2px}
