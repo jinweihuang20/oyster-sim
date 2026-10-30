@@ -19,7 +19,7 @@
  <ul><li><b>找縫</b>：轉蚵仔（滾輪／A D；手機拖下半畫面或按 ◀ ▶），把殼縫轉到刀尖旁，點一下插刀</li>
  <li><b>撬開</b>：插刀後指針會來回擺動，走到綠區時點一下（滑鼠／Space；手機點螢幕）撬一下，撬夠次數殼就打開；點在紅區太用力會把殼弄碎。不同的刀綠區大小、指針速度、要撬幾下都不一樣</li>
  <li><b>投肉</b>：轉頭對準藍色碗，按住蓄力，藍色區間放開</li>
- <li><b>惡趣味</b>：阿婆轉頭聊天時，對準她的碗按住 E／「偷」偷肉；按 F／右鍵／「丟殼」丟殼；看到 ⚠ 趕快按 R／「雨傘」</li>
+ <li><b>惡趣味</b>：阿婆轉頭聊天時，對準她的碗按住 E／「偷」偷肉；按 F／右鍵／「丟殼」丟殼；看到 ⚠ 趕快按住 R／「雨傘」撐傘擋殼，放開就收起來（撐傘時不能剝蚵）</li>
  <li>一班 3 分鐘，比誰丟進碗裡的最多，搶「今日蚵后」！偶爾還會撬出珍珠和奇怪的東西～</li></ul>
  <button id="daily" class="daily"></button>
  <div class="mbtns"><button id="oShop">🏪 雜貨店</button><button id="oDex">📖 圖鑑</button><button id="oSet">⚙ 設定</button><button id="oTut">📘 教學</button><button id="oRedeem">🎁 兌換碼</button></div>
@@ -38,6 +38,6 @@
  <label class="row">全部靜音 <input id="v_mute" type="checkbox"></label>
  <button id="setRedeem">🎁 兌換碼</button> <button id="tutReplay">📘 重看教學</button> <button id="resetSave" style="background:#8a2a2a;color:#fff">重置存檔</button> <button id="setClose">關閉</button></div>
 <div id="redeem" class="panel"><h2>🎁 兌換碼</h2><p style="font-size:14px;opacity:.85">輸入活動送的兌換碼，領取獎勵（每組碼每人限兌換一次，不分大小寫）</p><input id="rdInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="請輸入兌換碼"><div id="rdMsg"></div><button id="rdSubmit">兌換</button> <button id="rdClose">關閉</button></div>
-<div id="shop" class="panel"><h2>🏪 蚵寮雜貨店</h2><div id="shopList"></div><p style="font-size:12px;opacity:.75">刀：綠區大、撬較少下、割手率低、揣縫易、幸運🍀多（較會開著珍珠奇物）＝好；指針速慢＝好。傘：開傘快、撐久、完美窗寬、冷卻短、遮較濟、反彈力大＝好</p><button id="shopClose">關閉</button></div>
+<div id="shop" class="panel"><h2>🏪 蚵寮雜貨店</h2><div id="shopList"></div><p style="font-size:12px;opacity:.75">刀：綠區大、撬較少下、割手率低、揣縫易、幸運🍀多（較會開著珍珠奇物）＝好；指針速慢＝好。傘（按住撐開、放開收起，沒有冷卻）：開傘快、可撐久、完美窗寬、遮得多、反彈力大＝好</p><button id="shopClose">關閉</button></div>
 <div id="result" class="panel"><h2 id="resTitle"></h2><div id="resBody"></div><button id="shopBtn2">🏪 雜貨店</button> <button id="rDex">📖 圖鑑</button> <button id="rSet">⚙ 設定</button> <button id="again">🌅 再次上工</button></div>
 <script type="module" src="./src/main.ts"></script></body></html>

@@ -467,7 +467,7 @@ let steals = 0, caught = 0, penalty = 0, meatHits = 0, shellHits = 0, blocks = 0
 let holding = false, hold = 0, diff = 1, slowmo = 0, shake = 0, pearlShow = 0;
 let rot = 0, seamA = 0, lastTick = 0, progress = 0, tension = 0, strokeDir = 0, strokeLen = 0, strokePeak = 0, crabShakes = 0, lastKeyT = 0, lastKey = '';
 let find: ReturnType<typeof rollFind> = { kind: 'none', i: 0 };
-let umbT = 0, umbCd = 0, stealT = 0, stealNpc: Npc | null = null, rotKey = 0, emptyT = 0;
+let umbT = 0, stealT = 0, stealNpc: Npc | null = null, rotKey = 0, emptyT = 0;
 let yaw = 0, pitch = -0.85, tYaw = 0, tPitch = -0.85;
 const timers: { t: number; f: () => void }[] = [];
 const later = (t: number, f: () => void) => timers.push({ t, f });
@@ -521,7 +521,7 @@ function startDay() {
   count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
-  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
+  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); drawMeds(); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
 }
 function updHud() {
   ($('hpFill') as HTMLElement).style.width = `${hp}%`;
@@ -627,13 +627,13 @@ const KNIVES: Knife[] = [
   { id: 'seam', luck: 0, n: '揣縫刀', price: 180, green: 0.9, speed: 1.1, steps: 0, stab: 0.8, seam: 1.6, blade: 0xc8e0b0, desc: '揣縫真簡單，撬的時陣較食力' },
   { id: 'master', luck: 1, n: '師傅刀', price: 1200, green: 1.2, speed: 0.95, steps: -1, stab: 0.6, seam: 1.25, blade: 0xffe28a, desc: '老師傅手工，樣樣好，就是貴' },
 ];
-type Umb = { id: string; n: string; price: number; open: number; dur: number; perf: number; cd: number; cover: number; reflect: number; look: string; size: number; desc: string };
+type Umb = { id: string; n: string; price: number; open: number; dur: number; perf: number; cover: number; reflect: number; look: string; size: number; desc: string };
 const UMBS: Umb[] = [
-  { id: 'stripe', n: '紅白傘', price: 0, open: 0.05, dur: 0.9, perf: 0.28, cd: 2.5, cover: 0.95, reflect: 1, look: 'stripe', size: 1, desc: '工寮門口撿著的，普通好用' },
-  { id: 'clear', n: '超商透明傘', price: 30, open: 0.05, dur: 0.7, perf: 0.2, cd: 1.5, cover: 0.85, reflect: 0.6, look: 'clear', size: 0.8, desc: '俗閣輕，緊閣會當連開，毋過細支、反彈無力' },
-  { id: 'fold', n: '自動摺疊傘', price: 160, open: 0, dur: 0.6, perf: 0.4, cd: 2, cover: 0.8, reflect: 1.2, look: 'navy', size: 0.7, desc: '一揤就開，完美時機寬，毋過傘面細' },
-  { id: 'beach', n: '海灘陽傘', price: 260, open: 0.25, dur: 1.8, perf: 0.15, cd: 3.5, cover: 1, reflect: 0.8, look: 'beach', size: 1.3, desc: '大支閣撐久，毋過開較慢、歇較久' },
-  { id: 'temple', n: '廟會涼傘', price: 1500, open: 0.05, dur: 1.1, perf: 0.35, cd: 2.2, cover: 1, reflect: 1.6, look: 'temple', size: 1.05, desc: '神明的涼傘，反彈有夠力，就是貴' },
+  { id: 'stripe', n: '紅白傘', price: 0, open: 0.05, dur: 4, perf: 0.28, cover: 0.95, reflect: 1, look: 'stripe', size: 1, desc: '工寮門口撿到的，各方面都普通好用' },
+  { id: 'clear', n: '超商透明傘', price: 30, open: 0.05, dur: 3, perf: 0.2, cover: 0.85, reflect: 0.6, look: 'clear', size: 0.8, desc: '便宜又輕，但傘面小、反彈沒力，撐一下手就痠' },
+  { id: 'fold', n: '自動摺疊傘', price: 160, open: 0, dur: 3, perf: 0.4, cover: 0.8, reflect: 1.2, look: 'navy', size: 0.7, desc: '一按就開，完美反彈時機最寬，但傘面小' },
+  { id: 'beach', n: '海灘陽傘', price: 260, open: 0.25, dur: 8, perf: 0.15, cover: 1, reflect: 0.8, look: 'beach', size: 1.3, desc: '又大又能撐很久，但開傘比較慢、完美時機窄' },
+  { id: 'temple', n: '廟會涼傘', price: 1500, open: 0.05, dur: 5, perf: 0.35, cover: 1, reflect: 1.6, look: 'temple', size: 1.05, desc: '神明的涼傘，反彈超有力，就是貴' },
 ];
 const umbNow = () => UMBS.find(u => u.id === save.shop.equipped.umb) ?? UMBS[0];
 function applyUmb() { const u = umbNow(); buildUmb(u.look, u.size); }
@@ -691,10 +691,10 @@ function renderShop() {
   if (!save.shop.owned.includes('stripe')) save.shop.owned.push('stripe');
   const cu = umbNow().id, B = UMBS[0];
   const rel = (v: number, b: number, goodHigh: boolean, unit: string) => { if (v === b) return `<span style="opacity:.6">${v}${unit}</span>`; const good = goodHigh ? v > b : v < b; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${v}${unit}</b>`; };
-  $('shopList').innerHTML += `<h3>☂ 雨傘</h3><table class="kt"><tr><th>傘</th><th>開傘</th><th>撐</th><th>完美窗</th><th>冷卻</th><th>遮</th><th>反彈力</th><th></th></tr>` + UMBS.map(u => {
+  $('shopList').innerHTML += `<h3>☂ 雨傘</h3><table class="kt"><tr><th>傘</th><th>開傘</th><th>可撐</th><th>完美窗</th><th>遮</th><th>反彈力</th><th></th></tr>` + UMBS.map(u => {
     const own = save.shop.owned.includes(u.id);
     const btn = u.id === cu ? '<b>使用中</b>' : own ? `<button data-ueq="${u.id}">換</button>` : `<button data-ubuy="${u.id}" ${save.money < u.price ? 'disabled' : ''}>$${u.price}</button>`;
-    return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small></td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(u.cd, B.cd, false, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small></td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!save.shop.owned.includes('plastic')) save.shop.owned.push('plastic');
   const cb = bowlNow().id, P = BOWLS[0];
   $('shopList').innerHTML += `<h3>🥣 盆仔</h3><table class="kt"><tr><th>盆</th><th>盆口</th><th>彈出</th><th>距離</th><th>完美窗</th><th>加價</th><th></th></tr>` + BOWLS.map(b => {
@@ -881,12 +881,15 @@ function hitInHand() {
     else if (phase === 'twist') { progress = 0; shellTop.rotation.z = 0; combo = 0; toast('撬到一半，殼又合回去了…', '#ff9a8a'); }
   }
 }
-function openUmbrella() { if (state !== 'play' || umbCd > 0) return; const u = umbNow(); umbT = umbLen = u.open + u.dur; umbCd = u.cd; umb.visible = true; SFX.pop(); }
+let umbHeld = false, umbTired = false;
+// 按住開傘、放開就收；沒有冷卻。撐太久（超過該傘的「可撐」秒數）手會痠自動收起，要放開再按。
+function openUmbrella() { if (state !== 'play' || umbHeld || umbTired) return; const u = umbNow(); umbHeld = true; umbT = umbLen = u.open + u.dur; umb.visible = true; SFX.pop(); $('umbBtn').classList.add('held'); }
+function closeUmbrella() { umbTired = false; if (!umbHeld && umbT <= 0) return; umbHeld = false; umbT = 0; $('umbBtn').classList.remove('held'); }
 let umbLen = 0.9;
 const umbAge = () => umbLen - umbT;
 // ----- 4. 偷蚵仔 -----
 function stealTarget() { for (const n of npcs) { const p = n.bowl.clone().project(camera); if (p.z < 1 && Math.abs(p.x) < 0.3 && Math.abs(p.y) < 0.35) return n; } return null; }
-function startSteal() { if (state !== 'play') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n); }
+function startSteal() { if (state !== 'play' || umbHeld) return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n); }
 function stopSteal() { stealNpc = null; stealT = 0; on('prog', phase === 'twist' || phase === 'crab' || phase === 'scoop'); }
 function caughtBy(n: Npc) {
   caught++; stopSteal(); const back = Math.min(count, 2); count -= back; n.count += back; penalty += 20;
@@ -904,7 +907,7 @@ function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.r
   return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">做工 ${save.days} 工・累積收入 $${save.money}・最佳 ${save.best} 粒<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美出手 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/掠 ${L.caught}・擲著阿婆 ${L.shellHits}・予人擲 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
 function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
-  if (state === 'end') return; state = 'end'; setPhase('busy'); on('umbBtn', false); on('stealBtn', false); stopSteal();
+  if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
   const all = [{ name: '你（阿婆）', count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const queen = all[0].me;
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
@@ -958,7 +961,7 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const swipePhase = () => phase === 'twist' || phase === 'crab';
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
-  if (state !== 'play') return; audio().resume();
+  if (state !== 'play') return; audio().resume(); if (umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
   if (swipePhase()) { pry(e.timeStamp); if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) canvas.requestPointerLock(); return; }
   if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
   if (walking) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
@@ -988,10 +991,13 @@ window.addEventListener('pointerup', up); window.addEventListener('pointercancel
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
   if ((e.target as HTMLElement)?.tagName === 'INPUT' && (e.target as HTMLInputElement).type === 'text') return;
+  if (state === 'play' && !tut && e.code === 'KeyM') { const L = $('medList'); if (document.pointerLockElement) document.exitPointerLock(); L.classList.toggle('show'); if (L.classList.contains('show')) renderMedList(); return; }
+  if (state === 'play' && $('medList').classList.contains('show') && /^Digit[1-9]$/.test(e.code)) { const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0); const m = own[+e.code.slice(5) - 1]; if (m) { useMed(m.id); renderMedList(); } return; }
   if (tut && e.code === 'Enter' && TUT[tut.i].next) { $('tutNext').click(); return; }
   if (state !== 'play') return; audio().resume();
   if (walking) { walkKeys.add(e.code); if (e.code === 'KeyE' && nearSeat) sitDown(nearSeat.id); return; }
   if (e.code === 'KeyG') { standUp(); return; }
+  if (e.code === 'Space' && !e.repeat && umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
   if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim') { holding = true; hold = 0; } }
   if (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
     const l = e.code === 'KeyA' || e.code === 'ArrowLeft';
@@ -999,12 +1005,12 @@ window.addEventListener('keydown', e => {
   }
   if (e.code === 'KeyQ') giveUp();
   if (e.code === 'KeyF') throwShell();
-  if (e.code === 'KeyR') openUmbrella();
+  if (e.code === 'KeyR' && !e.repeat) openUmbrella();
   if (e.code === 'KeyE' && !e.repeat) startSteal();
 });
-window.addEventListener('keyup', e => { walkKeys.delete(e.code); if (e.code === 'Space') release(); if (/Key[AD]|Arrow(Left|Right)/.test(e.code)) rotKey = 0; if (e.code === 'KeyE') stopSteal(); });
+window.addEventListener('keyup', e => { walkKeys.delete(e.code); if (e.code === 'Space') release(); if (/Key[AD]|Arrow(Left|Right)/.test(e.code)) rotKey = 0; if (e.code === 'KeyE') stopSteal(); if (e.code === 'KeyR') closeUmbrella(); });
 const btn = (id: string, f: () => void, upF?: () => void) => { $(id).addEventListener('pointerdown', e => { e.stopPropagation(); audio().resume(); f(); }); if (upF) { $(id).addEventListener('pointerup', upF); $(id).addEventListener('pointerleave', upF); } };
-btn('giveUp', giveUp); btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella); btn('stealBtn', startSteal, stopSteal);
+btn('giveUp', giveUp); btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
@@ -1107,7 +1113,7 @@ function frame() {
   hurtT = Math.max(0, hurtT - rdt); flinch = Math.max(0, flinch - rdt); ($('hurt') as HTMLElement).style.opacity = String(Math.min(0.55, hurtT * 0.6));
   toastT -= rdt; if (toastT <= 0) toastEl.classList.remove('on');
   tension = Math.max(0, tension - rdt * 1.6);
-  umbT = Math.max(0, umbT - rdt); umbCd = Math.max(0, umbCd - rdt); $('umbBtn').classList.toggle('cd', umbCd > 0);
+  if (umbHeld) { umbT = Math.max(0, umbT - rdt); if (umbT <= 0) { umbHeld = false; umbTired = true; $('umbBtn').classList.remove('held'); toast('手痠了，放開再重新撐傘', '#ffcf8a'); } } else umbT = 0; $('umbBtn').classList.toggle('cd', umbTired);
   const us = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
   let warnNpc: Npc | null = null;
   if (state === 'play') {
@@ -1202,7 +1208,7 @@ const TUT: TutStep[] = [
   { id: 'toss', line: '蚵仔肉出來了！丟進藍色的碗裡才算錢。', pc: '轉頭對準藍色碗，按住滑鼠／Space 蓄力，到藍色區間放開', mb: '拖動畫面對準藍色碗，按住螢幕蓄力，到藍色區間放開', hi: ['gauge'], done: () => count > tut!.c0 },
   { id: 'steal', line: '偷偷跟你說：阿婆轉頭聊天的時候，可以偷她碗裡的肉…', pc: '看到阿婆在聊天，對準她的碗按住 E 偷（被看到她會生氣）', mb: '看到阿婆在聊天，對準她的碗按住「偷」（被看到她會生氣）', hi: ['stealBtn'], next: '知道了 ▶', done: () => steals > tut!.s0 },
   { id: 'shell', line: '撬出空殼，也可以丟向別人！', pc: '手上有空殼時，對準阿婆按 F 或右鍵丟過去', mb: '手上有空殼時，對準阿婆按「丟殼」丟過去', hi: ['throwBtn'], next: '知道了 ▶', done: () => thrown > tut!.t0 },
-  { id: 'umb', line: '小心！阿婆要丟殼過來了！', pc: '看到 ⚠ 趕快按 R 打開雨傘擋', mb: '看到 ⚠ 趕快按「雨傘」擋', hi: ['umbBtn'], next: '知道了 ▶', done: () => umbT > 0, enter: () => later(1.2, () => { if (tut && TUT[tut.i].id === 'umb') windUp(npcs[0]); }) },
+  { id: 'umb', line: '小心！阿婆要丟殼過來了！', pc: '看到 ⚠ 趕快按住 R 打開雨傘擋', mb: '看到 ⚠ 趕快按住「雨傘」擋', hi: ['umbBtn'], next: '知道了 ▶', done: () => umbT > 0, enter: () => later(1.2, () => { if (tut && TUT[tut.i].id === 'umb') windUp(npcs[0]); }) },
   { id: 'stand', line: '坐太久腳會麻，起來走走，找別的位子。', pc: '按 G 換位置', mb: '按「🚶 換位置」按鈕', hi: ['standBtn'], next: '知道了 ▶', done: () => walking },
   { id: 'sit', line: '每個位子的好處都不一樣，看清楚再坐。', pc: '用 WASD 走到藍色板凳旁邊，按 E 坐下（或按下面的按鈕坐回原位）', mb: '用搖桿走到藍色板凳旁邊，按「坐落」坐下（或按下面的按鈕坐回原位）', hi: ['sitBtn'], next: '坐回去 ▶', done: () => !walking },
   { id: 'menu', line: '賺的錢可以去雜貨店買好刀、雨傘、碗；開到的珍珠會記在圖鑑裡。', pc: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面也有', mb: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面也有', hi: ['shopBtn', 'dexBtn', 'setBtn'], next: '下一步 ▶' },
@@ -1230,7 +1236,7 @@ function tutEnd(done: boolean) {
   tutHi.forEach(id => $(id).classList.remove('tutHi')); tutHi = []; document.body.classList.remove('tutOn'); on('tut', false);
   if (document.pointerLockElement) document.exitPointerLock();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); }
-  stopSteal(); state = 'menu'; setPhase('busy'); oyster.visible = false; on('umbBtn', false); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
+  stopSteal(); state = 'menu'; setPhase('busy'); oyster.visible = false; closeUmbrella(); on('umbBtn', false); on('medBtn', false); $('medList').classList.remove('show'); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
   if (done) toast('出師了！去剝蚵仔賺錢吧～', '#9be37a');
   renderDaily(); $('overlay').classList.add('show');
 }
@@ -1244,7 +1250,7 @@ $('tutSkip').onclick = e => { e.stopPropagation(); tutEnd(false); };
 ['tutNext', 'tutSkip'].forEach(id => $(id).addEventListener('pointerdown', e => e.stopPropagation()));
 $('oTut').onclick = () => tutStart();
 $('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; } tutStart(); };
-(window as any).__oy = { get phase() { return phase; }, get tut() { return tut && TUT[tut.i].id; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, P0, P1); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
+(window as any).__oy = { get phase() { return phase; }, get umb() { return { held: umbHeld, t: umbT, vis: umb.visible }; }, get tut() { return tut && TUT[tut.i].id; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, P0, P1); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
 // ---------- 截圖模式 ----------
 if (SHOT) {
   startDay(); npcs.forEach((n, i) => { n.count = 5 + i * 3; n.throwCd = 999; });
@@ -1253,7 +1259,7 @@ if (SHOT) {
   if (SHOT === 'blood' || SHOT === 'aid') { if (SHOT === 'aid') mix.gore = false; later(0.3, () => { flinch = 0.6; bleed(16); hurt(15, '割著手矣！'); }); }
   if (SHOT === 'npcblood' || SHOT === 'npcaid') { if (SHOT === 'npcaid') mix.gore = false; const n = npcs[0]; look(Math.atan2(-(worldOf(n.head).x - camera.position.x), -(worldOf(n.head).z - camera.position.z)), -0.2); later(0.2, () => npcHurt(n)); }
   if (SHOT === 'grudge') { look(0.15, -0.25); [30, 65, 100].forEach((g, i) => { npcs[i].grudge = g; grudgeUI(npcs[i]); }); npcs[2].angry = 99; say(npcs[2], '看我連環殼！', 99); }
-  if (SHOT === 'reflect') { const n = npcs[2]; look(0.6, -0.3); n.windup = 0.25; later(0.62, () => { umbT = umbLen = 0.9; umbCd = 0; umb.visible = true; }); }
+  if (SHOT === 'reflect') { const n = npcs[2]; look(0.6, -0.3); n.windup = 0.25; later(0.62, () => { umbT = umbLen = 0.9; umb.visible = true; }); }
   if (SHOT === 'shop') { save.money = 600; save.shop.owned = ['basic', 'seam']; save.shop.equipped.knife = 'seam'; applyKnife(); renderShop(); $('shop').classList.add('show'); }
   if (SHOT === 'bowl') { save.shop.equipped.bowl = params.get('b') || 'steel'; applyBowl(); look(0.35, -0.75); }
   if (SHOT === 'seat') { applySeat(params.get('s') || 'corner'); goPick(); }
@@ -1275,7 +1281,7 @@ if (SHOT) {
   if (SHOT === 'crab') { setPhase('busy'); seamMark.visible = false; shellTop.visible = false; revealOdd(3); }
   if (SHOT === 'throw') { look(0.1, -0.3); setPhase('empty'); emptyT = 99; later(0.05, throwShell); }
   if (SHOT === 'warning') { look(-0.3, -0.5); windUp(npcs[2]); npcs[2].windup = 99; }
-  if (SHOT === 'umbrella') { look(0.6, -0.3); windUp(npcs[2]); npcs[2].windup = 0.3; later(0.25, () => { umbT = umbLen = 0.9; umbCd = 0; umb.visible = true; }); later(0.6, () => { umbT = 0.6; }); }
+  if (SHOT === 'umbrella') { look(0.6, -0.3); windUp(npcs[2]); npcs[2].windup = 0.3; later(0.25, () => { umbT = umbLen = 0.9; umb.visible = true; }); later(0.6, () => { umbT = 0.6; }); }
   if (SHOT === 'harbor') look(0, -0.05);
   if (SHOT === 'end') { count = 38; opened = 47; missed = 9; abandoned = 3; perfects = 12; cracked = 4; steals = 3; caught = 1; meatHits = 2; shellHits = 4; thrown = 5; blocks = 3; reflects = 2; lost = 1; hitsTaken = 1; penalty = 28; dayPearls = [0]; dayOdd = [1]; endDay(); }
 }
@@ -1302,7 +1308,7 @@ function npcTip(n: Npc) {
 <li><b>會讓她生氣</b>：用殼丟中她（+35，丟歪打中 +30）、偷她的肉（+12，被抓到再 +20）。</li>
 <li><b>越生氣越常丟你</b>：怒氣越高，她丟殼的頻率越高、準備時間越短；怒氣到 90 會連丟 3 顆殼。</li>
 <li><b>怎麼讓她消氣</b>：8 秒內不要再丟她或偷她，之後怒氣每秒降 2.5。</li>
-<li><b>被丟的時候</b>：看到 ⚠ 就趕快開 ☂ 雨傘擋；連續擋下 3 次，阿婆們會暫時比較少丟。</li>
+<li><b>被丟的時候</b>：看到 ⚠ 就趕快按住 ☂ 雨傘擋（放開就收起來，撐傘時不能剝蚵）；連續擋下 3 次，阿婆們會暫時比較少丟。</li>
 <li><b>真的被盯上</b>：可以「🚶 換位置」，換到比較不容易被丟中的位子。</li></ul><p style="opacity:.7;font-size:12px">點這裡關閉</p>`;
   el.classList.add('show');
 }
@@ -1362,7 +1368,7 @@ let medDrawT = 0;
 function tickMeds(dt: number) { let ch = false; for (const k in medT) { const was = medT[k] > 0; medT[k] = Math.max(0, medT[k] - dt); if (was && medT[k] <= 0) { ch = true; const m = MEDS.find(x => x.id === k); if (m) toast(`${m.emo}${m.n} 效果結束了`, '#cfc3ff'); } } medDrawT -= dt; if (ch || medDrawT <= 0) { medDrawT = 1; drawMeds(); } }
 function drawMeds() {
   const el = document.getElementById('medAct'); if (el) el.innerHTML = medOn().map(m => `<span>${m.emo}${Math.ceil(medT[m.id])}s</span>`).join('');
-  const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0); const b = document.getElementById('medBtn'); if (b) b.firstChild!.textContent = `💊 藥品${n ? ` ${n}` : ''}`;
+  const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0); const b = document.getElementById('medBtn'); if (b) { b.innerHTML = (n ? `💊 藥品 ×${n}` : '💊 藥品') + '<span class="key"> (M)</span>' + (n ? '' : '<small>去雜貨店買藥</small>'); b.classList.toggle('empty', !n); }
   const L = document.getElementById('medList'); if (L && L.classList.contains('show')) renderMedList();
 }
 function useMed(id: string) {
@@ -1371,7 +1377,7 @@ function useMed(id: string) {
 }
 function renderMedList() {
   const L = $('medList'); const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0);
-  L.innerHTML = own.length ? own.map(m => `<button data-use="${m.id}">${m.emo} ${m.n} ×${save.meds[m.id]}<small>${m.good}／${m.bad}・${m.dur} 秒${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「💊 藥品」買吧</p>';
+  L.innerHTML = own.length ? own.map((m, i) => `<button data-use="${m.id}"><span class="key">${i + 1}. </span>${m.emo} ${m.n} ×${save.meds[m.id]}<small>${m.good}／${m.bad}・${m.dur} 秒${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「💊 藥品」買吧</p>';
   L.querySelectorAll('button[data-use]').forEach(b => b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); useMed(b.getAttribute('data-use')!); renderMedList(); }));
 }
 {
