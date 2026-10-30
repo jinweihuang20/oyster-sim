@@ -27,7 +27,7 @@ function mesh(g: THREE.BufferGeometry, m: THREE.Material, p?: [number, number, n
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // ---------- 場景：漁港邊的工寮（黃昏） ----------
-scene.add(new THREE.HemisphereLight(0xc08a9a, 0x201810, 0.55));
+const hemi = new THREE.HemisphereLight(0xc08a9a, 0x201810, 0.55); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xff9a60, 0.5); sun.position.set(-6, 3, -12); scene.add(sun);
 const lamp = new THREE.PointLight(0xffb060, 26, 10, 1.6); lamp.position.set(0, 2.55, 0); lamp.castShadow = true; lamp.shadow.bias = -0.003; lamp.shadow.normalBias = 0.03; lamp.shadow.mapSize.set(1024, 1024); scene.add(lamp);
 const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
@@ -526,7 +526,25 @@ function dressAma(n: Npc) {
   const m = n.body.material as THREE.MeshStandardMaterial; m.map?.dispose(); m.map = tex; m.color.set(0xffffff); m.needsUpdate = true;
   for (const a of [n.armL, n.armR]) { const sl = a.children[0] as THREE.Mesh; (sl.material as THREE.MeshStandardMaterial).color.set(base); }
 }
+let nightShift = false;
+const isNight = () => { const h = new Date().getHours(); return h >= 20 || h < 5; };
+// 天色跟著玩家裝置的時間（黎明／白天／黃昏／夜晚，平滑過渡）
+const SKY: [number, number, number, number, number, number][] = [ // 時, 天空, 霧, 半球光, 強度, 太陽強度
+  [0, 0x1c2440, 0x222a44, 0x8090c0, 0.62, 0.15], [5, 0x2a2c4e, 0x30304e, 0x9a90b8, 0.6, 0.25], [6.5, 0xd99a7a, 0xc89080, 0xffc0a0, 0.7, 0.55],
+  [9, 0x8fc3e8, 0xa8c8dc, 0xe8f0ff, 0.85, 0.9], [16, 0x9cc6e6, 0xb0cadc, 0xf0f0ff, 0.85, 0.85], [18, 0x3a3050, 0x4a3a50, 0xc08a9a, 0.6, 0.5],
+  [19.5, 0x24284a, 0x2a2c48, 0x8a90c0, 0.62, 0.2], [24, 0x1c2440, 0x222a44, 0x8090c0, 0.62, 0.15]];
+const _c1 = new THREE.Color(), _c2 = new THREE.Color();
+function updSky() {
+  const d = new Date(), h = d.getHours() + d.getMinutes() / 60; let i = 0; while (SKY[i + 1][0] <= h) i++;
+  const a = SKY[i], b = SKY[i + 1], f = (h - a[0]) / (b[0] - a[0]);
+  const L = (k: number) => _c1.setHex(a[k]).lerp(_c2.setHex(b[k]), f).getHex();
+  (scene.background as THREE.Color).setHex(L(1)); (scene.fog as THREE.Fog).color.setHex(L(2)); hemi.color.setHex(L(3));
+  hemi.intensity = a[4] + (b[4] - a[4]) * f; sun.intensity = a[5] + (b[5] - a[5]) * f;
+  const nn = document.getElementById('nightNote'); if (nn) nn.style.display = isNight() ? '' : 'none';
+}
+updSky(); setInterval(updSky, 30000);
 function startDay() {
+  nightShift = isNight(); updSky(); $('nightTag').style.display = nightShift ? '' : 'none'; if (nightShift) later(1.5, () => toast('🌙 夜班加成 +20%', '#b8c8ff'));
   npcs.forEach(dressAma);
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = SHIFT; hp = 100; dayCombo = 0;
@@ -929,7 +947,8 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (thrown === 0) { titles.push('🕊 和平阿婆（+$50）'); bonus = 50; }
   if (shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
   if (blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
-  const earn = Math.max(0, count * OYSTER_PRICE + bowlBonus + pearlMoney + bonus - penalty);
+  const nightBonus = nightShift ? Math.round((count * OYSTER_PRICE + bowlBonus + pearlMoney) * 0.2) : 0;
+  const earn = Math.max(0, count * OYSTER_PRICE + bowlBonus + pearlMoney + nightBonus + bonus - penalty);
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
   save.days++; save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日蚵后'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
@@ -940,7 +959,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 粒入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美出手 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
     `偷 ${steals}・予人掠著 ${caught}・肉擲著阿婆 ${meatHits}・殼擲著阿婆 ${shellHits}<br>雨傘擋 ${blocks}・完美反彈 ${reflects}・予人擲著 ${hitsTaken}・擲殼 ${thrown}・蚵仔落塗跤 ${lost}</p>` + (titles.length ? `<p style="font-size:18px"><b>${titles.join('　')}</b></p>` : '') +
-    `<p>蚵仔 ${count} 粒 × $${OYSTER_PRICE}（殼屑 ${cracked} 粒只 $${CRACK_PRICE}）${bowlBonus ? `<br>盆仔加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
+    `<p>蚵仔 ${count} 粒 × $${OYSTER_PRICE}（殼屑 ${cracked} 粒只 $${CRACK_PRICE}）${bowlBonus ? `<br>盆仔加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
     `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 粒・做蚵后 ${save.queen} 擺</p>` +
     `<p>${caught >= 2 ? '阿婆們：「明仔載你家己坐一角！」' : waste >= 30 ? '阿婆們：「塗跤攏是蚵仔肉，明仔載較準咧！」' : queen ? '阿婆們：「哎唷，今仔日予你贏去矣！」' : `${all[0].name}：「明仔載閣來拚喔～」`}</p>`;
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
