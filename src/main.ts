@@ -1547,6 +1547,14 @@ function drawName() { const n = myName(); const m = document.getElementById('meL
 { const i = $('myName') as HTMLInputElement; const commit = () => { const v = cleanName(i.value); save.name = v === '阿婆' ? undefined : v; i.value = save.name ? v : ''; persist(); drawName(); };
   i.addEventListener('change', commit); i.addEventListener('blur', commit); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
   for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend']) i.addEventListener(ev, e => e.stopPropagation()); drawName(); }
+// 面板可捲動提示：內容超出且還沒捲到底時，底部顯示 ⌄
+document.querySelectorAll<HTMLElement>('.panel').forEach(pn => {
+  const h = document.createElement('div'); h.className = 'scrollHint'; h.innerHTML = '<span><b>⌄</b></span>'; pn.appendChild(h);
+  const upd = () => h.classList.toggle('on', pn.classList.contains('show') && pn.scrollHeight - pn.clientHeight - pn.scrollTop > 24);
+  h.onclick = () => pn.scrollBy({ top: pn.clientHeight * 0.6, behavior: 'smooth' });
+  pn.addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd);
+  new MutationObserver(() => requestAnimationFrame(upd)).observe(pn, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }); upd();
+});
 installBackGuard(() => {
   const open = (id: string) => document.getElementById(id)?.classList.contains('show');
   if (open('npcTip')) { $('npcTip').classList.remove('show'); return 'handled'; }

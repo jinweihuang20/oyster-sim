@@ -251,3 +251,9 @@ body.tutOn .ntag{display:none!important}
 #vign{position:fixed;inset:0;pointer-events:none;z-index:1;display:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(20,14,8,.32) 100%)}
 #vign.on{display:block}
 #nameEdit{color:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer;display:inline-block;padding:14px 2px;margin:-14px 0;line-height:16px;-webkit-tap-highlight-color:transparent}#nameEdit i{font-style:normal;opacity:.7;font-size:.85em}
+.scrollHint{position:sticky;bottom:-18px;height:0;pointer-events:none;opacity:0;transition:opacity .25s}
+.scrollHint.on{opacity:1}
+.scrollHint span{position:absolute;left:0;right:0;bottom:0;height:46px;margin:0 -22px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px;font-size:26px;line-height:1;color:#ffd76a;background:linear-gradient(transparent,rgba(36,22,10,.95))}
+.scrollHint b{display:block;animation:shb 1.6s ease-in-out infinite}
+.scrollHint.on span{pointer-events:auto;cursor:pointer}
+@keyframes shb{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
