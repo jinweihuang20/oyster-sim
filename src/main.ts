@@ -719,7 +719,8 @@ function applyBowl() {
 }
 const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
 const pryW = () => Math.min(0.6, PRY[diff].w * knifeNow().green * medM('green'));
-const prySp = () => PRY[diff].sp * knifeNow().speed * medM('speed');
+const PRY_SLOW = 0.8; // 整體放慢 20%
+const prySp = () => PRY[diff].sp * PRY_SLOW * knifeNow().speed * medM('speed');
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
 const tolNow = () => DIFF[diff].tol * knifeNow().seam;
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip'));
