@@ -187,7 +187,7 @@ const handRig = new THREE.Group(); camera.add(handRig);
 const sleeve = mat(0x3a5a8a);
 function makeHand(s: number) {
   const h = new THREE.Group();
-  mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.3, 8), sleeve, [0, 0, 0.12], h).rotation.x = Math.PI / 2;
+  mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.7, 8), sleeve, [0, 0, 0.32], h).rotation.x = Math.PI / 2; // 長前臂延伸到畫面角落，兩手呈 A 字
   mesh(new THREE.BoxGeometry(0.11, 0.05, 0.13), mat(skin), [0, 0, -0.1], h);
   for (let i = 0; i < 4; i++) mesh(new THREE.BoxGeometry(0.022, 0.03, 0.07), mat(skin), [-0.04 + i * 0.026, -0.01, -0.19], h);
   mesh(new THREE.BoxGeometry(0.03, 0.03, 0.07), mat(skin), [s * -0.06, 0, -0.12], h).rotation.y = s * 0.6;
@@ -195,8 +195,8 @@ function makeHand(s: number) {
 }
 const handL = makeHand(-1), handR = makeHand(1);
 const HL = new THREE.Vector3(-0.16, -0.24, -0.42);
-handL.position.copy(HL); handL.rotation.set(0.4, 0.3, 0.3);
-handR.position.set(0.2, -0.26, -0.45); handR.rotation.set(0.3, -0.3, -0.2);
+handL.position.copy(HL); handL.rotation.set(0.4, -0.5, 0.3);
+handR.position.set(0.2, -0.26, -0.45); handR.rotation.set(0.3, 0.5, -0.2);
 handRig.add(handL, handR);
 let knifeK = 0; const _kt = new THREE.Vector3(), _kg = new THREE.Vector3(), _ko = new THREE.Vector3(0.05, 0.015, 0);
 const knife = new THREE.Group(); handR.add(knife); knife.position.set(-0.02, 0.03, -0.18); knife.rotation.set(0, 0.9, 0);
@@ -1251,7 +1251,7 @@ function frame() {
   leanFaces.forEach(f => { f.visible = pe > 0.02; f.position.x = f.userData.s * (restX + ((narrow ? 0.4 : 0.58) - restX) * pe); f.position.y = 0.05 - 0.08 * pe; f.rotation.z = -f.userData.s * 0.35 * pe; });
   // 手勢
   const tw = phase === 'twist' ? strokeDir * Math.min(1, tension) : 0;
-  handR.position.y = -0.26; handR.rotation.z = -0.2 + tw * 0.4; handR.rotation.y = -0.3 + tw * 0.2; handR.position.x = 0.2 - (phase === 'twist' || phase === 'seam' ? 0.07 : 0);
+  handR.position.y = -0.26; handR.rotation.z = -0.2 + tw * 0.4; handR.rotation.y = 0.5 + tw * 0.2; handR.position.x = 0.2 - (phase === 'twist' || phase === 'seam' ? 0.07 : 0);
   if (phase === 'crab') handL.position.x += Math.sin(t * 30) * 0.02;
   reach = Math.max(0, reach - rdt); const rk = Math.sin(Math.min(1, reach / 0.35) * Math.PI); handL.position.z -= rk * 0.18; handL.position.y -= rk * 0.12;
   if (phase === 'scoop') { const sk = Math.sin(t * 6); handL.position.z -= 0.2 + sk * 0.05; handR.position.z = -0.6 + sk * 0.05; handL.position.y += 0.05; } else handR.position.z = -0.45;
