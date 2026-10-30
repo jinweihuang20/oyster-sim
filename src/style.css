@@ -214,3 +214,17 @@ body.tutOn .ntag{display:none!important}
 @keyframes ulow{to{filter:brightness(1.35)}}
 #shopTabs button{overflow:visible!important;text-overflow:clip!important;padding:4px 2px!important;font-size:14px!important;line-height:1.15;white-space:normal!important;word-break:keep-all!important;min-width:56px!important}
 #shopTabs .ti{display:block;font-size:16px}#shopTabs .tl{display:block;white-space:nowrap}
+
+/* 手機觸控區：中間留大片滑動區，按鈕貼邊、縮小 */
+@media (pointer:coarse){
+ #btns{right:calc(env(safe-area-inset-right) + 6px);bottom:calc(env(safe-area-inset-bottom) + 6px);gap:6px}
+ #btns button{min-width:84px!important;min-height:44px!important;font-size:15px!important;padding:6px 10px!important}
+ #umbBtn{min-height:56px!important;min-width:96px!important;font-size:18px!important}
+ #stealBtn{min-height:52px!important;min-width:90px!important;font-size:17px!important}
+ #btnsL{left:calc(env(safe-area-inset-left) + 6px);bottom:calc(env(safe-area-inset-bottom) + 6px);flex-direction:row!important;gap:6px;max-width:calc(100vw - 120px);flex-wrap:wrap;align-items:flex-end}
+ #btnsL button{min-height:40px;font-size:13px;padding:6px 9px}
+ #joy{bottom:calc(env(safe-area-inset-bottom) + 64px)!important}
+ #rotL{left:calc(env(safe-area-inset-left) + 4px)!important}#rotR{right:calc(env(safe-area-inset-right) + 4px)!important}
+ #btns button.mb{min-width:52px!important;min-height:52px!important;width:52px;height:52px}
+}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#rotR{right:calc(env(safe-area-inset-right) + 110px)!important}#joy{bottom:calc(env(safe-area-inset-bottom) + 56px)!important}}
