@@ -401,11 +401,15 @@ const persist = () => { try { localStorage.setItem('oyster-sim', JSON.stringify(
 persist();
 let dry = 0;
 const wpick = (arr: { w: number }[]) => { let r = Math.random() * arr.reduce((s, x) => s + x.w, 0); for (let i = 0; i < arr.length; i++) { r -= arr[i].w; if (r < 0) return i; } return 0; };
+// 幸運值：每點 找著機率 ×(1+0.12×luck)；非普通物件權重 ×(1+0.15×luck)，傳說最多 ×1.3
+const luckNow = () => knifeNow().luck || 0;
+const luckW = (arr: { w: number }[], l: number) => arr.map(x => ({ w: x.w <= 2 ? x.w * Math.min(1.3, 1 + 0.15 * l) : x.w <= 20 ? x.w * (1 + 0.15 * l) : x.w }));
 function rollFind(): { kind: 'pearl' | 'odd' | 'none'; i: number } {
-  const p = 1 / 50 + Math.max(0, dry - 40) * 0.01;
-  if (Math.random() < p) { dry = 0; return { kind: 'pearl', i: wpick(RAR) }; }
+  const l = luckNow(), f = 1 + 0.12 * l;
+  const p = (1 / 50 + Math.max(0, dry - 40) * 0.01) * f;
+  if (Math.random() < p) { dry = 0; return { kind: 'pearl', i: wpick(luckW(RAR, l)) }; }
   dry++;
-  if (Math.random() < 1 / 24) return { kind: 'odd', i: wpick(ODD) };
+  if (Math.random() < (1 / 24) * f) return { kind: 'odd', i: wpick(luckW(ODD, l)) };
   return { kind: 'none', i: 0 };
 }
 
@@ -501,6 +505,7 @@ function holdOyster(dd: number) {
   shellTop.visible = true; shellTop.position.set(0, 0.025, 0); shellTop.rotation.set(0, 0, 0); meatInHand.visible = true; meatInHand.material = meatMat; pearlMesh.visible = false; oddMeshes.forEach(m => m.visible = false);
   { const base = [0xc2c2be, 0xa0a09e, 0x7c7c7e, 0x58585c][diff]; shellTopMat.color.setHex(base); shellBotMat.color.setHex(base).multiplyScalar(0.85); const gi = Math.floor(Math.random() * 6); shellTop.geometry = HALF_GEOS[gi]; shellBot.geometry = HALF_GEOS[(gi + 3) % 6]; }
   barnacles.forEach((b, i) => b.visible = i < d.rough);
+  meatsLeft = 1; showExtra();
   find = tut ? { kind: 'none', i: 0 } : rollFind(); setPhase('seam');
 }
 function startDay() {
@@ -508,7 +513,7 @@ function startDay() {
   state = 'play'; handPain = false; timeLeft = SHIFT; hp = 100; dayCombo = 0;
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); if (!tut) track('start', { seat: save.seat ?? 'door' });
   const sidNow = statsSid; const pingT = setInterval(() => { if (tut || state !== 'play' || statsSid !== sidNow || document.hidden) { if (statsSid !== sidNow || state !== 'play') clearInterval(pingT); return; } track('ping'); }, 60_000);
-  count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = [];
+  count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
   ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
@@ -608,14 +613,14 @@ const PRY = [{ w: 0.3, sp: 0.8 }, { w: 0.22, sp: 1.05 }, { w: 0.15, sp: 1.35 }, 
 const PRY_NEED = [2, 3, 4, 5], PRY_C = 0.55, PRY_RED = 0.86;
 let needleStart = 0, combo = 0, dayCombo = 0;
 // ----- 剝殼刀（各有利弊） -----
-type Knife = { id: string; n: string; price: number; green: number; speed: number; steps: number; stab: number; seam: number; blade: number; desc: string };
+type Knife = { id: string; n: string; price: number; green: number; speed: number; steps: number; stab: number; seam: number; luck: number; blade: number; desc: string };
 const KNIVES: Knife[] = [
-  { id: 'basic', n: '舊蚵刀', price: 0, green: 1, speed: 1, steps: 0, stab: 1, seam: 1, blade: 0xd0d0d8, desc: '阿母留落來的，普普仔' },
-  { id: 'dull', n: '俗鈍刀', price: 20, green: 0.7, speed: 0.85, steps: 0, stab: 1.5, seam: 1, blade: 0x8a8a80, desc: '夜市 20 箍，指針較慢，毋過綠區細、真捷割著手' },
-  { id: 'wide', n: '闊喙刀', price: 150, green: 1.5, speed: 1.35, steps: 0, stab: 1, seam: 0.85, blade: 0xe8e0c8, desc: '刀面闊，綠區大，毋過指針緊、揣縫較歹' },
-  { id: 'point', n: '尖喙刀', price: 200, green: 0.9, speed: 1, steps: -1, stab: 1.6, seam: 1, blade: 0xb0c8e0, desc: '尖尖一下就入去，少撬一下，毋過較危險' },
-  { id: 'seam', n: '揣縫刀', price: 180, green: 0.9, speed: 1.1, steps: 0, stab: 0.8, seam: 1.6, blade: 0xc8e0b0, desc: '揣縫真簡單，撬的時陣較食力' },
-  { id: 'master', n: '師傅刀', price: 1200, green: 1.2, speed: 0.95, steps: -1, stab: 0.6, seam: 1.25, blade: 0xffe28a, desc: '老師傅手工，樣樣好，就是貴' },
+  { id: 'basic', luck: 1, n: '舊蚵刀', price: 0, green: 1, speed: 1, steps: 0, stab: 1, seam: 1, blade: 0xd0d0d8, desc: '阿母留落來的，普普仔' },
+  { id: 'dull', luck: 3, n: '俗鈍刀', price: 20, green: 0.7, speed: 0.85, steps: 0, stab: 1.5, seam: 1, blade: 0x8a8a80, desc: '夜市 20 箍，指針較慢、運氣特別好，毋過綠區細、真捷割著手' },
+  { id: 'wide', luck: 0, n: '闊喙刀', price: 150, green: 1.5, speed: 1.35, steps: 0, stab: 1, seam: 0.85, blade: 0xe8e0c8, desc: '刀面闊，綠區大，毋過指針緊、揣縫較歹' },
+  { id: 'point', luck: 2, n: '尖喙刀', price: 200, green: 0.9, speed: 1, steps: -1, stab: 1.6, seam: 1, blade: 0xb0c8e0, desc: '尖尖一下就入去，少撬一下，較有運，毋過較危險' },
+  { id: 'seam', luck: 0, n: '揣縫刀', price: 180, green: 0.9, speed: 1.1, steps: 0, stab: 0.8, seam: 1.6, blade: 0xc8e0b0, desc: '揣縫真簡單，撬的時陣較食力' },
+  { id: 'master', luck: 1, n: '師傅刀', price: 1200, green: 1.2, speed: 0.95, steps: -1, stab: 0.6, seam: 1.25, blade: 0xffe28a, desc: '老師傅手工，樣樣好，就是貴' },
 ];
 type Umb = { id: string; n: string; price: number; open: number; dur: number; perf: number; cd: number; cover: number; reflect: number; look: string; size: number; desc: string };
 const UMBS: Umb[] = [
@@ -674,10 +679,10 @@ function pctTxt(v: number, goodHigh: boolean) { if (v === 1) return '<span style
 function renderShop() {
   if (!save.shop.owned.includes('basic')) save.shop.owned.push('basic');
   const cur = knifeNow().id;
-  $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><h3>🔪 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>揣縫</th><th></th></tr>` + KNIVES.map(k => {
+  $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><h3>🔪 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>揣縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
     const own = save.shop.owned.includes(k.id);
     const btn = k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < k.price ? 'disabled' : ''}>$${k.price}</button>`;
-    return `<tr><td><b>${k.n}</b><br><small>${k.desc}</small></td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    return `<tr><td><b>${k.n}</b><br><small>${k.desc}</small></td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!save.shop.owned.includes('stripe')) save.shop.owned.push('stripe');
   const cu = umbNow().id, B = UMBS[0];
   const rel = (v: number, b: number, goodHigh: boolean, unit: string) => { if (v === b) return `<span style="opacity:.6">${v}${unit}</span>`; const good = goodHigh ? v > b : v < b; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${v}${unit}</b>`; };
@@ -743,7 +748,14 @@ function keyTwist(k: string) { if (swipePhase()) return;
   if (phase === 'crab') { crabShakes++; tone(600 + crabShakes * 40, 0.05, 0.1); if (crabShakes >= 6) crabOff(); return; }
   if (phase === 'twist' && dt < 1500) halfTwist(t); else if (phase === 'twist') hint.textContent = '閣較緊扭！';
 }
+let meatsLeft = 1, dayMulti2 = 0, dayMulti3 = 0; const extraMeat: THREE.Object3D[] = [];
+function showExtra() {
+  if (!extraMeat.length && meatInHand.parent) for (let k = 0; k < 2; k++) { const e = meatInHand.clone(); e.position.x += (k ? -1 : 1) * 0.028; e.position.z += 0.012; e.scale.multiplyScalar(0.85); meatInHand.parent.add(e); extraMeat.push(e); }
+  extraMeat.forEach((e, k) => e.visible = k < meatsLeft - 1);
+}
 function openOyster() {
+  { const l = luckNow(), r = Math.random(); meatsLeft = tut ? 1 : r < 0.02 + 0.0025 * l ? 3 : r < 0.10 + 0.0075 * l ? 2 : 1; showExtra();
+    if (meatsLeft > 1) { if (meatsLeft === 3) dayMulti3++; else dayMulti2++; later(0.3, () => { toast(meatsLeft === 3 ? '三仁！一粒三塊肉！' : '雙仁！一粒兩塊肉！', '#ffd76a'); tone(880, 0.12, 0.15, 'triangle'); tone(1320, 0.18, 0.12, 'triangle', 0.1); if (meatsLeft === 3) tone(1760, 0.22, 0.12, 'triangle', 0.2); }); } }
   crackSound(); shake = 0.25; opened++; setPhase('busy'); seamMark.visible = false;
   if (crackedNow) cracked++;
   shellTop.visible = false;
@@ -754,7 +766,7 @@ function openOyster() {
   updHud();
 }
 function revealOdd(i: number) {
-  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, dex: dexN() }); oddMeshes[i].visible = true;
+  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
   label.innerHTML = `${o.name}！<small>${o.line}</small>`; label.style.color = o.css; label.classList.add('on');
   npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
@@ -798,7 +810,7 @@ function shoot(power: number) {
     else { missed++; if (bounced) { SFX.plop(); later(0.05, () => toast('彈出來矣！', '#ff8a7a')); } m.material = splatMat; m.scale.set(1.5, 0.25, 1.5); splats.push(m); if (splats.length > 30) scene.remove(splats.shift()!); SFX.splat(); toast('無入！', '#ff8a7a'); nag(NAG_MISS); }
     updHud();
   });
-  later(0.35, () => { emptyT = 2.2; setPhase('empty'); });
+  later(0.35, () => { if (meatsLeft > 1 && state === 'play') { meatsLeft--; showExtra(); meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); hint.textContent = `閣有 ${meatsLeft} 塊肉！繼續投入碗`; } else { meatsLeft = 1; showExtra(); emptyT = 2.2; setPhase('empty'); } });
 }
 function discardShell() { if (phase !== 'empty') return; oyster.visible = false; const sh = new THREE.Mesh(halfGeo, shellBotMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.5, () => scene.remove(sh)); setPhase('busy'); later(0.5, goPick); }
 function meatOnHead(n: Npc, m: THREE.Mesh) {
@@ -899,7 +911,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
   for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
   persist();
-  track('day', { count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, dur: Math.round(SHIFT - Math.max(0, timeLeft)), dex: dexN(), seat: save.seat ?? 'door' });
+  track('day', { count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, double: dayMulti2, triple: dayMulti3, dur: Math.round(SHIFT - Math.max(0, timeLeft)), dex: dexN(), seat: save.seat ?? 'door' });
   $('resTitle').textContent = handPain ? '🩹 手痛收工' : queen ? '👑 今日蚵后！' : '收工矣～';
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 粒入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美出手 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
@@ -910,7 +922,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
 }
 function revealPearl(r: number) {
-  dayPearls.push(r); save.dex[r]++; persist(); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, dex: dexN() }); renderDex();
+  dayPearls.push(r); save.dex[r]++; persist(); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
   slowmo = 2.6; pearlShow = 2.6;
   (pearlMesh.material as THREE.MeshStandardMaterial).color.setHex(RAR[r].color);
   (pearlMesh.material as THREE.MeshStandardMaterial).emissive.setHex(r === 3 ? 0x302050 : RAR[r].color).multiplyScalar(0.25);
