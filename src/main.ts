@@ -248,7 +248,7 @@ const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gor
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(localStorage.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
   const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
-const STATS_URL = 'https://core-recycle-stats.jinweihuang1020.workers.dev/e';
+const STATS_URL = 'https://game-status.gwtech.org/e';
 const statsId = (() => { try { let v = localStorage.getItem('oyster-stats-id'); if (!v) { v = crypto.randomUUID(); localStorage.setItem('oyster-stats-id', v); } return v; } catch { return 'anon-' + Math.random().toString(36).slice(2, 14); } })();
 let statsSid = '';
 const COARSE = matchMedia('(pointer: coarse)').matches;
