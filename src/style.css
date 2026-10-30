@@ -160,10 +160,10 @@ body.tutOn #hint{display:none!important}
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#tut{width:min(46vw,420px);left:auto;right:calc(env(safe-area-inset-right) + 8px);transform:none;top:calc(env(safe-area-inset-top) + 52px)}#tutLine{font-size:13px}#tutDo{font-size:12px}}
 #tutKeys{font-size:11px;opacity:.6;margin-top:2px}
 /* 開始剝蚵：主要按鈕，固定貼在面板底部，免捲動 */
-#overlay #start{position:sticky;bottom:calc(-14px - env(safe-area-inset-bottom));display:block;width:100%;margin:12px 0 0;min-height:60px;font-size:22px;font-weight:800;letter-spacing:2px;background:linear-gradient(#5fd35a,#2e9a35);color:#fff;text-shadow:0 1px 2px #0006;border:2px solid #b9ffb0;border-radius:16px;box-shadow:0 -10px 16px rgba(36,22,10,.95),0 4px 14px #0008;z-index:2}
-#overlay #start:active{transform:translateY(1px)}
-#overlay{padding-bottom:14px}
-@media (pointer:coarse){.key{display:none}#overlay #start{min-height:64px;font-size:23px}}
+#overlay #start,#result #again{position:sticky;bottom:calc(-14px - env(safe-area-inset-bottom));display:block;width:100%;margin:12px 0 0;min-height:60px;font-size:22px;font-weight:800;letter-spacing:2px;background:linear-gradient(#5fd35a,#2e9a35);color:#fff;text-shadow:0 1px 2px #0006;border:2px solid #b9ffb0;border-radius:16px;box-shadow:0 -10px 16px rgba(36,22,10,.95),0 4px 14px #0008;z-index:2}
+#overlay #start:active,#result #again:active{transform:translateY(1px)}
+#overlay,#result{padding-bottom:14px}
+@media (pointer:coarse){.key{display:none}#overlay #start,#result #again{min-height:64px;font-size:23px}}
 @media (max-height:700px){#overlay h1{font-size:24px;margin:4px 0}#overlay p,#overlay ul{font-size:13px;line-height:1.45}}
 @media (orientation:landscape) and (max-height:500px){#overlay #start{min-height:52px;font-size:19px}}
 
