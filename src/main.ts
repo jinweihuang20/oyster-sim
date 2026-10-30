@@ -490,8 +490,14 @@ function rollFind(): { kind: 'pearl' | 'odd' | 'none'; i: number } {
   const l = luckNow(), f = 1 + 0.12 * l;
   const p = (1 / 50 + Math.max(0, dry - 40) * 0.01) * f;
   if (Math.random() < p) { dry = 0; return { kind: 'pearl', i: wpick(luckW(RAR, l)) }; }
+  // 新手：普通／少見（權重 ≥20）額外 +1.5 倍機率 → 合計約 ×2.5；稀有／傳說不加
+  const common = (arr: { w: number }[]) => luckW(arr, l).map((x, i) => ({ w: arr[i].w >= 20 ? x.w : 0 }));
+  if (newbie() && Math.random() < p * 1.5) { dry = 0; return { kind: 'pearl', i: wpick(common(RAR)) }; }
   dry++;
   if (Math.random() < (1 / 24) * f) return { kind: 'odd', i: wpick(luckW(ODD, l)) };
+  if (newbie() && Math.random() < (1 / 24) * f * 1.5) return { kind: 'odd', i: wpick(common(ODD)) };
+  // 保底：第一班到第 5 顆還沒找到東西 → 給一顆白珍珠
+  if (!tut && save.days === 0 && opened >= 4 && !dayPearls.length && !dayOdd.length) { dry = 0; return { kind: 'pearl', i: 0 }; }
   return { kind: 'none', i: 0 };
 }
 
