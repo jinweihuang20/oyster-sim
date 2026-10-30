@@ -669,7 +669,7 @@ const KNIVES: Knife[] = [
   { id: 'wide', luck: 0, n: '闊喙刀', price: 150, green: 1.5, speed: 1.35, steps: 0, stab: 1, seam: 0.85, blade: 0xe8e0c8, desc: '刀面闊，綠區大，毋過指針緊、揣縫較歹' },
   { id: 'point', luck: 2, n: '尖喙刀', price: 200, green: 0.9, speed: 1, steps: -1, stab: 1.6, seam: 1, blade: 0xb0c8e0, desc: '尖尖一下就入去，少撬一下，較有運，毋過較危險' },
   { id: 'seam', luck: 0, n: '揣縫刀', price: 180, green: 0.9, speed: 1.1, steps: 0, stab: 0.8, seam: 1.6, blade: 0xc8e0b0, desc: '揣縫真簡單，撬的時陣較食力' },
-  { id: 'master', luck: 1, n: '師傅刀', price: 1200, green: 1.2, speed: 0.95, steps: -1, stab: 0.6, seam: 1.25, blade: 0xffe28a, desc: '老師傅手工，樣樣好，就是貴' },
+  { id: 'master', luck: 4, n: '師傅刀', price: 1200, green: 1.2, speed: 0.95, steps: -1, stab: 0.6, seam: 1.25, blade: 0xffe28a, desc: '老師傅手工，樣樣好，就是貴' },
 ];
 type Umb = { id: string; n: string; price: number; open: number; dur: number; perf: number; cover: number; reflect: number; look: string; size: number; desc: string };
 const UMBS: Umb[] = [
