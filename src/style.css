@@ -258,3 +258,17 @@ body.tutOn .ntag{display:none!important}
 .scrollHint.on span{pointer-events:auto;cursor:pointer}
 @keyframes shb{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
 #pauseTag{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 8px);transform:translateX(-50%);z-index:200;pointer-events:none;display:none;background:rgba(0,0,0,.55);color:#fff;font-size:13px;padding:3px 12px;border-radius:12px}#pauseTag.on{display:block}
+/* 電腦版：除了上工畫面以外，選單畫面放寬鬆一點 */
+@media (min-width:900px) and (pointer:fine){
+ #overlay.panel,#result.panel,#shop.panel,#dex.panel,#settings.panel,#fb.panel,#redeem.panel{width:min(86vw,760px);max-height:88vh;padding:28px 36px;font-size:17px;line-height:1.65}
+ #shop.panel,#dex.panel{width:min(90vw,980px)}
+ #overlay h1{margin-bottom:18px}.panel h2{margin:0 0 18px}
+ #overlay p,#result p,#settings p,#fb p,#redeem p{margin:14px 0}
+ #overlay button,#result button,#settings button,#fb button,#redeem button,#shop button,#dex button{margin:6px;padding:10px 18px}
+ #settings .row{display:flex;align-items:center;justify-content:center;gap:12px;margin:14px 0}
+ .locRow{gap:14px!important}.loc{padding:14px!important}.locHead{margin-bottom:12px}
+ #shopList,#dexList{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-items:start}
+ #dexList{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+ #shopList>h3,#shopList>h4,#shopList>p,#shopList>.tabs,#dexList>h3,#dexList>h4,#dexList>p,#dexList>.dexProg,#dexList>.dexBar{grid-column:1/-1}
+ #resBody{line-height:1.8}#fbText{min-height:140px}
+}
