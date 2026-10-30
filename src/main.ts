@@ -341,6 +341,8 @@ const ODD = [
   { name: '金戒指', css: '#f2c440', w: 10, price: 2500, line: '金戒指！啥人的定情物？', cry: ['金的呢！予我看覓！', '這愛去報警無？'] },
   { name: '小螃蟹', css: '#e05a3a', w: 30, price: 0, line: '螃蟹夾手矣！！', cry: ['緊甩！緊甩！', '哈哈哈，伊夾牢牢'] },
 ];
+const dexN = () => save.dex.filter(x => x).length + save.odd.filter(x => x).length;
+const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'uncommon' : 'common';
 const OYSTER_PRICE = 3, CRACK_PRICE = 1;
 // ----- 存檔（有版本號；舊存檔會自動補欄位，壞去就用預設） -----
 const SAVE_V = 2;
@@ -709,7 +711,7 @@ function openOyster() {
   updHud();
 }
 function revealOdd(i: number) {
-  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); oddMeshes[i].visible = true;
+  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, dex: dexN() }); oddMeshes[i].visible = true;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
   label.innerHTML = `${o.name}！<small>${o.line}</small>`; label.style.color = o.css; label.classList.add('on');
   npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
@@ -853,7 +855,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
   for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
   persist();
-  track('day', { count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, dur: Math.round(SHIFT - Math.max(0, timeLeft)), seat: save.seat ?? 'door' });
+  track('day', { count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, dur: Math.round(SHIFT - Math.max(0, timeLeft)), dex: dexN(), seat: save.seat ?? 'door' });
   $('resTitle').textContent = handPain ? '🩹 手痛收工' : queen ? '👑 今日蚵后！' : '收工矣～';
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 粒入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美出手 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
@@ -864,7 +866,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
 }
 function revealPearl(r: number) {
-  dayPearls.push(r); save.dex[r]++; persist(); renderDex();
+  dayPearls.push(r); save.dex[r]++; persist(); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, dex: dexN() }); renderDex();
   slowmo = 2.6; pearlShow = 2.6;
   (pearlMesh.material as THREE.MeshStandardMaterial).color.setHex(RAR[r].color);
   (pearlMesh.material as THREE.MeshStandardMaterial).emissive.setHex(r === 3 ? 0x302050 : RAR[r].color).multiplyScalar(0.25);
