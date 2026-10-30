@@ -129,7 +129,11 @@ function makeAma(top: number, hair: number) {
   const g = new THREE.Group();
   mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.3, 8), mat(0xc83a3a), [0, 0.15, 0.05], g);
   const body = mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.55, 8), mat(top), [0, 0.6, 0], g);
-  mesh(new THREE.BoxGeometry(0.42, 0.14, 0.45), mat(0x2a2a40), [0, 0.35, -0.15], g);
+  const pants = mat(0x2a2a40); mesh(new THREE.BoxGeometry(0.42, 0.14, 0.45), pants, [0, 0.35, -0.15], g);
+  // 坐姿小腿＋藍白拖
+  const shinG = new THREE.CylinderGeometry(0.055, 0.045, 0.3, 6), sole = mat(0xf2f2ee), strap = mat(0x2f5fb8);
+  for (const sx of [-0.1, 0.1]) { mesh(shinG, pants, [sx, 0.17, -0.34], g); mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.05, 6), mat(skin), [sx, 0.04, -0.35], g);
+    mesh(new THREE.BoxGeometry(0.09, 0.02, 0.2), sole, [sx, 0.01, -0.4], g); mesh(new THREE.BoxGeometry(0.095, 0.03, 0.035), strap, [sx, 0.035, -0.45], g); mesh(new THREE.SphereGeometry(0.035, 6, 4, 0, Math.PI * 2, 0, 1.6), mat(skin), [sx, 0.025, -0.47], g); }
   const head = new THREE.Group(); head.position.set(0, 1.02, 0); g.add(head);
   mesh(new THREE.SphereGeometry(0.15, 10, 8), mat(skin), [0, 0, 0], head);
   mesh(new THREE.SphereGeometry(0.155, 10, 8, 0, Math.PI * 2, 0, 1.4), mat(hair), [0, 0.02, 0.02], head);
@@ -137,7 +141,7 @@ function makeAma(top: number, hair: number) {
   for (const s of [-1, 1]) mesh(new THREE.SphereGeometry(0.018, 6, 4), mat(0x111111), [s * 0.05, 0.02, -0.14], head);
   mesh(new THREE.BoxGeometry(0.06, 0.012, 0.01), mat(0x803030), [0, -0.06, -0.145], head);
   const arm = (s: number) => { const p = new THREE.Group(); p.position.set(s * 0.2, 0.8, -0.02); g.add(p); mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.38, 6), mat(top), [0, -0.12, -0.12], p).rotation.x = 1.1; mesh(new THREE.SphereGeometry(0.05, 6, 5), mat(skin), [0, -0.2, -0.3], p); return p; };
-  return { g, body, head, armL: arm(-1), armR: arm(1) };
+  return { g, body, head, pants, armL: arm(-1), armR: arm(1) };
 }
 type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: number; peek: boolean; count: number; pause: number; look: number; bubble: HTMLDivElement; bubT: number; lean: number;
   cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; w0?: number; warned?: boolean; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; gAt?: number; tag: HTMLButtonElement; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[] };
@@ -595,6 +599,7 @@ function dressAma(n: Npc) {
   const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 1); tex.colorSpace = THREE.SRGBColorSpace;
   const m = n.body.material as THREE.MeshStandardMaterial; m.map?.dispose(); m.map = tex; m.color.set(0xffffff); m.needsUpdate = true;
   for (const a of [n.armL, n.armR]) { const sl = a.children[0] as THREE.Mesh; (sl.material as THREE.MeshStandardMaterial).color.set(base); }
+  const PANTS = [0x2a2a40, 0x3a3a3a, 0x4a3a2a, 0x223a5a, 0x5a4a6a, 0x2f4a3a]; (n.pants as THREE.MeshStandardMaterial).color.set(PANTS[Math.floor(Math.random() * PANTS.length)]);
 }
 let nightShift = false, walkHintShown = false, saltNext = false;
 // 器具（手套、收音機）：買了可開關
