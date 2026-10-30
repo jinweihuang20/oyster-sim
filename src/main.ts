@@ -277,6 +277,41 @@ function startAmbience(a: AudioContext) {
     s.connect(f).connect(g).connect(ambG); s.start(t); s.stop(t + 1.6); setTimeout(radio, 9000 + Math.random() * 12000); };
   setTimeout(radio, 6000);
 }
+// ----- 收音機懷舊曲（AM 收音機味：帶通 + 輕微失真 + 沙沙聲），收音機開著時跟一般 BGM 交叉淡入淡出 -----
+function startRadioMusic(a: AudioContext, bgm: GainNode) {
+  const BPM = 84, st = 60 / BPM / 2, N = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
+  // 小調五聲（A C D E G），三拍子慢版懷舊風；24 步 × 4 段
+  const mel = [69, 0, 72, 74, 0, 76, 74, 0, 72, 69, 0, 0, 67, 0, 69, 72, 0, 74, 69, 0, 0, 0, 0, 0,
+               76, 0, 79, 76, 0, 74, 72, 0, 74, 76, 0, 0, 74, 0, 72, 69, 0, 67, 69, 0, 0, 0, 0, 0,
+               72, 0, 74, 76, 0, 79, 81, 0, 79, 76, 0, 0, 74, 0, 76, 74, 0, 72, 69, 0, 72, 74, 0, 0,
+               76, 0, 74, 72, 0, 69, 67, 0, 69, 72, 0, 0, 69, 0, 67, 64, 0, 67, 69, 0, 0, 0, 0, 0];
+  const roots = [45, 43, 41, 40, 45, 48, 43, 45]; // Am G F E Am C G Am（每 12 步一個）
+  const out = a.createGain(); out.gain.value = 0; out.connect(musG);
+  const hp = a.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 380;
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 1.2;
+  const ws = a.createWaveShaper(); const cv = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 128 - 1; cv[i] = Math.tanh(x * 2.2) / Math.tanh(2.2); } ws.curve = cv;
+  const bus = a.createGain(); bus.gain.value = 0.9; bus.connect(hp).connect(ws).connect(lp).connect(out);
+  // 沙沙聲（AM 雜訊），音量隨機飄
+  const sb = a.createBuffer(1, a.sampleRate * 2, a.sampleRate), sd = sb.getChannelData(0); for (let i = 0; i < sd.length; i++) sd[i] = (Math.random() * 2 - 1) * (Math.random() < 0.002 ? 1 : 0.35);
+  const sn = a.createBufferSource(); sn.buffer = sb; sn.loop = true; const sf = a.createBiquadFilter(); sf.type = 'bandpass'; sf.frequency.value = 1800; sf.Q.value = 0.6; const sg = a.createGain(); sg.gain.value = 0.035;
+  sn.connect(sf).connect(sg).connect(out); sn.start(); lfo(a, 0.23, 0.015, sg.gain);
+  const lead = (f: number, t: number, d: number) => { const g = a.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.11, t + 0.04); g.gain.setValueAtTime(0.09, t + d * 0.7); g.gain.linearRampToValueAtTime(0, t + d);
+    for (const [ty, mul, v] of [['triangle', 1, 1], ['sine', 2, 0.35]] as [OscillatorType, number, number][]) { const o = a.createOscillator(), og = a.createGain(); o.type = ty; o.frequency.value = f * mul; og.gain.value = v; const vib = a.createOscillator(), vg = a.createGain(); vib.frequency.value = 5; vg.gain.value = 14; vib.connect(vg).connect(o.detune); o.connect(og).connect(g); o.start(t); o.stop(t + d + 0.05); vib.start(t); vib.stop(t + d + 0.05); }
+    g.connect(bus); };
+  const pluck = (f: number, t: number, v: number) => { const o = a.createOscillator(), g = a.createGain(); o.type = 'triangle'; o.frequency.value = f; g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + st * 1.8); o.connect(g).connect(bus); o.start(t); o.stop(t + st * 2); };
+  let step = 0, next = a.currentTime + 0.1, on = false;
+  setInterval(() => {
+    const want = state === 'play' && !tut && gearOn('radio');
+    if (want !== on) { on = want; const t = a.currentTime; out.gain.cancelScheduledValues(t); bgm.gain.cancelScheduledValues(t); out.gain.setValueAtTime(out.gain.value, t); bgm.gain.setValueAtTime(bgm.gain.value, t); out.gain.linearRampToValueAtTime(on ? 1 : 0, t + 0.5); bgm.gain.linearRampToValueAtTime(on ? 0 : 1, t + 0.5); if (on) { step = 0; next = t + 0.05; } }
+    if (!on && out.gain.value < 0.001) { next = a.currentTime + 0.1; return; }
+    while (next < a.currentTime + 0.25) {
+      const i = step % 96, b = i % 6, root = roots[Math.floor(i / 12) % 8];
+      const m = mel[i]; if (m) { let d = 1; while (d < 4 && !mel[(i + d) % 96]) d++; lead(N(m), next, st * d * 0.95); }
+      if (b === 0) pluck(N(root), next, 0.32); else if (b === 2 || b === 4) { pluck(N(root + 12 + (b === 2 ? 3 : 7)), next, 0.09); pluck(N(root + 19), next, 0.06); }
+      next += st; step++;
+    }
+  }, 60);
+}
 // ----- 台式電子琴 BGM（那卡西／廟口風，全部 WebAudio 合成） -----
 function startMusic(a: AudioContext) {
   const BPM = 128, st = 60 / BPM / 2; // 8 分音符
@@ -285,7 +320,7 @@ function startMusic(a: AudioContext) {
   const mel = [76, 0, 79, 76, 74, 0, 72, 74, 76, 79, 81, 0, 79, 76, 74, 0, 72, 0, 74, 72, 69, 0, 67, 69, 72, 74, 76, 74, 72, 0, 0, 0,
                81, 0, 79, 81, 84, 0, 81, 79, 76, 79, 81, 0, 79, 0, 76, 74, 72, 74, 76, 79, 76, 74, 72, 69, 67, 0, 69, 72, 72, 0, 0, 0];
   const chords = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50], [48, 52, 55], [45, 48, 52], [43, 47, 50], [48, 52, 55]]; // C Am F G C Am G C
-  const out = a.createGain(); out.connect(musG);
+  const out = a.createGain(); out.connect(musG); startRadioMusic(a, out);
   const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; lp.connect(out);
   const nb = noiseBuf(a, 0.3);
   const organ = (f: number, t: number, d: number, v: number) => { const g = a.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.01); g.gain.setValueAtTime(v, t + d * 0.8); g.gain.linearRampToValueAtTime(0, t + d);
