@@ -239,3 +239,5 @@ body.tutOn .ntag{display:none!important}
 @media (pointer:coarse){#btnsL #radioBtn{display:block;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;font-size:20px;text-decoration:none;position:relative}
  #btnsL #radioBtn i{position:absolute;right:3px;top:3px;width:9px;height:9px;border-radius:50%;background:#7dff8a;box-shadow:0 0 6px #7dff8a}
  #btnsL #radioBtn.off i{background:#888;box-shadow:none}#btnsL #radioBtn.off{filter:grayscale(1)}#btnsL #radioBtn:after{display:none}}
+#vign{position:fixed;inset:0;pointer-events:none;z-index:1;display:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(20,14,8,.32) 100%)}
+#vign.on{display:block}

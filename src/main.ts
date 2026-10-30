@@ -197,7 +197,8 @@ const handRig = new THREE.Group(); camera.add(handRig);
 const sleeve = mat(0x3a5a8a);
 const handSkin = mat(skin), cuffMat = mat(0x3a6fc0); cuffMat.visible = false;
 const fingerMeshes: THREE.Mesh[] = [];
-function applyGloves() { const g = gearOn('glove'); handSkin.color.set(g ? 0xe8e4d8 : skin); handSkin.roughness = g ? 1 : 0.85; cuffMat.visible = g; fingerMeshes.forEach(f => f.scale.set(g ? 1.25 : 1, g ? 1.2 : 1, g ? 1.05 : 1)); }
+function applyGloves() { const g = gearOn('glove'); handSkin.color.set(g ? 0xe8e4d8 : skin); handSkin.roughness = g ? 1 : 0.85; cuffMat.visible = g; fingerMeshes.forEach(f => f.scale.set(g ? 1.25 : 1, g ? 1.2 : 1, g ? 1.05 : 1)); applyGlasses(); }
+function applyGlasses() { const g = gearOn('glasses'); (seamMark.material as THREE.MeshBasicMaterial).color.set(g ? 0xc8803a : 0x7a4a1e); seamMark.scale.setScalar(g ? 1.35 : 1); seamGlow.scale.setScalar(g ? 1.3 : 1); document.getElementById('vign')?.classList.toggle('on', g && state === 'play'); }
 function makeHand(s: number) {
   const h = new THREE.Group();
   mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.7, 8), sleeve, [0, 0, 0.32], h).rotation.x = Math.PI / 2; // 長前臂延伸到畫面角落，兩手呈 A 字
@@ -225,7 +226,7 @@ const shellTop = mesh(halfGeo, shellTopMat, [0, 0.025, 0], oyster);
 const barnacles: THREE.Mesh[] = [];
 mesh(new THREE.CircleGeometry(0.075, 14), mat(0xeeeae4, { roughness: 0.35, metalness: 0.15 }), [0, 0.008, 0], oyster).scale.set(1.25, 0.9, 1); (oyster.children[oyster.children.length - 1] as THREE.Mesh).rotation.x = -Math.PI / 2;
 for (let i = 0; i < 6; i++) barnacles.push(mesh(new THREE.ConeGeometry(0.012, 0.02, 5), mat(0x6e6e70), [rnd(-0.08, 0.08), 0.045, rnd(-0.05, 0.05)], oyster));
-const seamMark = mesh(new THREE.BoxGeometry(0.042, 0.016, 0.016), new THREE.MeshBasicMaterial({ color: 0x3a2210 }), [0, 0.012, 0], oyster);
+const seamMark = mesh(new THREE.BoxGeometry(0.042, 0.016, 0.016), new THREE.MeshBasicMaterial({ color: 0x7a4a1e }), [0, 0.012, 0], oyster);
 const seamGlow = mesh(new THREE.BoxGeometry(0.062, 0.026, 0.026), new THREE.MeshBasicMaterial({ color: 0xffc878, transparent: true, opacity: 0, depthWrite: false }), [0, 0.012, 0], oyster);
 const shimmer = mesh(new THREE.SphereGeometry(0.11, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }), [0, 0, 0], oyster);
 const pearlMesh = mesh(new THREE.SphereGeometry(0.03, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.3 }), [0, 0.05, 0], oyster);
@@ -559,7 +560,8 @@ let nightShift = false, walkHintShown = false, saltNext = false;
 // 器具（手套、收音機）：買了可開關
 const GEAR = [
   { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
-  { id: 'radio', n: '📻 收音機', price: 300, good: '整工阿婆怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：沒有丟殼預警聲和 ⚠ 提示' }];
+  { id: 'radio', n: '📻 收音機', price: 300, good: '整工阿婆怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：沒有丟殼預警聲和 ⚠ 提示' },
+  { id: 'glasses', n: '👓 老花眼鏡', price: 200, good: '蚵仔縫更亮更粗、光暈更明顯', bad: '看遠有點霧：畫面邊緣微暗' }];
 function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '📻<i></i>' : `📻 ${on ? '開' : '關'}<span class="key"> (V)</span>`; b.title = on ? '收音機：開' : '收音機：關'; }
 function toggleRadio() { if (!save.shop.owned.includes('radio') || state !== 'play' || tut) return; save.gear = save.gear ?? {}; save.gear.radio = !gearOn('radio'); persist(); drawRadio(); toast(gearOn('radio') ? '📻 收音機打開：阿婆心情好，但聽不到丟殼預警' : '📻 收音機關掉：聽得到丟殼預警了', '#cfc3ff'); }
 const gearOn = (id: string) => save.shop.owned.includes(id) && save.gear?.[id] !== false;
@@ -984,7 +986,7 @@ function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.r
   return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">做工 ${save.days} 工・累積收入 $${save.money}・最佳 ${save.best} 粒<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美出手 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/掠 ${L.caught}・擲著阿婆 ${L.shellHits}・予人擲 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
 function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
-  if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
+  if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
   const all = [{ name: '你（阿婆）', count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const queen = all[0].me;
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
@@ -1225,7 +1227,7 @@ function frame() {
     if (phase === 'seam') {
       rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
       const e = Math.abs(seamErr()), d = DIFF[diff], close = clamp(1 - e / (tolNow() * 3), 0, 1);
-      (seamGlow.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.42;
+      (seamGlow.material as THREE.MeshBasicMaterial).opacity = gearOn('glasses') ? Math.min(0.85, 0.36 + 0.06 * Math.sin(performance.now() * 0.0042) + clamp(1 - e / (tolNow() * 4), 0, 1) * 0.45) : 0.24 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.4;
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
       knife.position.y = 0.03 + (e < tolNow() * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
     } else knife.position.y = 0.03;
@@ -1344,7 +1346,7 @@ function tutEnd(done: boolean) {
   tutHi.forEach(id => $(id).classList.remove('tutHi')); tutHi = []; document.body.classList.remove('tutOn'); on('tut', false);
   if (document.pointerLockElement) document.exitPointerLock();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); }
-  stopSteal(); state = 'menu'; renderLocs(); setPhase('busy'); oyster.visible = false; closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; $('medList').classList.remove('show'); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
+  stopSteal(); state = 'menu'; renderLocs(); setPhase('busy'); oyster.visible = false; closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
   if (done) toast('出師了！去剝蚵仔賺錢吧～', '#9be37a');
   renderDaily(); $('overlay').classList.add('show');
 }
