@@ -1425,12 +1425,13 @@ function grant(d: RedeemCodeDef) {
 
 // ---------- 💊 藥品（消耗品，一工內有效）----------
 type MedKey = 'green' | 'speed' | 'slip' | 'dmg' | 'regen' | 'grudge';
-type Med = { id: string; n: string; emo: string; price: number; dur: number; m?: Partial<Record<MedKey, number>>; luck?: number; good: string; bad: string };
+type Med = { id: string; n: string; emo: string; price: number; dur: number; m?: Partial<Record<MedKey, number>>; luck?: number; heal?: number; good: string; bad: string };
 const MEDS: Med[] = [
   { id: 'tonic', n: '阿伯提神補酒', emo: '🍾', price: 40, dur: 60, m: { green: 1.25, slip: 1.5 }, good: '綠區 +25%', bad: '手會抖，割手率 +50%' },
   { id: 'oil', n: '綠色風油精', emo: '🧴', price: 30, dur: 60, m: { speed: 0.75 }, luck: -1, good: '指針速度 -25%（比較穩）', bad: '薰到眼睛，幸運 -1' },
   { id: 'patch', n: '痠痛貼布', emo: '🩹', price: 25, dur: 90, m: { dmg: 0.5, regen: 3, speed: 1.1 }, good: '受到的傷害減半、手痛恢復 3 倍', bad: '手腕貼太緊，指針速度 +10%' },
   { id: 'soup', n: '轉運雞精', emo: '🍵', price: 80, dur: 60, m: { green: 0.85 }, luck: 2, good: '幸運 +2（較容易開到珍珠奇物）', bad: '補過頭有點暈，綠區 -15%' },
+  { id: 'okb', n: 'OK繃', emo: '🩹', price: 15, dur: 0, heal: 25, good: '立刻補 25 點手的體力', bad: '只是包起來，沒有持續效果' },
   { id: 'candy', n: '潤喉糖', emo: '🍬', price: 20, dur: 90, m: { grudge: 0.5, regen: 0.5 }, good: '跟阿婆有說有笑，怒氣增加減半', bad: '只顧講話，手痛恢復變慢一半' },
 ];
 const medT: Record<string, number> = {};
@@ -1446,11 +1447,11 @@ function drawMeds() {
 }
 function useMed(id: string) {
   const m = MEDS.find(x => x.id === id); if (!m || state !== 'play' || tut || !(save.meds[id] > 0)) return;
-  save.meds[id]--; persist(); medT[id] = (medT[id] ?? 0) + m.dur; track('use', { item: id }); toast(`${m.emo}使用${m.n}：${m.good}；${m.bad}（${m.dur} 秒）`, '#cfc3ff'); if (ac) SFX.pop(); drawMeds();
+  save.meds[id]--; persist(); if (m.heal) { hp = Math.min(100, hp + m.heal); updHud(); } if (m.dur) medT[id] = (medT[id] ?? 0) + m.dur; track('use', { item: id }); toast(`${m.emo}使用${m.n}：${m.good}；${m.bad}${m.dur ? `（${m.dur} 秒）` : ''}`, '#cfc3ff'); if (ac) SFX.pop(); drawMeds();
 }
 function renderMedList() {
   const L = $('medList'); const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0);
-  L.innerHTML = own.length ? own.map((m, i) => `<button data-use="${m.id}"><span class="key">${i + 1}. </span>${m.emo} ${m.n} ×${save.meds[m.id]}<small>${m.good}／${m.bad}・${m.dur} 秒${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「💊 藥品」買吧</p>';
+  L.innerHTML = own.length ? own.map((m, i) => `<button data-use="${m.id}"><span class="key">${i + 1}. </span>${m.emo} ${m.n} ×${save.meds[m.id]}<small>${m.good}／${m.bad}${m.dur ? `・${m.dur} 秒` : "・立即"}${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「💊 藥品」買吧</p>';
   L.querySelectorAll('button[data-use]').forEach(b => b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); useMed(b.getAttribute('data-use')!); renderMedList(); }));
 }
 {
@@ -1461,7 +1462,7 @@ function renderMedList() {
   drawMeds();
 }
 function renderMedShop() {
-  $('shopList').insertAdjacentHTML('beforeend', `<h3>💊 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「💊 藥品」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b></td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur}s</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < m.price ? 'disabled' : ''}>$${m.price}</button></td></tr>`).join('') + '</table>');
+  $('shopList').insertAdjacentHTML('beforeend', `<h3>💊 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「💊 藥品」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b></td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur ? `${m.dur}s` : "立即"}</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < m.price ? 'disabled' : ''}>$${m.price}</button></td></tr>`).join('') + '</table>');
   $('shopList').querySelectorAll('button[data-mbuy]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const m = MEDS.find(x => x.id === b.getAttribute('data-mbuy'))!; if (save.money < m.price) return;
     save.money -= m.price; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; persist(); track('buy', { item: 'med-' + m.id, price: m.price }); if (ac) SFX.jingle(); renderShop(); drawMeds();
