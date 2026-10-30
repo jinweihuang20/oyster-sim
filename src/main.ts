@@ -1034,8 +1034,8 @@ function stealTarget() { for (const n of npcs) { const p = n.bowl.clone().projec
 function startSteal() { if (state !== 'play' || umbHeld) return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n); }
 function stopSteal() { stealNpc = null; stealT = 0; on('prog', phase === 'twist' || phase === 'crab' || phase === 'scoop'); }
 function caughtBy(n: Npc) {
-  caught++; stopSteal(); const back = Math.min(count, 2); count -= back; n.count += back; meatPay = Math.max(0, meatPay - back * DPAY[1]); penalty += 5;
-  n.distract = 0; n.pause = 0; addGrudge(n, 20); anger(n, SCOLD_STEAL, 0.5); toast('被抓到了！-2 顆、罰 $5', '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
+  caught++; stopSteal(); penalty += 5;
+  n.distract = 0; n.pause = 0; addGrudge(n, 20); anger(n, SCOLD_STEAL, 0.5); toast('被抓到了！罰 $5', '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
 }
 function stealOne(n: Npc) {
   if (n.count <= 0) { toast('碗裡沒肉了'); stopSteal(); return; }
