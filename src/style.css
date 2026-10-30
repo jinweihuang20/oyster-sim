@@ -267,8 +267,12 @@ body.tutOn .ntag{display:none!important}
  #overlay button,#result button,#settings button,#fb button,#redeem button,#shop button,#dex button{margin:6px;padding:10px 18px}
  #settings .row{display:flex;align-items:center;justify-content:center;gap:12px;margin:14px 0}
  .locRow{gap:14px!important}.loc{padding:14px!important}.locHead{margin-bottom:12px}
- #shopList,#dexList{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-items:start}
- #dexList{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
- #shopList>h3,#shopList>h4,#shopList>p,#shopList>.tabs,#dexList>h3,#dexList>h4,#dexList>p,#dexList>.dexProg,#dexList>.dexBar{grid-column:1/-1}
+ #shopList table{width:100%;border-collapse:collapse}#shopList th{white-space:nowrap;padding:6px 8px}#shopList td{padding:8px}#shopList td:first-child{min-width:240px;white-space:normal;word-break:normal}
  #resBody{line-height:1.8}#fbText{min-height:140px}
 }
+/* 關閉鈕：固定在面板右上角（不分手機／電腦），底部重複的關閉鈕隱藏 */
+.ph{position:sticky;top:0;z-index:5;background:rgba(36,22,10,.98);padding-right:56px;padding-left:56px;border-bottom:1px solid rgba(217,149,43,.5)}
+.panel .px{display:block;position:absolute;right:6px;top:6px;bottom:auto;width:44px;height:44px;min-width:44px!important;min-height:44px!important;margin:0!important;padding:0;border-radius:50%;font-size:20px;background:#8a3a1a;color:#fff;cursor:pointer;transform:none}
+#shop .ph .px{top:6px}
+#shopClose,#dexClose,#setClose,#rdClose,#fbClose{display:none!important}
+@media (pointer:fine){.panel:has(.ph){padding-top:0}.ph{margin:0 -20px 12px;padding-top:10px;padding-bottom:8px}}
