@@ -4,6 +4,8 @@
 
 ## [▶ 馬上開玩](https://jinweihuang20.github.io/oyster-sim/)
 
+## [▶ STAT](https://game-status.gwtech.org/admin?game=oyster-sim/)
+
 手機、電腦都能玩，打開瀏覽器就上工。
 
 ---
