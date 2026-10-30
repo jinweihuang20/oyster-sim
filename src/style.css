@@ -172,3 +172,7 @@ body.tutOn #hint{display:none!important}
 .rb{display:inline-block;font-size:11px;padding:1px 6px;border-radius:8px;font-weight:700;margin:1px}
 .r-common{background:#555;color:#eee}.r-uncommon{background:#2a7a4a;color:#dfffe8}.r-rare{background:#2a5ab0;color:#e0ecff}.r-legend{background:#b07a10;color:#fff3c0}
 .dexProg{margin:6px 0 10px}.dexBar{height:10px;background:#333;border-radius:6px;overflow:hidden;margin:6px 0}.dexBar i{display:block;height:100%;background:linear-gradient(90deg,#9be37a,#f2c440)}
+.ntag{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;background:rgba(30,20,10,.65);color:#ffe9c0;border:1px solid rgba(255,220,160,.5);border-radius:10px;font-size:12px;padding:2px 8px;cursor:pointer;white-space:nowrap}
+body.tutOn .ntag{display:none!important}
+#npcTip{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);max-width:340px;width:90vw;z-index:60;display:none;font-size:14px;text-align:left}
+#npcTip.show{display:block}#npcTip ul{padding-left:18px;margin:6px 0}#npcTip li{margin:4px 0}
