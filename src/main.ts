@@ -1182,7 +1182,7 @@ const TUT: TutStep[] = [
   { id: 'steal', line: '偷偷跟你說：阿婆轉頭聊天的時候，可以偷她碗裡的肉…', pc: '看到阿婆在聊天，對準她的碗按住 E 偷（被看到她會生氣）', mb: '看到阿婆在聊天，對準她的碗按住「偷」（被看到她會生氣）', hi: ['stealBtn'], next: '知道了 ▶', done: () => steals > tut!.s0 },
   { id: 'shell', line: '撬出空殼，也可以丟向別人！', pc: '手上有空殼時，對準阿婆按 F 或右鍵丟過去', mb: '手上有空殼時，對準阿婆按「丟殼」丟過去', hi: ['throwBtn'], next: '知道了 ▶', done: () => thrown > tut!.t0 },
   { id: 'umb', line: '小心！阿婆要丟殼過來了！', pc: '看到 ⚠ 趕快按 R 打開雨傘擋', mb: '看到 ⚠ 趕快按「雨傘」擋', hi: ['umbBtn'], next: '知道了 ▶', done: () => umbT > 0, enter: () => later(1.2, () => { if (tut && TUT[tut.i].id === 'umb') windUp(npcs[0]); }) },
-  { id: 'stand', line: '坐太久腳會麻，起來走走，找別的位子。', pc: '按 G 站起來', mb: '按「🚶 站起來」按鈕', hi: ['standBtn'], next: '知道了 ▶', done: () => walking },
+  { id: 'stand', line: '坐太久腳會麻，起來走走，找別的位子。', pc: '按 G 換位置', mb: '按「🚶 換位置」按鈕', hi: ['standBtn'], next: '知道了 ▶', done: () => walking },
   { id: 'sit', line: '每個位子的好處都不一樣，看清楚再坐。', pc: '用 WASD 走到藍色板凳旁邊，按 E 坐下（或按下面的按鈕坐回原位）', mb: '用搖桿走到藍色板凳旁邊，按「坐落」坐下（或按下面的按鈕坐回原位）', hi: ['sitBtn'], next: '坐回去 ▶', done: () => !walking },
   { id: 'menu', line: '賺的錢可以去雜貨店買好刀、雨傘、碗；開到的珍珠會記在圖鑑裡。', pc: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面也有', mb: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面也有', hi: ['shopBtn', 'dexBtn', 'setBtn'], next: '下一步 ▶' },
   { id: 'daily', line: '還有，每天來上工，阿姨都發 $100 上工費給你！', pc: '在開始畫面按「💰 領今日上工費」，每天可以領一次', mb: '在開始畫面按「💰 領今日上工費」，每天可以領一次', next: '學會了！🎉' },
