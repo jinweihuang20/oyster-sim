@@ -809,7 +809,7 @@ const umbAge = () => umbLen - umbT;
 // ----- 4. 偷蚵仔 -----
 function stealTarget() { for (const n of npcs) { const p = n.bowl.clone().project(camera); if (p.z < 1 && Math.abs(p.x) < 0.3 && Math.abs(p.y) < 0.35) return n; } return null; }
 function startSteal() { if (state !== 'play') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n); }
-function stopSteal() { stealNpc = null; stealT = 0; }
+function stopSteal() { stealNpc = null; stealT = 0; on('prog', phase === 'twist' || phase === 'crab' || phase === 'scoop'); }
 function caughtBy(n: Npc) {
   caught++; stopSteal(); const back = Math.min(count, 2); count -= back; n.count += back; penalty += 20;
   n.distract = 0; n.pause = 0; addGrudge(n, 20); anger(n, SCOLD_STEAL, 0.5); toast('予人掠著矣！-2 粒、罰 $20', '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
