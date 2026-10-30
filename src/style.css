@@ -129,7 +129,7 @@ button{touch-action:manipulation}
 .mbtns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:10px 0}
 .mbtns button{min-height:48px;min-width:96px;font-size:16px}
 #result button{min-height:44px}
-#shop,#dex,#settings{z-index:40}
+#shop,#dex,#settings{z-index:40}#redeem{z-index:45;max-width:420px}#rdInput{display:block;width:100%;box-sizing:border-box;margin:10px 0;padding:12px;font-size:20px;letter-spacing:2px;text-align:center;border-radius:10px;border:2px solid #d9952b;background:#fff8e8;color:#3a2410}#rdMsg{min-height:24px;margin:6px 0 10px;font-size:15px}#rdMsg.ok{color:#9fffa0}#rdMsg.bad{color:#ff9a8a}#rdSubmit{min-height:48px;min-width:120px;font-size:18px;font-weight:700;background:linear-gradient(#5fd35a,#2e9a35);color:#fff}
 /* 手機面板：標題＋✕ 黏佇頂懸 */
 .px{display:none}
 @media (pointer:coarse){

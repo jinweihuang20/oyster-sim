@@ -1,3 +1,5 @@
+import { checkCode, REDEEM_MESSAGES } from './redeem';
+import type { RedeemCodeDef } from './redeemCodes';
 import * as THREE from 'three';
 
 // ---------- 基本設定 ----------
@@ -356,11 +358,11 @@ const dexN = () => save.dex.filter(x => x).length + save.odd.filter(x => x).leng
 const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'uncommon' : 'common';
 const OYSTER_PRICE = 3, CRACK_PRICE = 1;
 // ----- 存檔（有版本號；舊存檔會自動補欄位，壞去就用預設） -----
-const SAVE_V = 2;
+const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number };
-function defaultSave(): Save { return { v: SAVE_V, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} } }; }
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; redeemed: string[] };
+function defaultSave(): Save { return { v: SAVE_V, redeemed: [], dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} } }; }
 function loadSave(): Save {
   const d = defaultSave(); let raw: any = null;
   try { raw = JSON.parse(localStorage.getItem('oyster-sim') || 'null'); } catch { raw = null; }
@@ -376,6 +378,7 @@ function loadSave(): Save {
   if (typeof raw.seat === 'string') out.seat = raw.seat;
   if (typeof raw.bonusDay === 'string') out.bonusDay = raw.bonusDay;
   out.bonusN = num(raw.bonusN); out.tutDone = num(raw.tutDone);
+  if (Array.isArray(raw.redeemed)) out.redeemed = raw.redeemed.filter((x: any) => typeof x === 'string');
   return out;
 }
 const save: Save = loadSave();
@@ -982,6 +985,7 @@ const up = (e: PointerEvent) => { if (down && down.id === e.pointerId && walking
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
+  if ((e.target as HTMLElement)?.tagName === 'INPUT' && (e.target as HTMLInputElement).type === 'text') return;
   if (tut && e.code === 'Enter' && TUT[tut.i].next) { $('tutNext').click(); return; }
   if (state !== 'play') return; audio().resume();
   if (walking) { walkKeys.add(e.code); if (e.code === 'KeyE' && nearSeat) sitDown(nearSeat.id); return; }
@@ -1278,7 +1282,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 手機：面板頂懸浮標題＋✕
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -1299,4 +1303,39 @@ function npcTip(n: Npc) {
 <li><b>被丟的時候</b>：看到 ⚠ 就趕快開 ☂ 雨傘擋；連續擋下 3 次，阿婆們會暫時比較少丟。</li>
 <li><b>真的被盯上</b>：可以「🚶 換位置」，換到比較不容易被丟中的位子。</li></ul><p style="opacity:.7;font-size:12px">點這裡關閉</p>`;
   el.classList.add('show');
+}
+
+// ---------- 兌換碼 ----------
+function rewardText(d: RedeemCodeDef) {
+  const r = d.reward, p: string[] = [];
+  if (r.money) p.push(`$${r.money}`);
+  for (const id of r.items ?? []) { const it = [...KNIVES, ...UMBS].find(x => x.id === id) as { n: string } | undefined; p.push(it ? it.n : id); }
+  (r.pearls ?? []).forEach((n, i) => { if (n > 0 && RAR[i]) p.push(`${RAR[i].emo}${RAR[i].name}×${n}`); });
+  for (const [k, n] of Object.entries(r.odd ?? {})) { const o = ODD[+k]; if (o && n > 0) p.push(`${o.emo}${o.name}×${n}`); }
+  return p.join('、') || '（無）';
+}
+function grant(d: RedeemCodeDef) {
+  const r = d.reward;
+  if (r.money) save.money += Math.max(0, Math.floor(r.money));
+  for (const id of r.items ?? []) if (!save.shop.owned.includes(id)) save.shop.owned.push(id);
+  (r.pearls ?? []).forEach((n, i) => { if (i < save.dex.length) save.dex[i] += Math.max(0, Math.floor(n)); });
+  for (const [k, n] of Object.entries(r.odd ?? {})) if (+k < save.odd.length) save.odd[+k] += Math.max(0, Math.floor(n));
+  save.redeemed.push(d.id); persist();
+}
+{
+  const msg = $('rdMsg'), inp = $('rdInput') as HTMLInputElement, sub = $('rdSubmit') as HTMLButtonElement;
+  const open = () => { if (document.pointerLockElement) document.exitPointerLock(); msg.textContent = ''; msg.className = ''; inp.value = ''; $('redeem').classList.add('show'); setTimeout(() => inp.focus(), 50); };
+  $('oRedeem').onclick = open; $('setRedeem').onclick = open;
+  $('rdClose').onclick = () => { $('redeem').classList.remove('show'); inp.blur(); };
+  let busy = false;
+  const go = async () => {
+    if (busy) return; busy = true; sub.disabled = true;
+    try {
+      const res = await checkCode(inp.value, save.redeemed);
+      if (!res.ok) { msg.textContent = REDEEM_MESSAGES[res.reason]; msg.className = 'bad'; return; }
+      grant(res.def); msg.innerHTML = `🎉 兌換成功！${res.def.label ? `（${res.def.label}）` : ''}<br>獲得：${rewardText(res.def)}`; msg.className = 'ok'; inp.value = '';
+      track('redeem', { item: res.def.id }); if (ac) SFX.jingle(); try { renderDex(); } catch { }
+    } finally { busy = false; sub.disabled = false; }
+  };
+  sub.onclick = go; inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
 }
