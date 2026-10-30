@@ -140,7 +140,7 @@ function makeAma(top: number, hair: number) {
   return { g, body, head, armL: arm(-1), armR: arm(1) };
 }
 type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: number; peek: boolean; count: number; pause: number; look: number; bubble: HTMLDivElement; bubT: number; lean: number;
-  cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; gAt?: number; tag: HTMLButtonElement; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[] };
+  cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; w0?: number; warned?: boolean; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; gAt?: number; tag: HTMLButtonElement; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[] };
 const npcs: Npc[] = [];
 // 阿婆每粒秒數 = rate × 難度倍率（易 0.75／普通 1／硬 1.3／超硬 1.6）
 const NPC_DIFF_T = [0.75, 1, 1.3, 1.6];
@@ -600,7 +600,7 @@ let nightShift = false, walkHintShown = false, saltNext = false;
 // 器具（手套、收音機）：買了可開關
 const GEAR = [
   { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
-  { id: 'radio', n: '📻 收音機', price: 300, good: '整工阿婆怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：沒有丟殼預警聲和 ⚠ 提示' },
+  { id: 'radio', n: '📻 收音機', price: 300, good: '阿婆氣消得快：怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：丟殼預警變晚（⚠ 和提示聲晚一半才出現）' },
   { id: 'glasses', n: '👓 老花眼鏡', price: 200, good: '蚵仔縫更亮更粗、光暈更大；插刀判定範圍 +25%', bad: '看遠有點霧：畫面邊緣微暗' }];
 function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '📻<i></i>' : `📻 ${on ? '開' : '關'}<span class="key"> (V)</span>`; b.title = on ? '收音機：開' : '收音機：關'; }
 function toggleRadio() { if (!save.shop.owned.includes('radio') || state !== 'play' || tut) return; save.gear = save.gear ?? {}; save.gear.radio = !gearOn('radio'); persist(); drawRadio(); toast(gearOn('radio') ? '📻 收音機打開：阿婆心情好，但聽不到丟殼預警' : '📻 收音機關掉：聽得到丟殼預警了', '#cfc3ff'); }
@@ -972,7 +972,9 @@ function throwShell() {
   setPhase('busy'); later(0.6, goPick);
 }
 // ----- 7. 阿婆擲殼仔 + 雨傘 -----
-function windUp(n: Npc) { if (n.windup > 0 || state !== 'play' || stunned(n)) return; n.windup = Math.max(0.45, 1.0 - (n.grudge ?? 0) * 0.005); n.look = 1.6; if (!gearOn('radio')) SFX.alert(); }
+function windUp(n: Npc) { if (n.windup > 0 || state !== 'play' || stunned(n)) return; n.windup = Math.max(0.45, 1.0 - (n.grudge ?? 0) * 0.005); n.w0 = n.windup; n.warned = !gearOn('radio'); n.look = 1.6; if (n.warned) SFX.alert(); }
+// 收音機開著：預警變晚（剩一半時間才出現，至少 0.5 秒）
+const warnLead = (n: Npc) => Math.min(n.w0 ?? n.windup, Math.max(0.5, (n.w0 ?? n.windup) * 0.5));
 function npcThrow(n: Npc) {
   if (stunned(n)) return;
   const shots = (n.grudge ?? 0) >= 90 ? 3 : 1;
@@ -1257,7 +1259,14 @@ addEventListener('resize', resize); resize();
 const clock = new THREE.Clock(); const v = new THREE.Vector3();
 let chatTimer = 2;
 const warnEl = $('warn');
+let pauseAt = 0;
+const isPaused = () => state === 'play' && (document.hidden || !!document.querySelector('.panel.show') || $('medList').classList.contains('show') || !!document.getElementById('npcTip')?.classList.contains('show'));
 function frame() {
+  if (isPaused()) {
+    clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); $('pauseTag').classList.add('on'); }
+    renderer.render(scene, camera); requestAnimationFrame(frame); return;
+  }
+  if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
   const rdt = Math.min(clock.getDelta(), 0.05);
   slowmo = Math.max(0, slowmo - rdt); const dt = rdt * (slowmo > 0.4 ? 0.3 : 1), t = clock.elapsedTime;
   for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= rdt; if (timers[i].t <= 0) { const f = timers[i].f; timers.splice(i, 1); f(); } }
@@ -1302,13 +1311,13 @@ function frame() {
       npcShuck(n, dt, t);
       n.grudge = Math.max(0, (n.grudge ?? 0) - (walking ? (performance.now() - (n.gAt ?? 0) > 2000 ? dt * 7.5 : 0) : performance.now() - (n.gAt ?? 0) > 8000 ? dt * 2.5 : 0)); n.calm = Math.max(0, (n.calm ?? 0) - dt); grudgeUI(n);
       n.throwCd -= dt * seatNow().throwM * locNow().thr * (n.calm! > 0 ? 0.3 : (1 + n.grudge! / 25) * (n.mood > 0 ? 2 : 1)); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); if (!tut) windUp(n); }
-      if (n.windup > 0) { warnNpc = n; n.windup -= rdt; if (n.windup <= 0) npcThrow(n); }
+      if (n.windup > 0) { warnNpc = n; n.windup -= rdt; if (!n.warned && n.windup <= warnLead(n)) { n.warned = true; SFX.alert(); } if (n.windup <= 0) npcThrow(n); }
       if (n.peek && n.look <= 0 && n.distract <= 0 && Math.random() < dt * 0.05) { n.look = 2.5; say(n, pick(PEEK), 2.5); }
     }
     updHud();
   }
   // ⚠ 方向提示
-  if (warnNpc && gearOn('radio')) warnNpc = null;
+  if (warnNpc && !warnNpc.warned) warnNpc = null;
   if (warnNpc) { const rel = warnNpc.g.position.clone().sub(camera.position); const fwd = camera.getWorldDirection(new THREE.Vector3()); let a = Math.atan2(rel.x, rel.z) - Math.atan2(fwd.x, fwd.z); a = Math.atan2(Math.sin(a), Math.cos(a));
     warnEl.classList.add('on'); warnEl.style.left = `${clamp(50 - a / 1.2 * 45, 6, 94)}%`; warnEl.style.opacity = String(0.6 + 0.4 * Math.sin(t * 14)); warnEl.textContent = a > 0.5 ? '⚠◀' : a < -0.5 ? '▶⚠' : '⚠'; hint.textContent = `${warnNpc.name}要丟殼過來了！快按 R／「雨傘」！`; }
   else warnEl.classList.remove('on');

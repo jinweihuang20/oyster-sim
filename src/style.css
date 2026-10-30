@@ -257,3 +257,4 @@ body.tutOn .ntag{display:none!important}
 .scrollHint b{display:block;animation:shb 1.6s ease-in-out infinite}
 .scrollHint.on span{pointer-events:auto;cursor:pointer}
 @keyframes shb{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+#pauseTag{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 8px);transform:translateX(-50%);z-index:200;pointer-events:none;display:none;background:rgba(0,0,0,.55);color:#fff;font-size:13px;padding:3px 12px;border-radius:12px}#pauseTag.on{display:block}
