@@ -231,3 +231,4 @@ body.tutOn .ntag{display:none!important}
 .dexN{display:inline-block;background:#d9952b;color:#2a1600;border-radius:10px;padding:0 7px;font-size:13px;font-weight:800}
 #locPick{display:flex;flex-direction:column;gap:6px;margin:8px auto;max-width:420px;text-align:left}#locPick .loc{background:rgba(120,60,40,.85);color:#fff;text-align:left;font-size:15px;padding:8px 12px;line-height:1.3}#locPick .loc.cur{background:#d9952b;color:#2a1600}#locPick .loc.locked{opacity:.75}#locPick .loc:disabled{opacity:.45}#locPick small{font-weight:400;font-size:12px}
 #back-toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 90px);transform:translateX(-50%);background:rgba(20,12,6,.92);color:#ffe080;padding:10px 16px;border-radius:14px;font-size:15px;z-index:99;pointer-events:none}#back-toast.hidden{display:none}
+#quitBtn{background:#5a5a66!important}
