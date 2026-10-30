@@ -476,7 +476,7 @@ const HINTS: Record<Phase, string> = {
   pick: COARSE ? '看家己的紅面盆，點一粒蚵仔（或點家己的手）提起來（細粒較好撬，烏閣粗的較硬）' : '看家己的紅面盆，點一粒蚵仔（或按 Space）提起來（細粒較好撬，烏閣粗的較硬）',
   scoop: '撈蚵仔中…',
   seam: COARSE ? '按牢 ◀ ▶ 或拖蚵仔來轉，揣殼縫；縫對著刀尖時點一下蚵仔插刀（拖別位是看四周）' : '滾輪／A D 轉蚵仔揣殼縫，縫對著刀尖時點一下（或 Space）插刀',
-  twist: COARSE ? '看指針！行到綠區就點一下螢幕撬一下；紅區傷大力會碎殼' : '看指針！行到綠區就點一下（Space／滑鼠）撬一下；紅區傷大力會碎殼',
+  twist: COARSE ? '看指針來回擺動，走到綠區時點一下螢幕撬一下；撬夠次數殼就打開。點在紅區太用力會把殼弄碎' : '看指針來回擺動，走到綠區時點一下滑鼠（或按 Space）撬一下；撬夠次數殼就打開。點在紅區太用力會把殼弄碎',
   aim: COARSE ? '拖畫面轉頭對準藍色碗，按牢螢幕蓄力，藍色區間放開投肉！' : '滑鼠轉頭對準藍色碗，按牢（滑鼠／Space）蓄力，藍色區間放開投肉！',
   empty: COARSE ? '空殼仔：按「丟殼」對準阿婆擲過去，或者等一下自動擲掉' : '空殼仔：F／右鍵對準阿婆擲過去，或者等一下自動擲掉',
   crab: COARSE ? '螃蟹夾手矣！緊狂點螢幕共甩掉！' : '螃蟹夾手矣！緊連點（滑鼠／Space）共甩掉！',
@@ -494,7 +494,7 @@ function setPhase(p: Phase) {
   if (p === 'twist') { zone.style.left = `${d.lo * 100}%`; zone.style.width = `${(d.hi - d.lo) * 100}%`; progress = 0; strokeDir = 0; strokeLen = 0; strokePeak = 0; }
   if (p === 'seam' || p === 'twist') updDiff();
 }
-function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・愛撬 ${pryNeed()} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
+function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・要撬 ${pryNeed()} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
 function goPick() { if (state !== 'play' || walking) return; oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = '面盆空矣！轉頭看中央的蚵殼山，點一下撈一把'; }
 function holdOyster(dd: number) {
   if (state !== 'play' || walking) return;
@@ -728,13 +728,13 @@ function pry(ms = performance.now()) {
   const need = pryNeed();
   if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('傷大力，殼碎去矣！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
   else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; combo++; if (combo > dayCombo) dayCombo = combo; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！手路真好！' : '好！閣一下'; }
-  else { combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 無著'); hint.textContent = '無著時機，等指針行到綠區'; tension = 0.3; return; }
+  else { combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 無著'); hint.textContent = '時機不對，等指針走到綠區再點'; tension = 0.3; return; }
   shellTop.rotation.z = -progress * 0.4;
   if (progress >= 0.999) openOyster();
 }
 function halfTwist(peak: number) {
   const d = DIFF[diff];
-  if (peak < d.lo) { hint.textContent = '無夠力，閣較出力扭！'; return; }
+  if (peak < d.lo) { hint.textContent = '力氣不夠，再用力一點！'; return; }
   progress += 1 / d.need; SFX.creak();
   if (peak > d.hi && !crackedNow) { crackedNow = true; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('殼碎去矣！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); }
   else hint.textContent = HINTS.twist;
@@ -746,7 +746,7 @@ function keyTwist(k: string) { if (swipePhase()) return;
   if (k === lastKey) return; lastKey = k;
   const t = Math.min(1.2, 220 / Math.max(80, dt)); tension = Math.max(tension, t);
   if (phase === 'crab') { crabShakes++; tone(600 + crabShakes * 40, 0.05, 0.1); if (crabShakes >= 6) crabOff(); return; }
-  if (phase === 'twist' && dt < 1500) halfTwist(t); else if (phase === 'twist') hint.textContent = '閣較緊扭！';
+  if (phase === 'twist' && dt < 1500) halfTwist(t); else if (phase === 'twist') hint.textContent = '再快一點！';
 }
 let meatsLeft = 1, dayMulti2 = 0, dayMulti3 = 0; const extraMeat: THREE.Object3D[] = [];
 function showExtra() {
@@ -755,7 +755,7 @@ function showExtra() {
 }
 function openOyster() {
   { const l = luckNow(), r = Math.random(); meatsLeft = tut ? 1 : r < 0.02 + 0.0025 * l ? 3 : r < 0.10 + 0.0075 * l ? 2 : 1; showExtra();
-    if (meatsLeft > 1) { if (meatsLeft === 3) dayMulti3++; else dayMulti2++; later(0.3, () => { toast(meatsLeft === 3 ? '三仁！一粒三塊肉！' : '雙仁！一粒兩塊肉！', '#ffd76a'); tone(880, 0.12, 0.15, 'triangle'); tone(1320, 0.18, 0.12, 'triangle', 0.1); if (meatsLeft === 3) tone(1760, 0.22, 0.12, 'triangle', 0.2); }); } }
+    if (meatsLeft > 1) { if (meatsLeft === 3) dayMulti3++; else dayMulti2++; later(0.3, () => { toast(meatsLeft === 3 ? '三仁！一顆有三塊肉！' : '雙仁！一顆有兩塊肉！', '#ffd76a'); tone(880, 0.12, 0.15, 'triangle'); tone(1320, 0.18, 0.12, 'triangle', 0.1); if (meatsLeft === 3) tone(1760, 0.22, 0.12, 'triangle', 0.2); }); } }
   crackSound(); shake = 0.25; opened++; setPhase('busy'); seamMark.visible = false;
   if (crackedNow) cracked++;
   shellTop.visible = false;
@@ -810,7 +810,7 @@ function shoot(power: number) {
     else { missed++; if (bounced) { SFX.plop(); later(0.05, () => toast('彈出來矣！', '#ff8a7a')); } m.material = splatMat; m.scale.set(1.5, 0.25, 1.5); splats.push(m); if (splats.length > 30) scene.remove(splats.shift()!); SFX.splat(); toast('無入！', '#ff8a7a'); nag(NAG_MISS); }
     updHud();
   });
-  later(0.35, () => { if (meatsLeft > 1 && state === 'play') { meatsLeft--; showExtra(); meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); hint.textContent = `閣有 ${meatsLeft} 塊肉！繼續投入碗`; } else { meatsLeft = 1; showExtra(); emptyT = 2.2; setPhase('empty'); } });
+  later(0.35, () => { if (meatsLeft > 1 && state === 'play') { meatsLeft--; showExtra(); meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); hint.textContent = `還有 ${meatsLeft} 塊肉！繼續丟進碗裡`; } else { meatsLeft = 1; showExtra(); emptyT = 2.2; setPhase('empty'); } });
 }
 function discardShell() { if (phase !== 'empty') return; oyster.visible = false; const sh = new THREE.Mesh(halfGeo, shellBotMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.5, () => scene.remove(sh)); setPhase('busy'); later(0.5, goPick); }
 function meatOnHead(n: Npc, m: THREE.Mesh) {
@@ -871,7 +871,7 @@ function throwOne(n: Npc) {
 function hitInHand() {
   if (phase === 'twist' || phase === 'seam') {
     if (Math.random() < 0.5) { lost++; abandoned++; const sh = new THREE.Mesh(shellGeo, shellTopMat); oyster.visible = false; const a = worldOf(oyster); fly(sh, a, a.clone().setY(0.02).add(new THREE.Vector3(rnd(-0.3, 0.3), 0, -0.3)), 0.5, 0.2, () => later(3, () => scene.remove(sh))); toast('蚵仔落落去塗跤矣！', '#ff9a8a'); progress = 0; shellTop.rotation.z = 0; setPhase('busy'); later(0.8, goPick); }
-    else if (phase === 'twist') { progress = 0; shellTop.rotation.z = 0; combo = 0; toast('撬一半閣合倒轉去矣…', '#ff9a8a'); }
+    else if (phase === 'twist') { progress = 0; shellTop.rotation.z = 0; combo = 0; toast('撬到一半，殼又合回去了…', '#ff9a8a'); }
   }
 }
 function openUmbrella() { if (state !== 'play' || umbCd > 0) return; const u = umbNow(); umbT = umbLen = u.open + u.dur; umbCd = u.cd; umb.visible = true; SFX.pop(); }
