@@ -1,3 +1,4 @@
+import { initUpdate } from './update';
 import { postDiscordFeedback } from './discord';
 import { installBackGuard } from './backguard';
 import { checkCode, REDEEM_MESSAGES } from './redeem';
@@ -1966,3 +1967,5 @@ function hgEnd() { const b = document.getElementById('hg'); if (b) b.classList.r
 function hgMaybe() { if ((save.days || 0) >= 1 || LS.getItem('oyster-homeguide')) { return; } if ($('overlay').classList.contains('show')) setTimeout(hgShow, 600); }
 $('hgReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play') { toast('收工回到主畫面後再看導覽喔', '#ffcf8a'); return; } $('overlay').classList.add('show'); setTimeout(hgShow, 400); };
 hgMaybe();
+
+initUpdate(() => state !== 'play' && !document.querySelector('.panel.show:not(#overlay):not(.overlay)'));
