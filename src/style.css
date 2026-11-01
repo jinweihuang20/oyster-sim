@@ -461,3 +461,21 @@ body.tutOn #feed{display:none!important}
 #hgCall b{background:#b8352a;color:#fff4dc;padding:1px 8px;margin-right:6px}.hgN{float:right;font-size:13px;color:#6a5a48}
 .hgB{display:flex;justify-content:flex-end;gap:10px;margin-top:10px}.hgB button{min-height:44px;min-width:84px;border:2px solid #1b2a3a;border-radius:0;font-size:16px;box-shadow:3px 3px 0 #1b2a3a}
 #hgNext{background:#2f5d8a;color:#fff4dc}#hgSkip{background:#e9dcc0;color:#2a1c10}
+/* 設定面板重排（覆蓋上方所有舊規則） */
+#settings.panel{padding:0!important;box-sizing:border-box;text-align:left}
+#settings.panel .ph{position:sticky;top:0!important;margin:0!important;padding:10px 56px!important;border-radius:0;z-index:5}
+#settings.panel .ph h2{margin:0!important;font-size:20px;line-height:1.4}
+#settings.panel .ph .px{top:50%!important;bottom:auto!important;right:8px;transform:translateY(-50%)!important}
+#settings .setBody{padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:0}
+#settings .setBody label.row{display:grid!important;grid-template-columns:1fr 58%;align-items:center;column-gap:12px;width:auto!important;min-height:44px!important;margin:0!important;padding:4px 0!important;font-size:15px!important;box-sizing:border-box}
+#settings .setBody label.row:first-child{padding-top:0!important}
+#settings .rl{text-align:left}
+#settings .setBody label.row input[type=text],#settings .setBody label.row input[type=range]{width:100%!important;box-sizing:border-box;margin:0;min-width:0;justify-self:stretch}
+#settings .setBody input#myName{padding:6px 8px!important;font-size:16px;height:40px}
+#settings .setBody label.row input[type=checkbox]{justify-self:end;width:26px;height:26px;margin:0}
+#settings .setSec{margin:16px 0 8px;font-weight:900;font-size:13px;letter-spacing:.1em;color:var(--iron);text-align:left}
+#settings .setGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 6px 6px 0}
+#settings .setGrid>*:last-child:nth-child(odd){grid-column:1/-1}
+#settings .setGrid>button,#settings .setGrid>a,#settings #resetSave{display:flex;align-items:center;justify-content:center;gap:.35em;width:100%;min-width:0!important;height:48px;min-height:48px!important;margin:0!important;padding:0 8px!important;box-sizing:border-box;font-size:15px!important;text-decoration:none;white-space:nowrap}
+#settings .setDiv{border:0;border-top:2px dashed rgba(22,25,29,.35);margin:16px 0}
+#settings #resetSave{width:calc(100% - 6px)}

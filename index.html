@@ -25,19 +25,26 @@
  <p id="nightNote" style="color:#b8c8ff;font-weight:700"><i class="ic ic-moon"></i> 夜班加成 +20%（晚上 8 點到早上 5 點上工，收入多兩成）</p></div>
 <div id="dex" class="panel"><h2>珍珠圖鑑</h2><div id="dexList"></div><button id="dexClose">關閉</button></div>
 <div id="settings" class="panel"><h2>設定</h2>
- <label class="row">你的名字 <input id="myName" type="text" maxlength="8" enterkeyhint="done" autocomplete="off" placeholder="剝蚵人" style="width:9em;font-size:16px"></label>
- <label class="row">總音量 <input id="v_master" type="range" min="0" max="1" step="0.05"></label>
- <label class="row">音樂 <input id="v_music" type="range" min="0" max="1" step="0.05"></label>
- <label class="row">環境音（海港） <input id="v_amb" type="range" min="0" max="1" step="0.05"></label>
- <label class="row">音效 <input id="v_sfx" type="range" min="0" max="1" step="0.05"></label>
- <label class="row">視角靈敏度 <input id="v_sens" type="range" min="0.3" max="3" step="0.1"></label>
- <label class="row">反轉左右 <input id="v_invX" type="checkbox"></label>
- <label class="row">反轉上下 <input id="v_invY" type="checkbox"></label>
- <label class="row">血腥效果 <input id="v_gore" type="checkbox"></label>
- <label class="row">傳送匿名統計 <input id="v_stats" type="checkbox"></label>
- <label class="row">全服消息跑馬燈 <input id="v_feed" type="checkbox"></label>
- <label class="row">全部靜音 <input id="v_mute" type="checkbox"></label>
- <button id="setRedeem"><i class="ic ic-gift"></i> 兌換碼</button> <button id="setFb"><i class="ic ic-chat"></i> 意見回饋</button> <a id="discordSet" href="https://discord.gg/45EZEXyGG4" target="_blank" rel="noopener" class="dcBtn"><i class="ic ic-discord"></i> 加入 Discord</a> <button id="tutReplay"><i class="ic ic-tut"></i> 重看教學</button> <button id="hgReplay"><i class="ic ic-pin"></i> 主畫面導覽</button> <button id="resetSave" class="danger">重置存檔</button> <button id="setClose">關閉</button></div>
+<div class="setBody">
+ <label class="row"><span class="rl">你的名字</span><input id="myName" type="text" maxlength="8" enterkeyhint="done" autocomplete="off" placeholder="剝蚵人"></label>
+ <label class="row"><span class="rl">總音量</span><input id="v_master" type="range" min="0" max="1" step="0.05"></label>
+ <label class="row"><span class="rl">音樂</span><input id="v_music" type="range" min="0" max="1" step="0.05"></label>
+ <label class="row"><span class="rl">環境音（海港）</span><input id="v_amb" type="range" min="0" max="1" step="0.05"></label>
+ <label class="row"><span class="rl">音效</span><input id="v_sfx" type="range" min="0" max="1" step="0.05"></label>
+ <label class="row"><span class="rl">視角靈敏度</span><input id="v_sens" type="range" min="0.3" max="3" step="0.1"></label>
+ <label class="row"><span class="rl">反轉左右</span><input id="v_invX" type="checkbox"></label>
+ <label class="row"><span class="rl">反轉上下</span><input id="v_invY" type="checkbox"></label>
+ <label class="row"><span class="rl">血腥效果</span><input id="v_gore" type="checkbox"></label>
+ <label class="row"><span class="rl">傳送匿名統計</span><input id="v_stats" type="checkbox"></label>
+ <label class="row"><span class="rl">全服消息跑馬燈</span><input id="v_feed" type="checkbox"></label>
+ <label class="row"><span class="rl">全部靜音</span><input id="v_mute" type="checkbox"></label>
+ <div class="setSec">幫助</div>
+ <div class="setGrid"><button id="tutReplay"><i class="ic ic-tut"></i> 重看教學</button><button id="hgReplay"><i class="ic ic-pin"></i> 主畫面導覽</button></div>
+ <div class="setSec">社群</div>
+ <div class="setGrid"><button id="setRedeem"><i class="ic ic-gift"></i> 兌換碼</button><button id="setFb"><i class="ic ic-chat"></i> 意見回饋</button><a id="discordSet" href="https://discord.gg/45EZEXyGG4" target="_blank" rel="noopener" class="dcBtn"><i class="ic ic-discord"></i> 加入 Discord</a></div>
+ <hr class="setDiv">
+ <button id="resetSave" class="danger">重置存檔</button> <button id="setClose">關閉</button>
+</div></div>
 <div id="fb" class="panel"><h2><i class="ic ic-chat"></i> 意見回饋</h2>
  <div id="fbForm"><p class="fbLead">遇到問題或有想法？寫在招牌上，阿婆幫你轉給做遊戲的人。</p>
  <div class="fbStep">1. 今天剝得心情如何？<small>（選填）</small></div>
