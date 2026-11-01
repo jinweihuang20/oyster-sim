@@ -453,3 +453,11 @@ body.tutOn #feed{display:none!important}
 #overlay #daily{display:block!important;visibility:visible!important;opacity:1!important;width:100%;max-width:420px;margin:6px auto;min-height:48px;padding:6px 10px;font-size:16px;color:var(--ink);background:#e4b13a var(--grain);border:3px dashed var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink)}
 #overlay #daily.done{background:#c9c4b8;color:#4a4f55;border-style:solid;box-shadow:none;opacity:1!important}
 @media (max-width:500px){#overlay #daily{min-height:44px;font-size:14px;padding:4px 8px}#overlay #daily small{font-size:11px}}
+
+/* 主畫面導覽 */
+#hg{position:fixed;inset:0;z-index:90;display:none;touch-action:none}#hg.show{display:block}
+#hgHole{position:fixed;border:3px solid #f2b705;box-shadow:0 0 0 9999px rgba(10,18,28,.72),4px 4px 0 #0008;transition:all .25s;pointer-events:none}
+#hgCall{position:fixed;left:12px;right:12px;max-width:420px;margin:0 auto;background:#fff4dc;color:#2a1c10;border:3px solid #1b2a3a;box-shadow:5px 5px 0 #1b2a3a;padding:12px 14px;font-size:16px;line-height:1.5}
+#hgCall b{background:#b8352a;color:#fff4dc;padding:1px 8px;margin-right:6px}.hgN{float:right;font-size:13px;color:#6a5a48}
+.hgB{display:flex;justify-content:flex-end;gap:10px;margin-top:10px}.hgB button{min-height:44px;min-width:84px;border:2px solid #1b2a3a;border-radius:0;font-size:16px;box-shadow:3px 3px 0 #1b2a3a}
+#hgNext{background:#2f5d8a;color:#fff4dc}#hgSkip{background:#e9dcc0;color:#2a1c10}

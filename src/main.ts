@@ -1917,3 +1917,41 @@ installBackGuard(() => {
   if (state === 'play') { toast('上工中按返回不會離開；要收工請按「🏃 翹班」或等時間到', '#ffcf8a'); return 'handled'; }
   return 'confirm-exit';
 }, () => state === 'play');
+
+// ── 主畫面導覽（新玩家第一次看到主畫面時；阿婆逐一介紹按鈕）──
+const HG: [string, string][] = [
+  ['daily', '每天先來這裡領上工費，有錢才好買工具喔。'],
+  ['start', '準備好了就按這裡開始剝蚵。'],
+  ['oShop', '雜貨店可以買刀子、手套跟各種好用的東西。'],
+  ['oDex', '剝到的珍珠和稀奇東西，都會記在圖鑑裡。'],
+  ['oRank', '排行榜看看今天誰最會剝，也可以幫人按讚。'],
+  ['oRedeem', '拿到兌換碼就在這裡輸入，有好禮可以領。'],
+  ['discordStart', '來蚵寮群組聊天，兌換碼常常在那裡公布。'],
+  ['oSet', '音量、名字跟重看教學，都在設定裡。'],
+  ['locPick', '這裡可以換漁港，剝得越多，能去的地方越多。'],
+];
+let hgI = -1;
+function hgShow() {
+  const steps = HG.filter(([id]) => { const e = document.getElementById(id); return e && e.offsetParent; });
+  let box = document.getElementById('hg'); if (!box) { box = document.createElement('div'); box.id = 'hg'; box.innerHTML = '<div id="hgHole"></div><div id="hgCall"><div id="hgTxt"></div><div class="hgB"><button id="hgSkip">略過</button><button id="hgNext">下一步</button></div></div>'; document.body.appendChild(box);
+    let downOk = false; const t0 = () => Number(box!.dataset.t || 0);
+    box.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); downOk = performance.now() - t0() > 350; });
+    box.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); });
+    box.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); if (!downOk) return; downOk = false;
+      if ((e.target as HTMLElement).closest('#hgSkip')) hgEnd(); else hgStep(hgI + 1, steps2()); });
+  }
+  const steps2 = () => steps; (box as any)._s = steps; hgStep(0, steps);
+}
+function hgStep(i: number, steps: [string, string][]) {
+  const box = $('hg'); if (i >= steps.length) { hgEnd(); return; } hgI = i; box.dataset.t = String(performance.now()); box.classList.add('show');
+  const el = $(steps[i][0]); el.scrollIntoView({ block: 'center' });
+  requestAnimationFrame(() => { const r = el.getBoundingClientRect(), H = innerHeight, p = 6; const hole = $('hgHole');
+    Object.assign(hole.style, { left: r.left - p + 'px', top: r.top - p + 'px', width: r.width + p * 2 + 'px', height: Math.min(r.height, H * 0.4) + p * 2 + 'px' });
+    $('hgTxt').innerHTML = '<b>阿婆</b><span class="hgN">' + (i + 1) + '/' + steps.length + '</span><br>' + steps[i][1];
+    $('hgNext').textContent = i === steps.length - 1 ? '知道了' : '下一步';
+    const c = $('hgCall'); const below = r.top + r.height / 2 < H / 2; c.style.top = below ? Math.min(r.bottom + 16, H - 170) + 'px' : ''; c.style.bottom = below ? '' : Math.min(H - r.top + 16, H - 170) + 'px'; });
+}
+function hgEnd() { const b = document.getElementById('hg'); if (b) b.classList.remove('show'); hgI = -1; inputGuard(); try { LS.setItem('oyster-homeguide', '1'); } catch { } }
+function hgMaybe() { if ((save.days || 0) >= 1 || LS.getItem('oyster-homeguide')) { return; } if ($('overlay').classList.contains('show')) setTimeout(hgShow, 600); }
+$('hgReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play') { toast('收工回到主畫面後再看導覽喔', '#ffcf8a'); return; } $('overlay').classList.add('show'); setTimeout(hgShow, 400); };
+hgMaybe();
