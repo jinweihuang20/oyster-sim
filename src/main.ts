@@ -1961,14 +1961,25 @@ function eqSvg(e: Eq, w = 72) {
     body: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
     legs: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
     feet: `<path d="M10 40q0-14 16-14h14q16 4 22 14v6H10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>` };
-  return `<svg class="slv" viewBox="0 0 72 60" width="${w}" height="${w * 60 / 72}">${P[e.slot]}</svg>`;
+  const ID: Record<string, string> = {
+    hd_basic: `<path d="M14 40Q36 8 58 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M56 36l10 10-4 4-8-8" fill="${f}" stroke="${s}" stroke-width="2.5"/><circle cx="28" cy="30" r="2.5" fill="#fff3c8"/><circle cx="42" cy="26" r="2.5" fill="#fff3c8"/>`,
+    hd_hat: `<path d="M4 44L36 10L68 44Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 36H52M28 26H44" stroke="${s}" stroke-width="1.5"/>`,
+    hd_fisher: `<path d="M20 36V20Q36 10 52 20V36Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M8 44L20 36H52L64 44Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
+    hd_helmet: `<path d="M14 40Q14 12 36 12Q58 12 58 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M8 40H64V46H8Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M36 12V40" stroke="${s}" stroke-width="2"/>`,
+    hd_crown: `<path d="M10 46L14 18L26 32L36 12L46 32L58 18L62 46Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="36" cy="38" r="4" fill="#c82a2a" stroke="${s}" stroke-width="1.5"/>`,
+    bd_vest: `<path d="M22 10L14 20v36h16V22l6 6 6-6v34h16V20L50 10l-8 8h-12Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
+    bd_rain: `<path d="M24 8L8 22l6 8 6-4v32h32V26l6 4 6-8L48 8l-12 10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M36 18V58" stroke="${s}" stroke-width="2"/>`,
+    ft_boots: `<path d="M18 8h18v28q16 2 22 10v6H18Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
+    ft_work: `<path d="M16 18h20v14q18 2 22 12v8H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 24h10M22 30h10" stroke="#e8d8a8" stroke-width="2"/>`,
+    lg_flower: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="26" cy="22" r="3" fill="#fff3c8"/><circle cx="46" cy="36" r="3" fill="#fff3c8"/>` };
+  return `<svg class="slv" viewBox="0 0 72 60" width="${w}" height="${w * 60 / 72}">${ID[e.id] ?? P[e.slot]}</svg>`;
 }
 // 全身人形（裝備面板與分享卡共用的配色）
 function figSvg() {
   const c = (s: Slot) => equipNow(s).base, k = '#1b1b1b';
-  return `<svg viewBox="0 0 160 300" class="eqFig"><path d="M48 92h64l14 70-12 4-8-50v66H54v-66l-8 50-12-4Z" fill="${c('body')}" stroke="${k}" stroke-width="3" stroke-linejoin="round"/>
-<path d="M34 150l12-40M126 150l-12-40" stroke="${c('hand')}" stroke-width="16" stroke-linecap="round"/><circle cx="80" cy="64" r="24" fill="#e8b890" stroke="${k}" stroke-width="3"/>
-<path d="M54 60Q80 22 106 60Z" fill="${c('head')}" stroke="${k}" stroke-width="3"/><path d="M54 182h52l6 86H86l-6-60-6 60H48Z" fill="${c('legs')}" stroke="${k}" stroke-width="3" stroke-linejoin="round"/>
+  const arm = (x1: number, x2: number) => `<path d="M${x1} 100L${x2} 160" stroke="${k}" stroke-width="20" stroke-linecap="round"/><path d="M${x1} 100L${x2} 160" stroke="${c('hand')}" stroke-width="14" stroke-linecap="round"/><circle cx="${x2 + (x2 < 80 ? -1 : 1)}" cy="170" r="9" fill="#e8b890" stroke="${k}" stroke-width="3"/>`;
+  return `<svg viewBox="0 0 160 300" class="eqFig">${arm(50, 34)}${arm(110, 126)}<path d="M50 90h60l10 20-10 6-2-4v70H52v-70l-2 4-10-6Z" fill="${c('body')}" stroke="${k}" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="80" cy="64" r="24" fill="#e8b890" stroke="${k}" stroke-width="3"/><path d="M54 60Q80 22 106 60Z" fill="${c('head')}" stroke="${k}" stroke-width="3"/><path d="M54 182h52l6 86H86l-6-60-6 60H48Z" fill="${c('legs')}" stroke="${k}" stroke-width="3" stroke-linejoin="round"/>
 <path d="M40 268h36v14H36ZM84 268h36l4 14H84Z" fill="${c('feet')}" stroke="${k}" stroke-width="3"/></svg>`;
 }
 const FIG_POS: Record<Slot, [number, number]> = { head: [58, 4], hand: [0, 34], body: [62, 26], legs: [62, 58], feet: [0, 80] };
