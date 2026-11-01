@@ -1718,6 +1718,17 @@ for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
+  // 共用外框：標題列以外的內容包進 .pb（統一 16px 內距）
+  const body = document.createElement('div'); body.className = 'pb';
+  while (bar.nextSibling) body.appendChild(bar.nextSibling);
+  pn.appendChild(body); pn.classList.add('sheet');
+}
+// 共用暗色背板：有可關閉面板開著時蓋住主畫面按鈕，避免露出、誤點
+{
+  const bd = document.createElement('div'); bd.id = 'pbd'; document.body.appendChild(bd);
+  ['pointerdown', 'pointerup', 'click', 'touchstart'].forEach(t => bd.addEventListener(t, e => { e.stopPropagation(); }, { passive: true }));
+  const sync = () => bd.classList.toggle('show', !!document.querySelector('.panel.sheet.show'));
+  const mo = new MutationObserver(sync); document.querySelectorAll('.panel.sheet').forEach(p => mo.observe(p, { attributes: true, attributeFilter: ['class'] })); sync();
 }
 
 const NPC_TIP: Record<string, string> = {

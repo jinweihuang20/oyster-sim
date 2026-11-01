@@ -57,14 +57,14 @@ async function render() {
   const list = $('lbList');
   $('lbTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b as HTMLElement).dataset.b === board));
   $('lbView').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b as HTMLElement).dataset.v === view));
-  list.innerHTML = '<p class="lbMsg">讀取中…</p>';
+  list.innerHTML = '<div class="lbEmpty"><i class="ic ic-timer"></i><span>讀取中…</span></div>';
   const r = await get(`/top?board=${board}&view=${view}&n=20&me=${D.id}${tq()}`);
-  if (!r) { list.innerHTML = '<p class="lbMsg">排行榜暫時連不上，等一下再試試。</p>'; return; }
+  if (!r) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; return; }
   const unit = BOARDS.find(b => b[0] === board)![2];
   const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}"><span class="lbR">${x.rank}</span><span class="lbN"><b>${esc(x.nick)}</b><small>#${esc(x.tag)}</small>${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
     (x.me ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>` : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span>`) + '</div>';
   const rows = r.rows as any[];
-  list.innerHTML = rows.length ? rows.map(row).join('') + (r.mine && !rows.some(x => x.me) ? '<div class="lbGap"></div>' + row(r.mine) : '') : '<p class="lbMsg">還沒有人上榜，收工後就會出現你的成績！</p>';
+  list.innerHTML = rows.length ? rows.map(row).join('') + (r.mine && !rows.some(x => x.me) ? '<div class="lbGap"></div>' + row(r.mine) : '') : '<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>收工後就會出現你的成績！</small></span></div>';
   list.querySelectorAll<HTMLButtonElement>('button[data-k]').forEach(b => b.onclick = async () => {
     b.disabled = true; const ok = await post('/react', { k: b.dataset.k, kind: b.dataset.r });
     if (ok) { const n = b.lastChild as Text; n.textContent = String(Number(n.textContent) + 1); D.toast(b.dataset.r === 'like' ? '按讚送出！' : '丟一顆蚵殼過去！'); }

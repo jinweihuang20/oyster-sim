@@ -479,3 +479,43 @@ body.tutOn #feed{display:none!important}
 #settings .setGrid>button,#settings .setGrid>a,#settings #resetSave{display:flex;align-items:center;justify-content:center;gap:.35em;width:100%;min-width:0!important;height:48px;min-height:48px!important;margin:0!important;padding:0 8px!important;box-sizing:border-box;font-size:15px!important;text-decoration:none;white-space:nowrap}
 #settings .setDiv{border:0;border-top:2px dashed rgba(22,25,29,.35);margin:16px 0}
 #settings #resetSave{width:calc(100% - 6px)}
+/* ===== 共用外框 .panel.sheet（圖鑑／雜貨店／排行榜／兌換碼／回饋／設定）：標題列貼齊頂端、內容 16px 內距、暗色背板 ===== */
+#pbd{position:fixed;inset:0;z-index:40;background:rgba(10,14,20,.72);display:none;touch-action:none}#pbd.show{display:block}
+.panel.sheet{z-index:50;padding:0!important;box-sizing:border-box;text-align:left;scroll-padding-top:64px}
+.panel.sheet>.ph{position:sticky!important;top:0!important;margin:0!important;padding:10px 56px!important;border-radius:0;z-index:5;background:var(--iron) var(--corr);border-bottom:3px solid var(--ink);text-align:center}
+.panel.sheet>.ph h2{margin:0!important;font-size:20px;line-height:1.4;color:var(--paint)}
+.panel.sheet>.ph .px{top:50%!important;bottom:auto!important;right:8px;transform:translateY(-50%)!important}
+.panel.sheet>.pb{padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+.panel.sheet>.pb>:first-child{margin-top:0!important}
+#settings.sheet>.pb{padding:0}
+#shop .ph #shopTabs{position:static;margin:8px -48px 0;padding:0;background:none}
+#lbClose{display:none!important}
+@media (max-width:500px){.panel.sheet{top:8px!important;transform:translateX(-50%)!important;max-height:calc(100dvh - 16px - env(safe-area-inset-bottom))!important}}
+/* 排行榜 */
+#lb .pb{display:flex;flex-direction:column;gap:12px}
+#lbTabs{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink)}
+#lbTabs button{margin:0!important;min-width:0!important;min-height:44px!important;height:44px;padding:0 4px;font-size:14px;border:0;border-right:3px solid var(--ink);border-radius:0;box-shadow:none;background-color:var(--paint2);color:var(--ink);white-space:nowrap;transform:none}
+#lbTabs button:last-child{border-right:0}
+#lbTabs button.on{background-color:var(--red);color:var(--paint)}
+#lbView{display:inline-flex;align-self:center;gap:0;margin:0;border:2px solid var(--ink);border-radius:999px;overflow:hidden;background:var(--paint)}
+#lbView button{margin:0!important;min-width:64px!important;min-height:32px!important;height:32px;padding:0 14px;font-size:13px;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--ink);transform:none}
+#lbView button+button{border-left:2px solid var(--ink)}
+#lbView button.on{background-color:var(--iron);color:var(--paint)}
+#lbMe:empty{display:none}#lbMe{text-align:center;color:var(--redD)}
+#lbList{margin:0;min-height:260px;display:flex;flex-direction:column;gap:6px}
+.lbEmpty{flex:1;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;border:2px dashed rgba(22,25,29,.35);color:#4a4f55;font-size:15px;font-weight:700}
+.lbEmpty .ic{font-size:36px;opacity:.7}.lbEmpty small{font-weight:400;font-size:13px}
+.lbRow{display:grid;grid-template-columns:2em minmax(0,1fr) auto auto;align-items:center;column-gap:8px;margin:0;padding:6px 8px;background:rgba(255,255,255,.35)}
+.lbR{width:auto}.lbN{white-space:nowrap;text-overflow:ellipsis}.lbV{text-align:right;min-width:3.5em;font-variant-numeric:tabular-nums}
+.lbA{display:grid;grid-template-columns:repeat(2,48px);gap:4px}
+.lbA button,.lbA>span{margin:0!important;min-width:0!important;min-height:34px!important;height:34px;padding:0 4px;font-size:13px;justify-content:center;font-variant-numeric:tabular-nums}
+.lbA>span{display:inline-flex;align-items:center}
+.lbGap{margin:2px 0}
+.lbSec{margin-top:4px;font-weight:900;font-size:13px;letter-spacing:.1em;color:var(--iron);border-top:2px dashed rgba(22,25,29,.35);padding-top:12px}
+#lbNickRow{display:flex;gap:8px;align-items:stretch}
+#lbNick{flex:1;min-width:0;width:auto;height:44px;box-sizing:border-box;margin:0;font-size:16px}
+#lbNickSave{flex:0 0 96px;height:44px;min-height:44px!important;min-width:0!important;margin:0!important;padding:0;box-sizing:border-box}
+.lbNote{margin:0;font-size:12px}
+#shop.sheet>.ph .px{top:6px!important;transform:none!important}
+.panel.sheet{z-index:50!important}#redeem.sheet{z-index:55!important}.panel.sheet>.pb>:first-child>:first-child{margin-top:0!important}
+#shop.sheet #shopList{padding-top:0!important;margin-top:0!important}#shop.sheet #shopList>div:first-child>:first-child{margin-top:0!important}
