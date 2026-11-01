@@ -418,3 +418,7 @@ button:disabled{filter:grayscale(.8);opacity:.55}
 .lbMsg{text-align:center;opacity:.8}.lbNote{font-size:12px;opacity:.75}
 #lbNickRow{display:flex;gap:6px;justify-content:center}#lbNick{font-size:16px;width:9em}
 body.tutOn #feed{display:none!important}
+
+.dcRow{display:flex;gap:8px;justify-content:center;align-items:stretch;margin-top:8px;flex-wrap:nowrap}
+.dcRow>.rdBtn,.dcRow>.dcBtn{padding:8px 12px;font-size:14px;min-height:40px;white-space:nowrap}
+.dcRow>.rdBtn{background-color:var(--iron2);color:#fff}
