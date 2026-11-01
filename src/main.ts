@@ -418,6 +418,27 @@ const ODD = [
   { name: '大同電鍋公仔', css: '#e04a3a', w: 4, price: 1200, emo: '🍚', tease: '台灣人家家都有一台的…迷你版', line: '大同電鍋迷你公仔！', cry: ['收藏價值高喔！', '我家那台用三十年了'] },
   { name: '中獎發票', css: '#ffe07a', w: 1, price: 8000, emo: '🎫', tease: '傳說有人在蚵裡挖到千萬…', line: '中獎了！！是頭獎！', cry: ['快去領！快去領！', '請客！請客！'] },
   { name: '開港紀念蚵', css: '#c8443a', w: 0, price: 0, emo: '⚓', tease: '活動限定：開港紀念包才拿得到', line: '開港紀念，蚵仔大豐收！', cry: ['這顆是紀念的喔！', '開港大吉！'], ex: true },
+  // 2026-11 新增 20 種怪奇物（只能接在最後面，存檔用索引）
+  { name: '會說話的鹹酥雞', css: '#d8962a', w: 22, price: 30, emo: '', tease: '聞起來很香…好像還會講話', line: '一直說「加辣嗎？」', cry: ['不要辣，謝謝！', '鹹酥雞怎麼跑進蚵裡啦'], ic: "<path d='M6 9h12l-2 12H8z'/><path d='M9 9V6a3 3 0 0 1 6 0v3M10 14h.01M14 14h.01M10 17h4'/>" },
+  { name: '插著吸管的蚵', css: '#b8b0a0', w: 22, price: 15, emo: '', tease: '有人在蚵裡留了一根管子', line: '好像有人先喝過了', cry: ['誰先喝的啦！', '蚵仔也可以外帶喔？'], ic: "<path d='M3 15c0-4 4-7 9-7s9 3 9 7-4 5-9 5-9-1-9-5z'/><path d='M13 12l5-10h3'/>" },
+  { name: '迷你斑馬線', css: '#f4f4f0', w: 22, price: 40, emo: '', tease: '一條一條白白的…有誰在等', line: '有一隻螃蟹正在乖乖等紅燈', cry: ['好有交通道德', '綠燈了，快過！'], ic: "<path d='M3 20h18M3 4h18M6 7v10M10 7v10M14 7v10M18 7v10'/>" },
+  { name: '會自己捲起來的海帶', css: '#4a8a4a', w: 22, price: 25, emo: '', tease: '軟軟的、綠綠的，會自己動', line: '捲成「謝謝光臨」四個字', cry: ['這海帶很有禮貌', '歡迎再來！'], ic: "<path d='M12 21c-4-3 4-6 0-9s4-6 0-9'/><path d='M7 21c-3-3 3-6 0-9M17 12c3-3-3-6 0-9'/>" },
+  { name: '夾娃娃機的夾子', css: '#c0c8d0', w: 22, price: 60, emo: '', tease: '鐵做的，三根爪子', line: '裡面還夾著一顆更小的蚵', cry: ['保夾成功！', '這台機台好佛心'], ic: "<path d='M12 2v7M8 9h8M8 9l-3 6 3 4M16 9l3 6-3 4M12 9v9'/><circle cx='12' cy='19' r='2'/>" },
+  { name: '珍珠奶茶的珍珠', css: '#a07858', w: 14, price: 120, emo: '', tease: '黑黑圓圓的…不像珍珠', line: '這顆不是我生的。', cry: ['蚵仔說不是牠的', '拿去配奶茶啦'], ic: "<circle cx='12' cy='13' r='7'/><path d='M9 11a3 3 0 0 1 3-2M12 6V2'/>" },
+  { name: '迷你麥克風', css: '#8a8a98', w: 14, price: 200, emo: '', tease: '小小的，好像想唱歌', line: '一拿出來就自己開始唱〈愛拚才會贏〉', cry: ['三分天註定！', '七分靠打拚！'], ic: "<rect x='9' y='2' width='6' height='11' rx='3'/><path d='M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8'/>" },
+  { name: '里長的名片', css: '#f0e6c8', w: 14, price: 150, emo: '', tease: '一張小紙片，上面印著頭銜', line: '背面寫著「有事找我」', cry: ['里長伯人真好', '水溝不通也可以找嗎？'], ic: "<rect x='2' y='6' width='20' height='12'/><circle cx='8' cy='12' r='2'/><path d='M13 10h6M13 14h4'/>" },
+  { name: '會發熱的暖暖包', css: '#e87a4a', w: 14, price: 100, emo: '', tease: '摸起來…怎麼是溫的？', line: '在海裡泡了不知道多久，還是熱的', cry: ['好暖喔，借我握一下', '品質太好了吧'], ic: "<rect x='5' y='5' width='14' height='16'/><path d='M9 2c-1 1 1 2 0 3M12 2c-1 1 1 2 0 3M15 2c-1 1 1 2 0 3M9 13h6'/>" },
+  { name: '小烏龜', css: '#5a9a5a', w: 14, price: 0, emo: '', tease: '慢吞吞的，背著一個家', line: '自己慢慢爬出蚵殼走了', cry: ['慢走喔～', '不要跑太快'], ic: "<path d='M4 15a8 6 0 0 1 16 0z'/><path d='M20 13h2M5 15l-1 3M19 15l1 3M9 15l-1 3M15 15l1 3M9 11l3-2 3 2'/>" },
+  { name: '迷你神明', css: '#e8b030', w: 5, price: 1500, emo: '', tease: '坐得很端正，好像在保佑誰', line: '一尊小小的土地公，坐得很端正', cry: ['快拜一下！', '福德正神保佑'], ic: "<circle cx='12' cy='6' r='3'/><path d='M7 21v-8l5-3 5 3v8zM5 21h14M10 16c1 1 3 1 4 0'/>" },
+  { name: '摺好的紅包', css: '#d8282a', w: 5, price: 3, emo: '', tease: '紅紅的、摺得很整齊', line: '裡面是 3 塊錢和一張「謝謝」', cry: ['三塊也是心意', '哈哈哈，好有禮貌'], ic: "<rect x='6' y='2' width='12' height='20'/><path d='M6 8l6 4 6-4'/><circle cx='12' cy='15' r='2'/>" },
+  { name: '會響的手機', css: '#8ab0d8', w: 5, price: 800, emo: '', tease: '裡面傳出鈴聲…', line: '來電顯示「阿母」', cry: ['快接！是阿母！', '阿母找你吃飯啦'], ic: "<rect x='7' y='2' width='10' height='20'/><path d='M11 18h2M3 7c-1 2-1 4 0 6M21 7c1 2 1 4 0 6'/>" },
+  { name: '一副假睫毛', css: '#e0a8c0', w: 5, price: 600, emo: '', tease: '彎彎的、黑黑的兩條', line: '比蚵還要漂亮', cry: ['好會畫喔', '借我戴一下'], ic: "<path d='M2 12c3-3 6-3 9 0M13 12c3-3 6-3 9 0M3 11l-1-3M6 9.5l-1-3M9 10l1-3M14 11l-1-3M17 9.5l-1-3M20 10l1-3'/>" },
+  { name: '迷你漁船', css: '#3a7ac0', w: 5, price: 1200, emo: '', tease: '小小的，有船帆', line: '裡面坐著更小的阿伯在補網', cry: ['阿伯辛苦了！', '今天有沒有漁獲？'], ic: "<path d='M3 15h18l-3 5H6z'/><path d='M12 15V3l6 9h-6'/>" },
+  { name: '一整碗蚵仔煎', css: '#e86a4a', w: 1, price: 6000, emo: '', tease: '熱熱的…還有醬汁的味道', line: '熱騰騰的，還附醬', cry: ['蚵仔煎自己出來了！', '分我一口啦'], ic: "<path d='M3 11h18a9 9 0 0 1-18 0z'/><path d='M9 20h6M8 3c-1 2 1 3 0 5M12 3c-1 2 1 3 0 5M16 3c-1 2 1 3 0 5'/>" },
+  { name: '另一個蚵', css: '#b8a890', w: 1, price: 8000, emo: '', tease: '蚵裡面…好像還有東西', line: '打開裡面還有一個蚵，裡面又有一個蚵……', cry: ['剝不完了啦！', '蚵中蚵中蚵'], ic: "<path d='M2 13c0-5 4-9 10-9s10 4 10 9-4 7-10 7S2 18 2 13z'/><path d='M7 13c0-2 2-4 5-4s5 2 5 4-2 3-5 3-5-1-5-3z'/><circle cx='12' cy='13' r='1'/>" },
+  { name: '外星人名片', css: '#7ae0a0', w: 1, price: 9999, emo: '', tease: '不像是地球的東西', line: '聯絡方式是「看天上」', cry: ['外星人也剝蚵喔？', '快抬頭看看！'], ic: "<rect x='2' y='7' width='20' height='12'/><path d='M7 15c-2 0-2-5 0-5s2 5 0 5zM12 11h6M12 15h4M17 3l-2 4'/>" },
+  { name: '過期的樂透彩券', css: '#f2d060', w: 1, price: 0, emo: '', tease: '六個號碼…好像哪裡不對', line: '對了六個號碼，但是是去年的', cry: ['差一年啦！！', '好可惜喔…'], ic: "<rect x='3' y='4' width='18' height='16'/><circle cx='8' cy='10' r='1.5'/><circle cx='12' cy='10' r='1.5'/><circle cx='16' cy='10' r='1.5'/><path d='M6 16h12M4 5l16 14'/>" },
+  { name: '縮小的阿婆', css: '#d0a0b0', w: 1, price: 10000, emo: '', tease: '有人說…在蚵裡看到自己', line: '長得跟你一模一樣，正在剝更小的蚵', cry: ['那不是你嗎！？', '她也在剝蚵耶'], ic: "<circle cx='12' cy='5' r='3'/><path d='M8 21l1-8h6l1 8M9 13l-3 3M15 13l2 2M17 15l2-2'/>" },
 ];
 const dexN = () => save.dex.filter(x => x).length + save.odd.filter(x => x).length;
 const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'uncommon' : 'common';
@@ -518,6 +539,7 @@ const oddMeshes: THREE.Object3D[] = ODD.map((o, i) => {
     else if (o.name.includes('平安符')) { mesh(new THREE.BoxGeometry(0.03, 0.004, 0.05), mat(0xe8b030), [0, 0.005, 0], g); mesh(new THREE.BoxGeometry(0.02, 0.005, 0.012), mat(0xc0302a), [0, 0.006, 0.012], g); }
     else if (o.name === '筊杯') for (const sx of [-1, 1]) { const h = mesh(new THREE.SphereGeometry(0.022, 10, 6, 0, Math.PI), M, [sx * 0.018, 0.008, 0], g); h.scale.set(0.6, 1, 1.4); h.rotation.set(-Math.PI / 2, 0, sx * 0.3); }
     else if (o.name.includes('電鍋')) { mesh(new THREE.CylinderGeometry(0.024, 0.026, 0.035, 16), M, [0, 0.018, 0], g); mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.006, 16), mat(0xf4f0e8), [0, 0.038, 0], g); mesh(new THREE.SphereGeometry(0.006, 6, 4), mat(0x222222), [0, 0.044, 0], g); }
+    else if ('ic' in o) { const b = mesh(new THREE.SphereGeometry(0.028, 10, 8), M, [0, 0.012, 0], g); b.scale.y = 0.55; mesh(new THREE.BoxGeometry(0.02, 0.012, 0.02), mat(0xffffff, { roughness: 0.3 }), [0, 0.026, 0], g); }
     else { mesh(new THREE.BoxGeometry(0.055, 0.003, 0.075), mat(0xffe07a, { emissive: 0x806010, roughness: 0.3 } as any), [0, 0.005, 0], g); }
   }
   return g;
@@ -1309,7 +1331,7 @@ function revealPearl(r: number) {
 function renderDex() {
   const RZ: Record<string, string> = { common: '普通', uncommon: '少見', rare: '稀有', legend: '傳說' };
   const all = [...RAR.map((r, i) => ({ ...r, has: save.dex[i] ?? 0 })), ...ODD.map((o, i) => ({ ...o, has: save.odd[i] ?? 0 }))];
-  const item = (x: typeof all[number]) => { const rr = rarOf(x.w); return `<div class="dexItem ${x.has ? '' : 'locked'}">${x.has ? `<div class="dot" style="background:${x.css};box-shadow:0 0 8px ${x.css}">${x.emo}</div>` : '<div class="dot unk" aria-hidden="true">?</div>'}<div><b>${x.has ? x.name : '？？？'}</b>${x.has ? ` <span class="dexN">×${x.has}</span>` : ''} <span class="rb r-${rr}">${RZ[rr]}</span><br><small>${x.has ? `收集 ${x.has} 件・值 $${x.price}${'line' in x ? `<br>「${(x as any).line}」` : ''}` : `💭 ${x.tease}`}</small></div></div>`; };
+  const item = (x: typeof all[number]) => { const rr = rarOf(x.w); return `<div class="dexItem ${x.has ? '' : 'locked'}">${x.has ? `<div class="dot" style="background:${x.css};box-shadow:0 0 8px ${x.css}">${'ic' in x && (x as any).ic ? `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#1e1a16" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${(x as any).ic}</svg>` : x.emo}</div>` : '<div class="dot unk" aria-hidden="true">?</div>'}<div><b>${x.has ? x.name : '？？？'}</b>${x.has ? ` <span class="dexN">×${x.has}</span>` : ''} <span class="rb r-${rr}">${RZ[rr]}</span><br><small>${x.has ? `收集 ${x.has} 件・值 $${x.price}${'line' in x ? `<br>「${(x as any).line}」` : ''}` : `💭 ${x.tease}`}</small></div></div>`; };
   const got = all.filter(x => x.has).length;
   const per = (['common', 'uncommon', 'rare', 'legend'] as const).map(r => { const xs = all.filter(x => rarOf(x.w) === r); return `<span class="rb r-${r}">${RZ[r]} ${xs.filter(x => x.has).length}/${xs.length}</span>`; }).join(' ');
   $('dexList').innerHTML = `<div class="dexProg"><b>已收集 ${got} / ${all.length} 種</b>・累計挖到 <b>${all.reduce((a, x) => a + x.has, 0)}</b> 個<div class="dexBar"><i style="width:${got / all.length * 100}%"></i></div>${per}</div>` +
