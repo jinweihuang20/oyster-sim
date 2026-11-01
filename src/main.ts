@@ -853,7 +853,7 @@ function applyCrew() {
   });
 }
 updSky(); showLand(); applyCrew(); setInterval(updSky, 30000);
-function startDay() {
+function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   nightShift = isNight(); updSky(); $('nightTag').style.display = nightShift ? '' : 'none'; if (nightShift) later(1.5, () => toast('🌙 夜班上工！這一工收入 +20%', '#b8c8ff'));
   npcs.forEach(dressAma); applyCrew();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
@@ -1266,7 +1266,7 @@ function stealOne(n: Npc) {
 function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.round((L.missed + L.wasteShells) / (L.opened + L.wasteShells) * 100) : 0;
   const tl = Object.entries(save.titles).map(([k, v]) => `${k} ×${v}`).join('、') || '（猶無）';
   return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">工作 ${save.days} 天・累積收入 $${save.money}・最佳 ${save.best} 顆<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美／俐落 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/被抓 ${L.caught}・丟中阿婆 ${L.shellHits}・被丟中 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
-function endDay() { if (document.pointerLockElement) document.exitPointerLock();
+function endDay() { inputGuard(); if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
   if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
   const all = [{ name: `你（${esc(myName())}）`, count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
@@ -1372,6 +1372,10 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyE' && !e.repeat) startSteal();
 });
 window.addEventListener('keyup', e => { walkKeys.delete(e.code); if (e.code === 'Space') release(); if (/Key[AD]|Arrow(Left|Right)/.test(e.code)) rotKey = 0; if (e.code === 'KeyE') stopSteal(); if (e.code === 'KeyR') closeUmbrella(); });
+// 換畫面後 350ms 內忽略點擊，防止放開觸發後的合成 click 穿透到新畫面同位置的按鈕
+let guardUntil = 0;
+function inputGuard() { guardUntil = performance.now() + 350; }
+for (const ev of ['click', 'pointerup']) document.addEventListener(ev, e => { if (performance.now() < guardUntil && (e.target as HTMLElement)?.closest?.('button,a,.panel')) { e.stopPropagation(); e.preventDefault(); } }, true);
 // 手機：一般按鈕放開才觸發，移動超過 12px 視為滑動不算按；按住型（雨傘、方向）維持按下即觸發
 const btn = (id: string, f: () => void, upF?: () => void) => {
   const el = $(id);
@@ -1451,7 +1455,7 @@ $('rLoc').onclick = () => { $('result').classList.remove('show'); renderLocs(); 
 const go = (len: number) => { shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 $('start').onclick = () => { shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
-$('again').onclick = startDay;
+btn('again', startDay);
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => $('settings').classList.add('show');
 $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
