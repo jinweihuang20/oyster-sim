@@ -13,13 +13,15 @@ const get = (p: string) => fetch(API + p, { mode: 'cors', cache: 'no-store' }).t
 // ---------- 彈幕 ----------
 let last = 0, busy = false, polls = 0;
 const queue: string[] = [];
+let cur: HTMLElement | null = null;
+function endCur() { const el = $('feed'); cur = null; el.classList.remove('on'); $('fdTrack').innerHTML = ''; busy = false; setTimeout(showNext, 600); }
 function showNext() {
   const el = $('feed');
   if (busy || !queue.length || !D.on() || D.inTut()) return;
   busy = true; const txt = queue.shift()!;
-  el.innerHTML = `<span class="fdIn"><i class="ic ic-horn"></i> ${txt}</span>`; el.classList.add('on');
-  const s = el.firstElementChild as HTMLElement; s.style.animationDuration = Math.max(7, (txt.length + 10) * 0.32) + 's';
-  s.onanimationend = () => { el.classList.remove('on'); el.innerHTML = ''; busy = false; setTimeout(showNext, 600); };
+  const tr = $('fdTrack'); tr.innerHTML = `<span class="fdIn"><i class="ic ic-horn"></i> ${txt}</span>`; el.classList.add('on');
+  const s = tr.firstElementChild as HTMLElement; cur = s; s.style.animationDuration = Math.max(7, (txt.length + 10) * 0.32) + 's';
+  s.onanimationend = () => { if (cur === s) endCur(); };
 }
 async function poll() {
   if (document.hidden) return;
@@ -76,7 +78,18 @@ export function open() { ($('lbNick') as HTMLInputElement).value = D.nick() === 
 
 export function init(d: Deps) {
   D = d;
-  const f = document.createElement('div'); f.id = 'feed'; document.body.appendChild(f);
+  const f = document.createElement('div'); f.id = 'feed';
+  f.innerHTML = '<div id="fdTrack"></div><button id="fdX" type="button" aria-label="關閉這則消息"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
+  document.body.appendChild(f);
+  // 只關掉當下這則；放開才觸發，且需在同一顆按鈕上按下
+  const x = f.querySelector('#fdX') as HTMLButtonElement; let down = false;
+  const stop = (e: Event) => e.stopPropagation();
+  x.addEventListener('pointerdown', e => { stop(e); down = true; });
+  x.addEventListener('pointerup', e => { stop(e); e.preventDefault(); if (down && cur) endCur(); down = false; });
+  x.addEventListener('pointerleave', () => { down = false; });
+  x.addEventListener('pointercancel', () => { down = false; });
+  for (const t of ['click', 'touchstart', 'touchend', 'mousedown', 'mouseup']) x.addEventListener(t, stop);
+  if (/[?&]feedtest=1/.test(location.search)) { queue.push('<b>測試蚵民</b><small>#0001</small> 剝到了黑珍珠！', '<b>第二則</b><small>#0002</small> 開到「舊懷錶」'); setTimeout(showNext, 500); }
   $('lbTabs').innerHTML = BOARDS.map(b => `<button data-b="${b[0]}">${b[1]}</button>`).join('');
   $('lbTabs').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.onclick = () => { board = b.dataset.b!; render(); });
   $('lbView').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.onclick = () => { view = b.dataset.v as any; render(); });
