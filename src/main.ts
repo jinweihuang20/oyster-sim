@@ -553,6 +553,9 @@ const fly = (m: THREE.Object3D, p0: THREE.Vector3, p1: THREE.Vector3 | (() => TH
 const gauge = $('gauge'), fill = $('fill'), zone = $('zone'), label = $('label'), hint = $('hint'), toastEl = $('toast');
 let toastT = 0;
 function toast(t: string, c = '#ffe080') { toastEl.textContent = t; toastEl.style.color = c; toastEl.classList.add('on'); toastT = 1.1; }
+let inZ0 = '';
+function setInZ(z: string) { if (z === inZ0) return; const was = inZ0; inZ0 = z; gauge.classList.toggle('inZ', !!z); gauge.classList.toggle('inP', z === 'p'); gauge.dataset.tag = z === 'p' ? '完美！' : z ? '現在！' : '';
+  if (z && !was) { navigator.vibrate?.(15); tone(z === 'p' ? 1320 : 990, 0.04, 0.06, 'triangle'); } }
 const IDEAL = 0.75; let PERF0 = 0.7, PERF1 = 0.8;
 const HINTS: Record<Phase, string> = {
   pick: COARSE ? '看自己的紅臉盆，點一顆蚵仔（或點自己的手）拿起來（小顆比較好撬，黑又粗的比較硬）' : '看自己的紅臉盆，點一顆蚵仔（或按 Space）拿起來（小顆比較好撬，黑又粗的比較硬）',
@@ -1007,7 +1010,7 @@ function applyBowl() {
 }
 const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
 const pryW = () => Math.min(0.6, PRY[diff].w * knifeNow().green * medM('green') * (newbie() ? 1.3 : 1));
-const PRY_SLOW = 0.8; // 整體放慢 20%
+const PRY_SLOW = 0.56; // 整體放慢（0.8→0.56，再慢 30%）
 const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * knifeNow().speed * medM('speed');
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
 const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? 1.25 : 1);
@@ -1516,13 +1519,14 @@ function frame() {
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
       knife.position.y = 0.03 + (e < tolNow() * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
     } else knife.position.y = 0.03;
-    if (phase === 'twist') { if (SHOT === 'pry') needleStart = performance.now() - Math.acos(1 - 2 * PRY_C) / (Math.PI * 2 * prySp()) * 1000; const n = needle(), w = pryW(); zone.style.left = `${(PRY_C - w / 2) * 100}%`; zone.style.width = `${w * 100}%`; fill.style.width = '4px'; fill.style.marginLeft = `calc(${n * 100}% - 2px)`; fill.style.background = n > PRY_RED ? '#ff5a4a' : Math.abs(n - PRY_C) <= w / 2 ? '#d8ffb0' : '#fff'; }
+    if (phase === 'twist') { if (SHOT === 'pry') needleStart = performance.now() - Math.acos(1 - 2 * PRY_C) / (Math.PI * 2 * prySp()) * 1000; const n = needle(), w = pryW(); zone.style.left = `${(PRY_C - w / 2) * 100}%`; zone.style.width = `${w * 100}%`; fill.style.width = '4px'; fill.style.marginLeft = `calc(${n * 100}% - 2px)`; fill.style.background = n > PRY_RED ? '#ff5a4a' : Math.abs(n - PRY_C) <= w / 2 ? '#d8ffb0' : '#fff'; setInZ(n <= PRY_RED && Math.abs(n - PRY_C) <= w / 2 ? 'z' : ''); }
     if (phase === 'twist' || phase === 'crab') { ($('progFill') as HTMLElement).style.width = `${(phase === 'crab' ? crabShakes / 6 : progress) * 100}%`; }
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
     updBlood(rdt);
     if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.6, goPick); setPhase('busy'); } }
     if (phase === 'empty') { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
-    if (holding && phase === 'aim') { gauge.classList.add('on'); hold += dt * 1.1 * (newbie() ? 0.75 : 1); if (hold > 1.25) { hold = 1.3; release(); } fill.style.width = `${Math.min(1, hold) * 100}%`; fill.style.background = 'rgba(255,255,255,.75)'; }
+    if (holding && phase === 'aim') { gauge.classList.add('on'); hold += dt * 0.77 * (newbie() ? 0.75 : 1); if (hold > 1.25) { hold = 1.3; release(); } fill.style.width = `${Math.min(1, hold) * 100}%`; fill.style.background = 'rgba(255,255,255,.75)'; { const TW = tut ? 0.12 : 0; setInZ(hold >= PERF0 - TW && hold <= PERF1 + TW ? 'p' : ''); } }
+    if (!(phase === 'twist' || (holding && phase === 'aim'))) setInZ('');
     // 偷蚵仔
     on('standBtn', !walking); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     const tgt = walking ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
