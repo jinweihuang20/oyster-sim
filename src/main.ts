@@ -1124,7 +1124,7 @@ function openOyster() {
   updHud();
 }
 function revealOdd(i: number) {
-  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); if (rarOf(o.w) === 'legend') Social.report('legend', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
+  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); Social.report(rarOf(o.w) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
   label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.css; label.classList.add('on');
   npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
@@ -1296,7 +1296,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
 }
 function revealPearl(r: number) {
-  dayPearls.push(r); save.dex[r]++; persist(); if (r >= 2) Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
+  dayPearls.push(r); save.dex[r]++; persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
   slowmo = 2.6; pearlShow = 2.6;
   (pearlMesh.material as THREE.MeshStandardMaterial).color.setHex(RAR[r].color);
   (pearlMesh.material as THREE.MeshStandardMaterial).emissive.setHex(r === 3 ? 0x302050 : RAR[r].color).multiplyScalar(0.25);
@@ -1672,7 +1672,7 @@ $('tutSkip').onclick = e => { e.stopPropagation(); tutEnd(false); };
 $('oTut').onclick = () => tutStart();
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
-  label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！` });
+  label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : k === 'odd' ? `開到「${ODD[i]?.name ?? '奇物'}」` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！` });
 $('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; } tutStart(); };
 (window as any).__oy = { get phase() { return phase; }, get umb() { return { held: umbHeld, t: umbT, vis: umb.visible }; }, get tut() { return tut && TUT[tut.i].id; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, P0, P1); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
 // ---------- 截圖模式 ----------

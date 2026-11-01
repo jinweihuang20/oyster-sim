@@ -28,13 +28,13 @@ async function poll() {
     const r = await get(`/events?since=${last}${tq()}`);
     if (r && typeof r.last === 'number') {
       const first = last === 0; last = r.last;
-      if (!first) for (const e of r.events ?? []) { if (queue.length < 6) queue.push(`<b>${esc(e.nick)}</b><small>#${esc(e.tag)}</small> ${esc(D.label(e.kind, e.item))}`); }
+      if (!first) for (const e of r.events ?? []) { const t = `<b>${esc(e.nick)}</b><small>#${esc(e.tag)}</small> ${esc(D.label(e.kind, e.item))}`; if (queue.length >= 3) queue[queue.length - 1] += '　・　' + t; else queue.push(t); }
       showNext();
     }
   }
   if (polls % 2 === 0) checkPassed();
 }
-export function report(kind: 'pearl' | 'legend' | 'port', item: number) { if (D.on() && !D.inTut()) post('/event', { kind, item }); }
+export function report(kind: 'pearl' | 'legend' | 'odd' | 'port', item: number) { if (D.on() && !D.inTut()) post('/event', { kind, item }); }
 
 // ---------- 排行榜 ----------
 const BOARDS = [['income', '今日收入', '$'], ['oysters', '單班最多蚵仔', ''], ['pearls', '珍珠收藏', '']] as const;
