@@ -422,3 +422,32 @@ body.tutOn #feed{display:none!important}
 .dcRow{display:flex;gap:8px;justify-content:center;align-items:stretch;margin-top:8px;flex-wrap:nowrap}
 .dcRow>.rdBtn,.dcRow>.dcBtn{padding:8px 12px;font-size:14px;min-height:40px;white-space:nowrap}
 .dcRow>.rdBtn{background-color:var(--iron2);color:#fff}
+/* 系統按鈕：招牌方格（手機少滑動） */
+.sysGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:8px;margin:10px 0;justify-content:stretch}
+.sysGrid>button,.sysGrid>a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;margin:0!important;min-width:0!important;min-height:64px;padding:8px 4px!important;font-size:14px;font-weight:800;line-height:1.1;border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink);text-decoration:none;white-space:nowrap}
+.sysGrid>button .ic,.sysGrid>a .ic{font-size:22px}
+.sysGrid>#oRedeem{background-color:var(--iron2);color:#fff}
+#result .sysGrid{grid-template-columns:repeat(3,1fr)}
+@media (max-width:500px){
+ .sysGrid{grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0}
+ .sysGrid>button,.sysGrid>a{min-height:58px;font-size:13px;padding:6px 2px!important}
+ #overlay h1{font-size:24px;margin:2px 0 6px}
+ #overlay #meLine{font-size:13px;margin:4px 0;line-height:1.4}
+ #locPick{margin:4px auto}#locPick .locHead{padding:4px 8px}#locPick .locRow{padding:6px 2px 4px}
+ #locPick .loc{width:136px;font-size:13px;padding:6px 8px}#locPick .loc .ld{display:none}
+ #overlay #start,#result #again{min-height:54px;font-size:21px;margin-top:6px}
+ #tempRow{margin-top:6px!important}
+ #settings .row{padding:4px 0;margin:0;min-height:38px;font-size:15px}
+ #settings>button,#settings>a{min-height:44px;padding:6px 10px;margin:3px;font-size:14px}
+}
+@media (max-width:500px){#result .sysGrid{grid-template-columns:repeat(6,1fr);gap:4px}#result .sysGrid>button{min-height:54px;font-size:12px}#result .sysGrid .ic{font-size:20px}}
+@media (max-width:500px){
+ #settings label.row{min-height:34px!important;padding:2px 0!important;margin:0!important;font-size:14px}
+ #settings label.row:has(input[type=checkbox]){display:inline-flex!important;width:calc(50% - 4px);box-sizing:border-box;justify-content:space-between;align-items:center;gap:4px;vertical-align:top;padding-right:6px!important;font-size:13px}
+ #settings input[type=checkbox]{width:24px;height:24px}
+ #settings input#myName{padding:4px 8px}
+}
+/* 上工費：一律看得到；已領取為灰色停用 */
+#overlay #daily{display:block!important;visibility:visible!important;opacity:1!important;width:100%;max-width:420px;margin:6px auto;min-height:48px;padding:6px 10px;font-size:16px;color:var(--ink);background:#e4b13a var(--grain);border:3px dashed var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink)}
+#overlay #daily.done{background:#c9c4b8;color:#4a4f55;border-style:solid;box-shadow:none;opacity:1!important}
+@media (max-width:500px){#overlay #daily{min-height:44px;font-size:14px;padding:4px 8px}#overlay #daily small{font-size:11px}}
