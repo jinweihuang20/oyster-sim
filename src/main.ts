@@ -2016,7 +2016,7 @@ async function shareOutfit() {
   g.textAlign = 'center'; g.fillStyle = '#c8d8e8'; g.font = '34px sans-serif'; g.fillText('https://jinweihuang20.github.io/oyster-sim/', W / 2, H - 80);
   const blob: Blob | null = await new Promise(r => c.toBlob(r, 'image/png')); if (!blob) return;
   const file = new File([blob], 'oyster-outfit.png', { type: 'image/png' }); const url = URL.createObjectURL(blob);
-  $('eqShareOut').innerHTML = `<img src="${url}" alt="穿搭卡" style="width:100%;border-radius:8px;margin-top:8px"><p class="eqHint">手機也可以長按圖片儲存。</p><a href="${url}" download="oyster-outfit.png" class="btnLike">儲存圖片</a><p class="eqHint" style="margin-top:10px">加入 Discord 分享穿搭，就送神秘好禮！</p><a href="https://discord.gg/45EZEXyGG4" target="_blank" rel="noopener" class="btnLike dcBtn">加入 Discord</a>`;
+  $('eqShareOut').innerHTML = `<img src="${url}" alt="穿搭卡" style="width:100%;border-radius:8px;margin-top:8px"><p class="eqHint">手機也可以長按圖片儲存。</p><a href="${url}" download="oyster-outfit.png" class="btnLike">儲存圖片</a><p class="eqHint" style="margin-top:10px">加入 Discord 分享穿搭，就送神秘好禮！</p><a href="https://discord.gg/tpPBqxACVq" target="_blank" rel="noopener" class="btnLike dcBtn">加入 Discord</a>`;
   const nav = navigator as any;
   if (COARSE && nav.canShare?.({ files: [file] })) { try { await nav.share({ files: [file], title: '剝蚵仔模擬器', text: '看看我的剝蚵穿搭 https://jinweihuang20.github.io/oyster-sim/' }); } catch { } }
 }
@@ -2054,9 +2054,10 @@ function renderGifts() {
   $('giftBody').innerHTML = giftList.length ? giftList.map(g => `<div class="gfRow"><div><b>${esc2(giftLabel(g))}</b><small>${esc2(g.message ?? '')}</small></div><button data-gift="${esc2(g.id)}">領取</button></div>`).join('') : '<p class="eqHint">目前沒有禮物。</p>';
   $('giftBody').querySelectorAll('button[data-gift]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-gift')!; (b as HTMLButtonElement).disabled = true; const local = giftList.find(x => x.id === id);
-    const g = await Social.claimGift(id).catch(() => null);
-    giftList = giftList.filter(x => x.id !== id);
-    if (g || local) { if (g) { applyGift(g); toast('領到了：' + giftLabel(g), '#ffd25a'); } }
+    const r = await Social.claimGift(id);
+    if (r.st === 'retry') { toast('信箱忙線中，等一下再試', '#ffd25a'); renderGifts(); return; }
+    giftList = giftList.filter(x => x.id !== id); void local;
+    if (r.st === 'ok') { const g = r.gift ?? local!; applyGift(g); toast('領到了：' + giftLabel(g), '#ffd25a'); }
     renderGifts(); const ob = document.getElementById('oGift'); if (ob) ob.style.display = giftList.length ? '' : 'none';
   });
 }
