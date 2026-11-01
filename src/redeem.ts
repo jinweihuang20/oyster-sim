@@ -32,7 +32,7 @@ export const REDEEM_MESSAGES: Record<Exclude<RedeemCheck, { ok: true }>['reason'
   invalid: '兌換碼無效，請確認有沒有打錯',
   used: '這組兌換碼你已經兌換過了',
   'not-started': '活動還沒開始，晚點再來兌換',
-  ended: '這組兌換碼已經過期了',
+  ended: '這個活動已經結束了，謝謝你的支持！請留意 Discord 的下一次活動',
 };
 
 function toHex(b: Uint8Array): string {

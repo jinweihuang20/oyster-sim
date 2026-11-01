@@ -412,6 +412,7 @@ const ODD = [
   { name: '筊杯', css: '#c0302a', w: 6, price: 400, emo: '🌙', tease: '一對紅紅的半月', line: '一對筊杯！聖筊！', cry: ['問神明今天會不會贏', '笑死人了哈哈'] },
   { name: '大同電鍋公仔', css: '#e04a3a', w: 4, price: 1200, emo: '🍚', tease: '台灣人家家都有一台的…迷你版', line: '大同電鍋迷你公仔！', cry: ['收藏價值高喔！', '我家那台用三十年了'] },
   { name: '中獎發票', css: '#ffe07a', w: 1, price: 8000, emo: '🎫', tease: '傳說有人在蚵裡挖到千萬…', line: '中獎了！！是頭獎！', cry: ['快去領！快去領！', '請客！請客！'] },
+  { name: '開港紀念蚵', css: '#c8443a', w: 0, price: 0, emo: '⚓', tease: '活動限定：開港紀念包才拿得到', line: '開港紀念，蚵仔大豐收！', cry: ['這顆是紀念的喔！', '開港大吉！'], ex: true },
 ];
 const dexN = () => save.dex.filter(x => x).length + save.odd.filter(x => x).length;
 const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'uncommon' : 'common';
@@ -428,7 +429,7 @@ const dstatStr = () => dStat.flat().join(',');
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number> };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number } };
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {} }; }
 function loadSave(): Save {
   const d = defaultSave(); let raw: any = null;
@@ -450,6 +451,7 @@ function loadSave(): Save {
   out.gear = {}; if (raw.gear && typeof raw.gear === 'object') for (const [k, v] of Object.entries(raw.gear)) out.gear[k] = !!v;
   if (typeof raw.name === 'string' && raw.name.trim()) out.name = raw.name.slice(0, 16);
   if (Array.isArray(raw.locSeen)) out.locSeen = raw.locSeen.filter((x: any) => typeof x === 'string');
+  if (raw.trial && typeof raw.trial.id === 'string' && num(raw.trial.left) > 0) out.trial = { id: raw.trial.id, left: num(raw.trial.left) };
   if (Array.isArray(raw.redeemed)) out.redeemed = raw.redeemed.filter((x: any) => typeof x === 'string');
   return out;
 }
@@ -1021,8 +1023,8 @@ function renderShop() {
   const cur = knifeNow().id;
   $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><h3><i class="ic ic-knife"></i> 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>找縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
     const own = save.shop.owned.includes(k.id);
-    const btn = k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < k.price ? 'disabled' : ''}>$${k.price}</button>`;
-    return `<tr><td><b>${k.n}</b><br><small>${k.desc}</small></td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    const tr = save.trial?.id === k.id, btn = tr ? `${k.id === cur ? '<b>使用中</b><br>' : `<button data-eq="${k.id}">換</button><br>`}<button data-buy="${k.id}" ${save.money < k.price ? 'disabled' : ''}>買斷 $${k.price}</button>` : k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < k.price ? 'disabled' : ''}>$${k.price}</button>`;
+    return `<tr><td><b>${k.n}</b>${save.trial?.id === k.id ? ` <span class="trialTag">試用剩 ${save.trial.left} 班</span>` : ''}<br><small>${k.desc}</small></td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!save.shop.owned.includes('stripe')) save.shop.owned.push('stripe');
   const cu = umbNow().id, B = UMBS[0];
   const rel = (v: number, b: number, goodHigh: boolean, unit: string) => { if (v === b) return `<span style="opacity:.6">${v}${unit}</span>`; const good = goodHigh ? v > b : v < b; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${v}${unit}</b>`; };
@@ -1049,7 +1051,7 @@ function renderShop() {
   });
   $('shopList').querySelectorAll('button[data-buy],button[data-eq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const id = b.getAttribute('data-buy') || b.getAttribute('data-eq')!; const k = KNIVES.find(x => x.id === id)!;
-    if (b.hasAttribute('data-buy')) { if (save.money < k.price) return; save.money -= k.price; save.shop.owned.push(id); track('buy', { item: id, price: k.price }); if (ac) SFX.jingle(); }
+    if (b.hasAttribute('data-buy')) { if (save.money < k.price) return; save.money -= k.price; if (save.trial?.id === id) delete save.trial; else save.shop.owned.push(id); track('buy', { item: id, price: k.price }); if (ac) SFX.jingle(); }
     save.shop.equipped.knife = id; persist(); applyKnife(); renderShop();
   });
   $('shopList').insertAdjacentHTML('beforeend', '<h4 style="margin:12px 0 4px">🧰 其他器具（買了可以開關）</h4><table class="kt">' + GEAR.map(g => { const own = save.shop.owned.includes(g.id), on = gearOn(g.id);
@@ -1263,7 +1265,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   const LC = locNow(), base0 = meatPay + perfects * PERFECT_PAY + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
   const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty);
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
-  save.days++; autoUnlock(); save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
+  save.days++; tickTrial(); autoUnlock(); save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
   for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
   persist();
@@ -1723,6 +1725,24 @@ function rewardText(d: RedeemCodeDef) {
   for (const [k, n] of Object.entries(r.meds ?? {})) { const m = MEDS.find(x => x.id === k); if (m && n > 0) p.push(`${m.emo}${m.n}×${n}`); }
   return p.join('、') || '（無）';
 }
+function rewardList(d: RedeemCodeDef) {
+  const r = d.reward, li: string[] = [], row = (ic: string, t: string) => li.push(`<li><i class="ic ic-${ic}"></i> ${t}</li>`);
+  if (r.money) row('coin', `工錢 $${r.money}`);
+  if (r.trial) { const k = KNIVES.find(x => x.id === r.trial!.knife); if (k) row('knife', save.trial?.id === k.id ? `${k.n}（試用 ${r.trial.shifts} 班）` : `${k.n}（已擁有，改送等值工錢 $${TRIAL_REFUND}）`); }
+  for (const id of r.items ?? []) { const it = [...KNIVES, ...UMBS].find(x => x.id === id); row('gift', it ? it.n : id); }
+  for (const [k, n] of Object.entries(r.meds ?? {})) { const m = MEDS.find(x => x.id === k); if (m && n > 0) row('pill', `${m.n} ×${n}`); }
+  for (const [k, n] of Object.entries(r.odd ?? {})) { const o = ODD[+k]; if (o && n > 0) row('book', `${o.name} ×${n}（已收進圖鑑）`); }
+  (r.pearls ?? []).forEach((n, i) => { if (n > 0 && RAR[i]) row('pearl', `${RAR[i].name} ×${n}`); });
+  return `<div class="rdGot"><b><i class="ic ic-gift"></i> 兌換成功${d.label ? `・${d.label}` : ''}</b><ul>${li.join('')}</ul></div>`;
+}
+const TRIAL_REFUND = 100;
+function tickTrial() {
+  const t = save.trial; if (!t) return;
+  t.left--; if (t.left > 0) { setTimeout(() => toast(`${KNIVES.find(k => k.id === t.id)?.n ?? '試用刀'}試用剩 ${t.left} 班`, '#ffd76a'), 400); return; }
+  delete save.trial; save.shop.owned = save.shop.owned.filter(x => x !== t.id);
+  if (save.shop.equipped.knife === t.id) { save.shop.equipped.knife = 'basic'; applyKnife(); }
+  setTimeout(() => toast('試用刀到期，已換回舊蚵刀；喜歡的話可以到雜貨店買斷', '#ffd76a'), 400);
+}
 function grant(d: RedeemCodeDef) {
   const r = d.reward;
   if (r.money) save.money += Math.max(0, Math.floor(r.money));
@@ -1730,6 +1750,7 @@ function grant(d: RedeemCodeDef) {
   (r.pearls ?? []).forEach((n, i) => { if (i < save.dex.length) save.dex[i] += Math.max(0, Math.floor(n)); });
   for (const [k, n] of Object.entries(r.odd ?? {})) if (+k < save.odd.length) save.odd[+k] += Math.max(0, Math.floor(n));
   for (const [k, n] of Object.entries(r.meds ?? {})) if (MEDS.some(m => m.id === k)) save.meds[k] = (save.meds[k] ?? 0) + Math.max(0, Math.floor(n));
+  if (r.trial) { const k = KNIVES.find(x => x.id === r.trial!.knife); if (k) { if (save.shop.owned.includes(k.id)) save.money += TRIAL_REFUND; else { save.shop.owned.push(k.id); save.trial = { id: k.id, left: Math.max(1, r.trial.shifts) }; save.shop.equipped.knife = k.id; applyKnife(); } } }
   save.redeemed.push(d.id); persist();
 }
 {
@@ -1743,7 +1764,7 @@ function grant(d: RedeemCodeDef) {
     try {
       const res = await checkCode(inp.value, save.redeemed);
       if (!res.ok) { msg.textContent = REDEEM_MESSAGES[res.reason]; msg.className = 'bad'; return; }
-      grant(res.def); msg.innerHTML = `🎉 兌換成功！${res.def.label ? `（${res.def.label}）` : ''}<br>獲得：${rewardText(res.def)}`; msg.className = 'ok'; inp.value = '';
+      grant(res.def); msg.innerHTML = rewardList(res.def); msg.className = 'ok'; inp.value = '';
       track('redeem', { item: res.def.id }); if (ac) SFX.jingle(); try { renderDex(); } catch { }
     } finally { busy = false; sub.disabled = false; }
   };

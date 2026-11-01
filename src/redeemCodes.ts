@@ -20,8 +20,9 @@
  *
  * 注意：這裡只放 SHA-256 雜湊，絕對不要放明碼。
  */
-export type RedeemReward = { money?: number; items?: string[]; pearls?: number[]; odd?: Record<number, number>; meds?: Record<string, number> };
+export type RedeemReward = { money?: number; items?: string[]; pearls?: number[]; odd?: Record<number, number>; meds?: Record<string, number>; trial?: { knife: string; shifts: number } };
 export type RedeemCodeDef = { id: string; hash: string; reward: RedeemReward; start?: string; end?: string; label?: string };
 
 export const REDEEM_CODES: RedeemCodeDef[] = [
+  { id: 'kaigang-2026', hash: 'a48f4ac91f2d32a5209f0193de9c58b6830edbc0814d209d09c329b8b4ae4ee6', label: '開港紀念包', start: '2026-11-01T00:00:00+08:00', end: '2026-11-15T23:59:59+08:00', reward: { money: 300, trial: { knife: 'master', shifts: 3 }, meds: { patch: 2 }, odd: { 13: 1 } } },
 ];
