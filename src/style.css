@@ -168,7 +168,7 @@ body.tutOn #hint{display:none!important}
 @media (orientation:landscape) and (max-height:500px){#overlay #start{min-height:52px;font-size:19px}}
 
 .dexItem .dot{display:flex;align-items:center;justify-content:center;font-size:20px;min-width:34px;min-height:34px}
-.dexItem.locked .dot{filter:brightness(0) drop-shadow(0 0 1px #888);opacity:.75}.dexItem.locked b{color:#888}
+.dexItem .dot.unk{background:#2a2622!important;border:2px solid #888;box-sizing:border-box;color:#9a948c;font-weight:900;font-size:18px}.dexItem.locked b{color:#888}
 .rb{display:inline-block;font-size:11px;padding:1px 6px;border-radius:8px;font-weight:700;margin:1px}
 .r-common{background:#555;color:#eee}.r-uncommon{background:#2a7a4a;color:#dfffe8}.r-rare{background:#2a5ab0;color:#e0ecff}.r-legend{background:#b07a10;color:#fff3c0}
 .dexProg{margin:6px 0 10px}.dexBar{height:10px;background:#333;border-radius:6px;overflow:hidden;margin:6px 0}.dexBar i{display:block;height:100%;background:linear-gradient(90deg,#9be37a,#f2c440)}
@@ -519,3 +519,11 @@ body.tutOn #feed{display:none!important}
 #shop.sheet>.ph .px{top:6px!important;transform:none!important}
 .panel.sheet{z-index:50!important}#redeem.sheet{z-index:55!important}.panel.sheet>.pb>:first-child>:first-child{margin-top:0!important}
 #shop.sheet #shopList{padding-top:0!important;margin-top:0!important}#shop.sheet #shopList>div:first-child>:first-child{margin-top:0!important}
+
+/* 防止面板左移／橫向捲動 */
+html,body{overflow-x:hidden;max-width:100%}
+.panel,.panel *{box-sizing:border-box}
+.panel{overflow-x:hidden!important;overscroll-behavior-x:none;max-width:calc(100vw - 16px)!important}
+.panel .dexItem>div:last-child,.panel .pb>*{min-width:0;overflow-wrap:anywhere}
+.panel img,.panel table{max-width:100%}
+.panel.sheet .scrollHint span{margin:0}
