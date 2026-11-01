@@ -535,6 +535,7 @@ buildUmb('stripe', 1);
 umb.position.set(0, 0, -0.75);
 
 // ---------- 遊戲狀態 ----------
+let tapAim = false, tossT0 = 0; const TAP_HINT = '肉在刀尖上！點一下碗（或碗附近）丟進去，越快越俐落';
 type Phase = 'pick' | 'scoop' | 'seam' | 'twist' | 'aim' | 'empty' | 'crab' | 'busy';
 let state: 'menu' | 'play' | 'end' = 'menu';
 let tut: { i: number; c0: number; t0: number; b0: number; s0: number } | null = null; // 教學進行中
@@ -573,10 +574,11 @@ const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
 function setPhase(p: Phase) {
   if (p !== 'seam') { seamRing.visible = false; sweet = false; }
   phase = p; holding = false; hold = 0; fill.style.marginLeft = '0'; zone.style.left = ''; zone.style.width = ''; if (p === 'twist') { needleStart = performance.now(); combo = 0; } gauge.classList.remove('on', 'aim', 'tw'); setInZ('');
-  if (p === 'aim') gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
-  on('reticle', p === 'aim' || p === 'empty' || p === 'pick' || (document.pointerLockElement === canvas && p !== 'busy')); on('giveUp', (p === 'seam' || p === 'twist') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
+  tapAim = p === 'aim' && !tut; if (tapAim) tossT0 = performance.now(); bowlRing.visible = tapAim;
+  if (p === 'aim' && !tapAim) gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
+  on('reticle', (p === 'aim' && !tapAim) || p === 'empty' || p === 'pick' || (document.pointerLockElement === canvas && p !== 'busy')); on('giveUp', (p === 'seam' || p === 'twist') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
   on('rotL', p === 'seam'); on('rotR', p === 'seam'); on('throwBtn', (p === 'seam' || p === 'empty') && state === 'play');
-  if (p !== 'busy') hint.textContent = HINTS[p];
+  if (p !== 'busy') hint.textContent = tapAim ? TAP_HINT : HINTS[p];
   const d = DIFF[diff];
   if (p === 'aim') { const TW = tut ? 0.12 : 0; zone.style.left = `${(PERF0 - TW) * 100}%`; zone.style.width = `${(PERF1 - PERF0 + 2 * TW) * 100}%`; $('diff').textContent = crackedNow ? '⚠ 有殼屑' : ''; }
   if (p === 'twist') { zone.style.left = `${d.lo * 100}%`; zone.style.width = `${(d.hi - d.lo) * 100}%`; progress = 0; strokeDir = 0; strokeLen = 0; strokePeak = 0; }
@@ -1138,6 +1140,40 @@ function aimPoint() {
   return camera.position.clone().add(off).setY(BOWL.y);
 }
 function npcNear(p: THREE.Vector3, r: number) { return npcs.find(n => Math.hypot(n.g.position.x - p.x, n.g.position.z - p.z) < r); }
+const bowlRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.05, 28), new THREE.MeshBasicMaterial({ color: 0xf2b705, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+bowlRing.rotation.x = -Math.PI / 2; bowlRing.visible = false; scene.add(bowlRing);
+const fx: { m: THREE.Mesh; v: THREE.Vector3; t: number }[] = [];
+const fxGeo = new THREE.SphereGeometry(0.012, 5, 4);
+function burst(at: THREE.Vector3, n: number, color: number, up: number) {
+  for (let i = 0; i < n; i++) { const m = new THREE.Mesh(fxGeo, new THREE.MeshBasicMaterial({ color, transparent: true })); m.position.copy(at); scene.add(m); const a = Math.random() * 6.28, r = rnd(0.2, 0.6); fx.push({ m, v: new THREE.Vector3(Math.cos(a) * r, rnd(0.6, 1) * up, Math.sin(a) * r), t: 0.6 }); }
+}
+function tickFx(dt: number) {
+  for (let i = fx.length - 1; i >= 0; i--) { const f = fx[i]; f.t -= dt; f.v.y -= 4 * dt; f.m.position.addScaledVector(f.v, dt); (f.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, f.t / 0.6); if (f.t <= 0) { scene.remove(f.m); fx.splice(i, 1); } }
+  if (bowlRing.visible) { const k = 1 + 0.12 * Math.sin(performance.now() / 120); bowlRing.position.set(BOWL.x, BOWL.y + 0.02, BOWL.z); bowlRing.scale.setScalar(BOWL_R * k); }
+}
+function nearBowl(x: number, y: number) {
+  const p = BOWL.clone().project(camera); if (p.z > 1) return false;
+  const bx = (p.x + 1) / 2 * innerWidth, by = (1 - p.y) / 2 * innerHeight;
+  return Math.hypot(bx - x, by - y) < Math.max(150, Math.min(innerWidth, innerHeight) * 0.28);
+}
+function toss(tapped: boolean) {
+  if (phase !== 'aim' || !tapAim || state !== 'play') return;
+  const el = (performance.now() - tossT0) / 1000, quick = tapped && el <= 0.8;
+  setPhase('busy'); meatInHand.visible = false;
+  const wasCracked = crackedNow, md = diff;
+  const from = worldOf(oyster), m = new THREE.Mesh(meatGeo, wasCracked ? splatMat : meatMat);
+  const land = new THREE.Vector3(BOWL.x + rnd(-0.06, 0.06), BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015, BOWL.z + rnd(-0.06, 0.06));
+  SFX.whoosh(); if (quick) { perfects++; $('gtag').textContent = ''; }
+  fly(m, from, land, 0.45, 0.3, () => {
+    count++; bowlBonus += bowlNow().bonus; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.25)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)) + (quick ? 1 : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    burst(land.clone().setY(BOWL.y + 0.02), 8, 0xbfe4f2, 1);
+    if (!wasCracked) burst(land.clone().setY(BOWL.y + 0.05), 6, 0xffd23a, 1.4);
+    if (quick) { tone(980, 0.06, 0.18, 'triangle', 0, 520); tone(1568, 0.08, 0.1, 'sine', 0.05); } else SFX.plop();
+    toast(`${quick ? '俐落！' : wasCracked ? '入碗（有殼屑）' : '入碗！'} +$${pv} ${DIFF[md].n}`, quick ? '#f2b705' : DIFF[md].css); if (Math.random() < 0.15) say(pick(npcs), pick(PRAISE), 2);
+    updHud();
+  });
+  later(0.35, () => { if (meatsLeft > 1 && state === 'play') { meatsLeft--; showExtra(); meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); hint.textContent = `還有 ${meatsLeft} 塊肉！點碗繼續丟`; } else { meatsLeft = 1; showExtra(); emptyT = 2.2; setPhase('empty'); } });
+}
 function shoot(power: number) {
   setPhase('busy');
   const TW = tut ? 0.12 : 0; const perfect = power >= PERF0 - TW && power <= PERF1 + TW; // 教學時藍區較闊
@@ -1315,7 +1351,7 @@ canvas.addEventListener('pointerdown', e => {
   if (walking) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (e.button === 2) { throwShell(); return; }
   down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && hitsOyster(e.clientX, e.clientY), lx: e.clientX, lt: performance.now() };
-  if (phase === 'aim') { holding = true; hold = 0; }
+  if (phase === 'aim' && !tapAim) { holding = true; hold = 0; }
 });
 let lastMoveT = performance.now();
 window.addEventListener('pointermove', e => {
@@ -1334,7 +1370,7 @@ window.addEventListener('pointermove', e => {
   if (down.drag) { const k = 0.006 * mix.sens; tYaw = clamp(down.yaw - dx * k * (mix.invX ? -1 : 1), -yl(), yl()); tPitch = clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), P0, P1); }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); if (phase === 'aim' && state === 'play') shoot(h); }
-const up = (e: PointerEvent) => { if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else release(); } else release(); down = null; } };
+const up = (e: PointerEvent) => { if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else if (phase === 'aim' && tapAim) { const lk = document.pointerLockElement === canvas; if (nearBowl(lk ? innerWidth / 2 : e.clientX, lk ? innerHeight / 2 : e.clientY)) toss(true); else hint.textContent = '點碗或碗附近就能丟進去'; } else release(); } else release(); down = null; } };
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
@@ -1347,7 +1383,7 @@ window.addEventListener('keydown', e => {
   if (walking) { walkKeys.add(e.code); if (e.code === 'KeyE' && nearSeat) sitDown(nearSeat.id); return; }
   if (e.code === 'KeyG') { standUp(); return; }
   if (e.code === 'Space' && !e.repeat && umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
-  if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim') { holding = true; hold = 0; } }
+  if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) toss(true); else if (phase === 'aim') { holding = true; hold = 0; } }
   if (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
     const l = e.code === 'KeyA' || e.code === 'ArrowLeft';
     if (phase === 'seam') rotKey = l ? -1 : 1; else if (!e.repeat && swipePhase()) keyTwist(l ? 'L' : 'R');
@@ -1526,6 +1562,7 @@ function frame() {
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
     updBlood(rdt);
     if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.6, goPick); setPhase('busy'); } }
+    tickFx(rdt); if (phase === 'aim' && tapAim && performance.now() - tossT0 > 2000) toss(false);
     if (phase === 'empty') { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (holding && phase === 'aim') { gauge.classList.add('on'); hold += dt * 0.77 * (newbie() ? 0.75 : 1); if (hold > 1.25) { hold = 1.3; release(); } fill.style.width = `${Math.min(1, hold) * 100}%`; fill.style.background = 'rgba(255,255,255,.75)'; { const TW = tut ? 0.12 : 0; setInZ(hold >= PERF0 - TW && hold <= PERF1 + TW ? 'p' : ''); } }
     if (!(phase === 'twist' || (holding && phase === 'aim'))) setInZ('');
