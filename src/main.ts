@@ -455,7 +455,7 @@ const dstatStr = () => dStat.flat().join(',');
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number } };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string> };
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {} }; }
 function loadSave(): Save {
   const d = defaultSave(); let raw: any = null;
@@ -467,6 +467,7 @@ function loadSave(): Save {
   const out: Save = { ...d, dex: arr4(raw.dex), odd: ODD.map((_, i) => num(Array.isArray(raw.odd) ? raw.odd[i] : 0)), best: num(raw.best), money: num(raw.money), days: num(raw.days), queen: num(raw.queen) };
   for (const k of LIFE_KEYS) out.life[k] = num(raw.life?.[k]);
   if (raw.titles && typeof raw.titles === 'object') for (const [k0, v] of Object.entries(raw.titles)) { const k = k0 === '👑 今日蚵后' ? '👑 今日剝蚵冠軍' : k0; out.titles[k] = (out.titles[k] ?? 0) + num(v); }
+  if (raw.equip && typeof raw.equip === 'object') { out.equip = {}; for (const [k, v] of Object.entries(raw.equip)) if (typeof v === 'string') out.equip[k] = v; }
   if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
   if (raw.shop?.equipped && typeof raw.shop.equipped === 'object') for (const [k, v] of Object.entries(raw.shop.equipped)) if (typeof v === 'string') out.shop.equipped[k] = v;
   if (typeof raw.seat === 'string') out.seat = raw.seat;
@@ -1713,7 +1714,7 @@ if (SHOT) setTimeout(() => {
   if (SHOT === 'seat') { applySeat(params.get('s') || 'corner'); goPick(); }
   if (SHOT === 'walk') { later(0.1, () => { standUp(); walkPos.set(-1.1, 1.55, -2.35); tYaw = yaw = 3.09; tPitch = pitch = -0.5; }); }
   if (SHOT === 'dex') { renderDex(); $('dex').classList.add('show'); }
-  if (SHOT === 'sleeves') { save.money = 20000; save.shop.owned.push('sl_flower'); save.shop.equipped.sleeve = params.get('s') || 'sl_dragon'; if (!save.shop.owned.includes(save.shop.equipped.sleeve)) save.shop.owned.push(save.shop.equipped.sleeve); applySleeve(); if (params.get('p') === 'shop') { renderShop(); shopTab = 3; shopTabs(); $('shop').classList.add('show'); } }
+  if (SHOT === 'sleeves') { save.money = 20000; save.shop.owned.push('sl_flower'); const sid = params.get('s') || 'sl_dragon'; setEquip('hand', sid); if (!save.shop.owned.includes(sid)) save.shop.owned.push(sid); applySleeve(); if (params.get('p') === 'shop') { renderShop(); shopTab = 3; shopTabs(); $('shop').classList.add('show'); } }
   if (SHOT === 'settings') $('settings').classList.add('show');
   if (SHOT === 'fb' || SHOT === 'fbdone') { openFb('settings'); if (SHOT === 'fbdone') fbShow(true); }
   if (SHOT === 'pick') look(-0.25, -0.85);
@@ -1881,16 +1882,21 @@ function renderMedShop() {
   });
 }
 // ---------- 袖套 ----------
-type Sleeve = { id: string; n: string; price: number; eff: string; base: string; pat: string };
+// 裝備欄位：head 頭／hand 手／body 衣服／legs 褲子／feet 鞋子；之後新部位直接加進 EQUIP
+type Slot = 'head' | 'hand' | 'body' | 'legs' | 'feet';
+type Sleeve = { id: string; slot: Slot; n: string; price: number; eff: string; base: string; pat: string };
 const SLEEVES: Sleeve[] = [
-  { id: 'sl_flower', n: '碎花袖套', price: 3000, eff: '每碗多拿 $1', base: '#e86a8a', pat: 'flower' },
-  { id: 'sl_rain', n: '防水雨衣袖套', price: 8000, eff: '翹殼沒中的懲罰減半（一半機率保住連擊）', base: '#ffd21a', pat: 'rain' },
-  { id: 'sl_89', n: '89包手袖套', price: 8989, eff: '刺青太兇，阿婆主動丟殼的機率剩 ×0.2，旁邊的人會小聲議論', base: '#d9a77a', pat: 'tattoo' },
-  { id: 'sl_camo', n: '迷彩袖套', price: 15000, eff: '比較不顯眼，阿婆唸你、干擾的機率 -30%', base: '#5a6b3a', pat: 'camo' },
-  { id: 'sl_neon', n: '螢光運動袖套', price: 30000, eff: '翹殼指針慢 5%', base: '#39ff9a', pat: 'neon' },
-  { id: 'sl_dragon', n: '金線刺繡龍袖套', price: 80000, eff: '珍珠率 +8%，開到珍珠手臂閃金光', base: '#8a1420', pat: 'dragon' },
+  { slot: 'hand', id: 'sl_flower', n: '碎花袖套', price: 3000, eff: '每碗多拿 $1', base: '#e86a8a', pat: 'flower' },
+  { slot: 'hand', id: 'sl_rain', n: '防水雨衣袖套', price: 8000, eff: '翹殼沒中的懲罰減半（一半機率保住連擊）', base: '#ffd21a', pat: 'rain' },
+  { slot: 'hand', id: 'sl_89', n: '89包手袖套', price: 8989, eff: '刺青太兇，阿婆主動丟殼的機率剩 ×0.2，旁邊的人會小聲議論', base: '#d9a77a', pat: 'tattoo' },
+  { slot: 'hand', id: 'sl_camo', n: '迷彩袖套', price: 15000, eff: '比較不顯眼，阿婆唸你、干擾的機率 -30%', base: '#5a6b3a', pat: 'camo' },
+  { slot: 'hand', id: 'sl_neon', n: '螢光運動袖套', price: 30000, eff: '翹殼指針慢 5%', base: '#39ff9a', pat: 'neon' },
+  { slot: 'hand', id: 'sl_dragon', n: '金線刺繡龍袖套', price: 80000, eff: '珍珠率 +8%，開到珍珠手臂閃金光', base: '#8a1420', pat: 'dragon' },
 ];
-const sleeveNow = () => SLEEVES.find(s => s.id === save.shop.equipped.sleeve && save.shop.owned.includes(s.id)) ?? null;
+const EQUIP: Sleeve[] = [...SLEEVES];
+const setEquip = (slot: Slot, id: string) => { save.equip = save.equip ?? {}; if (id) save.equip[slot] = id; else delete save.equip[slot]; };
+const equipNow = (slot: Slot) => EQUIP.find(e => e.slot === slot && e.id === save.equip?.[slot] && save.shop.owned.includes(e.id)) ?? null;
+const sleeveNow = () => equipNow('hand');
 let sleeveTry: string | null = null, scaredT = 10;
 const SCARED = ['這個人看起來很流氓…', '不要惹那位', '手上那個刺青…你敢丟殼你丟', '小聲點，那個人在看', '我剛剛什麼都沒說喔', '那個刺青是真的嗎…', '今天大家安靜剝蚵就好', '殼不要往那邊丟啦', '那位是哪個角頭的…', '好啦好啦，我專心剝', '這位做的鐵板燒一定很好吃'];
 const slOn = (id: string) => sleeveNow()?.id === id;
@@ -1930,14 +1936,14 @@ function renderSleeveShop() {
   $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = SLEEVES.find(x => x.id === id);
     if (b.hasAttribute('data-slbuy') && s) { if (save.money < s.price) return; save.money -= s.price; save.shop.owned.push(id); track('buy', { item: id, price: s.price }); if (ac) SFX.jingle(); }
-    save.shop.equipped.sleeve = id; sleeveTry = null; persist(); applySleeve(); renderShop(); renderSleeveSet();
+    setEquip('hand', id); sleeveTry = null; persist(); applySleeve(); renderShop(); renderSleeveSet();
   });
 }
 function renderSleeveSet() {
   const box = document.getElementById('sleeveSet'); if (!box) return; const own = SLEEVES.filter(s => save.shop.owned.includes(s.id));
   box.style.display = own.length ? '' : 'none'; const cur = sleeveNow()?.id ?? '';
   box.innerHTML = `<span class="rl">袖套</span><select id="sleeveSel"><option value="">不穿</option>${own.map(s => `<option value="${s.id}" ${cur === s.id ? 'selected' : ''}>${s.n}</option>`).join('')}</select>`;
-  ($('sleeveSel') as HTMLSelectElement).onchange = e => { save.shop.equipped.sleeve = (e.target as HTMLSelectElement).value; persist(); applySleeve(); };
+  ($('sleeveSel') as HTMLSelectElement).onchange = e => { setEquip('hand', (e.target as HTMLSelectElement).value); persist(); applySleeve(); };
 }
 let shopTab = 0;
 function shopTabs() {
