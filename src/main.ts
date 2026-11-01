@@ -1,3 +1,4 @@
+import { postDiscordFeedback } from './discord';
 import { installBackGuard } from './backguard';
 import { checkCode, REDEEM_MESSAGES } from './redeem';
 import type { RedeemCodeDef } from './redeemCodes';
@@ -1701,7 +1702,10 @@ $('fbSend').onclick = () => {
   fbLast = Date.now();
   const ua = navigator.userAgent, uaS = (/(iPhone|iPad|Android|Windows|Mac OS X|Linux)/.exec(ua)?.[1] ?? '?') + ' ' + (/(Edg|Chrome|Firefox|Safari)\/[\d]+/.exec(ua)?.[0] ?? '');
   const body = JSON.stringify({ uid: statsId, cat: fbCat, text, contact: ($('fbContact') as HTMLInputElement).value.trim().slice(0, 120), meta: { ver: __BUILD__, dev: COARSE ? 'mobile' : 'pc', screen: `${innerWidth}x${innerHeight}`, loc: locNow().id, days: save.days, ua: uaS } });
-  fetch(FB_URL, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(r => { if (!r.ok) throw 0; toast('謝謝你的回饋！'); ta.value = ''; fbCount(); $('fbClose').click(); }).catch(() => { fbLast = 0; toast('送出失敗，稍後再試'); });
+  const catName: Record<string, string> = { bug: '🐛 Bug', idea: '💡 建議', fun: '😊 好玩', hard: '😣 太難' };
+  const pBack = fetch(FB_URL, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(r => r.ok, () => false);
+  const pDc = postDiscordFeedback(`剝蚵仔模擬器｜${catName[fbCat] ?? fbCat}`, text, { 版本: __BUILD__, 裝置: `${COARSE ? 'mobile' : 'pc'} ${uaS}`, 螢幕: `${innerWidth}x${innerHeight}`, 漁港: locNow().id, 工數: save.days });
+  Promise.all([pBack, pDc]).then(([a, b]) => { if (a || b) { toast('謝謝你的回饋！'); ta.value = ''; fbCount(); $('fbClose').click(); } else { fbLast = 0; toast('送出失敗，稍後再試'); } });
 };
 installBackGuard(() => {
   const open = (id: string) => document.getElementById(id)?.classList.contains('show');
