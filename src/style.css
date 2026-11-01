@@ -530,3 +530,5 @@ html,body{overflow-x:hidden;max-width:100%}
 .panel .dexItem>div:last-child,.panel .pb>*{min-width:0;overflow-wrap:anywhere}
 .panel img,.panel table{max-width:100%}
 .panel.sheet .scrollHint span{margin:0}
+
+.slGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}.slCard{border:2px solid #1b1b1b;border-radius:8px;padding:6px;background:rgba(255,255,255,.06);display:flex;flex-direction:column;gap:4px}.slCard.on{border-color:#ffd25a}.slCard small{opacity:.85}.slBtns{display:flex;gap:4px}.slBtns button{flex:1;min-height:36px;font-size:13px}.slv{max-width:100%}

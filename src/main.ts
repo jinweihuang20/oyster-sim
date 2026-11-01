@@ -187,7 +187,7 @@ const PRAISE = ['好功夫！', '真的很準喔！', '那顆丟得真漂亮！'
 function say(n: Npc, t: string, dur = 3.2) { if (ac) SFX.murmur([300, 230, 380][npcs.indexOf(n)] ?? 300); n.bubble.textContent = t; n.bubble.style.opacity = '1'; n.bubT = dur; }
 let lastNag = '';
 function nag(lines: string[]) {
-  if (Math.random() > seatNow().nag) return;
+  if (Math.random() > seatNow().nag * (slOn('sl_camo') ? 0.7 : 1)) return;
   let t = pick(lines); while (t === lastNag && lines.length > 1) t = pick(lines); lastNag = t;
   const n = npcs.find(x => x.peek && Math.random() < 0.5) ?? pick(npcs); n.look = 2.5; say(n, t, 3);
 }
@@ -510,7 +510,7 @@ const luckNow = () => Math.max(0, (knifeNow().luck || 0) + medA('luck'));
 const luckW = (arr: { w: number }[], l: number) => arr.map(x => ({ w: x.w <= 2 ? x.w * Math.min(1.3, 1 + 0.15 * l) : x.w <= 20 ? x.w * (1 + 0.15 * l) : x.w }));
 function rollFind(): { kind: 'pearl' | 'odd' | 'none'; i: number } {
   const l = luckNow(), f = 1 + 0.12 * l;
-  const p = (1 / 50 + Math.max(0, dry - 40) * 0.01) * f;
+  const p = (1 / 50 + Math.max(0, dry - 40) * 0.01) * f * (slOn('sl_dragon') ? 1.08 : 1);
   if (Math.random() < p) { dry = 0; return { kind: 'pearl', i: wpick(luckW(RAR, l)) }; }
   // 新手：普通／少見（權重 ≥20）額外 +1.5 倍機率 → 合計約 ×2.5；稀有／傳說不加
   const common = (arr: { w: number }[]) => luckW(arr, l).map((x, i) => ({ w: arr[i].w >= 20 ? x.w : 0 }));
@@ -886,7 +886,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
-  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); drawMeds(); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
+  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); applySleeve(); drawMeds(); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
 }
 function updHud() {
   ($('hpFill') as HTMLElement).style.width = `${hp}%`;
@@ -1043,7 +1043,7 @@ function applyBowl() {
 const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
 const pryW = () => Math.min(0.6, Math.min(1.6, 1 + 0.15 * pryHits) * PRY[diff].w * knifeNow().green * medM('green') * (newbie() ? 1.3 : 1));
 const PRY_SLOW = 0.56; // 整體放慢（0.8→0.56，再慢 30%）
-const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * knifeNow().speed * medM('speed');
+const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * knifeNow().speed * medM('speed') * (slOn('sl_neon') ? 0.95 : 1);
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
 const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? 1.25 : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
@@ -1092,7 +1092,7 @@ function renderShop() {
     else save.gear[id] = !gearOn(id);
     persist(); renderShop(); drawRadio(); applyGloves();
   });
-  renderMedShop(); shopTabs();
+  renderSleeveShop(); renderMedShop(); shopTabs();
 }
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : 1); }
 const PRY_GRACE = 0.04;
@@ -1109,7 +1109,7 @@ function pry(ms = performance.now()) {
   const need = pryNeed();
   if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; dStat[diff][3]++; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('太大力，殼碎掉了！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
   else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; pryHits++; if (Math.sin(((ms - needleStart) / 1000) * Math.PI * 2 * prySp()) > 0) needleStart = ms; combo++; if (combo > dayCombo) dayCombo = combo; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！功夫真好！' : '好！再一下'; }
-  else { combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 沒中'); hint.textContent = '時機不對，等指針走到綠區再點'; tension = 0.3; return; }
+  else { if (!(slOn('sl_rain') && Math.random() < 0.5)) combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 沒中'); hint.textContent = '時機不對，等指針走到綠區再點'; tension = 0.3; return; }
   shellTop.rotation.z = -progress * 0.4;
   if (progress >= 0.999) openOyster();
 }
@@ -1192,7 +1192,7 @@ function toss(tapped: boolean) {
   const land = new THREE.Vector3(BOWL.x + rnd(-0.06, 0.06), BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015, BOWL.z + rnd(-0.06, 0.06));
   SFX.whoosh(); if (quick) { perfects++; $('gtag').textContent = ''; }
   fly(m, from, land, 0.45, 0.3, () => {
-    count++; bowlBonus += bowlNow().bonus; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.25)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)) + (quick ? 1 : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    count++; bowlBonus += bowlNow().bonus + (slOn('sl_flower') ? 1 : 0); const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.25)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)) + (quick ? 1 : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
     burst(land.clone().setY(BOWL.y + 0.02), 8, 0xbfe4f2, 1);
     if (!wasCracked) burst(land.clone().setY(BOWL.y + 0.05), 6, 0xffd23a, 1.4);
     if (quick) { tone(980, 0.06, 0.18, 'triangle', 0, 520); tone(1568, 0.08, 0.1, 'sine', 0.05); } else SFX.plop();
@@ -1319,7 +1319,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
 }
 function revealPearl(r: number) {
-  dayPearls.push(r); save.dex[r]++; persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
+  sleeveGold(); dayPearls.push(r); save.dex[r]++; persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
   slowmo = 2.6; pearlShow = 2.6;
   (pearlMesh.material as THREE.MeshStandardMaterial).color.setHex(RAR[r].color);
   (pearlMesh.material as THREE.MeshStandardMaterial).emissive.setHex(r === 3 ? 0x302050 : RAR[r].color).multiplyScalar(0.25);
@@ -1481,13 +1481,13 @@ $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 $('start').onclick = () => { shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 btn('again', startDay);
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
-$('setBtn').onclick = () => $('settings').classList.add('show');
+$('setBtn').onclick = () => { renderSleeveSet(); $('settings').classList.add('show'); };
 $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
 $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖鑑、生涯紀錄、設定都會清掉，無法復原。')) { LS.removeItem('oyster-sim'); LS.removeItem('oyster-mix'); location.reload(); } };
 $('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); renderShop(); $('shop').classList.add('show'); };
 $('shopBtn2').onclick = () => { renderShop(); $('shop').classList.add('show'); };
-$('shopClose').onclick = () => $('shop').classList.remove('show');
+$('shopClose').onclick = () => { $('shop').classList.remove('show'); if (sleeveTry) { sleeveTry = null; applySleeve(); } };
 applyKnife(); applyUmb(); applySeat(save.seat ?? 'door');
 $('setClose').onclick = () => $('settings').classList.remove('show');
 for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as HTMLInputElement; el.value = String(mix[k]); el.oninput = () => { mix[k] = Number(el.value); applyMix(); if (k === 'sfx' && ac) SFX.plop(); }; }
@@ -1583,7 +1583,8 @@ function frame() {
       n.distract -= dt; n.angry -= dt; n.mood -= dt;
       npcShuck(n, dt, t);
       n.grudge = Math.max(0, (n.grudge ?? 0) - (walking ? (performance.now() - (n.gAt ?? 0) > 2000 ? dt * 7.5 : 0) : performance.now() - (n.gAt ?? 0) > 8000 ? dt * 2.5 : 0) * (newbie() ? 2 : 1)); n.calm = Math.max(0, (n.calm ?? 0) - dt); grudgeUI(n);
-      n.throwCd -= dt * seatNow().throwM * locNow().thr * (n.calm! > 0 ? 0.3 : (1 + n.grudge! / 25) * (n.mood > 0 ? 2 : 1) * 1); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); if (!tut && !(newbie() && !((n.grudge ?? 0) > 0))) windUp(n); }
+      if (n === npcs[0] && slOn('sl_89') && !tut && (scaredT -= dt) <= 0) { scaredT = rnd(8, 15); const m = pick(npcs); if (m.bubT <= 0) say(m, pick(SCARED)); }
+      n.throwCd -= dt * seatNow().throwM * locNow().thr * (n.calm! > 0 ? 0.3 : (1 + n.grudge! / 25) * (n.mood > 0 ? 2 : 1) * 1); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); if (!tut && !(newbie() && !((n.grudge ?? 0) > 0)) && !(slOn('sl_89') && Math.random() > 0.2)) windUp(n); }
       if (n.windup > 0) { warnNpc = n; n.windup -= rdt; if (!n.warned && n.windup <= warnLead(n)) { n.warned = true; SFX.alert(); } if (n.windup <= 0) npcThrow(n); }
       if (n.peek && n.look <= 0 && n.distract <= 0 && Math.random() < dt * 0.05) { n.look = 2.5; say(n, pick(PEEK), 2.5); }
     }
@@ -1712,6 +1713,7 @@ if (SHOT) setTimeout(() => {
   if (SHOT === 'seat') { applySeat(params.get('s') || 'corner'); goPick(); }
   if (SHOT === 'walk') { later(0.1, () => { standUp(); walkPos.set(-1.1, 1.55, -2.35); tYaw = yaw = 3.09; tPitch = pitch = -0.5; }); }
   if (SHOT === 'dex') { renderDex(); $('dex').classList.add('show'); }
+  if (SHOT === 'sleeves') { save.money = 20000; save.shop.owned.push('sl_flower'); save.shop.equipped.sleeve = params.get('s') || 'sl_dragon'; if (!save.shop.owned.includes(save.shop.equipped.sleeve)) save.shop.owned.push(save.shop.equipped.sleeve); applySleeve(); if (params.get('p') === 'shop') { renderShop(); shopTab = 3; shopTabs(); $('shop').classList.add('show'); } }
   if (SHOT === 'settings') $('settings').classList.add('show');
   if (SHOT === 'fb' || SHOT === 'fbdone') { openFb('settings'); if (SHOT === 'fbdone') fbShow(true); }
   if (SHOT === 'pick') look(-0.25, -0.85);
@@ -1877,6 +1879,65 @@ function renderMedShop() {
     const m = MEDS.find(x => x.id === b.getAttribute('data-mbuy'))!; if (save.money < m.price) return;
     save.money -= m.price; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; persist(); track('buy', { item: 'med-' + m.id, price: m.price }); if (ac) SFX.jingle(); renderShop(); drawMeds();
   });
+}
+// ---------- 袖套 ----------
+type Sleeve = { id: string; n: string; price: number; eff: string; base: string; pat: string };
+const SLEEVES: Sleeve[] = [
+  { id: 'sl_flower', n: '碎花袖套', price: 3000, eff: '每碗多拿 $1', base: '#e86a8a', pat: 'flower' },
+  { id: 'sl_rain', n: '防水雨衣袖套', price: 8000, eff: '翹殼沒中的懲罰減半（一半機率保住連擊）', base: '#ffd21a', pat: 'rain' },
+  { id: 'sl_89', n: '89包手袖套', price: 8989, eff: '刺青太兇，阿婆主動丟殼的機率剩 ×0.2，旁邊的人會小聲議論', base: '#d9a77a', pat: 'tattoo' },
+  { id: 'sl_camo', n: '迷彩袖套', price: 15000, eff: '比較不顯眼，阿婆唸你、干擾的機率 -30%', base: '#5a6b3a', pat: 'camo' },
+  { id: 'sl_neon', n: '螢光運動袖套', price: 30000, eff: '翹殼指針慢 5%', base: '#39ff9a', pat: 'neon' },
+  { id: 'sl_dragon', n: '金線刺繡龍袖套', price: 80000, eff: '珍珠率 +8%，開到珍珠手臂閃金光', base: '#8a1420', pat: 'dragon' },
+];
+const sleeveNow = () => SLEEVES.find(s => s.id === save.shop.equipped.sleeve && save.shop.owned.includes(s.id)) ?? null;
+let sleeveTry: string | null = null, scaredT = 10;
+const SCARED = ['這個人看起來很流氓…', '不要惹那位', '手上那個刺青…你敢丟殼你丟', '小聲點，那個人在看', '我剛剛什麼都沒說喔', '那個刺青是真的嗎…', '今天大家安靜剝蚵就好', '殼不要往那邊丟啦', '那位是哪個角頭的…', '好啦好啦，我專心剝', '這位做的鐵板燒一定很好吃'];
+const slOn = (id: string) => sleeveNow()?.id === id;
+function sleeveTex(s: Sleeve) {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d')!;
+  g.fillStyle = s.base; g.fillRect(0, 0, 128, 128);
+  const dot = (x: number, y: number, r: number, col: string) => { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); };
+  if (s.pat === 'flower') for (let i = 0; i < 40; i++) { const x = (i * 37) % 128, y = (i * 53) % 128; for (let k = 0; k < 5; k++) dot(x + Math.cos(k * 1.26) * 5, y + Math.sin(k * 1.26) * 5, 3, '#fff3c8'); dot(x, y, 2.5, '#3a8a4a'); }
+  if (s.pat === 'rain') { g.strokeStyle = '#fff7a0'; g.lineWidth = 3; for (let y = 10; y < 128; y += 30) { g.beginPath(); g.moveTo(0, y); g.lineTo(128, y); g.stroke(); } }
+  if (s.pat === 'camo') for (let i = 0; i < 30; i++) dot((i * 41) % 128, (i * 29) % 128, 8 + (i % 3) * 4, ['#2e3a1e', '#8a7a4a', '#3e5228'][i % 3]);
+  if (s.pat === 'neon') { g.fillStyle = '#ffffff'; for (let y = 20; y < 128; y += 40) g.fillRect(0, y, 128, 6); }
+  if (s.pat === 'tattoo') { g.strokeStyle = '#1e2a4a'; g.lineWidth = 3; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(64, 140 - i * 22, 40, Math.PI, 2 * Math.PI); g.stroke(); } g.fillStyle = '#b8323a'; dot(40, 40, 9, '#b8323a'); dot(90, 80, 9, '#2a5a9a'); }
+  if (s.pat === 'dragon') { g.strokeStyle = '#ffd25a'; g.lineWidth = 4; g.beginPath(); for (let x = 0; x <= 128; x += 4) g.lineTo(x, 64 + Math.sin(x / 10) * 26); g.stroke(); for (let x = 8; x < 128; x += 16) dot(x, 64 + Math.sin(x / 10) * 26, 3, '#fff0a0'); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 3); return t;
+}
+function applySleeve() {
+  const s = sleeveTry ? SLEEVES.find(x => x.id === sleeveTry)! : sleeveNow();
+  sleeve.map?.dispose(); sleeve.map = s ? sleeveTex(s) : null; sleeve.color.set(s ? 0xffffff : 0x3a5a8a);
+  sleeve.emissive.set(s?.pat === 'neon' ? 0x1a8a50 : 0x000000); sleeve.needsUpdate = true;
+}
+function sleeveGold() { if (!slOn('sl_dragon')) return; let k = 0; const iv = setInterval(() => { sleeve.emissive.set(k % 2 ? 0x000000 : 0xb08010); if (++k > 8) { clearInterval(iv); sleeve.emissive.set(0); } }, 150); }
+function sleeveSvg(s: Sleeve) {
+  const P: Record<string, string> = {
+    flower: '<circle cx="20" cy="20" r="3" fill="#fff3c8"/><circle cx="40" cy="30" r="3" fill="#fff3c8"/><circle cx="58" cy="18" r="3" fill="#fff3c8"/>',
+    rain: '<path d="M8 18H72M8 34H72" stroke="#fff7a0" stroke-width="2"/>',
+    camo: '<circle cx="20" cy="22" r="7" fill="#2e3a1e"/><circle cx="48" cy="30" r="8" fill="#8a7a4a"/>',
+    neon: '<path d="M8 26H72" stroke="#fff" stroke-width="4"/>',
+    tattoo: '<path d="M14 36Q30 8 46 36T76 36" stroke="#1e2a4a" stroke-width="2.5" fill="none"/><circle cx="28" cy="20" r="4" fill="#b8323a"/>',
+    dragon: '<path d="M8 26Q20 10 32 26T56 26T72 22" stroke="#ffd25a" stroke-width="2.5" fill="none"/>' };
+  return `<svg class="slv" viewBox="0 0 100 48" width="100" height="48"><rect x="4" y="8" width="72" height="34" rx="10" fill="${s.base}" stroke="#1b1b1b" stroke-width="2"/>${P[s.pat]}<path d="M76 14h12a8 8 0 0 1 0 22H76" fill="#e8b890" stroke="#1b1b1b" stroke-width="2"/></svg>`;
+}
+function renderSleeveShop() {
+  const cur = sleeveNow()?.id;
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-hand"></i> 袖套</h3><p style="font-size:12px;opacity:.8">買了永久擁有，一次只能穿一款，只有穿著的那款有效果。換穿免費。</p><div class="slGrid">` + SLEEVES.map(s => { const own = save.shop.owned.includes(s.id);
+    return `<div class="slCard${cur === s.id ? ' on' : ''}">${sleeveSvg(s)}<b>${s.n}</b><small>$${s.price}・${s.eff}</small><div class="slBtns"><button data-sltry="${s.id}">${sleeveTry === s.id ? '試穿中' : '試穿'}</button>${own ? `<button data-sleq="${s.id}" ${cur === s.id ? 'disabled' : ''}>${cur === s.id ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${save.money < s.price ? 'disabled' : ''}>買 $${s.price}</button>`}</div></div>`; }).join('') + `</div>${cur ? '<button data-sleq="">脫掉袖套</button>' : ''}`);
+  $('shopList').querySelectorAll('button[data-sltry]').forEach(b => (b as HTMLButtonElement).onclick = () => { const id = b.getAttribute('data-sltry')!; sleeveTry = sleeveTry === id ? null : id; applySleeve(); renderShop(); });
+  $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+    const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = SLEEVES.find(x => x.id === id);
+    if (b.hasAttribute('data-slbuy') && s) { if (save.money < s.price) return; save.money -= s.price; save.shop.owned.push(id); track('buy', { item: id, price: s.price }); if (ac) SFX.jingle(); }
+    save.shop.equipped.sleeve = id; sleeveTry = null; persist(); applySleeve(); renderShop(); renderSleeveSet();
+  });
+}
+function renderSleeveSet() {
+  const box = document.getElementById('sleeveSet'); if (!box) return; const own = SLEEVES.filter(s => save.shop.owned.includes(s.id));
+  box.style.display = own.length ? '' : 'none'; const cur = sleeveNow()?.id ?? '';
+  box.innerHTML = `<span class="rl">袖套</span><select id="sleeveSel"><option value="">不穿</option>${own.map(s => `<option value="${s.id}" ${cur === s.id ? 'selected' : ''}>${s.n}</option>`).join('')}</select>`;
+  ($('sleeveSel') as HTMLSelectElement).onchange = e => { save.shop.equipped.sleeve = (e.target as HTMLSelectElement).value; persist(); applySleeve(); };
 }
 let shopTab = 0;
 function shopTabs() {
