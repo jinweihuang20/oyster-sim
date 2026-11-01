@@ -23,7 +23,7 @@
  <li><b>惡趣味</b>：阿婆轉頭聊天時，對準她的碗按住 E／「偷」偷肉；按 F／右鍵／「丟殼」丟殼；看到 ⚠ 趕快按住 R／「雨傘」撐傘擋殼，放開就收起來（撐傘時不能剝蚵）</li>
  <li>一班 3 分鐘，比誰丟進碗裡的最多，搶「今日剝蚵冠軍」！偶爾還會撬出珍珠和奇怪的東西～</li></ul>
  <button id="daily" class="daily"></button>
- <div class="mbtns"><button id="oShop"><i class="ic ic-shop"></i> 雜貨店</button><button id="oDex"><i class="ic ic-book"></i> 圖鑑</button><button id="oSet"><i class="ic ic-gear"></i> 設定</button><button id="oTut"><i class="ic ic-tut"></i> 教學</button><button id="oRedeem"><i class="ic ic-gift"></i> 兌換碼</button></div>
+ <div class="mbtns"><button id="oShop"><i class="ic ic-shop"></i> 雜貨店</button><button id="oDex"><i class="ic ic-book"></i> 圖鑑</button><button id="oSet"><i class="ic ic-gear"></i> 設定</button><button id="oTut"><i class="ic ic-tut"></i> 教學</button><button id="oRank"><i class="ic ic-rank"></i> 排行榜</button><button id="oRedeem"><i class="ic ic-gift"></i> 兌換碼</button></div>
  <p id="nightNote" style="color:#b8c8ff;font-weight:700"><i class="ic ic-moon"></i> 夜班加成 +20%（晚上 8 點到早上 5 點上工，收入多兩成）</p></div>
 <div id="dex" class="panel"><h2>珍珠圖鑑</h2><div id="dexList"></div><button id="dexClose">關閉</button></div>
 <div id="settings" class="panel"><h2>設定</h2>
@@ -37,6 +37,7 @@
  <label class="row">反轉上下 <input id="v_invY" type="checkbox"></label>
  <label class="row">血腥效果 <input id="v_gore" type="checkbox"></label>
  <label class="row">傳送匿名統計 <input id="v_stats" type="checkbox"></label>
+ <label class="row">全服消息跑馬燈 <input id="v_feed" type="checkbox"></label>
  <label class="row">全部靜音 <input id="v_mute" type="checkbox"></label>
  <button id="setRedeem"><i class="ic ic-gift"></i> 兌換碼</button> <button id="setFb"><i class="ic ic-chat"></i> 意見回饋</button> <a id="discordSet" href="https://discord.gg/45EZEXyGG4" target="_blank" rel="noopener" class="dcBtn"><i class="ic ic-discord"></i> 加入 Discord</a> <button id="tutReplay"><i class="ic ic-tut"></i> 重看教學</button> <button id="resetSave" class="danger">重置存檔</button> <button id="setClose">關閉</button></div>
 <div id="fb" class="panel"><h2><i class="ic ic-chat"></i> 意見回饋</h2>
@@ -52,8 +53,9 @@
  <div id="fbDone"><div class="fbAma"><div class="amaFace"><i></i><i></i><b></b></div><div class="amaShell"><i class="ic ic-oyster"></i></div></div><h3>收到了，多謝！</h3><p id="fbDoneTxt">阿婆說：「好好好，我幫你轉過去，做遊戲的人一定會看。」</p><button id="fbBack"><i class="ic ic-again"></i> 回到遊戲</button></div>
 </div>
 <div id="redeem" class="panel"><h2><i class="ic ic-gift"></i> 兌換碼</h2><p style="font-size:14px;opacity:.85">輸入活動送的兌換碼，領取獎勵（每組碼每人限兌換一次，不分大小寫）</p><input id="rdInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="請輸入兌換碼"><div id="rdMsg"></div><button id="rdSubmit">兌換</button> <button id="rdClose">關閉</button></div>
+<div id="lb" class="panel"><h2><i class="ic ic-rank"></i> 全球排行榜</h2><div id="lbTabs"></div><div id="lbView"><button data-v="daily">今天</button><button data-v="weekly">本週</button></div><div id="lbMe"></div><div id="lbList"></div><div id="lbNickRow"><input id="lbNick" type="text" maxlength="8" enterkeyhint="done" autocomplete="off" placeholder="上榜用的名字"><button id="lbNickSave">改名字</button></div><p class="lbNote">只會顯示名字和 #四位數號碼。每週一結算，上週各榜前三名會拿到稱號。</p><button id="lbClose">關閉</button></div>
 <div id="shop" class="panel"><h2><i class="ic ic-shop"></i> 蚵寮雜貨店</h2><div id="shopList"></div><p style="font-size:12px;opacity:.75">刀：綠區大、撬的次數少、割手率低、容易找縫、幸運🍀多（比較會開到珍珠奇物）＝好；指針速慢＝好。傘（按住撐開、放開收起，沒有冷卻）：開傘快、可撐久、完美窗寬、遮得多、反彈力大＝好</p><button id="shopClose">關閉</button></div>
-<div id="result" class="panel"><h2 id="resTitle"></h2><div id="resBody"></div><button id="shopBtn2"><i class="ic ic-shop"></i> 雜貨店</button> <button id="rDex"><i class="ic ic-book"></i> 圖鑑</button> <button id="rSet"><i class="ic ic-gear"></i> 設定</button> <button id="rLoc"><i class="ic ic-pin"></i> 換地點</button> <button id="rFb" style="font-size:13px;padding:6px 10px"><i class="ic ic-chat"></i> 意見回饋</button> <button id="again"><i class="ic ic-again"></i> 再次上工</button></div>
+<div id="result" class="panel"><h2 id="resTitle"></h2><div id="resBody"></div><button id="shopBtn2"><i class="ic ic-shop"></i> 雜貨店</button> <button id="rDex"><i class="ic ic-book"></i> 圖鑑</button> <button id="rSet"><i class="ic ic-gear"></i> 設定</button> <button id="rRank"><i class="ic ic-rank"></i> 排行榜</button> <button id="rLoc"><i class="ic ic-pin"></i> 換地點</button> <button id="rFb" style="font-size:13px;padding:6px 10px"><i class="ic ic-chat"></i> 意見回饋</button> <button id="again"><i class="ic ic-again"></i> 再次上工</button></div>
 <script type="module" src="./src/main.ts"></script><div id="back-toast" class="hidden">再按一次返回就會離開遊戲</div>
 <div id="vign"></div>
 <div id="pauseTag"><i class="ic ic-pause"></i> 暫停中</div>

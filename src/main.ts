@@ -3,6 +3,7 @@ import { installBackGuard } from './backguard';
 import { checkCode, REDEEM_MESSAGES } from './redeem';
 import type { RedeemCodeDef } from './redeemCodes';
 import * as THREE from 'three';
+import * as Social from './social';
 const LS_P = __PREVIEW__ ? 'preview:' : '';
 const LS = { getItem: (k: string) => localStorage.getItem(LS_P + k), setItem: (k: string, v: string) => localStorage.setItem(LS_P + k, v), removeItem: (k: string) => localStorage.removeItem(LS_P + k) };
 if (__PREVIEW__) document.addEventListener('DOMContentLoaded', () => { const t = document.createElement('div'); t.textContent = '預覽版'; t.style.cssText = 'position:fixed;left:0;bottom:0;z-index:99999;background:#d8402f;color:#fff4dc;font:bold 12px sans-serif;padding:2px 8px;pointer-events:none;box-shadow:2px -2px 0 #1b2a3a'; document.body.appendChild(t); });
@@ -236,8 +237,8 @@ const leanFaces: THREE.Group[] = [];
 for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x2a7a5a : 0xb04050, s < 0 ? 0x333333 : 0xcccccc).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
-type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; sens: number; invX: boolean; invY: boolean };
-const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, sens: 1, invX: false, invY: false };
+type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean };
+const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false };
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
   const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
@@ -1123,7 +1124,7 @@ function openOyster() {
   updHud();
 }
 function revealOdd(i: number) {
-  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
+  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); if (rarOf(o.w) === 'legend') Social.report('legend', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
   label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.css; label.classList.add('on');
   npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
@@ -1309,6 +1310,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
   for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
   persist();
+  if (!tut && !SHOT) { const td = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); let inc = 0; try { const o = JSON.parse(LS.getItem('oyster-lb-day') || '{}'); inc = o.d === td ? o.v : 0; } catch { } inc += Math.max(0, earn); try { LS.setItem('oyster-lb-day', JSON.stringify({ d: td, v: inc })); } catch { } Social.submit({ income: inc, oysters: count, pearls: save.dex.reduce((a, b) => a + b, 0) }); }
   track('day', { loc: locNow().id, item: 't' + shiftLen,  count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, maxAnger: Math.round(dayMaxGrudge), double: dayMulti2, triple: dayMulti3, dur: Math.round(shiftLen - Math.max(0, timeLeft)), dex: dexN(), seat: save.seat ?? 'door', reason: handPain ? 'hand' : endReason, dstat: dstatStr() });
   $('resTitle').textContent = handPain ? '🩹 手痛收工' : queen ? '👑 今日剝蚵冠軍！' : '收工了～';
   $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 顆入碗</b></div>`).join('') +
@@ -1320,7 +1322,7 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
 }
 function revealPearl(r: number) {
-  dayPearls.push(r); save.dex[r]++; persist(); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
+  dayPearls.push(r); save.dex[r]++; persist(); if (r >= 2) Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
   slowmo = 2.6; pearlShow = 2.6;
   (pearlMesh.material as THREE.MeshStandardMaterial).color.setHex(RAR[r].color);
   (pearlMesh.material as THREE.MeshStandardMaterial).emissive.setHex(r === 3 ? 0x302050 : RAR[r].color).multiplyScalar(0.25);
@@ -1457,7 +1459,7 @@ function giveUp() {
   hint.textContent = '丟掉了…'; nag(NAG_GIVEUP); updHud(); later(0.6, goPick);
 }
 // 入碗數達標自動解鎖地點（不用錢）
-function autoUnlock() { const tot = save.life.inBowl ?? 0; save.locs ??= []; for (const l of LOCS) if (l.need && tot >= l.need && !save.locs.includes(l.id)) { save.locs.push(l.id); persist(); track('buy', { item: 'loc-' + l.id, price: 0 }); toast(`📍 新地點解鎖：${l.n}`); } }
+function autoUnlock() { const tot = save.life.inBowl ?? 0; save.locs ??= []; for (const l of LOCS) if (l.need && tot >= l.need && !save.locs.includes(l.id)) { save.locs.push(l.id); persist(); Social.report('port', LOCS.indexOf(l)); track('buy', { item: 'loc-' + l.id, price: 0 }); toast(`📍 新地點解鎖：${l.n}`); } }
 function renderLocs() { autoUnlock();
   const el = $('locPick'); const tot = save.life.inBowl ?? 0;
   const seen = save.locSeen ?? (save.locSeen = ['home']); const cl = locNow();
@@ -1492,6 +1494,7 @@ for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as H
 for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { const c = $(id) as HTMLInputElement; c.checked = mix[key]; c.onchange = () => { mix[key] = c.checked; applyMix(); }; }
 { const mv = $('v_music') as HTMLInputElement; mv.value = String(mix.music); mv.oninput = () => { mix.music = +mv.value; applyMix(); }; }
 { const g = $('v_stats') as HTMLInputElement; g.checked = mix.stats; g.onchange = () => { mix.stats = g.checked; applyMix(); }; }
+{ const g = $('v_feed') as HTMLInputElement; g.checked = mix.feed; g.onchange = () => { mix.feed = g.checked; applyMix(); }; }
 { const g = $('v_gore') as HTMLInputElement; g.checked = mix.gore; g.onchange = () => { mix.gore = g.checked; applyMix(); }; }
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
@@ -1691,6 +1694,9 @@ $('tutNext').onclick = e => { e.stopPropagation(); if (!tut) return; const st = 
 $('tutSkip').onclick = e => { e.stopPropagation(); tutEnd(false); };
 ['tutNext', 'tutSkip'].forEach(id => $(id).addEventListener('pointerdown', e => e.stopPropagation()));
 $('oTut').onclick = () => tutStart();
+$('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
+Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
+  label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！` });
 $('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; } tutStart(); };
 (window as any).__oy = { get phase() { return phase; }, get umb() { return { held: umbHeld, t: umbT, vis: umb.visible }; }, get tut() { return tut && TUT[tut.i].id; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, P0, P1); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
 // ---------- 截圖模式 ----------
@@ -1733,7 +1739,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -1932,7 +1938,7 @@ installBackGuard(() => {
   const open = (id: string) => document.getElementById(id)?.classList.contains('show');
   if (open('npcTip')) { $('npcTip').classList.remove('show'); return 'handled'; }
   if (open('medList')) { $('medList').classList.remove('show'); return 'handled'; }
-  for (const [id, close] of [['fb', 'fbClose'], ['redeem', 'rdClose'], ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose']]) if (open(id)) { ($(close) as HTMLElement).click(); return 'handled'; }
+  for (const [id, close] of [['lb', 'lbClose'], ['fb', 'fbClose'], ['redeem', 'rdClose'], ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose']]) if (open(id)) { ($(close) as HTMLElement).click(); return 'handled'; }
   if (state === 'play') { toast('上工中按返回不會離開；要收工請按「🏃 翹班」或等時間到', '#ffcf8a'); return 'handled'; }
   return 'confirm-exit';
 }, () => state === 'play');

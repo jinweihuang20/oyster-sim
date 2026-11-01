@@ -394,3 +394,27 @@ button:disabled{filter:grayscale(.8);opacity:.55}
 @media (prefers-reduced-motion:reduce){#gauge.inZ,#gauge.inZ #zone{animation:none}#gauge.inZ #zone{filter:brightness(1.4)}}
 
 .rdGot{background:#f1e6cc;color:#2a3a4a;border:3px solid #2a3a4a;box-shadow:4px 4px 0 #2a3a4a;padding:10px 12px;text-align:left}.rdGot>b{display:block;background:#b8453a;color:#fff8e8;margin:-10px -12px 8px;padding:6px 12px;font-size:17px}.rdGot ul{list-style:none;margin:0;padding:0}.rdGot li{padding:4px 0;border-bottom:1px dashed #2a3a4a55;font-size:15px}.trialTag{display:inline-block;background:#ffd76a;color:#2a1a08;border:2px solid #2a1a08;padding:0 5px;font-size:12px;font-weight:700}
+
+/* 全服跑馬燈 */
+#feed{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 46px);height:30px;overflow:hidden;z-index:150;pointer-events:none;display:none;background:var(--iron);border-top:3px solid var(--ink);border-bottom:3px solid var(--ink);box-shadow:0 3px 0 var(--ink)}
+#feed.on{display:block}
+#feed .fdIn{position:absolute;white-space:nowrap;top:3px;left:100%;color:var(--paint);font:900 15px var(--sign);animation:fdMove 9s linear forwards}
+#feed b{color:#f2b705}#feed small{opacity:.75;margin-right:6px;font-size:12px}
+@keyframes fdMove{from{transform:translateX(0)}to{transform:translateX(calc(-100vw - 100%))}}
+/* 排行榜 */
+#lbTabs,#lbView{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:6px 0}
+#lbTabs button,#lbView button{font-size:14px;padding:6px 10px;min-height:38px;background-color:var(--iron2);color:#fff}
+#lbTabs button.on,#lbView button.on{background-color:var(--red);color:var(--paint)}
+#lbMe{color:#f2b705;font-weight:900;min-height:1em}
+#lbList{margin:8px 0;text-align:left}
+.lbRow{display:flex;align-items:center;gap:8px;padding:6px;border:2px solid var(--ink);background:rgba(239,233,220,.08);margin-bottom:6px;box-shadow:2px 2px 0 var(--ink)}
+.lbRow.me{background:rgba(242,183,5,.18);border-color:#f2b705}
+.lbR{width:1.8em;text-align:center;font-weight:900;font-size:18px}
+.lbN{flex:1;min-width:0;overflow:hidden}.lbN small{opacity:.7;margin-left:3px}
+.lbT{display:block;font-style:normal;font-size:12px;color:#f2b705}
+.lbV{font-weight:900}
+.lbA{display:flex;gap:4px}.lbA button{font-size:13px;padding:4px 6px;min-height:34px}.lbA>span{font-size:13px;opacity:.8;display:inline-flex;gap:2px;align-items:center}
+.lbGap{border-top:2px dashed rgba(239,233,220,.4);margin:8px 0}
+.lbMsg{text-align:center;opacity:.8}.lbNote{font-size:12px;opacity:.75}
+#lbNickRow{display:flex;gap:6px;justify-content:center}#lbNick{font-size:16px;width:9em}
+body.tutOn #feed{display:none!important}
