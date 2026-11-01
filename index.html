@@ -1,30 +1,30 @@
 <!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
-<title>剝蚵仔模擬器</title><link rel="stylesheet" href="./src/style.css"/></head>
+<title>剝蚵仔模擬器</title><link rel="stylesheet" href="./src/style.css"/><link rel="stylesheet" href="./src/icons.css"/></head>
 <body><canvas id="c"></canvas>
 <div id="hud">
- <div id="top"><span id="timer">03:00</span><span id="nightTag" style="display:none;color:#b8c8ff">🌙+20%</span><span id="count">🦪 0</span><span id="pearls">⚪ 0</span><span id="hpWrap">✋<span id="hpBar"><span id="hpFill"></span></span><button id="radioBtn" style="display:none">📻 開<span class="key"> (V)</span></button></span><button id="shopBtn">🏪</button><button id="dexBtn">圖鑑</button><button id="setBtn">⚙</button></div>
+ <div id="top"><span id="timer">03:00</span><span id="nightTag" style="display:none;color:#b8c8ff"><i class="ic ic-moon"></i>+20%</span><span id="count"><i class="ic ic-oyster"></i> 0</span><span id="pearls"><i class="ic ic-pearl"></i> 0</span><span id="hpWrap"><i class="ic ic-hand"></i><span id="hpBar"><span id="hpFill"></span></span><button id="radioBtn" style="display:none">開<span class="key"> (V)</span></button></span><button id="shopBtn" aria-label="雜貨店"><i class="ic ic-shop"></i></button><button id="dexBtn">圖鑑</button><button id="setBtn" aria-label="設定"><i class="ic ic-gear"></i></button></div>
  <div id="gauge"><div id="zone"></div><div id="fill"></div></div>
- <div id="diff"></div><div id="stats"></div><div id="reticle"></div><div id="toast"></div><div id="prog"><div id="progFill"></div></div><div id="warn">⚠</div><div id="splat"></div>
- <div id="btns"><button id="rotL" class="mb">◀</button><button id="rotR" class="mb">▶</button><button id="stealBtn">偷<span class="key"> (E)</span></button><button id="throwBtn">丟殼<span class="key"> (F)</span></button><button id="umbBtn">☂ 雨傘<span class="key"> (R)</span><span id="umbCd"></span></button><button id="medBtn">💊 藥品</button><button id="giveUp">放棄這顆<span class="key"> (Q)</span></button><button id="quitBtn">🏃 翹班</button><button id="standBtn">🚶 換位置<span class="key"> (G)</span></button></div><div id="btnsL"></div>
- <div id="joy"><div id="joyK"></div></div><div id="seatCard"><div id="seatInfo"></div><button id="sitBtn">🪑 坐落<span class="key"> (E)</span></button></div>
+ <div id="diff"></div><div id="stats"></div><div id="reticle"></div><div id="toast"></div><div id="prog"><div id="progFill"></div></div><div id="warn"><i class="ic ic-warn"></i></div><div id="splat"></div>
+ <div id="btns"><button id="rotL" class="mb">◀</button><button id="rotR" class="mb">▶</button><button id="stealBtn">偷<span class="key"> (E)</span></button><button id="throwBtn">丟殼<span class="key"> (F)</span></button><button id="umbBtn"><i class="ic ic-umb"></i> 雨傘<span class="key"> (R)</span><span id="umbCd"></span></button><button id="medBtn"><i class="ic ic-pill"></i> 藥品</button><button id="giveUp">放棄這顆<span class="key"> (Q)</span></button><button id="quitBtn"><i class="ic ic-run"></i> 翹班</button><button id="standBtn"><i class="ic ic-walk"></i> 換位置<span class="key"> (G)</span></button></div><div id="btnsL"></div>
+ <div id="joy"><div id="joyK"></div></div><div id="seatCard"><div id="seatInfo"></div><button id="sitBtn"><i class="ic ic-chair"></i> 坐落<span class="key"> (E)</span></button></div>
  <div id="medList"></div><div id="medAct"></div>
  <div id="hint">看指針，走到綠區時點一下撬開蚵仔！</div>
  <div id="label"></div>
 </div>
 <div id="tut"><div id="tutStep"></div><div id="tutLine"></div><div id="tutDo"></div><div id="tutKeys">滑鼠被鎖定時，按 Esc 放開才點得到按鈕</div><div class="tb"><button id="tutSkip">跳過教學</button><button id="tutNext"></button></div></div>
-<div id="hurt"></div><div id="ppop"></div><div id="lockHint">🖱 點畫面開始操作（Esc 放開滑鼠）</div><div id="aid">🩹</div><div id="bubbles"></div>
+<div id="hurt"></div><div id="ppop"></div><div id="lockHint"><i class="ic ic-mouse"></i> 點畫面開始操作（Esc 放開滑鼠）</div><div id="aid">🩹</div><div id="bubbles"></div>
 <div id="overlay" class="panel show"><h1>剝蚵仔模擬器</h1>
  <p id="meLine">夜晚的巷口，你和鄰居阿婆們坐在小板凳上，圍在一起剝蚵仔。</p>
- <div id="locPick"></div><button id="start">開始剝蚵</button><div id="tempRow" style="display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap"><button id="t60" class="tempBtn" style="font-size:14px;padding:8px 12px;min-height:40px">⏱ 臨時工 1 分鐘</button><button id="t120" class="tempBtn" style="font-size:14px;padding:8px 12px;min-height:40px">⏱ 臨時工 2 分鐘</button></div><div><a id="discordStart" href="https://discord.gg/45EZEXyGG4" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;padding:8px 12px;border-radius:8px;background:#5865F2;color:#fff;text-decoration:none;font-size:14px">💬 加入 Discord</a></div>
+ <div id="locPick"></div><button id="start">開始剝蚵</button><div id="tempRow" style="display:flex;gap:8px;justify-content:center;margin-top:8px;flex-wrap:wrap"><button id="t60" class="tempBtn" style="font-size:14px;padding:8px 12px;min-height:40px"><i class="ic ic-timer"></i> 臨時工 1 分鐘</button><button id="t120" class="tempBtn" style="font-size:14px;padding:8px 12px;min-height:40px"><i class="ic ic-timer"></i> 臨時工 2 分鐘</button></div><div><a id="discordStart" href="https://discord.gg/45EZEXyGG4" target="_blank" rel="noopener" class="dcBtn" style="margin-top:8px"><i class="ic ic-discord"></i> 加入 Discord</a></div>
  <ul><li><b>找縫</b>：轉蚵仔（滾輪／A D；手機拖下半畫面或按 ◀ ▶），把殼縫轉到刀尖旁，點一下插刀</li>
  <li><b>撬開</b>：插刀後指針會來回擺動，走到綠區時點一下（滑鼠／Space；手機點螢幕）撬一下，撬夠次數殼就打開；點在紅區太用力會把殼弄碎。不同的刀綠區大小、指針速度、要撬幾下都不一樣</li>
  <li><b>投肉</b>：轉頭對準藍色碗，按住蓄力，藍色區間放開</li>
  <li><b>惡趣味</b>：阿婆轉頭聊天時，對準她的碗按住 E／「偷」偷肉；按 F／右鍵／「丟殼」丟殼；看到 ⚠ 趕快按住 R／「雨傘」撐傘擋殼，放開就收起來（撐傘時不能剝蚵）</li>
  <li>一班 3 分鐘，比誰丟進碗裡的最多，搶「今日剝蚵冠軍」！偶爾還會撬出珍珠和奇怪的東西～</li></ul>
  <button id="daily" class="daily"></button>
- <div class="mbtns"><button id="oShop">🏪 雜貨店</button><button id="oDex">📖 圖鑑</button><button id="oSet">⚙ 設定</button><button id="oTut">📘 教學</button><button id="oRedeem">🎁 兌換碼</button></div>
- <p id="nightNote" style="color:#b8c8ff;font-weight:700">🌙 夜班加成 +20%（晚上 8 點到早上 5 點上工，收入多兩成）</p></div>
+ <div class="mbtns"><button id="oShop"><i class="ic ic-shop"></i> 雜貨店</button><button id="oDex"><i class="ic ic-book"></i> 圖鑑</button><button id="oSet"><i class="ic ic-gear"></i> 設定</button><button id="oTut"><i class="ic ic-tut"></i> 教學</button><button id="oRedeem"><i class="ic ic-gift"></i> 兌換碼</button></div>
+ <p id="nightNote" style="color:#b8c8ff;font-weight:700"><i class="ic ic-moon"></i> 夜班加成 +20%（晚上 8 點到早上 5 點上工，收入多兩成）</p></div>
 <div id="dex" class="panel"><h2>珍珠圖鑑</h2><div id="dexList"></div><button id="dexClose">關閉</button></div>
 <div id="settings" class="panel"><h2>設定</h2>
  <label class="row">你的名字 <input id="myName" type="text" maxlength="8" enterkeyhint="done" autocomplete="off" placeholder="剝蚵人" style="width:9em;font-size:16px"></label>
@@ -38,12 +38,23 @@
  <label class="row">血腥效果 <input id="v_gore" type="checkbox"></label>
  <label class="row">傳送匿名統計 <input id="v_stats" type="checkbox"></label>
  <label class="row">全部靜音 <input id="v_mute" type="checkbox"></label>
- <button id="setRedeem">🎁 兌換碼</button> <button id="setFb">💬 意見回饋</button> <a id="discordSet" href="https://discord.gg/45EZEXyGG4" target="_blank" rel="noopener" style="display:inline-block;padding:8px 12px;border-radius:8px;background:#5865F2;color:#fff;text-decoration:none;font-size:14px">💬 加入 Discord</a> <button id="tutReplay">📘 重看教學</button> <button id="resetSave" style="background:#8a2a2a;color:#fff">重置存檔</button> <button id="setClose">關閉</button></div>
-<div id="fb" class="panel"><h2>💬 意見回饋</h2><p style="font-size:14px;opacity:.85">遇到問題或有想法？告訴我們！</p><div id="fbCats" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center"><button data-fc="bug">🐛 Bug</button><button data-fc="idea">💡 建議</button><button data-fc="fun">😊 好玩</button><button data-fc="hard">😣 太難</button></div><textarea id="fbText" maxlength="500" rows="5" placeholder="想說什麼都可以…" style="width:100%;box-sizing:border-box;font-size:16px;margin-top:8px"></textarea><div id="fbCount" style="font-size:12px;opacity:.7;text-align:right">0/500</div><input id="fbContact" type="email" maxlength="120" autocomplete="email" placeholder="想收到回覆可留 Email（選填）" style="width:100%;box-sizing:border-box;font-size:16px"><p><button id="fbSend">送出</button> <button id="fbClose">返回</button></p></div>
-<div id="redeem" class="panel"><h2>🎁 兌換碼</h2><p style="font-size:14px;opacity:.85">輸入活動送的兌換碼，領取獎勵（每組碼每人限兌換一次，不分大小寫）</p><input id="rdInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="請輸入兌換碼"><div id="rdMsg"></div><button id="rdSubmit">兌換</button> <button id="rdClose">關閉</button></div>
-<div id="shop" class="panel"><h2>🏪 蚵寮雜貨店</h2><div id="shopList"></div><p style="font-size:12px;opacity:.75">刀：綠區大、撬的次數少、割手率低、容易找縫、幸運🍀多（比較會開到珍珠奇物）＝好；指針速慢＝好。傘（按住撐開、放開收起，沒有冷卻）：開傘快、可撐久、完美窗寬、遮得多、反彈力大＝好</p><button id="shopClose">關閉</button></div>
-<div id="result" class="panel"><h2 id="resTitle"></h2><div id="resBody"></div><button id="shopBtn2">🏪 雜貨店</button> <button id="rDex">📖 圖鑑</button> <button id="rSet">⚙ 設定</button> <button id="rLoc">📍 換地點</button> <button id="rFb" style="font-size:13px;padding:6px 10px">💬 意見回饋</button> <button id="again">🌅 再次上工</button></div>
+ <button id="setRedeem"><i class="ic ic-gift"></i> 兌換碼</button> <button id="setFb"><i class="ic ic-chat"></i> 意見回饋</button> <a id="discordSet" href="https://discord.gg/45EZEXyGG4" target="_blank" rel="noopener" class="dcBtn"><i class="ic ic-discord"></i> 加入 Discord</a> <button id="tutReplay"><i class="ic ic-tut"></i> 重看教學</button> <button id="resetSave" class="danger">重置存檔</button> <button id="setClose">關閉</button></div>
+<div id="fb" class="panel"><h2><i class="ic ic-chat"></i> 意見回饋</h2>
+ <div id="fbForm"><p class="fbLead">遇到問題或有想法？寫在招牌上，阿婆幫你轉給做遊戲的人。</p>
+ <div class="fbStep">1. 今天剝得心情如何？<small>（選填）</small></div>
+ <div id="fbMood" role="radiogroup" aria-label="心情評分"><button data-mood="1" aria-label="1 分"><i class="ic ic-oyster"></i></button><button data-mood="2" aria-label="2 分"><i class="ic ic-oyster"></i></button><button data-mood="3" aria-label="3 分"><i class="ic ic-oyster"></i></button><button data-mood="4" aria-label="4 分"><i class="ic ic-oyster"></i></button><button data-mood="5" aria-label="5 分"><i class="ic ic-oyster"></i></button><span id="fbMoodTxt"></span></div>
+ <div class="fbStep">2. 想說哪一類？</div>
+ <div id="fbCats"><button data-fc="bug"><i class="ic ic-bug"></i><b>出問題</b><small>Bug、卡住</small></button><button data-fc="idea"><i class="ic ic-idea"></i><b>有建議</b><small>想加什麼</small></button><button data-fc="fun"><i class="ic ic-fun"></i><b>好好玩</b><small>喜歡哪裡</small></button><button data-fc="hard"><i class="ic ic-hard"></i><b>太難了</b><small>哪關卡關</small></button></div>
+ <div class="fbStep">3. 寫下來</div>
+ <textarea id="fbText" maxlength="500" rows="5" placeholder="先選上面的類別，再寫想說的話…"></textarea><div id="fbCount">0/500</div>
+ <input id="fbContact" type="email" maxlength="120" autocomplete="email" placeholder="想收到回覆可留 Email（選填）">
+ <p><button id="fbSend"><i class="ic ic-send"></i> <span id="fbSendTxt">送出</span></button> <button id="fbClose">返回</button></p></div>
+ <div id="fbDone"><div class="fbAma"><div class="amaFace"><i></i><i></i><b></b></div><div class="amaShell"><i class="ic ic-oyster"></i></div></div><h3>收到了，多謝！</h3><p id="fbDoneTxt">阿婆說：「好好好，我幫你轉過去，做遊戲的人一定會看。」</p><button id="fbBack"><i class="ic ic-again"></i> 回到遊戲</button></div>
+</div>
+<div id="redeem" class="panel"><h2><i class="ic ic-gift"></i> 兌換碼</h2><p style="font-size:14px;opacity:.85">輸入活動送的兌換碼，領取獎勵（每組碼每人限兌換一次，不分大小寫）</p><input id="rdInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="請輸入兌換碼"><div id="rdMsg"></div><button id="rdSubmit">兌換</button> <button id="rdClose">關閉</button></div>
+<div id="shop" class="panel"><h2><i class="ic ic-shop"></i> 蚵寮雜貨店</h2><div id="shopList"></div><p style="font-size:12px;opacity:.75">刀：綠區大、撬的次數少、割手率低、容易找縫、幸運🍀多（比較會開到珍珠奇物）＝好；指針速慢＝好。傘（按住撐開、放開收起，沒有冷卻）：開傘快、可撐久、完美窗寬、遮得多、反彈力大＝好</p><button id="shopClose">關閉</button></div>
+<div id="result" class="panel"><h2 id="resTitle"></h2><div id="resBody"></div><button id="shopBtn2"><i class="ic ic-shop"></i> 雜貨店</button> <button id="rDex"><i class="ic ic-book"></i> 圖鑑</button> <button id="rSet"><i class="ic ic-gear"></i> 設定</button> <button id="rLoc"><i class="ic ic-pin"></i> 換地點</button> <button id="rFb" style="font-size:13px;padding:6px 10px"><i class="ic ic-chat"></i> 意見回饋</button> <button id="again"><i class="ic ic-again"></i> 再次上工</button></div>
 <script type="module" src="./src/main.ts"></script><div id="back-toast" class="hidden">再按一次返回就會離開遊戲</div>
 <div id="vign"></div>
-<div id="pauseTag">⏸ 暫停中</div>
+<div id="pauseTag"><i class="ic ic-pause"></i> 暫停中</div>
 </body></html>

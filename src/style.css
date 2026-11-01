@@ -246,8 +246,8 @@ body.tutOn .ntag{display:none!important}
 /* 收音機按鈕：手機改成左下列最前面的圓形圖示 */
 #btns #radioBtn{display:block}
 @media (pointer:coarse){#btnsL #radioBtn{display:block;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;font-size:20px;text-decoration:none;position:relative}
- #btnsL #radioBtn i{position:absolute;right:3px;top:3px;width:9px;height:9px;border-radius:50%;background:#7dff8a;box-shadow:0 0 6px #7dff8a}
- #btnsL #radioBtn.off i{background:#888;box-shadow:none}#btnsL #radioBtn.off{filter:grayscale(1)}#btnsL #radioBtn:after{display:none}}
+ #btnsL #radioBtn i.led{position:absolute;right:3px;top:3px;width:9px;height:9px;border-radius:50%;background:#7dff8a;box-shadow:0 0 6px #7dff8a}
+ #btnsL #radioBtn.off i.led{background:#888;box-shadow:none}#btnsL #radioBtn.off{filter:grayscale(1)}#btnsL #radioBtn:after{display:none}}
 #vign{position:fixed;inset:0;pointer-events:none;z-index:1;display:none;background:radial-gradient(ellipse at center,transparent 58%,rgba(20,14,8,.32) 100%)}
 #vign.on{display:block}
 #nameEdit{color:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer;display:inline-block;padding:14px 2px;margin:-14px 0;line-height:16px;-webkit-tap-highlight-color:transparent}#nameEdit i{font-style:normal;opacity:.7;font-size:.85em}
@@ -283,3 +283,93 @@ body.tutOn .ntag{display:none!important}
  #top #setBtn,#top #shopBtn,#top #dexBtn{position:relative;z-index:2;flex-shrink:0}
  #top #timer,#top #count,#top #pearls{flex-shrink:1;min-width:0}
 }
+
+/* ================= 漁港招牌風 主題 ================= */
+:root{--iron:#1f5a8a;--iron2:#5d8fb3;--ironD:#123a5c;--red:#b8322a;--redD:#7e1f19;--paint:#efe9dc;--paint2:#d9d2c1;--rust:#c8642a;--ink:#16191d;
+ --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+ --corr:repeating-linear-gradient(90deg,rgba(255,255,255,.06) 0 3px,rgba(0,0,0,.08) 3px 9px,transparent 9px 14px);
+ --sign:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",system-ui,sans-serif}
+html,body{font-family:var(--sign)}
+button,.dcBtn{font-family:var(--sign);background:var(--paint) var(--grain);color:var(--ink);border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink);font-weight:900;letter-spacing:.04em;transition:transform .06s,box-shadow .06s;display:inline-flex;align-items:center;justify-content:center;gap:.35em}
+button:active:not(:disabled),.dcBtn:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
+button:disabled{filter:grayscale(.8);opacity:.55}
+.dcBtn{padding:8px 12px;font-size:14px;text-decoration:none;background-color:#5865F2;color:#fff}
+.danger{background-color:var(--redD)!important;color:#fff!important}
+.panel{background:var(--paint) var(--grain);color:var(--ink);border:4px solid var(--ink);border-radius:3px;box-shadow:6px 6px 0 rgba(0,0,0,.55),inset 0 0 0 4px var(--paint),inset 0 0 0 6px var(--iron)}
+.panel h1,.panel h2{font-weight:900;letter-spacing:.08em}
+#overlay h1{display:inline-block;background:var(--red) var(--grain);color:var(--paint);padding:6px 18px;border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);transform:rotate(-1.2deg);font-size:clamp(26px,7vw,40px);margin:4px 0 10px;text-shadow:2px 2px 0 var(--redD)}
+.panel h3{display:inline-flex;align-items:center;gap:.35em;background:var(--iron) var(--corr);color:var(--paint);padding:3px 12px;border:2px solid var(--ink);margin:14px 0 6px}
+.ph{background:var(--iron) var(--corr);color:var(--paint);border-bottom:3px solid var(--ink)}
+.ph h2{display:flex;align-items:center;justify-content:center;gap:.4em}
+.panel .px{background:var(--red);color:var(--paint);border:3px solid var(--ink);border-radius:2px;box-shadow:2px 2px 0 var(--ink);font-size:20px}
+.panel p,.panel li{color:var(--ink)}
+.row{border-bottom:2px dashed rgba(22,25,29,.25)}
+.panel input[type=text],.panel input[type=email],.panel textarea{background:#fffdf7;color:var(--ink);border:3px solid var(--ink);border-radius:0;padding:8px;font-family:inherit}
+.panel input[type=range]{accent-color:var(--red)}.panel input[type=checkbox]{accent-color:var(--iron)}
+#start,#again{background-color:var(--red);color:var(--paint);font-size:20px;padding:12px 28px;text-shadow:1px 1px 0 var(--redD)}
+.mbtns button,#result button{background-color:var(--iron2);color:#fff}
+.tempBtn{background-color:var(--rust)!important;color:#fff}
+#daily{background-color:#e4b13a;color:var(--ink);border-style:dashed}
+/* 地點卡 */
+#locPick .locHead{background:var(--iron) var(--corr);border:3px solid var(--ink);border-radius:2px;color:var(--paint)}
+#locPick .locHead small{color:#d8e6f2}
+#locPick .loc{background:var(--iron2) var(--grain);border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink);color:#fff;display:flex;align-items:stretch;justify-content:flex-start}
+#locPick .loc .lm{color:#ffe2a6}
+#locPick .loc.cur{background-color:var(--red);color:var(--paint);border-color:var(--ink);box-shadow:3px 3px 0 var(--ink),0 0 0 3px var(--paint) inset}#locPick .loc.cur .lm{color:#ffe2a6}
+#locPick .loc.locked{background-color:#6b6f73}
+#locPick .nb{background:var(--rust);border:2px solid var(--ink);border-radius:0}
+/* 上工 HUD：鐵皮招牌 */
+#top{background:var(--iron) var(--corr);border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 rgba(0,0,0,.6);color:var(--paint);font-weight:900}
+#top button{padding:4px 10px}
+#stats{background:rgba(18,58,92,.85);border:2px solid var(--ink);border-radius:0}
+#hpBar{border:2px solid var(--ink);border-radius:0;background:#333}#hpFill{background:var(--red)}
+#btns button,#btnsL button{background:var(--iron) var(--corr);color:var(--paint);border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink)}
+#umbBtn{background-color:var(--red)!important}#stealBtn{background-color:#4a3a6a!important}#quitBtn{background-color:#55595e!important}
+#btnsL #medBtn{background-color:#2f6b4f}
+.mb{border-radius:2px!important}
+#gauge{border:3px solid var(--ink);border-radius:0;background:rgba(239,233,220,.25)}
+#lockHint,#back-toast,#pauseTag{border-radius:2px;border:2px solid var(--ink);background:var(--ink);color:var(--paint)}
+.bub{background:var(--paint);color:var(--ink);border:2px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 rgba(0,0,0,.5)}.bub:after{border-top-color:var(--ink)}
+#warn .ic{width:1em;height:1em}
+.dexN{background:var(--red);color:var(--paint);border-radius:0}
+.scrollHint span{color:var(--red);background:linear-gradient(transparent,rgba(239,233,220,.97))}
+/* 雜貨店表 */
+.kt td,.kt th{border-bottom:2px dashed rgba(22,25,29,.2)}.kt th{background:var(--ink);color:var(--paint);font-weight:900}
+.panel small[style*="9be37a"],.panel [style*="color:#9be37a"]{color:#1f7a3a!important}
+.panel small[style*="ff8a7a"],.panel [style*="color:#ff8a7a"]{color:var(--red)!important}
+#shopTabs button{background-color:var(--iron2);color:#fff}
+#nightNote{color:var(--iron)!important}
+#tut{font-family:var(--sign)}
+/* ===== 意見回饋 ===== */
+.fbLead{font-size:14px}
+.fbStep{text-align:left;font-weight:900;margin:12px 0 6px;font-size:15px}.fbStep small{font-weight:400;opacity:.7}
+#fbMood{display:flex;align-items:center;gap:6px;justify-content:flex-start;flex-wrap:wrap}
+#fbMood button{width:46px;height:46px;min-width:46px!important;padding:0;margin:0!important;background-color:#fffdf7;color:#9aa0a6;font-size:22px}
+#fbMood button.sel{background-color:var(--rust);color:var(--paint)}
+#fbMoodTxt{font-weight:900;color:var(--rust);margin-left:4px}
+#fbCats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+#fbCats button{flex-direction:column;gap:2px;padding:10px 4px;margin:0!important;background-color:var(--iron2);color:#fff;min-height:84px}
+#fbCats button .ic{font-size:26px}#fbCats button b{font-size:15px}#fbCats button small{font-size:11px;font-weight:500;opacity:.9}
+#fbCats button.sel{background-color:var(--red);transform:rotate(-2deg);box-shadow:4px 4px 0 var(--ink),inset 0 0 0 3px var(--paint)}
+@media (max-width:420px){#fbCats{grid-template-columns:repeat(2,1fr)}}
+.pop{animation:pop .32s cubic-bezier(.3,1.8,.5,1)}
+@keyframes pop{0%{scale:1}35%{scale:.86}100%{scale:1}}
+#fbText{width:100%;box-sizing:border-box;font-size:16px;resize:vertical}
+#fbContact{width:100%;box-sizing:border-box;font-size:16px;margin-top:8px}
+#fbCount{font-size:12px;text-align:right;font-weight:700;opacity:.7}#fbCount.near{color:var(--rust);opacity:1}#fbCount.full{color:var(--red);opacity:1;animation:pop .3s}
+#fbSend{background-color:var(--red);color:var(--paint);font-size:17px;padding:10px 22px}
+#fbSend.flying .ic{animation:fly .7s ease-in forwards}
+@keyframes fly{0%{transform:none}30%{transform:translate(-4px,3px)}100%{transform:translate(120px,-90px) rotate(20deg);opacity:0}}
+#fbDone{display:none;padding:10px 0 4px}#fbDone.on{display:block}
+#fbDone h3{font-size:20px}
+.fbAma{position:relative;width:130px;height:120px;margin:6px auto 0}
+.amaFace{position:absolute;left:25px;top:8px;width:80px;height:80px;background:#e9b98c;border:3px solid var(--ink);border-radius:50% 50% 46% 46%;box-shadow:inset 0 14px 0 #8a8f96;animation:nod 1.1s ease-in-out infinite}
+.amaFace i{position:absolute;top:36px;width:10px;height:4px;border-bottom:3px solid var(--ink);border-radius:0 0 8px 8px}.amaFace i:first-child{left:18px}.amaFace i:nth-child(2){right:18px}
+.amaFace b{position:absolute;left:26px;top:54px;width:24px;height:10px;border-bottom:3px solid var(--ink);border-radius:0 0 14px 14px}
+.amaShell{position:absolute;right:0;bottom:0;font-size:34px;color:var(--rust);animation:toss 1.4s ease-in-out infinite}
+@keyframes nod{50%{transform:translateY(4px) rotate(-3deg)}}
+@keyframes toss{0%,100%{transform:translateY(0) rotate(0)}40%{transform:translateY(-26px) rotate(-30deg)}}
+#fbBack{background-color:var(--iron);color:var(--paint);font-size:17px;padding:10px 22px;margin-top:8px}
+@media (prefers-reduced-motion:reduce){.amaFace,.amaShell,.pop{animation:none!important}}
+#overlay #start,#result #again{background:var(--red) var(--grain);color:var(--paint);border:3px solid var(--ink);border-radius:2px;box-shadow:4px 4px 0 var(--ink);text-shadow:2px 2px 0 var(--redD)}
+#shopTabs{background:var(--ink);padding:6px}#shopTabs button{background-color:var(--iron2);color:#fff;opacity:.85;box-shadow:2px 2px 0 #000}#shopTabs button.on{background-color:var(--rust);color:#fff;opacity:1}

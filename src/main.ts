@@ -624,7 +624,7 @@ const GEAR = [
   { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
   { id: 'radio', n: '📻 收音機', price: 300, good: '阿婆氣消得快：怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：丟殼預警變晚（⚠ 和提示聲晚一半才出現）' },
   { id: 'glasses', n: '👓 老花眼鏡', price: 200, good: '蚵仔縫更亮更粗、光暈更大；插刀判定範圍 +25%', bad: '看遠有點霧：畫面邊緣微暗' }];
-function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '📻<i></i>' : `📻 ${on ? '開' : '關'}<span class="key"> (V)</span>`; b.title = on ? '收音機：開' : '收音機：關'; }
+function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '<i class="ic ic-radio"></i><i class="led"></i>' : `<i class="ic ic-radio"></i> ${on ? '開' : '關'}<span class="key"> (V)</span>`; b.title = on ? '收音機：開' : '收音機：關'; }
 function toggleRadio() { if (!save.shop.owned.includes('radio') || state !== 'play' || tut) return; save.gear = save.gear ?? {}; save.gear.radio = !gearOn('radio'); persist(); drawRadio(); toast(gearOn('radio') ? '📻 收音機打開：阿婆心情好，但聽不到丟殼預警' : '📻 收音機關掉：聽得到丟殼預警了', '#cfc3ff'); }
 const gearOn = (id: string) => save.shop.owned.includes(id) && save.gear?.[id] !== false;
 const isNight = () => { const h = new Date().getHours(); return h >= 20 || h < 5; };
@@ -716,7 +716,7 @@ function startDay() {
 function updHud() {
   ($('hpFill') as HTMLElement).style.width = `${hp}%`;
   const s = Math.max(0, Math.ceil(timeLeft)); $('timer').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  $('count').textContent = `🦪 ${count}`; $('pearls').textContent = `⚪ ${dayPearls.length + dayOdd.length}`;
+  $('count').innerHTML = `<i class="ic ic-oyster"></i> ${count}`; $('pearls').innerHTML = `<i class="ic ic-pearl"></i> ${dayPearls.length + dayOdd.length}`;
   $('stats').textContent = `開 ${opened}・入碗 ${count}・浪費率 ${opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0}%・殼屑 ${cracked}・偷 ${steals}/掠 ${caught}・割手 ${stabs}`;
 }
 function worldOf(o: THREE.Object3D) { return o.getWorldPosition(new THREE.Vector3()); }
@@ -875,20 +875,20 @@ function pctTxt(v: number, goodHigh: boolean) { if (v === 1) return '<span style
 function renderShop() {
   if (!save.shop.owned.includes('basic')) save.shop.owned.push('basic');
   const cur = knifeNow().id;
-  $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><h3>🔪 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>找縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
+  $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><h3><i class="ic ic-knife"></i> 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>找縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
     const own = save.shop.owned.includes(k.id);
     const btn = k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < k.price ? 'disabled' : ''}>$${k.price}</button>`;
     return `<tr><td><b>${k.n}</b><br><small>${k.desc}</small></td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!save.shop.owned.includes('stripe')) save.shop.owned.push('stripe');
   const cu = umbNow().id, B = UMBS[0];
   const rel = (v: number, b: number, goodHigh: boolean, unit: string) => { if (v === b) return `<span style="opacity:.6">${v}${unit}</span>`; const good = goodHigh ? v > b : v < b; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${v}${unit}</b>`; };
-  $('shopList').innerHTML += `<h3>☂ 雨傘</h3><table class="kt"><tr><th>傘</th><th>開傘</th><th>可撐</th><th>完美窗</th><th>遮擋</th><th>反彈力</th><th></th></tr>` + UMBS.map(u => {
+  $('shopList').innerHTML += `<h3><i class="ic ic-umb"></i> 雨傘</h3><table class="kt"><tr><th>傘</th><th>開傘</th><th>可撐</th><th>完美窗</th><th>遮擋</th><th>反彈力</th><th></th></tr>` + UMBS.map(u => {
     const own = save.shop.owned.includes(u.id);
     const btn = u.id === cu ? '<b>使用中</b>' : own ? `<button data-ueq="${u.id}">換</button>` : `<button data-ubuy="${u.id}" ${save.money < u.price ? 'disabled' : ''}>$${u.price}</button>`;
     return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small></td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!save.shop.owned.includes('plastic')) save.shop.owned.push('plastic');
   const cb = bowlNow().id, P = BOWLS[0];
-  $('shopList').innerHTML += `<h3>🥣 盆仔</h3><table class="kt"><tr><th>盆</th><th>盆口</th><th>彈出</th><th>距離</th><th>完美窗</th><th>加價</th><th></th></tr>` + BOWLS.map(b => {
+  $('shopList').innerHTML += `<h3><i class="ic ic-bowl"></i> 盆仔</h3><table class="kt"><tr><th>盆</th><th>盆口</th><th>彈出</th><th>距離</th><th>完美窗</th><th>加價</th><th></th></tr>` + BOWLS.map(b => {
     const own = save.shop.owned.includes(b.id);
     const btn = b.id === cb ? '<b>使用中</b>' : own ? `<button data-beq="${b.id}">換</button>` : `<button data-bbuy="${b.id}" ${save.money < b.price ? 'disabled' : ''}>$${b.price}</button>`;
     return `<tr><td><b>${b.n}</b><br><small>${b.desc}</small></td><td>${rel(Math.round(b.r / P.r * 100), 100, true, '%')}</td><td>${rel(Math.round(b.bounce * 100), 0, false, '%')}</td><td>${rel(Math.round(b.dist * 100), 100, false, '%')}</td><td>${rel(Math.round(b.perf * 100), 10, true, '%')}</td><td>${rel(b.bonus, 0, true, '$')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
@@ -1110,12 +1110,12 @@ function endDay() { if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
   if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
   const all = [{ name: `你（${esc(myName())}）`, count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
-  const temp = shiftLen < SHIFT, queen = all[0].me && !temp, PAY = OYSTER_PRICE - (temp ? TEMP_CUT : 0);
+  const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= 5, queen = all[0].me && !temp && worked, PAY = OYSTER_PRICE - (temp ? TEMP_CUT : 0);
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
   const titles: string[] = []; let bonus = 0;
-  if (thrown === 0 && !temp) { titles.push(`🕊 和平${esc(myName())}（+$50）`); bonus = 50; }
-  if (shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
-  if (blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
+  if (thrown === 0 && !temp && worked) { titles.push(`🕊 和平${esc(myName())}（+$50）`); bonus = 50; }
+  if (worked && shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
+  if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
   const LC = locNow(), base0 = meatPay + perfects * PERFECT_PAY + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
   const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty);
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
@@ -1277,10 +1277,10 @@ function renderLocs() { autoUnlock();
   const seen = save.locSeen ?? (save.locSeen = ['home']); const cl = locNow();
   const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && save.locs!.includes(l.id);
   const anyNew = LOCS.some(isNew);
-  el.innerHTML = `<div class="locHead"><b>📍 上工地點：${cl.n} ×${cl.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small></div><div class="locRow">` + LOCS.map(l => { const own = l.need === 0 || save.locs!.includes(l.id), cur = cl.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
+  el.innerHTML = `<div class="locHead"><b><i class="ic ic-pin"></i> 上工地點：${cl.n} ×${cl.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small></div><div class="locRow">` + LOCS.map(l => { const own = l.need === 0 || save.locs!.includes(l.id), cur = cl.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
     if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small>${cur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${l.d}</small></button>`;
-    return `<button class="loc locked" disabled>${head}<small>🔒 解鎖條件：入碗 ${tot}/${l.need} 顆</small><small class="ld">${l.d}</small></button>`; }).join('') + '</div>';
+    return `<button class="loc locked" disabled>${head}<small><i class="ic ic-lock"></i> 解鎖條件：入碗 ${tot}/${l.need} 顆</small><small class="ld">${l.d}</small></button>`; }).join('') + '</div>';
   const mark = (id?: string) => { if (id && !seen.includes(id)) { seen.push(id); persist(); } };
   el.querySelectorAll<HTMLButtonElement>('button.loc').forEach(b => b.addEventListener('click', () => mark(b.dataset.loc || b.dataset.lbuy), { capture: true }));
   requestAnimationFrame(() => el.querySelector('.loc.cur')?.scrollIntoView({ block: 'nearest', inline: 'center' }));
@@ -1505,7 +1505,7 @@ $('oTut').onclick = () => tutStart();
 $('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; } tutStart(); };
 (window as any).__oy = { get phase() { return phase; }, get umb() { return { held: umbHeld, t: umbT, vis: umb.visible }; }, get tut() { return tut && TUT[tut.i].id; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, P0, P1); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
 // ---------- 截圖模式 ----------
-if (SHOT) {
+if (SHOT) setTimeout(() => {
   startDay(); npcs.forEach((n, i) => { n.count = 5 + i * 3; n.throwCd = 999; });
   const look = (y: number, p: number) => { tYaw = yaw = y; tPitch = pitch = p; };
   const twistSetup = () => { diff = 2; setPhase('twist'); seamGlow.visible = false; progress = 0.6; tension = 0.5; strokeDir = 1; shellTop.rotation.z = -0.25; };
@@ -1519,6 +1519,7 @@ if (SHOT) {
   if (SHOT === 'walk') { later(0.1, () => { standUp(); walkPos.set(-1.1, 1.55, -2.35); tYaw = yaw = 3.09; tPitch = pitch = -0.5; }); }
   if (SHOT === 'dex') { renderDex(); $('dex').classList.add('show'); }
   if (SHOT === 'settings') $('settings').classList.add('show');
+  if (SHOT === 'fb' || SHOT === 'fbdone') { openFb('settings'); if (SHOT === 'fbdone') fbShow(true); }
   if (SHOT === 'pick') look(-0.25, -0.85);
   if (SHOT === 'scoop') { look(0, -0.5); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; scoop(); }
   const shotHold = () => holdOyster(2);
@@ -1537,7 +1538,7 @@ if (SHOT) {
   if (SHOT === 'umbrella') { look(0.6, -0.3); windUp(npcs[2]); npcs[2].windup = 0.3; later(0.25, () => { umbT = umbLen = 0.9; umb.visible = true; }); later(0.6, () => { umbT = 0.6; }); }
   if (SHOT === 'harbor') look(0, -0.05);
   if (SHOT === 'end') { count = 38; opened = 47; missed = 9; abandoned = 3; perfects = 12; cracked = 4; steals = 3; caught = 1; meatHits = 2; shellHits = 4; thrown = 5; blocks = 3; reflects = 2; lost = 1; hitsTaken = 1; penalty = 28; dayPearls = [0]; dayOdd = [1]; endDay(); }
-}
+}, 0);
 frame();
 
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
@@ -1624,7 +1625,7 @@ let medDrawT = 0;
 function tickMeds(dt: number) { let ch = false; for (const k in medT) { const was = medT[k] > 0; medT[k] = Math.max(0, medT[k] - dt); if (was && medT[k] <= 0) { ch = true; const m = MEDS.find(x => x.id === k); if (m) toast(`${m.emo}${m.n} 效果結束了`, '#cfc3ff'); } } medDrawT -= dt; if (ch || medDrawT <= 0) { medDrawT = 1; drawMeds(); } }
 function drawMeds() {
   const el = document.getElementById('medAct'); if (el) el.innerHTML = medOn().map(m => `<span>${m.emo}${Math.ceil(medT[m.id])}s</span>`).join('') + (saltNext ? '<span>🧂下一粒</span>' : '');
-  const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0); const b = document.getElementById('medBtn'); if (b) { b.innerHTML = (n ? `💊 藥品 ×${n}` : '💊 藥品') + '<span class="key"> (M)</span>' + (n ? '' : '<small>去雜貨店買藥</small>'); b.classList.toggle('empty', !n); }
+  const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0); const b = document.getElementById('medBtn'); if (b) { b.innerHTML = (n ? `<i class="ic ic-pill"></i> 藥品 ×${n}` : '<i class="ic ic-pill"></i> 藥品') + '<span class="key"> (M)</span>' + (n ? '' : '<small>去雜貨店買藥</small>'); b.classList.toggle('empty', !n); }
   const L = document.getElementById('medList'); if (L && L.classList.contains('show')) renderMedList();
 }
 function useMed(id: string) {
@@ -1647,7 +1648,7 @@ function renderMedList() {
   drawMeds();
 }
 function renderMedShop() {
-  $('shopList').insertAdjacentHTML('beforeend', `<h3>💊 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「💊 藥品」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b></td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur ? `${m.dur}s` : "立即"}</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < m.price ? 'disabled' : ''}>$${m.price}</button></td></tr>`).join('') + '</table>');
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-pill"></i> 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「💊 藥品」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b></td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur ? `${m.dur}s` : "立即"}</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < m.price ? 'disabled' : ''}>$${m.price}</button></td></tr>`).join('') + '</table>');
   $('shopList').querySelectorAll('button[data-mbuy]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const m = MEDS.find(x => x.id === b.getAttribute('data-mbuy'))!; if (save.money < m.price) return;
     save.money -= m.price; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; persist(); track('buy', { item: 'med-' + m.id, price: m.price }); if (ac) SFX.jingle(); renderShop(); drawMeds();
@@ -1687,26 +1688,38 @@ document.querySelectorAll<HTMLElement>('.panel').forEach(pn => {
 addEventListener('pagehide', () => { if (state === 'play' && !tut) track('abandon', { reason: 'abandon', count, opened, dur: Math.round(shiftLen - Math.max(0, timeLeft)), loc: locNow().id, dstat: dstatStr() }); });
 // 💬 意見回饋
 const FB_URL = STATS_URL.replace(/\/e$/, '/feedback');
-let fbCat = '', fbFrom = '', fbLast = 0;
-const fbCount = () => { $('fbCount').textContent = `${($('fbText') as HTMLTextAreaElement).value.length}/500`; };
-function openFb(from: string) { fbFrom = from; $(from).classList.remove('show'); $('fb').classList.add('show'); fbCount(); }
-document.querySelectorAll<HTMLButtonElement>('[data-fc]').forEach(b => b.onclick = () => { fbCat = b.dataset.fc!; document.querySelectorAll<HTMLButtonElement>('[data-fc]').forEach(x => x.style.outline = x === b ? '3px solid #ffd24a' : ''); });
+let fbCat = '', fbFrom = '', fbLast = 0, fbMood = 0, fbTimer = 0;
+const FB_PH: Record<string, string> = { bug: '哪裡出問題？在做什麼的時候發生的？例如：在王功漁港撬第三顆時畫面卡住…', idea: '想加什麼東西？新的刀、新漁港、新阿婆都可以講～', fun: '哪裡最好玩？哪個阿婆最好笑？', hard: '哪一段太難？撬殼、投碗還是躲殼？' };
+const MOOD_TXT = ['', '很差', '普通偏差', '還可以', '不錯', '超好玩'];
+const fbCount = () => { const n = ($('fbText') as HTMLTextAreaElement).value.length, c = $('fbCount'); c.textContent = `${n}/500`; c.className = n >= 480 ? 'full' : n >= 400 ? 'near' : ''; };
+function fbCool() { const left = Math.ceil((60_000 - (Date.now() - fbLast)) / 1000), btn = $('fbSend') as HTMLButtonElement; clearTimeout(fbTimer);
+  if (left > 0 && fbLast) { btn.disabled = true; $('fbSendTxt').textContent = `阿婆喘口氣… ${left} 秒`; fbTimer = window.setTimeout(fbCool, 1000); } else { btn.disabled = false; $('fbSendTxt').textContent = '送出'; } }
+function fbShow(done: boolean) { $('fbForm').style.display = done ? 'none' : ''; $('fbDone').classList.toggle('on', done); }
+function openFb(from: string) { fbFrom = from; $(from).classList.remove('show'); fbShow(false); $('fb').classList.add('show'); fbCount(); fbCool(); }
+const bounce = (el: Element) => { el.classList.remove('pop'); void (el as HTMLElement).offsetWidth; el.classList.add('pop'); };
+document.querySelectorAll<HTMLButtonElement>('[data-fc]').forEach(b => b.onclick = () => { fbCat = b.dataset.fc!; document.querySelectorAll<HTMLButtonElement>('[data-fc]').forEach(x => x.classList.toggle('sel', x === b)); bounce(b); ($('fbText') as HTMLTextAreaElement).placeholder = FB_PH[fbCat] ?? ''; });
+document.querySelectorAll<HTMLButtonElement>('[data-mood]').forEach(b => b.onclick = () => { const v = +b.dataset.mood!; fbMood = fbMood === v ? 0 : v; document.querySelectorAll<HTMLButtonElement>('[data-mood]').forEach(x => { x.classList.toggle('sel', +x.dataset.mood! <= fbMood); }); bounce(b); $('fbMoodTxt').textContent = fbMood ? `${fbMood}/5 ${MOOD_TXT[fbMood]}` : ''; });
 $('fbText').addEventListener('input', fbCount);
 $('setFb').onclick = () => openFb('settings'); $('rFb').onclick = () => openFb('result');
-$('fbClose').onclick = () => { $('fb').classList.remove('show'); if (fbFrom) $(fbFrom).classList.add('show'); };
+$('fbClose').onclick = () => { $('fb').classList.remove('show'); fbShow(false); if (fbFrom) $(fbFrom).classList.add('show'); };
+$('fbBack').onclick = () => { $('fb').classList.remove('show'); fbShow(false); if (fbFrom === 'result' || state !== 'play') { if (fbFrom) $(fbFrom).classList.add('show'); } };
 $('fbSend').onclick = () => {
   const ta = $('fbText') as HTMLTextAreaElement, text = ta.value.trim().slice(0, 500);
-  if (!fbCat) { toast('先選一個類別喔'); return; }
-  if (!text) { toast('寫點什麼再送出吧'); return; }
-  if (Date.now() - fbLast < 60_000) { toast('送太快了，等一分鐘再試'); return; }
-  fbLast = Date.now();
+  if (!fbCat) { toast('先選一個類別喔'); bounce($('fbCats')); return; }
+  if (!text) { toast('寫點什麼再送出吧'); ta.focus(); return; }
+  if (Date.now() - fbLast < 60_000) { fbCool(); return; }
+  fbLast = Date.now(); const btn = $('fbSend'); btn.classList.add('flying'); ($('fbSend') as HTMLButtonElement).disabled = true; $('fbSendTxt').textContent = '送出中…';
   const ua = navigator.userAgent, uaS = (/(iPhone|iPad|Android|Windows|Mac OS X|Linux)/.exec(ua)?.[1] ?? '?') + ' ' + (/(Edg|Chrome|Firefox|Safari)\/[\d]+/.exec(ua)?.[0] ?? '');
-  const body = JSON.stringify({ uid: statsId, cat: fbCat, text, contact: ($('fbContact') as HTMLInputElement).value.trim().slice(0, 120), meta: { ver: __BUILD__, dev: COARSE ? 'mobile' : 'pc', screen: `${innerWidth}x${innerHeight}`, loc: locNow().id, days: save.days, ua: uaS } });
+  const body = JSON.stringify({ uid: statsId, cat: fbCat, text, mood: fbMood || undefined, contact: ($('fbContact') as HTMLInputElement).value.trim().slice(0, 120), meta: { ver: __BUILD__, dev: COARSE ? 'mobile' : 'pc', screen: `${innerWidth}x${innerHeight}`, loc: locNow().id, days: save.days, ua: uaS, mood: fbMood || undefined } });
   const catName: Record<string, string> = { bug: '🐛 Bug', idea: '💡 建議', fun: '😊 好玩', hard: '😣 太難' };
   const pBack = fetch(FB_URL, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(r => r.ok, () => false);
-  const pDc = postDiscordFeedback(`剝蚵仔模擬器｜${catName[fbCat] ?? fbCat}`, text, { 版本: __BUILD__, 裝置: `${COARSE ? 'mobile' : 'pc'} ${uaS}`, 螢幕: `${innerWidth}x${innerHeight}`, 漁港: locNow().id, 工數: save.days });
-  Promise.all([pBack, pDc]).then(([a, b]) => { if (a || b) { toast('謝謝你的回饋！'); ta.value = ''; fbCount(); $('fbClose').click(); } else { fbLast = 0; toast('送出失敗，稍後再試'); } });
+  const pDc = postDiscordFeedback(`剝蚵仔模擬器｜${catName[fbCat] ?? fbCat}`, text, { 心情: fbMood ? `${'🦪'.repeat(fbMood)} ${fbMood}/5` : '未選', 版本: __BUILD__, 裝置: `${COARSE ? 'mobile' : 'pc'} ${uaS}`, 螢幕: `${innerWidth}x${innerHeight}`, 漁港: locNow().id, 工數: save.days });
+  const minT = new Promise(r => setTimeout(r, 700));
+  Promise.all([pBack, pDc, minT]).then(([a, b]) => { btn.classList.remove('flying');
+    if (a || b) { ta.value = ''; fbCount(); fbMood = 0; document.querySelectorAll('[data-mood].sel').forEach(x => x.classList.remove('sel')); $('fbMoodTxt').textContent = ''; fbShow(true); fbCool(); }
+    else { fbLast = 0; fbCool(); toast('送出失敗，稍後再試'); } });
 };
+(window as any).__fbDone = () => fbShow(true);
 installBackGuard(() => {
   const open = (id: string) => document.getElementById(id)?.classList.contains('show');
   if (open('npcTip')) { $('npcTip').classList.remove('show'); return 'handled'; }
