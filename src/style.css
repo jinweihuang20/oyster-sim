@@ -373,3 +373,11 @@ button:disabled{filter:grayscale(.8);opacity:.55}
 @media (prefers-reduced-motion:reduce){.amaFace,.amaShell,.pop{animation:none!important}}
 #overlay #start,#result #again{background:var(--red) var(--grain);color:var(--paint);border:3px solid var(--ink);border-radius:2px;box-shadow:4px 4px 0 var(--ink);text-shadow:2px 2px 0 var(--redD)}
 #shopTabs{background:var(--ink);padding:6px}#shopTabs button{background-color:var(--iron2);color:#fff;opacity:.85;box-shadow:2px 2px 0 #000}#shopTabs button.on{background-color:var(--rust);color:#fff;opacity:1}
+/* 滑桿命中區：高對比招牌風 */
+#gauge{background:#1b2a3a;box-shadow:3px 3px 0 #0b141d;height:20px}
+#zone{background:#d8402f!important;border-left:3px solid #fff4dc;border-right:3px solid #fff4dc;box-shadow:inset 0 0 0 2px #7a1a10}
+#gauge.aim #zone{background:#f2b705!important;box-shadow:inset 0 0 0 2px #7a5a00}
+#gauge.tw #zone{background:#3fb24a!important;box-shadow:inset 0 0 0 2px #14551b}
+#gauge.hitHold #zone{background:#b8ff3a!important}
+#fill{background:#fff4dc;box-shadow:0 0 0 2px #0b141d}
+@media (pointer:coarse){#gauge{height:26px}}
