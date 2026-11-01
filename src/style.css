@@ -394,3 +394,128 @@ button:disabled{filter:grayscale(.8);opacity:.55}
 @media (prefers-reduced-motion:reduce){#gauge.inZ,#gauge.inZ #zone{animation:none}#gauge.inZ #zone{filter:brightness(1.4)}}
 
 .rdGot{background:#f1e6cc;color:#2a3a4a;border:3px solid #2a3a4a;box-shadow:4px 4px 0 #2a3a4a;padding:10px 12px;text-align:left}.rdGot>b{display:block;background:#b8453a;color:#fff8e8;margin:-10px -12px 8px;padding:6px 12px;font-size:17px}.rdGot ul{list-style:none;margin:0;padding:0}.rdGot li{padding:4px 0;border-bottom:1px dashed #2a3a4a55;font-size:15px}.trialTag{display:inline-block;background:#ffd76a;color:#2a1a08;border:2px solid #2a1a08;padding:0 5px;font-size:12px;font-weight:700}
+
+/* 全服跑馬燈 */
+#feed{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 46px);height:30px;overflow:hidden;z-index:150;pointer-events:none;display:none;background:var(--iron);border-top:3px solid var(--ink);border-bottom:3px solid var(--ink);box-shadow:0 3px 0 var(--ink)}
+#feed.on{display:block}
+#feed .fdIn{position:absolute;white-space:nowrap;top:3px;left:100%;color:var(--paint);font:900 15px var(--sign);animation:fdMove 9s linear forwards}
+#feed b{color:#f2b705}#feed small{opacity:.75;margin-right:6px;font-size:12px}
+@keyframes fdMove{from{transform:translateX(0)}to{transform:translateX(calc(-100vw - 100%))}}
+/* 排行榜 */
+#lbTabs,#lbView{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:6px 0}
+#lbTabs button,#lbView button{font-size:14px;padding:6px 10px;min-height:38px;background-color:var(--iron2);color:#fff}
+#lbTabs button.on,#lbView button.on{background-color:var(--red);color:var(--paint)}
+#lbMe{color:#f2b705;font-weight:900;min-height:1em}
+#lbList{margin:8px 0;text-align:left}
+.lbRow{display:flex;align-items:center;gap:8px;padding:6px;border:2px solid var(--ink);background:rgba(239,233,220,.08);margin-bottom:6px;box-shadow:2px 2px 0 var(--ink)}
+.lbRow.me{background:rgba(242,183,5,.18);border-color:#f2b705}
+.lbR{width:1.8em;text-align:center;font-weight:900;font-size:18px}
+.lbN{flex:1;min-width:0;overflow:hidden}.lbN small{opacity:.7;margin-left:3px}
+.lbT{display:block;font-style:normal;font-size:12px;color:#f2b705}
+.lbV{font-weight:900}
+.lbA{display:flex;gap:4px}.lbA button{font-size:13px;padding:4px 6px;min-height:34px}.lbA>span{font-size:13px;opacity:.8;display:inline-flex;gap:2px;align-items:center}
+.lbGap{border-top:2px dashed rgba(239,233,220,.4);margin:8px 0}
+.lbMsg{text-align:center;opacity:.8}.lbNote{font-size:12px;opacity:.75}
+#lbNickRow{display:flex;gap:6px;justify-content:center}#lbNick{font-size:16px;width:9em}
+body.tutOn #feed{display:none!important}
+
+.dcRow{display:flex;gap:8px;justify-content:center;align-items:stretch;margin-top:8px;flex-wrap:nowrap}
+.dcRow>.rdBtn,.dcRow>.dcBtn{padding:8px 12px;font-size:14px;min-height:40px;white-space:nowrap}
+.dcRow>.rdBtn{background-color:var(--iron2);color:#fff}
+/* 系統按鈕：招牌方格（手機少滑動） */
+.sysGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:8px;margin:10px 0;justify-content:stretch}
+.sysGrid>button,.sysGrid>a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;margin:0!important;min-width:0!important;min-height:64px;padding:8px 4px!important;font-size:14px;font-weight:800;line-height:1.1;border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink);text-decoration:none;white-space:nowrap}
+.sysGrid>button .ic,.sysGrid>a .ic{font-size:22px}
+.sysGrid>#oRedeem{background-color:var(--iron2);color:#fff}
+#result .sysGrid{grid-template-columns:repeat(3,1fr)}
+@media (max-width:500px){
+ .sysGrid{grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0}
+ .sysGrid>button,.sysGrid>a{min-height:58px;font-size:13px;padding:6px 2px!important}
+ #overlay h1{font-size:24px;margin:2px 0 6px}
+ #overlay #meLine{font-size:13px;margin:4px 0;line-height:1.4}
+ #locPick{margin:4px auto}#locPick .locHead{padding:4px 8px}#locPick .locRow{padding:6px 2px 4px}
+ #locPick .loc{width:136px;font-size:13px;padding:6px 8px}#locPick .loc .ld{display:none}
+ #overlay #start,#result #again{min-height:54px;font-size:21px;margin-top:6px}
+ #tempRow{margin-top:6px!important}
+ #settings .row{padding:4px 0;margin:0;min-height:38px;font-size:15px}
+ #settings>button,#settings>a{min-height:44px;padding:6px 10px;margin:3px;font-size:14px}
+}
+@media (max-width:500px){#result .sysGrid{grid-template-columns:repeat(6,1fr);gap:4px}#result .sysGrid>button{min-height:54px;font-size:12px}#result .sysGrid .ic{font-size:20px}}
+@media (max-width:500px){
+ #settings label.row{min-height:34px!important;padding:2px 0!important;margin:0!important;font-size:14px}
+ #settings label.row:has(input[type=checkbox]){display:inline-flex!important;width:calc(50% - 4px);box-sizing:border-box;justify-content:space-between;align-items:center;gap:4px;vertical-align:top;padding-right:6px!important;font-size:13px}
+ #settings input[type=checkbox]{width:24px;height:24px}
+ #settings input#myName{padding:4px 8px;min-width:0;flex:0 1 9em}
+ #settings.panel{padding:44px 18px 16px!important;box-sizing:border-box}
+ #settings label.row{padding-left:4px!important;padding-right:4px!important}
+}
+/* 上工費：一律看得到；已領取為灰色停用 */
+#overlay #daily{display:block!important;visibility:visible!important;opacity:1!important;width:100%;max-width:420px;margin:6px auto;min-height:48px;padding:6px 10px;font-size:16px;color:var(--ink);background:#e4b13a var(--grain);border:3px dashed var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink)}
+#overlay #daily.done{background:#c9c4b8;color:#4a4f55;border-style:solid;box-shadow:none;opacity:1!important}
+@media (max-width:500px){#overlay #daily{min-height:44px;font-size:14px;padding:4px 8px}#overlay #daily small{font-size:11px}}
+
+/* 主畫面導覽 */
+#hg{position:fixed;inset:0;z-index:90;display:none;touch-action:none}#hg.show{display:block}
+#hgHole{position:fixed;border:3px solid #f2b705;box-shadow:0 0 0 9999px rgba(10,18,28,.72),4px 4px 0 #0008;transition:all .25s;pointer-events:none}
+#hgCall{position:fixed;left:12px;right:12px;max-width:420px;margin:0 auto;background:#fff4dc;color:#2a1c10;border:3px solid #1b2a3a;box-shadow:5px 5px 0 #1b2a3a;padding:12px 14px;font-size:16px;line-height:1.5}
+#hgCall b{background:#b8352a;color:#fff4dc;padding:1px 8px;margin-right:6px}.hgN{float:right;font-size:13px;color:#6a5a48}
+.hgB{display:flex;justify-content:flex-end;gap:10px;margin-top:10px}.hgB button{min-height:44px;min-width:84px;border:2px solid #1b2a3a;border-radius:0;font-size:16px;box-shadow:3px 3px 0 #1b2a3a}
+#hgNext{background:#2f5d8a;color:#fff4dc}#hgSkip{background:#e9dcc0;color:#2a1c10}
+/* 設定面板重排（覆蓋上方所有舊規則） */
+#settings.panel{padding:0!important;box-sizing:border-box;text-align:left}
+#settings.panel .ph{position:sticky;top:0!important;margin:0!important;padding:10px 56px!important;border-radius:0;z-index:5}
+#settings.panel .ph h2{margin:0!important;font-size:20px;line-height:1.4}
+#settings.panel .ph .px{top:50%!important;bottom:auto!important;right:8px;transform:translateY(-50%)!important}
+#settings .setBody{padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:0}
+#settings .setBody label.row{display:grid!important;grid-template-columns:1fr 58%;align-items:center;column-gap:12px;width:auto!important;min-height:44px!important;margin:0!important;padding:4px 0!important;font-size:15px!important;box-sizing:border-box}
+#settings .setBody label.row:first-child{padding-top:0!important}
+#settings .rl{text-align:left}
+#settings .setBody label.row input[type=text],#settings .setBody label.row input[type=range]{width:100%!important;box-sizing:border-box;margin:0;min-width:0;justify-self:stretch}
+#settings .setBody input#myName{padding:6px 8px!important;font-size:16px;height:40px}
+#settings .setBody label.row input[type=checkbox]{justify-self:end;width:26px;height:26px;margin:0}
+#settings .setSec{margin:16px 0 8px;font-weight:900;font-size:13px;letter-spacing:.1em;color:var(--iron);text-align:left}
+#settings .setGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 6px 6px 0}
+#settings .setGrid>*:last-child:nth-child(odd){grid-column:1/-1}
+#settings .setGrid>button,#settings .setGrid>a,#settings #resetSave{display:flex;align-items:center;justify-content:center;gap:.35em;width:100%;min-width:0!important;height:48px;min-height:48px!important;margin:0!important;padding:0 8px!important;box-sizing:border-box;font-size:15px!important;text-decoration:none;white-space:nowrap}
+#settings .setDiv{border:0;border-top:2px dashed rgba(22,25,29,.35);margin:16px 0}
+#settings #resetSave{width:calc(100% - 6px)}
+/* ===== 共用外框 .panel.sheet（圖鑑／雜貨店／排行榜／兌換碼／回饋／設定）：標題列貼齊頂端、內容 16px 內距、暗色背板 ===== */
+#pbd{position:fixed;inset:0;z-index:40;background:rgba(10,14,20,.72);display:none;touch-action:none}#pbd.show{display:block}
+.panel.sheet{z-index:50;padding:0!important;box-sizing:border-box;text-align:left;scroll-padding-top:64px}
+.panel.sheet>.ph{position:sticky!important;top:0!important;margin:0!important;padding:10px 56px!important;border-radius:0;z-index:5;background:var(--iron) var(--corr);border-bottom:3px solid var(--ink);text-align:center}
+.panel.sheet>.ph h2{margin:0!important;font-size:20px;line-height:1.4;color:var(--paint)}
+.panel.sheet>.ph .px{top:50%!important;bottom:auto!important;right:8px;transform:translateY(-50%)!important}
+.panel.sheet>.pb{padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+.panel.sheet>.pb>:first-child{margin-top:0!important}
+#settings.sheet>.pb{padding:0}
+#shop .ph #shopTabs{position:static;margin:8px -48px 0;padding:0;background:none}
+#lbClose{display:none!important}
+@media (max-width:500px){.panel.sheet{top:8px!important;transform:translateX(-50%)!important;max-height:calc(100dvh - 16px - env(safe-area-inset-bottom))!important}}
+/* 排行榜 */
+#lb .pb{display:flex;flex-direction:column;gap:12px}
+#lbTabs{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink)}
+#lbTabs button{margin:0!important;min-width:0!important;min-height:44px!important;height:44px;padding:0 4px;font-size:14px;border:0;border-right:3px solid var(--ink);border-radius:0;box-shadow:none;background-color:var(--paint2);color:var(--ink);white-space:nowrap;transform:none}
+#lbTabs button:last-child{border-right:0}
+#lbTabs button.on{background-color:var(--red);color:var(--paint)}
+#lbView{display:inline-flex;align-self:center;gap:0;margin:0;border:2px solid var(--ink);border-radius:999px;overflow:hidden;background:var(--paint)}
+#lbView button{margin:0!important;min-width:64px!important;min-height:32px!important;height:32px;padding:0 14px;font-size:13px;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--ink);transform:none}
+#lbView button+button{border-left:2px solid var(--ink)}
+#lbView button.on{background-color:var(--iron);color:var(--paint)}
+#lbMe:empty{display:none}#lbMe{text-align:center;color:var(--redD)}
+#lbList{margin:0;min-height:260px;display:flex;flex-direction:column;gap:6px}
+.lbEmpty{flex:1;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;border:2px dashed rgba(22,25,29,.35);color:#4a4f55;font-size:15px;font-weight:700}
+.lbEmpty .ic{font-size:36px;opacity:.7}.lbEmpty small{font-weight:400;font-size:13px}
+.lbRow{display:grid;grid-template-columns:2em minmax(0,1fr) auto auto;align-items:center;column-gap:8px;margin:0;padding:6px 8px;background:rgba(255,255,255,.35)}
+.lbR{width:auto}.lbN{white-space:nowrap;text-overflow:ellipsis}.lbV{text-align:right;min-width:3.5em;font-variant-numeric:tabular-nums}
+.lbA{display:grid;grid-template-columns:repeat(2,48px);gap:4px}
+.lbA button,.lbA>span{margin:0!important;min-width:0!important;min-height:34px!important;height:34px;padding:0 4px;font-size:13px;justify-content:center;font-variant-numeric:tabular-nums}
+.lbA>span{display:inline-flex;align-items:center}
+.lbGap{margin:2px 0}
+.lbSec{margin-top:4px;font-weight:900;font-size:13px;letter-spacing:.1em;color:var(--iron);border-top:2px dashed rgba(22,25,29,.35);padding-top:12px}
+#lbNickRow{display:flex;gap:8px;align-items:stretch}
+#lbNick{flex:1;min-width:0;width:auto;height:44px;box-sizing:border-box;margin:0;font-size:16px}
+#lbNickSave{flex:0 0 96px;height:44px;min-height:44px!important;min-width:0!important;margin:0!important;padding:0;box-sizing:border-box}
+.lbNote{margin:0;font-size:12px}
+#shop.sheet>.ph .px{top:6px!important;transform:none!important}
+.panel.sheet{z-index:50!important}#redeem.sheet{z-index:55!important}.panel.sheet>.pb>:first-child>:first-child{margin-top:0!important}
+#shop.sheet #shopList{padding-top:0!important;margin-top:0!important}#shop.sheet #shopList>div:first-child>:first-child{margin-top:0!important}
