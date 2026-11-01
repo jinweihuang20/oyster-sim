@@ -979,7 +979,7 @@ function twistInput(dx: number, dtMs: number) { if (swipePhase()) return;
   if (dir !== strokeDir) { if (strokeDir !== 0 && strokeLen > innerWidth * 0.05) halfTwist(strokePeak); strokeDir = dir; strokeLen = 0; strokePeak = 0; }
   strokeLen += Math.abs(dx); strokePeak = Math.max(strokePeak, tension);
 }
-const PRY = [{ w: 0.3, sp: 0.8 }, { w: 0.24, sp: 1.05 }, { w: 0.2, sp: 1.35 }, { w: 0.135, sp: 1.7 }];
+const PRY = [{ w: 0.3, sp: 0.8 }, { w: 0.22, sp: 1.05 }, { w: 0.2, sp: 1.35 }, { w: 0.135, sp: 1.7 }];
 let pryHits = 0;
 const PRY_NEED = [2, 3, 4, 5], PRY_C = 0.55, PRY_RED = 0.86;
 let needleStart = 0, combo = 0, dayCombo = 0;
