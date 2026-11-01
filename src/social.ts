@@ -101,3 +101,7 @@ export function init(d: Deps) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) showNext(); });
 }
 export function resume() { showNext(); }
+// ---------- 禮物信箱 ----------
+export type Gift = { id: string; type: 'money' | 'equip' | 'odd' | 'pearl'; amount?: number; itemId?: string | number; tier?: number; message?: string; createdAt?: number | string };
+export async function gifts(): Promise<Gift[]> { const r = await get(`/gifts?pid=${encodeURIComponent(D.id)}${tq()}`); return Array.isArray(r?.gifts) ? r.gifts : []; }
+export async function claimGift(giftId: string): Promise<Gift | null> { const r = await post('/gifts/claim', { pid: D.id, giftId }); return r?.ok ? (r.gift ?? null) : null; }
