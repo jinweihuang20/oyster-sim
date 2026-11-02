@@ -24,7 +24,7 @@ function placeFeed() {
     const r = e.getBoundingClientRect();
     if (r.height > 0 && r.width > 0 && r.top < innerHeight * 0.4 && getComputedStyle(e).visibility !== 'hidden' && (e.textContent || '').trim()) b = Math.max(b, r.bottom);
   }
-  f.style.top = b > 0 ? Math.round(b + 6) + 'px' : 'env(safe-area-inset-top)';
+  f.style.top = b > 0 ? Math.round(b + 6) + 'px' : 'var(--sa-top)';
   const h = document.getElementById('hint'); if (!h) return;
   h.style.removeProperty('top'); h.style.removeProperty('bottom');
   if (!f.classList.contains('on')) return;
