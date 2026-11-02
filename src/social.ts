@@ -165,10 +165,22 @@ export const myNick = () => D.nick();
 
 // ---------- 活動場景 ----------
 /** 目前進行中的活動；連不上或逾時回傳 undefined（呼叫端要隱藏入口，不能沿用舊設定） */
-export async function evActive(): Promise<{ event: any | null; serverTime: number } | undefined> {
+export async function evActive(): Promise<{ event: any | null; serverTime: number; left?: number | null } | undefined> {
   const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 6000);
-  try { const r = await fetch(API + '/events/active?game=oyster-sim', { mode: 'cors', cache: 'no-store', signal: ac.signal }); if (!r.ok) return undefined; const j = await r.json(); return j && typeof j.serverTime === 'number' ? j : undefined; }
+  try { const r = await fetch(API + '/events/active?game=oyster-sim&id=' + encodeURIComponent(D.id), { mode: 'cors', cache: 'no-store', signal: ac.signal }); if (!r.ok) return undefined; const j = await r.json(); return j && typeof j.serverTime === 'number' ? j : undefined; }
   catch { return undefined; } finally { clearTimeout(t); }
 }
-export function evResult(d: { eventId: number; sid: string; score: number; meat: number; completed: boolean; early: boolean }) { return post('/events/result', d); }
+// 開始一場活動：伺服器發場次 token（次數上限在伺服器扣）。ok / limit / ended / net
+export async function evStart(eventId: number): Promise<{ st: 'ok'; token: string; left: number | null } | { st: 'limit' | 'ended' | 'net' }> {
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 8000);
+  try {
+    const r = await fetch(API + '/events/start', { method: 'POST', body: JSON.stringify({ id: D.id, eventId }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors', signal: ac.signal });
+    const j = await r.json().catch(() => null);
+    if (r.ok && j && typeof j.token === 'string') return { st: 'ok', token: j.token, left: typeof j.left === 'number' ? j.left : null };
+    if (j?.error === 'limit') return { st: 'limit' };
+    if (j?.error === 'ended') return { st: 'ended' };
+    return { st: 'net' };
+  } catch { return { st: 'net' }; } finally { clearTimeout(t); }
+}
+export function evResult(d: { eventId: number; token: string; sid: string; score: number; meat: number; completed: boolean; early: boolean }) { return post('/events/result', d); }
 export function evTop(eventId: number) { return get(`/events/top?eventId=${eventId}&id=${encodeURIComponent(D.id)}${tq()}`); }

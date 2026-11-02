@@ -722,3 +722,5 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 .evE{display:block;font-size:11px;opacity:.75}
 #evLb .pb{display:flex;flex-direction:column;gap:6px}
 .evEntry p,.evEntry .evName{color:#ffe9c2}.evEntry .evMeta{color:#ffd9a8}
+.evEntry .evPlays{margin:4px 0 0;font-size:13px;font-weight:700;color:#ffe08a}
+.evEntry button:disabled{opacity:.55;filter:grayscale(.6)}
