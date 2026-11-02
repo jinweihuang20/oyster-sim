@@ -669,7 +669,8 @@ function checkReturn() {
   track('return_bonus', { days, amount: amt });
   giftMsg(true, '阿姨好想你！', [`你已經 ${days} 天沒來上工了，歡迎回來！`, `回歸禮 +$${amt}`, item, '連續上工從第 1 天重新開始', `身上有 $${save.money}`]);
 }
-const persist = () => { try { LS.setItem('oyster-sim', JSON.stringify(save)); } catch { /* 私密模式等 */ } };
+let achT = 0; // 進度一變就排一次成就檢查（成就區塊載入後才會跑）
+const persist = () => { try { LS.setItem('oyster-sim', JSON.stringify(save)); } catch { /* 私密模式等 */ } if ((window as any).__achOk && !achT) achT = window.setTimeout(() => { achT = 0; achCheck(); }, 250); };
 persist();
 let dry = 0;
 const wpick = (arr: { w: number }[]) => { let r = Math.random() * arr.reduce((s, x) => s + x.w, 0); for (let i = 0; i < arr.length; i++) { r -= arr[i].w; if (r < 0) return i; } return 0; };
@@ -1059,7 +1060,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   nightShift = isNight(); updSky(); $('nightTag').style.display = nightShift ? '' : 'none'; if (nightShift) later(1.5, () => toast('🌙 夜班上工！這一工收入 +20%', '#b8c8ff'));
   moonReset(); npcs.forEach(dressAma); applyCrew();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
-  state = 'play'; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
+  state = 'play'; achShiftGot = []; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); if (!tut) track('start', { seat: save.seat ?? 'door', loc: locNow().id });
   const sidNow = statsSid; const pingT = setInterval(() => { if (tut || state !== 'play' || statsSid !== sidNow || document.hidden) { if (statsSid !== sidNow || state !== 'play') clearInterval(pingT); return; } track('ping'); }, 60_000);
   count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
@@ -1549,6 +1550,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 易$6・普$8・硬$12・超硬$18，殼屑 ${cracked} 顆只算 25%${temp ? `，臨時工抽成 -$${TEMP_CUT}／顆` : ''}</small>${perfects ? `<br>完美／俐落 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
     `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>` +
     `<p>${caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
+  if (achShiftGot.length) $('resBody').insertAdjacentHTML('afterbegin', `<div class="resAch"><b><i class="ic ic-trophy"></i> 這一工達成的成就</b><ul>${achShiftGot.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`);
   if (ev) { evLastId = ev.id; evRun = null; evToken = null; shiftLen = SHIFT; } else evLastId = null;
   $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); later(1.2, namePrompt); if (ac) SFX.endJingle(queen && !handPain);
 }
@@ -3070,12 +3072,13 @@ type AchDef = { id: string; cat: string; n: string; d: string; t: number[]; v: (
 const ACH_CATS = [{ id: 'shuck', s: '剝蚵', n: '剝蚵職人', ic: 'ic-knife' }, { id: 'steal', s: '偷蚵', n: '偷蚵高手', ic: 'ic-hand' }, { id: 'war', s: '戰爭', n: '阿婆們的戰爭', ic: 'ic-umb' }, { id: 'travel', s: '跑透透', n: '跑遍蚵寮', ic: 'ic-pin' }, { id: 'collect', s: '收藏', n: '收藏家', ic: 'ic-pearl' }, { id: 'veteran', s: '老蚵仔', n: '老蚵仔', ic: 'ic-flag' }];
 const achS = (): AchSave => (save.ach ??= { got: {}, st: {}, locs: [], seats: [], radio: [], sets: [], fresh: [], title: '', pts: 0 });
 const AS = (k: string) => achS().st[k] ?? 0;
-const L_ = () => save.life;
+// 上工中把這一工的即時數字加進去，剝到就跳成就，不用等收工
+const L_ = () => { const L = save.life; if (state !== 'play' || tut) return L; return { ...L, inBowl: L.inBowl + count, opened: L.opened + opened, perfects: L.perfects + perfects, steals: L.steals + steals, caught: L.caught + caught, meatHits: L.meatHits + meatHits, blocks: L.blocks + blocks, reflects: L.reflects + reflects, shellHits: L.shellHits + shellHits }; };
 const dexPct = () => { const odd = ODD.map((o, i) => [o, i] as const).filter(([o]) => !(o as any).ex); const tot = 4 + odd.length, have = save.dex.filter(x => x).length + odd.filter(([, i]) => save.odd[i]).length; return Math.floor(have / tot * 100); };
 const ACHS: AchDef[] = [
   { id: 'inbowl', cat: 'shuck', n: '蚵仔入碗', d: '累積剝進碗裡的蚵仔', t: [100, 1000, 10000], v: () => L_().inBowl, unit: '顆' },
   { id: 'opened', cat: 'shuck', n: '開殼達人', d: '累積開殼次數', t: [200, 2000, 20000], v: () => L_().opened, unit: '次' },
-  { id: 'best', cat: 'shuck', n: '一工爆量', d: '單一工最多入碗顆數', t: [20, 50, 100], v: () => save.best, unit: '顆' },
+  { id: 'best', cat: 'shuck', n: '一工爆量', d: '單一工最多入碗顆數', t: [20, 50, 100], v: () => Math.max(save.best, state === 'play' && !tut ? count : 0), unit: '顆' },
   { id: 'perfect', cat: 'shuck', n: '俐落刀工', d: '累積完美／俐落開殼', t: [50, 500, 5000], v: () => L_().perfects, unit: '次' },
   { id: 'combo', cat: 'shuck', n: '連擊不斷', d: '最長連擊', t: [10, 25, 50], v: () => L_().bestCombo, unit: '連擊' },
   { id: 'zerowaste', cat: 'shuck', n: '一點不浪費', d: '浪費率 0% 完成一工（至少入碗 5 顆）', t: [1, 10, 50], v: () => AS('zw'), unit: '工' },
@@ -3139,9 +3142,19 @@ const achTitle = () => { const t = achS().title; return t && ACH_TITLES.some(x =
 const achAdd = (list: 'locs' | 'seats' | 'radio' | 'sets', id: string) => { const a = achS()[list]; if (!a.includes(id)) a.push(id); };
 function achBump(k: string, n = 1) { const s = achS().st; s[k] = (s[k] ?? 0) + n; achCheck(); }
 // 看板式橫幅：不擋操作（pointer-events:none），排隊一個一個出
-const achQ: string[] = []; let achBusy = false;
-function achBanner(html: string) { achQ.push(html); if (!achBusy) achNextBanner(); }
-function achNextBanner() { const el = $('achBan'); const h = achQ.shift(); if (!h) { achBusy = false; el.classList.remove('on'); return; } achBusy = true; el.innerHTML = h; el.classList.remove('on'); void el.offsetWidth; el.classList.add('on'); setTimeout(() => { el.classList.remove('on'); setTimeout(achNextBanner, 350); }, 2600); }
+type AchB = { h: string; id?: string };
+const achQ: AchB[] = []; let achBusy = false, achMore = 0;
+function achBanner(h: string, id?: string) { if (achQ.length + (achBusy ? 1 : 0) >= 3) { achMore++; } else achQ.push({ h, id }); if (!achBusy) achNextBanner(); }
+function achNextBanner() {
+  const el = $('achBan'); let b = achQ.shift();
+  if (!b && achMore) { b = { h: `<i class="ic ic-trophy"></i><span><small>成就達成</small><b>還有 ${achMore} 個成就</b><em>到成就頁面看看</em></span>` }; achMore = 0; }
+  if (!b) { achBusy = false; el.classList.remove('on'); return; }
+  achBusy = true; el.innerHTML = b.h; el.dataset.id = b.id ?? ''; el.classList.toggle('tap', state !== 'play'); el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+  setTimeout(() => { el.classList.remove('on'); setTimeout(achNextBanner, 350); }, 3400);
+}
+// 上工時點橫幅不做事（不干擾操作）；其他畫面點了直接打開成就頁面到那一項
+$('achBan').addEventListener('pointerup', () => { const el = $('achBan'); if (state === 'play' || !el.classList.contains('on')) return; const a = ACHS.find(x => x.id === el.dataset.id); if (a) achTab = a.cat; achOpen(a?.id); });
+let achShiftGot: string[] = [];
 function achCheck(retro = false) {
   const A = achS(); let gotN = 0, cash = 0;
   for (const s of setsOn()) achAdd('sets', s.id);
@@ -3153,7 +3166,8 @@ function achCheck(retro = false) {
       if (!A.fresh.includes(a.id)) A.fresh.push(a.id);
       if (!retro) {
         const gold = a.t.length > 1 && k === 2;
-        achBanner(`<i class="ic ic-trophy"></i><span><small>成就達成・${tierName(a, k)}${a.t.length > 1 ? '牌' : ''}</small><b>${esc(a.n)}</b><em>+${pts} 點・+$${pay}</em></span>`);
+        achBanner(`<i class="ic ic-trophy"></i><span><small>成就達成・${tierName(a, k)}${a.t.length > 1 ? '牌' : ''}</small><b>${esc(a.n)}</b><em>+${pts} 點・+$${pay}</em></span>`, a.id);
+        if (state !== 'menu') achShiftGot.push(`${a.n}・${tierName(a, k)}${a.t.length > 1 ? '牌' : ''}（+$${pay}）`);
         if (gold) Social.report('ach', idx);
         track('achievement', { item: a.id, tier: k });
       }
@@ -3181,17 +3195,18 @@ function achRender() {
       const k = A.got[a.id] ?? 0, v = Math.max(0, Math.floor(a.v() || 0)), hid = !!a.hint && k === 0, full = k >= a.t.length, goal = a.t[Math.min(k, a.t.length - 1)];
       const pct = full ? 100 : Math.min(100, v / goal * 100);
       const tiers = a.t.map((th, j) => `<span class="achT t${a.t.length === 1 ? 'x' : j}${j < k ? ' got' : ''}">${tierName(a, j)}<small>${th}${a.unit === '%' ? '%' : ''}</small></span>`).join('');
-      return `<div class="achCard${full ? ' full' : ''}${fresh.has(a.id) ? ' new' : ''}${hid ? ' hid' : ''}"><div class="achH"><b>${hid ? '？？？' : esc(a.n)}</b><span class="achTs">${tiers}</span></div><p>${hid ? `提示：${a.hint}` : a.d}</p>` +
+      return `<div data-a="${a.id}" class="achCard${full ? ' full' : ''}${fresh.has(a.id) ? ' new' : ''}${hid ? ' hid' : ''}"><div class="achH"><b>${hid ? '？？？' : esc(a.n)}</b><span class="achTs">${tiers}</span></div><p>${hid ? `提示：${a.hint}` : a.d}</p>` +
         (a.t.length > 1 || !full ? `<div class="achP"><i class="achBar"><i style="width:${pct}%"></i></i><span>${hid ? '？' : full ? '全部達成' : (a.unit === '%' ? `${Math.min(v, goal)}%／${goal}%` : `${Math.min(v, goal)}／${goal}${a.unit ? ' ' + a.unit : ''}`)}</span></div>` : '') +
         `<small class="achR">${full ? '已領取全部獎勵' : `下一階：+${tierPts(a, k)} 點・+$${tierPay(a, k)}`}</small></div>`; }).join('');
   }
 }
-function achOpen() { if (document.pointerLockElement) document.exitPointerLock(); achCheck(); achRender(); $('ach').classList.add('show'); ($('ach').querySelector('.pb') as HTMLElement | null)?.scrollTo(0, 0); }
+function achOpen(focus?: string) { if (document.pointerLockElement) document.exitPointerLock(); achCheck(); achRender(); $('ach').classList.add('show'); const pb = $('ach').querySelector('.pb') as HTMLElement | null; pb?.scrollTo(0, 0); if (focus) { const c = $('achList').querySelector<HTMLElement>(`[data-a="${focus}"]`); if (c && pb) { pb.scrollTo(0, c.offsetTop - 120); c.classList.add('achHi'); setTimeout(() => c.classList.remove('achHi'), 1600); } } }
 function achTabSeen() { const A = achS(); const before = A.fresh.length; A.fresh = A.fresh.filter(id => ACHS.find(a => a.id === id)?.cat !== achTab); if (A.fresh.length !== before) { persist(); achDot(); } }
 $('achTabs').addEventListener('click', e => { const b = (e.target as HTMLElement).closest('button[data-t]') as HTMLElement | null; if (!b) return; achTabSeen(); achTab = b.dataset.t!; achRender(); });
 $('achList').addEventListener('click', e => { const b = (e.target as HTMLElement).closest('.achEq') as HTMLElement | null; if (!b) return; const A = achS(), n = b.dataset.n!; A.title = A.title === n ? '' : n; persist(); achRender(); toast(A.title ? `配戴稱號「${A.title}」` : '已卸下稱號', '#ffe080'); Social.syncTitle(); });
 $('achClose').onclick = () => { achTabSeen(); $('ach').classList.remove('show'); };
-btn('oAch', achOpen);
+btn('oAch', () => achOpen());
+setInterval(() => { if (state === 'play' && !tut) achCheck(); }, 1000); // 上工中每秒檢查一次即時進度
 // 一工結束：記錄原本沒有的統計
 function achShift(o: { worked: boolean; temp: boolean; waste: number; cracked: number; steals: number; caught: number; hitsTaken: number; thrown: number; ev: EvCfg | null; evDone: boolean; evEarly: boolean; cnt: number }) {
   const s = achS().st, inc = (k: string) => s[k] = (s[k] ?? 0) + 1;
@@ -3205,5 +3220,6 @@ function achShift(o: { worked: boolean; temp: boolean; waste: number; cracked: n
 { const first = !save.ach; const A = achS();
   if (first) { A.st.peace = Object.entries(save.titles).filter(([k]) => k.includes('和平')).reduce((x, [, v]) => x + v, 0); if (save.days > 0) achAdd('locs', 'home'); if (save.loc && save.days > 0) achAdd('locs', save.loc); if (save.seat && save.days > 0) achAdd('seats', save.seat); }
   setTimeout(() => achCheck(first), 1500); achDot(); }
-(window as any).__ach = { get s() { return achS(); }, bump: achBump, check: achCheck, title: achTitle, list: ACHS.map(a => a.id) };
+(window as any).__achOk = 1;
+(window as any).__ach = { end: () => endDay(), get got() { return achShiftGot; }, get s() { return achS(); }, bump: achBump, check: achCheck, title: achTitle, list: ACHS.map(a => a.id) };
 (window as any).__ev = { get run() { return evRun; }, get cfg() { return evCfg; }, get hp() { return hp; }, get npcs() { return npcs.length; }, get left() { return timeLeft; }, minDist: () => { let m = 99; for (let i = 0; i < npcs.length; i++) for (let j = i + 1; j < npcs.length; j++) m = Math.min(m, npcs[i].g.position.distanceTo(npcs[j].g.position)); return m; }, refetch: evFetch, meat: (k: number) => { for (let i = 0; i < k; i++) { count++; evMeat(); } updHud(); }, hurt: (d: number) => hurt(d, '測試') };
