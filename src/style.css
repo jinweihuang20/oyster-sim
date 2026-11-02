@@ -152,7 +152,7 @@ button{touch-action:manipulation}
 #tut{position:fixed;left:50%;transform:translateX(-50%);top:calc(var(--sa-top) + 64px);z-index:25;width:min(92vw,520px);background:rgba(30,18,8,.92);border:2px solid #ffd76a;border-radius:16px;padding:10px 14px;color:#fff;display:none;box-shadow:0 4px 18px #0008;pointer-events:auto}
 #tut.on{display:block}
 #tutStep{font-size:12px;color:#ffd76a;font-weight:700}#tutLine{font-size:16px;font-weight:700;margin:4px 0}#tutDo{font-size:14px;color:#ffe9b0;line-height:1.4}
-#tut .tb{display:flex;justify-content:space-between;gap:8px;margin-top:8px}#tutSkip{background:#555;color:#ddd;font-size:13px;padding:6px 12px}#tutNext{background:#9be37a;color:#1a3000}
+#tut .tb{display:flex;justify-content:space-between;gap:8px;margin-top:8px}#tutSkip{background:#555;color:#ddd;font-size:13px;padding:6px 12px}#tutNext{background:#9be37a;color:#1a3000}#tutStepSkip{background:#f2b705;color:#2a1a00;font-size:13px;padding:6px 12px;margin-left:auto}
 body.tutOn #hint{display:none!important}
 .tutHi{outline:3px solid #ffd76a!important;outline-offset:3px;box-shadow:0 0 0 6px #ffd76a55,0 0 24px #ffd76a!important;animation:tutPulse 1s ease-in-out infinite!important}
 @keyframes tutPulse{50%{outline-color:#fff3b0}}

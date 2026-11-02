@@ -2157,8 +2157,15 @@ setInterval(() => {
   if (st.done?.()) tutGo(tut.i + 1);
 }, 120);
 $('tutNext').onclick = e => { e.stopPropagation(); if (!tut) return; const st = TUT[tut.i]; if (st.id === 'sit' && walking) sitDown(save.seat ?? 'door'); tutGo(tut.i + 1); };
+$('tutStepSkip').onclick = e => { e.stopPropagation(); if (!tut || state !== 'play') return; const st = TUT[tut.i];
+  // 跳過這步：把狀態整理好，讓下一步做得到
+  if (st.id === 'toss' && phase === 'aim') { meatInHand.visible = false; meatsLeft = 1; showExtra(); setPhase('busy'); later(0.2, goPick); }
+  if (st.id === 'meat' && phase === 'aim') { meatInHand.visible = false; meatsLeft = 1; showExtra(); emptyT = 2.2; setPhase('empty'); }
+  if (st.id === 'empty' && phase === 'empty') discardShell();
+  if ((st.id === 'stand' || st.id === 'sit') && walking) sitDown(save.seat ?? 'door');
+  tutGo(st.id === 'stand' ? tut.i + 2 : tut.i + 1); };
 $('tutSkip').onclick = e => { e.stopPropagation(); tutEnd(false); };
-['tutNext', 'tutSkip'].forEach(id => $(id).addEventListener('pointerdown', e => e.stopPropagation()));
+['tutNext', 'tutSkip', 'tutStepSkip'].forEach(id => $(id).addEventListener('pointerdown', e => e.stopPropagation()));
 $('oTut').onclick = () => tutStart();
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
