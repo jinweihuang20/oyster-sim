@@ -1911,7 +1911,7 @@ function renderItemShop() {
 (window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };
 const go = (len: number) => { evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
-$('oDm').onclick = () => { $('overlay').classList.remove('show'); openDeathmatch(() => { $('overlay').classList.add('show'); }); };
+$('oDm').onclick = () => { $('overlay').classList.remove('show'); openDeathmatch({ umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })() }, () => { $('overlay').classList.add('show'); }); };
 $('start').onclick = () => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 btn('again', () => { if (evLastId != null) evAgain(); else startDay(); });
 btn('resMenu', () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; });
