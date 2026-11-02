@@ -27,6 +27,9 @@ scene.fog = new THREE.Fog(0x4a3a50, 10, 34);
 const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 50);
 camera.rotation.order = 'YXZ';
 scene.add(camera);
+// 第三人稱另用一台鏡頭，遊戲邏輯照舊用 camera
+const tpCam = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.05, 200); let tpOn = false;
+function viewCam() { return tpOn ? tpCam : camera; }
 const SEAT0 = new THREE.Vector3(0, 1.05, 2.0), SEAT = SEAT0.clone();
 camera.position.copy(SEAT);
 
@@ -187,14 +190,14 @@ const PRAISE = ['好功夫！', '真的很準喔！', '那顆丟得真漂亮！'
 function say(n: Npc, t: string, dur = 3.2) { if (ac) SFX.murmur([300, 230, 380][npcs.indexOf(n)] ?? 300); n.bubble.textContent = t; n.bubble.style.opacity = '1'; n.bubT = dur; }
 let lastNag = '';
 function nag(lines: string[]) {
-  if (Math.random() > seatNow().nag) return;
+  if (Math.random() > seatNow().nag * fxAll().nag) return;
   let t = pick(lines); while (t === lastNag && lines.length > 1) t = pick(lines); lastNag = t;
   const n = npcs.find(x => x.peek && Math.random() < 0.5) ?? pick(npcs); n.look = 2.5; say(n, t, 3);
 }
 
 // ---------- 玩家的雙手（掛佇鏡頭） ----------
 const handRig = new THREE.Group(); camera.add(handRig);
-const sleeve = mat(0x3a5a8a);
+const sleeve = mat(0x3a5a8a), shirtCuff = mat(0xe8e4d8);
 const handSkin = mat(skin), cuffMat = mat(0x3a6fc0); cuffMat.visible = false;
 const fingerMeshes: THREE.Mesh[] = [];
 function applyGloves() { const g = gearOn('glove'); handSkin.color.set(g ? 0xe8e4d8 : skin); handSkin.roughness = g ? 1 : 0.85; cuffMat.visible = g; fingerMeshes.forEach(f => f.scale.set(g ? 1.25 : 1, g ? 1.2 : 1, g ? 1.05 : 1)); applyGlasses(); }
@@ -203,6 +206,7 @@ function makeHand(s: number) {
   const h = new THREE.Group();
   mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.7, 8), sleeve, [0, 0, 0.32], h).rotation.x = Math.PI / 2; // 長前臂延伸到畫面角落，兩手呈 A 字
   mesh(new THREE.BoxGeometry(0.11, 0.05, 0.13), handSkin, [0, 0, -0.1], h);
+  mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.06, 8), shirtCuff, [0, 0, 0.66], h).rotation.x = Math.PI / 2;
   mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.035, 8), cuffMat, [0, 0, -0.03], h).rotation.x = Math.PI / 2;
   for (let i = 0; i < 4; i++) mesh(new THREE.BoxGeometry(0.022, 0.03, 0.07), handSkin, [-0.04 + i * 0.026, -0.01, -0.19], h);
   mesh(new THREE.BoxGeometry(0.03, 0.03, 0.07), handSkin, [s * -0.06, 0, -0.12], h).rotation.y = s * 0.6;
@@ -455,7 +459,7 @@ const dstatStr = () => dStat.flat().join(',');
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number } };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number };
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {} }; }
 function loadSave(): Save {
   const d = defaultSave(); let raw: any = null;
@@ -467,6 +471,9 @@ function loadSave(): Save {
   const out: Save = { ...d, dex: arr4(raw.dex), odd: ODD.map((_, i) => num(Array.isArray(raw.odd) ? raw.odd[i] : 0)), best: num(raw.best), money: num(raw.money), days: num(raw.days), queen: num(raw.queen) };
   for (const k of LIFE_KEYS) out.life[k] = num(raw.life?.[k]);
   if (raw.titles && typeof raw.titles === 'object') for (const [k0, v] of Object.entries(raw.titles)) { const k = k0 === '👑 今日蚵后' ? '👑 今日剝蚵冠軍' : k0; out.titles[k] = (out.titles[k] ?? 0) + num(v); }
+  if (raw.namePrompted) out.namePrompted = 1;
+  if (raw.tpv) out.tpv = 1;
+  if (raw.equip && typeof raw.equip === 'object') { out.equip = {}; for (const [k, v] of Object.entries(raw.equip)) if (typeof v === 'string') out.equip[k] = v; }
   if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
   if (raw.shop?.equipped && typeof raw.shop.equipped === 'object') for (const [k, v] of Object.entries(raw.shop.equipped)) if (typeof v === 'string') out.shop.equipped[k] = v;
   if (typeof raw.seat === 'string') out.seat = raw.seat;
@@ -506,11 +513,11 @@ persist();
 let dry = 0;
 const wpick = (arr: { w: number }[]) => { let r = Math.random() * arr.reduce((s, x) => s + x.w, 0); for (let i = 0; i < arr.length; i++) { r -= arr[i].w; if (r < 0) return i; } return 0; };
 // 幸運值：每點 找著機率 ×(1+0.12×luck)；非普通物件權重 ×(1+0.15×luck)，傳說最多 ×1.3
-const luckNow = () => Math.max(0, (knifeNow().luck || 0) + medA('luck'));
+const luckNow = () => Math.max(0, (knifeNow().luck || 0) + medA('luck') + fxAll().luck);
 const luckW = (arr: { w: number }[], l: number) => arr.map(x => ({ w: x.w <= 2 ? x.w * Math.min(1.3, 1 + 0.15 * l) : x.w <= 20 ? x.w * (1 + 0.15 * l) : x.w }));
 function rollFind(): { kind: 'pearl' | 'odd' | 'none'; i: number } {
   const l = luckNow(), f = 1 + 0.12 * l;
-  const p = (1 / 50 + Math.max(0, dry - 40) * 0.01) * f;
+  const p = (1 / 50 + Math.max(0, dry - 40) * 0.01) * f * fxAll().pearl;
   if (Math.random() < p) { dry = 0; return { kind: 'pearl', i: wpick(luckW(RAR, l)) }; }
   // 新手：普通／少見（權重 ≥20）額外 +1.5 倍機率 → 合計約 ×2.5；稀有／傳說不加
   const common = (arr: { w: number }[]) => luckW(arr, l).map((x, i) => ({ w: arr[i].w >= 20 ? x.w : 0 }));
@@ -546,9 +553,9 @@ const oddMeshes: THREE.Object3D[] = ODD.map((o, i) => {
 });
 // 紅白雨傘（傳統菜市仔款）
 const umb = new THREE.Group(); camera.add(umb); umb.visible = false;
-let umbSize = 1;
+var umb3Ready = false, umbSlow = 1; let umbSize = 1, umbS = 0, umbLook = 'stripe';
 function buildUmb(look: string, size: number) {
-  while (umb.children.length) umb.remove(umb.children[0]); umbSize = size;
+  while (umb.children.length) umb.remove(umb.children[0]); umbSize = size; umbLook = look; if (umb3Ready) build3Umb();
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 32; const x = cv.getContext('2d')!;
   const pal: Record<string, string[]> = { stripe: ['#c8302a', '#f4f0e8'], clear: ['#cfe6ff', '#e4f2ff'], navy: ['#1f2b4a', '#24335a'], beach: ['#e83a3a', '#f6c33a', '#3ab0e8', '#5ac85a'], temple: ['#b0141a', '#e8b030'] };
   const cols = pal[look] ?? pal.stripe; for (let i = 0; i < 8; i++) { x.fillStyle = cols[i % cols.length]; x.fillRect(i * 32, 0, 32, 32); }
@@ -600,7 +607,7 @@ const HINTS: Record<Phase, string> = {
 const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
 function setPhase(p: Phase) {
   if (p !== 'seam') { seamRing.visible = false; sweet = false; }
-  phase = p; holding = false; hold = 0; fill.style.marginLeft = '0'; zone.style.left = ''; zone.style.width = ''; if (p === 'twist') { needleStart = performance.now(); combo = 0; } gauge.classList.remove('on', 'aim', 'tw'); setInZ('');
+  phase = p; holding = false; hold = 0; fill.style.marginLeft = '0'; zone.style.left = ''; zone.style.width = ''; if (p === 'twist') { needleStart = performance.now(); combo = 0; pryHits = 0; } gauge.classList.remove('on', 'aim', 'tw'); setInZ('');
   tapAim = p === 'aim'; if (tapAim) tossT0 = performance.now(); bowlRing.visible = tapAim;
   if (p === 'aim' && !tapAim) gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
   on('reticle', (p === 'aim' && !tapAim) || p === 'empty' || p === 'pick' || (document.pointerLockElement === canvas && p !== 'busy')); on('giveUp', (p === 'seam' || p === 'twist') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
@@ -886,7 +893,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
-  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); drawMeds(); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
+  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); applySleeve(); drawMeds(); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
 }
 function updHud() {
   ($('hpFill') as HTMLElement).style.width = `${hp}%`;
@@ -923,7 +930,7 @@ function updBlood(dt: number) {
   for (let i = decals.length - 1; i >= 0; i--) { const d = decals[i]; d.t -= dt; (d.m.material as THREE.MeshBasicMaterial).opacity = Math.min(0.85, d.t / 5); if (d.t <= 0) { scene.remove(d.m); decals.splice(i, 1); } }
   if (woundT > 0) { woundT -= dt; (wound.material as THREE.MeshBasicMaterial).opacity = Math.min(1, woundT / 3); if (woundT <= 0) wound.visible = false; }
 }
-function hurt(dmg: number, txt: string) { if (tut) dmg = 0; dmg *= medM('dmg'); hp = Math.max(0, hp - dmg); shake = 0.3; hurtT = 0.9; SFX.aia(); toast(txt, '#ff9a8a'); updHud(); if (hp <= 0 && state === 'play') { handPain = true; setPhase('busy'); later(0.8, endDay); } }
+function hurt(dmg: number, txt: string) { react3('ouch'); if (tut) dmg = 0; dmg *= medM('dmg') * fxAll().dmg; hp = Math.max(0, hp - dmg); shake = 0.3; hurtT = 0.9; SFX.aia(); toast(txt, '#ff9a8a'); updHud(); if (hp <= 0 && state === 'play') { handPain = true; setPhase('busy'); later(0.8, endDay); } }
 
 // ----- 0. 提蚵仔／撈蚵仔 -----
 const ray = new THREE.Raycaster();
@@ -938,16 +945,16 @@ function fillBasin(animate: boolean) {
   for (let i = 0; i < 8; i++) { const m = makeBasinOyster(wpick((newbie() ? [50, 50, 0, 0] : locW()).map(w => ({ w })))); const slot = basinSlot(i); m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2)); basinOy.push(m);
     if (animate) { const p0 = pileSpot(); fly(m, p0, slot, 0.4 + i * 0.05, 0.4, () => m.position.copy(slot)); } else { m.position.copy(slot); scene.add(m); } }
 }
-function hitsOyster(cx: number, cy: number) { camera.updateMatrixWorld(); ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), camera); return ray.intersectObject(oyster, true).length > 0; }
+function hitsOyster(cx: number, cy: number) { camera.updateMatrixWorld(); viewCam().updateMatrixWorld(); ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), viewCam()); return ray.intersectObject(oyster, true).length > 0; }
 function pickAt(cx: number, cy: number) {
   if (phase !== 'pick' || state !== 'play') return;
   camera.updateMatrixWorld();
-  ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), camera);
+  ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), viewCam());
   const hit = ray.intersectObjects(basinOy, true)[0];
   if (hit) { let o: THREE.Object3D = hit.object; while (!basinOy.includes(o as THREE.Mesh)) o = o.parent!; grab(o as THREE.Mesh); return; }
   // 點著家己的手／手骨（或附近）：揀螢幕上上近的蚵仔
   let best: THREE.Mesh | null = null, bd = Math.max(110, innerWidth * 0.12);
-  for (const m of basinOy) { const p = m.position.clone().project(camera); if (p.z > 1) continue; const d = Math.hypot((p.x + 1) / 2 * innerWidth - cx, (1 - p.y) / 2 * innerHeight - cy); if (d < bd) { bd = d; best = m; } }
+  for (const m of basinOy) { const p = m.position.clone().project(viewCam()); if (p.z > 1) continue; const d = Math.hypot((p.x + 1) / 2 * innerWidth - cx, (1 - p.y) / 2 * innerHeight - cy); if (d < bd) { bd = d; best = m; } }
   if (best) { grab(best); return; }
   if (ray.intersectObject(pileHit, false).length || ray.intersectObject(pile, false).length) { scoop(); return; }
   hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : '臉盆空了！點中間的蚵殼山撈一把';
@@ -979,7 +986,8 @@ function twistInput(dx: number, dtMs: number) { if (swipePhase()) return;
   if (dir !== strokeDir) { if (strokeDir !== 0 && strokeLen > innerWidth * 0.05) halfTwist(strokePeak); strokeDir = dir; strokeLen = 0; strokePeak = 0; }
   strokeLen += Math.abs(dx); strokePeak = Math.max(strokePeak, tension);
 }
-const PRY = [{ w: 0.3, sp: 0.8 }, { w: 0.22, sp: 1.05 }, { w: 0.15, sp: 1.35 }, { w: 0.1, sp: 1.7 }];
+const PRY = [{ w: 0.3, sp: 0.8 }, { w: 0.22, sp: 1.05 }, { w: 0.2, sp: 1.35 }, { w: 0.135, sp: 1.7 }];
+let pryHits = 0;
 const PRY_NEED = [2, 3, 4, 5], PRY_C = 0.55, PRY_RED = 0.86;
 let needleStart = 0, combo = 0, dayCombo = 0;
 // ----- 剝殼刀（各有利弊） -----
@@ -1040,9 +1048,9 @@ function applyBowl() {
   seatRig.updateMatrixWorld(true); const w = seatRig.localToWorld(BOWL_L.clone()); BOWL.x = w.x; BOWL.z = w.z;
 }
 const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
-const pryW = () => Math.min(0.6, PRY[diff].w * knifeNow().green * medM('green') * (newbie() ? 1.3 : 1));
+const pryW = () => Math.min(0.6, Math.min(1.6, 1 + 0.15 * pryHits) * PRY[diff].w * knifeNow().green * medM('green') * (newbie() ? 1.3 : 1));
 const PRY_SLOW = 0.56; // 整體放慢（0.8→0.56，再慢 30%）
-const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * knifeNow().speed * medM('speed');
+const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * knifeNow().speed * medM('speed') * fxAll().speed;
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
 const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? 1.25 : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
@@ -1091,7 +1099,7 @@ function renderShop() {
     else save.gear[id] = !gearOn(id);
     persist(); renderShop(); drawRadio(); applyGloves();
   });
-  renderMedShop(); shopTabs();
+  renderClothShop(); renderMedShop(); shopTabs();
 }
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : 1); }
 const PRY_GRACE = 0.04;
@@ -1107,8 +1115,8 @@ function pry(ms = performance.now()) {
   const n = needle(ms), w = pryW() + PRY_GRACE * 2; (window as any).__pryLog = ((window as any).__pryLog || []).concat([[+n.toFixed(3), Math.abs(n - PRY_C) <= w / 2]]); strokeDir = -strokeDir || 1; tension = 0.9;
   const need = pryNeed();
   if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; dStat[diff][3]++; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('太大力，殼碎掉了！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
-  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; if (Math.sin(((ms - needleStart) / 1000) * Math.PI * 2 * prySp()) > 0) needleStart = ms; combo++; if (combo > dayCombo) dayCombo = combo; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！功夫真好！' : '好！再一下'; }
-  else { combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 沒中'); hint.textContent = '時機不對，等指針走到綠區再點'; tension = 0.3; return; }
+  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; pryHits++; if (Math.sin(((ms - needleStart) / 1000) * Math.PI * 2 * prySp()) > 0) needleStart = ms; combo++; if (combo > dayCombo) dayCombo = combo; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！功夫真好！' : '好！再一下'; }
+  else { if (!(Math.random() < fxAll().keep)) combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 沒中'); hint.textContent = '時機不對，等指針走到綠區再點'; tension = 0.3; return; }
   shellTop.rotation.z = -progress * 0.4;
   if (progress >= 0.999) openOyster();
 }
@@ -1145,7 +1153,7 @@ function openOyster() {
   else later(0.2, () => setPhase('aim'));
   updHud();
 }
-function revealOdd(i: number) {
+function revealOdd(i: number) { react3('cheer');
   const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); Social.report(rarOf(o.w) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
   label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.css; label.classList.add('on');
@@ -1178,7 +1186,7 @@ function tickFx(dt: number) {
   if (bowlRing.visible) { const k = 1 + 0.12 * Math.sin(performance.now() / 120); bowlRing.position.set(BOWL.x, BOWL.y + 0.02, BOWL.z); bowlRing.scale.setScalar(BOWL_R * k); }
 }
 function nearBowl(x: number, y: number) {
-  const p = BOWL.clone().project(camera); if (p.z > 1) return false;
+  const p = BOWL.clone().project(viewCam()); if (p.z > 1) return false;
   const bx = (p.x + 1) / 2 * innerWidth, by = (1 - p.y) / 2 * innerHeight;
   return Math.hypot(bx - x, by - y) < Math.max(150, Math.min(innerWidth, innerHeight) * 0.28);
 }
@@ -1191,7 +1199,7 @@ function toss(tapped: boolean) {
   const land = new THREE.Vector3(BOWL.x + rnd(-0.06, 0.06), BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015, BOWL.z + rnd(-0.06, 0.06));
   SFX.whoosh(); if (quick) { perfects++; $('gtag').textContent = ''; }
   fly(m, from, land, 0.45, 0.3, () => {
-    count++; bowlBonus += bowlNow().bonus; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.25)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)) + (quick ? 1 : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    count++; bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.25)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)) + (quick ? 1 : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
     burst(land.clone().setY(BOWL.y + 0.02), 8, 0xbfe4f2, 1);
     if (!wasCracked) burst(land.clone().setY(BOWL.y + 0.05), 6, 0xffd23a, 1.4);
     if (quick) { tone(980, 0.06, 0.18, 'triangle', 0, 520); tone(1568, 0.08, 0.1, 'sine', 0.05); } else SFX.plop();
@@ -1251,9 +1259,9 @@ function throwOne(n: Npc) {
     const U = umbNow(), up = umbT > 0 && umbAge() >= U.open, covered = up && Math.random() < U.cover;
     if (up && !covered) toast('傘傷細，殼仔對邊仔鑽入來！', '#ff9a8a');
     if (covered && umbAge() - U.open < U.perf) { // 拄開好的時陣 = 完美反彈
-      reflects++; blockStreak++; SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
+      reflects++; blockStreak++; umbHit3(sh.position); SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
       fly(sh, sh.position.clone(), () => worldOf(n.head), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); addGrudge(n, Math.round(20 * U.reflect)); npcHurt(n, U.reflect); });
-    } else if (covered) { scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋住了！啵嗯～', '#9be37a'); say(n, pick(['怎麼會有雨傘啦！', '狡怪喔你！', '什麼時候拿出來的！']), 2.5); }
+    } else if (covered) { umbHit3(sh.position); scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋住了！啵嗯～', '#9be37a'); say(n, pick(['怎麼會有雨傘啦！', '狡怪喔你！', '什麼時候拿出來的！']), 2.5); }
     else { scene.remove(sh); blockStreak = 0; hitsTaken++; ($('splat') as HTMLElement).style.opacity = '1'; later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0'); hurt(8, '哎唷！被丟中了！'); hitInHand(); }
     if (blockStreak >= 3) { blockStreak = 0; npcs.forEach((m, i) => { m.calm = 45; if (i === 0) later(0.8, () => say(m, `這個${myName()}真勇敢……`, 3)); }); toast('阿婆們怕你了，暫時比較少丟', '#9fe0ff'); }
     updHud();
@@ -1291,7 +1299,7 @@ function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.r
   return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">工作 ${save.days} 天・累積收入 $${save.money}・最佳 ${save.best} 顆<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美／俐落 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/被抓 ${L.caught}・丟中阿婆 ${L.shellHits}・被丟中 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
 function endDay() { inputGuard(); if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
-  if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
+  if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
   const all = [{ name: `你（${esc(myName())}）`, count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= 5, queen = all[0].me && !temp && worked, PAY = OYSTER_PRICE - (temp ? TEMP_CUT : 0);
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
@@ -1315,10 +1323,10 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 易$6・普$8・硬$12・超硬$18，殼屑 ${cracked} 顆只算 25%${temp ? `，臨時工抽成 -$${TEMP_CUT}／顆` : ''}</small>${perfects ? `<br>完美／俐落 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
     `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>` +
     `<p>${caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
-  $('result').classList.add('show'); if (ac) SFX.endJingle(queen && !handPain);
+  $('result').classList.add('show'); later(1.2, namePrompt); if (ac) SFX.endJingle(queen && !handPain);
 }
-function revealPearl(r: number) {
-  dayPearls.push(r); save.dex[r]++; persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
+function revealPearl(r: number) { react3('cheer');
+  sleeveGold(); dayPearls.push(r); save.dex[r]++; persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
   slowmo = 2.6; pearlShow = 2.6;
   (pearlMesh.material as THREE.MeshStandardMaterial).color.setHex(RAR[r].color);
   (pearlMesh.material as THREE.MeshStandardMaterial).emissive.setHex(r === 3 ? 0x302050 : RAR[r].color).multiplyScalar(0.25);
@@ -1414,7 +1422,7 @@ btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
 // 手機：次要按鈕放左下一排（不收選單）
-if (matchMedia('(pointer:coarse)').matches) { const L = $('btnsL'); for (const id of ['radioBtn', 'medBtn', 'quitBtn', 'giveUp', 'standBtn']) L.appendChild($(id)); }
+if (matchMedia('(pointer:coarse)').matches) { const L = $('btnsL'); for (const id of ['radioBtn', 'medBtn', 'quitBtn', 'giveUp', 'standBtn', 'camBtn']) L.appendChild($(id)); }
 else $('btns').insertBefore($('radioBtn'), $('medBtn'));
 btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, () => rotKey = 0);
 // ----- 徛起來行路、換位 -----
@@ -1480,13 +1488,13 @@ $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 $('start').onclick = () => { shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 btn('again', startDay);
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
-$('setBtn').onclick = () => $('settings').classList.add('show');
+$('setBtn').onclick = () => { renderSleeveSet(); $('settings').classList.add('show'); };
 $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
 $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖鑑、生涯紀錄、設定都會清掉，無法復原。')) { LS.removeItem('oyster-sim'); LS.removeItem('oyster-mix'); location.reload(); } };
 $('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); renderShop(); $('shop').classList.add('show'); };
 $('shopBtn2').onclick = () => { renderShop(); $('shop').classList.add('show'); };
-$('shopClose').onclick = () => $('shop').classList.remove('show');
+$('shopClose').onclick = () => { $('shop').classList.remove('show'); if (sleeveTry) { sleeveTry = null; applySleeve(); } };
 applyKnife(); applyUmb(); applySeat(save.seat ?? 'door');
 $('setClose').onclick = () => $('settings').classList.remove('show');
 for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as HTMLInputElement; el.value = String(mix[k]); el.oninput = () => { mix[k] = Number(el.value); applyMix(); if (k === 'sfx' && ac) SFX.plop(); }; }
@@ -1523,7 +1531,7 @@ function npcShuck(n: Npc, dt: number, t: number) {
 
 // ---------- 主迴圈 ----------
 let baseFov = 70, narrow = false;
-function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); tpCam.aspect = camera.aspect; tpCam.updateProjectionMatrix();
   narrow = camera.aspect < 0.8; baseFov = narrow ? 82 : 70; handRig.position.set(0, narrow ? -0.02 : 0, 0); handRig.scale.set(narrow ? 0.42 : 0.7, narrow ? 0.6 : 0.7, 0.7); }
 addEventListener('resize', resize); resize();
 const clock = new THREE.Clock(); const v = new THREE.Vector3();
@@ -1535,7 +1543,7 @@ function frame() {
   if (shedAnim.length) { const t = performance.now() / 1000; for (const f of shedAnim) f(t); }
   if (isPaused()) {
     clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); $('pauseTag').classList.add('on'); }
-    renderer.render(scene, camera); requestAnimationFrame(frame); return;
+    renderer.render(scene, viewCam()); requestAnimationFrame(frame); return;
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
   const rdt = Math.min(clock.getDelta(), 0.05);
@@ -1545,7 +1553,7 @@ function frame() {
   toastT -= rdt; if (toastT <= 0) toastEl.classList.remove('on');
   tension = Math.max(0, tension - rdt * 1.6);
   if (umbHeld) { umbT = Math.max(0, umbT - rdt); if (umbT <= 0) { umbHeld = false; umbTired = true; $('umbBtn').classList.remove('held'); toast('手痠了，放開再重新撐傘', '#ffcf8a'); } } else umbT = 0; $('umbBtn').classList.toggle('cd', umbTired); { const b = $('umbBtn'), c = $('umbCd'); if (umbHeld) { const f = umbT / Math.max(0.1, umbLen); b.style.setProperty('--p', `${(f * 100).toFixed(1)}%`); c.textContent = `${umbT.toFixed(1)}s`; b.classList.toggle('low', umbT < 1.2); } else { c.textContent = ''; b.classList.remove('low'); } }
-  const us = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
+  const us = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0; umbS = us; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
   let warnNpc: Npc | null = null;
   if (state === 'play') {
     if (!tut) timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); }
@@ -1572,7 +1580,7 @@ function frame() {
     if (phase === 'empty') { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
-    on('standBtn', !walking); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
+    on('standBtn', !walking); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     const tgt = walking ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
     if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！按住 E／「偷」偷她的肉` : `${tgt.name}在看，不要偷…`;
     if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
@@ -1582,7 +1590,8 @@ function frame() {
       n.distract -= dt; n.angry -= dt; n.mood -= dt;
       npcShuck(n, dt, t);
       n.grudge = Math.max(0, (n.grudge ?? 0) - (walking ? (performance.now() - (n.gAt ?? 0) > 2000 ? dt * 7.5 : 0) : performance.now() - (n.gAt ?? 0) > 8000 ? dt * 2.5 : 0) * (newbie() ? 2 : 1)); n.calm = Math.max(0, (n.calm ?? 0) - dt); grudgeUI(n);
-      n.throwCd -= dt * seatNow().throwM * locNow().thr * (n.calm! > 0 ? 0.3 : (1 + n.grudge! / 25) * (n.mood > 0 ? 2 : 1) * 1); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); if (!tut && !(newbie() && !((n.grudge ?? 0) > 0))) windUp(n); }
+      if (n === npcs[0] && slOn('sl_89') && !tut && (scaredT -= dt) <= 0) { scaredT = rnd(8, 15); const m = pick(npcs); if (m.bubT <= 0) say(m, pick(SCARED)); }
+      n.throwCd -= dt * seatNow().throwM * locNow().thr * (n.calm! > 0 ? 0.3 : (1 + n.grudge! / 25) * (n.mood > 0 ? 2 : 1) * 1); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); if (!tut && !(newbie() && !((n.grudge ?? 0) > 0)) && !(Math.random() > fxAll().throw)) windUp(n); }
       if (n.windup > 0) { warnNpc = n; n.windup -= rdt; if (!n.warned && n.windup <= warnLead(n)) { n.warned = true; SFX.alert(); } if (n.windup <= 0) npcThrow(n); }
       if (n.peek && n.look <= 0 && n.distract <= 0 && Math.random() < dt * 0.05) { n.look = 2.5; say(n, pick(PEEK), 2.5); }
     }
@@ -1636,10 +1645,10 @@ function frame() {
   shake = Math.max(0, shake - rdt);
   if (walking) walkStep(rdt);
   camera.rotation.set(pitch - pe * 0.08, yaw + (walking ? 0 : seatYaw), 0);
-  camera.position.copy(walking ? walkPos : SEAT); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
+  camera.position.copy(walking ? walkPos : SEAT); camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
   lamp.intensity = 26 + Math.sin(t * 1.3) * 1.0;
-  renderer.render(scene, camera);
+  renderer.render(scene, viewCam());
   requestAnimationFrame(frame);
 }
 // ---------- 新手教學 ----------
@@ -1654,7 +1663,7 @@ const TUT: TutStep[] = [
   { id: 'umb', line: '小心！阿婆要丟殼過來了！', pc: '看到 ⚠ 趕快按住 R 打開雨傘擋', mb: '看到 ⚠ 趕快按住「雨傘」擋', hi: ['umbBtn'], next: '知道了 ▶', done: () => umbT > 0, enter: () => later(1.2, () => { if (tut && TUT[tut.i].id === 'umb') windUp(npcs[0]); }) },
   { id: 'stand', line: '坐太久腳會麻，起來走走，找別的位子。', pc: '按 G 換位置', mb: '按「🚶 換位置」按鈕', hi: ['standBtn'], next: '知道了 ▶', done: () => walking },
   { id: 'sit', line: '每個位子的好處都不一樣，看清楚再坐。', pc: '用 WASD 走到藍色板凳旁邊，按 E 坐下（或按下面的按鈕坐回原位）', mb: '用搖桿走到藍色板凳旁邊，按「坐落」坐下（或按下面的按鈕坐回原位）', hi: ['sitBtn'], next: '坐回去 ▶', done: () => !walking },
-  { id: 'menu', line: '賺的錢可以去雜貨店買好刀、雨傘、碗；開到的珍珠會記在圖鑑裡。', pc: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面也有', mb: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面也有', hi: ['shopBtn', 'dexBtn', 'setBtn'], next: '下一步 ▶' },
+  { id: 'menu', line: '賺的錢可以去雜貨店買好刀、雨傘、碗和服飾，在「裝備」換穿；開到的珍珠會記在圖鑑裡。', pc: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面還有「裝備」', mb: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面還有「裝備」', hi: ['shopBtn', 'dexBtn', 'setBtn'], next: '下一步 ▶' },
   { id: 'daily', line: '還有，每天來上工，阿姨都發 $100 上工費給你！', pc: '在開始畫面按「💰 領今日上工費」，每天可以領一次', mb: '在開始畫面按「💰 領今日上工費」，每天可以領一次', next: '學會了！🎉' },
 ];
 let tutHi: string[] = [];
@@ -1711,6 +1720,8 @@ if (SHOT) setTimeout(() => {
   if (SHOT === 'seat') { applySeat(params.get('s') || 'corner'); goPick(); }
   if (SHOT === 'walk') { later(0.1, () => { standUp(); walkPos.set(-1.1, 1.55, -2.35); tYaw = yaw = 3.09; tPitch = pitch = -0.5; }); }
   if (SHOT === 'dex') { renderDex(); $('dex').classList.add('show'); }
+  if (SHOT === 'sleeves') { save.money = 20000; const sid = params.get('s') || 'sl_dragon'; for (const id of ['sl_flower', sid, 'hd_crown', 'bd_vest', 'ft_gold']) save.shop.owned.push(id); setEquip('hand', sid); if (params.get('set')) { setEquip('head', 'hd_crown'); setEquip('body', 'bd_vest'); setEquip('feet', 'ft_gold'); } applySleeve(); { const of = params.get('outfit'); if (of) { for (const id of of.split(',')) { const e = EQUIP.find(q => q.id === id); if (e) { save.shop.owned.push(id); setEquip(e.slot, id); } } applySleeve(); } } if (params.get('p') === 'shop') { renderShop(); $('shop').classList.add('show'); } if (params.get('p') === 'eq') { eqPick = 'hand'; renderEquip(); $('equip').classList.add('show'); } if (params.get('tpv')) { for (const id of ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots']) { save.shop.owned.push(id); setEquip(EQUIP.find(e => e.id === id)!.slot, id); } setEquip('hand', 'sl_89'); applySleeve(); setTpv(true); if (params.get('tpv') === 'cheer') later(0.5, () => react3('cheer')); }
+  if (params.get('p') === 'name') { save.name = undefined; save.namePrompted = 0; namePrompt(); } }
   if (SHOT === 'settings') $('settings').classList.add('show');
   if (SHOT === 'fb' || SHOT === 'fbdone') { openFb('settings'); if (SHOT === 'fbdone') fbShow(true); }
   if (SHOT === 'pick') look(-0.25, -0.85);
@@ -1737,7 +1748,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['nameAsk', 'naClose'], ['gift', 'giftClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -1877,6 +1888,315 @@ function renderMedShop() {
     save.money -= m.price; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; persist(); track('buy', { item: 'med-' + m.id, price: m.price }); if (ac) SFX.jingle(); renderShop(); drawMeds();
   });
 }
+// ---------- 裝備（頭／手／衣服／褲子／鞋子）----------
+type Slot = 'head' | 'hand' | 'body' | 'legs' | 'feet';
+type Fx = { bowl?: number; keep?: number; speed?: number; pearl?: number; nag?: number; throw?: number; dmg?: number; luck?: number };
+type Eq = { id: string; slot: Slot; n: string; price: number; eff: string; base: string; pat: string; fx: Fx };
+const SLOTS: [Slot, string][] = [['head', '頭'], ['hand', '手'], ['body', '衣服'], ['legs', '褲子'], ['feet', '鞋子']];
+const EQUIP: Eq[] = [
+  { slot: 'head', id: 'hd_basic', n: '花布頭巾', price: 0, eff: '基本款', base: '#c84a5a', pat: 'flower', fx: {} },
+  { slot: 'head', id: 'hd_hat', n: '斗笠', price: 3000, eff: '殼比較難砸到臉，被丟殼的機率 -10%', base: '#d8b46a', pat: 'plain', fx: { throw: 0.9 } },
+  { slot: 'head', id: 'hd_fisher', n: '漁夫帽', price: 9000, eff: '帽簷壓低，阿婆唸你的機率 -10%', base: '#4a6a8a', pat: 'plain', fx: { nag: 0.9 } },
+  { slot: 'head', id: 'hd_helmet', n: '工地安全帽', price: 20000, eff: '受到的傷害 -15%', base: '#ffb21a', pat: 'plain', fx: { dmg: 0.85 } },
+  { slot: 'head', id: 'hd_crown', n: '廟會金冠', price: 60000, eff: '珍珠率 +5%', base: '#e8b830', pat: 'dragon', fx: { pearl: 1.05 } },
+  { slot: 'hand', id: 'hn_basic', n: '素色袖套', price: 0, eff: '基本款', base: '#3a5a8a', pat: 'plain', fx: {} },
+  { slot: 'hand', id: 'sl_flower', n: '碎花袖套', price: 3000, eff: '每碗多拿 $1', base: '#e86a8a', pat: 'flower', fx: { bowl: 1 } },
+  { slot: 'hand', id: 'sl_rain', n: '防水雨衣袖套', price: 8000, eff: '翹殼沒中的懲罰減半（一半機率保住連擊）', base: '#ffd21a', pat: 'rain', fx: { keep: 0.5 } },
+  { slot: 'hand', id: 'sl_89', n: '89包手袖套', price: 8989, eff: '刺青太兇，阿婆主動丟殼的機率剩 ×0.2，旁邊的人會小聲議論', base: '#d9a77a', pat: 'tattoo', fx: { throw: 0.2 } },
+  { slot: 'hand', id: 'sl_camo', n: '迷彩袖套', price: 15000, eff: '比較不顯眼，阿婆唸你、干擾的機率 -30%', base: '#5a6b3a', pat: 'camo', fx: { nag: 0.7 } },
+  { slot: 'hand', id: 'sl_neon', n: '螢光運動袖套', price: 30000, eff: '翹殼指針慢 5%', base: '#39ff9a', pat: 'neon', fx: { speed: 0.95 } },
+  { slot: 'hand', id: 'sl_dragon', n: '金線刺繡龍袖套', price: 80000, eff: '珍珠率 +8%，開到珍珠手臂閃金光', base: '#8a1420', pat: 'dragon', fx: { pearl: 1.08 } },
+  { slot: 'body', id: 'bd_basic', n: '舊 T 恤', price: 0, eff: '基本款', base: '#e8e4d8', pat: 'plain', fx: {} },
+  { slot: 'body', id: 'bd_rain', n: '雨衣', price: 5000, eff: '受到的傷害 -10%', base: '#ffd21a', pat: 'rain', fx: { dmg: 0.9 } },
+  { slot: 'body', id: 'bd_vest', n: '廟會背心', price: 15000, eff: '每碗多拿 $1', base: '#c82a2a', pat: 'plain', fx: { bowl: 1 } },
+  { slot: 'body', id: 'bd_boss', n: '漁港老大夾克', price: 40000, eff: '氣場夠，被丟殼的機率 -20%', base: '#1e2a3a', pat: 'tattoo', fx: { throw: 0.8 } },
+  { slot: 'body', id: 'bd_sequin', n: '亮片表演服', price: 70000, eff: '幸運 +1（比較會開到珍珠、奇物）', base: '#b84ad8', pat: 'neon', fx: { luck: 1 } },
+  { slot: 'legs', id: 'lg_basic', n: '工作褲', price: 0, eff: '基本款', base: '#4a4a52', pat: 'plain', fx: {} },
+  { slot: 'legs', id: 'lg_rain', n: '雨褲', price: 4000, eff: '受到的傷害 -10%', base: '#ffd21a', pat: 'rain', fx: { dmg: 0.9 } },
+  { slot: 'legs', id: 'lg_flower', n: '花褲', price: 12000, eff: '每碗多拿 $1', base: '#e86a8a', pat: 'flower', fx: { bowl: 1 } },
+  { slot: 'legs', id: 'lg_camo', n: '迷彩褲', price: 25000, eff: '阿婆唸你的機率 -15%', base: '#5a6b3a', pat: 'camo', fx: { nag: 0.85 } },
+  { slot: 'feet', id: 'ft_basic', n: '藍白拖', price: 0, eff: '基本款', base: '#2a5ab0', pat: 'plain', fx: {} },
+  { slot: 'feet', id: 'ft_boots', n: '雨鞋', price: 3000, eff: '站得穩，翹殼沒中有兩成機率保住連擊', base: '#ffd21a', pat: 'plain', fx: { keep: 0.2 } },
+  { slot: 'feet', id: 'ft_work', n: '工作靴', price: 18000, eff: '翹殼指針慢 3%', base: '#6a4a2a', pat: 'plain', fx: { speed: 0.97 } },
+  { slot: 'feet', id: 'ft_gold', n: '金色拖鞋', price: 50000, eff: '珍珠率 +4%', base: '#e8b830', pat: 'plain', fx: { pearl: 1.04 } },
+];
+const SETS: { id: string; n: string; need: string[]; eff: string; fx: Fx }[] = [
+  { id: 'typhoon', n: '颱風天套', need: ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots'], eff: '被丟殼的機率再 -30%、受到的傷害再 -10%', fx: { throw: 0.7, dmg: 0.9 } },
+  { id: 'temple', n: '廟會套', need: ['hd_crown', 'bd_vest', 'sl_dragon', 'ft_gold'], eff: '珍珠率再 +5%、每碗再多 $2', fx: { pearl: 1.05, bowl: 2 } },
+  { id: 'army', n: '迷彩套', need: ['hd_helmet', 'sl_camo', 'lg_camo', 'ft_work'], eff: '阿婆唸你的機率再 -30%', fx: { nag: 0.7 } },
+];
+const eqOwned = (id: string) => (EQUIP.find(e => e.id === id)?.price === 0) || save.shop.owned.includes(id);
+const setEquip = (slot: Slot, id: string) => { save.equip = save.equip ?? {}; save.equip[slot] = id; };
+const equipNow = (slot: Slot) => EQUIP.find(e => e.slot === slot && e.id === save.equip?.[slot] && eqOwned(e.id)) ?? EQUIP.find(e => e.slot === slot && e.price === 0)!;
+const wornIds = () => SLOTS.map(([s]) => equipNow(s).id);
+const setsOn = () => { const w = wornIds(); return SETS.filter(s => s.need.every(i => w.includes(i))); };
+const slOn = (id: string) => wornIds().includes(id);
+function fxAll(): Required<Fx> {
+  const r = { bowl: 0, keep: 0, speed: 1, pearl: 1, nag: 1, throw: 1, dmg: 1, luck: 0 };
+  for (const f of [...SLOTS.map(([s]) => equipNow(s).fx), ...setsOn().map(s => s.fx)]) { r.bowl += f.bowl ?? 0; r.keep += f.keep ?? 0; r.luck += f.luck ?? 0; r.speed *= f.speed ?? 1; r.pearl *= f.pearl ?? 1; r.nag *= f.nag ?? 1; r.throw *= f.throw ?? 1; r.dmg *= f.dmg ?? 1; }
+  r.keep = Math.min(0.7, r.keep); r.throw = Math.max(0.1, r.throw); return r;
+}
+function migrateEquip() { save.equip = save.equip ?? {}; for (const [s] of SLOTS) if (!save.equip[s] || !eqOwned(save.equip[s])) save.equip[s] = EQUIP.find(e => e.slot === s && e.price === 0)!.id; }
+let sleeveTry: string | null = null, scaredT = 10;
+const SCARED = ['這個人看起來很流氓…', '不要惹那位', '手上那個刺青…你敢丟殼你丟', '小聲點，那個人在看', '我剛剛什麼都沒說喔', '那個刺青是真的嗎…', '今天大家安靜剝蚵就好', '殼不要往那邊丟啦', '那位是哪個角頭的…', '好啦好啦，我專心剝', '這位做的鐵板燒一定很好吃'];
+function patDraw(g: CanvasRenderingContext2D, e: Eq, W: number, H: number) {
+  g.fillStyle = e.base; g.fillRect(0, 0, W, H);
+  const dot = (x: number, y: number, r: number, col: string) => { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); };
+  if (e.pat === 'flower') for (let i = 0; i < 40; i++) { const x = (i * 37) % W, y = (i * 53) % H; for (let k = 0; k < 5; k++) dot(x + Math.cos(k * 1.26) * 5, y + Math.sin(k * 1.26) * 5, 3, '#fff3c8'); dot(x, y, 2.5, '#3a8a4a'); }
+  if (e.pat === 'rain') { g.strokeStyle = '#fff7a0'; g.lineWidth = 3; for (let y = 10; y < H; y += 30) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); } }
+  if (e.pat === 'camo') for (let i = 0; i < 30; i++) dot((i * 41) % W, (i * 29) % H, 8 + (i % 3) * 4, ['#2e3a1e', '#8a7a4a', '#3e5228'][i % 3]);
+  if (e.pat === 'neon') { g.fillStyle = '#ffffff'; for (let y = 20; y < H; y += 40) g.fillRect(0, y, W, 6); }
+  if (e.pat === 'tattoo') { g.strokeStyle = '#1e2a4a'; g.lineWidth = 3; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(W / 2, H + 12 - i * 22, 40, Math.PI, 2 * Math.PI); g.stroke(); } dot(40, 40, 9, '#b8323a'); dot(90, 80, 9, '#2a5a9a'); }
+  if (e.pat === 'dragon') { g.strokeStyle = '#ffd25a'; g.lineWidth = 4; g.beginPath(); for (let x = 0; x <= W; x += 4) g.lineTo(x, H / 2 + Math.sin(x / 10) * 26); g.stroke(); }
+}
+function eqTex(e: Eq) { const c = document.createElement('canvas'); c.width = c.height = 128; patDraw(c.getContext('2d')!, e, 128, 128); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 3); return t; }
+function applySleeve() {
+  const s = sleeveTry ? EQUIP.find(x => x.id === sleeveTry)! : equipNow('hand');
+  sleeve.map?.dispose(); sleeve.map = eqTex(s); sleeve.color.set(0xffffff);
+  sleeve.emissive.set(s.pat === 'neon' ? 0x1a8a50 : 0x000000); sleeve.needsUpdate = true;
+  shirtCuff.color.set(equipNow('body').base);
+}
+function sleeveGold() { if (!slOn('sl_dragon')) return; let k = 0; const iv = setInterval(() => { sleeve.emissive.set(k % 2 ? 0x000000 : 0xb08010); if (++k > 8) { clearInterval(iv); sleeve.emissive.set(0); } }, 150); }
+// 線條圖示：各部位一個簡單輪廓，填該件顏色
+function eqSvg(e: Eq, w = 72) {
+  const s = '#1b1b1b', f = e.base;
+  const P: Record<Slot, string> = {
+    head: `<path d="M10 40Q36 6 62 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M6 40H66" stroke="${s}" stroke-width="2.5"/>`,
+    hand: `<rect x="6" y="18" width="44" height="22" rx="8" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
+    body: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
+    legs: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
+    feet: `<path d="M10 40q0-14 16-14h14q16 4 22 14v6H10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>` };
+  const ID: Record<string, string> = {
+    hd_basic: `<path d="M14 40Q36 8 58 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M56 36l10 10-4 4-8-8" fill="${f}" stroke="${s}" stroke-width="2.5"/><circle cx="28" cy="30" r="2.5" fill="#fff3c8"/><circle cx="42" cy="26" r="2.5" fill="#fff3c8"/>`,
+    hd_hat: `<path d="M4 44L36 10L68 44Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 36H52M28 26H44" stroke="${s}" stroke-width="1.5"/>`,
+    hd_fisher: `<path d="M20 36V20Q36 10 52 20V36Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M8 44L20 36H52L64 44Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
+    hd_helmet: `<path d="M14 40Q14 12 36 12Q58 12 58 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M8 40H64V46H8Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M36 12V40" stroke="${s}" stroke-width="2"/>`,
+    hd_crown: `<path d="M10 46L14 18L26 32L36 12L46 32L58 18L62 46Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="36" cy="38" r="4" fill="#c82a2a" stroke="${s}" stroke-width="1.5"/>`,
+    bd_vest: `<path d="M22 10L14 20v36h16V22l6 6 6-6v34h16V20L50 10l-8 8h-12Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
+    bd_rain: `<path d="M24 8L8 22l6 8 6-4v32h32V26l6 4 6-8L48 8l-12 10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M36 18V58" stroke="${s}" stroke-width="2"/>`,
+    ft_boots: `<path d="M18 8h18v28q16 2 22 10v6H18Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
+    ft_work: `<path d="M16 18h20v14q18 2 22 12v8H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 24h10M22 30h10" stroke="#e8d8a8" stroke-width="2"/>`,
+    lg_flower: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="26" cy="22" r="3" fill="#fff3c8"/><circle cx="46" cy="36" r="3" fill="#fff3c8"/>` };
+  return `<svg class="slv" viewBox="0 0 72 60" width="${w}" height="${w * 60 / 72}">${ID[e.id] ?? P[e.slot]}</svg>`;
+}
+// 全身人形（裝備面板與分享卡共用的配色）
+function figSvg() {
+  const k = '#1b1b1b', SK = '#e8b890', H = equipNow('head'), A = equipNow('hand'), B = equipNow('body'), L = equipNow('legs'), F = equipNow('feet');
+  const ol = `stroke="${k}" stroke-width="3" stroke-linejoin="round"`;
+  // 圖樣：每個人形只出現一次，id 固定
+  const fl = (id: string, c: string) => `<pattern id="${id}" width="14" height="14" patternUnits="userSpaceOnUse"><rect width="14" height="14" fill="${c}"/><g fill="#fff3c8"><circle cx="4" cy="4" r="1.8"/><circle cx="7" cy="4" r="1.8"/><circle cx="5.5" cy="1.6" r="1.8"/><circle cx="5.5" cy="6.4" r="1.8"/></g><circle cx="5.5" cy="4" r="1.2" fill="#3a8a4a"/><circle cx="11" cy="11" r="1.5" fill="#fff3c8"/></pattern>`;
+  const defs = `<defs>
+${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
+<pattern id="pCamo" width="30" height="30" patternUnits="userSpaceOnUse"><rect width="30" height="30" fill="#5a6b3a"/><path d="M2 6q6-6 12 0t8 8q-6 4-12 0T2 6Z" fill="#2e3a1e"/><path d="M16 20q6-4 10 2t-4 6q-8 0-6-8Z" fill="#8a7a4a"/><circle cx="24" cy="6" r="3.5" fill="#3e5228"/></pattern>
+<pattern id="pNeon" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(70)"><rect width="10" height="10" fill="#39ff9a"/><rect width="10" height="3" fill="#fff"/></pattern>
+<pattern id="pSeq" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#b84ad8"/><circle cx="2" cy="2" r="1.6" fill="#f0c8ff"/><circle cx="6" cy="6" r="1.6" fill="#ffd8f8"/></pattern>
+<pattern id="pTat" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="${SK}"/><path d="M0 12q4-8 8 0t8 0" stroke="#1e2a4a" stroke-width="1.6" fill="none"/><circle cx="12" cy="4" r="2" fill="#b8323a"/></pattern>
+</defs>`;
+  void 0;
+  const PF: Record<string, string> = { flower: 'url(#pFlower)', camo: 'url(#pCamo)', neon: 'url(#pNeon)', tattoo: 'url(#pTat)' };
+  // ---- 手臂（在衣服後面）：肩到腕，手在末端 ----
+  const armFill = A.id === 'sl_flower' ? 'url(#pFlower)' : A.id === 'sl_camo' ? 'url(#pCamo)' : A.id === 'sl_neon' ? 'url(#pNeon)' : A.id === 'sl_89' ? 'url(#pTat)' : A.base;
+  const arm = (x1: number, x2: number) => { const d = `M${x1} 100L${x2} 160`, dx = x2 - x1, len = Math.hypot(dx, 60), nx = -60 / len, ny = dx / len;
+    let ex = '';
+    if (A.id === 'sl_rain') ex = `<path d="M${x1 + nx * 3} ${100 + ny * 3}L${x2 + nx * 3} ${160 + ny * 3}" stroke="#fffbe0" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>`;
+    if (A.id === 'sl_dragon') { let p = ''; for (let i = 0; i <= 10; i++) { const t = i / 10, o = Math.sin(i * 1.6) * 4; p += `${i ? 'L' : 'M'}${(x1 + dx * t + nx * o).toFixed(1)} ${(100 + 60 * t + ny * o).toFixed(1)}`; } ex = `<path d="${p}" stroke="#ffd25a" stroke-width="2" fill="none"/><circle cx="${x1 + dx * 0.2}" cy="112" r="2.2" fill="#ffd25a"/>`; }
+    if (A.id === 'sl_89') ex = `<path d="M${x1} 100L${x2} 160" stroke="#1e2a4a" stroke-width="1" stroke-dasharray="3 4" fill="none"/>`;
+    return `<path d="${d}" stroke="${k}" stroke-width="20" stroke-linecap="round"/><path d="${d}" stroke="${armFill}" stroke-width="14" stroke-linecap="round"/>${ex}<path d="M${x2 - 7} 158h14" stroke="${k}" stroke-width="2"/><circle cx="${x2 + (x2 < 80 ? -1 : 1)}" cy="170" r="9" fill="${SK}" stroke="${k}" stroke-width="3"/>`; };
+  // ---- 衣服 ----
+  const T = 'M50 90h60l10 20-10 6-2-4v70H52v-70l-2 4-10-6Z';
+  const body: Record<string, string> = {
+    bd_basic: `<path d="${T}" fill="#e8e4d8" ${ol}/><path d="M70 90q10 10 20 0" fill="none" stroke="${k}" stroke-width="2"/><ellipse cx="80" cy="130" rx="12" ry="8" fill="#9a9488" stroke="${k}" stroke-width="2"/><path d="M70 130q10-6 20 0" stroke="#e8e4d8" stroke-width="1.5" fill="none"/>`,
+    bd_rain: `<path d="${T}" fill="#ffd21a" ${ol}/><path d="M80 92V182" stroke="${k}" stroke-width="2"/>${[110, 130, 150, 170].map(y => `<circle cx="80" cy="${y}" r="2.5" fill="#fff" stroke="${k}" stroke-width="1.5"/>`).join('')}<path d="M56 100l4 70" stroke="#fffbe0" stroke-width="3" opacity=".8"/>`,
+    bd_vest: `<path d="${T}" fill="#f2efe4" ${ol}/><path d="M52 92h18l-2 90H52Z M108 92H90l2 90h16Z" fill="#c82a2a" stroke="${k}" stroke-width="2.5" stroke-linejoin="round"/><path d="M70 92l-2 90M90 92l2 90" stroke="#ffd25a" stroke-width="3"/><path d="M56 150h8M96 150h8" stroke="#ffd25a" stroke-width="2"/>`,
+    bd_boss: `<path d="${T}" fill="#1e2a3a" ${ol}/><path d="M66 90l14 14 14-14" fill="#2e3e52" stroke="${k}" stroke-width="2.5"/><path d="M80 104V182" stroke="#c8c8c8" stroke-width="2.5" stroke-dasharray="2 2"/><rect x="58" y="140" width="14" height="12" fill="none" stroke="#c8c8c8" stroke-width="2"/><rect x="88" y="140" width="14" height="12" fill="none" stroke="#c8c8c8" stroke-width="2"/>`,
+    bd_sequin: `<path d="${T}" fill="url(#pSeq)" ${ol}/><path d="M64 92q16 16 32 0" fill="none" stroke="#ffd25a" stroke-width="3"/>` };
+  const hood = B.id === 'bd_rain' ? `<path d="M50 92Q48 34 80 30Q112 34 110 92Z" fill="#ffd21a" ${ol}/>` : '';
+  // ---- 褲子 ----
+  const P = 'M54 182h52l6 86H86l-6-60-6 60H48Z';
+  const legs: Record<string, string> = {
+    lg_basic: `<path d="${P}" fill="#4a4a52" ${ol}/><path d="M58 190q8 10 16 0M86 190q8 10 16 0" stroke="#8a8a92" stroke-width="2" fill="none"/><rect x="92" y="222" width="12" height="12" fill="none" stroke="#8a8a92" stroke-width="2"/>`,
+    lg_rain: `<path d="${P}" fill="#ffd21a" ${ol}/><path d="M60 190l-6 72M100 190l4 72" stroke="#fffbe0" stroke-width="3" opacity=".85"/>`,
+    lg_flower: `<path d="${P}" fill="url(#pFlower)" ${ol}/>`,
+    lg_camo: `<path d="${P}" fill="url(#pCamo)" ${ol}/><rect x="56" y="214" width="12" height="14" fill="none" stroke="#2e3a1e" stroke-width="2"/>` };
+  // ---- 鞋子 ----
+  const toes = (x: number) => [0, 1, 2, 3].map(i => `<circle cx="${x + 6 + i * 7}" cy="270" r="3" fill="${SK}" stroke="${k}" stroke-width="1.2"/>`).join('');
+  const slip = (sole: string, strap: string) => [40, 84].map(x => `<rect x="${x - 4}" y="276" width="40" height="7" rx="3" fill="${sole}" stroke="${k}" stroke-width="2.5"/>${toes(x)}<path d="M${x + 2} 276q16-12 32 0" fill="none" stroke="${strap}" stroke-width="5"/>`).join('');
+  const feet: Record<string, string> = {
+    ft_basic: slip('#f2f2ee', '#2a5ab0'),
+    ft_gold: slip('#e8b830', '#ffd25a') + `<circle cx="56" cy="271" r="2" fill="#fff"/><circle cx="100" cy="271" r="2" fill="#fff"/>`,
+    ft_boots: [44, 84].map(x => `<path d="M${x} 236h30v40h6v8H${x - 4}v-8h4Z" fill="#ffd21a" ${ol}/><path d="M${x + 4} 242v32" stroke="#fffbe0" stroke-width="3"/>`).join(''),
+    ft_work: [40, 84].map(x => `<path d="M${x + 2} 258h30l4 18h4v8H${x - 2}v-8h4Z" fill="#6a4a2a" ${ol}/>${[262, 268, 274].map(y => `<path d="M${x + 10} ${y}l12 3M${x + 22} ${y}l-12 3" stroke="#e8d8a8" stroke-width="1.5"/>`).join('')}`).join('') };
+  // ---- 頭 ----
+  const hd: Record<string, string> = {
+    hd_basic: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="url(#pFlowerR)" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#c84a5a" ${ol}/>`,
+    hd_hat: `<path d="M28 58L80 22L132 58Q80 66 28 58Z" fill="#d8b46a" ${ol}/><path d="M48 50L112 50M62 40H98M80 22V58" stroke="#8a6a2a" stroke-width="1.5"/><path d="M62 62q18 28 36 0" fill="none" stroke="${k}" stroke-width="1.5"/>`,
+    hd_fisher: `<path d="M58 54V38Q80 26 102 38V54Z" fill="#4a6a8a" ${ol}/><path d="M44 62L58 52H102L116 62Q80 68 44 62Z" fill="#4a6a8a" ${ol}/><path d="M58 50H102" stroke="#2a3a4a" stroke-width="2.5"/>`,
+    hd_helmet: `<path d="M56 56Q56 30 80 30Q104 30 104 56Z" fill="#ffb21a" ${ol}/><path d="M48 54H112V60H48Z" fill="#ffb21a" ${ol}/><path d="M80 30V54M70 33v21M90 33v21" stroke="${k}" stroke-width="2"/>`,
+    hd_crown: `<path d="M58 54L60 28L70 40L80 22L90 40L100 28L102 54Z" fill="#e8b830" ${ol}/><path d="M58 54H102" stroke="#b8862a" stroke-width="4"/><circle cx="80" cy="44" r="4" fill="#c82a2a" stroke="${k}" stroke-width="1.5"/><circle cx="66" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="94" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="80" cy="22" r="2.5" fill="#fff6dc" stroke="${k}"/>` };
+  const face = `<circle cx="80" cy="66" r="24" fill="${SK}" ${ol}/><circle cx="71" cy="66" r="2.6" fill="${k}"/><circle cx="89" cy="66" r="2.6" fill="${k}"/><path d="M73 76q7 6 14 0" fill="none" stroke="${k}" stroke-width="2.2" stroke-linecap="round"/><circle cx="66" cy="73" r="3" fill="#f0a090" opacity=".7"/><circle cx="94" cy="73" r="3" fill="#f0a090" opacity=".7"/>`;
+  void PF;
+  return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${arm(50, 34)}${arm(110, 126)}${legs[L.id] ?? legs.lg_basic}${body[B.id] ?? body.bd_basic}${face}${hd[H.id] ?? hd.hd_basic}${feet[F.id] ?? feet.ft_basic}</svg>`;
+}
+const FIG_POS: Record<Slot, [number, number]> = { head: [58, 4], hand: [0, 34], body: [62, 26], legs: [62, 58], feet: [0, 80] };
+let eqPick: Slot | null = null;
+function renderEquip() {
+  const sets = setsOn();
+  $('eqBody').innerHTML = `<div class="eqStage">${figSvg()}${SLOTS.map(([s, n]) => `<button class="eqSlot${eqPick === s ? ' on' : ''}" data-slot="${s}" style="left:${FIG_POS[s][0]}%;top:${FIG_POS[s][1]}%"><small>${n}</small><b>${equipNow(s).n}</b></button>`).join('')}</div>` +
+    (eqPick ? `<div class="eqList">${EQUIP.filter(e => e.slot === eqPick && eqOwned(e.id)).map(e => `<button data-eqset="${e.id}" class="${equipNow(e.slot).id === e.id ? 'on' : ''}">${eqSvg(e, 48)}<span><b>${e.n}</b><small>${e.eff}</small></span></button>`).join('')}<p class="eqHint">想要更多款式，去雜貨店的「服飾」看看。</p></div>` : '<p class="eqHint">點身上的部位來換裝。</p>') +
+    `<div class="eqSets"><b>套裝</b>${SETS.map(s => `<div class="${sets.includes(s) ? 'on' : ''}">${s.n}：${s.need.map(i => EQUIP.find(e => e.id === i)!.n).join('＋')}${s.id === 'typhoon' ? '（手部任意）' : ''}<br><small>${s.eff}</small></div>`).join('')}</div><button id="eqShare">分享穿搭</button><p class="eqHint">分享到 Discord 有機會拿神秘好禮</p><div id="eqShareOut"></div>`;
+  $('eqBody').querySelectorAll('button[data-slot]').forEach(b => (b as HTMLButtonElement).onclick = () => { const s = b.getAttribute('data-slot') as Slot; eqPick = eqPick === s ? null : s; renderEquip(); });
+  $('eqBody').querySelectorAll('button[data-eqset]').forEach(b => (b as HTMLButtonElement).onclick = () => { const e = EQUIP.find(x => x.id === b.getAttribute('data-eqset'))!; setEquip(e.slot, e.id); persist(); applySleeve(); applyOutfit3(); renderEquip(); });
+  ($('eqShare') as HTMLButtonElement).onclick = shareOutfit;
+}
+let clothTab: Slot = 'hand';
+function renderClothShop() {
+  const items = EQUIP.filter(e => e.slot === clothTab && e.price > 0).sort((a, b) => a.price - b.price);
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-hand"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。</p><div class="clTabs">${SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === clothTab ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
+    return `<div class="slCard${cur ? ' on' : ''}">${eqSvg(s)}<b>${s.n}</b><small>$${s.price}・${s.eff}</small><div class="slBtns">${s.slot === 'hand' ? `<button data-sltry="${s.id}">${sleeveTry === s.id ? '試穿中' : '試穿'}</button>` : ''}${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${save.money < s.price ? 'disabled' : ''}>買 $${s.price}</button>`}</div></div>`; }).join('') + `</div>`);
+  $('shopList').querySelectorAll('button[data-ctab]').forEach(b => (b as HTMLButtonElement).onclick = () => { clothTab = b.getAttribute('data-ctab') as Slot; renderShop(); });
+  $('shopList').querySelectorAll('button[data-sltry]').forEach(b => (b as HTMLButtonElement).onclick = () => { const id = b.getAttribute('data-sltry')!; sleeveTry = sleeveTry === id ? null : id; applySleeve(); renderShop(); });
+  $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+    const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = EQUIP.find(x => x.id === id)!;
+    if (b.hasAttribute('data-slbuy')) { if (save.money < s.price) return; save.money -= s.price; save.shop.owned.push(id); track('buy', { item: id, price: s.price }); if (ac) SFX.jingle(); }
+    setEquip(s.slot, id); sleeveTry = null; persist(); applySleeve(); applyOutfit3(); renderShop();
+  });
+}
+function renderSleeveSet() {
+  const box = document.getElementById('sleeveSet'); if (!box) return; const own = EQUIP.filter(s => s.slot === 'hand' && eqOwned(s.id));
+  box.style.display = own.length > 1 ? '' : 'none'; const cur = equipNow('hand').id;
+  box.innerHTML = `<span class="rl">袖套</span><select id="sleeveSel">${own.map(s => `<option value="${s.id}" ${cur === s.id ? 'selected' : ''}>${s.n}</option>`).join('')}</select>`;
+  ($('sleeveSel') as HTMLSelectElement).onchange = e => { setEquip('hand', (e.target as HTMLSelectElement).value); persist(); applySleeve(); };
+}
+// 分享穿搭卡：直接畫在 canvas 上
+async function shareOutfit() {
+  const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d')!;
+  g.fillStyle = '#1e3a5a'; g.fillRect(0, 0, W, H); g.strokeStyle = '#f0e6c8'; g.lineWidth = 14; g.strokeRect(30, 30, W - 60, H - 60);
+  g.fillStyle = '#c8302a'; g.fillRect(60, 60, W - 120, 150); g.strokeStyle = '#1b1b1b'; g.lineWidth = 6; g.strokeRect(60, 60, W - 120, 150);
+  g.fillStyle = '#fff6dc'; g.textAlign = 'center'; g.font = 'bold 84px sans-serif'; g.fillText('剝蚵仔模擬器', W / 2, 165);
+  g.font = 'bold 60px sans-serif'; g.fillText(myName(), W / 2, 300); g.font = '36px sans-serif'; g.fillStyle = '#c8d8e8'; g.fillText('#' + statsId.slice(0, 4).toUpperCase() + ' 的今日穿搭', W / 2, 352);
+  const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(figSvg().replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="750" '));
+  await new Promise(r => { img.onload = r; img.onerror = r; }); g.fillStyle = '#f0e6c8'; g.fillRect(80, 400, 440, 780); g.drawImage(img, 100, 415, 400, 750);
+  g.textAlign = 'left'; let y = 450;
+  for (const [s, n] of SLOTS) { const e = equipNow(s); g.fillStyle = e.base; g.fillRect(570, y - 40, 50, 50); g.strokeStyle = '#1b1b1b'; g.lineWidth = 4; g.strokeRect(570, y - 40, 50, 50); g.fillStyle = '#c8d8e8'; g.font = '32px sans-serif'; g.fillText(n, 640, y - 12); g.fillStyle = '#fff6dc'; g.font = 'bold 42px sans-serif'; g.fillText(e.n, 640, y + 34); y += 130; }
+  const sets = setsOn(); if (sets.length) { g.fillStyle = '#ffd25a'; g.font = 'bold 40px sans-serif'; g.fillText('套裝：' + sets.map(s => s.n).join('、'), 570, y + 10); }
+  g.textAlign = 'center'; g.fillStyle = '#c8d8e8'; g.font = '34px sans-serif'; g.fillText('https://jinweihuang20.github.io/oyster-sim/', W / 2, H - 80);
+  const blob: Blob | null = await new Promise(r => c.toBlob(r, 'image/png')); if (!blob) return;
+  const file = new File([blob], 'oyster-outfit.png', { type: 'image/png' }); const url = URL.createObjectURL(blob);
+  $('eqShareOut').innerHTML = `<img src="${url}" alt="穿搭卡" style="width:100%;border-radius:8px;margin-top:8px"><p class="eqHint">手機也可以長按圖片儲存。</p><a href="${url}" download="oyster-outfit.png" class="btnLike">儲存圖片</a><p class="eqHint" style="margin-top:10px">加入 Discord 分享穿搭，就送神秘好禮！</p><a href="https://discord.gg/tpPBqxACVq" target="_blank" rel="noopener" class="btnLike dcBtn">加入 Discord</a>`;
+  const nav = navigator as any;
+  if (COARSE && nav.canShare?.({ files: [file] })) { try { await nav.share({ files: [file], title: '剝蚵仔模擬器', text: '看看我的剝蚵穿搭 https://jinweihuang20.github.io/oyster-sim/' }); } catch { } }
+}
+// 第一次收工後提醒取名字（只出現一次）
+function namePrompt() {
+  if (save.namePrompted || save.name || tut) return; save.namePrompted = 1; persist(); ($('naIn') as HTMLInputElement).value = ''; $('nameAsk').classList.add('show');
+}
+$('naOk').onclick = () => { const i = $('myName') as HTMLInputElement; i.value = ($('naIn') as HTMLInputElement).value; i.dispatchEvent(new Event('change')); $('nameAsk').classList.remove('show'); };
+$('naSkip').onclick = () => $('nameAsk').classList.remove('show'); $('naClose').onclick = () => $('nameAsk').classList.remove('show');
+{ const i = $('naIn'); for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'keydown']) i.addEventListener(ev, e => e.stopPropagation()); }
+migrateEquip(); persist(); applySleeve();
+// 禮物信箱：伺服器沒開或還沒有這個路由時安靜失敗
+let giftList: Social.Gift[] = [], giftAt = 0;
+async function checkGifts(force = false) {
+  if (!force && Date.now() - giftAt < 3 * 60e3) return; giftAt = Date.now();
+  try { giftList = await Social.gifts(); } catch { giftList = []; }
+  const b = document.getElementById('oGift'); if (b) b.style.display = giftList.length ? '' : 'none';
+}
+function giftLabel(g: Social.Gift) {
+  if (g.type === 'money') return `$${Math.max(0, Math.floor(+g.amount! || 0))}`;
+  if (g.type === 'equip') return EQUIP.find(e => e.id === g.itemId)?.n ?? '服飾';
+  if (g.type === 'odd') return ODD[+g.itemId!]?.name ?? '奇物';
+  if (g.type === 'pearl') return RAR[+(g.tier ?? 0)]?.name ?? '珍珠';
+  return '禮物';
+}
+function applyGift(g: Social.Gift) {
+  if (g.type === 'money') save.money += Math.max(0, Math.floor(+g.amount! || 0));
+  else if (g.type === 'equip') { if (EQUIP.some(e => e.id === g.itemId) && !save.shop.owned.includes(g.itemId as string)) save.shop.owned.push(g.itemId as string); }
+  else if (g.type === 'odd') { const i = +g.itemId!; if (Number.isInteger(i) && i >= 0 && i < save.odd.length) save.odd[i]++; }
+  else if (g.type === 'pearl') { const t = +(g.tier ?? 0); if (Number.isInteger(t) && t >= 0 && t < save.dex.length) save.dex[t]++; }
+  persist(); renderDex();
+}
+function renderGifts() {
+  const esc2 = (v: string) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+  $('giftBody').innerHTML = giftList.length ? giftList.map(g => `<div class="gfRow"><div><b>${esc2(giftLabel(g))}</b><small>${esc2(g.message ?? '')}</small></div><button data-gift="${esc2(g.id)}">領取</button></div>`).join('') : '<p class="eqHint">目前沒有禮物。</p>';
+  $('giftBody').querySelectorAll('button[data-gift]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
+    const id = b.getAttribute('data-gift')!; (b as HTMLButtonElement).disabled = true; const local = giftList.find(x => x.id === id);
+    const r = await Social.claimGift(id);
+    if (r.st === 'retry') { toast('信箱忙線中，等一下再試', '#ffd25a'); renderGifts(); return; }
+    giftList = giftList.filter(x => x.id !== id); void local;
+    if (r.st === 'ok') { const g = r.gift ?? local!; applyGift(g); toast('領到了：' + giftLabel(g), '#ffd25a'); }
+    renderGifts(); const ob = document.getElementById('oGift'); if (ob) ob.style.display = giftList.length ? '' : 'none';
+  });
+}
+$('oGift').onclick = () => { renderGifts(); $('gift').classList.add('show'); };
+$('giftClose').onclick = () => $('gift').classList.remove('show');
+setTimeout(() => checkGifts(true), 3000); setInterval(() => { if (state !== 'play') checkGifts(); }, 60e3);
+// ---------- 第三人稱視角 ----------
+// eslint-disable-next-line no-var
+var tpReady = false;
+const pm = { head: mat(0xffffff), body: mat(0xffffff), legs: mat(0xffffff), feet: mat(0xffffff), skin: mat(skin) };
+const me3 = new THREE.Group(); me3.visible = false; scene.add(me3);
+const meTorso = new THREE.Group(); me3.add(meTorso);
+mesh(new THREE.BoxGeometry(0.36, 0.42, 0.22), pm.body, [0, 0.66, 0], meTorso);
+const meSeatLegs = new THREE.Group(); me3.add(meSeatLegs);
+mesh(new THREE.BoxGeometry(0.34, 0.12, 0.36), pm.legs, [0, 0.42, -0.1], meSeatLegs);
+for (const sx of [-0.09, 0.09]) { mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.32, 6), pm.legs, [sx, 0.2, -0.28], meSeatLegs); mesh(new THREE.BoxGeometry(0.1, 0.05, 0.2), pm.feet, [sx, 0.03, -0.34], meSeatLegs); }
+// 站著走路用的腿：髖關節為軸，前後擺
+const meLeg = (sx: number) => { const g = new THREE.Group(); g.position.set(sx, 0.86, 0); me3.add(g); mesh(new THREE.CylinderGeometry(0.065, 0.05, 0.8, 6), pm.legs, [0, -0.4, 0], g); mesh(new THREE.BoxGeometry(0.11, 0.06, 0.22), pm.feet, [0, -0.83, -0.05], g); g.visible = false; return g; };
+const meLegL = meLeg(-0.09), meLegR = meLeg(0.09); let walkPh = 0; const lastWalk = new THREE.Vector3(); let tpWas = false; const tpLook = new THREE.Vector3();
+const meHead = new THREE.Group(); meHead.position.set(0, 1.02, 0); meTorso.add(meHead);
+mesh(new THREE.SphereGeometry(0.15, 10, 8), pm.skin, [0, 0, 0], meHead);
+mesh(new THREE.SphereGeometry(0.16, 10, 8, 0, Math.PI * 2, 0, 1.3), pm.head, [0, 0.03, 0], meHead);
+mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.02, 12), pm.head, [0, 0.06, 0], meHead);
+const meArm = (s: number) => { const p = new THREE.Group(); p.position.set(s * 0.22, 0.84, 0); meTorso.add(p); mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.36, 6), sleeve, [0, -0.12, -0.12], p).rotation.x = 1.1; mesh(new THREE.SphereGeometry(0.05, 6, 5), pm.skin, [0, -0.2, -0.3], p); return p; };
+const meArmL = meArm(-1), meArmR = meArm(1);
+let tpv = false, cheerT = 0, ouchT = 0;
+function applyOutfit3() {
+  for (const s of ['head', 'body', 'legs', 'feet'] as const) { const e = equipNow(s), m = pm[s]; m.map?.dispose(); m.map = eqTex(e); m.map.repeat.set(1, 1); m.color.set(0xffffff); m.emissive.set(e.pat === 'neon' ? 0x3a1a50 : 0); m.needsUpdate = true; }
+}
+function setTpv(v: boolean) { tpv = v; save.tpv = v ? 1 : 0; persist(); applyOutfit3(); drawCamBtn(); const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) c.checked = v; }
+function drawCamBtn() { const b = document.getElementById('camBtn'); if (!b) return; b.classList.toggle('on', tpv); b.title = tpv ? '視角：第三人稱' : '視角：第一人稱'; }
+function react3(kind: 'cheer' | 'ouch') { if (!tpReady) return; if (kind === 'cheer') cheerT = 1.4; else ouchT = 0.6; }
+// 每幀：放好角色、把鏡頭拉到身後上方；手和蚵仔仍跟著鏡頭，操作不變
+function camTick(dt: number) {
+  if (!tpReady) return;
+  const show = tpv && state === 'play';
+  const enter = show && !tpWas; tpWas = show;
+  tpOn = show; me3.visible = show; umbTick3(dt, show); handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
+  if (!show) return;
+  const kk = enter ? 1 : 1 - Math.exp(-5 * dt);
+  meSeatLegs.visible = !walking; meLegL.visible = meLegR.visible = walking;
+  if (walking) {
+    // 走路：站起來、腿手擺動，鏡頭跟在背後上方
+    const sp = Math.hypot(walkPos.x - lastWalk.x, walkPos.z - lastWalk.z) / Math.max(dt, 1e-3); lastWalk.copy(walkPos);
+    walkPh += Math.min(sp, 3) * dt * 5; const sw = Math.min(1, sp / 1.2) * Math.sin(walkPh);
+    me3.position.set(walkPos.x, walkPos.y - 1.55 - 0.4, walkPos.z); me3.rotation.y = yaw; meTorso.position.y = 0.43; meTorso.rotation.x = 0;
+    meLegL.rotation.x = sw * 0.6; meLegR.rotation.x = -sw * 0.6; meArmL.rotation.x = -sw * 0.5; meArmR.rotation.x = sw * 0.5; meArmL.rotation.z = meArmR.rotation.z = 0; meHead.rotation.y = 0;
+    handRig.visible = false;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), gy = walkPos.y - 1.95;
+    const cp = new THREE.Vector3(walkPos.x - fx * 2.9, gy + 2.5, walkPos.z - fz * 2.9);
+    if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
+    { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, gy + 0.9, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); } tpCam.updateMatrixWorld(); return;
+  }
+  me3.position.set(SEAT.x, SEAT.y - 1.02, SEAT.z); me3.rotation.y = seatYaw;
+  cheerT = Math.max(0, cheerT - dt); ouchT = Math.max(0, ouchT - dt);
+  const up = cheerT > 0 ? Math.sin(Math.min(1, cheerT) * Math.PI) : 0;
+  meArmL.rotation.x = meArmR.rotation.x = -up * 2.4; meArmL.rotation.z = -up * 0.3; meArmR.rotation.z = up * 0.3;
+  meTorso.rotation.x = ouchT > 0 ? Math.sin(ouchT / 0.6 * Math.PI) * 0.35 : 0; meTorso.position.y = up * 0.06;
+  meHead.rotation.y = yaw * 0.6; meTorso.position.y = Math.max(meTorso.position.y, 0);
+  // 從背後斜 3/4 看，人在畫面中下、全身入鏡
+  const h = seatYaw + yaw * 0.35, fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
+  const tx = SEAT.x + fx * 0.3, tz = SEAT.z + fz * 0.3;
+  { const cp = new THREE.Vector3(SEAT.x - fx * 2.6 - rx * 1.5, SEAT.y + 0.85, SEAT.z - fz * 2.6 - rz * 1.5); if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk); } { const lt = new THREE.Vector3(SEAT.x + fx * 0.8 + rx * 0.35, SEAT.y - 0.2, SEAT.z + fz * 0.8 + rz * 0.35); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); } tpCam.updateMatrixWorld();
+  // 蚵仔與刀跟著角色的手（handRig 掛在 camera 底下，換算到角色胸前）
+  camera.updateMatrixWorld(); const hp = new THREE.Vector3(SEAT.x + fx * 0.45, SEAT.y - 0.55 + up * 0.4, SEAT.z + fz * 0.45); camera.worldToLocal(hp); handRig.position.copy(hp).add(new THREE.Vector3(0, 0.24, 0.42)); handRig.scale.setScalar(0.6);
+}
+tpv = !!save.tpv; applyOutfit3(); drawCamBtn(); tpReady = true;
+$('camBtn').onclick = () => setTpv(!tpv);
+{ const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) { c.checked = tpv; c.onchange = () => setTpv(c.checked); } }
+let eqFromRes = false;
+$('eqClose').onclick = () => { $('equip').classList.remove('show'); if (eqFromRes) { eqFromRes = false; $('result').classList.add('show'); } };
+$('rEquip').onclick = () => { eqFromRes = true; $('result').classList.remove('show'); eqPick = null; renderEquip(); $('equip').classList.add('show'); };
+$('oEquip').onclick = () => { eqPick = null; renderEquip(); $('equip').classList.add('show'); };
 let shopTab = 0;
 function shopTabs() {
   const list = $('shopList'), kids = Array.from(list.children); const groups: HTMLElement[] = []; let cur: HTMLElement | null = null; const head = document.createElement('div');
@@ -1991,3 +2311,61 @@ $('hgReplay').onclick = () => { $('settings').classList.remove('show'); if (stat
 hgMaybe();
 
 initUpdate(() => state !== 'play' && !document.querySelector('.panel.show:not(#overlay):not(.overlay)'));
+(window as any).__tpTest = () => { const p = BOWL.clone().project(viewCam()); const x = (p.x + 1) / 2 * innerWidth, y = (1 - p.y) / 2 * innerHeight; return { tp: tpOn, x: Math.round(x), y: Math.round(y), hit: nearBowl(x, y), farMiss: nearBowl(x > innerWidth / 2 ? 5 : innerWidth - 5, 5) }; };
+(window as any).__cheer = () => react3('cheer');
+(window as any).__aim = () => setPhase('aim');
+
+// ---- 第三人稱雨傘：手舉起來撐一支立體傘（傘骨、傘面分片、把手），開合有動畫，被打中會晃 ----
+const umb3 = new THREE.Group(); umb3.visible = false; me3.add(umb3);
+const umb3Can = new THREE.Group(); umb3.add(umb3Can);
+let umb3Open = 0, umb3Jolt = 0; const umbFx: { m: THREE.Mesh; t: number }[] = [];
+function build3Umb() {
+  while (umb3.children.length > 1) umb3.remove(umb3.children[1]); while (umb3Can.children.length) umb3Can.remove(umb3Can.children[0]);
+  const pal: Record<string, number[]> = { stripe: [0xc8302a, 0xf4f0e8], clear: [0xcfe6ff, 0xe4f2ff], navy: [0x1f2b4a, 0x2a3c66], beach: [0xe83a3a, 0xf6c33a, 0x3ab0e8, 0x5ac85a], temple: [0xb0141a, 0xe8b030] };
+  const cols = pal[umbLook] ?? pal.stripe, N = umbLook === 'temple' ? 12 : 8, R = 0.62 * umbSize, Hh = 0.24 * umbSize, clear = umbLook === 'clear';
+  const metal = umbLook === 'temple' ? 0xd8a020 : 0x8a8a90;
+  // 傘桿＋J 形把手
+  mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.95, 6), mat(metal), [0, 0.0, 0], umb3);
+  const hd = mesh(new THREE.TorusGeometry(0.05, 0.016, 6, 10, Math.PI), mat(umbLook === 'temple' ? 0xb0141a : 0x5a3a1a), [0.05, -0.47, 0], umb3); hd.rotation.z = Math.PI;
+  mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.14, 6), mat(umbLook === 'temple' ? 0xb0141a : 0x5a3a1a), [0, -0.42, 0], umb3);
+  // 傘面：一片一片的三角面，每片顏色輪流
+  for (let i = 0; i < N; i++) {
+    const a0 = i / N * Math.PI * 2, a1 = (i + 1) / N * Math.PI * 2, g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute([0, Hh, 0, Math.cos(a0) * R, 0, Math.sin(a0) * R, Math.cos(a1) * R, 0, Math.sin(a1) * R], 3)); g.computeVertexNormals();
+    const m = new THREE.MeshStandardMaterial({ color: cols[i % cols.length], side: THREE.DoubleSide, roughness: clear ? 0.1 : 0.8, transparent: clear, opacity: clear ? 0.5 : 1, flatShading: true });
+    umb3Can.add(new THREE.Mesh(g, m));
+    // 傘骨
+    const rib = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, Math.hypot(R, Hh), 4), mat(metal));
+    rib.position.set(Math.cos(a0) * R / 2, Hh / 2, Math.sin(a0) * R / 2); rib.lookAt(new THREE.Vector3(Math.cos(a0) * R, 0, Math.sin(a0) * R).add(umb3.position)); rib.rotateX(Math.PI / 2); umb3Can.add(rib);
+    mesh(new THREE.SphereGeometry(0.014, 5, 4), mat(metal), [Math.cos(a0) * R, -0.005, Math.sin(a0) * R], umb3Can);
+  }
+  if (umbLook === 'temple') { const fr = mesh(new THREE.CylinderGeometry(R, R, 0.08, N, 1, true), new THREE.MeshStandardMaterial({ color: 0xffe28a, side: THREE.DoubleSide }), [0, -0.04, 0], umb3Can); void fr; }
+  mesh(new THREE.ConeGeometry(0.02, 0.08, 6), mat(metal), [0, Hh + 0.04, 0], umb3Can);
+  umb3Can.position.y = 0.42;
+}
+build3Umb(); umb3Ready = true;
+function umbHit3(at: THREE.Vector3) {
+  if (!umb3Ready || !tpOn) return; umb3Jolt = 0.3;
+  const f = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff2a0, transparent: true, opacity: 0.95, depthWrite: false }));
+  // 打中的點：拉到傘面上
+  umb3Can.updateMatrixWorld(); const c = new THREE.Vector3(0, 0.15, 0); umb3Can.localToWorld(c); f.position.copy(c).lerp(at, 0.25); scene.add(f); umbFx.push({ m: f, t: 0 });
+  for (let i = 0; i < 6; i++) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), new THREE.MeshBasicMaterial({ color: 0xd8d0c0, transparent: true })); p.position.copy(f.position); p.userData.v = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).multiplyScalar(2.2); scene.add(p); umbFx.push({ m: p, t: 0 }); }
+}
+function umbTick3(dt: number, show: boolean) {
+  if (!umb3Ready) return;
+  for (let i = umbFx.length - 1; i >= 0; i--) { const e = umbFx[i]; e.t += dt; const v = e.m.userData.v as THREE.Vector3 | undefined;
+    if (v) { e.m.position.addScaledVector(v, dt); v.y -= 6 * dt; } else e.m.scale.setScalar(1 + e.t * 9);
+    (e.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - e.t / 0.4); if (e.t > 0.4) { scene.remove(e.m); umbFx.splice(i, 1); } }
+  const want = umbS > 0 ? 1 : 0; umb3Open += Math.sign(want - umb3Open) * Math.min(Math.abs(want - umb3Open), dt / 0.2 / umbSlow);
+  umb3Jolt = Math.max(0, umb3Jolt - dt);
+  const vis = show && umb3Open > 0.01; umb3.visible = vis; if (show) umb.visible = false;
+  if (!vis) return;
+  // 傘面像真的傘一樣從收起的細長往外撐開
+  const o = umb3Open, e = 1 - Math.pow(1 - o, 3); umb3Can.scale.set(0.12 + 0.88 * e, 1.6 - 0.6 * e, 0.12 + 0.88 * e);
+  const j = umb3Jolt > 0 ? Math.sin(umb3Jolt * 60) * umb3Jolt * 1.2 : 0;
+  const st = walking ? 0.43 : 0;
+  // 往前開傘：傘面朝前（殼飛來的方向），手往前伸握柄，傘稍微壓低偏右，不擋住手上的蚵仔
+  umb3.position.set(0.22, 0.95 + st + 0.05 * e, -0.38 - 0.12 * e + j * 0.12); umb3.rotation.set(-1.15 * e - 0.2 - j, 0, -0.18 + j * 0.5);
+}
+function umbArm() { if (!umb3Ready || !umb3.visible) return; const e = 1 - Math.pow(1 - umb3Open, 3); meArmR.rotation.x = 1.35 * e + 0.2; meArmR.rotation.z = -0.1; }
+(window as any).__umb3 = { open: () => openUmbrella(), close: () => closeUmbrella(), throwAt: () => throwOne(npcs[2]), get o() { return umb3Open; }, set slow(v: number) { umbSlow = v; } };
