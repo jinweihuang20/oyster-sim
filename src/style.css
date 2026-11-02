@@ -682,3 +682,11 @@ small.saleCd{display:block;color:#c8302a;font-size:11px;font-weight:700;font-var
 .itemCard button{flex:0 0 auto}.itemCard .itemTx{min-width:0}
 button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 .itemCard{flex-wrap:wrap}.itemCard .itemTx{flex:1 1 150px}.itemCard button{margin-left:auto}
+
+/* 新商品上架提示（d32fc3b 時被覆蓋，補回） */
+#shopBtn,#shopBtn2,#oShop,#eqShop{position:relative!important;overflow:visible!important}
+#shopBtn .newDot,#shopBtn2 .newDot,#oShop .newDot,#eqShop .newDot,.newDot{position:absolute!important;top:-7px!important;right:-7px!important;left:auto!important;bottom:auto!important;z-index:5;display:block!important;margin:0!important;padding:0 4px!important;min-width:18px;height:18px;line-height:18px!important;box-sizing:border-box;font-size:11px!important;font-weight:800;text-align:center;color:#fff!important;background:#e0322a!important;border:1.5px solid #fff8e8;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap;width:auto!important;opacity:1!important}
+.newTag{display:inline-block;margin-left:6px;padding:0 5px;font-size:11px;line-height:16px;font-weight:800;color:#fff;background:#e0322a;border:1px solid #2a1600;border-radius:3px;vertical-align:middle}
+#shopTabs button.hasNew{box-shadow:inset 0 0 0 2px #ff5a3a,2px 2px 0 #000!important}
+#shopTabs button.hasNew:after{content:"";display:inline-block;width:7px;height:7px;margin-left:3px;border-radius:50%;background:#ff3a2a;vertical-align:top}
+#newMsg .nmTx{margin:8px 0;font-size:15px;line-height:1.5}
