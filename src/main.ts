@@ -1110,9 +1110,11 @@ function cdTxt(ms: number) { if (ms <= 0) return '特價已結束'; const s = Ma
 /** 價格標示：特價時原價劃掉＋新價＋「特價」＋倒數 */
 function pxHtml(k: string, base: number, pre = '') {
   const p = pxLive(k); if (!p || !p.sale || p.price >= p.base) return `${pre}$${px(k, base)}`;
-  return `<span class="pxSale">${pre}<s>$${p.base}</s> <b>$${p.price}</b><span class="saleTag">特價</span>${p.endsAt ? `<span class="saleCd" data-end="${p.endsAt}">${cdTxt(p.endsAt - pxNow())}</span>` : ''}</span>`;
+  return `<span class="pxSale">${pre}<s>$${p.base}</s>$${p.price}</span><span class="saleTag">特價</span>`;
 }
-setInterval(() => { if (!$('shop').classList.contains('show')) return; let gone = false; $('shop').querySelectorAll<HTMLElement>('.saleCd').forEach(e => { const left = +e.dataset.end! - pxNow(); e.textContent = cdTxt(left); if (left <= 0) gone = true; }); if (gone) renderShop(); }, 1000);
+/** 特價倒數：放在物品說明下面的小字 */
+function pxCd(k: string) { const p = pxLive(k); return p?.sale && p.endsAt && p.price < p.base ? `<small class="saleCd" data-end="${p.endsAt}">特價${cdTxt(p.endsAt - pxNow())}</small>` : ''; }
+setInterval(() => { if (!$('shop').classList.contains('show')) return; let gone = false; $('shop').querySelectorAll<HTMLElement>('.saleCd').forEach(e => { const left = +e.dataset.end! - pxNow(); e.textContent = '特價' + cdTxt(left); if (left <= 0) gone = true; }); if (gone) renderShop(); }, 1000);
 function openShopPx() { fetchPrices().then(r => { if (r === 'changed' && $('shop').classList.contains('show')) renderShop(); }); }
 function pxMsg(t: string) {
   const m = document.createElement('div'); m.className = 'giftMsg bad';
@@ -1138,20 +1140,20 @@ function renderShop() {
   $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><h3><i class="ic ic-knife"></i> 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>找縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
     const own = save.shop.owned.includes(k.id);
     const tr = save.trial?.id === k.id, btn = tr ? `${k.id === cur ? '<b>使用中</b><br>' : `<button data-eq="${k.id}">換</button><br>`}<button data-buy="${k.id}" ${save.money < px(k.id, k.price) ? 'disabled' : ''}>${pxHtml(k.id, k.price, '買斷 ')}</button>` : k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < px(k.id, k.price) ? 'disabled' : ''}>${pxHtml(k.id, k.price)}</button>`;
-    return `<tr><td><b>${k.n}</b>${save.trial?.id === k.id ? ` <span class="trialTag">試用剩 ${save.trial.left} 班</span>` : ''}<br><small>${k.desc}</small></td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    return `<tr><td><b>${k.n}</b>${save.trial?.id === k.id ? ` <span class="trialTag">試用剩 ${save.trial.left} 班</span>` : ''}<br><small>${k.desc}</small>${pxCd(k.id)}</td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!save.shop.owned.includes('stripe')) save.shop.owned.push('stripe');
   const cu = umbNow().id, B = UMBS[0];
   const rel = (v: number, b: number, goodHigh: boolean, unit: string) => { if (v === b) return `<span style="opacity:.6">${v}${unit}</span>`; const good = goodHigh ? v > b : v < b; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${v}${unit}</b>`; };
   $('shopList').innerHTML += `<h3><i class="ic ic-umb"></i> 雨傘</h3><table class="kt"><tr><th>傘</th><th>開傘</th><th>可撐</th><th>完美窗</th><th>遮擋</th><th>反彈力</th><th></th></tr>` + UMBS.map(u => {
     const own = save.shop.owned.includes(u.id);
     const btn = u.id === cu ? '<b>使用中</b>' : own ? `<button data-ueq="${u.id}">換</button>` : `<button data-ubuy="${u.id}" ${save.money < px(u.id, u.price) ? 'disabled' : ''}>${pxHtml(u.id, u.price)}</button>`;
-    return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small></td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small>${pxCd(u.id)}</td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!save.shop.owned.includes('plastic')) save.shop.owned.push('plastic');
   const cb = bowlNow().id;
   $('shopList').innerHTML += `<h3><i class="ic ic-bowl"></i> 盆仔</h3><table class="kt"><tr><th>盆</th><th>加價</th><th></th></tr>` + BOWLS.map(b => {
     const own = save.shop.owned.includes(b.id);
     const bk = b.id === 'wide' ? 'bowl-wide' : b.id; const btn = b.id === cb ? '<b>使用中</b>' : own ? `<button data-beq="${b.id}">換</button>` : `<button data-bbuy="${b.id}" ${save.money < px(bk, b.price) ? 'disabled' : ''}>${pxHtml(bk, b.price)}</button>`;
-    return `<tr><td><b>${b.n}</b><br><small>${b.desc}</small></td><td>${rel(b.bonus, 0, true, '$')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    return `<tr><td><b>${b.n}</b><br><small>${b.desc}</small>${pxCd(b.id === 'wide' ? 'bowl-wide' : b.id)}</td><td>${rel(b.bonus, 0, true, '$')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   $('shopList').querySelectorAll('button[data-bbuy],button[data-beq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-bbuy') || b.getAttribute('data-beq')!; const w = BOWLS.find(x => x.id === id)!;
     if (b.hasAttribute('data-bbuy')) { const pr = await payFor(id === 'wide' ? 'bowl-wide' : id, w.price, w.n); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
@@ -1169,7 +1171,7 @@ function renderShop() {
     save.shop.equipped.knife = id; persist(); applyKnife(); renderShop();
   });
   $('shopList').insertAdjacentHTML('beforeend', '<h4 class="shH4"><i class="ic ic-gear"></i> 其他器具（買了可以開關）</h4><table class="kt">' + GEAR.map(g => { const own = save.shop.owned.includes(g.id), on = gearOn(g.id);
-    return `<tr><td><b>${g.n}</b><br><small style="color:#9be37a">${g.good}</small><small style="color:#ff8a7a">${g.bad}</small></td><td>${own ? `<button data-gtog="${g.id}">${on ? '✅ 使用中' : '⬜ 沒用'}</button>` : `<button data-gbuy="${g.id}" ${save.money < px(g.id, g.price) ? 'disabled' : ''}>${pxHtml(g.id, g.price)}</button>`}</td></tr>`; }).join('') + '</table>');
+    return `<tr><td><b>${g.n}</b><br><small style="color:#9be37a">${g.good}</small><small style="color:#ff8a7a">${g.bad}</small>${pxCd(g.id)}</td><td>${own ? `<button data-gtog="${g.id}">${on ? '✅ 使用中' : '⬜ 沒用'}</button>` : `<button data-gbuy="${g.id}" ${save.money < px(g.id, g.price) ? 'disabled' : ''}>${pxHtml(g.id, g.price)}</button>`}</td></tr>`; }).join('') + '</table>');
   $('shopList').querySelectorAll('button[data-gbuy],button[data-gtog]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-gbuy') || b.getAttribute('data-gtog')!; const g = GEAR.find(x => x.id === id)!; save.gear = save.gear ?? {};
     if (b.hasAttribute('data-gbuy')) { const pr = await payFor(id, g.price, g.n.replace(/^\S+\s/, '')); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); save.gear[id] = true; track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
@@ -1657,7 +1659,7 @@ function moonTick(dt: number) {
 }
 function renderItemShop() {
   const it = ITEMS[0]; const own = save.meds[it.id] ?? 0;
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 道具</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，沒用完的會留著。</p><div class="itemCard"><div class="itemIc">${MOON_SVG}</div><div class="itemTx"><b>${it.n}</b><small style="color:#9be37a">${it.good}</small><small style="color:#ff8a7a">${it.bad}</small><small>持有 ${own}</small></div><button data-ibuy="${it.id}" ${save.money < px('item-' + it.id, it.price) ? 'disabled' : ''}>${pxHtml('item-' + it.id, it.price)}</button></div>`);
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 道具</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，沒用完的會留著。</p><div class="itemCard"><div class="itemIc">${MOON_SVG}</div><div class="itemTx"><b>${it.n}</b><small style="color:#9be37a">${it.good}</small><small style="color:#ff8a7a">${it.bad}</small><small>持有 ${own}</small>${pxCd('item-' + it.id)}</div><button data-ibuy="${it.id}" ${save.money < px('item-' + it.id, it.price) ? 'disabled' : ''}>${pxHtml('item-' + it.id, it.price)}</button></div>`);
   $('shopList').querySelectorAll('button[data-ibuy]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const i = ITEMS.find(x => x.id === b.getAttribute('data-ibuy'))!; const pr = await payFor('item-' + i.id, i.price, i.n); if (pr == null) return;
     save.money -= pr; save.meds[i.id] = (save.meds[i.id] ?? 0) + 1; persist(); track('buy', { item: 'item-' + i.id, price: pr }); if (ac) SFX.jingle(); renderShop(); drawMeds();
@@ -2091,7 +2093,7 @@ function renderMedList() {
   drawMeds();
 }
 function renderMedShop() {
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-pill"></i> 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b></td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur ? `${m.dur}s` : "立即"}</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < px('med-' + m.id, m.price) ? 'disabled' : ''}>${pxHtml('med-' + m.id, m.price)}</button></td></tr>`).join('') + '</table>');
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-pill"></i> 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b>${pxCd('med-' + m.id)}</td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur ? `${m.dur}s` : "立即"}</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < px('med-' + m.id, m.price) ? 'disabled' : ''}>${pxHtml('med-' + m.id, m.price)}</button></td></tr>`).join('') + '</table>');
   $('shopList').querySelectorAll('button[data-mbuy]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const m = MEDS.find(x => x.id === b.getAttribute('data-mbuy'))!; const pr = await payFor('med-' + m.id, m.price, m.n); if (pr == null) return;
     save.money -= pr; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; persist(); track('buy', { item: 'med-' + m.id, price: pr }); if (ac) SFX.jingle(); renderShop(); drawMeds();
@@ -2307,7 +2309,7 @@ function renderClothShop() {
   if (sleeveTry) { sleeveTry = null; applySleeve(); }
   const items = EQUIP.filter(e => e.slot === clothTab && e.price > 0).sort((a, b) => a.price - b.price);
   $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-hand"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。</p><div class="clTabs">${SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === clothTab ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
-    return `<div class="slCard${cur ? ' on' : ''}">${eqSvg(s)}<b>${s.n}</b><small>${s.eff}</small><div class="slBtns">${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${save.money < px(s.id, s.price) ? 'disabled' : ''}>${pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
+    return `<div class="slCard${cur ? ' on' : ''}">${eqSvg(s)}<b>${s.n}</b><small>${s.eff}</small>${pxCd(s.id)}<div class="slBtns">${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${save.money < px(s.id, s.price) ? 'disabled' : ''}>${pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
   $('shopList').querySelectorAll('button[data-ctab]').forEach(b => (b as HTMLButtonElement).onclick = () => { clothTab = b.getAttribute('data-ctab') as Slot; renderShop(); });
   $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = EQUIP.find(x => x.id === id)!;
