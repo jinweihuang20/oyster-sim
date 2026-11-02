@@ -98,15 +98,17 @@ function shellPaint(g: THREE.BufferGeometry, seed: number) {
 // 蚵殼紋理：一張 256px 共用貼圖（生長紋、灰白斑駁、紫褐烏紋、細雜訊）＋同一張當凹凸圖，載入時畫一次，沒有每幀成本
 function shellTex() {
   const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d')!;
-  let r = 7; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280;
-  c.fillStyle = '#d9d6cf'; c.fillRect(0, 0, S, S);
-  for (let i = 0; i < 260; i++) { const g = 170 + rn() * 70 | 0; c.fillStyle = `rgba(${g},${g - 4},${g - 10},${0.25 + rn() * 0.35})`; c.beginPath(); c.ellipse(rn() * S, rn() * S, 4 + rn() * 18, 3 + rn() * 12, rn() * 3, 0, 7); c.fill(); }
-  // 生長紋：以殼頂（鉸合處）為圓心的一圈圈波浪層
-  for (let k = 0; k < 26; k++) { const R0 = 12 + k * 9 + rn() * 4; c.beginPath(); for (let a = -0.2; a <= Math.PI + 0.2; a += 0.08) { const rr = R0 + Math.sin(a * 9 + k) * 2.5 + (rn() - 0.5) * 2; const x = S / 2 + Math.cos(a) * rr * 1.15, y = 8 + Math.sin(a) * rr; a < -0.1 ? c.moveTo(x, y) : c.lineTo(x, y); }
-    c.strokeStyle = k % 3 ? `rgba(110,102,96,${0.12 + rn() * 0.12})` : `rgba(250,248,240,${0.35})`; c.lineWidth = k % 3 ? 1 + rn() * 1.2 : 2; c.stroke(); }
-  // 紫褐、深色放射烏紋
-  for (let i = 0; i < 9; i++) { const a = rn() * Math.PI, w = 2 + rn() * 5; c.strokeStyle = rn() < 0.5 ? `rgba(110,74,100,${0.12 + rn() * 0.16})` : `rgba(70,60,56,${0.1 + rn() * 0.16})`; c.lineWidth = w; c.beginPath(); c.moveTo(S / 2, 8); c.lineTo(S / 2 + Math.cos(a) * S, 8 + Math.sin(a) * S); c.stroke(); }
-  const im = c.getImageData(0, 0, S, S), d = im.data; for (let i = 0; i < d.length; i += 4) { const n = (rn() - 0.5) * 26; d[i] += n; d[i + 1] += n; d[i + 2] += n; } c.putImageData(im, 0, 0);
+  let r = 7; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280; const hx = S / 2, hy = 4;
+  c.fillStyle = '#cfc9c4'; c.fillRect(0, 0, S, S);
+  // 放射色帶：紫灰、淡褐、灰白交錯，從殼頂往外扇開
+  for (let i = 0; i < 22; i++) { const a0 = -0.3 + rn() * (Math.PI + 0.6), w = 0.05 + rn() * 0.14, t = rn();
+    c.fillStyle = t < 0.4 ? `rgba(120,96,118,${0.16 + rn() * 0.18})` : t < 0.7 ? `rgba(140,116,92,${0.12 + rn() * 0.14})` : `rgba(236,232,226,${0.2 + rn() * 0.2})`;
+    c.beginPath(); c.moveTo(hx, hy); c.arc(hx, hy, S * 1.3, a0, a0 + w); c.closePath(); c.fill(); }
+  // 層層薄片（生長層）：由內到外，每層下緣有亮白薄邊＋上方陰影，邊緣荷葉狀起伏
+  for (let k = 0; k < 30; k++) { const R0 = 10 + k * 8.5 + rn() * 3, f = 6 + rn() * 6, ph = rn() * 6, ampl = 1.5 + k * 0.12;
+    const path = (off: number) => { c.beginPath(); for (let a = -0.35; a <= Math.PI + 0.35; a += 0.05) { const rr = R0 + off + Math.sin(a * f + ph) * ampl + Math.sin(a * 23 + k) * 0.8; const x = hx + Math.cos(a) * rr * 1.15, y = hy + Math.sin(a) * rr; a < -0.3 ? c.moveTo(x, y) : c.lineTo(x, y); } };
+    path(-2); c.strokeStyle = `rgba(70,58,64,${0.18 + rn() * 0.12})`; c.lineWidth = 2.5; c.stroke();
+    path(0); c.strokeStyle = `rgba(250,248,244,${0.45 + rn() * 0.3})`; c.lineWidth = 1 + rn() * 1.2; c.stroke(); }
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 2; return t;
 }
 const SHELL_TEX = shellTex(), SHELL_BUMP = SHELL_TEX.clone(); SHELL_BUMP.colorSpace = THREE.NoColorSpace;
@@ -121,9 +123,9 @@ const mkShell = (sy: number, seed: number) => {
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g = g.toNonIndexed(); g.computeVertexNormals(); return shellPaint(g, seed); };
 const SHELL_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.45, i + 1)), HALF_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.25, i + 11));
 const shellGeo = SHELL_GEOS[0], halfGeo = HALF_GEOS[0];
-const GREYS = [0xc2c2be, 0xa4a4a2, 0x8a8a8a, 0x6c6c6e, 0x4a4a4e];
+const GREYS = [0xd2ccc8, 0xb4aab0, 0x9a908e, 0x7c7278, 0x5a5258];
 const greyPick = () => GREYS[Math.min(4, Math.floor(Math.random() * Math.random() * 6.2))];
-const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.95, metalness: 0, map: SHELL_TEX, bumpMap: SHELL_BUMP, bumpScale: 2.5 }); m.emissive.setHex(0x2a2c30); return m; };
+const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX, bumpMap: SHELL_BUMP, bumpScale: 1.6 }); m.emissive.setHex(0x262428); return m; };
 const shellMat = shellM(0xa0a0a0);
 mesh(new THREE.ConeGeometry(0.9, 0.55, 10), mat(0x6a7c94, { roughness: 0.95, emissive: 0x24262a }), [0, 0.27, 0]);
 const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo, pileMat, 260); pile.castShadow = true;
@@ -254,7 +256,7 @@ const knife = new THREE.Group(); handR.add(knife); knife.position.set(-0.02, 0.0
 mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.11, 6), mat(0x7a4a20), [0, 0, 0], knife).rotation.z = Math.PI / 2;
 mesh(new THREE.BoxGeometry(0.1, 0.006, 0.025), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [-0.1, 0, 0], knife);
 const oyster = new THREE.Group(); handL.add(oyster); oyster.position.set(0.02, 0.05, -0.16);
-const shellBotMat = shellM(0x8a8a8a), shellTopMat = shellM(0xa4a4a2);
+const shellBotMat = shellM(0x8a8a8a), shellTopMat = shellM(0xc4bcbc);
 const shellBot = mesh(halfGeo, shellBotMat, [0, -0.01, 0], oyster);
 const meatInHand = mesh(meatGeo, meatMat, [0, 0.015, 0], oyster);
 const shellTop = mesh(halfGeo, shellTopMat, [0, 0.025, 0], oyster);
@@ -273,7 +275,7 @@ function placeBarn(list: THREE.Object3D[], dd: number, y = 0.045) {
     b.scale.set(sc * rnd(0.85, 1.15), sc * rnd(0.7, 1.2), sc * rnd(0.85, 1.15)); b.rotation.set(rnd(-0.35, 0.35), rnd(0, 6.28), rnd(-0.35, 0.35)); });
 }
 mesh(new THREE.CircleGeometry(0.075, 14), mat(0xeeeae4, { roughness: 0.35, metalness: 0.15 }), [0, 0.008, 0], oyster).scale.set(1.25, 0.9, 1); (oyster.children[oyster.children.length - 1] as THREE.Mesh).rotation.x = -Math.PI / 2;
-for (let i = 0; i < 16; i++) barnacles.push(mesh(BARN_GEO, BARN_MAT, [0, 0.045, 0], oyster));
+for (let i = 0; i < 16; i++) barnacles.push(mesh(BARN_GEO, BARN_MAT, [0, 0.02, 0], shellTop)); // 藤壺長在上蓋：撬開後跟著上蓋一起移走
 const seamMark = mesh(new THREE.BoxGeometry(0.042, 0.016, 0.016), new THREE.MeshBasicMaterial({ color: 0x7a4a1e }), [0, 0.012, 0], oyster);
 const seamRing = mesh(new THREE.TorusGeometry(0.03, 0.004, 6, 24), new THREE.MeshBasicMaterial({ color: 0xd8ff80, transparent: true, opacity: 0, depthWrite: false }), [0, 0.02, 0], oyster); seamRing.rotation.x = Math.PI / 2; seamRing.visible = false;
 let sweet = false, sweetT = 0;
@@ -837,7 +839,7 @@ function holdOyster(dd: number) {
   seamMark.visible = seamGlow.visible = true;
   shellTop.visible = true; shellTop.position.set(0, 0.025, 0); shellTop.rotation.set(0, 0, 0); meatInHand.visible = true; meatInHand.material = meatMat; pearlMesh.visible = false; oddMeshes.forEach(m => m.visible = false);
   { const base = [0xc2c2be, 0xa0a09e, 0x7c7c7e, 0x58585c][diff]; shellTopMat.color.setHex(base); shellBotMat.color.setHex(base).multiplyScalar(0.85); const gi = Math.floor(Math.random() * 6); shellTop.geometry = HALF_GEOS[gi]; shellBot.geometry = HALF_GEOS[(gi + 3) % 6]; }
-  placeBarn(barnacles, diff);
+  placeBarn(barnacles, diff, 0.02);
   meatsLeft = 1; showExtra();
   find = tut ? { kind: 'none', i: 0 } : rollFind(); setPhase('seam');
 }
