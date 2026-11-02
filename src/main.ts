@@ -168,7 +168,7 @@ for (const d of NPC_DEF) {
   const bowlL = new THREE.Vector3(0.32, 0, -0.42); const bowl = a.g.localToWorld(bowlL.clone());
   mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, 0.05, bowl.z]);
   bowl.y = 0.08;
-  const tag = document.createElement('button'); tag.className = 'ntag'; tag.textContent = d.name; $('bubbles').appendChild(tag); const ni = npcs.length; tag.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); npcTip(npcs[ni]); });
+  const tag = document.createElement('button'); tag.className = 'ntag'; tag.textContent = d.name; $('bubbles').appendChild(tag); tag.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); const me = npcs.find(x => x.tag === tag); if (me) npcTip(me); });
   const bubble = document.createElement('div'); bubble.className = 'bub'; bubble.style.opacity = '0'; $('bubbles').appendChild(bubble);
   npcs.push({ ...a, tag, name: d.name, rate: d.rate, chatty: d.chatty, peek: d.peek, count: 0, pause: 0, look: 0, bubble, bubT: 0, lean: 0, cyc: Math.random(), dur: d.rate, ev: 0, mood: 0, angry: 0, distract: 0, turnDir: 1, windup: 0, throwCd: rnd(15, 30), stuck: null, baseY: 0, oy, top, meat, bowl, bowlMeat: [] });
 }
@@ -917,7 +917,7 @@ function applyCrew() {
 updSky(); showLand(); applyCrew(); setInterval(updSky, 30000);
 function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   nightShift = isNight(); updSky(); $('nightTag').style.display = nightShift ? '' : 'none'; if (nightShift) later(1.5, () => toast('🌙 夜班上工！這一工收入 +20%', '#b8c8ff'));
-  npcs.forEach(dressAma); applyCrew();
+  moonReset(); npcs.forEach(dressAma); applyCrew();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); if (!tut) track('start', { seat: save.seat ?? 'door', loc: locNow().id });
@@ -1087,51 +1087,98 @@ const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
 const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? 1.25 : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
 function pctTxt(v: number, goodHigh: boolean) { if (v === 1) return '<span style="opacity:.6">—</span>'; const p = Math.round((v - 1) * 100), good = goodHigh ? p > 0 : p < 0; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${p > 0 ? '+' : ''}${p}%</b>`; }
+// 商店價格：每次打開雜貨店向伺服器拿一次（後台「商店價格」可改價、打折）；拿不到就照內建價格
+type ShopPx = { price: number; base: number; sale?: boolean; endsAt?: number | null };
+const PX_URL = 'https://game-status.gwtech.org/s/shop/prices?game=oyster-sim';
+/** 後台「標為新品」的物品 key（給雜貨店新品標記用） */
+let shopNewIds: string[] = [];
+let shopPx: Record<string, ShopPx> = {}, shopPxAt = 0, shopPxTry = 0, shopSkew = 0, payBusy = false;
+async function fetchPrices(ms = 2000) {
+  shopPxTry = Date.now(); const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
+  try {
+    const r = await fetch(PX_URL, { mode: 'cors', cache: 'no-store', signal: c.signal });
+    const j = r.ok ? await r.json() : null;
+    if (!j || typeof j.items !== 'object') return false;
+    const old = JSON.stringify(shopPx); shopPx = j.items; shopNewIds = Array.isArray(j.newIds) ? j.newIds.filter((x: unknown) => typeof x === 'string') : []; (window as any).__shopNewIds = shopNewIds; shopPxAt = Date.now(); shopSkew = typeof j.serverTime === 'number' ? j.serverTime - Date.now() : 0;
+    return old !== JSON.stringify(shopPx) ? 'changed' : true;
+  } catch { return false; } finally { clearTimeout(t); }
+}
+const pxNow = () => Date.now() + shopSkew;
+const pxLive = (k: string) => { const p = shopPx[k]; return p && p.price > 0 && !(p.endsAt && pxNow() >= p.endsAt) ? p : null; };
+const px = (k: string, base: number) => { const p = pxLive(k); if (p) return p.price; const q = shopPx[k]; return q && q.base > 0 ? q.base : base; };
+function cdTxt(ms: number) { if (ms <= 0) return '特價已結束'; const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `剩 ${d} 天 ${h} 小時` : `剩 ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
+/** 價格標示：特價時原價劃掉＋新價＋「特價」＋倒數 */
+function pxHtml(k: string, base: number, pre = '') {
+  const p = pxLive(k); if (!p || !p.sale || p.price >= p.base) return `${pre}$${px(k, base)}`;
+  return `<span class="pxSale">${pre}<s>$${p.base}</s>$${p.price}</span><span class="saleTag">特價</span>`;
+}
+/** 特價倒數：放在物品說明下面的小字 */
+function pxCd(k: string) { const p = pxLive(k); return p?.sale && p.endsAt && p.price < p.base ? `<small class="saleCd" data-end="${p.endsAt}">特價${cdTxt(p.endsAt - pxNow())}</small>` : ''; }
+setInterval(() => { if (!$('shop').classList.contains('show')) return; let gone = false; $('shop').querySelectorAll<HTMLElement>('.saleCd').forEach(e => { const left = +e.dataset.end! - pxNow(); e.textContent = '特價' + cdTxt(left); if (left <= 0) gone = true; }); if (gone) renderShop(); }, 1000);
+function openShopPx() { fetchPrices().then(r => { if (r === 'changed' && $('shop').classList.contains('show')) renderShop(); }); }
+function pxMsg(t: string) {
+  const m = document.createElement('div'); m.className = 'giftMsg bad';
+  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-shop"></i> 價格有變動</b><p style="margin:6px 0">${t}</p><div class="mbtns"><button class="gmYes">知道了</button></div></div>`;
+  const close = () => m.remove(); m.querySelectorAll('.gmX,.gmYes').forEach(b => b.addEventListener('click', close)); m.addEventListener('click', e => { if (e.target === m) close(); });
+  document.body.appendChild(m);
+}
+/** 結帳：價格超過 60 秒沒更新就重拿一次；價格變了就跳提示、不扣錢。回傳實際要付的錢，不能買回 null */
+async function payFor(k: string, base: number, name: string): Promise<number | null> {
+  if (payBusy) return null;
+  let price = px(k, base);
+  if (Date.now() - Math.max(shopPxAt, shopPxTry) > 60_000) {
+    payBusy = true; try { await fetchPrices(); } finally { payBusy = false; }
+    const np = px(k, base);
+    if (np !== price) { renderShop(); pxMsg(`「${esc(name)}」現在是 $${np}（剛剛顯示 $${price}），價格已經更新，要買的話請再按一次。`); return null; }
+    price = np;
+  }
+  return save.money >= price ? price : null;
+}
 function renderShop() {
   if (!save.shop.owned.includes('basic')) save.shop.owned.push('basic');
   const cur = knifeNow().id;
   $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><h3><i class="ic ic-knife"></i> 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>找縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
     const own = save.shop.owned.includes(k.id);
-    const tr = save.trial?.id === k.id, btn = tr ? `${k.id === cur ? '<b>使用中</b><br>' : `<button data-eq="${k.id}">換</button><br>`}<button data-buy="${k.id}" ${save.money < k.price ? 'disabled' : ''}>買斷 $${k.price}</button>` : k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < k.price ? 'disabled' : ''}>$${k.price}</button>`;
-    return `<tr><td><b>${k.n}</b>${save.trial?.id === k.id ? ` <span class="trialTag">試用剩 ${save.trial.left} 班</span>` : ''}<br><small>${k.desc}</small></td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    const tr = save.trial?.id === k.id, btn = tr ? `${k.id === cur ? '<b>使用中</b><br>' : `<button data-eq="${k.id}">換</button><br>`}<button data-buy="${k.id}" ${save.money < px(k.id, k.price) ? 'disabled' : ''}>${pxHtml(k.id, k.price, '買斷 ')}</button>` : k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < px(k.id, k.price) ? 'disabled' : ''}>${pxHtml(k.id, k.price)}</button>`;
+    return `<tr><td><b>${k.n}</b>${save.trial?.id === k.id ? ` <span class="trialTag">試用剩 ${save.trial.left} 班</span>` : ''}<br><small>${k.desc}</small>${pxCd(k.id)}</td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!save.shop.owned.includes('stripe')) save.shop.owned.push('stripe');
   const cu = umbNow().id, B = UMBS[0];
   const rel = (v: number, b: number, goodHigh: boolean, unit: string) => { if (v === b) return `<span style="opacity:.6">${v}${unit}</span>`; const good = goodHigh ? v > b : v < b; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${v}${unit}</b>`; };
   $('shopList').innerHTML += `<h3><i class="ic ic-umb"></i> 雨傘</h3><table class="kt"><tr><th>傘</th><th>開傘</th><th>可撐</th><th>完美窗</th><th>遮擋</th><th>反彈力</th><th></th></tr>` + UMBS.map(u => {
     const own = save.shop.owned.includes(u.id);
-    const btn = u.id === cu ? '<b>使用中</b>' : own ? `<button data-ueq="${u.id}">換</button>` : `<button data-ubuy="${u.id}" ${save.money < u.price ? 'disabled' : ''}>$${u.price}</button>`;
-    return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small></td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    const btn = u.id === cu ? '<b>使用中</b>' : own ? `<button data-ueq="${u.id}">換</button>` : `<button data-ubuy="${u.id}" ${save.money < px(u.id, u.price) ? 'disabled' : ''}>${pxHtml(u.id, u.price)}</button>`;
+    return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small>${pxCd(u.id)}</td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!save.shop.owned.includes('plastic')) save.shop.owned.push('plastic');
   const cb = bowlNow().id;
   $('shopList').innerHTML += `<h3><i class="ic ic-bowl"></i> 盆仔</h3><table class="kt"><tr><th>盆</th><th>加價</th><th></th></tr>` + BOWLS.map(b => {
     const own = save.shop.owned.includes(b.id);
-    const btn = b.id === cb ? '<b>使用中</b>' : own ? `<button data-beq="${b.id}">換</button>` : `<button data-bbuy="${b.id}" ${save.money < b.price ? 'disabled' : ''}>$${b.price}</button>`;
-    return `<tr><td><b>${b.n}</b><br><small>${b.desc}</small></td><td>${rel(b.bonus, 0, true, '$')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
-  $('shopList').querySelectorAll('button[data-bbuy],button[data-beq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+    const bk = b.id === 'wide' ? 'bowl-wide' : b.id; const btn = b.id === cb ? '<b>使用中</b>' : own ? `<button data-beq="${b.id}">換</button>` : `<button data-bbuy="${b.id}" ${save.money < px(bk, b.price) ? 'disabled' : ''}>${pxHtml(bk, b.price)}</button>`;
+    return `<tr><td><b>${b.n}</b><br><small>${b.desc}</small>${pxCd(b.id === 'wide' ? 'bowl-wide' : b.id)}</td><td>${rel(b.bonus, 0, true, '$')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+  $('shopList').querySelectorAll('button[data-bbuy],button[data-beq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-bbuy') || b.getAttribute('data-beq')!; const w = BOWLS.find(x => x.id === id)!;
-    if (b.hasAttribute('data-bbuy')) { if (save.money < w.price) return; save.money -= w.price; save.shop.owned.push(id); track('buy', { item: id, price: w.price }); if (ac) SFX.jingle(); }
+    if (b.hasAttribute('data-bbuy')) { const pr = await payFor(id === 'wide' ? 'bowl-wide' : id, w.price, w.n); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
     if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; }
     save.shop.equipped.bowl = id; persist(); applyBowl(); renderShop();
   });
-  $('shopList').querySelectorAll('button[data-ubuy],button[data-ueq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+  $('shopList').querySelectorAll('button[data-ubuy],button[data-ueq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-ubuy') || b.getAttribute('data-ueq')!; const u = UMBS.find(x => x.id === id)!;
-    if (b.hasAttribute('data-ubuy')) { if (save.money < u.price) return; save.money -= u.price; save.shop.owned.push(id); track('buy', { item: id, price: u.price }); if (ac) SFX.jingle(); }
+    if (b.hasAttribute('data-ubuy')) { const pr = await payFor(id, u.price, u.n); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
     save.shop.equipped.umb = id; persist(); applyUmb(); renderShop();
   });
-  $('shopList').querySelectorAll('button[data-buy],button[data-eq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+  $('shopList').querySelectorAll('button[data-buy],button[data-eq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-buy') || b.getAttribute('data-eq')!; const k = KNIVES.find(x => x.id === id)!;
-    if (b.hasAttribute('data-buy')) { if (save.money < k.price) return; save.money -= k.price; if (save.trial?.id === id) delete save.trial; else save.shop.owned.push(id); track('buy', { item: id, price: k.price }); if (ac) SFX.jingle(); }
+    if (b.hasAttribute('data-buy')) { const pr = await payFor(id, k.price, k.n); if (pr == null) return; save.money -= pr; if (save.trial?.id === id) delete save.trial; else save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
     save.shop.equipped.knife = id; persist(); applyKnife(); renderShop();
   });
   $('shopList').insertAdjacentHTML('beforeend', '<h4 class="shH4"><i class="ic ic-gear"></i> 其他器具（買了可以開關）</h4><table class="kt">' + GEAR.map(g => { const own = save.shop.owned.includes(g.id), on = gearOn(g.id);
-    return `<tr><td><b>${g.n}</b><br><small style="color:#9be37a">${g.good}</small><small style="color:#ff8a7a">${g.bad}</small></td><td>${own ? `<button data-gtog="${g.id}">${on ? '✅ 使用中' : '⬜ 沒用'}</button>` : `<button data-gbuy="${g.id}" ${save.money < g.price ? 'disabled' : ''}>$${g.price}</button>`}</td></tr>`; }).join('') + '</table>');
-  $('shopList').querySelectorAll('button[data-gbuy],button[data-gtog]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+    return `<tr><td><b>${g.n}</b><br><small style="color:#9be37a">${g.good}</small><small style="color:#ff8a7a">${g.bad}</small>${pxCd(g.id)}</td><td>${own ? `<button data-gtog="${g.id}">${on ? '✅ 使用中' : '⬜ 沒用'}</button>` : `<button data-gbuy="${g.id}" ${save.money < px(g.id, g.price) ? 'disabled' : ''}>${pxHtml(g.id, g.price)}</button>`}</td></tr>`; }).join('') + '</table>');
+  $('shopList').querySelectorAll('button[data-gbuy],button[data-gtog]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-gbuy') || b.getAttribute('data-gtog')!; const g = GEAR.find(x => x.id === id)!; save.gear = save.gear ?? {};
-    if (b.hasAttribute('data-gbuy')) { if (save.money < g.price) return; save.money -= g.price; save.shop.owned.push(id); save.gear[id] = true; track('buy', { item: id, price: g.price }); if (ac) SFX.jingle(); }
+    if (b.hasAttribute('data-gbuy')) { const pr = await payFor(id, g.price, g.n.replace(/^\S+\s/, '')); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); save.gear[id] = true; track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
     else save.gear[id] = !gearOn(id);
     persist(); renderShop(); drawRadio(); applyGloves();
   });
-  renderClothShop(); renderMedShop(); shopTabs();
+  renderClothShop(); renderMedShop(); renderItemShop(); shopTabs(); newDecor();
 }
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : 1); }
 const PRY_GRACE = 0.04;
@@ -1389,6 +1436,7 @@ const swipePhase = () => phase === 'twist' || phase === 'crab';
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (state !== 'play') return; audio().resume(); if (umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
+  if (moonAimOn) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (swipePhase()) { pry(e.timeStamp); if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) canvas.requestPointerLock(); return; }
   if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
   if (walking) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
@@ -1398,7 +1446,7 @@ canvas.addEventListener('pointerdown', e => {
 let lastMoveT = performance.now();
 window.addEventListener('pointermove', e => {
   const now = performance.now();
-  if (e.pointerType === 'mouse' && state === 'play') {
+  if (e.pointerType === 'mouse' && state === 'play' && !(moonAimOn && down)) {
     if (swipePhase()) { lastMoveT = now; return; }
     lastMoveT = now;
     if (document.pointerLockElement === canvas) { const k = 0.0022 * mix.sens; yaw = tYaw = clamp(tYaw - e.movementX * k * (mix.invX ? -1 : 1), -yl(), yl()); pitch = tPitch = clamp(tPitch - e.movementY * k * (mix.invY ? -1 : 1), P0, P1); camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld(); }
@@ -1406,13 +1454,13 @@ window.addEventListener('pointermove', e => {
   }
   if (!down || down.id !== e.pointerId) return;
   const dx = e.clientX - down.x, dy = e.clientY - down.y;
-  if (swipePhase()) return;
+  if (swipePhase() && !moonAimOn) return;
   if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; if (Math.abs(dx) > 8) down.drag = true; return; }
   if (!down.drag && Math.hypot(dx, dy) > 14) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
   if (down.drag) { const k = 0.006 * mix.sens; tYaw = clamp(down.yaw - dx * k * (mix.invX ? -1 : 1), -yl(), yl()); tPitch = clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), P0, P1); }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); void h; }
-const up = (e: PointerEvent) => { if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else if (phase === 'aim' && tapAim) { const lk = document.pointerLockElement === canvas; if (nearBowl(lk ? innerWidth / 2 : e.clientX, lk ? innerHeight / 2 : e.clientY)) toss(true); else hint.textContent = '點碗或碗附近就能丟進去'; } else release(); } else release(); down = null; } };
+const up = (e: PointerEvent) => { if (moonAimOn && down && down.id === e.pointerId) { const d = down; down = null; if (!d.drag) moonTapAt(e.clientX, e.clientY); return; } if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else if (phase === 'aim' && tapAim) { const lk = document.pointerLockElement === canvas; if (nearBowl(lk ? innerWidth / 2 : e.clientX, lk ? innerHeight / 2 : e.clientY)) toss(true); else hint.textContent = '點碗或碗附近就能丟進去'; } else release(); } else release(); down = null; } };
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
@@ -1519,6 +1567,105 @@ function renderLocs() { autoUnlock();
 }
 renderLocs();
 $('rLoc').onclick = () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; };
+const ITEMS = [{ id: 'moon', n: '把你媽的愛送上月球', price: 5000, good: '選一位鄰居，發射飛彈鐵拳把對方送上月球，這一工都不會再出現', bad: '每一工最多用 2 個，下一工對方會回來' }];
+const MOON_MAX = 2;
+let moonUsed = 0, moonAimOn = false, punchT = 0;
+// ---------- 道具：把你媽的愛送上月球 ----------
+const MOON_SVG = `<svg viewBox="0 0 64 40" width="72" height="45" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M2 14h8M0 20h12M2 26h8"/><path d="M14 13l6 3v8l-6 3z"/><path d="M20 14h18v12H20z"/><path d="M24 14l-3-6h6l3 6M24 26l-3 6h6l3-6"/><path d="M38 12h12a6 6 0 0 1 6 6v4a6 6 0 0 1-6 6H38z"/><path d="M44 12v6M50 12v6M44 22h10"/><path d="M40 28v-4h4"/><path d="M58 8l4-4M60 20h4M58 32l4 4"/></svg>`;
+const ALL_NPCS = npcs.slice();
+const NPC_HOME = ALL_NPCS.map(n => ({ p: n.g.position.clone(), r: n.g.rotation.clone() }));
+type MoonFx = (dt: number) => boolean;
+const moonFx: MoonFx[] = [];
+function moonReset() {
+  moonFx.length = 0; moonUsed = 0; moonAimEnd();
+  npcs.length = 0; ALL_NPCS.forEach((n, i) => { npcs.push(n); n.g.position.copy(NPC_HOME[i].p); n.g.rotation.copy(NPC_HOME[i].r); n.g.scale.setScalar(1); if (!n.g.parent) scene.add(n.g); n.g.visible = true; delete n.g.userData.moon; });
+}
+function moonGone(n: Npc) {
+  const i = npcs.indexOf(n); if (i >= 0) npcs.splice(i, 1);
+  n.windup = 0; n.warned = false; n.throwCd = 999; n.distract = 0; n.look = 0; n.bubT = 0; n.grudge = 0; n.bubble.style.opacity = '0'; n.bubble.style.display = 'none'; n.tag.style.display = 'none'; n.g.userData.moon = 1;
+  if (stealNpc === n) stopSteal(); if (hint.textContent?.includes(n.name)) hint.textContent = '';
+}
+const moonAimEl = document.createElement('div'); moonAimEl.id = 'moonAim';
+moonAimEl.innerHTML = '<div class="maTip">選一個要送上月球的人</div><button class="maX" aria-label="取消">✕</button>';
+document.body.appendChild(moonAimEl);
+moonAimEl.querySelectorAll('.maX').forEach(b => b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); }));
+moonAimEl.querySelector('.maX')!.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonAimEnd(); });
+function moonStart() {
+  if (state !== 'play' || tut || !(save.meds.moon > 0)) return;
+  if (moonUsed >= MOON_MAX) { toast(`這一工已經送 ${MOON_MAX} 位上月球了，下一工再用`, '#ffb08a'); return; }
+  if (!npcs.length) { toast('旁邊已經沒有人了', '#ffb08a'); return; }
+  $('medList').classList.remove('show'); if (document.pointerLockElement) document.exitPointerLock();
+  moonAimOn = true; moonAimEl.classList.add('on'); moonAimEl.querySelectorAll('.maT').forEach(b => b.remove());
+  for (const n of npcs) { const b = document.createElement('button'); b.className = 'maT'; b.innerHTML = `<svg viewBox="0 0 40 40" width="56" height="56" fill="none" stroke="currentColor" stroke-width="3"><circle cx="20" cy="20" r="13"/><circle cx="20" cy="20" r="3"/><path d="M20 1v10M20 29v10M1 20h10M29 20h10"/></svg><span>${esc(n.name)}</span>`; (b as any)._n = n;
+    b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonFire(n); }); moonAimEl.appendChild(b); }
+  moonAimPos();
+}
+function moonTapAt(x: number, y: number) { let best: Npc | null = null, bd = 70; moonAimEl.querySelectorAll<HTMLElement>('.maT').forEach(b => { const r = b.getBoundingClientRect(); const d = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y); if (d < bd) { bd = d; best = (b as any)._n; } }); if (best) moonFire(best); }
+function moonAimEnd() { moonAimOn = false; moonAimEl.classList.remove('on'); }
+function moonAimPos() {
+  const cam = viewCam(); moonAimEl.querySelectorAll<HTMLElement>('.maT').forEach(b => { const n = (b as any)._n as Npc; const p = worldOf(n.head).project(cam); if (p.z > 1) { p.x = -Math.sign(p.x || 1); p.y = -0.6; }
+    b.style.display = ''; b.style.left = `${clamp((p.x * .5 + .5) * innerWidth, 36, innerWidth - 36)}px`; b.style.top = `${clamp((-p.y * .5 + .5) * innerHeight, 90, innerHeight - 60)}px`; });
+}
+const starTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d')!; const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, '#fff'); g.addColorStop(0.25, '#fff6b0'); g.addColorStop(1, 'rgba(255,240,150,0)'); x.fillStyle = g; x.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r = i % 2 ? 9 : 32; x.lineTo(32 + Math.cos(a) * r, 32 + Math.sin(a) * r); } x.fill(); return new THREE.CanvasTexture(c); })();
+const smokeGeo = new THREE.SphereGeometry(0.05, 6, 5);
+function moonFire(n: Npc) {
+  if (!moonAimOn || !npcs.includes(n) || !(save.meds.moon > 0)) return;
+  moonAimEnd(); save.meds.moon--; moonUsed++; persist(); drawMeds(); track('item_use', { item: 'moonpunch' });
+  moonGone(n); punchT = 0.5; if (ac) { SFX.whoosh(); tone(220, 0.5, 0.15, 'sawtooth', 0.05, 900); }
+  toast(`把你媽的愛送上月球！目標：${n.name}`, '#ffd25a');
+  // 飛彈鐵拳
+  const mis = new THREE.Group();
+  mesh(new THREE.SphereGeometry(0.07, 10, 8), mat(0xe8b896), [0, 0, -0.08], mis).scale.set(1, 0.85, 1.1);
+  mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.22, 10), mat(0xc83a2a, { metalness: 0.4 }), [0, 0, 0.08], mis).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 4; i++) { const f = mesh(new THREE.BoxGeometry(0.008, 0.09, 0.07), mat(0xeeeeee), [0, 0, 0.17], mis); f.rotation.z = i * Math.PI / 2; f.position.x = Math.cos(i * Math.PI / 2 + Math.PI / 2) * 0.05; f.position.y = Math.sin(i * Math.PI / 2 + Math.PI / 2) * 0.05; }
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.22, 8), new THREE.MeshBasicMaterial({ color: 0xffa020, transparent: true, opacity: 0.9, fog: false })); flame.rotation.x = -Math.PI / 2; flame.position.z = 0.3; mis.add(flame);
+  scene.add(mis);
+  const p0 = camera.localToWorld(new THREE.Vector3(0.18, -0.18, -0.45)); mis.position.copy(p0);
+  let t = 0, smokeT = 0; const dur = 0.7;
+  moonFx.push(dt => {
+    t += dt; const k = Math.min(1, t / dur); const p1 = worldOf(n.head);
+    const pos = new THREE.Vector3().lerpVectors(p0, p1, k); pos.y += Math.sin(k * Math.PI) * 0.25; mis.lookAt(pos.clone().multiplyScalar(2).sub(mis.position)); mis.position.copy(pos);
+    flame.scale.set(1, 0.7 + Math.random() * 0.6, 1);
+    if ((smokeT -= dt) <= 0) { smokeT = 0.04; const s = new THREE.Mesh(smokeGeo, new THREE.MeshBasicMaterial({ color: 0x9a9a9a, transparent: true, opacity: 0.7 })); s.position.copy(flame.getWorldPosition(new THREE.Vector3())); scene.add(s); let st = 0; moonFx.push(d => { st += d; s.scale.setScalar(1 + st * 2.2); (s.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - st / 0.9); s.position.y += d * 0.3; if (st >= 0.9) { scene.remove(s); return false; } return true; }); }
+    if (k < 1) return true;
+    scene.remove(mis); moonHit(n); return false;
+  });
+}
+function moonHit(n: Npc) {
+  shake = 0.6; if (ac) { noise(0.6, 900, 0.7, 80); tone(70, 0.5, 0.4, 'sine', 0, 35); tone(500, 0.12, 0.15, 'square', 0, 120); }
+  const hp0 = worldOf(n.head);
+  const ex = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffd040, transparent: true, opacity: 1, fog: false })); ex.position.copy(hp0); scene.add(ex);
+  const ex2 = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff5020, transparent: true, opacity: 0.9, fog: false })); ex2.position.copy(hp0); scene.add(ex2);
+  let et = 0; moonFx.push(dt => { et += dt; ex.scale.setScalar(1 + et * 9); ex2.scale.setScalar(1 + et * 6); (ex.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - et / 0.45); (ex2.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.9 - et / 0.4); if (et >= 0.45) { scene.remove(ex, ex2); return false; } return true; });
+  const away = n.g.position.clone().sub(camera.position).setY(0).normalize();
+  const vel = away.multiplyScalar(9).setY(2.2); const spin = new THREE.Vector3(rnd(6, 10), rnd(4, 8), rnd(5, 9));
+  const star = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, transparent: true, depthTest: false, fog: false, opacity: 0 })); star.scale.setScalar(0.01); scene.add(star);
+  let lt = 0; const FLY = 2.2, END = 3.2; const pitch0 = tPitch, follow = false;
+  moonFx.push(dt => {
+    lt += dt;
+    if (follow && state === 'play') { const d = n.g.position.clone().sub(camera.position); const want = lt < END - 0.4 ? Math.min(0.12, Math.atan2(d.y, Math.hypot(d.x, d.z))) : pitch0; tPitch += (want - tPitch) * Math.min(1, dt * 4); }
+    if (lt < FLY) { vel.y += dt * 3.5; n.g.position.addScaledVector(vel, dt); n.g.rotation.x += spin.x * dt; n.g.rotation.y += spin.y * dt; n.g.rotation.z += spin.z * dt; n.g.scale.setScalar(Math.max(0.05, 1 - lt / FLY * 0.95)); star.position.copy(n.g.position).y += 0.5; }
+    else if (n.g.parent) scene.remove(n.g);
+    const sk = lt < FLY - 0.4 ? 0 : lt < FLY ? (lt - FLY + 0.4) / 0.4 : Math.max(0, 1 - (lt - FLY) / (END - FLY));
+    (star.material as THREE.SpriteMaterial).opacity = sk; star.scale.setScalar((0.6 + 0.5 * Math.abs(Math.sin(lt * 18))) * 1.4 * Math.max(sk, 0.01)); star.material.rotation = lt * 3;
+    if (lt === lt && lt > FLY && lt - dt <= FLY && ac) { tone(1800, 0.08, 0.1, 'triangle'); tone(2600, 0.12, 0.08, 'triangle', 0.08); }
+    if (lt >= END) { scene.remove(star); if (follow && state === 'play') tPitch = pitch0; return false; } return true;
+  });
+}
+function moonTick(dt: number) {
+  for (let i = moonFx.length - 1; i >= 0; i--) if (!moonFx[i](dt)) moonFx.splice(i, 1);
+  if (punchT > 0) { punchT = Math.max(0, punchT - dt); const k = Math.sin((1 - punchT / 0.5) * Math.PI); handR.position.z -= k * 0.35; handR.position.y += k * 0.08; handR.position.x -= k * 0.06; }
+  if (moonAimOn) { if (state !== 'play') moonAimEnd(); else moonAimPos(); }
+}
+function renderItemShop() {
+  const it = ITEMS[0]; const own = save.meds[it.id] ?? 0;
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 道具</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，沒用完的會留著。</p><div class="itemCard"><div class="itemIc">${MOON_SVG}</div><div class="itemTx"><b>${it.n}</b><small style="color:#9be37a">${it.good}</small><small style="color:#ff8a7a">${it.bad}</small><small>持有 ${own}</small>${pxCd('item-' + it.id)}</div><button data-ibuy="${it.id}" ${save.money < px('item-' + it.id, it.price) ? 'disabled' : ''}>${pxHtml('item-' + it.id, it.price)}</button></div>`);
+  $('shopList').querySelectorAll('button[data-ibuy]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
+    const i = ITEMS.find(x => x.id === b.getAttribute('data-ibuy'))!; const pr = await payFor('item-' + i.id, i.price, i.n); if (pr == null) return;
+    save.money -= pr; save.meds[i.id] = (save.meds[i.id] ?? 0) + 1; persist(); track('buy', { item: 'item-' + i.id, price: pr }); if (ac) SFX.jingle(); renderShop(); drawMeds();
+  });
+}
+(window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };
 const go = (len: number) => { shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 $('start').onclick = () => { shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
@@ -1530,8 +1677,8 @@ $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visib
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
 setTimeout(checkReturn, 600);
 $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖鑑、生涯紀錄、設定都會清掉，無法復原。')) { LS.removeItem('oyster-sim'); LS.removeItem('oyster-mix'); location.reload(); } };
-$('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); renderShop(); $('shop').classList.add('show'); };
-$('shopBtn2').onclick = () => { renderShop(); $('shop').classList.add('show'); };
+$('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); openShopPx(); renderShop(); $('shop').classList.add('show'); };
+$('shopBtn2').onclick = () => { openShopPx(); renderShop(); $('shop').classList.add('show'); };
 $('shopClose').onclick = () => { $('shop').classList.remove('show'); if (sleeveTry) { sleeveTry = null; applySleeve(); } };
 applyKnife(); applyUmb(); applySeat(save.seat ?? 'door');
 $('pidLong').textContent = statsId;
@@ -1701,6 +1848,7 @@ function frame() {
   if (phase === 'aim' || ch) { handL.position.y += 0.05 + ch * 0.06; handL.position.z -= ch * 0.05; handL.rotation.x = 0.4 - ch * 0.5; } else handL.rotation.x = 0.4;
   if (flinch > 0) { handL.position.y -= flinch * 0.1; handL.rotation.z = 0.3 + flinch * 0.8; } else handL.rotation.z = 0.3;
   if (!swipePhase()) { yaw = tYaw; pitch = tPitch; }
+  moonTick(rdt);
   shake = Math.max(0, shake - rdt);
   if (walking) walkStep(rdt);
   camera.rotation.set(pitch - pe * 0.08, yaw + (walking ? 0 : seatYaw), 0);
@@ -1775,7 +1923,7 @@ if (SHOT) setTimeout(() => {
   if (SHOT === 'npcblood' || SHOT === 'npcaid') { if (SHOT === 'npcaid') mix.gore = false; const n = npcs[0]; look(Math.atan2(-(worldOf(n.head).x - camera.position.x), -(worldOf(n.head).z - camera.position.z)), -0.2); later(0.2, () => npcHurt(n)); }
   if (SHOT === 'grudge') { look(0.15, -0.25); [30, 65, 100].forEach((g, i) => { npcs[i].grudge = g; grudgeUI(npcs[i]); }); npcs[2].angry = 99; say(npcs[2], '看我連環殼！', 99); }
   if (SHOT === 'reflect') { const n = npcs[2]; look(0.6, -0.3); n.windup = 0.25; later(0.62, () => { umbT = umbLen = 0.9; umb.visible = true; }); }
-  if (SHOT === 'shop') { save.money = 600; save.shop.owned = ['basic', 'seam']; save.shop.equipped.knife = 'seam'; applyKnife(); renderShop(); $('shop').classList.add('show'); }
+  if (SHOT === 'shop') { save.money = 600; save.shop.owned = ['basic', 'seam']; save.shop.equipped.knife = 'seam'; applyKnife(); openShopPx(); renderShop(); $('shop').classList.add('show'); }
   if (SHOT === 'bowl') { save.shop.equipped.bowl = params.get('b') || 'steel'; applyBowl(); look(0.35, -0.75); }
   if (SHOT === 'seat') { applySeat(params.get('s') || 'corner'); goPick(); }
   if (SHOT === 'walk') { later(0.1, () => { standUp(); walkPos.set(-1.1, 1.55, -2.35); tYaw = yaw = 3.09; tPitch = pitch = -0.5; }); }
@@ -1919,7 +2067,7 @@ let medDrawT = 0;
 function tickMeds(dt: number) { let ch = false; for (const k in medT) { const was = medT[k] > 0; medT[k] = Math.max(0, medT[k] - dt); if (was && medT[k] <= 0) { ch = true; const m = MEDS.find(x => x.id === k); if (m) toast(`${m.emo}${m.n} 效果結束了`, '#cfc3ff'); } } medDrawT -= dt; if (ch || medDrawT <= 0) { medDrawT = 1; drawMeds(); } }
 function drawMeds() {
   const el = document.getElementById('medAct'); if (el) el.innerHTML = medOn().map(m => `<span>${m.emo}${Math.ceil(medT[m.id])}s</span>`).join('') + (saltNext ? '<span>🧂下一粒</span>' : '');
-  const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0); const b = document.getElementById('medBtn'); if (b) { b.innerHTML = (n ? `<i class="ic ic-pill"></i> 藥品 ×${n}` : '<i class="ic ic-pill"></i> 藥品') + '<span class="key"> (M)</span>' + (n ? '' : '<small>去雜貨店買藥</small>'); b.classList.toggle('empty', !n); }
+  const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0) + ITEMS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0); const b = document.getElementById('medBtn'); if (b) { b.innerHTML = (n ? `<i class="ic ic-pill"></i> 藥品/道具 ×${n}` : '<i class="ic ic-pill"></i> 藥品/道具') + '<span class="key"> (M)</span>' + (n ? '' : '<small>去雜貨店買</small>'); b.classList.toggle('empty', !n); }
   const L = document.getElementById('medList'); if (L && L.classList.contains('show')) renderMedList();
 }
 function useMed(id: string) {
@@ -1931,8 +2079,11 @@ function useMed(id: string) {
 }
 function renderMedList() {
   const L = $('medList'); const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0);
-  L.innerHTML = own.length ? own.map((m, i) => `<button data-use="${m.id}"><span class="key">${i + 1}. </span>${m.emo} ${m.n} ×${save.meds[m.id]}<small>${m.good}／${m.bad}${m.dur ? `・${m.dur} 秒` : "・立即"}${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「💊 藥品」買吧</p>';
-  L.querySelectorAll('button[data-use]').forEach(b => b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); useMed(b.getAttribute('data-use')!); renderMedList(); }));
+  const ownI = ITEMS.filter(m => (save.meds[m.id] ?? 0) > 0);
+  L.innerHTML = '<div class="mlH"><b>藥品</b><button class="mlX" aria-label="關閉">✕</button></div>' + (own.length ? own.map((m, i) => `<button data-use="${m.id}"><span class="mlN"><span class="nm"><span class="key">${i + 1}. </span>${m.emo} ${m.n}</span><b class="ct">×${save.meds[m.id]}</b></span><small>${m.good}／${m.bad}${m.dur ? `・${m.dur} 秒` : "・立即"}${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「藥品」買吧</p>') + '<div class="mlH"><b>道具</b></div>' + (ownI.length ? ownI.map(m => `<button data-item="${m.id}"><span class="mlN"><i class="ic ic-moon"></i><span class="nm">${m.n}</span><b class="ct">×${save.meds[m.id]}</b></span><small>${m.good}（這一工剩 ${Math.max(0, MOON_MAX - moonUsed)} 次）</small></button>`).join('') : '<p>身上沒有道具，去雜貨店的「道具」買吧</p>');
+  L.querySelector('.mlX')?.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); L.classList.remove('show'); });
+  L.querySelectorAll('button[data-item]').forEach(b => b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonStart(); }));
+  L.querySelectorAll('button[data-use]').forEach(b => b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); useMed(b.getAttribute('data-use')!); renderMedList(); }));
 }
 {
   const b = $('medBtn'), L = $('medList');
@@ -1942,10 +2093,10 @@ function renderMedList() {
   drawMeds();
 }
 function renderMedShop() {
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-pill"></i> 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「💊 藥品」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b></td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur ? `${m.dur}s` : "立即"}</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < m.price ? 'disabled' : ''}>$${m.price}</button></td></tr>`).join('') + '</table>');
-  $('shopList').querySelectorAll('button[data-mbuy]').forEach(b => (b as HTMLButtonElement).onclick = () => {
-    const m = MEDS.find(x => x.id === b.getAttribute('data-mbuy'))!; if (save.money < m.price) return;
-    save.money -= m.price; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; persist(); track('buy', { item: 'med-' + m.id, price: m.price }); if (ac) SFX.jingle(); renderShop(); drawMeds();
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-pill"></i> 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b>${pxCd('med-' + m.id)}</td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur ? `${m.dur}s` : "立即"}</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < px('med-' + m.id, m.price) ? 'disabled' : ''}>${pxHtml('med-' + m.id, m.price)}</button></td></tr>`).join('') + '</table>');
+  $('shopList').querySelectorAll('button[data-mbuy]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
+    const m = MEDS.find(x => x.id === b.getAttribute('data-mbuy'))!; const pr = await payFor('med-' + m.id, m.price, m.n); if (pr == null) return;
+    save.money -= pr; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; persist(); track('buy', { item: 'med-' + m.id, price: pr }); if (ac) SFX.jingle(); renderShop(); drawMeds();
   });
 }
 // ---------- 裝備（頭／手／衣服／褲子／鞋子）----------
@@ -2151,18 +2302,18 @@ function renderEquip() {
   $('eqBody').querySelectorAll<HTMLElement>('.eqSet[data-setid]').forEach(el => el.onclick = () => { const st = SETS.find(x => x.id === el.dataset.setid); if (st) askSet(st); });
   $('eqBody').querySelectorAll('button[data-eqset]').forEach(b => (b as HTMLButtonElement).onclick = () => { const e = EQUIP.find(x => x.id === b.getAttribute('data-eqset'))!; setEquip(e.slot, e.id); persist(); applySleeve(); applyOutfit3(); renderEquip(); });
   ($('eqShare') as HTMLButtonElement).onclick = shareOutfit;
-  ($('eqShop') as HTMLButtonElement).onclick = () => { $('equip').classList.remove('show'); eqFromRes = false; if (eqPick) clothTab = eqPick; renderShop(); const gs = Array.from(document.querySelectorAll('#shopList .stab')); const i = gs.findIndex(g => g.querySelector('.slGrid')); if (i >= 0) { shopTab = i; renderShop(); } $('shop').classList.add('show'); $('shop').scrollTop = 0; };
+  ($('eqShop') as HTMLButtonElement).onclick = () => { openShopPx(); $('equip').classList.remove('show'); eqFromRes = false; if (eqPick) clothTab = eqPick; renderShop(); const gs = Array.from(document.querySelectorAll('#shopList .stab')); const i = gs.findIndex(g => g.querySelector('.slGrid')); if (i >= 0) { shopTab = i; renderShop(); } $('shop').classList.add('show'); $('shop').scrollTop = 0; };
 }
 let clothTab: Slot = 'hand';
 function renderClothShop() {
   if (sleeveTry) { sleeveTry = null; applySleeve(); }
   const items = EQUIP.filter(e => e.slot === clothTab && e.price > 0).sort((a, b) => a.price - b.price);
   $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-hand"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。</p><div class="clTabs">${SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === clothTab ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
-    return `<div class="slCard${cur ? ' on' : ''}">${eqSvg(s)}<b>${s.n}</b><small>$${s.price}・${s.eff}</small><div class="slBtns">${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${save.money < s.price ? 'disabled' : ''}>買 $${s.price}</button>`}</div></div>`; }).join('') + `</div>`);
+    return `<div class="slCard${cur ? ' on' : ''}">${eqSvg(s)}<b>${s.n}</b><small>${s.eff}</small>${pxCd(s.id)}<div class="slBtns">${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${save.money < px(s.id, s.price) ? 'disabled' : ''}>${pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
   $('shopList').querySelectorAll('button[data-ctab]').forEach(b => (b as HTMLButtonElement).onclick = () => { clothTab = b.getAttribute('data-ctab') as Slot; renderShop(); });
-  $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+  $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = EQUIP.find(x => x.id === id)!;
-    if (b.hasAttribute('data-slbuy')) { if (save.money < s.price) return; save.money -= s.price; save.shop.owned.push(id); track('buy', { item: id, price: s.price }); if (ac) SFX.jingle(); }
+    if (b.hasAttribute('data-slbuy')) { const pr = await payFor(id, s.price, s.n); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
     setEquip(s.slot, id); sleeveTry = null; persist(); applySleeve(); applyOutfit3(); renderShop();
   });
 }
@@ -2208,7 +2359,7 @@ function giftNew() { return giftList.filter(g => !giftSeen.includes(String(g.id)
 function giftAlert() {
   const n = giftNew(), h = document.getElementById('giftHud');
   if (h) h.style.display = state === 'play' && n.length ? '' : 'none';
-  if (!n.length || state === 'play' || tut || document.getElementById('giftMsg') || $('gift').classList.contains('show')) return;
+  if (!n.length || state === 'play' || tut || document.getElementById('giftMsg') || document.getElementById('newMsg') || $('gift').classList.contains('show')) return;
   for (const g of n) giftSeen.push(String(g.id));
   while (giftSeen.length > 200) giftSeen.shift();
   try { LS.setItem('giftSeen', JSON.stringify(giftSeen)); } catch { /* 忽略 */ }
@@ -2389,7 +2540,7 @@ function shopTabs() {
   groups.forEach((g, i) => { g.style.display = i === shopTab ? '' : 'none'; g.querySelector('h3')!.style.display = 'none'; });
   bar.querySelectorAll('button').forEach(b => (b as HTMLButtonElement).onclick = () => { shopTab = +b.getAttribute('data-tab')!; shopTabs2(groups, bar!); });
 }
-function shopTabs2(groups: HTMLElement[], bar: HTMLElement) { groups.forEach((g, i) => g.style.display = i === shopTab ? '' : 'none'); bar.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === shopTab)); $('shop').scrollTop = 0; }
+function shopTabs2(groups: HTMLElement[], bar: HTMLElement) { groups.forEach((g, i) => g.style.display = i === shopTab ? '' : 'none'); bar.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === shopTab)); $('shop').scrollTop = 0; newDecor(); }
 
 // 手機返回鍵：關掉最上層的視窗；上工中不離開；主畫面連按兩次才離開（同核心回收）
 function cleanName(v: string) { return [...v.replace(/[\u0000-\u001f\u007f<>&"'`]/g, '').trim()].slice(0, 8).join('').trim() || '剝蚵人'; }
@@ -2555,3 +2706,60 @@ new MutationObserver(ms => { for (const m of ms) { const el = m.target as HTMLEl
   if (el.classList.contains('panel') && el.classList.contains('show') && !(m.oldValue || '').includes('show'))
     requestAnimationFrame(() => { void el.offsetHeight; el.style.opacity = '0.999'; requestAnimationFrame(() => { el.style.opacity = ''; }); }); } })
   .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+
+// ---------- 新商品上架提示 ----------
+// 商品 key：類別-id。SHOP_NEW 接後台「標為新品」的 newIds（接受 key 或 id）；SHOP_RECENT 是舊玩家第一次也要提示的近期新品
+const SHOP_NEW = { has: (k: string) => shopNewIds.includes(k) || shopNewIds.includes(k.split('-').slice(1).join('-')) };
+const SHOP_RECENT = ['item-moon'];
+const NEW_CAT: Record<string, string> = { knife: '刀具', umb: '雨傘', bowl: '器具', gear: '器具', cloth: '服飾', med: '藥品', item: '道具' };
+const NEW_ATTR: [string, string][] = [['buy', 'knife'], ['eq', 'knife'], ['ubuy', 'umb'], ['ueq', 'umb'], ['bbuy', 'bowl'], ['beq', 'bowl'], ['gbuy', 'gear'], ['gtog', 'gear'], ['slbuy', 'cloth'], ['sleq', 'cloth'], ['mbuy', 'med'], ['ibuy', 'item']];
+const shopKeys = () => [...KNIVES.filter(k => k.price > 0).map(k => 'knife-' + k.id), ...UMBS.filter(u => u.price > 0).map(u => 'umb-' + u.id), ...BOWLS.filter(b => b.price > 0).map(b => 'bowl-' + b.id), ...GEAR.map(g => 'gear-' + g.id), ...EQUIP.filter(e => e.price > 0).map(e => 'cloth-' + e.id), ...MEDS.map(m => 'med-' + m.id), ...ITEMS.map(i => 'item-' + i.id)];
+const shopName = (k: string) => { const [c, ...r] = k.split('-'); const id = r.join('-'); const L: any[] = c === 'knife' ? KNIVES : c === 'umb' ? UMBS : c === 'bowl' ? BOWLS : c === 'gear' ? GEAR : c === 'cloth' ? EQUIP : c === 'med' ? MEDS : ITEMS; return L.find(x => x.id === id)?.n ?? id; };
+let shopKnown: Set<string>, shopAnn: Set<string>;
+{ let raw: any = null; try { raw = JSON.parse(LS.getItem('shopKnown') ?? 'null'); } catch { }
+  if (Array.isArray(raw)) shopKnown = new Set(raw);
+  else { shopKnown = new Set(shopKeys().filter(k => !(save.days > 0 && SHOP_RECENT.includes(k)))); try { LS.setItem('shopKnown', JSON.stringify([...shopKnown])); } catch { } }
+  let a: any = null; try { a = JSON.parse(LS.getItem('shopAnn') ?? 'null'); } catch { } shopAnn = new Set(Array.isArray(a) ? a : []); }
+const newNow = () => shopKeys().filter(k => !shopKnown.has(k) || (SHOP_NEW.has(k) && !shopAnn.has('seen:' + k)));
+const saveNew = () => { try { LS.setItem('shopKnown', JSON.stringify([...shopKnown])); LS.setItem('shopAnn', JSON.stringify([...shopAnn])); } catch { } };
+const markSeen = (k: string) => { shopKnown.add(k); shopAnn.add('seen:' + k); };
+let newSnap: string[] = [];
+function newDecor() {
+  const shop = $('shop'); if (!shop.classList.contains('show')) newSnap = newNow();
+  const groups = Array.from(document.querySelectorAll<HTMLElement>('#shopList .stab'));
+  let changed = false;
+  groups.forEach((g, i) => { for (const [at, c] of NEW_ATTR) g.querySelectorAll(`button[data-${at}]`).forEach(b => {
+    const k = c + '-' + b.getAttribute('data-' + at); if (!newSnap.includes(k)) return;
+    const card = b.closest('tr, .slCard, .itemCard'); const nm = card?.querySelector('b');
+    if (nm && !card!.querySelector('.newTag')) nm.insertAdjacentHTML('afterend', '<span class="newTag">新品</span>');
+    if (i === shopTab && !shopKnown.has(k) || i === shopTab && !shopAnn.has('seen:' + k)) { markSeen(k); changed = true; } }); });
+  if (changed) saveNew();
+  const left = newNow();
+  document.querySelectorAll<HTMLElement>('#shopTabs button').forEach(b => { const t = b.textContent ?? ''; b.classList.toggle('hasNew', left.some(k => t.includes(NEW_CAT[k.split('-')[0]]))); });
+  newDots();
+}
+function newDots() {
+  const has = newNow().length > 0;
+  for (const id of ['shopBtn', 'shopBtn2', 'oShop', 'eqShop']) { const b = document.getElementById(id); if (!b) continue; let d = b.querySelector('.newDot'); if (has && !d) b.insertAdjacentHTML('beforeend', '<span class="newDot">新</span>'); else if (!has && d) d.remove(); }
+}
+function openShopAt(k: string) {
+  ($('shopBtn2') as HTMLButtonElement).click();
+  const cat = NEW_CAT[k.split('-')[0]]; const i = Array.from(document.querySelectorAll('#shopTabs button')).findIndex(b => (b.textContent ?? '').includes(cat));
+  if (i >= 0) (document.querySelectorAll('#shopTabs button')[i] as HTMLButtonElement).click();
+}
+function newAnnounce() {
+  newDots();
+  const fresh = newNow().filter(k => !shopAnn.has(k)); if (!fresh.length) return;
+  if (state === 'play' || tut || !$('overlay').classList.contains('show') || document.getElementById('giftMsg') || document.getElementById('newMsg') || $('gift').classList.contains('show') || document.querySelector('.panel.show:not(#overlay)')) return;
+  const names = fresh.map(shopName).join('、');
+  fresh.forEach(k => shopAnn.add(k)); saveNew();
+  const day = todayKey(); if (LS.getItem('shopAnnDay') !== day) { try { LS.setItem('shopAnnDay', day); } catch { } Social.local(`雜貨店新上架：${names}`); }
+  const m = document.createElement('div'); m.id = 'newMsg'; m.className = 'giftMsg';
+  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-shop"></i> 雜貨店新上架</b><p class="nmTx">雜貨店新上架：${esc(names)}</p><div class="mbtns"><button class="gmNo">晚點再說</button><button class="gmYes">去看看</button></div></div>`;
+  const close = () => { m.remove(); setTimeout(giftAlert, 300); };
+  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
+  m.querySelector('.gmYes')!.addEventListener('click', () => { close(); openShopAt(fresh[0]); });
+  document.body.appendChild(m);
+}
+setInterval(newAnnounce, 1500); setTimeout(newAnnounce, 2500);
+(window as any).__newShop = { now: () => newNow(), reset: () => { LS.removeItem('shopKnown'); LS.removeItem('shopAnn'); LS.removeItem('shopAnnDay'); } };

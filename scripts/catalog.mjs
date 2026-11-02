@@ -32,6 +32,7 @@ export function buildCatalog(src, version = '') {
   ev(src, 'BOWLS').forEach(b => items.push({ id: b.id, key: b.id === 'wide' ? 'bowl-wide' : b.id, name: b.n, category: 'basin', price: b.price, limited: false }));
   ev(src, 'GEAR').forEach(g => items.push({ id: g.id, name: g.n.replace(/^\S+\s/, ''), category: 'tool', price: g.price, limited: false }));
   ev(src, 'MEDS').forEach(m => items.push({ id: 'med-' + m.id, name: m.n, emo: m.emo, category: 'med', price: m.price, limited: false }));
+  ev(src, 'ITEMS').forEach(m => items.push({ id: 'item-' + m.id, name: m.n, category: 'item', price: m.price, limited: false }));
   ev(src, 'EQUIP').forEach(e => items.push({ id: e.id, name: e.n, category: SLOT_CAT[e.slot] ?? 'equip', price: e.price, limited: false }));
   ev(src, 'LOCS', { DIFF_W }).forEach(l => items.push({ id: 'loc-' + l.id, loc: l.id, name: l.n, category: 'location', price: l.price, need: l.need, limited: false }));
   ev(src, 'SEATS').forEach(s => items.push({ id: s.id, name: s.n, category: 'seat', price: 0, limited: false }));
