@@ -2113,9 +2113,10 @@ function renderEquip() {
     `<div class="eqStage">${SVG_SHED}<div class="eqFigW">${figSvg()}</div><svg class="eqLines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${hits}${cards}</div>` +
     (eqPick ? `<div class="eqList"><div class="eqListT">換${pickName}<small>點一件就換上，換穿免費</small></div>${EQUIP.filter(e => e.slot === eqPick && eqOwned(e.id)).map(e => `<button data-eqset="${e.id}" class="${equipNow(e.slot).id === e.id ? 'on' : ''}">${eqSvg(e, 48)}<span><b>${e.n}</b><small>${e.eff}</small></span>${equipNow(e.slot).id === e.id ? '<em>穿著中</em>' : ''}</button>`).join('')}<p class="eqHint">想要更多款式，去服飾店看看。</p></div>` : '<p class="eqHint">點人身上的部位或旁邊的木牌來換裝。</p>') +
     `<div class="eqSecT">套裝收集</div><div class="eqSets">${SETS.map(s => { const done = sets.includes(s), have = s.need.filter(i => eqOwned(i)).length;
-      return `<div class="eqSet${done ? ' done' : ''}"><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqSvg(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}</div>`; }).join('')}</div>` +
+      const full = have === s.need.length; return `<div class="eqSet${done ? ' done' : ''}${full ? ' full' : ''}"${full ? ` data-setid="${s.id}" role="button"` : ''}><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqSvg(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}${full ? `<em class="eqSetGo"><i class="ic ${done ? 'ic-check' : 'ic-hand'}"></i> ${done ? '穿著中' : '一鍵換上'}</em>` : ''}</div>`; }).join('')}</div>` +
     `<div id="eqShareOut"></div><p class="eqHint">分享到 Discord 有機會拿神秘好禮</p><div class="eqDock"><button id="eqShare"><i class="ic ic-send"></i>分享穿搭</button><button id="eqShop"><i class="ic ic-shop"></i>去服飾店</button></div>`;
   $('eqBody').querySelectorAll('button[data-slot]').forEach(b => (b as HTMLButtonElement).onclick = () => { const s = b.getAttribute('data-slot') as Slot; eqPick = eqPick === s ? null : s; renderEquip(); if (eqPick) $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
+  $('eqBody').querySelectorAll<HTMLElement>('.eqSet[data-setid]').forEach(el => el.onclick = () => { const st = SETS.find(x => x.id === el.dataset.setid); if (st) askSet(st); });
   $('eqBody').querySelectorAll('button[data-eqset]').forEach(b => (b as HTMLButtonElement).onclick = () => { const e = EQUIP.find(x => x.id === b.getAttribute('data-eqset'))!; setEquip(e.slot, e.id); persist(); applySleeve(); applyOutfit3(); renderEquip(); });
   ($('eqShare') as HTMLButtonElement).onclick = shareOutfit;
   ($('eqShop') as HTMLButtonElement).onclick = () => { $('equip').classList.remove('show'); eqFromRes = false; if (eqPick) clothTab = eqPick; renderShop(); const gs = Array.from(document.querySelectorAll('#shopList .stab')); const i = gs.findIndex(g => g.querySelector('.slGrid')); if (i >= 0) { shopTab = i; renderShop(); } $('shop').classList.add('show'); $('shop').scrollTop = 0; };
@@ -2183,6 +2184,26 @@ function applyGift(g: Social.Gift) {
   persist(); renderDex();
 }
 function giftBadge() { const ob = document.getElementById('oGift'); if (ob) ob.style.display = giftList.length ? '' : 'none'; }
+function askSet(st: typeof SETS[number]) {
+  document.getElementById('giftMsg')?.remove();
+  const worn = wornIds(), on = st.need.every(i => worn.includes(i));
+  const m = document.createElement('div'); m.id = 'giftMsg'; m.className = 'giftMsg setAsk';
+  const items = st.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<li>${eqSvg(e, 32, false)}<span>${e.n}</span></li>`; }).join('');
+  m.innerHTML = on
+    ? `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-check"></i> 已經穿著這套了</b><p class="saEff">${st.n}：${st.eff}</p><div class="mbtns"><button class="gmNo"><i class="ic ic-check"></i> 確定</button></div></div>`
+    : `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-hand"></i> 要換上「${st.n}」嗎？</b><ul class="saList">${items}</ul><p class="saEff">套裝加成：${st.eff}</p><div class="mbtns"><button class="gmNo">取消</button><button class="gmYes"><i class="ic ic-check"></i> 換上</button></div></div>`;
+  const close = () => m.remove();
+  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
+  m.querySelector('.gmYes')?.addEventListener('click', () => {
+    for (const i of st.need) { const e = EQUIP.find(x => x.id === i); if (e && eqOwned(i)) setEquip(e.slot, i); }
+    persist(); applySleeve(); applyOutfit3(); renderEquip(); try { SFX.jingle(); } catch { /* 無音訊 */ }
+    m.querySelector('.gmBox')!.innerHTML = `<button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-check"></i> 已換上「${st.n}」</b><p class="saEff">套裝加成生效：${st.eff}</p><div class="mbtns"><button class="gmNo"><i class="ic ic-check"></i> 確定</button></div>`;
+    m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
+    setTimeout(close, 2200);
+  });
+  m.addEventListener('click', e => { if (e.target === m) close(); });
+  document.body.appendChild(m);
+}
 function giftMsg(ok: boolean, title: string, lines: string[]) {
   document.getElementById('giftMsg')?.remove();
   const esc2 = (v: string) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');

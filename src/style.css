@@ -625,3 +625,12 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .giftMsg .gmBox>b{padding-right:44px}
 .giftMsg .mbtns{margin-top:10px}
 .gfRow button.busy{opacity:.6}
+
+.eqSet.full{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.eqSet.full:active{background:#ffe9a8}
+.eqSetGo{position:absolute;right:6px;bottom:6px;font-style:normal;font-size:11px;font-weight:bold;background:#2a3a4a;color:#ffe080;padding:2px 7px;border:2px solid var(--ink)}
+.eqSet.full p{padding-right:76px}
+.setAsk .saList{list-style:none;padding:0;margin:8px 0;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.setAsk .saList li{display:flex;align-items:center;gap:6px;background:#fff8e8;border:2px solid #2a3a4a;padding:4px;font-size:13px}
+.setAsk .saEff{font-size:12px;margin:6px 0 0}
+.setAsk .mbtns{display:flex;gap:8px;justify-content:flex-end}
