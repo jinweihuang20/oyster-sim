@@ -540,3 +540,5 @@ html,body{overflow-x:hidden;max-width:100%}
 .slBtns{flex-wrap:wrap}.slBtns button{min-width:0!important;padding:4px 2px!important;flex:1 1 40%}.eqSlot{min-width:0!important;max-width:38%;padding:4px!important}.eqSlot b{white-space:normal}
 .clTabs{display:grid!important;grid-template-columns:repeat(5,1fr);gap:4px}.clTabs button{min-width:0!important;padding:6px 2px!important;font-size:13px!important;white-space:nowrap}
 .slGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:stretch}.slCard{min-width:0;overflow:hidden;height:auto}.slCard small{overflow-wrap:anywhere;word-break:break-word;flex:1}.slBtns{margin-top:auto}
+
+#btns #camBtn.tpOn,#btnsL #camBtn.tpOn{background-color:#b8862a}

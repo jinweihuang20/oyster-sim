@@ -27,6 +27,9 @@ scene.fog = new THREE.Fog(0x4a3a50, 10, 34);
 const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 50);
 camera.rotation.order = 'YXZ';
 scene.add(camera);
+// 第三人稱另用一台鏡頭，遊戲邏輯照舊用 camera
+const tpCam = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.05, 200); let tpOn = false;
+function viewCam() { return tpOn ? tpCam : camera; }
 const SEAT0 = new THREE.Vector3(0, 1.05, 2.0), SEAT = SEAT0.clone();
 camera.position.copy(SEAT);
 
@@ -942,16 +945,16 @@ function fillBasin(animate: boolean) {
   for (let i = 0; i < 8; i++) { const m = makeBasinOyster(wpick((newbie() ? [50, 50, 0, 0] : locW()).map(w => ({ w })))); const slot = basinSlot(i); m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2)); basinOy.push(m);
     if (animate) { const p0 = pileSpot(); fly(m, p0, slot, 0.4 + i * 0.05, 0.4, () => m.position.copy(slot)); } else { m.position.copy(slot); scene.add(m); } }
 }
-function hitsOyster(cx: number, cy: number) { camera.updateMatrixWorld(); ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), camera); return ray.intersectObject(oyster, true).length > 0; }
+function hitsOyster(cx: number, cy: number) { camera.updateMatrixWorld(); viewCam().updateMatrixWorld(); ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), viewCam()); return ray.intersectObject(oyster, true).length > 0; }
 function pickAt(cx: number, cy: number) {
   if (phase !== 'pick' || state !== 'play') return;
   camera.updateMatrixWorld();
-  ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), camera);
+  ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), viewCam());
   const hit = ray.intersectObjects(basinOy, true)[0];
   if (hit) { let o: THREE.Object3D = hit.object; while (!basinOy.includes(o as THREE.Mesh)) o = o.parent!; grab(o as THREE.Mesh); return; }
   // 點著家己的手／手骨（或附近）：揀螢幕上上近的蚵仔
   let best: THREE.Mesh | null = null, bd = Math.max(110, innerWidth * 0.12);
-  for (const m of basinOy) { const p = m.position.clone().project(camera); if (p.z > 1) continue; const d = Math.hypot((p.x + 1) / 2 * innerWidth - cx, (1 - p.y) / 2 * innerHeight - cy); if (d < bd) { bd = d; best = m; } }
+  for (const m of basinOy) { const p = m.position.clone().project(viewCam()); if (p.z > 1) continue; const d = Math.hypot((p.x + 1) / 2 * innerWidth - cx, (1 - p.y) / 2 * innerHeight - cy); if (d < bd) { bd = d; best = m; } }
   if (best) { grab(best); return; }
   if (ray.intersectObject(pileHit, false).length || ray.intersectObject(pile, false).length) { scoop(); return; }
   hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : '臉盆空了！點中間的蚵殼山撈一把';
@@ -1183,7 +1186,7 @@ function tickFx(dt: number) {
   if (bowlRing.visible) { const k = 1 + 0.12 * Math.sin(performance.now() / 120); bowlRing.position.set(BOWL.x, BOWL.y + 0.02, BOWL.z); bowlRing.scale.setScalar(BOWL_R * k); }
 }
 function nearBowl(x: number, y: number) {
-  const p = BOWL.clone().project(camera); if (p.z > 1) return false;
+  const p = BOWL.clone().project(viewCam()); if (p.z > 1) return false;
   const bx = (p.x + 1) / 2 * innerWidth, by = (1 - p.y) / 2 * innerHeight;
   return Math.hypot(bx - x, by - y) < Math.max(150, Math.min(innerWidth, innerHeight) * 0.28);
 }
@@ -1296,7 +1299,7 @@ function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.r
   return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">工作 ${save.days} 天・累積收入 $${save.money}・最佳 ${save.best} 顆<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美／俐落 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/被抓 ${L.caught}・丟中阿婆 ${L.shellHits}・被丟中 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
 function endDay() { inputGuard(); if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
-  if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
+  if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
   const all = [{ name: `你（${esc(myName())}）`, count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= 5, queen = all[0].me && !temp && worked, PAY = OYSTER_PRICE - (temp ? TEMP_CUT : 0);
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
@@ -1419,7 +1422,7 @@ btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
 // 手機：次要按鈕放左下一排（不收選單）
-if (matchMedia('(pointer:coarse)').matches) { const L = $('btnsL'); for (const id of ['radioBtn', 'medBtn', 'quitBtn', 'giveUp', 'standBtn']) L.appendChild($(id)); }
+if (matchMedia('(pointer:coarse)').matches) { const L = $('btnsL'); for (const id of ['radioBtn', 'medBtn', 'quitBtn', 'giveUp', 'standBtn', 'camBtn']) L.appendChild($(id)); }
 else $('btns').insertBefore($('radioBtn'), $('medBtn'));
 btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, () => rotKey = 0);
 // ----- 徛起來行路、換位 -----
@@ -1430,7 +1433,7 @@ function standUp() {
   if (['seam', 'twist', 'crab', 'aim', 'empty'].includes(phase)) { abandoned++; const sh = new THREE.Mesh(shellGeo, shellTopMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.6, () => scene.remove(sh)); nag(NAG_STAND); if (!seatNow().nag || Math.random() > seatNow().nag) { const n = pick(npcs); n.look = 2.5; say(n, pick(NAG_STAND), 3); } }
   oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
   walking = true; handRig.visible = false; walkPos.copy(SEAT).setY(1.55); const out = seatGround(seatNow()).setLength(0.45); walkPos.add(out);
-  tYaw = yaw = yaw + seatYaw; tPitch = pitch = -0.25; $('diff').textContent = ''; on('standBtn', false); on('joy', true); on('stealBtn', false);
+  tYaw = yaw = yaw + seatYaw; tPitch = pitch = -0.25; $('diff').textContent = ''; on('standBtn', false); on('camBtn', false); on('joy', true); on('stealBtn', false);
   hint.textContent = 'WASD／搖桿行路，走去空的藍色板凳邊仔，按 E／「坐落」換位';
 }
 function sitDown(id: string) {
@@ -1528,7 +1531,7 @@ function npcShuck(n: Npc, dt: number, t: number) {
 
 // ---------- 主迴圈 ----------
 let baseFov = 70, narrow = false;
-function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); tpCam.aspect = camera.aspect; tpCam.updateProjectionMatrix();
   narrow = camera.aspect < 0.8; baseFov = narrow ? 82 : 70; handRig.position.set(0, narrow ? -0.02 : 0, 0); handRig.scale.set(narrow ? 0.42 : 0.7, narrow ? 0.6 : 0.7, 0.7); }
 addEventListener('resize', resize); resize();
 const clock = new THREE.Clock(); const v = new THREE.Vector3();
@@ -1540,7 +1543,7 @@ function frame() {
   if (shedAnim.length) { const t = performance.now() / 1000; for (const f of shedAnim) f(t); }
   if (isPaused()) {
     clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); $('pauseTag').classList.add('on'); }
-    renderer.render(scene, camera); requestAnimationFrame(frame); return;
+    renderer.render(scene, viewCam()); requestAnimationFrame(frame); return;
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
   const rdt = Math.min(clock.getDelta(), 0.05);
@@ -1577,7 +1580,7 @@ function frame() {
     if (phase === 'empty') { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
-    on('standBtn', !walking); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
+    on('standBtn', !walking); on('camBtn', !walking); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     const tgt = walking ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
     if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！按住 E／「偷」偷她的肉` : `${tgt.name}在看，不要偷…`;
     if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
@@ -1645,7 +1648,7 @@ function frame() {
   camera.position.copy(walking ? walkPos : SEAT); camera.updateMatrixWorld(); camTick(dt); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
   lamp.intensity = 26 + Math.sin(t * 1.3) * 1.0;
-  renderer.render(scene, camera);
+  renderer.render(scene, viewCam());
   requestAnimationFrame(frame);
 }
 // ---------- 新手教學 ----------
@@ -1717,7 +1720,7 @@ if (SHOT) setTimeout(() => {
   if (SHOT === 'seat') { applySeat(params.get('s') || 'corner'); goPick(); }
   if (SHOT === 'walk') { later(0.1, () => { standUp(); walkPos.set(-1.1, 1.55, -2.35); tYaw = yaw = 3.09; tPitch = pitch = -0.5; }); }
   if (SHOT === 'dex') { renderDex(); $('dex').classList.add('show'); }
-  if (SHOT === 'sleeves') { save.money = 20000; const sid = params.get('s') || 'sl_dragon'; for (const id of ['sl_flower', sid, 'hd_crown', 'bd_vest', 'ft_gold']) save.shop.owned.push(id); setEquip('hand', sid); if (params.get('set')) { setEquip('head', 'hd_crown'); setEquip('body', 'bd_vest'); setEquip('feet', 'ft_gold'); } applySleeve(); if (params.get('p') === 'shop') { renderShop(); $('shop').classList.add('show'); } if (params.get('p') === 'eq') { eqPick = 'hand'; renderEquip(); $('equip').classList.add('show'); } if (params.get('tpv')) { for (const id of ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots']) { save.shop.owned.push(id); setEquip(EQUIP.find(e => e.id === id)!.slot, id); } setEquip('hand', 'sl_89'); applySleeve(); setTpv(true); if (params.get('tpv') === 'cheer') later(0.5, () => react3('cheer')); }
+  if (SHOT === 'sleeves') { save.money = 20000; const sid = params.get('s') || 'sl_dragon'; for (const id of ['sl_flower', sid, 'hd_crown', 'bd_vest', 'ft_gold']) save.shop.owned.push(id); setEquip('hand', sid); if (params.get('set')) { setEquip('head', 'hd_crown'); setEquip('body', 'bd_vest'); setEquip('feet', 'ft_gold'); } applySleeve(); { const of = params.get('outfit'); if (of) { for (const id of of.split(',')) { const e = EQUIP.find(q => q.id === id); if (e) { save.shop.owned.push(id); setEquip(e.slot, id); } } applySleeve(); } } if (params.get('p') === 'shop') { renderShop(); $('shop').classList.add('show'); } if (params.get('p') === 'eq') { eqPick = 'hand'; renderEquip(); $('equip').classList.add('show'); } if (params.get('tpv')) { for (const id of ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots']) { save.shop.owned.push(id); setEquip(EQUIP.find(e => e.id === id)!.slot, id); } setEquip('hand', 'sl_89'); applySleeve(); setTpv(true); if (params.get('tpv') === 'cheer') later(0.5, () => react3('cheer')); }
   if (params.get('p') === 'name') { save.name = undefined; save.namePrompted = 0; namePrompt(); } }
   if (SHOT === 'settings') $('settings').classList.add('show');
   if (SHOT === 'fb' || SHOT === 'fbdone') { openFb('settings'); if (SHOT === 'fbdone') fbShow(true); }
@@ -1978,11 +1981,61 @@ function eqSvg(e: Eq, w = 72) {
 }
 // 全身人形（裝備面板與分享卡共用的配色）
 function figSvg() {
-  const c = (s: Slot) => equipNow(s).base, k = '#1b1b1b';
-  const arm = (x1: number, x2: number) => `<path d="M${x1} 100L${x2} 160" stroke="${k}" stroke-width="20" stroke-linecap="round"/><path d="M${x1} 100L${x2} 160" stroke="${c('hand')}" stroke-width="14" stroke-linecap="round"/><circle cx="${x2 + (x2 < 80 ? -1 : 1)}" cy="170" r="9" fill="#e8b890" stroke="${k}" stroke-width="3"/>`;
-  return `<svg viewBox="0 0 160 300" class="eqFig">${arm(50, 34)}${arm(110, 126)}<path d="M50 90h60l10 20-10 6-2-4v70H52v-70l-2 4-10-6Z" fill="${c('body')}" stroke="${k}" stroke-width="3" stroke-linejoin="round"/>
-<circle cx="80" cy="64" r="24" fill="#e8b890" stroke="${k}" stroke-width="3"/><path d="M54 60Q80 22 106 60Z" fill="${c('head')}" stroke="${k}" stroke-width="3"/><path d="M54 182h52l6 86H86l-6-60-6 60H48Z" fill="${c('legs')}" stroke="${k}" stroke-width="3" stroke-linejoin="round"/>
-<path d="M40 268h36v14H36ZM84 268h36l4 14H84Z" fill="${c('feet')}" stroke="${k}" stroke-width="3"/></svg>`;
+  const k = '#1b1b1b', SK = '#e8b890', H = equipNow('head'), A = equipNow('hand'), B = equipNow('body'), L = equipNow('legs'), F = equipNow('feet');
+  const ol = `stroke="${k}" stroke-width="3" stroke-linejoin="round"`;
+  // 圖樣：每個人形只出現一次，id 固定
+  const fl = (id: string, c: string) => `<pattern id="${id}" width="14" height="14" patternUnits="userSpaceOnUse"><rect width="14" height="14" fill="${c}"/><g fill="#fff3c8"><circle cx="4" cy="4" r="1.8"/><circle cx="7" cy="4" r="1.8"/><circle cx="5.5" cy="1.6" r="1.8"/><circle cx="5.5" cy="6.4" r="1.8"/></g><circle cx="5.5" cy="4" r="1.2" fill="#3a8a4a"/><circle cx="11" cy="11" r="1.5" fill="#fff3c8"/></pattern>`;
+  const defs = `<defs>
+${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
+<pattern id="pCamo" width="30" height="30" patternUnits="userSpaceOnUse"><rect width="30" height="30" fill="#5a6b3a"/><path d="M2 6q6-6 12 0t8 8q-6 4-12 0T2 6Z" fill="#2e3a1e"/><path d="M16 20q6-4 10 2t-4 6q-8 0-6-8Z" fill="#8a7a4a"/><circle cx="24" cy="6" r="3.5" fill="#3e5228"/></pattern>
+<pattern id="pNeon" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(70)"><rect width="10" height="10" fill="#39ff9a"/><rect width="10" height="3" fill="#fff"/></pattern>
+<pattern id="pSeq" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#b84ad8"/><circle cx="2" cy="2" r="1.6" fill="#f0c8ff"/><circle cx="6" cy="6" r="1.6" fill="#ffd8f8"/></pattern>
+<pattern id="pTat" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="${SK}"/><path d="M0 12q4-8 8 0t8 0" stroke="#1e2a4a" stroke-width="1.6" fill="none"/><circle cx="12" cy="4" r="2" fill="#b8323a"/></pattern>
+</defs>`;
+  void 0;
+  const PF: Record<string, string> = { flower: 'url(#pFlower)', camo: 'url(#pCamo)', neon: 'url(#pNeon)', tattoo: 'url(#pTat)' };
+  // ---- 手臂（在衣服後面）：肩到腕，手在末端 ----
+  const armFill = A.id === 'sl_flower' ? 'url(#pFlower)' : A.id === 'sl_camo' ? 'url(#pCamo)' : A.id === 'sl_neon' ? 'url(#pNeon)' : A.id === 'sl_89' ? 'url(#pTat)' : A.base;
+  const arm = (x1: number, x2: number) => { const d = `M${x1} 100L${x2} 160`, dx = x2 - x1, len = Math.hypot(dx, 60), nx = -60 / len, ny = dx / len;
+    let ex = '';
+    if (A.id === 'sl_rain') ex = `<path d="M${x1 + nx * 3} ${100 + ny * 3}L${x2 + nx * 3} ${160 + ny * 3}" stroke="#fffbe0" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>`;
+    if (A.id === 'sl_dragon') { let p = ''; for (let i = 0; i <= 10; i++) { const t = i / 10, o = Math.sin(i * 1.6) * 4; p += `${i ? 'L' : 'M'}${(x1 + dx * t + nx * o).toFixed(1)} ${(100 + 60 * t + ny * o).toFixed(1)}`; } ex = `<path d="${p}" stroke="#ffd25a" stroke-width="2" fill="none"/><circle cx="${x1 + dx * 0.2}" cy="112" r="2.2" fill="#ffd25a"/>`; }
+    if (A.id === 'sl_89') ex = `<path d="M${x1} 100L${x2} 160" stroke="#1e2a4a" stroke-width="1" stroke-dasharray="3 4" fill="none"/>`;
+    return `<path d="${d}" stroke="${k}" stroke-width="20" stroke-linecap="round"/><path d="${d}" stroke="${armFill}" stroke-width="14" stroke-linecap="round"/>${ex}<path d="M${x2 - 7} 158h14" stroke="${k}" stroke-width="2"/><circle cx="${x2 + (x2 < 80 ? -1 : 1)}" cy="170" r="9" fill="${SK}" stroke="${k}" stroke-width="3"/>`; };
+  // ---- 衣服 ----
+  const T = 'M50 90h60l10 20-10 6-2-4v70H52v-70l-2 4-10-6Z';
+  const body: Record<string, string> = {
+    bd_basic: `<path d="${T}" fill="#e8e4d8" ${ol}/><path d="M70 90q10 10 20 0" fill="none" stroke="${k}" stroke-width="2"/><ellipse cx="80" cy="130" rx="12" ry="8" fill="#9a9488" stroke="${k}" stroke-width="2"/><path d="M70 130q10-6 20 0" stroke="#e8e4d8" stroke-width="1.5" fill="none"/>`,
+    bd_rain: `<path d="${T}" fill="#ffd21a" ${ol}/><path d="M80 92V182" stroke="${k}" stroke-width="2"/>${[110, 130, 150, 170].map(y => `<circle cx="80" cy="${y}" r="2.5" fill="#fff" stroke="${k}" stroke-width="1.5"/>`).join('')}<path d="M56 100l4 70" stroke="#fffbe0" stroke-width="3" opacity=".8"/>`,
+    bd_vest: `<path d="${T}" fill="#f2efe4" ${ol}/><path d="M52 92h18l-2 90H52Z M108 92H90l2 90h16Z" fill="#c82a2a" stroke="${k}" stroke-width="2.5" stroke-linejoin="round"/><path d="M70 92l-2 90M90 92l2 90" stroke="#ffd25a" stroke-width="3"/><path d="M56 150h8M96 150h8" stroke="#ffd25a" stroke-width="2"/>`,
+    bd_boss: `<path d="${T}" fill="#1e2a3a" ${ol}/><path d="M66 90l14 14 14-14" fill="#2e3e52" stroke="${k}" stroke-width="2.5"/><path d="M80 104V182" stroke="#c8c8c8" stroke-width="2.5" stroke-dasharray="2 2"/><rect x="58" y="140" width="14" height="12" fill="none" stroke="#c8c8c8" stroke-width="2"/><rect x="88" y="140" width="14" height="12" fill="none" stroke="#c8c8c8" stroke-width="2"/>`,
+    bd_sequin: `<path d="${T}" fill="url(#pSeq)" ${ol}/><path d="M64 92q16 16 32 0" fill="none" stroke="#ffd25a" stroke-width="3"/>` };
+  const hood = B.id === 'bd_rain' ? `<path d="M50 92Q48 34 80 30Q112 34 110 92Z" fill="#ffd21a" ${ol}/>` : '';
+  // ---- 褲子 ----
+  const P = 'M54 182h52l6 86H86l-6-60-6 60H48Z';
+  const legs: Record<string, string> = {
+    lg_basic: `<path d="${P}" fill="#4a4a52" ${ol}/><path d="M58 190q8 10 16 0M86 190q8 10 16 0" stroke="#8a8a92" stroke-width="2" fill="none"/><rect x="92" y="222" width="12" height="12" fill="none" stroke="#8a8a92" stroke-width="2"/>`,
+    lg_rain: `<path d="${P}" fill="#ffd21a" ${ol}/><path d="M60 190l-6 72M100 190l4 72" stroke="#fffbe0" stroke-width="3" opacity=".85"/>`,
+    lg_flower: `<path d="${P}" fill="url(#pFlower)" ${ol}/>`,
+    lg_camo: `<path d="${P}" fill="url(#pCamo)" ${ol}/><rect x="56" y="214" width="12" height="14" fill="none" stroke="#2e3a1e" stroke-width="2"/>` };
+  // ---- 鞋子 ----
+  const toes = (x: number) => [0, 1, 2, 3].map(i => `<circle cx="${x + 6 + i * 7}" cy="270" r="3" fill="${SK}" stroke="${k}" stroke-width="1.2"/>`).join('');
+  const slip = (sole: string, strap: string) => [40, 84].map(x => `<rect x="${x - 4}" y="276" width="40" height="7" rx="3" fill="${sole}" stroke="${k}" stroke-width="2.5"/>${toes(x)}<path d="M${x + 2} 276q16-12 32 0" fill="none" stroke="${strap}" stroke-width="5"/>`).join('');
+  const feet: Record<string, string> = {
+    ft_basic: slip('#f2f2ee', '#2a5ab0'),
+    ft_gold: slip('#e8b830', '#ffd25a') + `<circle cx="56" cy="271" r="2" fill="#fff"/><circle cx="100" cy="271" r="2" fill="#fff"/>`,
+    ft_boots: [44, 84].map(x => `<path d="M${x} 236h30v40h6v8H${x - 4}v-8h4Z" fill="#ffd21a" ${ol}/><path d="M${x + 4} 242v32" stroke="#fffbe0" stroke-width="3"/>`).join(''),
+    ft_work: [40, 84].map(x => `<path d="M${x + 2} 258h30l4 18h4v8H${x - 2}v-8h4Z" fill="#6a4a2a" ${ol}/>${[262, 268, 274].map(y => `<path d="M${x + 10} ${y}l12 3M${x + 22} ${y}l-12 3" stroke="#e8d8a8" stroke-width="1.5"/>`).join('')}`).join('') };
+  // ---- 頭 ----
+  const hd: Record<string, string> = {
+    hd_basic: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="url(#pFlowerR)" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#c84a5a" ${ol}/>`,
+    hd_hat: `<path d="M28 58L80 22L132 58Q80 66 28 58Z" fill="#d8b46a" ${ol}/><path d="M48 50L112 50M62 40H98M80 22V58" stroke="#8a6a2a" stroke-width="1.5"/><path d="M62 62q18 28 36 0" fill="none" stroke="${k}" stroke-width="1.5"/>`,
+    hd_fisher: `<path d="M58 54V38Q80 26 102 38V54Z" fill="#4a6a8a" ${ol}/><path d="M44 62L58 52H102L116 62Q80 68 44 62Z" fill="#4a6a8a" ${ol}/><path d="M58 50H102" stroke="#2a3a4a" stroke-width="2.5"/>`,
+    hd_helmet: `<path d="M56 56Q56 30 80 30Q104 30 104 56Z" fill="#ffb21a" ${ol}/><path d="M48 54H112V60H48Z" fill="#ffb21a" ${ol}/><path d="M80 30V54M70 33v21M90 33v21" stroke="${k}" stroke-width="2"/>`,
+    hd_crown: `<path d="M58 54L60 28L70 40L80 22L90 40L100 28L102 54Z" fill="#e8b830" ${ol}/><path d="M58 54H102" stroke="#b8862a" stroke-width="4"/><circle cx="80" cy="44" r="4" fill="#c82a2a" stroke="${k}" stroke-width="1.5"/><circle cx="66" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="94" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="80" cy="22" r="2.5" fill="#fff6dc" stroke="${k}"/>` };
+  const face = `<circle cx="80" cy="66" r="24" fill="${SK}" ${ol}/><circle cx="71" cy="66" r="2.6" fill="${k}"/><circle cx="89" cy="66" r="2.6" fill="${k}"/><path d="M73 76q7 6 14 0" fill="none" stroke="${k}" stroke-width="2.2" stroke-linecap="round"/><circle cx="66" cy="73" r="3" fill="#f0a090" opacity=".7"/><circle cx="94" cy="73" r="3" fill="#f0a090" opacity=".7"/>`;
+  void PF;
+  return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${arm(50, 34)}${arm(110, 126)}${legs[L.id] ?? legs.lg_basic}${body[B.id] ?? body.bd_basic}${face}${hd[H.id] ?? hd.hd_basic}${feet[F.id] ?? feet.ft_basic}</svg>`;
 }
 const FIG_POS: Record<Slot, [number, number]> = { head: [58, 4], hand: [0, 34], body: [62, 26], legs: [62, 58], feet: [0, 80] };
 let eqPick: Slot | null = null;
@@ -2103,7 +2156,7 @@ function react3(kind: 'cheer' | 'ouch') { if (!tpReady) return; if (kind === 'ch
 function camTick(dt: number) {
   if (!tpReady) return;
   const show = tpv && !walking && state === 'play';
-  me3.visible = show; handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
+  tpOn = show; me3.visible = show; handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
   if (!show) return;
   me3.position.set(SEAT.x, SEAT.y - 1.02, SEAT.z); me3.rotation.y = seatYaw;
   cheerT = Math.max(0, cheerT - dt); ouchT = Math.max(0, ouchT - dt);
@@ -2111,7 +2164,12 @@ function camTick(dt: number) {
   meArmL.rotation.x = meArmR.rotation.x = -up * 2.4; meArmL.rotation.z = -up * 0.3; meArmR.rotation.z = up * 0.3;
   meTorso.rotation.x = ouchT > 0 ? Math.sin(ouchT / 0.6 * Math.PI) * 0.35 : 0; meTorso.position.y = up * 0.06;
   meHead.rotation.y = yaw * 0.6;
-  const h = yaw + seatYaw; camera.position.add(new THREE.Vector3(Math.sin(h) * 1.7 + Math.cos(h) * 0.5, 0.95, Math.cos(h) * 1.7 - Math.sin(h) * 0.5));
+  // 從背後斜 3/4 看，人在畫面中下、全身入鏡
+  const h = seatYaw + yaw * 0.35, fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
+  const tx = SEAT.x + fx * 0.3, tz = SEAT.z + fz * 0.3;
+  tpCam.position.set(SEAT.x - fx * 2.6 - rx * 1.5, SEAT.y + 0.85, SEAT.z - fz * 2.6 - rz * 1.5); tpCam.lookAt(SEAT.x + fx * 0.8 + rx * 0.35, SEAT.y - 0.2, SEAT.z + fz * 0.8 + rz * 0.35); tpCam.updateMatrixWorld();
+  // 蚵仔與刀跟著角色的手（handRig 掛在 camera 底下，換算到角色胸前）
+  camera.updateMatrixWorld(); const hp = new THREE.Vector3(SEAT.x + fx * 0.45, SEAT.y - 0.55 + up * 0.4, SEAT.z + fz * 0.45); camera.worldToLocal(hp); handRig.position.copy(hp).add(new THREE.Vector3(0, 0.24, 0.42)); handRig.scale.setScalar(0.6);
 }
 tpv = !!save.tpv; applyOutfit3(); drawCamBtn(); tpReady = true;
 $('camBtn').onclick = () => setTpv(!tpv);
@@ -2232,3 +2290,6 @@ $('hgReplay').onclick = () => { $('settings').classList.remove('show'); if (stat
 hgMaybe();
 
 initUpdate(() => state !== 'play' && !document.querySelector('.panel.show:not(#overlay):not(.overlay)'));
+(window as any).__tpTest = () => { const p = BOWL.clone().project(viewCam()); const x = (p.x + 1) / 2 * innerWidth, y = (1 - p.y) / 2 * innerHeight; return { tp: tpOn, x: Math.round(x), y: Math.round(y), hit: nearBowl(x, y), farMiss: nearBowl(x > innerWidth / 2 ? 5 : innerWidth - 5, 5) }; };
+(window as any).__cheer = () => react3('cheer');
+(window as any).__aim = () => setPhase('aim');
