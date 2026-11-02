@@ -19,7 +19,7 @@ function endCur() { const el = $('feed'); cur = null; el.classList.remove('on');
 function placeFeed() {
   const f = document.getElementById('feed'); if (!f) return;
   let b = 0;
-  if (!document.querySelector('.panel.show')) for (const id of ['top', 'stats']) {
+  for (const id of ['top', 'stats']) {
     const e = document.getElementById(id); if (!e) continue;
     const r = e.getBoundingClientRect();
     if (r.height > 0 && r.width > 0 && r.top < innerHeight * 0.4 && getComputedStyle(e).visibility !== 'hidden' && (e.textContent || '').trim()) b = Math.max(b, r.bottom);
@@ -98,6 +98,8 @@ export function init(d: Deps) {
   f.innerHTML = '<div id="fdTrack"></div><button id="fdX" type="button" aria-label="關閉這則消息"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
   document.body.appendChild(f);
   addEventListener('resize', placeFeed);
+  // 面板開關後重新定位（之前只在 resize 時算，主選單時算的位置會留到上工，蓋住上方 HUD）
+  { let q = 0; new MutationObserver(() => { if (!q) q = requestAnimationFrame(() => { q = 0; placeFeed(); }); }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] }); }
   if ('ResizeObserver' in window) { const ro = new ResizeObserver(placeFeed); for (const id of ['top', 'stats', 'hint']) { const e = document.getElementById(id); if (e) ro.observe(e); } }
   // 只關掉當下這則；放開才觸發，且需在同一顆按鈕上按下
   const x = f.querySelector('#fdX') as HTMLButtonElement; let down = false;
@@ -162,3 +164,25 @@ export type Me = { tag: string; changed: boolean; oldTag?: string | null };
 export async function me(): Promise<Me | null> { const r = await get(`/me?pid=${encodeURIComponent(D.id)}`); return r && typeof r.tag === 'string' && /^\d{4,5}$/.test(r.tag) ? r : null; }
 export function ackMe() { fetch(API + '/me/ack', { method: 'POST', body: JSON.stringify({ pid: D.id }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).catch(() => null); }
 export const myNick = () => D.nick();
+
+// ---------- 活動場景 ----------
+/** 目前進行中的活動；連不上或逾時回傳 undefined（呼叫端要隱藏入口，不能沿用舊設定） */
+export async function evActive(): Promise<{ event: any | null; serverTime: number; left?: number | null } | undefined> {
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 6000);
+  try { const r = await fetch(API + '/events/active?game=oyster-sim&id=' + encodeURIComponent(D.id), { mode: 'cors', cache: 'no-store', signal: ac.signal }); if (!r.ok) return undefined; const j = await r.json(); return j && typeof j.serverTime === 'number' ? j : undefined; }
+  catch { return undefined; } finally { clearTimeout(t); }
+}
+// 開始一場活動：伺服器發場次 token（次數上限在伺服器扣）。ok / limit / ended / net
+export async function evStart(eventId: number): Promise<{ st: 'ok'; token: string; left: number | null } | { st: 'limit' | 'ended' | 'net' }> {
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 8000);
+  try {
+    const r = await fetch(API + '/events/start', { method: 'POST', body: JSON.stringify({ id: D.id, eventId }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors', signal: ac.signal });
+    const j = await r.json().catch(() => null);
+    if (r.ok && j && typeof j.token === 'string') return { st: 'ok', token: j.token, left: typeof j.left === 'number' ? j.left : null };
+    if (j?.error === 'limit') return { st: 'limit' };
+    if (j?.error === 'ended') return { st: 'ended' };
+    return { st: 'net' };
+  } catch { return { st: 'net' }; } finally { clearTimeout(t); }
+}
+export function evResult(d: { eventId: number; token: string; sid: string; score: number; meat: number; completed: boolean; early: boolean }) { return post('/events/result', d); }
+export function evTop(eventId: number) { return get(`/events/top?eventId=${eventId}&id=${encodeURIComponent(D.id)}${tq()}`); }

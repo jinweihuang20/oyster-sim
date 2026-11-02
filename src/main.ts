@@ -17,6 +17,10 @@ const params = new URLSearchParams(location.search);
 const SHOT = params.get('shot'); // 截圖測試用
 const SHIFT = 180;
 let shiftLen = SHIFT; // 臨時工 60／120 秒
+// 活動場景：後台排定的限時活動設定（只在活動那一工有值，收工就清掉，不會沿用舊設定）
+type EvOdd = { i: number; n: number };
+type EvCfg = { id: number; name: string; desc: string; npc: number; dur: number; throwX: number; angerX: number; bonus: number; earlyBonus: number; earlyMeat: number | null; infHp: boolean; steal: 'normal' | 'steal_only' | 'no_steal'; oddDone: EvOdd[]; oddEarly: EvOdd[]; left?: number | null; start: number; end: number };
+let evRun: EvCfg | null = null, evToken: string | null = null, evLastId: number | null = null, evBusy = false;
 const TEMP_CUT = 1;
 const canvas = $('c') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: !!SHOT });
@@ -145,7 +149,7 @@ function makeAma(top: number, hair: number) {
   return { g, body, head, pants, armL: arm(-1), armR: arm(1) };
 }
 type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: number; peek: boolean; count: number; pause: number; look: number; bubble: HTMLDivElement; bubT: number; lean: number;
-  cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; w0?: number; warned?: boolean; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; gAt?: number; tag: HTMLButtonElement; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[] };
+  cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; w0?: number; warned?: boolean; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; gAt?: number; tag: HTMLButtonElement; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[]; bowlM?: THREE.Object3D };
 const npcs: Npc[] = [];
 // 阿婆每粒秒數 = rate × 難度倍率（易 0.75／普通 1／硬 1.3／超硬 1.6）
 const NPC_DIFF_T = [0.75, 1, 1.3, 1.6];
@@ -154,8 +158,9 @@ const NPC_DEF = [
   { name: '講話阿春', rate: 7.5, chatty: 0.6, peek: false, top: 0x2a7a5a, hair: 0x333333, a: Math.PI },
   { name: '好奇阿嬌', rate: 5.8, chatty: 0.3, peek: true, top: 0xb04050, hair: 0xcccccc, a: 1.9 },
 ];
-for (const d of NPC_DEF) {
-  const a = makeAma(d.top, d.hair); const ang = Math.PI / 2 + d.a; const r = 1.9;
+type NpcDef = { name: string; rate: number; chatty: number; peek: boolean; top: number; hair: number; a: number; r?: number };
+function makeNpc(d: NpcDef) {
+  const a = makeAma(d.top, d.hair); const ang = Math.PI / 2 + d.a; const r = d.r ?? 1.9;
   a.g.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r); a.g.lookAt(0, 0, 0); a.g.rotateY(Math.PI); scene.add(a.g);
   // 手頂的蚵仔佮蚵刀
   const oy = new THREE.Group(); oy.position.set(0, -0.15, -0.32); a.armL.add(oy);
@@ -166,12 +171,13 @@ for (const d of NPC_DEF) {
   mesh(new THREE.BoxGeometry(0.03, 0.03, 0.09), mat(0x7a4a20), [0, 0, 0], kn);
   mesh(new THREE.BoxGeometry(0.02, 0.006, 0.09), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [0, 0, -0.09], kn);
   const bowlL = new THREE.Vector3(0.32, 0, -0.42); const bowl = a.g.localToWorld(bowlL.clone());
-  mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, 0.05, bowl.z]);
+  const bowlM = mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, 0.05, bowl.z]);
   bowl.y = 0.08;
   const tag = document.createElement('button'); tag.className = 'ntag'; tag.textContent = d.name; $('bubbles').appendChild(tag); tag.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); const me = npcs.find(x => x.tag === tag); if (me) npcTip(me); });
   const bubble = document.createElement('div'); bubble.className = 'bub'; bubble.style.opacity = '0'; $('bubbles').appendChild(bubble);
-  npcs.push({ ...a, tag, name: d.name, rate: d.rate, chatty: d.chatty, peek: d.peek, count: 0, pause: 0, look: 0, bubble, bubT: 0, lean: 0, cyc: Math.random(), dur: d.rate, ev: 0, mood: 0, angry: 0, distract: 0, turnDir: 1, windup: 0, throwCd: rnd(15, 30), stuck: null, baseY: 0, oy, top, meat, bowl, bowlMeat: [] });
+  npcs.push({ ...a, tag, name: d.name, rate: d.rate, chatty: d.chatty, peek: d.peek, count: 0, pause: 0, look: 0, bubble, bubT: 0, lean: 0, cyc: Math.random(), dur: d.rate, ev: 0, mood: 0, angry: 0, distract: 0, turnDir: 1, windup: 0, throwCd: rnd(15, 30), stuck: null, baseY: 0, oy, top, meat, bowl, bowlMeat: [], bowlM });
 }
+for (const d of NPC_DEF) makeNpc(d);
 const GOSSIP = [
   '你們知道嗎，巷尾的阿雄又換工作了', '今天的蚵仔好肥喔！', '我孫子說要讀博士，我都聽不懂', '聽說今天有人剝到黑珍珠喔', '剝快一點，等一下菜市場要收了',
   '這次颱風沒來，蚵仔超讚', '我年輕時一天剝兩千顆呢', '你媳婦有回來嗎？', '珍珠喔～越剝越有機會啦', '蚵仔煎攤老闆說要加訂',
@@ -191,7 +197,7 @@ const PRAISE = ['好功夫！', '真的很準喔！', '那顆丟得真漂亮！'
 function say(n: Npc, t: string, dur = 3.2) { if (ac) SFX.murmur([300, 230, 380][npcs.indexOf(n)] ?? 300); n.bubble.textContent = t; n.bubble.style.opacity = '1'; n.bubT = dur; }
 let lastNag = '';
 function nag(lines: string[]) {
-  if (Math.random() > seatNow().nag * fxAll().nag) return;
+  if (Math.random() > (evRun ? Math.max(1, seatNow().nag) : seatNow().nag) * fxAll().nag) return;
   let t = pick(lines); while (t === lastNag && lines.length > 1) t = pick(lines); lastNag = t;
   const n = npcs.find(x => x.peek && Math.random() < 0.5) ?? pick(npcs); n.look = 2.5; say(n, t, 3);
 }
@@ -461,7 +467,7 @@ const dstatStr = () => dStat.flat().join(',');
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; streakDay?: number; lastBonusDay?: string; lastSeen?: string; retDay?: string; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number; legendDry?: number; legendN?: number };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; evClaim?: string[]; seat?: string; bonusDay?: string; bonusN?: number; streakDay?: number; lastBonusDay?: string; lastSeen?: string; retDay?: string; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number; legendDry?: number; legendN?: number };
 const START_MONEY = 10000; // 首次遊玩見面禮（僅無存檔的新玩家）
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: START_MONEY, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {} }; }
 function loadSave(): Save {
@@ -476,6 +482,7 @@ function loadSave(): Save {
   if (raw.titles && typeof raw.titles === 'object') for (const [k0, v] of Object.entries(raw.titles)) { const k = k0 === '👑 今日蚵后' ? '👑 今日剝蚵冠軍' : k0; out.titles[k] = (out.titles[k] ?? 0) + num(v); }
   if (raw.namePrompted) out.namePrompted = 1;
   if (raw.tpv) out.tpv = 1;
+  if (Array.isArray(raw.evClaim)) out.evClaim = raw.evClaim.filter((x: unknown) => typeof x === 'string').slice(-30);
   out.legendDry = Math.max(0, Math.floor(num(raw.legendDry))); if (typeof raw.legendN === 'number') out.legendN = raw.legendN;
   if (raw.equip && typeof raw.equip === 'object') { out.equip = {}; for (const [k, v] of Object.entries(raw.equip)) if (typeof v === 'string') out.equip[k] = v; }
   if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
@@ -660,7 +667,7 @@ function setPhase(p: Phase) {
   if (p === 'seam' || p === 'twist') updDiff();
 }
 function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・要撬 ${pryNeed()} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
-function goPick() { if (state !== 'play' || walking) return; oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把'; }
+function goPick() { if (state !== 'play' || walking) return; if (evRun?.steal === 'steal_only') { oyster.visible = false; setPhase('busy'); hint.textContent = '本活動只能用偷的：趁阿婆轉頭聊天，偷她碗裡的肉'; return; } oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把'; }
 function holdOyster(dd: number) {
   if (state !== 'play' || walking) return;
   if (saltNext && !tut) { saltNext = false; if (dd > 1) dd = Math.random() < 0.5 ? 0 : 1; toast('🧂 粗鹽搓過，這顆比較好開', '#cfc3ff'); drawMeds(); }
@@ -909,7 +916,7 @@ function applyCrew() {
   showLand();
   crewHats.forEach(h => h.removeFromParent()); crewHats.length = 0;
   npcs.forEach((n, i) => {
-    const c = set[i % set.length]; n.name = c.name; n.tag.textContent = c.name;
+    const c = set[i % set.length], nm = i < set.length ? c.name : evExtraName(i - set.length) ?? c.name; n.name = nm; n.tag.textContent = nm;
     const head = n.g.children.find(o => o instanceof THREE.Group && Math.abs(o.position.y - 1.02) < 0.01) as THREE.Group | undefined; if (!head) return;
     const hair = head.children[1] as THREE.Mesh, bun = head.children[2] as THREE.Mesh;
     (hair.material as THREE.MeshStandardMaterial).color.setHex(c.hair); (bun.material as THREE.MeshStandardMaterial).color.setHex(c.hair);
@@ -940,6 +947,7 @@ function updHud() {
   ($('hpFill') as HTMLElement).style.width = `${hp}%`;
   const s = Math.max(0, Math.ceil(timeLeft)); $('timer').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   $('count').innerHTML = `<i class="ic ic-oyster"></i> ${count}`; $('pearls').innerHTML = `<i class="ic ic-pearl"></i> ${dayPearls.length + dayOdd.length}`;
+  evHud();
   $('statsT').textContent = `開 ${opened}・入碗 ${count}・浪費率 ${opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0}%・殼屑 ${cracked}・偷 ${steals}/掠 ${caught}・割手 ${stabs}`;
 }
 function worldOf(o: THREE.Object3D) { return o.getWorldPosition(new THREE.Vector3()); }
@@ -971,7 +979,7 @@ function updBlood(dt: number) {
   for (let i = decals.length - 1; i >= 0; i--) { const d = decals[i]; d.t -= dt; (d.m.material as THREE.MeshBasicMaterial).opacity = Math.min(0.85, d.t / 5); if (d.t <= 0) { scene.remove(d.m); decals.splice(i, 1); } }
   if (woundT > 0) { woundT -= dt; (wound.material as THREE.MeshBasicMaterial).opacity = Math.min(1, woundT / 3); if (woundT <= 0) wound.visible = false; }
 }
-function hurt(dmg: number, txt: string) { react3('ouch'); if (tut) dmg = 0; dmg *= medM('dmg') * fxAll().dmg; hp = Math.max(0, hp - dmg); shake = 0.3; hurtT = 0.9; SFX.aia(); toast(txt, '#ff9a8a'); updHud(); if (hp <= 0 && state === 'play') { handPain = true; setPhase('busy'); later(0.8, endDay); } }
+function hurt(dmg: number, txt: string) { react3('ouch'); if (tut || evRun?.infHp) dmg = 0; dmg *= medM('dmg') * fxAll().dmg; hp = Math.max(0, hp - dmg); shake = 0.3; hurtT = 0.9; SFX.aia(); toast(txt, '#ff9a8a'); updHud(); if (hp <= 0 && state === 'play') { handPain = true; setPhase('busy'); later(0.8, endDay); } }
 
 // ----- 0. 提蚵仔／撈蚵仔 -----
 const ray = new THREE.Raycaster();
@@ -1194,6 +1202,7 @@ const PRY_GRACE = 0.04;
 // 視覺佮判定攏用同一个時間公式（事件 timeStamp），毋免等下一格
 const needle = (ms = performance.now()) => 0.5 - 0.5 * Math.cos(((ms - needleStart) / 1000) * Math.PI * 2 * prySp());
 (window as any).__sim = () => ({ t: SHIFT - timeLeft, c: npcs.map(n => n.count), names: npcs.map(n => n.name) });
+(window as any).__dbg = { warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }) };
 (window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
 (window as any).__pry = () => { if (phase !== 'twist') return null; const f = prySp(), per = 1000 / f, th = Math.acos(1 - 2 * PRY_C) / (Math.PI * 2) * per; const el = (performance.now() - needleStart) % per; let w = th - el; if (w < 5) w += per / 2 > th ? per - 2 * th + th * 2 - th : per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
 function pryFx(ok: boolean, txt: string) { gauge.classList.remove('hit', 'miss'); void gauge.offsetWidth; gauge.classList.add(ok ? 'hit' : 'miss'); const pp = $('ppop'); pp.textContent = txt; pp.className = ''; void pp.offsetWidth; pp.className = ok ? 'ok' : 'bad'; }
@@ -1287,7 +1296,7 @@ function toss(tapped: boolean) {
   const land = new THREE.Vector3(BOWL.x + rnd(-0.06, 0.06), BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015, BOWL.z + rnd(-0.06, 0.06));
   SFX.whoosh(); if (quick) { perfects++; $('gtag').textContent = ''; }
   fly(m, from, land, 0.45, 0.3, () => {
-    count++; bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.25)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)) + (quick ? 1 : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    count++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.25)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)) + (quick ? 1 : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
     burst(land.clone().setY(BOWL.y + 0.02), 8, 0xbfe4f2, 1);
     if (!wasCracked) burst(land.clone().setY(BOWL.y + 0.05), 6, 0xffd23a, 1.4);
     if (quick) { tone(980, 0.06, 0.18, 'triangle', 0, 520); tone(1568, 0.08, 0.1, 'sine', 0.05); } else SFX.plop();
@@ -1310,7 +1319,7 @@ function anger(n: Npc, lines: string[], retaliate: number) {
 const stunned = (n: Npc) => (n.clutch ?? 0) > 0;
 const freeToSteal = (n: Npc) => n.distract > 0 || stunned(n);
 let dayMaxGrudge = 0;
-function addGrudge(n: Npc, v: number) { if (v > 0) v *= medM('grudge') * locNow().ang * (gearOn('radio') ? 0.7 : 1); const g0 = n.grudge ?? 0; n.grudge = Math.max(0, Math.min(100, g0 + v)); if (v > 0) { n.gAt = performance.now(); if (g0 < 60 && n.grudge >= 60 && state === 'play') toast(`${n.name}很生氣！會更常丟你（一陣子不惹她就會消氣）`, '#ff7a6a'); } dayMaxGrudge = Math.max(dayMaxGrudge, n.grudge); }
+function addGrudge(n: Npc, v: number) { if (v > 0) v *= (evRun ? Math.max(1, medM('grudge')) * Math.max(1, locNow().ang) : medM('grudge') * locNow().ang * (gearOn('radio') ? 0.7 : 1)) * (evRun?.angerX ?? 1); const g0 = n.grudge ?? 0; n.grudge = Math.max(0, Math.min(100, g0 + v)); if (v > 0) { n.gAt = performance.now(); if (g0 < 60 && n.grudge >= 60 && state === 'play') toast(`${n.name}很生氣！會更常丟你（一陣子不惹她就會消氣）`, '#ff7a6a'); } dayMaxGrudge = Math.max(dayMaxGrudge, n.grudge); }
 function grudgeUI(n: Npc) {
   if (!n.gIcon) { n.gIcon = emojiSprite('💢', 0.12); n.gIcon.position.set(-0.1, 0.32, 0); n.head.add(n.gIcon); const bar = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff3b2f, depthTest: false })); bar.center.set(0, 0.5); bar.position.set(-0.03, 0.32, 0); n.head.add(bar); n.gBar = bar; }
   const g = n.grudge ?? 0; n.gIcon.visible = n.gBar!.visible = g > 4; n.gIcon.scale.setScalar(0.12 + g * 0.0015); n.gBar!.scale.set(0.006 + g * 0.0032, 0.035, 1);
@@ -1351,7 +1360,7 @@ function throwOne(n: Npc) {
       fly(sh, sh.position.clone(), () => worldOf(n.head), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); addGrudge(n, Math.round(20 * U.reflect)); npcHurt(n, U.reflect); });
     } else if (covered) { umbHit3(sh.position); scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋住了！啵嗯～', '#9be37a'); say(n, pick(['怎麼會有雨傘啦！', '狡怪喔你！', '什麼時候拿出來的！']), 2.5); }
     else { scene.remove(sh); blockStreak = 0; hitsTaken++; ($('splat') as HTMLElement).style.opacity = '1'; later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0'); hurt(8, '哎唷！被丟中了！'); hitInHand(); }
-    if (blockStreak >= 3) { blockStreak = 0; npcs.forEach((m, i) => { m.calm = 45; if (i === 0) later(0.8, () => say(m, `這個${myName()}真勇敢……`, 3)); }); toast('阿婆們怕你了，暫時比較少丟', '#9fe0ff'); }
+    if (blockStreak >= 3 && !evRun) { blockStreak = 0; npcs.forEach((m, i) => { m.calm = 45; if (i === 0) later(0.8, () => say(m, `這個${myName()}真勇敢……`, 3)); }); toast('阿婆們怕你了，暫時比較少丟', '#9fe0ff'); }
     updHud();
   });
 }
@@ -1369,7 +1378,7 @@ let umbLen = 0.9;
 const umbAge = () => umbLen - umbT;
 // ----- 4. 偷蚵仔 -----
 function stealTarget() { for (const n of npcs) { const p = n.bowl.clone().project(camera); if (p.z < 1 && Math.abs(p.x) < 0.3 && Math.abs(p.y) < 0.35) return n; } return null; }
-function startSteal() { if (state !== 'play' || umbHeld) return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n); }
+function startSteal() { if (state !== 'play' || umbHeld || evRun?.steal === 'no_steal') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n); }
 function stopSteal() { stealNpc = null; stealT = 0; on('prog', phase === 'twist' || phase === 'crab' || phase === 'scoop'); }
 function caughtBy(n: Npc) {
   caught++; stopSteal(); penalty += 5;
@@ -1377,7 +1386,7 @@ function caughtBy(n: Npc) {
 }
 function stealOne(n: Npc) {
   if (n.count <= 0) { toast('碗裡沒肉了'); stopSteal(); return; }
-  n.count--; count++; meatPay += DPAY[1]; steals++; addGrudge(n, 12); const m = new THREE.Mesh(meatGeo, meatMat);
+  n.count--; count++; evMeat(); meatPay += DPAY[1]; steals++; addGrudge(n, 12); const m = new THREE.Mesh(meatGeo, meatMat);
   const lm = n.bowlMeat.pop(); if (lm) scene.remove(lm);
   fly(m, n.bowl.clone(), BOWL.clone().add(new THREE.Vector3(rnd(-0.08, 0.08), 0.06, rnd(-0.08, 0.08))), 0.5, 0.3, () => bowlMeat.push(m));
   SFX.sneak(); toast('偷到一顆！', '#c9a0ff'); updHud();
@@ -1397,22 +1406,25 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   if (worked && shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
   if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
   const LC = locNow(), base0 = meatPay + perfects * PERFECT_PAY + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
-  const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty); lastPay = { gross: base0 + locBonus + nightBonus + bonus, pen: penalty, earn };
+  const ev = evRun, evDone = !!ev && endReason !== 'quit' && !handPain, evEarly = evDone && endReason === 'early', evCash = ev && evDone ? Math.max(0, ev.bonus) + (evEarly ? Math.max(0, ev.earlyBonus) : 0) : 0;
+  const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty) + evCash; lastPay = { gross: base0 + locBonus + nightBonus + bonus + evCash, pen: penalty, earn };
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
   save.days++; tickTrial(); autoUnlock(); save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
   for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
+  const evHtml = ev ? evFinish(ev, evDone, evEarly) : '';
   persist();
   if (!tut && !SHOT) { const td = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); let inc = 0; try { const o = JSON.parse(LS.getItem('oyster-lb-day') || '{}'); inc = o.d === td ? o.v : 0; } catch { } inc += Math.max(0, earn); try { LS.setItem('oyster-lb-day', JSON.stringify({ d: td, v: inc })); } catch { } Social.submit({ income: inc, oysters: count, pearls: save.dex.reduce((a, b) => a + b, 0) }); }
   track('day', { loc: locNow().id, item: 't' + shiftLen,  count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, maxAnger: Math.round(dayMaxGrudge), double: dayMulti2, triple: dayMulti3, dur: Math.round(shiftLen - Math.max(0, timeLeft)), dex: dexN(), seat: save.seat ?? 'door', reason: handPain ? 'hand' : endReason, dstat: dstatStr() });
-  $('resTitle').textContent = handPain ? '🩹 手痛收工' : queen ? '👑 今日剝蚵冠軍！' : '收工了～';
-  $('resBody').innerHTML = all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 顆入碗</b></div>`).join('') +
+  $('resTitle').textContent = ev ? (evEarly ? `${ev.name}・提前完工！` : evDone ? `${ev.name}・完工` : `${ev.name}・提早收工`) : handPain ? '🩹 手痛收工' : queen ? '👑 今日剝蚵冠軍！' : '收工了～';
+  $('resBody').innerHTML = evHtml + all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 顆入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美／俐落 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
     `偷 ${steals}・被抓到 ${caught}・肉丟中阿婆 ${meatHits}・殼丟中阿婆 ${shellHits}<br>雨傘擋 ${blocks}・完美反彈 ${reflects}・被丟中 ${hitsTaken}・丟殼 ${thrown}・蚵仔掉地上 ${lost}</p>` + (titles.length ? `<p style="font-size:18px"><b>${titles.join('　')}</b></p>` : '') +
     `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 易$6・普$8・硬$12・超硬$18，殼屑 ${cracked} 顆只算 25%${temp ? `，臨時工抽成 -$${TEMP_CUT}／顆` : ''}</small>${perfects ? `<br>完美／俐落 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
     `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>` +
     `<p>${caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
-  $('result').classList.add('show'); later(1.2, namePrompt); if (ac) SFX.endJingle(queen && !handPain);
+  if (ev) { evLastId = ev.id; evRun = null; evToken = null; shiftLen = SHIFT; } else evLastId = null;
+  $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); later(1.2, namePrompt); if (ac) SFX.endJingle(queen && !handPain);
 }
 function revealPearl(r: number) { react3('cheer');
   sleeveGold(); dayPearls.push(r); save.dex[r]++; if (r === 3) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
@@ -1505,7 +1517,10 @@ const btn = (id: string, f: () => void, upF?: () => void) => {
   el.addEventListener('pointerdown', e => { e.stopPropagation(); audio().resume(); sx = e.clientX; sy = e.clientY; st = performance.now(); ok = true; });
   el.addEventListener('pointermove', e => { if (ok && Math.hypot(e.clientX - sx, e.clientY - sy) > 12) ok = false; });
   el.addEventListener('pointercancel', () => ok = false);
-  el.addEventListener('pointerup', e => { e.stopPropagation(); if (ok && performance.now() - st < 800) f(); ok = false; });
+  let fired = 0;
+  el.addEventListener('pointerup', e => { e.stopPropagation(); if (ok && performance.now() - st < 800) { fired = performance.now(); f(); } ok = false; });
+  // iOS 偶爾吃掉 pointerup（或被別的觸控搶走）：補一個 click 備援，700ms 內已觸發過就不重複
+  el.addEventListener('click', e => { e.stopPropagation(); if (performance.now() - fired > 700) { fired = performance.now(); f(); } });
 };
 btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); $('backMenu').classList.add('show'); });
 $('bmStay').onclick = () => $('backMenu').classList.remove('show');
@@ -1527,7 +1542,7 @@ function standUp() {
   oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
   walking = true; handRig.visible = false; walkPos.copy(SEAT).setY(1.55); const out = seatGround(seatNow()).setLength(0.45); walkPos.add(out);
   tYaw = yaw = yaw + seatYaw; tPitch = pitch = -0.25; $('diff').textContent = ''; on('standBtn', false); on('joy', true); on('stealBtn', false);
-  hint.textContent = 'WASD／搖桿行路，走去空的藍色板凳邊仔，按 E／「坐落」換位';
+  hint.textContent = COARSE ? '用搖桿行路，走去空的藍色板凳邊仔，按「坐落」換位' : 'WASD 行路，走去空的藍色板凳邊仔，按 E 坐落換位';
 }
 function sitDown(id: string) {
   walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear(); stools.forEach(g => g.userData.tag.visible = false);
@@ -1583,11 +1598,38 @@ let moonUsed = 0, moonAimOn = false, punchT = 0;
 const MOON_SVG = `<svg viewBox="0 0 64 40" width="72" height="45" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M2 14h8M0 20h12M2 26h8"/><path d="M14 13l6 3v8l-6 3z"/><path d="M20 14h18v12H20z"/><path d="M24 14l-3-6h6l3 6M24 26l-3 6h6l3-6"/><path d="M38 12h12a6 6 0 0 1 6 6v4a6 6 0 0 1-6 6H38z"/><path d="M44 12v6M50 12v6M44 22h10"/><path d="M40 28v-4h4"/><path d="M58 8l4-4M60 20h4M58 32l4 4"/></svg>`;
 const ALL_NPCS = npcs.slice();
 const NPC_HOME = ALL_NPCS.map(n => ({ p: n.g.position.clone(), r: n.g.rotation.clone() }));
+// 活動場景可以有 1～50 個阿婆：多的第一次用到才建立，平常隱藏
+const EV_EXTRA: NpcDef[] = [
+  { name: '阿蘭姨', rate: 5.5, chatty: 0.4, peek: false, top: 0x8a5a2a, hair: 0x555555, a: 2.6 },
+  { name: '阿珠姨', rate: 6.2, chatty: 0.5, peek: true, top: 0x3a5a9a, hair: 0x888888, a: -2.6 },
+  { name: '阿秀', rate: 4.8, chatty: 0.2, peek: false, top: 0x9a3a6a, hair: 0x222222, a: 2.25, r: 2.9 },
+  { name: '阿玉', rate: 6.8, chatty: 0.6, peek: false, top: 0x4a7a3a, hair: 0xaaaaaa, a: -2.25, r: 2.9 },
+  { name: '阿美', rate: 5.2, chatty: 0.3, peek: true, top: 0xa06a2a, hair: 0x444444, a: Math.PI, r: 2.9 },
+  { name: '阿月', rate: 7.0, chatty: 0.5, peek: false, top: 0x5a3a8a, hair: 0xbbbbbb, a: 1.55, r: 2.9 },
+  { name: '阿花', rate: 4.5, chatty: 0.2, peek: false, top: 0x2a6a7a, hair: 0x333333, a: -1.55, r: 2.9 },
+  { name: '阿雪', rate: 6.0, chatty: 0.4, peek: true, top: 0x8a2a2a, hair: 0xdddddd, a: 2.7, r: 2.9 },
+  { name: '阿金', rate: 5.0, chatty: 0.3, peek: false, top: 0x6a6a2a, hair: 0x666666, a: -2.7, r: 2.9 },
+];
+// 第 13 個以後：外圈一圈一圈排（避開正前方視線），名字不重複
+function evExtraName(k: number): string | undefined {
+  const n = ['阿蘭姨', '阿珠姨', '阿秀', '阿玉', '阿美', '阿月', '阿花', '阿雪', '阿金', '阿英', '阿琴', '阿梅', '阿蓮', '阿霞', '阿鳳', '阿娟', '阿惠', '阿芳', '阿敏', '阿麗', '阿萍', '阿桂', '阿娥', '阿菊', '阿香', '阿貞', '阿綢', '阿嬋', '阿碧', '阿滿', '阿招', '阿好', '阿罔', '阿市', '阿緞', '阿錦', '阿燕', '阿琪', '阿霜', '阿瑞', '阿彩', '阿蕊', '阿秋', '阿冬', '阿春姨', '阿夏', '阿杏', '阿梨'];
+  return n[k];
+}
+const EV_RINGS = [{ r: 3.8, n: 12 }, { r: 4.7, n: 15 }, { r: 5.6, n: 18 }];
+for (let ri = 0, k = EV_EXTRA.length; ri < EV_RINGS.length; ri++) {
+  const { r, n } = EV_RINGS[ri], a0 = 1.35, span = 2 * (Math.PI - a0);
+  for (let j = 0; j < n && k < 47; j++, k++) {
+    const a = a0 + span * (j + 0.5) / n, ang = a > Math.PI ? a - 2 * Math.PI : a;
+    EV_EXTRA.push({ name: evExtraName(k)!, rate: 4.5 + (k * 37 % 30) / 10, chatty: (k * 13 % 6) / 10, peek: k % 4 === 0, top: [0x8a5a2a, 0x3a5a9a, 0x9a3a6a, 0x4a7a3a, 0xa06a2a, 0x5a3a8a, 0x2a6a7a, 0x8a2a2a, 0x6a6a2a][k % 9], hair: [0x555555, 0x888888, 0x222222, 0xaaaaaa, 0xdddddd][k % 5], a: ang, r });
+  }
+}
+function evEnsure(n: number) { while (ALL_NPCS.length < n && ALL_NPCS.length - NPC_DEF.length < EV_EXTRA.length) { makeNpc(EV_EXTRA[ALL_NPCS.length - NPC_DEF.length]); const x = npcs.pop()!; ALL_NPCS.push(x); NPC_HOME.push({ p: x.g.position.clone(), r: x.g.rotation.clone() }); } }
 type MoonFx = (dt: number) => boolean;
 const moonFx: MoonFx[] = [];
 function moonReset() {
   moonFx.length = 0; moonUsed = 0; moonAimEnd();
-  npcs.length = 0; ALL_NPCS.forEach((n, i) => { npcs.push(n); n.g.position.copy(NPC_HOME[i].p); n.g.rotation.copy(NPC_HOME[i].r); n.g.scale.setScalar(1); if (!n.g.parent) scene.add(n.g); n.g.visible = true; delete n.g.userData.moon; });
+  const N = evRun ? Math.max(1, Math.min(50, evRun.npc)) : NPC_DEF.length; evEnsure(N);
+  npcs.length = 0; ALL_NPCS.forEach((n, i) => { const use = i < N; if (n.bowlM) n.bowlM.visible = use; if (!use) { n.g.visible = false; n.tag.style.display = 'none'; n.bubble.style.display = 'none'; n.windup = 0; n.throwCd = 999; return; } npcs.push(n); n.g.position.copy(NPC_HOME[i].p); n.g.rotation.copy(NPC_HOME[i].r); n.g.scale.setScalar(1); if (!n.g.parent) scene.add(n.g); n.g.visible = true; delete n.g.userData.moon; });
 }
 function moonGone(n: Npc) {
   const i = npcs.indexOf(n); if (i >= 0) npcs.splice(i, 1);
@@ -1675,10 +1717,10 @@ function renderItemShop() {
   });
 }
 (window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };
-const go = (len: number) => { shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); };
+const go = (len: number) => { evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
-$('start').onclick = () => { shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
-btn('again', startDay);
+$('start').onclick = () => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
+btn('again', () => { if (evLastId != null) evAgain(); else startDay(); });
 btn('resMenu', () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
@@ -1753,11 +1795,16 @@ const clock = new THREE.Clock(); const v = new THREE.Vector3();
 let chatTimer = 2;
 const warnEl = $('warn');
 let pauseAt = 0;
-const isPaused = () => state === 'play' && (document.hidden || !!document.querySelector('.panel.show') || $('medList').classList.contains('show') || !!document.getElementById('npcTip')?.classList.contains('show'));
-function frame() {
+// 只算真的畫得出來的面板（被隱藏的父層裡的 .show 不算，避免看不到的面板讓遊戲一直暫停）
+const panelOpen = () => { for (const p of Array.from(document.querySelectorAll('.panel.show'))) if ((p as HTMLElement).getClientRects().length) return true; return false; };
+const isPaused = () => state === 'play' && (document.hidden || panelOpen() || $('medList').classList.contains('show') || !!document.getElementById('npcTip')?.classList.contains('show'));
+let frameErr = 0;
+// 主迴圈出錯也不能停：停了計時、暫停、預警都會卡住
+function frame() { try { frameBody(); } catch (e) { if (frameErr++ < 3) console.error('frame', e); requestAnimationFrame(frame); } }
+function frameBody() {
   if (shedAnim.length) { const t = performance.now() / 1000; for (const f of shedAnim) f(t); }
   if (isPaused()) {
-    clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); $('pauseTag').classList.add('on'); }
+    clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); closeUmbrella(); down = null; joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
     renderer.render(scene, viewCam()); requestAnimationFrame(frame); return;
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
@@ -1789,6 +1836,7 @@ function frame() {
     if (phase === 'twist') { if (SHOT === 'pry') needleStart = performance.now() - Math.acos(1 - 2 * PRY_C) / (Math.PI * 2 * prySp()) * 1000; const n = needle(), w = pryW(); zone.style.left = `${(PRY_C - w / 2) * 100}%`; zone.style.width = `${w * 100}%`; fill.style.width = '4px'; fill.style.marginLeft = `calc(${n * 100}% - 2px)`; fill.style.background = n > PRY_RED ? '#ff5a4a' : Math.abs(n - PRY_C) <= w / 2 ? '#d8ffb0' : '#fff'; setInZ(n <= PRY_RED && Math.abs(n - PRY_C) <= w / 2 ? 'z' : ''); }
     if (phase === 'twist' || phase === 'crab') { ($('progFill') as HTMLElement).style.width = `${(phase === 'crab' ? crabShakes / 6 : progress) * 100}%`; }
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
+    if (evRun?.infHp) hp = 100;
     updBlood(rdt);
     if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.6, goPick); setPhase('busy'); } }
     tickFx(rdt); if (phase === 'aim' && tapAim && performance.now() - tossT0 > 2000) toss(false);
@@ -1796,17 +1844,17 @@ function frame() {
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
     on('standBtn', !walking); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
-    const tgt = walking ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
-    if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！按住 E／「偷」偷她的肉` : `${tgt.name}在看，不要偷…`;
+    const tgt = walking || evRun?.steal === 'no_steal' ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
+    if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！${COARSE ? '按住「偷」' : '按住 E'}偷她的肉` : `${tgt.name}在看，不要偷…`;
     if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
     chatTimer -= dt * seatNow().nag; if (chatTimer <= 0) { chatTimer = 3 + Math.random() * 4; const n = pick(npcs);
       if (n.bubT <= 0 && n.windup <= 0) { if (n.mood > 0) say(n, pick(GRUDGE)); else if (Math.random() < 0.5) { n.distract = rnd(3, 5.5) * seatNow().steal; n.turnDir = Math.random() < 0.5 ? -1 : 1; say(n, pick(TURN_CHAT), n.distract); } else { say(n, pick(GOSSIP)); if (Math.random() < n.chatty) n.pause = 2.5; } } }
     for (const n of npcs) {
       n.distract -= dt; n.angry -= dt; n.mood -= dt;
       npcShuck(n, dt, t);
-      n.grudge = Math.max(0, (n.grudge ?? 0) - (walking ? (performance.now() - (n.gAt ?? 0) > 2000 ? dt * 7.5 : 0) : performance.now() - (n.gAt ?? 0) > 8000 ? dt * 2.5 : 0) * (newbie() ? 2 : 1)); n.calm = Math.max(0, (n.calm ?? 0) - dt); grudgeUI(n);
+      n.grudge = Math.max(0, (n.grudge ?? 0) - (walking ? (performance.now() - (n.gAt ?? 0) > 2000 ? dt * 7.5 : 0) : performance.now() - (n.gAt ?? 0) > 8000 ? dt * 2.5 : 0) * (newbie() && !evRun ? 2 : 1)); n.calm = Math.max(0, (n.calm ?? 0) - dt); grudgeUI(n);
       if (n === npcs[0] && slOn('sl_89') && !tut && (scaredT -= dt) <= 0) { scaredT = rnd(8, 15); const m = pick(npcs); if (m.bubT <= 0) say(m, pick(SCARED)); }
-      n.throwCd -= dt * seatNow().throwM * locNow().thr * (n.calm! > 0 ? 0.3 : (1 + n.grudge! / 25) * (n.mood > 0 ? 2 : 1) * 1); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); if (!tut && !(newbie() && !((n.grudge ?? 0) > 0)) && !(Math.random() > fxAll().throw)) windUp(n); }
+      n.throwCd -= dt * (evRun ? Math.max(1, seatNow().throwM) * Math.max(1, locNow().thr) : seatNow().throwM * locNow().thr) * (n.calm! > 0 && !evRun ? 0.3 : (1 + n.grudge! / 25) * (n.mood > 0 ? 2 : 1) * 1) * (evRun?.throwX ?? 1); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); if (!tut && !(newbie() && !evRun && !((n.grudge ?? 0) > 0)) && !(Math.random() > fxAll().throw)) windUp(n); }
       if (n.windup > 0) { warnNpc = n; n.windup -= rdt; if (!n.warned && n.windup <= warnLead(n)) { n.warned = true; SFX.alert(); } if (n.windup <= 0) npcThrow(n); }
       if (n.peek && n.look <= 0 && n.distract <= 0 && Math.random() < dt * 0.05) { n.look = 2.5; say(n, pick(PEEK), 2.5); }
     }
@@ -1815,7 +1863,7 @@ function frame() {
   // ⚠ 方向提示
   if (warnNpc && !warnNpc.warned) warnNpc = null;
   if (warnNpc) { const rel = warnNpc.g.position.clone().sub(camera.position); const fwd = camera.getWorldDirection(new THREE.Vector3()); let a = Math.atan2(rel.x, rel.z) - Math.atan2(fwd.x, fwd.z); a = Math.atan2(Math.sin(a), Math.cos(a));
-    warnEl.classList.add('on'); warnEl.style.left = `${clamp(50 - a / 1.2 * 45, 6, 94)}%`; warnEl.style.opacity = String(0.6 + 0.4 * Math.sin(t * 14)); warnEl.textContent = a > 0.5 ? '⚠◀' : a < -0.5 ? '▶⚠' : '⚠'; hint.textContent = `${warnNpc.name}要丟殼過來了！快按 R／「雨傘」！`; }
+    warnEl.classList.add('on'); warnEl.style.left = `${clamp(50 - a / 1.2 * 45, 6, 94)}%`; warnEl.style.opacity = String(0.6 + 0.4 * Math.sin(t * 14)); warnEl.textContent = a > 0.5 ? '⚠◀' : a < -0.5 ? '▶⚠' : '⚠'; hint.textContent = `${warnNpc.name}要丟殼過來了！快${COARSE ? '按住「雨傘」' : '按住 R 撐傘'}！`; }
   else warnEl.classList.remove('on');
   for (const n of npcs) {
     n.look -= dt; n.bubT -= rdt; if (n.bubT <= 0) n.bubble.style.opacity = '0';
@@ -1965,7 +2013,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['nameAsk', 'naClose'], ['gift', 'giftClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['nameAsk', 'naClose'], ['gift', 'giftClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -2082,6 +2130,7 @@ function drawMeds() {
 function useMed(id: string) {
   const m = MEDS.find(x => x.id === id); if (!m || state !== 'play' || tut || !(save.meds[id] > 0)) return;
   let who = '';
+  if (id === 'sweet' && evRun) { toast('活動中的阿婆都殺紅眼了，糖果沒有用', '#ff9a8a'); return; }
   if (id === 'sweet') { const t = npcs.reduce((a, b) => ((b.grudge ?? 0) > (a.grudge ?? 0) ? b : a)); if ((t.grudge ?? 0) < 1) { toast('阿婆們現在都不生氣，糖果先留著', '#cfc3ff'); return; } t.grudge = Math.max(0, (t.grudge ?? 0) - 40); t.calm = Math.max(t.calm ?? 0, 3); grudgeUI(t); say(t, '哎唷，古早味！好啦不跟你計較', 2.6); who = `（給${t.name}）`; }
   if (id === 'salt') { if (saltNext) { toast('粗鹽已經用了，等下一顆', '#cfc3ff'); return; } saltNext = true; }
   save.meds[id]--; persist(); if (m.heal) { hp = Math.min(100, hp + m.heal); updHud(); } if (m.dur) medT[id] = (medT[id] ?? 0) + m.dur; track('use', { item: id }); toast(`${m.emo}使用${m.n}${who}：${m.good}；${m.bad}${m.dur ? `（${m.dur} 秒）` : ''}`, '#cfc3ff'); if (ac) SFX.pop(); drawMeds();
@@ -2154,7 +2203,9 @@ const slOn = (id: string) => wornIds().includes(id);
 function fxAll(): Required<Fx> {
   const r = { bowl: 0, keep: 0, speed: 1, pearl: 1, nag: 1, throw: 1, dmg: 1, luck: 0 };
   for (const f of [...SLOTS.map(([s]) => equipNow(s).fx), ...setsOn().map(s => s.fx)]) { r.bowl += f.bowl ?? 0; r.keep += f.keep ?? 0; r.luck += f.luck ?? 0; r.speed *= f.speed ?? 1; r.pearl *= f.pearl ?? 1; r.nag *= f.nag ?? 1; r.throw *= f.throw ?? 1; r.dmg *= f.dmg ?? 1; }
-  r.keep = Math.min(0.7, r.keep); r.throw = Math.max(0.1, r.throw); return r;
+  r.keep = Math.min(0.7, r.keep); r.throw = Math.max(0.1, r.throw);
+  if (evRun) { r.throw = Math.max(1, r.throw); r.nag = Math.max(1, r.nag); } // 活動中阿婆是瘋子：怕你、少丟、少唸的效果都不算
+  return r;
 }
 function migrateEquip() { save.equip = save.equip ?? {}; for (const [s] of SLOTS) if (!save.equip[s] || !eqOwned(save.equip[s])) save.equip[s] = EQUIP.find(e => e.slot === s && e.price === 0)!.id; }
 let sleeveTry: string | null = null, scaredT = 10;
@@ -2778,3 +2829,111 @@ setInterval(newAnnounce, 1500); setTimeout(newAnnounce, 2500);
 (window as any).__pity = { LEGEND_PITY, LEGEND_ODD, get dry() { return save.legendDry ?? 0; }, set dry(v: number) { save.legendDry = v; }, roll: () => rollFind(), sync: () => legendSync(), give: (i: number) => { save.odd[i]++; }, odd: () => save.odd.slice() };
 
 if ((navigator as any).standalone) document.documentElement.classList.add('iosApp');
+
+// ---------- 活動場景 ----------
+const EV_RULE: Record<string, string> = { normal: '一般，可剝可偷', steal_only: '只能用偷的', no_steal: '不能偷' };
+let evCfg: EvCfg | null = null, evSkew = 0, evShown = false;
+function evMeat() {
+  if (!evRun || state !== 'play' || tut) return;
+  const tgt = evRun.earlyMeat;
+  if (tgt && count >= tgt && endReason !== 'early') { endReason = 'early'; toast('達成目標，提前完工！', '#ffd76a'); later(0.8, endDay); }
+}
+function evHud() {
+  const el = document.getElementById('evHud'); if (!el) return;
+  if (!evRun || state !== 'play') { el.style.display = 'none'; document.body.classList.remove('evOn'); return; }
+  document.body.classList.add('evOn');
+  const t = evRun.earlyMeat, rule = evRun.steal === 'no_steal' ? '本活動不能偷' : evRun.steal === 'steal_only' ? '本活動只能用偷的' : '';
+  el.innerHTML = `<i class="ic ic-lantern"></i>${t ? `<b>${Math.min(count, t)}/${t}</b>` : `<b>${esc(evRun.name)}</b>`}${rule ? `<small>${rule}</small>` : ''}`;
+  el.style.display = '';
+}
+const evOdds = (l: EvOdd[]) => (Array.isArray(l) ? l : []).filter(o => Number.isInteger(o?.i) && ODD[o.i] && o.n > 0).map(o => ({ i: o.i, n: Math.min(99, Math.floor(o.n)) }));
+// 收工：發活動獎勵（同一工只發一次，存檔記住 sid 防重複領）、回報成績、組收工畫面的活動區塊
+function evFinish(ev: EvCfg, done: boolean, early: boolean): string {
+  const sid = statsSid; save.evClaim ??= [];
+  const fresh = done && !save.evClaim.includes(sid);
+  const odds = done ? [...evOdds(ev.oddDone), ...(early ? evOdds(ev.oddEarly) : [])] : [];
+  if (fresh) {
+    save.evClaim.push(sid); save.evClaim = save.evClaim.slice(-30);
+    for (const o of odds) { save.odd[o.i] = (save.odd[o.i] ?? 0) + o.n; const w = ODD[o.i]; if (rarOf(w.w) === 'legend' && !(w as any).ex) { save.legendDry = 0; save.legendN = legendTotal(); } }
+    for (const i of new Set(odds.map(o => o.i))) Social.report(rarOf(ODD[i].w) === 'legend' ? 'legend' : 'odd', i);
+    renderDex();
+  }
+  const score = count * 1000 + (early ? Math.max(0, Math.ceil(timeLeft)) : 0);
+  if (!SHOT) { if (evToken) Social.evResult({ eventId: ev.id, token: evToken, sid, score, meat: count, completed: done, early }); track('event_end', { item: 'ev-' + ev.id, count, earn: lastPay.earn, reason: early ? 'time' : endReason === 'quit' ? 'quit' : 'time', dur: Math.round(shiftLen - Math.max(0, timeLeft)) }); }
+  const row = (l: string, v: string, on = true) => `<div class="row${on ? '' : ' off'}"><span>${l}</span><b>${v}</b></div>`;
+  const oddRow = (l: EvOdd[]) => l.map(o => `${esc(ODD[o.i].name)} ×${o.n}`).join('、');
+  return `<div class="evRes"><h3><i class="ic ic-lantern"></i> 活動獎勵・${esc(ev.name)}</h3>` +
+    row('完工獎勵', done ? `+$${ev.bonus}` : '未完工', done) +
+    (ev.earlyMeat ? row(`提前完工額外獎勵（${ev.earlyMeat} 顆）`, early ? `+$${ev.earlyBonus}` : `${Math.min(count, ev.earlyMeat)}/${ev.earlyMeat}`, early) : '') +
+    (evOdds(ev.oddDone).length ? row('完工奇物', oddRow(evOdds(ev.oddDone)), done) : '') +
+    (ev.earlyMeat && evOdds(ev.oddEarly).length ? row('提前完工奇物', oddRow(evOdds(ev.oddEarly)), early) : '') +
+    (done && !fresh ? '<p class="evNote">這一工的獎勵已經領過了</p>' : odds.length && fresh ? '<p class="evNote">奇物已收進圖鑑</p>' : '') +
+    `<button id="resEvLb" class="evLbBtn"><i class="ic ic-rank"></i> 活動排行榜</button></div>`;
+}
+function evLeft(ms: number) { const m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60; return d ? `${d} 天 ${h} 小時` : h ? `${h} 小時 ${mm} 分` : `${mm} 分`; }
+function evRender() {
+  const box = $('evEntry'); const ev = evCfg;
+  if (!ev || Date.now() + evSkew >= ev.end) { box.style.display = 'none'; evCfg = null; return; }
+  const left = ev.end - (Date.now() + evSkew);
+  box.innerHTML = `<div class="evHd"><i class="ic ic-lantern"></i><b>活動場景</b><span class="evLeft"><i class="ic ic-timer"></i> 剩 ${evLeft(left)}</span></div>` +
+    `<div class="evName">${esc(ev.name)}</div>${ev.desc ? `<p class="evDesc">${esc(ev.desc)}</p>` : ''}` +
+    `<p class="evMeta">阿婆 ${ev.npc} 人・上工 ${Math.round(ev.dur / 60 * 10) / 10} 分鐘${ev.earlyMeat ? `・剝滿 ${ev.earlyMeat} 顆提前完工` : ''}・偷蚵仔：${EV_RULE[ev.steal] ?? EV_RULE.normal}${ev.infHp ? '・不會受傷' : ''}<br>完工 $${ev.bonus}${ev.earlyMeat ? `・提前完工再加 $${ev.earlyBonus}` : ''}</p>` +
+    `<p class="evPlays">${ev.left == null ? '不限次數' : ev.left > 0 ? `還可以玩 ${ev.left} 次` : '這個活動的次數用完了'}</p>` +
+    `<div class="evBtns"><button id="evGo"${ev.left === 0 ? ' disabled' : ''}><i class="ic ic-flag"></i> ${ev.left === 0 ? '次數用完了' : '參加活動'}</button><button id="evRank"><i class="ic ic-rank"></i> 活動排行榜</button></div>`;
+  box.style.display = '';
+  $('evGo').onclick = evStart; const eid = ev.id; $('evRank').onclick = () => evLbOpen(eid);
+}
+const evValid = (e: any): e is EvCfg => e && Number.isInteger(e.id) && typeof e.name === 'string' && Number.isFinite(e.npc) && Number.isFinite(e.dur) && e.dur > 0 && Number.isFinite(e.end);
+async function evFetch() {
+  evCfg = null; evRender(); // 抓新的之前先藏起來，失敗就不顯示（不用舊設定）
+  evFetchFrom(await Social.evActive());
+}
+function evFetchFrom(r: Awaited<ReturnType<typeof Social.evActive>>) {
+  if (!r || !evValid(r.event)) { evCfg = null; evRender(); return; }
+  evSkew = r.serverTime - Date.now(); const e: any = r.event;
+  evCfg = { ...e, throwX: Number(e.throwX) || 1, angerX: Number(e.angerX) || 1, bonus: Math.max(0, Number(e.bonus) || 0), earlyBonus: Math.max(0, Number(e.earlyBonus) || 0), earlyMeat: Number(e.earlyMeat) > 0 ? Math.floor(e.earlyMeat) : null, infHp: e.infHp === true, steal: ['steal_only', 'no_steal'].includes(e.steal) ? e.steal : 'normal', oddDone: evOdds(e.oddDone), oddEarly: evOdds(e.oddEarly), left: typeof r.left === 'number' ? Math.max(0, r.left) : null };
+  evRender();
+}
+// 參加活動：先跟伺服器拿場次 token（次數上限由伺服器判斷），拿到才開工
+async function evStart(): Promise<boolean> {
+  const ev = evCfg; if (!ev || Date.now() + evSkew >= ev.end) { evRender(); toast('活動已經結束了'); return false; }
+  if (!save.tutDone) { toast('先完成教學再來參加活動喔'); return false; }
+  if (ev.left === 0) { toast('這個活動的次數用完了'); return false; }
+  if (evBusy) return false; evBusy = true;
+  const b = document.getElementById('evGo') as HTMLButtonElement | null; if (b) b.disabled = true;
+  const r = await Social.evStart(ev.id); evBusy = false;
+  if (r.st !== 'ok') {
+    if (r.st === 'limit') { ev.left = 0; toast('這個活動的次數用完了'); evRender(); }
+    else if (r.st === 'ended') { toast('活動已經結束了'); evFetch(); }
+    else { toast('連不上活動伺服器，等一下再試'); evRender(); }
+    return false;
+  }
+  ev.left = r.left; evToken = r.token; evRun = ev; shiftLen = Math.max(10, Math.min(1800, Math.round(ev.dur))); audio(); startDay();
+  return true;
+}
+// 收工畫面「再次上工」：剛剛是活動就再開一場同一個活動；活動結束或次數用完就回主選單
+async function evAgain() {
+  if (evBusy) return;
+  const id = evLastId; const ab = $('again') as HTMLButtonElement; ab.disabled = true;
+  const r = await Social.evActive(); ab.disabled = false;
+  const toMenu = (m: string) => { if (m) toast(m); evLastId = null; $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; };
+  if (!r) { toast('連不上活動伺服器，等一下再試'); return; }
+  if (!evValid(r.event) || r.event.id !== id) { toMenu('活動已經結束了'); return; }
+  evFetchFrom(r);
+  if (evCfg?.left === 0) { toMenu('這個活動的次數用完了'); return; }
+  if (!(await evStart()) && !evRun) { if ($('result').classList.contains('show')) toMenu(''); }
+}
+async function evLbOpen(id: number) {
+  const body = $('evLbBody'); body.innerHTML = '<div class="lbEmpty"><span>載入中…</span></div>'; $('evLb').classList.add('show');
+  const r = await Social.evTop(id);
+  if (!r || !Array.isArray(r.rows)) { body.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; return; }
+  const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}"><span class="lbR">${x.rank}</span><span class="lbN"><b>${esc(x.nick)}</b><small>#${esc(x.tag)}</small></span><span class="lbV">${Math.floor(x.v / 1000)} 顆${x.early ? `<small class="evE">提前 ${x.v % 1000} 秒</small>` : ''}</span></div>`;
+  body.innerHTML = (r.event ? `<p class="evDesc">${esc(r.event.name)}・共 ${r.total ?? r.rows.length} 人參加</p>` : '') +
+    (r.rows.length ? r.rows.map(row).join('') + (r.mine ? '<div class="lbGap"></div>' + row(r.mine) : '') : '<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>完成活動就會出現你的成績</small></span></div>');
+}
+$('evLbClose').onclick = () => $('evLb').classList.remove('show');
+new MutationObserver(() => { const sh = $('overlay').classList.contains('show'); if (sh && !evShown) evFetch(); evShown = sh; }).observe($('overlay'), { attributes: true, attributeFilter: ['class'] });
+evShown = $('overlay').classList.contains('show'); evFetch(); setInterval(() => { if ($('overlay').classList.contains('show') && evCfg) evRender(); }, 30_000);
+// 手機：對話框按鈕統一走 btn()（放開觸發＋click 備援），不只靠 onclick
+if (COARSE) for (const id of ['bmGo', 'bmStay', 'psOk', 'tnOk']) { const el = $(id) as HTMLButtonElement; const f = el.onclick; if (!f) continue; el.onclick = null; btn(id, () => f.call(el, new PointerEvent('click'))); }
+(window as any).__ev = { get run() { return evRun; }, get cfg() { return evCfg; }, get hp() { return hp; }, get npcs() { return npcs.length; }, get left() { return timeLeft; }, minDist: () => { let m = 99; for (let i = 0; i < npcs.length; i++) for (let j = i + 1; j < npcs.length; j++) m = Math.min(m, npcs[i].g.position.distanceTo(npcs[j].g.position)); return m; }, refetch: evFetch, meat: (k: number) => { for (let i = 0; i < k; i++) { count++; evMeat(); } updHud(); }, hurt: (d: number) => hurt(d, '測試') };
