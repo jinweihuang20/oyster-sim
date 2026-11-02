@@ -724,3 +724,48 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 .evEntry p,.evEntry .evName{color:#ffe9c2}.evEntry .evMeta{color:#ffd9a8}
 .evEntry .evPlays{margin:4px 0 0;font-size:13px;font-weight:700;color:#ffe08a}
 .evEntry button:disabled{opacity:.55;filter:grayscale(.6)}
+
+/* ===== 成就 ===== */
+.sysGrid>#oAch{background-color:var(--iron2);color:#fff;position:relative}
+#oAch.achNew::after,#achTabs button.achNew::after{content:'';position:absolute;top:-5px;right:-5px;width:12px;height:12px;border-radius:50%;background:var(--red);border:2px solid var(--ink)}
+.achSum{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:6px;margin:4px 0 8px}
+.achSum>div{background:var(--iron) var(--corr);color:var(--paint);border:3px solid var(--ink);padding:6px 8px;text-align:center;min-width:0}
+.achSum small{display:block;font-size:12px;opacity:.85}.achSum b{font:900 22px var(--sign)}.achSum span{font-size:12px;opacity:.8;white-space:nowrap}
+.achSum .achCur{background:var(--red)}.achSum .achCur b{font-size:16px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.achNext{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px}.achNext span{white-space:nowrap}
+.achBar{flex:1;display:block;height:12px;background:var(--paint2);border:2px solid var(--ink);position:relative;overflow:hidden}
+.achBar>i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(#ffd25a,#d9952b)}
+#achTabs{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-bottom:10px}
+.achCatT{grid-column:1/-1;display:flex;justify-content:center;background:var(--iron) var(--corr);color:var(--paint);font:900 16px var(--sign);letter-spacing:.2em;border:3px solid var(--ink);padding:4px;margin-top:6px}
+#ach .pb{overflow-x:hidden}
+#achTabs button{position:relative;flex-direction:column;gap:2px;min-width:0;min-height:52px;padding:4px 0;font-size:12px;letter-spacing:0;border-radius:2px;white-space:nowrap;opacity:.75;box-shadow:2px 2px 0 var(--ink)}
+#achTabs button .ic{width:20px;height:20px}
+#achTabs button.on{opacity:1;background:var(--iron) var(--corr);color:var(--paint)}
+#achList{display:flex;flex-direction:column;gap:8px}
+.achCard{position:relative;background:var(--paint);border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);padding:8px 10px}
+.achCard.full{background:#fff3cf}.achCard.new{outline:3px solid var(--red);outline-offset:1px}
+.achCard.hid{background:var(--paint2)}.achCard.hid .achH b{letter-spacing:.3em;opacity:.7}
+.achH{display:flex;justify-content:space-between;align-items:center;gap:8px}.achH b{font:900 17px var(--sign)}
+.achCard p{margin:4px 0;font-size:13px;line-height:1.4}
+.achTs{display:flex;gap:4px;flex-shrink:0}
+.achT{display:flex;flex-direction:column;align-items:center;min-width:40px;padding:1px 4px;font:900 12px var(--sign);border:2px solid var(--ink);background:#fff;opacity:.45}
+.achT small{font-size:10px;font-weight:700}
+.achT.got{opacity:1}.achT.t0.got{background:#e0a46a}.achT.t1.got{background:#d8dde2}.achT.t2.got,.achT.tx.got{background:#ffd25a}
+.achP{display:flex;align-items:center;gap:8px;font-size:12px}.achP span{white-space:nowrap;font-weight:700}
+.achR{display:block;font-size:11px;opacity:.7;margin-top:3px}
+.achTip{font-size:13px;margin:0 0 4px;opacity:.85}
+.achCard.ttl.lock{opacity:.6}.achCard.ttl.on{background:#fff3cf;border-color:var(--red)}
+.achEq{min-height:40px;padding:4px 14px;font-size:14px}.achCard.ttl.on .achEq{background:var(--red);color:#fff}
+#achBan{position:fixed;left:50%;top:calc(var(--sa-top) + 70px);z-index:10050;pointer-events:none;display:flex;align-items:center;gap:10px;padding:8px 16px 8px 12px;max-width:86vw;background:var(--iron) var(--corr);color:var(--paint);border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);opacity:0;visibility:hidden;transform:translate(-50%,-20px);transition:opacity .3s,transform .3s,visibility 0s .3s}
+#achBan.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .3s,transform .3s}
+#achBan .ic{width:30px;height:30px;background-color:#ffd25a;flex-shrink:0}
+#achBan span{display:flex;flex-direction:column;line-height:1.2}#achBan small{font-size:12px;opacity:.85}#achBan b{font:900 18px var(--sign)}#achBan em{font-style:normal;font-size:13px;color:#ffd25a}
+.lbA,.fdA{font-style:normal;font-size:.8em;font-weight:900;margin-right:4px;padding:0 4px;border:1.5px solid currentColor;border-radius:2px;color:#b8322a;white-space:nowrap}
+.fdA{color:#ffd25a}
+
+#achBan.tap.on{pointer-events:auto;cursor:pointer}
+#achBan{max-width:min(86vw,420px)}
+.resAch{background:var(--iron) var(--corr);color:var(--paint);border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);padding:8px 12px;margin:0 0 10px;text-align:left}
+.resAch b{font:900 16px var(--sign);display:flex;align-items:center;gap:6px}.resAch .ic{background-color:#ffd25a}
+.resAch ul{margin:6px 0 0;padding-left:20px;font-size:14px;line-height:1.5}
+.achCard.achHi{outline:4px solid #ffd25a;outline-offset:2px}
