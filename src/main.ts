@@ -456,7 +456,7 @@ const dstatStr = () => dStat.flat().join(',');
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number };
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: 0, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {} }; }
 function loadSave(): Save {
   const d = defaultSave(); let raw: any = null;
@@ -469,6 +469,7 @@ function loadSave(): Save {
   for (const k of LIFE_KEYS) out.life[k] = num(raw.life?.[k]);
   if (raw.titles && typeof raw.titles === 'object') for (const [k0, v] of Object.entries(raw.titles)) { const k = k0 === '👑 今日蚵后' ? '👑 今日剝蚵冠軍' : k0; out.titles[k] = (out.titles[k] ?? 0) + num(v); }
   if (raw.namePrompted) out.namePrompted = 1;
+  if (raw.tpv) out.tpv = 1;
   if (raw.equip && typeof raw.equip === 'object') { out.equip = {}; for (const [k, v] of Object.entries(raw.equip)) if (typeof v === 'string') out.equip[k] = v; }
   if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
   if (raw.shop?.equipped && typeof raw.shop.equipped === 'object') for (const [k, v] of Object.entries(raw.shop.equipped)) if (typeof v === 'string') out.shop.equipped[k] = v;
@@ -926,7 +927,7 @@ function updBlood(dt: number) {
   for (let i = decals.length - 1; i >= 0; i--) { const d = decals[i]; d.t -= dt; (d.m.material as THREE.MeshBasicMaterial).opacity = Math.min(0.85, d.t / 5); if (d.t <= 0) { scene.remove(d.m); decals.splice(i, 1); } }
   if (woundT > 0) { woundT -= dt; (wound.material as THREE.MeshBasicMaterial).opacity = Math.min(1, woundT / 3); if (woundT <= 0) wound.visible = false; }
 }
-function hurt(dmg: number, txt: string) { if (tut) dmg = 0; dmg *= medM('dmg') * fxAll().dmg; hp = Math.max(0, hp - dmg); shake = 0.3; hurtT = 0.9; SFX.aia(); toast(txt, '#ff9a8a'); updHud(); if (hp <= 0 && state === 'play') { handPain = true; setPhase('busy'); later(0.8, endDay); } }
+function hurt(dmg: number, txt: string) { react3('ouch'); if (tut) dmg = 0; dmg *= medM('dmg') * fxAll().dmg; hp = Math.max(0, hp - dmg); shake = 0.3; hurtT = 0.9; SFX.aia(); toast(txt, '#ff9a8a'); updHud(); if (hp <= 0 && state === 'play') { handPain = true; setPhase('busy'); later(0.8, endDay); } }
 
 // ----- 0. 提蚵仔／撈蚵仔 -----
 const ray = new THREE.Raycaster();
@@ -1149,7 +1150,7 @@ function openOyster() {
   else later(0.2, () => setPhase('aim'));
   updHud();
 }
-function revealOdd(i: number) {
+function revealOdd(i: number) { react3('cheer');
   const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); Social.report(rarOf(o.w) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
   label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.css; label.classList.add('on');
@@ -1321,7 +1322,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     `<p>${caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
   $('result').classList.add('show'); later(1.2, namePrompt); if (ac) SFX.endJingle(queen && !handPain);
 }
-function revealPearl(r: number) {
+function revealPearl(r: number) { react3('cheer');
   sleeveGold(); dayPearls.push(r); save.dex[r]++; persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
   slowmo = 2.6; pearlShow = 2.6;
   (pearlMesh.material as THREE.MeshStandardMaterial).color.setHex(RAR[r].color);
@@ -1641,7 +1642,7 @@ function frame() {
   shake = Math.max(0, shake - rdt);
   if (walking) walkStep(rdt);
   camera.rotation.set(pitch - pe * 0.08, yaw + (walking ? 0 : seatYaw), 0);
-  camera.position.copy(walking ? walkPos : SEAT); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
+  camera.position.copy(walking ? walkPos : SEAT); camera.updateMatrixWorld(); camTick(dt); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
   lamp.intensity = 26 + Math.sin(t * 1.3) * 1.0;
   renderer.render(scene, camera);
@@ -1716,7 +1717,8 @@ if (SHOT) setTimeout(() => {
   if (SHOT === 'seat') { applySeat(params.get('s') || 'corner'); goPick(); }
   if (SHOT === 'walk') { later(0.1, () => { standUp(); walkPos.set(-1.1, 1.55, -2.35); tYaw = yaw = 3.09; tPitch = pitch = -0.5; }); }
   if (SHOT === 'dex') { renderDex(); $('dex').classList.add('show'); }
-  if (SHOT === 'sleeves') { save.money = 20000; const sid = params.get('s') || 'sl_dragon'; for (const id of ['sl_flower', sid, 'hd_crown', 'bd_vest', 'ft_gold']) save.shop.owned.push(id); setEquip('hand', sid); if (params.get('set')) { setEquip('head', 'hd_crown'); setEquip('body', 'bd_vest'); setEquip('feet', 'ft_gold'); } applySleeve(); if (params.get('p') === 'shop') { renderShop(); $('shop').classList.add('show'); } if (params.get('p') === 'eq') { eqPick = 'hand'; renderEquip(); $('equip').classList.add('show'); } if (params.get('p') === 'name') { save.name = undefined; save.namePrompted = 0; namePrompt(); } }
+  if (SHOT === 'sleeves') { save.money = 20000; const sid = params.get('s') || 'sl_dragon'; for (const id of ['sl_flower', sid, 'hd_crown', 'bd_vest', 'ft_gold']) save.shop.owned.push(id); setEquip('hand', sid); if (params.get('set')) { setEquip('head', 'hd_crown'); setEquip('body', 'bd_vest'); setEquip('feet', 'ft_gold'); } applySleeve(); if (params.get('p') === 'shop') { renderShop(); $('shop').classList.add('show'); } if (params.get('p') === 'eq') { eqPick = 'hand'; renderEquip(); $('equip').classList.add('show'); } if (params.get('tpv')) { for (const id of ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots']) { save.shop.owned.push(id); setEquip(EQUIP.find(e => e.id === id)!.slot, id); } setEquip('hand', 'sl_89'); applySleeve(); setTpv(true); if (params.get('tpv') === 'cheer') later(0.5, () => react3('cheer')); }
+  if (params.get('p') === 'name') { save.name = undefined; save.namePrompted = 0; namePrompt(); } }
   if (SHOT === 'settings') $('settings').classList.add('show');
   if (SHOT === 'fb' || SHOT === 'fbdone') { openFb('settings'); if (SHOT === 'fbdone') fbShow(true); }
   if (SHOT === 'pick') look(-0.25, -0.85);
@@ -1990,7 +1992,7 @@ function renderEquip() {
     (eqPick ? `<div class="eqList">${EQUIP.filter(e => e.slot === eqPick && eqOwned(e.id)).map(e => `<button data-eqset="${e.id}" class="${equipNow(e.slot).id === e.id ? 'on' : ''}">${eqSvg(e, 48)}<span><b>${e.n}</b><small>${e.eff}</small></span></button>`).join('')}<p class="eqHint">想要更多款式，去雜貨店的「服飾」看看。</p></div>` : '<p class="eqHint">點身上的部位來換裝。</p>') +
     `<div class="eqSets"><b>套裝</b>${SETS.map(s => `<div class="${sets.includes(s) ? 'on' : ''}">${s.n}：${s.need.map(i => EQUIP.find(e => e.id === i)!.n).join('＋')}${s.id === 'typhoon' ? '（手部任意）' : ''}<br><small>${s.eff}</small></div>`).join('')}</div><button id="eqShare">分享穿搭</button><p class="eqHint">分享到 Discord 有機會拿神秘好禮</p><div id="eqShareOut"></div>`;
   $('eqBody').querySelectorAll('button[data-slot]').forEach(b => (b as HTMLButtonElement).onclick = () => { const s = b.getAttribute('data-slot') as Slot; eqPick = eqPick === s ? null : s; renderEquip(); });
-  $('eqBody').querySelectorAll('button[data-eqset]').forEach(b => (b as HTMLButtonElement).onclick = () => { const e = EQUIP.find(x => x.id === b.getAttribute('data-eqset'))!; setEquip(e.slot, e.id); persist(); applySleeve(); renderEquip(); });
+  $('eqBody').querySelectorAll('button[data-eqset]').forEach(b => (b as HTMLButtonElement).onclick = () => { const e = EQUIP.find(x => x.id === b.getAttribute('data-eqset'))!; setEquip(e.slot, e.id); persist(); applySleeve(); applyOutfit3(); renderEquip(); });
   ($('eqShare') as HTMLButtonElement).onclick = shareOutfit;
 }
 let clothTab: Slot = 'hand';
@@ -2003,7 +2005,7 @@ function renderClothShop() {
   $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = EQUIP.find(x => x.id === id)!;
     if (b.hasAttribute('data-slbuy')) { if (save.money < s.price) return; save.money -= s.price; save.shop.owned.push(id); track('buy', { item: id, price: s.price }); if (ac) SFX.jingle(); }
-    setEquip(s.slot, id); sleeveTry = null; persist(); applySleeve(); renderShop();
+    setEquip(s.slot, id); sleeveTry = null; persist(); applySleeve(); applyOutfit3(); renderShop();
   });
 }
 function renderSleeveSet() {
@@ -2075,6 +2077,45 @@ function renderGifts() {
 $('oGift').onclick = () => { renderGifts(); $('gift').classList.add('show'); };
 $('giftClose').onclick = () => $('gift').classList.remove('show');
 setTimeout(() => checkGifts(true), 3000); setInterval(() => { if (state !== 'play') checkGifts(); }, 60e3);
+// ---------- 第三人稱視角 ----------
+// eslint-disable-next-line no-var
+var tpReady = false;
+const pm = { head: mat(0xffffff), body: mat(0xffffff), legs: mat(0xffffff), feet: mat(0xffffff), skin: mat(skin) };
+const me3 = new THREE.Group(); me3.visible = false; scene.add(me3);
+const meTorso = new THREE.Group(); me3.add(meTorso);
+mesh(new THREE.BoxGeometry(0.36, 0.42, 0.22), pm.body, [0, 0.66, 0], meTorso);
+mesh(new THREE.BoxGeometry(0.34, 0.12, 0.36), pm.legs, [0, 0.42, -0.1], me3);
+for (const sx of [-0.09, 0.09]) { mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.32, 6), pm.legs, [sx, 0.2, -0.28], me3); mesh(new THREE.BoxGeometry(0.1, 0.05, 0.2), pm.feet, [sx, 0.03, -0.34], me3); }
+const meHead = new THREE.Group(); meHead.position.set(0, 1.02, 0); meTorso.add(meHead);
+mesh(new THREE.SphereGeometry(0.15, 10, 8), pm.skin, [0, 0, 0], meHead);
+mesh(new THREE.SphereGeometry(0.16, 10, 8, 0, Math.PI * 2, 0, 1.3), pm.head, [0, 0.03, 0], meHead);
+mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.02, 12), pm.head, [0, 0.06, 0], meHead);
+const meArm = (s: number) => { const p = new THREE.Group(); p.position.set(s * 0.22, 0.84, 0); meTorso.add(p); mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.36, 6), sleeve, [0, -0.12, -0.12], p).rotation.x = 1.1; mesh(new THREE.SphereGeometry(0.05, 6, 5), pm.skin, [0, -0.2, -0.3], p); return p; };
+const meArmL = meArm(-1), meArmR = meArm(1);
+let tpv = false, cheerT = 0, ouchT = 0;
+function applyOutfit3() {
+  for (const s of ['head', 'body', 'legs', 'feet'] as const) { const e = equipNow(s), m = pm[s]; m.map?.dispose(); m.map = eqTex(e); m.map.repeat.set(1, 1); m.color.set(0xffffff); m.emissive.set(e.pat === 'neon' ? 0x3a1a50 : 0); m.needsUpdate = true; }
+}
+function setTpv(v: boolean) { tpv = v; save.tpv = v ? 1 : 0; persist(); applyOutfit3(); drawCamBtn(); const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) c.checked = v; }
+function drawCamBtn() { const b = document.getElementById('camBtn'); if (!b) return; b.classList.toggle('on', tpv); b.title = tpv ? '視角：第三人稱' : '視角：第一人稱'; }
+function react3(kind: 'cheer' | 'ouch') { if (!tpReady) return; if (kind === 'cheer') cheerT = 1.4; else ouchT = 0.6; }
+// 每幀：放好角色、把鏡頭拉到身後上方；手和蚵仔仍跟著鏡頭，操作不變
+function camTick(dt: number) {
+  if (!tpReady) return;
+  const show = tpv && !walking && state === 'play';
+  me3.visible = show; handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
+  if (!show) return;
+  me3.position.set(SEAT.x, SEAT.y - 1.02, SEAT.z); me3.rotation.y = seatYaw;
+  cheerT = Math.max(0, cheerT - dt); ouchT = Math.max(0, ouchT - dt);
+  const up = cheerT > 0 ? Math.sin(Math.min(1, cheerT) * Math.PI) : 0;
+  meArmL.rotation.x = meArmR.rotation.x = -up * 2.4; meArmL.rotation.z = -up * 0.3; meArmR.rotation.z = up * 0.3;
+  meTorso.rotation.x = ouchT > 0 ? Math.sin(ouchT / 0.6 * Math.PI) * 0.35 : 0; meTorso.position.y = up * 0.06;
+  meHead.rotation.y = yaw * 0.6;
+  const h = yaw + seatYaw; camera.position.add(new THREE.Vector3(Math.sin(h) * 1.7 + Math.cos(h) * 0.5, 0.95, Math.cos(h) * 1.7 - Math.sin(h) * 0.5));
+}
+tpv = !!save.tpv; applyOutfit3(); drawCamBtn(); tpReady = true;
+$('camBtn').onclick = () => setTpv(!tpv);
+{ const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) { c.checked = tpv; c.onchange = () => setTpv(c.checked); } }
 $('eqClose').onclick = () => $('equip').classList.remove('show');
 $('oEquip').onclick = () => { eqPick = null; renderEquip(); $('equip').classList.add('show'); };
 let shopTab = 0;
