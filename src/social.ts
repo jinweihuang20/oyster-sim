@@ -14,7 +14,7 @@ const get = (p: string) => fetch(API + p, { mode: 'cors', cache: 'no-store' }).t
 let last = 0, busy = false, polls = 0;
 const queue: string[] = [];
 let cur: HTMLElement | null = null;
-function endCur() { const el = $('feed'); cur = null; el.classList.remove('on'); $('fdTrack').innerHTML = ''; busy = false; setTimeout(showNext, 600); }
+function endCur() { const el = $('feed'); cur = null; el.classList.remove('on'); $('fdTrack').innerHTML = ''; placeFeed(); busy = false; setTimeout(showNext, 600); }
 // 跑馬燈放在 HUD 上方統計（#top、#stats）的下緣之下，絕不蓋住
 function placeFeed() {
   const f = document.getElementById('feed'); if (!f) return;
@@ -25,12 +25,17 @@ function placeFeed() {
     if (r.height > 0 && r.width > 0 && r.top < innerHeight * 0.4 && getComputedStyle(e).visibility !== 'hidden' && (e.textContent || '').trim()) b = Math.max(b, r.bottom);
   }
   f.style.top = b > 0 ? Math.round(b + 6) + 'px' : 'env(safe-area-inset-top)';
+  const h = document.getElementById('hint'); if (!h) return;
+  h.style.removeProperty('top'); h.style.removeProperty('bottom');
+  if (!f.classList.contains('on')) return;
+  const fr = f.getBoundingClientRect(), hr = h.getBoundingClientRect();
+  if (fr.height > 0 && hr.height > 0 && hr.top < fr.bottom + 2 && hr.bottom > fr.top - 2) { h.style.setProperty('top', Math.round(fr.bottom + 4) + 'px', 'important'); h.style.setProperty('bottom', 'auto', 'important'); }
 }
 function showNext() {
   const el = $('feed'); placeFeed();
   if (busy || !queue.length || !D.on() || D.inTut()) return;
   busy = true; const txt = queue.shift()!;
-  const tr = $('fdTrack'); tr.innerHTML = `<span class="fdIn"><i class="ic ic-horn"></i> ${txt}</span>`; el.classList.add('on');
+  const tr = $('fdTrack'); tr.innerHTML = `<span class="fdIn"><i class="ic ic-horn"></i> ${txt}</span>`; el.classList.add('on'); placeFeed();
   const s = tr.firstElementChild as HTMLElement; cur = s; s.style.animationDuration = Math.max(4.4, (txt.length + 10) * 0.2) + 's';
   s.onanimationend = () => { if (cur === s) endCur(); };
 }
@@ -93,7 +98,7 @@ export function init(d: Deps) {
   f.innerHTML = '<div id="fdTrack"></div><button id="fdX" type="button" aria-label="關閉這則消息"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
   document.body.appendChild(f);
   addEventListener('resize', placeFeed);
-  if ('ResizeObserver' in window) { const ro = new ResizeObserver(placeFeed); for (const id of ['top', 'stats']) { const e = document.getElementById(id); if (e) ro.observe(e); } }
+  if ('ResizeObserver' in window) { const ro = new ResizeObserver(placeFeed); for (const id of ['top', 'stats', 'hint']) { const e = document.getElementById(id); if (e) ro.observe(e); } }
   // 只關掉當下這則；放開才觸發，且需在同一顆按鈕上按下
   const x = f.querySelector('#fdX') as HTMLButtonElement; let down = false;
   const stop = (e: Event) => e.stopPropagation();
