@@ -539,7 +539,7 @@ html,body{overflow-x:hidden;max-width:100%}
 .gfRow{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,.3)}.gfRow small{display:block;opacity:.85}.giftBtn{background:#ffd25a!important;color:#2a1600!important}
 .slBtns{flex-wrap:wrap}.slBtns button{min-width:0!important;padding:4px 2px!important;flex:1 1 40%}.eqSlot{min-width:0!important;max-width:38%;padding:4px!important}.eqSlot b{white-space:normal}
 .clTabs{display:grid!important;grid-template-columns:repeat(5,1fr);gap:4px}.clTabs button{min-width:0!important;padding:6px 2px!important;font-size:13px!important;white-space:nowrap}
-.slGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:stretch}.slCard{min-width:0;overflow:hidden;height:auto}.slCard small{overflow-wrap:anywhere;word-break:break-word;flex:1}.slBtns{margin-top:auto}
+.slGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:stretch}.slCard{min-width:0;overflow:visible;height:auto}.slCard .slv{width:100%;height:auto;max-height:90px;flex:none}.slBtns{flex:none}.slBtns button{flex:1 1 100%!important;width:100%}.slCard small{overflow-wrap:anywhere;word-break:break-word;flex:1}.slBtns{margin-top:auto}
 
 #btns #camBtn.tpOn,#btnsL #camBtn.tpOn{background-color:#b8862a}
 

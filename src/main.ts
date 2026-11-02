@@ -2090,11 +2090,11 @@ function renderEquip() {
 }
 let clothTab: Slot = 'hand';
 function renderClothShop() {
+  if (sleeveTry) { sleeveTry = null; applySleeve(); }
   const items = EQUIP.filter(e => e.slot === clothTab && e.price > 0).sort((a, b) => a.price - b.price);
   $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-hand"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。</p><div class="clTabs">${SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === clothTab ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
-    return `<div class="slCard${cur ? ' on' : ''}">${eqSvg(s)}<b>${s.n}</b><small>$${s.price}・${s.eff}</small><div class="slBtns">${s.slot === 'hand' ? `<button data-sltry="${s.id}">${sleeveTry === s.id ? '試穿中' : '試穿'}</button>` : ''}${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${save.money < s.price ? 'disabled' : ''}>買 $${s.price}</button>`}</div></div>`; }).join('') + `</div>`);
+    return `<div class="slCard${cur ? ' on' : ''}">${eqSvg(s)}<b>${s.n}</b><small>$${s.price}・${s.eff}</small><div class="slBtns">${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${save.money < s.price ? 'disabled' : ''}>買 $${s.price}</button>`}</div></div>`; }).join('') + `</div>`);
   $('shopList').querySelectorAll('button[data-ctab]').forEach(b => (b as HTMLButtonElement).onclick = () => { clothTab = b.getAttribute('data-ctab') as Slot; renderShop(); });
-  $('shopList').querySelectorAll('button[data-sltry]').forEach(b => (b as HTMLButtonElement).onclick = () => { const id = b.getAttribute('data-sltry')!; sleeveTry = sleeveTry === id ? null : id; applySleeve(); renderShop(); });
   $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = EQUIP.find(x => x.id === id)!;
     if (b.hasAttribute('data-slbuy')) { if (save.money < s.price) return; save.money -= s.price; save.shop.owned.push(id); track('buy', { item: id, price: s.price }); if (ac) SFX.jingle(); }
