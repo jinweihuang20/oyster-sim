@@ -4,6 +4,7 @@ import { installBackGuard } from './backguard';
 import { checkCode, REDEEM_MESSAGES } from './redeem';
 import type { RedeemCodeDef } from './redeemCodes';
 import * as THREE from 'three';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
 const LS_P = __PREVIEW__ ? 'preview:' : '';
@@ -94,12 +95,35 @@ function shellPaint(g: THREE.BufferGeometry, seed: number) {
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); return g;
 }
-const mkShell = (sy: number, seed: number) => { const g = new THREE.DodecahedronGeometry(0.09, 0); g.scale(1.3, sy, 1); return shellPaint(g, seed); };
+// 蚵殼紋理：一張 256px 共用貼圖（生長紋、灰白斑駁、紫褐烏紋、細雜訊）＋同一張當凹凸圖，載入時畫一次，沒有每幀成本
+function shellTex() {
+  const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d')!;
+  let r = 7; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+  c.fillStyle = '#d9d6cf'; c.fillRect(0, 0, S, S);
+  for (let i = 0; i < 260; i++) { const g = 170 + rn() * 70 | 0; c.fillStyle = `rgba(${g},${g - 4},${g - 10},${0.25 + rn() * 0.35})`; c.beginPath(); c.ellipse(rn() * S, rn() * S, 4 + rn() * 18, 3 + rn() * 12, rn() * 3, 0, 7); c.fill(); }
+  // 生長紋：以殼頂（鉸合處）為圓心的一圈圈波浪層
+  for (let k = 0; k < 26; k++) { const R0 = 12 + k * 9 + rn() * 4; c.beginPath(); for (let a = -0.2; a <= Math.PI + 0.2; a += 0.08) { const rr = R0 + Math.sin(a * 9 + k) * 2.5 + (rn() - 0.5) * 2; const x = S / 2 + Math.cos(a) * rr * 1.15, y = 8 + Math.sin(a) * rr; a < -0.1 ? c.moveTo(x, y) : c.lineTo(x, y); }
+    c.strokeStyle = k % 3 ? `rgba(110,102,96,${0.12 + rn() * 0.12})` : `rgba(250,248,240,${0.35})`; c.lineWidth = k % 3 ? 1 + rn() * 1.2 : 2; c.stroke(); }
+  // 紫褐、深色放射烏紋
+  for (let i = 0; i < 9; i++) { const a = rn() * Math.PI, w = 2 + rn() * 5; c.strokeStyle = rn() < 0.5 ? `rgba(110,74,100,${0.12 + rn() * 0.16})` : `rgba(70,60,56,${0.1 + rn() * 0.16})`; c.lineWidth = w; c.beginPath(); c.moveTo(S / 2, 8); c.lineTo(S / 2 + Math.cos(a) * S, 8 + Math.sin(a) * S); c.stroke(); }
+  const im = c.getImageData(0, 0, S, S), d = im.data; for (let i = 0; i < d.length; i += 4) { const n = (rn() - 0.5) * 26; d[i] += n; d[i + 1] += n; d[i + 2] += n; } c.putImageData(im, 0, 0);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 2; return t;
+}
+const SHELL_TEX = shellTex(), SHELL_BUMP = SHELL_TEX.clone(); SHELL_BUMP.colorSpace = THREE.NoColorSpace;
+// 殼形：低面數球體壓扁，邊緣做不規則波浪，平面投影 UV 讓生長紋從殼頂展開
+const mkShell = (sy: number, seed: number) => {
+  let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(0.09, 1); g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
+  let r = seed * 7919 + 13; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280; const ph = rn() * 6.28, amp = 0.1 + rn() * 0.08;
+  const pos = g.attributes.position, uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), a = Math.atan2(z, x), edge = 1 - Math.abs(y) / 0.09;
+    const k = 1 + edge * (Math.sin(a * 5 + ph) * amp + Math.sin(a * 11 + ph * 2) * amp * 0.4) + (rn() - 0.5) * 0.06;
+    pos.setXYZ(i, x * k * 1.3, y * sy * (1 + (rn() - 0.5) * 0.25), z * k); uv[i * 2] = x / 0.25 + 0.5; uv[i * 2 + 1] = (z + 0.09) / 0.2; }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g = g.toNonIndexed(); g.computeVertexNormals(); return shellPaint(g, seed); };
 const SHELL_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.45, i + 1)), HALF_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.25, i + 11));
 const shellGeo = SHELL_GEOS[0], halfGeo = HALF_GEOS[0];
 const GREYS = [0xc2c2be, 0xa4a4a2, 0x8a8a8a, 0x6c6c6e, 0x4a4a4e];
 const greyPick = () => GREYS[Math.min(4, Math.floor(Math.random() * Math.random() * 6.2))];
-const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.92, metalness: 0 }); m.emissive.setHex(0x2a2c30); return m; };
+const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.95, metalness: 0, map: SHELL_TEX, bumpMap: SHELL_BUMP, bumpScale: 2.5 }); m.emissive.setHex(0x2a2c30); return m; };
 const shellMat = shellM(0xa0a0a0);
 mesh(new THREE.ConeGeometry(0.9, 0.55, 10), mat(0x6a7c94, { roughness: 0.95, emissive: 0x24262a }), [0, 0.27, 0]);
 const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo, pileMat, 260); pile.castShadow = true;
@@ -235,8 +259,21 @@ const shellBot = mesh(halfGeo, shellBotMat, [0, -0.01, 0], oyster);
 const meatInHand = mesh(meatGeo, meatMat, [0, 0.015, 0], oyster);
 const shellTop = mesh(halfGeo, shellTopMat, [0, 0.025, 0], oyster);
 const barnacles: THREE.Mesh[] = [];
+// 難度硬塊＝藤壺／石灰質附著：火山口形（頂端有洞）的低面數旋轉體，共用一個幾何和材質
+const BARN_GEO = (() => { const g = new THREE.LatheGeometry([[0, 0.004], [0.0035, 0.005], [0.0042, 0.016], [0.0068, 0.0175], [0.0105, 0.009], [0.0135, 0.002], [0.0142, -0.004]].map(([x, y]) => new THREE.Vector2(x, y)), 7);
+  const p = g.attributes.position; let r = 3; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280; for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y > 0.006) { const k = 1 + (rn() - 0.5) * 0.35; p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * k); } } g.computeVertexNormals(); return g; })();
+const BARN_MAT = mat(0xb8b6aa, { roughness: 1, bumpMap: SHELL_BUMP, bumpScale: 3, emissive: 0x24262a, side: THREE.DoubleSide });
+const BARN_N = [0, 4, 8, 14], BARN_S = [0.8, 0.9, 1.15, 1.4];
+// 一群一群長：先挑幾個群中心，每群 1～4 顆大小不一、彼此擠在一起
+function placeBarn(list: THREE.Object3D[], dd: number, y = 0.045) {
+  const n = Math.min(list.length, BARN_N[dd]); let ci = 0, cx = 0, cz = 0, left = 0;
+  list.forEach((b, i) => { b.visible = i < n; if (i >= n) return;
+    if (left <= 0) { cx = rnd(-0.07, 0.07); cz = rnd(-0.045, 0.045); left = 1 + Math.floor(Math.random() * (dd + 1)); ci++; }
+    left--; const sc = BARN_S[dd] * rnd(0.55, 1.25); b.position.set(cx + rnd(-0.014, 0.014) * BARN_S[dd], y - 0.002 + Math.random() * 0.004, cz + rnd(-0.012, 0.012) * BARN_S[dd]);
+    b.scale.set(sc * rnd(0.85, 1.15), sc * rnd(0.7, 1.2), sc * rnd(0.85, 1.15)); b.rotation.set(rnd(-0.35, 0.35), rnd(0, 6.28), rnd(-0.35, 0.35)); });
+}
 mesh(new THREE.CircleGeometry(0.075, 14), mat(0xeeeae4, { roughness: 0.35, metalness: 0.15 }), [0, 0.008, 0], oyster).scale.set(1.25, 0.9, 1); (oyster.children[oyster.children.length - 1] as THREE.Mesh).rotation.x = -Math.PI / 2;
-for (let i = 0; i < 6; i++) barnacles.push(mesh(new THREE.ConeGeometry(0.012, 0.02, 5), mat(0x6e6e70), [rnd(-0.08, 0.08), 0.045, rnd(-0.05, 0.05)], oyster));
+for (let i = 0; i < 16; i++) barnacles.push(mesh(BARN_GEO, BARN_MAT, [0, 0.045, 0], oyster));
 const seamMark = mesh(new THREE.BoxGeometry(0.042, 0.016, 0.016), new THREE.MeshBasicMaterial({ color: 0x7a4a1e }), [0, 0.012, 0], oyster);
 const seamRing = mesh(new THREE.TorusGeometry(0.03, 0.004, 6, 24), new THREE.MeshBasicMaterial({ color: 0xd8ff80, transparent: true, opacity: 0, depthWrite: false }), [0, 0.02, 0], oyster); seamRing.rotation.x = Math.PI / 2; seamRing.visible = false;
 let sweet = false, sweetT = 0;
@@ -573,7 +610,7 @@ const ODD = [
 ];
 const dexN = () => save.dex.filter(x => x).length + save.odd.filter(x => x).length;
 const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'uncommon' : 'common';
-// 入碗工錢依難度：易／普通／硬／超硬；殼屑 = 25%（至少 $1）
+// 入碗工錢依難度：易／普通／硬／超硬；殼屑 = 70%（至少 $1）
 const DPAY = [6, 8, 12, 18], DSHORT = ['易', '普', '硬', '超硬'];
 let meatPay = 0, dCnt = [0, 0, 0, 0];
 const OYSTER_PRICE = 8, CRACK_PRICE = 2, PERFECT_PAY = 2;
@@ -800,7 +837,7 @@ function holdOyster(dd: number) {
   seamMark.visible = seamGlow.visible = true;
   shellTop.visible = true; shellTop.position.set(0, 0.025, 0); shellTop.rotation.set(0, 0, 0); meatInHand.visible = true; meatInHand.material = meatMat; pearlMesh.visible = false; oddMeshes.forEach(m => m.visible = false);
   { const base = [0xc2c2be, 0xa0a09e, 0x7c7c7e, 0x58585c][diff]; shellTopMat.color.setHex(base); shellBotMat.color.setHex(base).multiplyScalar(0.85); const gi = Math.floor(Math.random() * 6); shellTop.geometry = HALF_GEOS[gi]; shellBot.geometry = HALF_GEOS[(gi + 3) % 6]; }
-  barnacles.forEach((b, i) => b.visible = i < d.rough);
+  placeBarn(barnacles, diff);
   meatsLeft = 1; showExtra();
   find = tut ? { kind: 'none', i: 0 } : rollFind(); setPhase('seam');
 }
@@ -1112,7 +1149,7 @@ const ray = new THREE.Raycaster();
 const pileHit = scene.children.find(o => (o as THREE.Mesh).geometry instanceof THREE.ConeGeometry && o.position.y > 0.2 && o.position.y < 0.3)!;
 function makeBasinOyster(dd: number) {
   const m = new THREE.Mesh(SHELL_GEOS[Math.floor(Math.random() * 6)], shellM([0xc2c2be, 0xa0a09e, 0x7c7c7e, 0x58585c][dd])); m.scale.setScalar(DIFF[dd].scale * 0.95); m.userData.diff = dd; m.castShadow = true;
-  for (let i = 0; i < DIFF[dd].rough; i++) { const b = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.025, 5), mat(0x5a5448)); b.position.set(rnd(-0.08, 0.08), 0.04, rnd(-0.05, 0.05)); m.add(b); }
+  const bl: THREE.Mesh[] = []; for (let i = 0; i < BARN_N[dd]; i++) { const b = new THREE.Mesh(BARN_GEO, BARN_MAT); m.add(b); bl.push(b); } placeBarn(bl, dd, 0.04);
   return m;
 }
 function basinSlot(i: number) { const a = i * 2.4, r = 0.06 + (i % 4) * 0.05; return new THREE.Vector3(BASIN.x + Math.cos(a) * r, 0.14 + Math.floor(i / 6) * 0.04, BASIN.z + Math.sin(a) * r); }
@@ -1339,7 +1376,7 @@ function pry(ms = performance.now()) {
   const n = needle(ms), w = pryW() + PRY_GRACE * 2; (window as any).__pryLog = ((window as any).__pryLog || []).concat([[+n.toFixed(3), Math.abs(n - PRY_C) <= w / 2]]); strokeDir = -strokeDir || 1; tension = 0.9;
   const need = pryNeed();
   if (n > PRY_RED) { combo = 0; progress += 1 / need; SFX.creak(); pryFx(false, '碎！'); if (!crackedNow) { crackedNow = true; dStat[diff][3]++; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('太大力，殼碎掉了！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); } }
-  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; pryHits++; if (Math.sin(((ms - needleStart) / 1000) * Math.PI * 2 * prySp()) > 0) needleStart = ms; combo++; if (combo > dayCombo) dayCombo = combo; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！功夫真好！' : '好！再一下'; }
+  else if (Math.abs(n - PRY_C) <= w / 2) { progress += 1 / need; pryHits++; /* 撬中後指針從目前位置繼續滑，不再跳回起點 */ combo++; if (combo > dayCombo) dayCombo = combo; if (combo > save.life.bestCombo) { save.life.bestCombo = combo; persist(); } SFX.creak(); tone(1500, 0.04, 0.12, 'square'); tone(2200, 0.05, 0.08, 'triangle', 0.03); shake = 0.05; const k = Math.round(progress * need); pryFx(true, `✓ ${k}/${need}${combo >= 2 ? `　連擊 x${combo}` : ''}`); hint.textContent = combo >= 3 ? '讚！功夫真好！' : '好！再一下'; }
   else { if (!(Math.random() < fxAll().keep)) combo = 0; tone(140, 0.12, 0.12, 'triangle'); noise(0.06, 300, 0.2); pryFx(false, '✗ 沒中'); hint.textContent = '時機不對，等指針走到綠區再點'; tension = 0.3; return; }
   shellTop.rotation.z = -progress * 0.4;
   if (progress >= 0.999) openOyster();
@@ -1423,7 +1460,7 @@ function toss(tapped: boolean) {
   const land = new THREE.Vector3(BOWL.x + rnd(-0.06, 0.06), BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015, BOWL.z + rnd(-0.06, 0.06));
   SFX.whoosh(); if (quick) { perfects++; $('gtag').textContent = ''; }
   fly(m, from, land, 0.45, 0.3, () => {
-    count++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.25)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)) + (quick ? 1 : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    count++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.7)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)) + (quick ? 1 : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
     burst(land.clone().setY(BOWL.y + 0.02), 8, 0xbfe4f2, 1);
     if (!wasCracked) burst(land.clone().setY(BOWL.y + 0.05), 6, 0xffd23a, 1.4);
     if (quick) { tone(980, 0.06, 0.18, 'triangle', 0, 520); tone(1568, 0.08, 0.1, 'sine', 0.05); } else SFX.plop();
@@ -1567,7 +1604,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   $('resBody').innerHTML = evHtml + all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 顆入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美／俐落 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
     `偷 ${steals}・被抓到 ${caught}・肉丟中阿婆 ${meatHits}・殼丟中阿婆 ${shellHits}<br>雨傘擋 ${blocks}・完美反彈 ${reflects}・被丟中 ${hitsTaken}・丟殼 ${thrown}・蚵仔掉地上 ${lost}</p>` + (titles.length ? `<p style="font-size:18px"><b>${titles.join('　')}</b></p>` : '') +
-    `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 易$6・普$8・硬$12・超硬$18，殼屑 ${cracked} 顆只算 25%${temp ? `，臨時工抽成 -$${TEMP_CUT}／顆` : ''}</small>${perfects ? `<br>完美／俐落 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
+    `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 易$6・普$8・硬$12・超硬$18，殼屑 ${cracked} 顆只算 70%${temp ? `，臨時工抽成 -$${TEMP_CUT}／顆` : ''}</small>${perfects ? `<br>完美／俐落 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
     `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>` +
     `<p>${caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
   if (achShiftGot.length) $('resBody').insertAdjacentHTML('afterbegin', `<div class="resAch"><b><i class="ic ic-trophy"></i> 這一工達成的成就</b><ul>${achShiftGot.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`);
@@ -1738,7 +1775,8 @@ function renderLocs() { autoUnlock();
   el.querySelectorAll<HTMLButtonElement>('[data-loc]').forEach(b => b.onclick = () => { save.loc = b.dataset.loc; persist(); renderLocs(); updSky(); });
 }
 renderLocs();
-$('rLoc').onclick = () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; };
+let achFromRes = false; // 從收工畫面打開成就，關掉後回到收工畫面
+btn('rAch', () => { achFromRes = true; $('result').classList.remove('show'); achOpen(); });
 const ITEMS = [{ id: 'moon', n: '把你媽的愛送上月球', price: 5000, good: '選一位鄰居，發射飛彈鐵拳把對方送上月球，這一工都不會再出現', bad: '每一工最多用 2 個，下一工對方會回來' }];
 const MOON_MAX = 2;
 let moonUsed = 0, moonAimOn = false, punchT = 0;
@@ -2856,7 +2894,7 @@ initUpdate(() => state !== 'play' && !document.querySelector('.panel.show:not(#o
 (window as any).__tpTest = () => { const p = BOWL.clone().project(viewCam()); const x = (p.x + 1) / 2 * innerWidth, y = (1 - p.y) / 2 * innerHeight; return { tp: tpOn, x: Math.round(x), y: Math.round(y), hit: nearBowl(x, y), farMiss: nearBowl(x > innerWidth / 2 ? 5 : innerWidth - 5, 5) }; };
 (window as any).__cheer = () => react3('cheer');
 (window as any).__aim = () => setPhase('aim');
-(window as any).__meat = { npcScr: () => npcs.map(n => { const p = worldOf(n.head).add(new THREE.Vector3(0, -0.15, 0)).project(viewCam()); return { name: n.name, x: (p.x + 1) / 2 * innerWidth, y: (1 - p.y) / 2 * innerHeight, z: p.z }; }), get hits() { return meatHits; }, get count() { return count; }, get pay() { return meatPay; }, get phase() { return phase; } };
+(window as any).__meat = { npcScr: () => npcs.map(n => { const p = worldOf(n.head).add(new THREE.Vector3(0, -0.15, 0)).project(viewCam()); return { name: n.name, x: (p.x + 1) / 2 * innerWidth, y: (1 - p.y) / 2 * innerHeight, z: p.z }; }), at: (x: number, y: number) => npcAtScr(x, y)?.name ?? null, get hits() { return meatHits; }, get count() { return count; }, get pay() { return meatPay; }, get phase() { return phase; } };
 
 // ---- 第三人稱雨傘：手舉起來撐一支立體傘（傘骨、傘面分片、把手），開合有動畫，被打中會晃 ----
 const umb3 = new THREE.Group(); umb3.visible = false; me3.add(umb3);
@@ -3158,6 +3196,7 @@ const ACH_TITLES: { n: string; d: string; ok: () => boolean }[] = [
   { n: '走跳蚵寮', d: '「跑遍蚵寮」金牌', ok: () => (achS().got.locs ?? 0) >= 3 },
   { n: '圖鑑博士', d: '「圖鑑收集」金牌', ok: () => (achS().got.dex ?? 0) >= 3 },
   { n: '鐵打的蚵工', d: '「上工天數」金牌', ok: () => (achS().got.days ?? 0) >= 3 },
+  { n: '雜貨店股東', d: '「雜貨店常客」金牌', ok: () => (achS().got.owned ?? 0) >= 3 },
   { n: '活動常客', d: '「活動常客」銀牌', ok: () => (achS().got.ev ?? 0) >= 2 },
 ];
 const achTitle = () => { const t = achS().title; return t && ACH_TITLES.some(x => x.n === t && x.ok()) ? t : ''; };
@@ -3226,7 +3265,7 @@ function achOpen(focus?: string) { if (document.pointerLockElement) document.exi
 function achTabSeen() { const A = achS(); const before = A.fresh.length; A.fresh = A.fresh.filter(id => ACHS.find(a => a.id === id)?.cat !== achTab); if (A.fresh.length !== before) { persist(); achDot(); } }
 $('achTabs').addEventListener('click', e => { const b = (e.target as HTMLElement).closest('button[data-t]') as HTMLElement | null; if (!b) return; achTabSeen(); achTab = b.dataset.t!; achRender(); });
 $('achList').addEventListener('click', e => { const b = (e.target as HTMLElement).closest('.achEq') as HTMLElement | null; if (!b) return; const A = achS(), n = b.dataset.n!; A.title = A.title === n ? '' : n; persist(); achRender(); toast(A.title ? `配戴稱號「${A.title}」` : '已卸下稱號', '#ffe080'); Social.syncTitle(); });
-$('achClose').onclick = () => { achTabSeen(); $('ach').classList.remove('show'); };
+$('achClose').onclick = () => { achTabSeen(); $('ach').classList.remove('show'); if (achFromRes) { achFromRes = false; if (state === 'end') $('result').classList.add('show'); } };
 btn('oAch', () => achOpen());
 setInterval(() => { if (state === 'play' && !tut) achCheck(); }, 1000); // 上工中每秒檢查一次即時進度
 // 一工結束：記錄原本沒有的統計

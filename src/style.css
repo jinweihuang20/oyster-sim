@@ -726,7 +726,7 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 .evEntry button:disabled{opacity:.55;filter:grayscale(.6)}
 
 /* ===== 成就 ===== */
-.sysGrid>#oAch{background-color:var(--iron2);color:#fff;position:relative}
+.sysGrid>#oAch,.sysGrid>#rAch{background-color:var(--iron2);color:#fff;position:relative}
 #oAch.achNew::after,#achTabs button.achNew::after{content:'';position:absolute;top:-5px;right:-5px;width:12px;height:12px;border-radius:50%;background:var(--red);border:2px solid var(--ink)}
 .achSum{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:6px;margin:4px 0 8px}
 .achSum>div{background:var(--iron) var(--corr);color:var(--paint);border:3px solid var(--ink);padding:6px 8px;text-align:center;min-width:0}
