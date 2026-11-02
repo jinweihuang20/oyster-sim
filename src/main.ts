@@ -553,9 +553,9 @@ const oddMeshes: THREE.Object3D[] = ODD.map((o, i) => {
 });
 // 紅白雨傘（傳統菜市仔款）
 const umb = new THREE.Group(); camera.add(umb); umb.visible = false;
-let umbSize = 1;
+var umb3Ready = false, umbSlow = 1; let umbSize = 1, umbS = 0, umbLook = 'stripe';
 function buildUmb(look: string, size: number) {
-  while (umb.children.length) umb.remove(umb.children[0]); umbSize = size;
+  while (umb.children.length) umb.remove(umb.children[0]); umbSize = size; umbLook = look; if (umb3Ready) build3Umb();
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 32; const x = cv.getContext('2d')!;
   const pal: Record<string, string[]> = { stripe: ['#c8302a', '#f4f0e8'], clear: ['#cfe6ff', '#e4f2ff'], navy: ['#1f2b4a', '#24335a'], beach: ['#e83a3a', '#f6c33a', '#3ab0e8', '#5ac85a'], temple: ['#b0141a', '#e8b030'] };
   const cols = pal[look] ?? pal.stripe; for (let i = 0; i < 8; i++) { x.fillStyle = cols[i % cols.length]; x.fillRect(i * 32, 0, 32, 32); }
@@ -1259,9 +1259,9 @@ function throwOne(n: Npc) {
     const U = umbNow(), up = umbT > 0 && umbAge() >= U.open, covered = up && Math.random() < U.cover;
     if (up && !covered) toast('傘傷細，殼仔對邊仔鑽入來！', '#ff9a8a');
     if (covered && umbAge() - U.open < U.perf) { // 拄開好的時陣 = 完美反彈
-      reflects++; blockStreak++; SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
+      reflects++; blockStreak++; umbHit3(sh.position); SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
       fly(sh, sh.position.clone(), () => worldOf(n.head), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); addGrudge(n, Math.round(20 * U.reflect)); npcHurt(n, U.reflect); });
-    } else if (covered) { scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋住了！啵嗯～', '#9be37a'); say(n, pick(['怎麼會有雨傘啦！', '狡怪喔你！', '什麼時候拿出來的！']), 2.5); }
+    } else if (covered) { umbHit3(sh.position); scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋住了！啵嗯～', '#9be37a'); say(n, pick(['怎麼會有雨傘啦！', '狡怪喔你！', '什麼時候拿出來的！']), 2.5); }
     else { scene.remove(sh); blockStreak = 0; hitsTaken++; ($('splat') as HTMLElement).style.opacity = '1'; later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0'); hurt(8, '哎唷！被丟中了！'); hitInHand(); }
     if (blockStreak >= 3) { blockStreak = 0; npcs.forEach((m, i) => { m.calm = 45; if (i === 0) later(0.8, () => say(m, `這個${myName()}真勇敢……`, 3)); }); toast('阿婆們怕你了，暫時比較少丟', '#9fe0ff'); }
     updHud();
@@ -1553,7 +1553,7 @@ function frame() {
   toastT -= rdt; if (toastT <= 0) toastEl.classList.remove('on');
   tension = Math.max(0, tension - rdt * 1.6);
   if (umbHeld) { umbT = Math.max(0, umbT - rdt); if (umbT <= 0) { umbHeld = false; umbTired = true; $('umbBtn').classList.remove('held'); toast('手痠了，放開再重新撐傘', '#ffcf8a'); } } else umbT = 0; $('umbBtn').classList.toggle('cd', umbTired); { const b = $('umbBtn'), c = $('umbCd'); if (umbHeld) { const f = umbT / Math.max(0.1, umbLen); b.style.setProperty('--p', `${(f * 100).toFixed(1)}%`); c.textContent = `${umbT.toFixed(1)}s`; b.classList.toggle('low', umbT < 1.2); } else { c.textContent = ''; b.classList.remove('low'); } }
-  const us = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
+  const us = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0; umbS = us; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
   let warnNpc: Npc | null = null;
   if (state === 'play') {
     if (!tut) timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); }
@@ -1645,7 +1645,7 @@ function frame() {
   shake = Math.max(0, shake - rdt);
   if (walking) walkStep(rdt);
   camera.rotation.set(pitch - pe * 0.08, yaw + (walking ? 0 : seatYaw), 0);
-  camera.position.copy(walking ? walkPos : SEAT); camera.updateMatrixWorld(); camTick(dt); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
+  camera.position.copy(walking ? walkPos : SEAT); camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
   lamp.intensity = 26 + Math.sin(t * 1.3) * 1.0;
   renderer.render(scene, viewCam());
@@ -2161,7 +2161,7 @@ function camTick(dt: number) {
   if (!tpReady) return;
   const show = tpv && state === 'play';
   const enter = show && !tpWas; tpWas = show;
-  tpOn = show; me3.visible = show; handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
+  tpOn = show; me3.visible = show; umbTick3(dt, show); handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
   if (!show) return;
   const kk = enter ? 1 : 1 - Math.exp(-5 * dt);
   meSeatLegs.visible = !walking; meLegL.visible = meLegR.visible = walking;
@@ -2193,7 +2193,9 @@ function camTick(dt: number) {
 tpv = !!save.tpv; applyOutfit3(); drawCamBtn(); tpReady = true;
 $('camBtn').onclick = () => setTpv(!tpv);
 { const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) { c.checked = tpv; c.onchange = () => setTpv(c.checked); } }
-$('eqClose').onclick = () => $('equip').classList.remove('show');
+let eqFromRes = false;
+$('eqClose').onclick = () => { $('equip').classList.remove('show'); if (eqFromRes) { eqFromRes = false; $('result').classList.add('show'); } };
+$('rEquip').onclick = () => { eqFromRes = true; $('result').classList.remove('show'); eqPick = null; renderEquip(); $('equip').classList.add('show'); };
 $('oEquip').onclick = () => { eqPick = null; renderEquip(); $('equip').classList.add('show'); };
 let shopTab = 0;
 function shopTabs() {
@@ -2312,3 +2314,57 @@ initUpdate(() => state !== 'play' && !document.querySelector('.panel.show:not(#o
 (window as any).__tpTest = () => { const p = BOWL.clone().project(viewCam()); const x = (p.x + 1) / 2 * innerWidth, y = (1 - p.y) / 2 * innerHeight; return { tp: tpOn, x: Math.round(x), y: Math.round(y), hit: nearBowl(x, y), farMiss: nearBowl(x > innerWidth / 2 ? 5 : innerWidth - 5, 5) }; };
 (window as any).__cheer = () => react3('cheer');
 (window as any).__aim = () => setPhase('aim');
+
+// ---- 第三人稱雨傘：手舉起來撐一支立體傘（傘骨、傘面分片、把手），開合有動畫，被打中會晃 ----
+const umb3 = new THREE.Group(); umb3.visible = false; me3.add(umb3);
+const umb3Can = new THREE.Group(); umb3.add(umb3Can);
+let umb3Open = 0, umb3Jolt = 0; const umbFx: { m: THREE.Mesh; t: number }[] = [];
+function build3Umb() {
+  while (umb3.children.length > 1) umb3.remove(umb3.children[1]); while (umb3Can.children.length) umb3Can.remove(umb3Can.children[0]);
+  const pal: Record<string, number[]> = { stripe: [0xc8302a, 0xf4f0e8], clear: [0xcfe6ff, 0xe4f2ff], navy: [0x1f2b4a, 0x2a3c66], beach: [0xe83a3a, 0xf6c33a, 0x3ab0e8, 0x5ac85a], temple: [0xb0141a, 0xe8b030] };
+  const cols = pal[umbLook] ?? pal.stripe, N = umbLook === 'temple' ? 12 : 8, R = 0.62 * umbSize, Hh = 0.24 * umbSize, clear = umbLook === 'clear';
+  const metal = umbLook === 'temple' ? 0xd8a020 : 0x8a8a90;
+  // 傘桿＋J 形把手
+  mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.95, 6), mat(metal), [0, 0.0, 0], umb3);
+  const hd = mesh(new THREE.TorusGeometry(0.05, 0.016, 6, 10, Math.PI), mat(umbLook === 'temple' ? 0xb0141a : 0x5a3a1a), [0.05, -0.47, 0], umb3); hd.rotation.z = Math.PI;
+  mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.14, 6), mat(umbLook === 'temple' ? 0xb0141a : 0x5a3a1a), [0, -0.42, 0], umb3);
+  // 傘面：一片一片的三角面，每片顏色輪流
+  for (let i = 0; i < N; i++) {
+    const a0 = i / N * Math.PI * 2, a1 = (i + 1) / N * Math.PI * 2, g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute([0, Hh, 0, Math.cos(a0) * R, 0, Math.sin(a0) * R, Math.cos(a1) * R, 0, Math.sin(a1) * R], 3)); g.computeVertexNormals();
+    const m = new THREE.MeshStandardMaterial({ color: cols[i % cols.length], side: THREE.DoubleSide, roughness: clear ? 0.1 : 0.8, transparent: clear, opacity: clear ? 0.5 : 1, flatShading: true });
+    umb3Can.add(new THREE.Mesh(g, m));
+    // 傘骨
+    const rib = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, Math.hypot(R, Hh), 4), mat(metal));
+    rib.position.set(Math.cos(a0) * R / 2, Hh / 2, Math.sin(a0) * R / 2); rib.lookAt(new THREE.Vector3(Math.cos(a0) * R, 0, Math.sin(a0) * R).add(umb3.position)); rib.rotateX(Math.PI / 2); umb3Can.add(rib);
+    mesh(new THREE.SphereGeometry(0.014, 5, 4), mat(metal), [Math.cos(a0) * R, -0.005, Math.sin(a0) * R], umb3Can);
+  }
+  if (umbLook === 'temple') { const fr = mesh(new THREE.CylinderGeometry(R, R, 0.08, N, 1, true), new THREE.MeshStandardMaterial({ color: 0xffe28a, side: THREE.DoubleSide }), [0, -0.04, 0], umb3Can); void fr; }
+  mesh(new THREE.ConeGeometry(0.02, 0.08, 6), mat(metal), [0, Hh + 0.04, 0], umb3Can);
+  umb3Can.position.y = 0.42;
+}
+build3Umb(); umb3Ready = true;
+function umbHit3(at: THREE.Vector3) {
+  if (!umb3Ready || !tpOn) return; umb3Jolt = 0.3;
+  const f = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff2a0, transparent: true, opacity: 0.95, depthWrite: false }));
+  // 打中的點：拉到傘面上
+  umb3Can.updateMatrixWorld(); const c = new THREE.Vector3(0, 0.15, 0); umb3Can.localToWorld(c); f.position.copy(c).lerp(at, 0.25); scene.add(f); umbFx.push({ m: f, t: 0 });
+  for (let i = 0; i < 6; i++) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), new THREE.MeshBasicMaterial({ color: 0xd8d0c0, transparent: true })); p.position.copy(f.position); p.userData.v = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).multiplyScalar(2.2); scene.add(p); umbFx.push({ m: p, t: 0 }); }
+}
+function umbTick3(dt: number, show: boolean) {
+  if (!umb3Ready) return;
+  for (let i = umbFx.length - 1; i >= 0; i--) { const e = umbFx[i]; e.t += dt; const v = e.m.userData.v as THREE.Vector3 | undefined;
+    if (v) { e.m.position.addScaledVector(v, dt); v.y -= 6 * dt; } else e.m.scale.setScalar(1 + e.t * 9);
+    (e.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - e.t / 0.4); if (e.t > 0.4) { scene.remove(e.m); umbFx.splice(i, 1); } }
+  const want = umbS > 0 ? 1 : 0; umb3Open += Math.sign(want - umb3Open) * Math.min(Math.abs(want - umb3Open), dt / 0.2 / umbSlow);
+  umb3Jolt = Math.max(0, umb3Jolt - dt);
+  const vis = show && umb3Open > 0.01; umb3.visible = vis; if (show) umb.visible = false;
+  if (!vis) return;
+  // 傘面像真的傘一樣從收起的細長往外撐開
+  const o = umb3Open, e = 1 - Math.pow(1 - o, 3); umb3Can.scale.set(0.12 + 0.88 * e, 1.6 - 0.6 * e, 0.12 + 0.88 * e);
+  const j = umb3Jolt > 0 ? Math.sin(umb3Jolt * 60) * umb3Jolt * 1.2 : 0;
+  const st = walking ? 0.43 : 0;
+  umb3.position.set(0.2, 1.0 + st + 0.06 * e, -0.1 + j * 0.15); umb3.rotation.set(-0.35 - j, 0, -0.1 + j * 0.5);
+}
+function umbArm() { if (!umb3Ready || !umb3.visible) return; const e = 1 - Math.pow(1 - umb3Open, 3); meArmR.rotation.x = -1.6 * e - 0.4; meArmR.rotation.z = 0.15; }
+(window as any).__umb3 = { open: () => openUmbrella(), close: () => closeUmbrella(), throwAt: () => throwOne(npcs[2]), get o() { return umb3Open; }, set slow(v: number) { umbSlow = v; } };

@@ -542,3 +542,7 @@ html,body{overflow-x:hidden;max-width:100%}
 .slGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:stretch}.slCard{min-width:0;overflow:hidden;height:auto}.slCard small{overflow-wrap:anywhere;word-break:break-word;flex:1}.slBtns{margin-top:auto}
 
 #btns #camBtn.tpOn,#btnsL #camBtn.tpOn{background-color:#b8862a}
+
+/* 結算列 7 顆：一排排完 */
+#result .sysGrid{grid-template-columns:repeat(7,1fr)!important;gap:4px!important}
+@media (max-width:500px){#result .sysGrid{gap:3px!important}#result .sysGrid>button{min-height:52px;font-size:11px!important;padding:5px 0!important;letter-spacing:-.5px}#result .sysGrid .ic{font-size:18px!important}}
