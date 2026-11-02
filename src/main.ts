@@ -168,7 +168,7 @@ for (const d of NPC_DEF) {
   const bowlL = new THREE.Vector3(0.32, 0, -0.42); const bowl = a.g.localToWorld(bowlL.clone());
   mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, 0.05, bowl.z]);
   bowl.y = 0.08;
-  const tag = document.createElement('button'); tag.className = 'ntag'; tag.textContent = d.name; $('bubbles').appendChild(tag); const ni = npcs.length; tag.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); npcTip(npcs[ni]); });
+  const tag = document.createElement('button'); tag.className = 'ntag'; tag.textContent = d.name; $('bubbles').appendChild(tag); tag.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); const me = npcs.find(x => x.tag === tag); if (me) npcTip(me); });
   const bubble = document.createElement('div'); bubble.className = 'bub'; bubble.style.opacity = '0'; $('bubbles').appendChild(bubble);
   npcs.push({ ...a, tag, name: d.name, rate: d.rate, chatty: d.chatty, peek: d.peek, count: 0, pause: 0, look: 0, bubble, bubT: 0, lean: 0, cyc: Math.random(), dur: d.rate, ev: 0, mood: 0, angry: 0, distract: 0, turnDir: 1, windup: 0, throwCd: rnd(15, 30), stuck: null, baseY: 0, oy, top, meat, bowl, bowlMeat: [] });
 }
@@ -917,7 +917,7 @@ function applyCrew() {
 updSky(); showLand(); applyCrew(); setInterval(updSky, 30000);
 function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   nightShift = isNight(); updSky(); $('nightTag').style.display = nightShift ? '' : 'none'; if (nightShift) later(1.5, () => toast('🌙 夜班上工！這一工收入 +20%', '#b8c8ff'));
-  npcs.forEach(dressAma); applyCrew();
+  moonReset(); npcs.forEach(dressAma); applyCrew();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); if (!tut) track('start', { seat: save.seat ?? 'door', loc: locNow().id });
@@ -1131,7 +1131,7 @@ function renderShop() {
     else save.gear[id] = !gearOn(id);
     persist(); renderShop(); drawRadio(); applyGloves();
   });
-  renderClothShop(); renderMedShop(); shopTabs();
+  renderClothShop(); renderMedShop(); renderItemShop(); shopTabs();
 }
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : 1); }
 const PRY_GRACE = 0.04;
@@ -1519,6 +1519,104 @@ function renderLocs() { autoUnlock();
 }
 renderLocs();
 $('rLoc').onclick = () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; };
+const ITEMS = [{ id: 'moon', n: '把你媽的愛送上月球', price: 5000, good: '選一位鄰居，發射飛彈鐵拳把對方送上月球，這一工都不會再出現', bad: '每一工最多用 2 個，下一工對方會回來' }];
+const MOON_MAX = 2;
+let moonUsed = 0, moonAimOn = false, punchT = 0;
+// ---------- 道具：把你媽的愛送上月球 ----------
+const MOON_SVG = `<svg viewBox="0 0 64 40" width="72" height="45" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M2 14h8M0 20h12M2 26h8"/><path d="M14 13l6 3v8l-6 3z"/><path d="M20 14h18v12H20z"/><path d="M24 14l-3-6h6l3 6M24 26l-3 6h6l3-6"/><path d="M38 12h12a6 6 0 0 1 6 6v4a6 6 0 0 1-6 6H38z"/><path d="M44 12v6M50 12v6M44 22h10"/><path d="M40 28v-4h4"/><path d="M58 8l4-4M60 20h4M58 32l4 4"/></svg>`;
+const ALL_NPCS = npcs.slice();
+const NPC_HOME = ALL_NPCS.map(n => ({ p: n.g.position.clone(), r: n.g.rotation.clone() }));
+type MoonFx = (dt: number) => boolean;
+const moonFx: MoonFx[] = [];
+function moonReset() {
+  moonFx.length = 0; moonUsed = 0; moonAimEnd();
+  npcs.length = 0; ALL_NPCS.forEach((n, i) => { npcs.push(n); n.g.position.copy(NPC_HOME[i].p); n.g.rotation.copy(NPC_HOME[i].r); n.g.scale.setScalar(1); if (!n.g.parent) scene.add(n.g); n.g.visible = true; delete n.g.userData.moon; });
+}
+function moonGone(n: Npc) {
+  const i = npcs.indexOf(n); if (i >= 0) npcs.splice(i, 1);
+  n.windup = 0; n.warned = false; n.throwCd = 999; n.distract = 0; n.look = 0; n.bubT = 0; n.grudge = 0; n.bubble.style.opacity = '0'; n.bubble.style.display = 'none'; n.tag.style.display = 'none'; n.g.userData.moon = 1;
+  if (stealNpc === n) stopSteal(); if (hint.textContent?.includes(n.name)) hint.textContent = '';
+}
+const moonAimEl = document.createElement('div'); moonAimEl.id = 'moonAim';
+moonAimEl.innerHTML = '<div class="maTip">選一個要送上月球的人</div><button class="maX" aria-label="取消">✕</button>';
+document.body.appendChild(moonAimEl);
+moonAimEl.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
+moonAimEl.querySelector('.maX')!.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonAimEnd(); });
+function moonStart() {
+  if (state !== 'play' || tut || !(save.meds.moon > 0)) return;
+  if (moonUsed >= MOON_MAX) { toast(`這一工已經送 ${MOON_MAX} 位上月球了，下一工再用`, '#ffb08a'); return; }
+  if (!npcs.length) { toast('旁邊已經沒有人了', '#ffb08a'); return; }
+  $('medList').classList.remove('show'); if (document.pointerLockElement) document.exitPointerLock();
+  if (!walking && !tpOn) tPitch = Math.max(tPitch, -0.3); moonAimOn = true; moonAimEl.classList.add('on'); moonAimEl.querySelectorAll('.maT').forEach(b => b.remove());
+  for (const n of npcs) { const b = document.createElement('button'); b.className = 'maT'; b.innerHTML = `<svg viewBox="0 0 40 40" width="56" height="56" fill="none" stroke="currentColor" stroke-width="3"><circle cx="20" cy="20" r="13"/><circle cx="20" cy="20" r="3"/><path d="M20 1v10M20 29v10M1 20h10M29 20h10"/></svg><span>${esc(n.name)}</span>`; (b as any)._n = n;
+    b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonFire(n); }); moonAimEl.appendChild(b); }
+  moonAimPos();
+}
+function moonAimEnd() { moonAimOn = false; moonAimEl.classList.remove('on'); }
+function moonAimPos() {
+  const cam = viewCam(); moonAimEl.querySelectorAll<HTMLElement>('.maT').forEach(b => { const n = (b as any)._n as Npc; const p = worldOf(n.head).project(cam); if (p.z > 1) { p.x = -Math.sign(p.x || 1); p.y = -0.6; }
+    b.style.display = ''; b.style.left = `${clamp((p.x * .5 + .5) * innerWidth, 36, innerWidth - 36)}px`; b.style.top = `${clamp((-p.y * .5 + .5) * innerHeight, 90, innerHeight - 60)}px`; });
+}
+const starTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d')!; const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, '#fff'); g.addColorStop(0.25, '#fff6b0'); g.addColorStop(1, 'rgba(255,240,150,0)'); x.fillStyle = g; x.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r = i % 2 ? 9 : 32; x.lineTo(32 + Math.cos(a) * r, 32 + Math.sin(a) * r); } x.fill(); return new THREE.CanvasTexture(c); })();
+const smokeGeo = new THREE.SphereGeometry(0.05, 6, 5);
+function moonFire(n: Npc) {
+  if (!moonAimOn || !npcs.includes(n) || !(save.meds.moon > 0)) return;
+  moonAimEnd(); save.meds.moon--; moonUsed++; persist(); drawMeds(); track('item_use', { item: 'moonpunch' });
+  moonGone(n); punchT = 0.5; if (ac) { SFX.whoosh(); tone(220, 0.5, 0.15, 'sawtooth', 0.05, 900); }
+  toast(`把你媽的愛送上月球！目標：${n.name}`, '#ffd25a');
+  // 飛彈鐵拳
+  const mis = new THREE.Group();
+  mesh(new THREE.SphereGeometry(0.07, 10, 8), mat(0xe8b896), [0, 0, -0.08], mis).scale.set(1, 0.85, 1.1);
+  mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.22, 10), mat(0xc83a2a, { metalness: 0.4 }), [0, 0, 0.08], mis).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 4; i++) { const f = mesh(new THREE.BoxGeometry(0.008, 0.09, 0.07), mat(0xeeeeee), [0, 0, 0.17], mis); f.rotation.z = i * Math.PI / 2; f.position.x = Math.cos(i * Math.PI / 2 + Math.PI / 2) * 0.05; f.position.y = Math.sin(i * Math.PI / 2 + Math.PI / 2) * 0.05; }
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.22, 8), new THREE.MeshBasicMaterial({ color: 0xffa020, transparent: true, opacity: 0.9, fog: false })); flame.rotation.x = -Math.PI / 2; flame.position.z = 0.3; mis.add(flame);
+  scene.add(mis);
+  const p0 = camera.localToWorld(new THREE.Vector3(0.18, -0.18, -0.45)); mis.position.copy(p0);
+  let t = 0, smokeT = 0; const dur = 0.7;
+  moonFx.push(dt => {
+    t += dt; const k = Math.min(1, t / dur); const p1 = worldOf(n.head);
+    const pos = new THREE.Vector3().lerpVectors(p0, p1, k); pos.y += Math.sin(k * Math.PI) * 0.25; mis.lookAt(pos.clone().multiplyScalar(2).sub(mis.position)); mis.position.copy(pos);
+    flame.scale.set(1, 0.7 + Math.random() * 0.6, 1);
+    if ((smokeT -= dt) <= 0) { smokeT = 0.04; const s = new THREE.Mesh(smokeGeo, new THREE.MeshBasicMaterial({ color: 0x9a9a9a, transparent: true, opacity: 0.7 })); s.position.copy(flame.getWorldPosition(new THREE.Vector3())); scene.add(s); let st = 0; moonFx.push(d => { st += d; s.scale.setScalar(1 + st * 2.2); (s.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - st / 0.9); s.position.y += d * 0.3; if (st >= 0.9) { scene.remove(s); return false; } return true; }); }
+    if (k < 1) return true;
+    scene.remove(mis); moonHit(n); return false;
+  });
+}
+function moonHit(n: Npc) {
+  shake = 0.6; if (ac) { noise(0.6, 900, 0.7, 80); tone(70, 0.5, 0.4, 'sine', 0, 35); tone(500, 0.12, 0.15, 'square', 0, 120); }
+  const hp0 = worldOf(n.head);
+  const ex = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffd040, transparent: true, opacity: 1, fog: false })); ex.position.copy(hp0); scene.add(ex);
+  const ex2 = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff5020, transparent: true, opacity: 0.9, fog: false })); ex2.position.copy(hp0); scene.add(ex2);
+  let et = 0; moonFx.push(dt => { et += dt; ex.scale.setScalar(1 + et * 9); ex2.scale.setScalar(1 + et * 6); (ex.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - et / 0.45); (ex2.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.9 - et / 0.4); if (et >= 0.45) { scene.remove(ex, ex2); return false; } return true; });
+  const away = n.g.position.clone().sub(camera.position).setY(0).normalize();
+  const vel = away.multiplyScalar(9).setY(2.2); const spin = new THREE.Vector3(rnd(6, 10), rnd(4, 8), rnd(5, 9));
+  const star = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, transparent: true, depthTest: false, fog: false, opacity: 0 })); star.scale.setScalar(0.01); scene.add(star);
+  let lt = 0; const FLY = 2.2, END = 3.2; const pitch0 = tPitch, follow = !walking && !tpOn;
+  moonFx.push(dt => {
+    lt += dt;
+    if (follow && state === 'play') { const d = n.g.position.clone().sub(camera.position); const want = lt < END - 0.4 ? Math.min(0.12, Math.atan2(d.y, Math.hypot(d.x, d.z))) : pitch0; tPitch += (want - tPitch) * Math.min(1, dt * 4); }
+    if (lt < FLY) { vel.y += dt * 3.5; n.g.position.addScaledVector(vel, dt); n.g.rotation.x += spin.x * dt; n.g.rotation.y += spin.y * dt; n.g.rotation.z += spin.z * dt; n.g.scale.setScalar(Math.max(0.05, 1 - lt / FLY * 0.95)); star.position.copy(n.g.position).y += 0.5; }
+    else if (n.g.parent) scene.remove(n.g);
+    const sk = lt < FLY - 0.4 ? 0 : lt < FLY ? (lt - FLY + 0.4) / 0.4 : Math.max(0, 1 - (lt - FLY) / (END - FLY));
+    (star.material as THREE.SpriteMaterial).opacity = sk; star.scale.setScalar((0.6 + 0.5 * Math.abs(Math.sin(lt * 18))) * 1.4 * Math.max(sk, 0.01)); star.material.rotation = lt * 3;
+    if (lt === lt && lt > FLY && lt - dt <= FLY && ac) { tone(1800, 0.08, 0.1, 'triangle'); tone(2600, 0.12, 0.08, 'triangle', 0.08); }
+    if (lt >= END) { scene.remove(star); if (follow && state === 'play') tPitch = pitch0; return false; } return true;
+  });
+}
+function moonTick(dt: number) {
+  for (let i = moonFx.length - 1; i >= 0; i--) if (!moonFx[i](dt)) moonFx.splice(i, 1);
+  if (punchT > 0) { punchT = Math.max(0, punchT - dt); const k = Math.sin((1 - punchT / 0.5) * Math.PI); handR.position.z -= k * 0.35; handR.position.y += k * 0.08; handR.position.x -= k * 0.06; }
+  if (moonAimOn) { if (state !== 'play') moonAimEnd(); else moonAimPos(); }
+}
+function renderItemShop() {
+  const it = ITEMS[0]; const own = save.meds[it.id] ?? 0;
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 道具</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，沒用完的會留著。</p><div class="itemCard"><div class="itemIc">${MOON_SVG}</div><div class="itemTx"><b>${it.n}</b><small style="color:#9be37a">${it.good}</small><small style="color:#ff8a7a">${it.bad}</small><small>持有 ${own}</small></div><button data-ibuy="${it.id}" ${save.money < it.price ? 'disabled' : ''}>$${it.price}</button></div>`);
+  $('shopList').querySelectorAll('button[data-ibuy]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+    const i = ITEMS.find(x => x.id === b.getAttribute('data-ibuy'))!; if (save.money < i.price) return;
+    save.money -= i.price; save.meds[i.id] = (save.meds[i.id] ?? 0) + 1; persist(); track('buy', { item: 'item-' + i.id, price: i.price }); if (ac) SFX.jingle(); renderShop(); drawMeds();
+  });
+}
+(window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };
 const go = (len: number) => { shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 $('start').onclick = () => { shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
@@ -1701,6 +1799,7 @@ function frame() {
   if (phase === 'aim' || ch) { handL.position.y += 0.05 + ch * 0.06; handL.position.z -= ch * 0.05; handL.rotation.x = 0.4 - ch * 0.5; } else handL.rotation.x = 0.4;
   if (flinch > 0) { handL.position.y -= flinch * 0.1; handL.rotation.z = 0.3 + flinch * 0.8; } else handL.rotation.z = 0.3;
   if (!swipePhase()) { yaw = tYaw; pitch = tPitch; }
+  moonTick(rdt);
   shake = Math.max(0, shake - rdt);
   if (walking) walkStep(rdt);
   camera.rotation.set(pitch - pe * 0.08, yaw + (walking ? 0 : seatYaw), 0);
@@ -1919,7 +2018,7 @@ let medDrawT = 0;
 function tickMeds(dt: number) { let ch = false; for (const k in medT) { const was = medT[k] > 0; medT[k] = Math.max(0, medT[k] - dt); if (was && medT[k] <= 0) { ch = true; const m = MEDS.find(x => x.id === k); if (m) toast(`${m.emo}${m.n} 效果結束了`, '#cfc3ff'); } } medDrawT -= dt; if (ch || medDrawT <= 0) { medDrawT = 1; drawMeds(); } }
 function drawMeds() {
   const el = document.getElementById('medAct'); if (el) el.innerHTML = medOn().map(m => `<span>${m.emo}${Math.ceil(medT[m.id])}s</span>`).join('') + (saltNext ? '<span>🧂下一粒</span>' : '');
-  const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0); const b = document.getElementById('medBtn'); if (b) { b.innerHTML = (n ? `<i class="ic ic-pill"></i> 藥品 ×${n}` : '<i class="ic ic-pill"></i> 藥品') + '<span class="key"> (M)</span>' + (n ? '' : '<small>去雜貨店買藥</small>'); b.classList.toggle('empty', !n); }
+  const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0) + ITEMS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0); const b = document.getElementById('medBtn'); if (b) { b.innerHTML = (n ? `<i class="ic ic-pill"></i> 藥品/道具 ×${n}` : '<i class="ic ic-pill"></i> 藥品/道具') + '<span class="key"> (M)</span>' + (n ? '' : '<small>去雜貨店買</small>'); b.classList.toggle('empty', !n); }
   const L = document.getElementById('medList'); if (L && L.classList.contains('show')) renderMedList();
 }
 function useMed(id: string) {
@@ -1931,8 +2030,11 @@ function useMed(id: string) {
 }
 function renderMedList() {
   const L = $('medList'); const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0);
-  L.innerHTML = own.length ? own.map((m, i) => `<button data-use="${m.id}"><span class="key">${i + 1}. </span>${m.emo} ${m.n} ×${save.meds[m.id]}<small>${m.good}／${m.bad}${m.dur ? `・${m.dur} 秒` : "・立即"}${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「💊 藥品」買吧</p>';
-  L.querySelectorAll('button[data-use]').forEach(b => b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); useMed(b.getAttribute('data-use')!); renderMedList(); }));
+  const ownI = ITEMS.filter(m => (save.meds[m.id] ?? 0) > 0);
+  L.innerHTML = '<div class="mlH"><b>藥品</b><button class="mlX" aria-label="關閉">✕</button></div>' + (own.length ? own.map((m, i) => `<button data-use="${m.id}"><span class="key">${i + 1}. </span>${m.emo} ${m.n} ×${save.meds[m.id]}<small>${m.good}／${m.bad}${m.dur ? `・${m.dur} 秒` : "・立即"}${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「藥品」買吧</p>') + '<div class="mlH"><b>道具</b></div>' + (ownI.length ? ownI.map(m => `<button data-item="${m.id}"><i class="ic ic-moon"></i> ${m.n} ×${save.meds[m.id]}<small>${m.good}（這一工剩 ${Math.max(0, MOON_MAX - moonUsed)} 次）</small></button>`).join('') : '<p>身上沒有道具，去雜貨店的「道具」買吧</p>');
+  L.querySelector('.mlX')?.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); L.classList.remove('show'); });
+  L.querySelectorAll('button[data-item]').forEach(b => b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonStart(); }));
+  L.querySelectorAll('button[data-use]').forEach(b => b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); useMed(b.getAttribute('data-use')!); renderMedList(); }));
 }
 {
   const b = $('medBtn'), L = $('medList');
@@ -1942,7 +2044,7 @@ function renderMedList() {
   drawMeds();
 }
 function renderMedShop() {
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-pill"></i> 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「💊 藥品」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b></td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur ? `${m.dur}s` : "立即"}</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < m.price ? 'disabled' : ''}>$${m.price}</button></td></tr>`).join('') + '</table>');
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-pill"></i> 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b></td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur ? `${m.dur}s` : "立即"}</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < m.price ? 'disabled' : ''}>$${m.price}</button></td></tr>`).join('') + '</table>');
   $('shopList').querySelectorAll('button[data-mbuy]').forEach(b => (b as HTMLButtonElement).onclick = () => {
     const m = MEDS.find(x => x.id === b.getAttribute('data-mbuy'))!; if (save.money < m.price) return;
     save.money -= m.price; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; persist(); track('buy', { item: 'med-' + m.id, price: m.price }); if (ac) SFX.jingle(); renderShop(); drawMeds();
