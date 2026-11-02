@@ -1330,7 +1330,7 @@ function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.r
 let lastPay = { gross: 0, pen: 0, earn: 0 }, nameWait = false;
 function endDay() { inputGuard(); if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
-  if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
+  if (state === 'end') return; state = 'end'; setTimeout(giftAlert, 1500); setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
   const all = [{ name: `你（${esc(myName())}）`, count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= 5, queen = all[0].me && !temp && worked, PAY = OYSTER_PRICE - (temp ? TEMP_CUT : 0);
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
@@ -1745,7 +1745,7 @@ function tutEnd(done: boolean) {
   tutHi.forEach(id => $(id).classList.remove('tutHi')); tutHi = []; document.body.classList.remove('tutOn'); on('tut', false);
   if (document.pointerLockElement) document.exitPointerLock();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); }
-  stopSteal(); state = 'menu'; renderLocs(); setPhase('busy'); oyster.visible = false; closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
+  stopSteal(); state = 'menu'; setTimeout(giftAlert, 300); renderLocs(); setPhase('busy'); oyster.visible = false; closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
   if (done) toast('出師了！去剝蚵仔賺錢吧～', '#9be37a');
   renderDaily(); $('overlay').classList.add('show');
 }
@@ -2195,9 +2195,48 @@ migrateEquip(); persist(); applySleeve();
 // 禮物信箱：伺服器沒開或還沒有這個路由時安靜失敗
 let giftList: Social.Gift[] = [], giftAt = 0;
 async function checkGifts(force = false) {
-  if (!force && Date.now() - giftAt < 3 * 60e3) return; giftAt = Date.now();
+  if (!force && Date.now() - giftAt < 20e3) return; giftAt = Date.now();
   try { giftList = await Social.gifts(); } catch { giftList = []; }
   const b = document.getElementById('oGift'); if (b) b.style.display = giftList.length ? '' : 'none';
+  giftAlert();
+}
+// 新禮物提示：同一份禮物只提醒一次；上工中只亮 HUD 圖示，收工或回主選單再跳提示
+const giftSeen: string[] = (() => { try { return JSON.parse(LS.getItem('giftSeen') || '[]'); } catch { return []; } })();
+function giftNew() { return giftList.filter(g => !giftSeen.includes(String(g.id))); }
+function giftAlert() {
+  const n = giftNew(), h = document.getElementById('giftHud');
+  if (h) h.style.display = state === 'play' && n.length ? '' : 'none';
+  if (!n.length || state === 'play' || tut || document.getElementById('giftMsg') || $('gift').classList.contains('show')) return;
+  for (const g of n) giftSeen.push(String(g.id));
+  while (giftSeen.length > 200) giftSeen.shift();
+  try { LS.setItem('giftSeen', JSON.stringify(giftSeen)); } catch { /* 忽略 */ }
+  giftNotice(n);
+}
+function giftNotice(n: Social.Gift[]) {
+  const esc2 = (v: string) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+  const m = document.createElement('div'); m.id = 'giftMsg'; m.className = 'giftMsg';
+  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-gift"></i> 你有新禮物</b><ul class="gnList">${n.map(g => `<li>${esc2(giftLabel(g))}${g.message ? `<br><small>「${esc2(g.message)}」</small>` : ''}</li>`).join('')}</ul><div class="mbtns"><button class="gmNo">稍後再領</button><button class="gmYes"><i class="ic ic-check"></i> 領取</button></div></div>`;
+  const close = () => m.remove();
+  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
+  m.addEventListener('click', e => { if (e.target === m) close(); });
+  const y = m.querySelector<HTMLButtonElement>('.gmYes')!;
+  y.addEventListener('click', async () => {
+    if (y.disabled) return; y.disabled = true; y.textContent = '領取中…';
+    const got: string[] = []; let bad = '';
+    for (const g of n) {
+      const r = await Social.claimGift(g.id);
+      if (r.st === 'retry') { bad = r.why ?? '等一下再試'; continue; }
+      giftList = giftList.filter(x => String(x.id) !== String(g.id));
+      if (r.st === 'ok') { const gg = r.gift ?? g; applyGift(gg); got.push(giftGot(gg)); if (gg.message) got.push(`「${gg.message}」`); track('gift_claim', { type: gg.type, money: save.money }); }
+      else bad = r.why ?? '這份禮物已經不能領了';
+    }
+    renderDaily(); giftBadge(); close();
+    if (got.length) {
+      try { audio(); for (let k = 0; k < 5; k++) tone(1100 + k * 200, 0.12, 0.08, 'square', k * 0.06, 1600 + k * 200); tone(659, 0.45, 0.12, 'triangle', 0.35); } catch { }
+      giftMsg(true, '已領取！', [...got, ...(bad ? [`有一份沒領到：${bad}`] : []), `身上有 $${save.money}`]);
+    } else giftMsg(false, '沒領到', [bad || '等一下再試']);
+  });
+  document.body.appendChild(m);
 }
 function giftLabel(g: Social.Gift) {
   if (g.type === 'money') return `$${Math.max(0, Math.floor(+g.amount! || 0))}`;
@@ -2266,7 +2305,7 @@ function renderGifts() {
 }
 $('oGift').onclick = () => { renderGifts(); $('gift').classList.add('show'); };
 $('giftClose').onclick = () => $('gift').classList.remove('show');
-setTimeout(() => checkGifts(true), 3000); setInterval(() => { if (state !== 'play') checkGifts(); }, 60e3);
+setTimeout(() => checkGifts(true), 3000); Social.onPresence(() => { checkGifts(); });
 // ---------- 第三人稱視角 ----------
 // eslint-disable-next-line no-var
 var tpReady = false;
