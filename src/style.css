@@ -493,7 +493,7 @@ body.tutOn #feed{display:none!important}
 #settings.sheet>.pb{padding:0}
 #shop .ph #shopTabs{position:static;margin:8px -48px 0;padding:0;background:none}
 #lbClose{display:none!important}
-@media (max-width:500px){.panel.sheet{top:8px!important;transform:translateX(-50%)!important;max-height:calc(100dvh - 16px - env(safe-area-inset-bottom))!important}}
+@media (max-width:500px){.panel.sheet{top:8px!important;max-height:calc(100dvh - 16px - env(safe-area-inset-bottom))!important}}
 /* 排行榜 */
 #lb .pb{display:flex;flex-direction:column;gap:12px}
 #lbTabs{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink)}
@@ -600,4 +600,6 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 #onlineSign{display:inline-flex;align-items:center;gap:6px;margin:-4px auto 8px;padding:4px 12px;background:#b3261e;color:#fff6d8;border:2px solid #f2b705;border-radius:6px;font-weight:700;font-size:14px;letter-spacing:1px;box-shadow:0 2px 0 rgba(0,0,0,.35)}#onlineSign svg{width:18px;height:18px}#onlineSign b{color:#f2b705;font-size:16px}
 /* iOS WebKit：捲動容器本身帶 transform 時，畫面外的內容不繪製。面板改用 inset+margin:auto 置中，不用 transform */
 .panel{left:0!important;right:0!important;top:0!important;bottom:0!important;margin:auto!important;height:fit-content;transform:none!important}
-@media (max-width:500px){.panel.sheet{top:8px!important;bottom:auto!important;margin:0 auto!important}}
+/* .panel.sheet 在 496 行的手機規則帶 translateX(-50%)，特異度較高會蓋過上面的 transform:none，造成面板左移一半 */
+.panel.sheet,.panel.sheet.show{transform:none!important;left:0!important;right:0!important}
+@media (max-width:500px){.panel.sheet,.panel.sheet.show{top:8px!important;bottom:auto!important;margin:0 auto!important;transform:none!important}}
