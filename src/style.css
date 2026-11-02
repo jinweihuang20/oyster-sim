@@ -640,3 +640,6 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .daily .stp.big{border-style:solid;width:30px;height:30px}
 .daily .stp.on{background:#b8322a;color:#fff;border-style:solid;border-color:#7a1d18}
 .daily .stp .ic{width:14px;height:14px}
+
+#onHud{display:inline-flex;align-items:center;gap:3px;color:#9fe0a8;font-size:15px}
+#onHud svg{flex:none}

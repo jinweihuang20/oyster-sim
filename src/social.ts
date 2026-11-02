@@ -15,12 +15,23 @@ let last = 0, busy = false, polls = 0;
 const queue: string[] = [];
 let cur: HTMLElement | null = null;
 function endCur() { const el = $('feed'); cur = null; el.classList.remove('on'); $('fdTrack').innerHTML = ''; busy = false; setTimeout(showNext, 600); }
+// 跑馬燈放在 HUD 上方統計（#top、#stats）的下緣之下，絕不蓋住
+function placeFeed() {
+  const f = document.getElementById('feed'); if (!f) return;
+  let b = 0;
+  if (!document.querySelector('.panel.show')) for (const id of ['top', 'stats']) {
+    const e = document.getElementById(id); if (!e) continue;
+    const r = e.getBoundingClientRect();
+    if (r.height > 0 && r.width > 0 && r.top < innerHeight * 0.4 && getComputedStyle(e).visibility !== 'hidden' && (e.textContent || '').trim()) b = Math.max(b, r.bottom);
+  }
+  f.style.top = b > 0 ? Math.round(b + 6) + 'px' : 'env(safe-area-inset-top)';
+}
 function showNext() {
-  const el = $('feed');
+  const el = $('feed'); placeFeed();
   if (busy || !queue.length || !D.on() || D.inTut()) return;
   busy = true; const txt = queue.shift()!;
   const tr = $('fdTrack'); tr.innerHTML = `<span class="fdIn"><i class="ic ic-horn"></i> ${txt}</span>`; el.classList.add('on');
-  const s = tr.firstElementChild as HTMLElement; cur = s; s.style.animationDuration = Math.max(7, (txt.length + 10) * 0.32) + 's';
+  const s = tr.firstElementChild as HTMLElement; cur = s; s.style.animationDuration = Math.max(4.4, (txt.length + 10) * 0.2) + 's';
   s.onanimationend = () => { if (cur === s) endCur(); };
 }
 async function poll() {
@@ -81,6 +92,8 @@ export function init(d: Deps) {
   const f = document.createElement('div'); f.id = 'feed';
   f.innerHTML = '<div id="fdTrack"></div><button id="fdX" type="button" aria-label="關閉這則消息"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
   document.body.appendChild(f);
+  addEventListener('resize', placeFeed);
+  if ('ResizeObserver' in window) { const ro = new ResizeObserver(placeFeed); for (const id of ['top', 'stats']) { const e = document.getElementById(id); if (e) ro.observe(e); } }
   // 只關掉當下這則；放開才觸發，且需在同一顆按鈕上按下
   const x = f.querySelector('#fdX') as HTMLButtonElement; let down = false;
   const stop = (e: Event) => e.stopPropagation();
@@ -118,10 +131,11 @@ export async function claimGift(giftId: string | number): Promise<{ st: 'ok' | '
 let prsPlaying: () => boolean = () => false;
 function showOnline(r: any) {
   const el = $('onlineSign');
-  if (!r || typeof r.online !== 'number') { el.style.display = 'none'; return; }
+  if (!r || typeof r.online !== 'number') { el.style.display = 'none'; const h = document.getElementById('onHud'); if (h) h.style.display = 'none'; return; }
   const on = Math.max(1, r.online), sh = r.shucking | 0;
   $('onlineTxt').innerHTML = sh >= 1 ? `現在 <b>${sh}</b> 人正在剝蚵仔` : `現在 <b>${on}</b> 人在蚵寮`;
   el.style.display = '';
+  const h = document.getElementById('onHud'); if (h) { h.style.display = ''; $('onHudN').textContent = String(on); }
 }
 async function presenceTick() {
   if (document.hidden) return;
