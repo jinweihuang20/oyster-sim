@@ -6,21 +6,32 @@ interface Fighter {
   name: string; isPlayer: boolean; pos: THREE.Vector3; vel: THREE.Vector3; yaw: number; pitch: number;
   hp: number; ammo: number; dead: boolean; respawnAt: number; invulnUntil: number;
   kills: number; deaths: number; hs: number; shots: number; hits: number;
-  mesh: THREE.Group | null; cd: number; umbT: number; umbHeld: boolean; umbTired: boolean; umbMesh: THREE.Object3D | null; goal: THREE.Vector3; idleUntil: number; pickT: number;
+  mesh: THREE.Group | null; cd: number; rig: { armR: THREE.Group; legL: THREE.Group; legR: THREE.Group } | null; throwA: number; walkPh: number; pickCd: number; umbT: number; umbHeld: boolean; umbTired: boolean; umbMesh: THREE.Object3D | null; goal: THREE.Vector3; idleUntil: number; pickT: number;
 }
 interface Shell { pos: THREE.Vector3; vel: THREE.Vector3; owner: Fighter; mesh: THREE.Mesh; life: number; }
 
 const SPEED = 24, HALF = 18, MAXAMMO = 5, EYE = 1.6, R = 0.35;
-const PILE = new THREE.Vector3(0, 0, 0);
-const COVERS: THREE.Box3[] = [
-  [-8, -6], [8, 6], [-7, 8], [7, -8], [0, 11], [0, -11], [-12, 0], [12, 0],
-].map(([x, z]) => new THREE.Box3(new THREE.Vector3(x - 1.4, 0, z - 0.6), new THREE.Vector3(x + 1.4, 1.5, z + 0.6)));
+const PILES = [[0, 0], [-13, -12], [13, 12], [-12, 12], [12, -12], [0, -6], [5, 15]].map(([x, z]) => new THREE.Vector3(x, 0, z));
+const PICK_R = 1.9;
+// 掩體：木箱堆、藍色塑膠籃堆、剝蚵工作桌
+type Kind = 'crate' | 'basket' | 'table';
+const COVER_DEF: [number, number, number, number, number, Kind][] = [
+  [-8, -6, 2.4, 1.2, 1.5, 'crate'], [8, 6, 2.4, 1.2, 1.5, 'crate'], [-7, 8, 2.2, 1.0, 1.3, 'basket'], [7, -8, 2.2, 1.0, 1.3, 'basket'],
+  [0, 11, 3.0, 1.2, 1.0, 'table'], [0, -11, 3.0, 1.2, 1.0, 'table'], [-12, 0, 1.2, 2.6, 1.5, 'crate'], [12, 0, 1.0, 2.2, 1.3, 'basket'],
+];
+const COVERS: THREE.Box3[] = COVER_DEF.map(([x, z, w, d, h]) => new THREE.Box3(new THREE.Vector3(x - w / 2, 0, z - d / 2), new THREE.Vector3(x + w / 2, h, z + d / 2)));
 const SPAWNS = [[-15, -15], [15, 15], [-15, 15], [15, -15], [0, -16], [0, 16], [-16, 0], [16, 0]];
 
 let active = false;
 export const isDeathmatchActive = () => active;
 
-export interface DmUmb { umb: { n: string; open: number; dur: number; cover: number }; model: THREE.Object3D }
+export interface DmUmb {
+  umb: { n: string; open: number; dur: number; cover: number }; model: THREE.Object3D;
+  // 沿用上工場景的美術：阿婆模型、蚵殼幾何／材質、藤壺
+  makeAma: (top: number, hair: number) => { g: THREE.Group; head: THREE.Group; armL: THREE.Group; armR: THREE.Group; pants: THREE.Material };
+  shellGeos: THREE.BufferGeometry[]; shellMat: THREE.Material; greyPick: () => number;
+  barnGeo: THREE.BufferGeometry; barnMat: THREE.Material; placeBarn: (list: THREE.Object3D[], dd: number, y?: number) => void;
+}
 export function openDeathmatch(U: DmUmb, onExit: () => void) {
   if (active) return; active = true;
   const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -58,55 +69,95 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
   const canvas = root.querySelector('canvas')!;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x1a2338); scene.fog = new THREE.Fog(0x1a2338, 20, 50);
+  renderer.shadowMap.enabled = true;
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x3a3050); scene.fog = new THREE.Fog(0x4a3a50, 14, 44);
   const cam = new THREE.PerspectiveCamera(70, 1, 0.05, 100); cam.rotation.order = 'YXZ';
-  scene.add(new THREE.HemisphereLight(0xfff0d0, 0x302010, 1.1));
-  const sun = new THREE.DirectionalLight(0xffe0b0, 1.2); sun.position.set(10, 20, 5); scene.add(sun);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2, HALF * 2), new THREE.MeshLambertMaterial({ color: 0x5a5148 }));
-  ground.rotation.x = -Math.PI / 2; scene.add(ground);
-  const wallM = new THREE.MeshLambertMaterial({ color: 0x8a3a20 });
-  for (const [x, z, w, d] of [[0, -HALF, HALF * 2, .4], [0, HALF, HALF * 2, .4], [-HALF, 0, .4, HALF * 2], [HALF, 0, .4, HALF * 2]]) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 3, d), wallM); m.position.set(x, 1.5, z); scene.add(m);
+  const M = (c: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true, ...o });
+  const add = (g: THREE.BufferGeometry, m: THREE.Material, p: [number, number, number], parent: THREE.Object3D = scene, shadow = true) => { const x = new THREE.Mesh(g, m); x.position.set(...p); x.castShadow = shadow; x.receiveShadow = true; parent.add(x); return x; };
+  // 黃昏漁港燈光（同上工場景色調，亮度調高方便瞄準）
+  scene.add(new THREE.HemisphereLight(0xc08a9a, 0x201810, 1.0));
+  const sun = new THREE.DirectionalLight(0xff9a60, 1.1); sun.position.set(-12, 16, -18); sun.castShadow = true;
+  Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, far: 60 }); sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.002; scene.add(sun);
+  // 水泥地＋水漬
+  add(new THREE.PlaneGeometry(HALF * 2 + 4, HALF * 2 + 4), M(0x5a544c, { roughness: 0.95 }), [0, 0, 0]).rotation.x = -Math.PI / 2;
+  const stain = M(0x3e3c38, { roughness: 0.3, transparent: true, opacity: 0.5 }), stainG = new THREE.CircleGeometry(1, 12);
+  for (let i = 0; i < 18; i++) { const d = add(stainG, stain, [(Math.random() - .5) * 32, 0.01, (Math.random() - .5) * 32], scene, false); d.rotation.x = -Math.PI / 2; d.scale.set(0.6 + Math.random() * 1.6, 0.4 + Math.random(), 1); }
+  // 四周鐵皮工寮牆
+  const tin = M(0x6f7a80, { roughness: 0.6, metalness: 0.3 }), tinD = M(0x56606a, { roughness: 0.6, metalness: 0.3 }), rib = new THREE.BoxGeometry(0.08, 3, 0.08);
+  for (const [x, z, w, d] of [[0, -HALF, HALF * 2, .3], [0, HALF, HALF * 2, .3], [-HALF, 0, .3, HALF * 2], [HALF, 0, .3, HALF * 2]]) {
+    add(new THREE.BoxGeometry(w, 3, d), tin, [x, 1.5, z]);
+    const n = Math.round(Math.max(w, d) / 0.6); for (let k = 0; k < n; k++) { const t = -Math.max(w, d) / 2 + (k + .5) * Math.max(w, d) / n; add(rib, tinD, w > d ? [t, 1.5, z - Math.sign(z) * 0.18] : [x - Math.sign(x) * 0.18, 1.5, t], scene, false); }
   }
-  const coverM = new THREE.MeshLambertMaterial({ color: 0x2f6f8f });
-  for (const b of COVERS) { const s = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3()); const m = new THREE.Mesh(new THREE.BoxGeometry(s.x, s.y, s.z), coverM); m.position.copy(c); scene.add(m); }
-  const shellGeo = new THREE.SphereGeometry(0.09, 8, 6); shellGeo.scale(1.4, 0.6, 1);
-  const shellM = new THREE.MeshLambertMaterial({ color: 0xd8d0c0 });
-  const pile = new THREE.Group();
-  for (let i = 0; i < 60; i++) { const s = new THREE.Mesh(shellGeo, shellM); const a = Math.random() * 6.28, r = Math.random() * 1.1; s.position.set(Math.cos(a) * r, 0.05 + Math.random() * (1.2 - r) * 0.5, Math.sin(a) * r); s.rotation.set(Math.random() * 3, Math.random() * 3, 0); pile.add(s); }
-  scene.add(pile);
-
-  function makeBot(color: number) {
-    const g = new THREE.Group();
-    const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.8, 10), new THREE.MeshLambertMaterial({ color: 0x334 })); legs.position.y = 0.4;
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.65, 10), new THREE.MeshLambertMaterial({ color })); body.position.y = 1.125;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), new THREE.MeshLambertMaterial({ color: 0xf0c8a0 })); head.position.y = 1.6;
-    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.21, 12, 8, 0, 6.3, 0, 1.4), new THREE.MeshLambertMaterial({ color: 0xdddddd })); hair.position.y = 1.62;
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.1), new THREE.MeshLambertMaterial({ color: 0xe0a080 })); nose.position.set(0, 1.6, 0.2);
-    g.add(legs, body, head, hair, nose); scene.add(g); return g;
+  // 掩體
+  const wood = M(0x8a6440), woodD = M(0x5e4128), blue = M(0x2a6ad0, { roughness: 0.5 }), tableTop = M(0x9a9a92, { roughness: 0.4, metalness: 0.4 }), steel = M(0x707070, { metalness: 0.5, roughness: 0.4 });
+  for (const [x, z, w, d, h, k] of COVER_DEF) {
+    if (k === 'crate') { const nx = Math.round(Math.max(w, d) / 1.2), along = w >= d; for (let i = 0; i < nx; i++) for (let j = 0; j < 2; j++) { const off = -Math.max(w, d) / 2 + (i + .5) * Math.max(w, d) / nx, sz = Math.min(w, d);
+      const c = add(new THREE.BoxGeometry(along ? Math.max(w, d) / nx - 0.04 : sz, h / 2 - 0.02, along ? sz : Math.max(w, d) / nx - 0.04), wood, [along ? x + off : x, h / 4 + j * h / 2, along ? z : z + off]); c.rotation.y = (Math.random() - .5) * 0.06;
+      add(new THREE.BoxGeometry(along ? Math.max(w, d) / nx : sz + 0.02, 0.06, along ? sz + 0.02 : Math.max(w, d) / nx), woodD, [along ? x + off : x, j * h / 2 + h / 4, along ? z : z + off], scene, false); } }
+    else if (k === 'basket') { const along = w >= d, n = Math.round(Math.max(w, d) / 0.55); for (let i = 0; i < n; i++) for (let j = 0; j < 4; j++) { const off = -Math.max(w, d) / 2 + (i + .5) * Math.max(w, d) / n;
+      add(new THREE.BoxGeometry(along ? 0.52 : Math.min(w, d), h / 4 - 0.02, along ? Math.min(w, d) : 0.52), blue, [along ? x + off : x, h / 8 + j * h / 4, along ? z : z + off]); } }
+    else { add(new THREE.BoxGeometry(w, 0.06, d), tableTop, [x, h - 0.03, z]); add(new THREE.BoxGeometry(w - 0.1, h - 0.1, 0.04), steel, [x, (h - 0.06) / 2, z]);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.06, h, 0.06), steel, [x + sx * (w / 2 - 0.05), h / 2, z + sz * (d / 2 - 0.05)]);
+      for (let i = 0; i < 10; i++) { const sh = add(U.shellGeos[i % 6], U.shellMat, [x + (Math.random() - .5) * (w - .3), h + 0.03, z + (Math.random() - .5) * (d - .3)]); sh.rotation.y = Math.random() * 6; } }
   }
-  const mk = (name: string, isPlayer: boolean, color: number): Fighter => ({ name, isPlayer, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, hp: 100, ammo: 0, dead: false, respawnAt: 0, invulnUntil: 0, kills: 0, deaths: 0, hs: 0, shots: 0, hits: 0, mesh: isPlayer ? null : makeBot(color), cd: 1, umbT: 0, umbHeld: false, umbTired: false, umbMesh: null, goal: new THREE.Vector3(), idleUntil: 0, pickT: 0 });
+  // 裝飾：紅色塑膠椅、水桶、路燈
+  const red = M(0xd04040, { roughness: 0.5 }), stoolG = new THREE.CylinderGeometry(0.17, 0.15, 0.3, 10);
+  for (const [x, z] of [[-15, -3], [-14.6, -2.4], [15, 4], [6, 16], [-6, -16], [3, -15.5]]) add(stoolG, red, [x, 0.15, z]);
+  for (const [x, z, c] of [[16.5, -16.5, 0xd07a2a], [-16.5, 16.5, 0x3a8a4a], [16.5, 9, 0x3a8a4a]] as const) add(new THREE.CylinderGeometry(0.22, 0.17, 0.45, 10), M(c), [x, 0.22, z]);
+  const glowM = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
+  for (const [x, z] of [[-17, -17], [17, 17], [-17, 17], [17, -17]]) { add(new THREE.CylinderGeometry(0.05, 0.06, 3.4, 6), steel, [x * 0.97, 1.7, z * 0.97]); add(new THREE.SphereGeometry(0.12, 8, 6), glowM, [x * 0.97, 3.4, z * 0.97], scene, false);
+    const l = new THREE.PointLight(0xffb060, 18, 14, 1.6); l.position.set(x * 0.93, 3.3, z * 0.93); scene.add(l); }
+  // 蚵仔堆：共用上工的蚵殼幾何／材質，InstancedMesh
+  const coneM = M(0x6a7c94, { roughness: 0.95, emissive: 0x24262a }), coneG = new THREE.ConeGeometry(0.9, 0.55, 10), dmy = new THREE.Object3D(), col = new THREE.Color();
+  PILES.forEach((pp, pi) => {
+    add(coneG, coneM, [pp.x, 0.27, pp.z]);
+    const im = new THREE.InstancedMesh(U.shellGeos[pi % U.shellGeos.length], U.shellMat, 160); im.castShadow = true;
+    for (let i = 0; i < 160; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 1.0, hh = Math.max(0, 0.55 * (1 - r / 0.95)); dmy.position.set(pp.x + Math.cos(a) * r, hh + 0.03, pp.z + Math.sin(a) * r); dmy.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); dmy.updateMatrix(); im.setMatrixAt(i, dmy.matrix); im.setColorAt(i, col.setHex(U.greyPick())); }
+    scene.add(im);
+  });
+  // 丟出去的殼：上工那顆真蚵殼＋藤壺，放大一點好看清楚
+  function shellMesh() {
+    const m = new THREE.Mesh(U.shellGeos[Math.floor(Math.random() * U.shellGeos.length)], U.shellMat); m.scale.setScalar(1.7); m.castShadow = true;
+    const bl: THREE.Object3D[] = []; for (let i = 0; i < 8; i++) { const b = new THREE.Mesh(U.barnGeo, U.barnMat); m.add(b); bl.push(b); } U.placeBarn(bl, 2); return m;
+  }
+  // 阿婆：沿用上工的阿婆模型，藏起板凳和坐姿小腿，改成站姿雙腿
+  function makeBot(top: number, hair: number) {
+    const outer = new THREE.Group(); const a = U.makeAma(top, hair);
+    a.g.children.forEach(c => { if ((c as THREE.Mesh).isMesh && c.position.y < 0.4) c.visible = false; });
+    a.g.scale.setScalar(1.25); a.g.position.y = 0.39; outer.add(a.g);
+    const leg = (sx: number) => { const p = new THREE.Group(); p.position.set(sx, 0.8, 0); outer.add(p);
+      add(new THREE.CylinderGeometry(0.075, 0.06, 0.78, 6), a.pants, [0, -0.4, 0], p); add(new THREE.BoxGeometry(0.11, 0.03, 0.24), M(0xf2f2ee), [0, -0.78, -0.04], p); add(new THREE.BoxGeometry(0.115, 0.035, 0.04), M(0x2f5fb8), [0, -0.76, -0.1], p); return p; };
+    const legL = leg(-0.12), legR = leg(0.12);
+    outer.traverse(o => { o.castShadow = true; }); scene.add(outer);
+    return { outer, rig: { armR: a.armR, legL, legR } };
+  }
+  const mk = (name: string, isPlayer: boolean, color: number): Fighter => ({ name, isPlayer, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, hp: 100, ammo: 0, dead: false, respawnAt: 0, invulnUntil: 0, kills: 0, deaths: 0, hs: 0, shots: 0, hits: 0, mesh: null, rig: null, throwA: 0, walkPh: 0, pickCd: 0, cd: 1, umbT: 0, umbHeld: false, umbTired: false, umbMesh: null, goal: new THREE.Vector3(), idleUntil: 0, pickT: 0 });
   const me = mk('你', true, 0);
-  const fighters: Fighter[] = [me, mk('阿婆 A', false, 0xc8102e), mk('阿婆 B', false, 0x2e7d32), mk('阿婆 C', false, 0x6a1b9a)];
+  const fighters: Fighter[] = [me, mk('阿婆 A', false, 0), mk('阿婆 B', false, 0), mk('阿婆 C', false, 0)];
+  ([[0xc84a6a, 0xdddddd], [0x3a7a5a, 0xbbbbbb], [0x6a5aa0, 0x888888]] as const).forEach(([t, h], i) => { const b = makeBot(t, h); fighters[i + 1].mesh = b.outer; fighters[i + 1].rig = b.rig; });
   const shells: Shell[] = [];
   // 雨傘：沿用上工的傘（目前裝備的傘外觀與開傘／可撐／遮擋數值）
   scene.add(cam);
   me.umbMesh = U.model; U.model.visible = false; cam.add(U.model);
-  for (const f of fighters) if (f.mesh) { const m = U.model.clone(true); m.visible = false; m.position.set(0, 1.3, 0.55); m.rotation.set(Math.PI / 2.4, 0, 0); m.scale.setScalar(0.8); f.mesh.add(m); f.umbMesh = m; }
+  for (const f of fighters) if (f.mesh) { const m = U.model.clone(true); m.visible = false; m.position.set(0, 1.35, -0.5); m.rotation.set(-Math.PI / 2.4, 0, 0); m.scale.setScalar(0.8); f.mesh.add(m); f.umbMesh = m; }
   const umbUp = (f: Fighter) => f.umbHeld && (U.umb.open + U.umb.dur - f.umbT) >= U.umb.open;
   function openUmb(f: Fighter) { if (f.dead || f.umbHeld || f.umbTired) return; f.umbHeld = true; f.umbT = U.umb.open + U.umb.dur; }
   function closeUmb(f: Fighter) { f.umbTired = false; f.umbHeld = false; f.umbT = 0; }
   let now = 0;
   function spawn(f: Fighter) {
     const opts = SPAWNS.map(([x, z]) => new THREE.Vector3(x, 0, z)).sort((a, b) => minDist(b, f) - minDist(a, f));
-    f.pos.copy(opts[Math.floor(Math.random() * 3)]); f.vel.set(0, 0, 0); f.hp = 100; f.ammo = 0; f.dead = false;
-    f.invulnUntil = now + 3; f.idleUntil = now + 1; f.umbHeld = false; f.umbTired = false; f.umbT = 0; f.yaw = Math.atan2(-f.pos.x, -f.pos.z) + Math.PI; f.pitch = 0; f.goal.copy(PILE); f.pickT = 0;
+    f.pos.copy(opts[Math.floor(Math.random() * 3)]); f.vel.set(0, 0, 0); f.hp = 100; f.ammo = MAXAMMO; f.dead = false;
+    f.invulnUntil = now + 3; f.idleUntil = now + 1; f.umbHeld = false; f.umbTired = false; f.umbT = 0; f.yaw = Math.atan2(-f.pos.x, -f.pos.z) + Math.PI; f.pitch = 0; f.goal.copy(nearPile(f.pos)); f.pickT = 0;
   }
+  const nearPile = (p: THREE.Vector3) => PILES.reduce((a, b) => (Math.hypot(b.x - p.x, b.z - p.z) < Math.hypot(a.x - p.x, a.z - p.z) ? b : a));
+  const pileDist = (p: THREE.Vector3) => { const n = nearPile(p); return Math.hypot(n.x - p.x, n.z - p.z); };
   const minDist = (p: THREE.Vector3, self: Fighter) => Math.min(...fighters.filter(o => o !== self && !o.dead).map(o => o.pos.distanceTo(p)), 99);
   fighters.forEach(spawn);
 
   // ---- 輸入 ----
-  const keys: Record<string, boolean> = {}; const joy = { x: 0, y: 0 };
+  const keys: Record<string, boolean> = {}; const joy = { x: 0, y: 0 }; let holdPick = false;
+  const blur = () => { for (const k in keys) keys[k] = false; closeUmb(me); holdPick = false; };
+  addEventListener('blur', blur);
   let locked = false;
   const onKey = (e: KeyboardEvent, d: boolean) => {
     keys[e.code] = d;
@@ -122,25 +173,31 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
   canvas.addEventListener('mousemove', e => { if (!locked) return; me.yaw -= e.movementX * 0.0025; me.pitch = clampP(me.pitch - e.movementY * 0.0025); });
   const clampP = (p: number) => Math.max(-1.3, Math.min(1.3, p));
   if (isTouch) {
-    const jo = q('dmJoy'), kn = q('dmKnob'); let jid = -1, lid = -1, lx = 0, ly = 0;
-    root.addEventListener('touchstart', e => {
-      for (const t of Array.from(e.changedTouches)) {
-        const el = t.target as HTMLElement; if (el.closest('button')) continue;
-        if (el.closest('#dmJoy') && jid < 0) jid = t.identifier; else if (lid < 0) { lid = t.identifier; lx = t.clientX; ly = t.clientY; }
+    // 多指同時操作：用 pointerId 分開追蹤搖桿、轉視角、各個按鈕
+    const jo = q('dmJoy'), kn = q('dmKnob'), ptr = new Map<number, { k: 'joy' | 'look' | 'btn'; el?: HTMLElement; x: number; y: number }>();
+    const joyAt = (x: number, y: number) => { const r = jo.getBoundingClientRect(); let jx = (x - r.left - 60) / 50, jy = (y - r.top - 60) / 50; const l = Math.hypot(jx, jy); if (l > 1) { jx /= l; jy /= l; } joy.x = jx; joy.y = jy; kn.style.transform = `translate(${jx * 35}px,${jy * 35}px)`; };
+    root.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse') return; const t = e.target as HTMLElement, b = t.closest('button') as HTMLElement | null;
+      if (b) { if (b.id === 'dmUmb') openUmb(me); if (b.id === 'dmPick') holdPick = true; ptr.set(e.pointerId, { k: 'btn', el: b, x: e.clientX, y: e.clientY }); return; }
+      if (t.closest('#dmJoy')) { ptr.set(e.pointerId, { k: 'joy', x: e.clientX, y: e.clientY }); joyAt(e.clientX, e.clientY); }
+      else ptr.set(e.pointerId, { k: 'look', x: e.clientX, y: e.clientY });
+    });
+    root.addEventListener('pointermove', e => {
+      const p = ptr.get(e.pointerId); if (!p) return;
+      if (p.k === 'joy') joyAt(e.clientX, e.clientY);
+      else if (p.k === 'look') { me.yaw -= (e.clientX - p.x) * 0.006; me.pitch = clampP(me.pitch - (e.clientY - p.y) * 0.006); }
+      p.x = e.clientX; p.y = e.clientY;
+    });
+    const end = (e: PointerEvent) => {
+      const p = ptr.get(e.pointerId); if (!p) return; ptr.delete(e.pointerId);
+      if (p.k === 'joy') { joy.x = joy.y = 0; kn.style.transform = ''; }
+      if (p.k === 'btn' && p.el) {
+        if (p.el.id === 'dmUmb') closeUmb(me);
+        if (p.el.id === 'dmPick') { holdPick = false; if (e.type === 'pointerup') pick(me); }
+        if (p.el.id === 'dmThrow' && e.type === 'pointerup') throwShell(me); // 放開才發射
       }
-    }, { passive: true });
-    root.addEventListener('touchmove', e => {
-      for (const t of Array.from(e.changedTouches)) {
-        if (t.identifier === jid) { const r = jo.getBoundingClientRect(); let x = (t.clientX - r.left - 60) / 50, y = (t.clientY - r.top - 60) / 50; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } joy.x = x; joy.y = y; kn.style.transform = `translate(${x * 35}px,${y * 35}px)`; }
-        else if (t.identifier === lid) { me.yaw -= (t.clientX - lx) * 0.006; me.pitch = clampP(me.pitch - (t.clientY - ly) * 0.006); lx = t.clientX; ly = t.clientY; }
-      }
-    }, { passive: true });
-    const end = (e: TouchEvent) => { for (const t of Array.from(e.changedTouches)) { if (t.identifier === jid) { jid = -1; joy.x = joy.y = 0; kn.style.transform = ''; } if (t.identifier === lid) lid = -1; } };
-    root.addEventListener('touchend', end); root.addEventListener('touchcancel', end);
-    const ub = q('dmUmb');
-    ub.addEventListener('touchstart', e => { e.preventDefault(); openUmb(me); }, { passive: false });
-    ub.addEventListener('touchend', () => closeUmb(me)); ub.addEventListener('touchcancel', () => closeUmb(me));
-    q('dmThrow').onclick = () => throwShell(me); q('dmPick').onclick = () => pick(me);
+    };
+    root.addEventListener('pointerup', end); root.addEventListener('pointercancel', end);
   }
   q('dmScoreBtn').onclick = () => { q('dmBoard').classList.toggle('show'); renderBoard(); };
   q('dmX').onclick = () => exit();
@@ -148,7 +205,7 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
   // ---- 遊戲邏輯 ----
   function pick(f: Fighter) {
     if (f.dead || f.ammo >= MAXAMMO) return false;
-    if (Math.hypot(f.pos.x - PILE.x, f.pos.z - PILE.z) > 2.6) { if (f.isPlayer) msg('離蚵仔堆太遠了', 1); return false; }
+    if (pileDist(f.pos) > PICK_R) { if (f.isPlayer) msg('離蚵仔堆太遠了', 1); return false; }
     f.ammo = MAXAMMO; return true;
   }
   function eyeOf(f: Fighter) { return new THREE.Vector3(f.pos.x, f.pos.y + EYE, f.pos.z); }
@@ -159,16 +216,16 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
     if (f.ammo <= 0) { if (f.isPlayer) msg('沒殼了，去蚵仔堆拿', 1); return false; }
     f.ammo--; f.shots++; if (f.isPlayer) f.invulnUntil = 0;
     const d = dirOf(yaw, pitch); const p = eyeOf(f).addScaledVector(d, 0.4);
-    const m = new THREE.Mesh(shellGeo, shellM); m.position.copy(p); scene.add(m);
+    const m = shellMesh(); m.position.copy(p); scene.add(m); f.throwA = 0.35;
     shells.push({ pos: p, vel: d.multiplyScalar(SPEED).add(f.vel.clone().multiplyScalar(0.5)), owner: f, mesh: m, life: 6 });
     return true;
   }
   // 點是否在某人的命中區（頭為球，身體與腳為圓柱）
   function hitPart(f: Fighter, p: THREE.Vector3): Part | null {
     const dx = p.x - f.pos.x, dz = p.z - f.pos.z, y = p.y - f.pos.y, h = Math.hypot(dx, dz);
-    if (Math.hypot(h, y - 1.6) < 0.24) return 'head';
-    if (h < R && y >= 0.8 && y < 1.45) return 'body';
-    if (h < R * 0.85 && y >= 0 && y < 0.8) return 'legs';
+    if (Math.hypot(h, y - 1.665) < 0.22) return 'head';
+    if (h < 0.34 && y >= 0.8 && y < 1.5) return 'body';
+    if (h < 0.24 && y >= 0 && y < 0.8) return 'legs';
     return null;
   }
   function hitWorld(p: THREE.Vector3) {
@@ -205,7 +262,7 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
           const part = hitPart(f, p); if (part) { damage(s.owner, f, part, p); done = true; break; } }
         if (!done && hitWorld(p)) done = true;
       }
-      s.pos.copy(b); s.mesh.position.copy(b); s.mesh.rotation.y += dt * 20;
+      s.pos.copy(b); s.mesh.position.copy(b); s.mesh.rotation.y += dt * 20; s.mesh.rotation.x += dt * 9;
       if (done || s.life <= 0) { scene.remove(s.mesh); shells.splice(i, 1); }
     }
   }
@@ -228,15 +285,14 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
     const targets = fighters.filter(o => o !== f && !o.dead);
     let tgt: Fighter | null = null, best = 1e9;
     for (const o of targets) { const d = o.pos.distanceTo(f.pos) * (o.isPlayer ? 0.8 : 1); if (d < best) { best = d; tgt = o; } }
-    if (f.ammo === 0) {
-      f.goal.copy(PILE);
-      if (Math.hypot(f.pos.x, f.pos.z) < 2.2) { f.pickT += dt; f.vel.set(0, 0, 0); if (f.pickT > 0.8) { pick(f); f.pickT = 0; f.goal.set((Math.random() - .5) * 26, 0, (Math.random() - .5) * 26); } }
+    if (f.ammo === 0 || (f.pickT > 0 && f.ammo < MAXAMMO)) {
+      f.goal.copy(nearPile(f.pos)); f.pickT = 1; // 去最近的蚵仔堆，經過就會自動撿
     } else if (f.pos.distanceTo(f.goal) < 1.5 || Math.random() < dt * 0.3) {
-      const base = tgt ? tgt.pos : PILE; const a = Math.random() * 6.28, r = 7 + Math.random() * 6;
+      f.pickT = 0; const base = tgt ? tgt.pos : nearPile(f.pos); const a = Math.random() * 6.28, r = 7 + Math.random() * 6;
       f.goal.set(base.x + Math.cos(a) * r, 0, base.z + Math.sin(a) * r);
     }
     const to = f.goal.clone().sub(f.pos); to.y = 0;
-    if (to.length() > 0.3 && !(f.ammo === 0 && f.pickT > 0)) f.vel.copy(to.normalize().multiplyScalar(3.6)); else f.vel.set(0, 0, 0);
+    if (to.length() > 0.3) f.vel.copy(to.normalize().multiplyScalar(3.6)); else f.vel.set(0, 0, 0);
     if (tgt && !f.umbHeld) {
       // 預判：用飛行時間估計目標位置
       let aim = tgt.pos.clone(); for (let k = 0; k < 3; k++) { const t = eyeOf(f).distanceTo(aim) / (SPEED * 0.95); aim = tgt.pos.clone().addScaledVector(tgt.vel, t); }
@@ -253,6 +309,9 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
       if (f.dead) { f.vel.set(0, 0, 0); if (now >= f.respawnAt) { spawn(f); if (f.mesh) f.mesh.visible = true; if (f.isPlayer) msg('', 0); } continue; }
       if (f.umbHeld) { f.umbT -= dt; if (f.umbT <= 0) { f.umbHeld = false; f.umbTired = true; f.umbT = 0; if (f.isPlayer) msg('手痠了，放開再重新撐傘', 1.5); } }
       if (f.umbMesh) f.umbMesh.visible = f.umbHeld;
+      // 邊走邊撿：在蚵仔堆旁邊每 0.2 秒自動補一顆（按住拿殼／E 一次補滿）
+      if (f.ammo < MAXAMMO && pileDist(f.pos) <= PICK_R) { f.pickCd -= dt; if (f.pickCd <= 0) { f.ammo++; f.pickCd = 0.2; } } else f.pickCd = 0;
+      if (f.isPlayer && (holdPick || keys.KeyE)) pick(f);
       if (f.isPlayer) {
         let fx = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + joy.x, fz = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0) + joy.y;
         const l = Math.hypot(fx, fz); if (l > 1) { fx /= l; fz /= l; }
@@ -261,7 +320,9 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
       } else botThink(f, dt);
       if (f.vel.lengthSq() > 0.01) f.invulnUntil = Math.min(f.invulnUntil, now); // 一開始移動就結束無敵
       f.pos.addScaledVector(f.vel, dt); collide(f);
-      if (f.mesh) { f.mesh.position.copy(f.pos); f.mesh.rotation.y = f.yaw + Math.PI; f.mesh.visible = now < f.invulnUntil ? Math.floor(now * 10) % 2 === 0 : true; }
+      if (f.rig) { const sp = f.vel.length(); f.walkPh += dt * sp * 2.6; const sw = Math.sin(f.walkPh) * Math.min(1, sp / 3) * 0.6; f.rig.legL.rotation.x = sw; f.rig.legR.rotation.x = -sw;
+        f.throwA = Math.max(0, f.throwA - dt); f.rig.armR.rotation.x = f.throwA > 0 ? -2.2 * Math.sin((f.throwA / 0.35) * Math.PI) : f.umbHeld ? -0.8 : 0; }
+      if (f.mesh) { f.mesh.position.copy(f.pos); f.mesh.rotation.y = f.yaw; f.mesh.visible = now < f.invulnUntil ? Math.floor(now * 10) % 2 === 0 : true; }
     }
     stepShells(dt);
   }
@@ -282,9 +343,9 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
     q('dmTable').innerHTML = `<table><tr><th>名字</th><th>擊倒</th><th>倒下</th><th>爆頭</th><th>命中率</th></tr>${rows.map(f => `<tr class="${f.isPlayer ? 'me' : ''}"><td>${f.name}</td><td>${f.kills}</td><td>${f.deaths}</td><td>${f.hs}</td><td>${f.shots ? Math.round(f.hits / f.shots * 100) : 0}%</td></tr>`).join('')}</table>`;
   }
   function hud() {
-    const nearPile = Math.hypot(me.pos.x, me.pos.z) < 2.6;
+    const atPile = pileDist(me.pos) <= PICK_R;
     if (isTouch) q('dmUmb').classList.toggle('held', me.umbHeld);
-    q('dmHud').innerHTML = `血量 ${Math.max(0, me.hp)}<br>殼 ${me.ammo} / ${MAXAMMO}${now < me.invulnUntil && !me.dead ? '<br>無敵中' : ''}${me.umbHeld ? '<br>撐傘中' : me.umbTired ? '<br>手痠，放開雨傘' : ''}${nearPile && me.ammo < MAXAMMO && !me.dead ? (isTouch ? '<br>可以拿殼' : '<br>按 E 拿殼') : ''}`;
+    q('dmHud').innerHTML = `血量 ${Math.max(0, me.hp)}<br>殼 ${me.ammo} / ${MAXAMMO}${now < me.invulnUntil && !me.dead ? '<br>無敵中' : ''}${me.umbHeld ? '<br>撐傘中' : me.umbTired ? '<br>手痠，放開雨傘' : ''}${atPile && me.ammo < MAXAMMO && !me.dead ? '<br>撿殼中' : ''}`;
     if (q('dmBoard').classList.contains('show')) renderBoard();
   }
 
@@ -302,10 +363,10 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
     if ((hudT -= dt) <= 0) { hud(); hudT = 0.1; }
     renderer.render(scene, cam);
   }
-  loop(); msg('死鬥（測試）：去中間蚵仔堆拿殼！', 2.5);
+  loop(); msg('死鬥（測試）：殼丟完就去蚵仔堆補', 2.5);
 
   function exit() {
-    cancelAnimationFrame(raf); removeEventListener('keydown', kd); removeEventListener('keyup', ku); removeEventListener('resize', resize);
+    cancelAnimationFrame(raf); removeEventListener('keydown', kd); removeEventListener('keyup', ku); removeEventListener('resize', resize); removeEventListener('blur', blur);
     document.removeEventListener('pointerlockchange', plc); if (document.pointerLockElement === canvas) document.exitPointerLock();
     renderer.dispose(); root.remove(); active = false; delete (window as any).__dm; onExit();
   }
