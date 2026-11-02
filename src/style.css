@@ -596,3 +596,5 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .eqDock .ic{width:20px;height:20px;background:currentColor}
 .eqSets div{opacity:1!important}#eqClose{display:none!important}
 .eqSetH{justify-content:flex-start!important;gap:8px}.eqStamp{top:4px!important;right:8px!important}
+
+#onlineSign{display:inline-flex;align-items:center;gap:6px;margin:-4px auto 8px;padding:4px 12px;background:#b3261e;color:#fff6d8;border:2px solid #f2b705;border-radius:6px;font-weight:700;font-size:14px;letter-spacing:1px;box-shadow:0 2px 0 rgba(0,0,0,.35)}#onlineSign svg{width:18px;height:18px}#onlineSign b{color:#f2b705;font-size:16px}
