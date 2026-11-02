@@ -459,7 +459,7 @@ const dstatStr = () => dStat.flat().join(',');
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; streakDay?: number; lastBonusDay?: string; lastSeen?: string; retDay?: string; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number };
 const START_MONEY = 10000; // 首次遊玩見面禮（僅無存檔的新玩家）
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: START_MONEY, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {} }; }
 function loadSave(): Save {
@@ -479,6 +479,8 @@ function loadSave(): Save {
   if (raw.shop?.equipped && typeof raw.shop.equipped === 'object') for (const [k, v] of Object.entries(raw.shop.equipped)) if (typeof v === 'string') out.shop.equipped[k] = v;
   if (typeof raw.seat === 'string') out.seat = raw.seat;
   if (typeof raw.bonusDay === 'string') out.bonusDay = raw.bonusDay;
+  for (const k of ['lastBonusDay', 'lastSeen', 'retDay'] as const) if (typeof raw[k] === 'string') out[k] = raw[k];
+  out.streakDay = Math.min(7, Math.max(0, Math.floor(num(raw.streakDay))));
   out.bonusN = num(raw.bonusN); out.tutDone = num(raw.tutDone);
   if (raw.meds && typeof raw.meds === 'object') for (const [k, v] of Object.entries(raw.meds)) out.meds[k] = Math.max(0, Math.floor(num(v)));
   out.locs = Array.isArray(raw.locs) ? raw.locs.filter((x: any) => typeof x === 'string') : []; if (typeof raw.loc === 'string') out.loc = raw.loc;
@@ -491,23 +493,50 @@ function loadSave(): Save {
 }
 const save: Save = loadSave();
 // 每日上工費：用裝置本地日曆日判斷
-const DAILY_PAY = 100;
+const DAILY_PAYS = [1000, 1200, 1500, 1800, 2200, 2600, 3000];
 const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const dayDiff = (a: string, b: string) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5);
+// 今天領的話是連續第幾天
+const nextStreak = () => { const t = todayKey(), l = save.lastBonusDay, n = save.streakDay ?? 0; if (!l || n <= 0 || n >= 7 || dayDiff(l, t) !== 1) return 1; return n + 1; };
+const stampRow = (got: number) => `<span class="stamps">${[1, 2, 3, 4, 5, 6, 7].map(i => `<span class="stp${i <= got ? ' on' : ''}${i === 7 ? ' big' : ''}">${i <= got ? '<i class="ic ic-check"></i>' : i === 7 ? '<i class="ic ic-gift"></i>' : i}</span>`).join('')}</span>`;
 function renderDaily() {
-  const b = document.getElementById('daily') as HTMLButtonElement | null; if (!b) return;
+  const b = $('daily');
   const done = save.bonusDay === todayKey();
-  b.disabled = done; b.classList.toggle('done', done);
-  b.innerHTML = done ? `✅ 今天的上工費已經領過了・明天再來領<small>身上有 $${save.money}</small>` : `💰 領今日上工費 $${DAILY_PAY}<small>阿姨說：今天也要加油喔！</small>`;
+  b.classList.toggle('done', done);
+  if (done) { const n = save.streakDay ?? 1; b.innerHTML = `<span class="dTop"><i class="ic ic-check"></i> 連續第 ${n} 天・今天領過了</span>${stampRow(n)}<small>明天再來・身上有 $${save.money}</small>`; }
+  else { const n = nextStreak(); b.innerHTML = `<span class="dTop"><i class="ic ic-coin"></i> 領今日上工費 $${DAILY_PAYS[n - 1]}・連續第 ${n} 天</span>${stampRow(n - 1)}<small>${n === 7 ? '第 7 天另外送一件小東西！' : `再 ${7 - n} 天拿第 7 天大獎`}</small>`; }
+}
+function dailyItem(): string {
+  if (Math.random() < 0.5 || !MEDS.length) { save.dex[0]++; return '白珍珠 1 顆'; }
+  const m = MEDS[Math.floor(Math.random() * MEDS.length)]; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; return `${m.n} 1 個`;
 }
 function claimDaily(ev?: Event) {
   if (save.bonusDay === todayKey()) { renderDaily(); return; }
-  save.bonusDay = todayKey(); save.bonusN = (save.bonusN ?? 0) + 1; save.money += DAILY_PAY; persist();
-  track('daily_bonus', { amount: DAILY_PAY, streak: save.bonusN, money: save.money });
-  try { audio(); for (let k = 0; k < 6; k++) tone(1200 + k * 180, 0.12, 0.09, 'square', k * 0.07, 1800 + k * 180); tone(523, 0.4, 0.12, 'triangle', 0.45); tone(784, 0.5, 0.12, 'triangle', 0.55); } catch { }
-  const b = document.getElementById('daily')!; const r = b.getBoundingClientRect();
-  for (let i = 0; i < 14; i++) { const c = document.createElement('div'); c.className = 'coinfx'; c.textContent = '🪙'; c.style.left = `${r.left + r.width / 2}px`; c.style.top = `${r.top + r.height / 2}px`; c.style.setProperty('--dx', `${(Math.random() - 0.5) * 260}px`); c.style.setProperty('--dy', `${-80 - Math.random() * 160}px`); c.style.animationDelay = `${i * 0.03}s`; document.body.appendChild(c); setTimeout(() => c.remove(), 1400); }
-  const plus = document.createElement('div'); plus.className = 'coinplus'; plus.textContent = `+$${DAILY_PAY}`; plus.style.left = `${r.left + r.width / 2}px`; plus.style.top = `${r.top}px`; document.body.appendChild(plus); setTimeout(() => plus.remove(), 1500);
+  const n = nextStreak(), amt = DAILY_PAYS[n - 1];
+  save.bonusDay = save.lastBonusDay = todayKey(); save.streakDay = n; save.bonusN = (save.bonusN ?? 0) + 1; save.money += amt;
+  const item = n === 7 ? dailyItem() : '';
+  persist(); renderDex();
+  track('daily_bonus', { amount: amt, streak: n, money: save.money });
+  try { audio(); for (let k = 0; k < 3; k++) tone(1200 + k * 250, 0.15, 0.09, 'square', k * 0.07, 1800 + k * 250); } catch { /* 無音訊 */ }
+  const r = $('daily').getBoundingClientRect();
+  const plus = document.createElement('div'); plus.className = 'coinplus'; plus.textContent = `+$${amt}`; plus.style.left = `${r.left + r.width / 2}px`; plus.style.top = `${r.top}px`; document.body.appendChild(plus); setTimeout(() => plus.remove(), 1500);
   ev?.stopPropagation(); renderDaily();
+  if (item) giftMsg(true, '連續上工 7 天！', [`上工費 +$${amt}`, `阿姨另外送你：${item}`, `身上有 $${save.money}`]);
+}
+// 老玩家回歸：離開 7 天以上回來，每 7 天最多領一次
+function checkReturn() {
+  const t = todayKey(), last = save.lastSeen; save.lastSeen = t;
+  if (!last) { persist(); return; }
+  const days = dayDiff(last, t);
+  if (days < 7 || (save.retDay && dayDiff(save.retDay, t) < 7)) { persist(); return; }
+  const big = days >= 30, amt = big ? 30000 : 10000;
+  save.money += amt; save.retDay = t; save.streakDay = 0; save.lastBonusDay = undefined;
+  let item: string;
+  if (big) { const rs = ODD.map((o, i) => ({ o, i })).filter(x => rarOf(x.o.w) === 'rare'); const p = rs[Math.floor(Math.random() * rs.length)] ?? { o: ODD[0], i: 0 }; save.odd[p.i]++; item = `稀有奇物：${p.o.name}`; }
+  else { save.dex[0]++; item = '白珍珠 1 顆'; }
+  persist(); renderDex(); renderDaily();
+  track('return_bonus', { days, amount: amt });
+  giftMsg(true, '阿姨好想你！', [`你已經 ${days} 天沒來上工了，歡迎回來！`, `回歸禮 +$${amt}`, item, '連續上工從第 1 天重新開始', `身上有 $${save.money}`]);
 }
 const persist = () => { try { LS.setItem('oyster-sim', JSON.stringify(save)); } catch { /* 私密模式等 */ } };
 persist();
@@ -1497,6 +1526,7 @@ $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
 $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
+setTimeout(checkReturn, 600);
 $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖鑑、生涯紀錄、設定都會清掉，無法復原。')) { LS.removeItem('oyster-sim'); LS.removeItem('oyster-mix'); location.reload(); } };
 $('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); renderShop(); $('shop').classList.add('show'); };
 $('shopBtn2').onclick = () => { renderShop(); $('shop').classList.add('show'); };
@@ -1691,7 +1721,7 @@ const TUT: TutStep[] = [
   { id: 'stand', line: '坐太久腳會麻，起來走走，找別的位子。', pc: '按 G 換位置', mb: '按「🚶 換位置」按鈕', hi: ['standBtn'], next: '知道了 ▶', done: () => walking },
   { id: 'sit', line: '每個位子的好處都不一樣，看清楚再坐。', pc: '用 WASD 走到藍色板凳旁邊，按 E 坐下（或按下面的按鈕坐回原位）', mb: '用搖桿走到藍色板凳旁邊，按「坐落」坐下（或按下面的按鈕坐回原位）', hi: ['sitBtn'], next: '坐回去 ▶', done: () => !walking },
   { id: 'menu', line: '賺的錢可以去雜貨店買好刀、雨傘、碗和服飾，在「裝備」換穿；開到的珍珠會記在圖鑑裡。', pc: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面還有「裝備」', mb: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面還有「裝備」', hi: ['shopBtn', 'dexBtn', 'setBtn'], next: '下一步 ▶' },
-  { id: 'daily', line: '還有，每天來上工，阿姨都發 $100 上工費給你！', pc: '在開始畫面按「💰 領今日上工費」，每天可以領一次', mb: '在開始畫面按「💰 領今日上工費」，每天可以領一次', next: '學會了！🎉' },
+  { id: 'daily', line: '還有，每天來上工，阿姨都發上工費給你！連續來領會越領越多。', pc: '在開始畫面按「領今日上工費」，每天一次，從 $1000 起跳，連續 7 天最多 $3000', mb: '在開始畫面按「領今日上工費」，每天一次，從 $1000 起跳，連續 7 天最多 $3000', next: '學會了！🎉' },
 ];
 let tutHi: string[] = [];
 function tutShow() {

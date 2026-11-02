@@ -634,3 +634,9 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .setAsk .saList li{display:flex;align-items:center;gap:6px;background:#fff8e8;border:2px solid #2a3a4a;padding:4px;font-size:13px}
 .setAsk .saEff{font-size:12px;margin:6px 0 0}
 .setAsk .mbtns{display:flex;gap:8px;justify-content:flex-end}
+.daily .dTop{display:block}
+.daily .stamps{display:flex;gap:4px;justify-content:center;margin:5px 0 2px}
+.daily .stp{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:2px dashed var(--ink,#3a2200);border-radius:50%;font-size:12px;font-weight:700;background:#fff6dc;color:var(--ink,#3a2200)}
+.daily .stp.big{border-style:solid;width:30px;height:30px}
+.daily .stp.on{background:#b8322a;color:#fff;border-style:solid;border-color:#7a1d18}
+.daily .stp .ic{width:14px;height:14px}
