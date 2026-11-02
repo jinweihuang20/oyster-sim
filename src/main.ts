@@ -5,6 +5,7 @@ import { checkCode, REDEEM_MESSAGES } from './redeem';
 import type { RedeemCodeDef } from './redeemCodes';
 import * as THREE from 'three';
 import * as Social from './social';
+import { importMove, escapeInApp } from './inapp';
 const LS_P = __PREVIEW__ ? 'preview:' : '';
 const LS = { getItem: (k: string) => localStorage.getItem(LS_P + k), setItem: (k: string, v: string) => localStorage.setItem(LS_P + k, v), removeItem: (k: string) => localStorage.removeItem(LS_P + k) };
 if (__PREVIEW__) document.addEventListener('DOMContentLoaded', () => { const t = document.createElement('div'); t.textContent = '預覽版'; t.style.cssText = 'position:fixed;left:0;bottom:0;z-index:99999;background:#d8402f;color:#fff4dc;font:bold 12px sans-serif;padding:2px 8px;pointer-events:none;box-shadow:2px -2px 0 #1b2a3a'; document.body.appendChild(t); });
@@ -248,6 +249,7 @@ const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
 const STATS_URL = 'https://game-status.gwtech.org/e';
 const statsId = (() => { try { let v = LS.getItem('oyster-stats-id'); if (!v) { v = crypto.randomUUID(); LS.setItem('oyster-stats-id', v); } return v; } catch { return 'anon-' + Math.random().toString(36).slice(2, 14); } })();
+importMove().then(r => { if (!r) escapeInApp(statsId); });
 let statsSid = '';
 const COARSE = matchMedia('(pointer: coarse)').matches;
 const statsDevice = COARSE ? 'mobile' : 'pc';
