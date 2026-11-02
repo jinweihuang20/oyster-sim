@@ -1433,7 +1433,7 @@ function standUp() {
   if (['seam', 'twist', 'crab', 'aim', 'empty'].includes(phase)) { abandoned++; const sh = new THREE.Mesh(shellGeo, shellTopMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.6, () => scene.remove(sh)); nag(NAG_STAND); if (!seatNow().nag || Math.random() > seatNow().nag) { const n = pick(npcs); n.look = 2.5; say(n, pick(NAG_STAND), 3); } }
   oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
   walking = true; handRig.visible = false; walkPos.copy(SEAT).setY(1.55); const out = seatGround(seatNow()).setLength(0.45); walkPos.add(out);
-  tYaw = yaw = yaw + seatYaw; tPitch = pitch = -0.25; $('diff').textContent = ''; on('standBtn', false); on('camBtn', false); on('joy', true); on('stealBtn', false);
+  tYaw = yaw = yaw + seatYaw; tPitch = pitch = -0.25; $('diff').textContent = ''; on('standBtn', false); on('joy', true); on('stealBtn', false);
   hint.textContent = 'WASD／搖桿行路，走去空的藍色板凳邊仔，按 E／「坐落」換位';
 }
 function sitDown(id: string) {
@@ -1580,7 +1580,7 @@ function frame() {
     if (phase === 'empty') { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
-    on('standBtn', !walking); on('camBtn', !walking); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
+    on('standBtn', !walking); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     const tgt = walking ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
     if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！按住 E／「偷」偷她的肉` : `${tgt.name}在看，不要偷…`;
     if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
@@ -2137,8 +2137,12 @@ const pm = { head: mat(0xffffff), body: mat(0xffffff), legs: mat(0xffffff), feet
 const me3 = new THREE.Group(); me3.visible = false; scene.add(me3);
 const meTorso = new THREE.Group(); me3.add(meTorso);
 mesh(new THREE.BoxGeometry(0.36, 0.42, 0.22), pm.body, [0, 0.66, 0], meTorso);
-mesh(new THREE.BoxGeometry(0.34, 0.12, 0.36), pm.legs, [0, 0.42, -0.1], me3);
-for (const sx of [-0.09, 0.09]) { mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.32, 6), pm.legs, [sx, 0.2, -0.28], me3); mesh(new THREE.BoxGeometry(0.1, 0.05, 0.2), pm.feet, [sx, 0.03, -0.34], me3); }
+const meSeatLegs = new THREE.Group(); me3.add(meSeatLegs);
+mesh(new THREE.BoxGeometry(0.34, 0.12, 0.36), pm.legs, [0, 0.42, -0.1], meSeatLegs);
+for (const sx of [-0.09, 0.09]) { mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.32, 6), pm.legs, [sx, 0.2, -0.28], meSeatLegs); mesh(new THREE.BoxGeometry(0.1, 0.05, 0.2), pm.feet, [sx, 0.03, -0.34], meSeatLegs); }
+// 站著走路用的腿：髖關節為軸，前後擺
+const meLeg = (sx: number) => { const g = new THREE.Group(); g.position.set(sx, 0.86, 0); me3.add(g); mesh(new THREE.CylinderGeometry(0.065, 0.05, 0.8, 6), pm.legs, [0, -0.4, 0], g); mesh(new THREE.BoxGeometry(0.11, 0.06, 0.22), pm.feet, [0, -0.83, -0.05], g); g.visible = false; return g; };
+const meLegL = meLeg(-0.09), meLegR = meLeg(0.09); let walkPh = 0; const lastWalk = new THREE.Vector3(); let tpWas = false; const tpLook = new THREE.Vector3();
 const meHead = new THREE.Group(); meHead.position.set(0, 1.02, 0); meTorso.add(meHead);
 mesh(new THREE.SphereGeometry(0.15, 10, 8), pm.skin, [0, 0, 0], meHead);
 mesh(new THREE.SphereGeometry(0.16, 10, 8, 0, Math.PI * 2, 0, 1.3), pm.head, [0, 0.03, 0], meHead);
@@ -2155,19 +2159,34 @@ function react3(kind: 'cheer' | 'ouch') { if (!tpReady) return; if (kind === 'ch
 // 每幀：放好角色、把鏡頭拉到身後上方；手和蚵仔仍跟著鏡頭，操作不變
 function camTick(dt: number) {
   if (!tpReady) return;
-  const show = tpv && !walking && state === 'play';
+  const show = tpv && state === 'play';
+  const enter = show && !tpWas; tpWas = show;
   tpOn = show; me3.visible = show; handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
   if (!show) return;
+  const kk = enter ? 1 : 1 - Math.exp(-5 * dt);
+  meSeatLegs.visible = !walking; meLegL.visible = meLegR.visible = walking;
+  if (walking) {
+    // 走路：站起來、腿手擺動，鏡頭跟在背後上方
+    const sp = Math.hypot(walkPos.x - lastWalk.x, walkPos.z - lastWalk.z) / Math.max(dt, 1e-3); lastWalk.copy(walkPos);
+    walkPh += Math.min(sp, 3) * dt * 5; const sw = Math.min(1, sp / 1.2) * Math.sin(walkPh);
+    me3.position.set(walkPos.x, walkPos.y - 1.55 - 0.4, walkPos.z); me3.rotation.y = yaw; meTorso.position.y = 0.43; meTorso.rotation.x = 0;
+    meLegL.rotation.x = sw * 0.6; meLegR.rotation.x = -sw * 0.6; meArmL.rotation.x = -sw * 0.5; meArmR.rotation.x = sw * 0.5; meArmL.rotation.z = meArmR.rotation.z = 0; meHead.rotation.y = 0;
+    handRig.visible = false;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), gy = walkPos.y - 1.95;
+    const cp = new THREE.Vector3(walkPos.x - fx * 2.9, gy + 2.5, walkPos.z - fz * 2.9);
+    if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
+    { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, gy + 0.9, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); } tpCam.updateMatrixWorld(); return;
+  }
   me3.position.set(SEAT.x, SEAT.y - 1.02, SEAT.z); me3.rotation.y = seatYaw;
   cheerT = Math.max(0, cheerT - dt); ouchT = Math.max(0, ouchT - dt);
   const up = cheerT > 0 ? Math.sin(Math.min(1, cheerT) * Math.PI) : 0;
   meArmL.rotation.x = meArmR.rotation.x = -up * 2.4; meArmL.rotation.z = -up * 0.3; meArmR.rotation.z = up * 0.3;
   meTorso.rotation.x = ouchT > 0 ? Math.sin(ouchT / 0.6 * Math.PI) * 0.35 : 0; meTorso.position.y = up * 0.06;
-  meHead.rotation.y = yaw * 0.6;
+  meHead.rotation.y = yaw * 0.6; meTorso.position.y = Math.max(meTorso.position.y, 0);
   // 從背後斜 3/4 看，人在畫面中下、全身入鏡
   const h = seatYaw + yaw * 0.35, fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
   const tx = SEAT.x + fx * 0.3, tz = SEAT.z + fz * 0.3;
-  tpCam.position.set(SEAT.x - fx * 2.6 - rx * 1.5, SEAT.y + 0.85, SEAT.z - fz * 2.6 - rz * 1.5); tpCam.lookAt(SEAT.x + fx * 0.8 + rx * 0.35, SEAT.y - 0.2, SEAT.z + fz * 0.8 + rz * 0.35); tpCam.updateMatrixWorld();
+  { const cp = new THREE.Vector3(SEAT.x - fx * 2.6 - rx * 1.5, SEAT.y + 0.85, SEAT.z - fz * 2.6 - rz * 1.5); if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk); } { const lt = new THREE.Vector3(SEAT.x + fx * 0.8 + rx * 0.35, SEAT.y - 0.2, SEAT.z + fz * 0.8 + rz * 0.35); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); } tpCam.updateMatrixWorld();
   // 蚵仔與刀跟著角色的手（handRig 掛在 camera 底下，換算到角色胸前）
   camera.updateMatrixWorld(); const hp = new THREE.Vector3(SEAT.x + fx * 0.45, SEAT.y - 0.55 + up * 0.4, SEAT.z + fz * 0.45); camera.worldToLocal(hp); handRig.position.copy(hp).add(new THREE.Vector3(0, 0.24, 0.42)); handRig.scale.setScalar(0.6);
 }
