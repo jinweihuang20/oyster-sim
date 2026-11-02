@@ -129,3 +129,9 @@ export function startPresence(playing: () => boolean) {
   presenceTick(); setInterval(presenceTick, 25000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) presenceTick(); });
 }
+
+// 玩家號碼（伺服器發放、保證不重複）。舊版伺服器沒有 /me 時回 null。
+export type Me = { tag: string; changed: boolean; oldTag?: string | null };
+export async function me(): Promise<Me | null> { const r = await get(`/me?pid=${encodeURIComponent(D.id)}`); return r && typeof r.tag === 'string' && /^\d{4,5}$/.test(r.tag) ? r : null; }
+export function ackMe() { fetch(API + '/me/ack', { method: 'POST', body: JSON.stringify({ pid: D.id }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).catch(() => null); }
+export const myNick = () => D.nick();

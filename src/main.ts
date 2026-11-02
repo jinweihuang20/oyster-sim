@@ -1494,7 +1494,7 @@ $('start').onclick = () => { shiftLen = SHIFT; audio(); if (!save.tutDone) tutSt
 btn('again', startDay);
 btn('resMenu', () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
-$('setBtn').onclick = () => { $('settings').classList.add('show'); };
+$('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
 $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
 $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖鑑、生涯紀錄、設定都會清掉，無法復原。')) { LS.removeItem('oyster-sim'); LS.removeItem('oyster-mix'); location.reload(); } };
@@ -1502,10 +1502,25 @@ $('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPoi
 $('shopBtn2').onclick = () => { renderShop(); $('shop').classList.add('show'); };
 $('shopClose').onclick = () => { $('shop').classList.remove('show'); if (sleeveTry) { sleeveTry = null; applySleeve(); } };
 applyKnife(); applyUmb(); applySeat(save.seat ?? 'door');
-$('pidVal').textContent = statsId;
-$('pidCopy').onpointerup = () => {
+$('pidLong').textContent = statsId;
+let myTag = '', tagNoted = false;
+const pidText = () => myTag ? `${Social.myNick()} #${myTag}` : '';
+const refreshTag = () => Social.me().then(m => {
+  if (m) myTag = m.tag;
+  $('pidVal').textContent = pidText() || (m === null && !myTag ? '暫時連不上伺服器' : '讀取中…');
+  ($('pidCopy') as HTMLButtonElement).style.display = myTag ? '' : 'none';
+  if (m?.changed && !tagNoted) {
+    tagNoted = true;
+    $('tnBody').innerHTML = `<p>你的玩家號碼已更新為 <b>#${m.tag}</b>${m.oldTag ? `（原本是 #${m.oldTag}）` : ''}。</p><p style="font-size:14px;opacity:.85">原本的號碼跟其他玩家重複，為了排行榜和禮物不會弄錯人，系統幫你換了一個新號碼。錢和紀錄都不受影響。</p>`;
+    $('tagNote').classList.add('show');
+  }
+});
+$('tnOk').onclick = () => { $('tagNote').classList.remove('show'); Social.ackMe(); };
+setTimeout(refreshTag, 1500);
+$('pidCopy').onclick = () => {
+  const txt = pidText(); if (!txt) return;
   const sel = () => { const r = document.createRange(); r.selectNodeContents($('pidVal')); const w = getSelection(); w?.removeAllRanges(); w?.addRange(r); };
-  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(statsId).then(() => toast('已複製'), () => { sel(); toast('已選取，請長按複製'); });
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(() => toast('已複製'), () => { sel(); toast('已選取，請長按複製'); });
   else { sel(); try { document.execCommand('copy'); toast('已複製'); } catch { toast('已選取，請長按複製'); } }
 };
 $('setClose').onclick = () => $('settings').classList.remove('show');
@@ -1761,7 +1776,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['nameAsk', 'naClose'], ['gift', 'giftClose'], ['paySum', 'psOk']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['nameAsk', 'naClose'], ['gift', 'giftClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);

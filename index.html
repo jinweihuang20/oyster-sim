@@ -26,7 +26,7 @@
 <div id="dex" class="panel"><h2>珍珠圖鑑</h2><div id="dexList"></div><button id="dexClose">關閉</button></div>
 <div id="settings" class="panel"><h2>設定</h2>
 <div class="setBody">
- <div class="row pidRow"><span class="rl">玩家 ID</span><code id="pidVal"></code><button id="pidCopy" type="button"><i class="ic ic-copy"></i> 複製</button></div>
+ <div class="row pidRow"><span class="rl">玩家 ID</span><code id="pidVal">讀取中…</code><button id="pidCopy" type="button"><i class="ic ic-copy"></i> 複製</button><div class="pidFull">完整 ID <code id="pidLong"></code></div></div>
  <label class="row"><span class="rl">第三人稱視角</span><input id="tpvSel" type="checkbox"></label>
  <label class="row"><span class="rl">你的名字</span><input id="myName" type="text" maxlength="8" enterkeyhint="done" autocomplete="off" placeholder="剝蚵人"></label>
  <label class="row"><span class="rl">總音量</span><input id="v_master" type="range" min="0" max="1" step="0.05"></label>
@@ -66,7 +66,7 @@
 <div id="nameAsk" class="panel"><h2>幫自己取個名字吧</h2><p>有名字，大家在排行榜和跑馬燈上就認得出你。</p><input id="naIn" type="text" maxlength="8" enterkeyhint="done" autocomplete="off" placeholder="剝蚵人"><div class="mbtns"><button id="naOk">好了</button><button id="naSkip">略過</button></div><button id="naClose" style="display:none">關閉</button></div>
 <div id="gift" class="panel"><h2><i class="ic ic-gift"></i> 禮物信箱</h2><div id="giftBody"></div><button id="giftClose">關閉</button></div>
 <div id="backMenu" class="panel"><h2><i class="ic ic-home"></i> 回主選單</h2><p style="font-size:16px;line-height:1.6">確定要回主選單嗎？<br>這一工賺的照算。</p><div class="mbtns"><button id="bmGo"><i class="ic ic-home"></i> 回主選單</button><button id="bmStay">繼續工作</button></div></div>
-<div id="paySum" class="panel"><h2><i class="ic ic-coin"></i> 這一工的帳</h2><div id="psBody"></div><div class="mbtns"><button id="psOk"><i class="ic ic-check"></i> 確定</button></div></div>
+<div id="tagNote" class="panel"><h2><i class="ic ic-rank"></i> 玩家號碼更新</h2><div id="tnBody"></div><div class="mbtns"><button id="tnOk"><i class="ic ic-check"></i> 知道了</button></div></div><div id="paySum" class="panel"><h2><i class="ic ic-coin"></i> 這一工的帳</h2><div id="psBody"></div><div class="mbtns"><button id="psOk"><i class="ic ic-check"></i> 確定</button></div></div>
 <div id="result" class="panel"><h2 id="resTitle"></h2><div class="mbtns sysGrid"><button id="shopBtn2"><i class="ic ic-shop"></i><span>雜貨店</span></button><button id="rEquip"><i class="ic ic-hand"></i><span>裝備</span></button><button id="rDex"><i class="ic ic-book"></i><span>圖鑑</span></button><button id="rSet"><i class="ic ic-gear"></i><span>設定</span></button><button id="rRank"><i class="ic ic-rank"></i><span>排行榜</span></button><button id="rLoc"><i class="ic ic-pin"></i><span>換地點</span></button><button id="rFb"><i class="ic ic-chat"></i><span>回饋</span></button></div><div id="resBody"></div> <div id="resActs"><button id="resMenu"><i class="ic ic-home"></i> 回主選單</button><button id="again"><i class="ic ic-again"></i> 再次上工</button></div></div>
 <script type="module" src="./src/main.ts"></script><div id="back-toast" class="hidden">再按一次返回就會離開遊戲</div>
 <div id="vign"></div>
