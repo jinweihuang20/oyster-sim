@@ -162,3 +162,13 @@ export type Me = { tag: string; changed: boolean; oldTag?: string | null };
 export async function me(): Promise<Me | null> { const r = await get(`/me?pid=${encodeURIComponent(D.id)}`); return r && typeof r.tag === 'string' && /^\d{4,5}$/.test(r.tag) ? r : null; }
 export function ackMe() { fetch(API + '/me/ack', { method: 'POST', body: JSON.stringify({ pid: D.id }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).catch(() => null); }
 export const myNick = () => D.nick();
+
+// ---------- 活動場景 ----------
+/** 目前進行中的活動；連不上或逾時回傳 undefined（呼叫端要隱藏入口，不能沿用舊設定） */
+export async function evActive(): Promise<{ event: any | null; serverTime: number } | undefined> {
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 6000);
+  try { const r = await fetch(API + '/events/active?game=oyster-sim', { mode: 'cors', cache: 'no-store', signal: ac.signal }); if (!r.ok) return undefined; const j = await r.json(); return j && typeof j.serverTime === 'number' ? j : undefined; }
+  catch { return undefined; } finally { clearTimeout(t); }
+}
+export function evResult(d: { eventId: number; sid: string; score: number; meat: number; completed: boolean; early: boolean }) { return post('/events/result', d); }
+export function evTop(eventId: number) { return get(`/events/top?eventId=${eventId}&id=${encodeURIComponent(D.id)}${tq()}`); }
