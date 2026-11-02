@@ -97,21 +97,21 @@ function shellPaint(g: THREE.BufferGeometry, seed: number) {
 }
 // 蚵殼紋理：一張 256px 共用貼圖（生長紋、灰白斑駁、紫褐烏紋、細雜訊）＋同一張當凹凸圖，載入時畫一次，沒有每幀成本
 function shellTex() {
+  // 參考實拍：殼面中央深褐橄欖灰帶污垢斑，往外是一層層深褐紫灰與米白交錯的薄片，最外緣米白荷葉薄邊
   const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d')!;
   let r = 7; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280; const hx = S / 2, hy = 4;
-  c.fillStyle = '#cfc9c4'; c.fillRect(0, 0, S, S);
-  // 放射色帶：紫灰、淡褐、灰白交錯，從殼頂往外扇開
-  for (let i = 0; i < 22; i++) { const a0 = -0.3 + rn() * (Math.PI + 0.6), w = 0.05 + rn() * 0.14, t = rn();
-    c.fillStyle = t < 0.4 ? `rgba(120,96,118,${0.16 + rn() * 0.18})` : t < 0.7 ? `rgba(140,116,92,${0.12 + rn() * 0.14})` : `rgba(236,232,226,${0.2 + rn() * 0.2})`;
-    c.beginPath(); c.moveTo(hx, hy); c.arc(hx, hy, S * 1.3, a0, a0 + w); c.closePath(); c.fill(); }
-  // 層層薄片（生長層）：由內到外，每層下緣有亮白薄邊＋上方陰影，邊緣荷葉狀起伏
-  for (let k = 0; k < 30; k++) { const R0 = 10 + k * 8.5 + rn() * 3, f = 6 + rn() * 6, ph = rn() * 6, ampl = 1.5 + k * 0.12;
-    const path = (off: number) => { c.beginPath(); for (let a = -0.35; a <= Math.PI + 0.35; a += 0.05) { const rr = R0 + off + Math.sin(a * f + ph) * ampl + Math.sin(a * 23 + k) * 0.8; const x = hx + Math.cos(a) * rr * 1.15, y = hy + Math.sin(a) * rr; a < -0.3 ? c.moveTo(x, y) : c.lineTo(x, y); } };
-    path(-2); c.strokeStyle = `rgba(70,58,64,${0.18 + rn() * 0.12})`; c.lineWidth = 2.5; c.stroke();
-    path(0); c.strokeStyle = `rgba(250,248,244,${0.45 + rn() * 0.3})`; c.lineWidth = 1 + rn() * 1.2; c.stroke(); }
+  c.fillStyle = '#e6dccb'; c.fillRect(0, 0, S, S);
+  for (let k = 30; k >= 0; k--) { const R0 = 10 + k * 8.5 + rn() * 3, f = 5 + rn() * 7, ph = rn() * 6, ampl = 2 + k * 0.15, dark = k % 2 === 0 || rn() < 0.3;
+    c.beginPath(); for (let a = -0.35; a <= Math.PI + 0.35; a += 0.05) { const rr = R0 + Math.sin(a * f + ph) * ampl + (rn() - 0.5) * 3; const x = hx + Math.cos(a) * rr * 1.15, y = hy + Math.sin(a) * rr; a < -0.3 ? c.moveTo(x, y) : c.lineTo(x, y); }
+    c.lineTo(hx, hy); c.closePath();
+    c.fillStyle = k > 27 ? '#efe8dc' : dark ? (rn() < 0.5 ? `rgb(${88 + rn() * 20 | 0},${70 + rn() * 14 | 0},${66 + rn() * 16 | 0})` : `rgb(${92 + rn() * 16 | 0},${78 + rn() * 12 | 0},${88 + rn() * 14 | 0})`) : `rgb(${200 + rn() * 30 | 0},${186 + rn() * 26 | 0},${160 + rn() * 24 | 0})`; c.fill();
+    c.strokeStyle = 'rgba(245,238,226,0.5)'; c.lineWidth = 1; c.stroke(); }
+  // 殼面中央的深色污垢斑（橄欖灰褐）
+  for (let i = 0; i < 160; i++) { const a = rn() * 6.28, d = Math.sqrt(rn()) * 70; c.fillStyle = `rgba(${50 + rn() * 30 | 0},${48 + rn() * 26 | 0},${36 + rn() * 20 | 0},${0.35 + rn() * 0.4})`;
+    c.beginPath(); c.ellipse(S / 2 + Math.cos(a) * d * 1.2, S * 0.5 + Math.sin(a) * d * 0.8, 3 + rn() * 14, 2 + rn() * 9, rn() * 3, 0, 7); c.fill(); }
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 2; return t;
 }
-const SHELL_TEX = shellTex(), SHELL_BUMP = SHELL_TEX.clone(); SHELL_BUMP.colorSpace = THREE.NoColorSpace;
+const SHELL_TEX = shellTex();
 // 殼形：低面數球體壓扁，邊緣做不規則波浪，平面投影 UV 讓生長紋從殼頂展開
 const mkShell = (sy: number, seed: number) => {
   let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(0.09, 1); g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
@@ -123,10 +123,10 @@ const mkShell = (sy: number, seed: number) => {
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g = g.toNonIndexed(); g.computeVertexNormals(); return shellPaint(g, seed); };
 const SHELL_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.45, i + 1)), HALF_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.25, i + 11));
 const shellGeo = SHELL_GEOS[0], halfGeo = HALF_GEOS[0];
-const GREYS = [0xd2ccc8, 0xb4aab0, 0x9a908e, 0x7c7278, 0x5a5258];
+const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 const greyPick = () => GREYS[Math.min(4, Math.floor(Math.random() * Math.random() * 6.2))];
-const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX, bumpMap: SHELL_BUMP, bumpScale: 1.6 }); m.emissive.setHex(0x262428); return m; };
-const shellMat = shellM(0xa0a0a0);
+const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX }); m.emissive.setHex(0x262428); return m; };
+const shellMat = shellM(0xe8e4e0);
 mesh(new THREE.ConeGeometry(0.9, 0.55, 10), mat(0x6a7c94, { roughness: 0.95, emissive: 0x24262a }), [0, 0.27, 0]);
 const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo, pileMat, 260); pile.castShadow = true;
 { const d = new THREE.Object3D(); for (let i = 0; i < 260; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 1.0, h = Math.max(0, 0.55 * (1 - r / 0.95)); d.position.set(Math.cos(a) * r, h + 0.03, Math.sin(a) * r); d.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); d.updateMatrix(); pile.setMatrixAt(i, d.matrix); pile.setColorAt(i, new THREE.Color(greyPick())); } }
@@ -256,7 +256,7 @@ const knife = new THREE.Group(); handR.add(knife); knife.position.set(-0.02, 0.0
 mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.11, 6), mat(0x7a4a20), [0, 0, 0], knife).rotation.z = Math.PI / 2;
 mesh(new THREE.BoxGeometry(0.1, 0.006, 0.025), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [-0.1, 0, 0], knife);
 const oyster = new THREE.Group(); handL.add(oyster); oyster.position.set(0.02, 0.05, -0.16);
-const shellBotMat = shellM(0x8a8a8a), shellTopMat = shellM(0xc4bcbc);
+const shellBotMat = shellM(0xe0dcd8), shellTopMat = shellM(0xf0ecea);
 const shellBot = mesh(halfGeo, shellBotMat, [0, -0.01, 0], oyster);
 const meatInHand = mesh(meatGeo, meatMat, [0, 0.015, 0], oyster);
 const shellTop = mesh(halfGeo, shellTopMat, [0, 0.025, 0], oyster);
@@ -264,7 +264,7 @@ const barnacles: THREE.Mesh[] = [];
 // 難度硬塊＝藤壺／石灰質附著：火山口形（頂端有洞）的低面數旋轉體，共用一個幾何和材質
 const BARN_GEO = (() => { const g = new THREE.LatheGeometry([[0, 0.004], [0.0035, 0.005], [0.0042, 0.016], [0.0068, 0.0175], [0.0105, 0.009], [0.0135, 0.002], [0.0142, -0.004]].map(([x, y]) => new THREE.Vector2(x, y)), 7);
   const p = g.attributes.position; let r = 3; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280; for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y > 0.006) { const k = 1 + (rn() - 0.5) * 0.35; p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * k); } } g.computeVertexNormals(); return g; })();
-const BARN_MAT = mat(0xb8b6aa, { roughness: 1, bumpMap: SHELL_BUMP, bumpScale: 3, emissive: 0x24262a, side: THREE.DoubleSide });
+const BARN_MAT = mat(0x8a6a58, { roughness: 0.6, emissive: 0x24262a });
 const BARN_N = [0, 4, 8, 14], BARN_S = [0.8, 0.9, 1.15, 1.4];
 // 一群一群長：先挑幾個群中心，每群 1～4 顆大小不一、彼此擠在一起
 function placeBarn(list: THREE.Object3D[], dd: number, y = 0.045) {
