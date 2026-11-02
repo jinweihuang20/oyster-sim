@@ -2776,3 +2776,5 @@ setInterval(newAnnounce, 1500); setTimeout(newAnnounce, 2500);
 (window as any).__newShop = { now: () => newNow(), reset: () => { LS.removeItem('shopKnown'); LS.removeItem('shopAnn'); LS.removeItem('shopAnnDay'); } };
 
 (window as any).__pity = { LEGEND_PITY, LEGEND_ODD, get dry() { return save.legendDry ?? 0; }, set dry(v: number) { save.legendDry = v; }, roll: () => rollFind(), sync: () => legendSync(), give: (i: number) => { save.odd[i]++; }, odd: () => save.odd.slice() };
+
+if ((navigator as any).standalone) document.documentElement.classList.add('iosApp');
