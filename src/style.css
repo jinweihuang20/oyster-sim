@@ -608,3 +608,8 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 #result #resActs #again{position:static;flex:2;margin:0;width:auto;min-width:0}
 #result #resActs #resMenu{flex:1.25;min-width:0;margin:0;min-height:54px;font-size:16px;letter-spacing:0;font-weight:800;background:var(--paint) var(--grain);color:var(--ink);border:3px solid var(--ink);border-radius:2px;box-shadow:4px 4px 0 var(--ink);white-space:nowrap;padding:8px 6px}
 #result #resActs #resMenu:active{transform:translateY(1px)}
+
+.pidRow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pidRow .rl{flex:0 0 auto}
+#pidVal{flex:1 1 140px;min-width:0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;word-break:break-all;overflow-wrap:anywhere;background:#0b1f2e;border:2px solid #f2b705;color:#ffe9a8;padding:4px 6px;user-select:all;-webkit-user-select:all}
+#pidCopy{flex:0 0 auto;font-size:14px;padding:6px 10px;min-height:36px}

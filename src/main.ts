@@ -1502,6 +1502,12 @@ $('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPoi
 $('shopBtn2').onclick = () => { renderShop(); $('shop').classList.add('show'); };
 $('shopClose').onclick = () => { $('shop').classList.remove('show'); if (sleeveTry) { sleeveTry = null; applySleeve(); } };
 applyKnife(); applyUmb(); applySeat(save.seat ?? 'door');
+$('pidVal').textContent = statsId;
+$('pidCopy').onpointerup = () => {
+  const sel = () => { const r = document.createRange(); r.selectNodeContents($('pidVal')); const w = getSelection(); w?.removeAllRanges(); w?.addRange(r); };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(statsId).then(() => toast('已複製'), () => { sel(); toast('已選取，請長按複製'); });
+  else { sel(); try { document.execCommand('copy'); toast('已複製'); } catch { toast('已選取，請長按複製'); } }
+};
 $('setClose').onclick = () => $('settings').classList.remove('show');
 for (const k of ['master', 'amb', 'sfx'] as const) { const el = $('v_' + k) as HTMLInputElement; el.value = String(mix[k]); el.oninput = () => { mix[k] = Number(el.value); applyMix(); if (k === 'sfx' && ac) SFX.plop(); }; }
 for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { const c = $(id) as HTMLInputElement; c.checked = mix[key]; c.onchange = () => { mix[key] = c.checked; applyMix(); }; }
