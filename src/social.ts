@@ -134,6 +134,8 @@ export async function claimGift(giftId: string | number): Promise<{ st: 'ok' | '
 
 // ---------- 線上人數（/s/presence、/s/online）。後端沒部署時看板直接隱藏 ----------
 let prsPlaying: () => boolean = () => false;
+let prsHook: () => void = () => { };
+export function onPresence(f: () => void) { prsHook = f; }
 function showOnline(r: any) {
   const el = $('onlineSign');
   if (!r || typeof r.online !== 'number') { el.style.display = 'none'; const h = document.getElementById('onHud'); if (h) h.style.display = 'none'; return; }
@@ -146,6 +148,7 @@ async function presenceTick() {
   if (document.hidden) return;
   const r = await fetch(API + '/presence', { method: 'POST', body: JSON.stringify({ pid: D.id, game: 'oyster', shucking: prsPlaying() }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(x => x.ok ? x.json() : null).catch(() => null);
   showOnline(r);
+  try { prsHook(); } catch { /* 忽略 */ }
 }
 export function startPresence(playing: () => boolean) {
   prsPlaying = playing;

@@ -643,3 +643,7 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 
 #onHud{display:inline-flex;align-items:center;gap:3px;color:#9fe0a8;font-size:15px}
 #onHud svg{flex:none}
+
+#giftHud{display:inline-flex;align-items:center;margin-right:6px;vertical-align:middle;color:#ffd257;animation:giftBlink 1s steps(2,start) infinite}
+@keyframes giftBlink{to{visibility:hidden}}
+.giftMsg .gnList{margin:6px 0;padding-left:18px}
