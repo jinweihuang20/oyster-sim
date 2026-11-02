@@ -1298,6 +1298,7 @@ function stealOne(n: Npc) {
 function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.round((L.missed + L.wasteShells) / (L.opened + L.wasteShells) * 100) : 0;
   const tl = Object.entries(save.titles).map(([k, v]) => `${k} ×${v}`).join('、') || '（猶無）';
   return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">工作 ${save.days} 天・累積收入 $${save.money}・最佳 ${save.best} 顆<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美／俐落 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/被抓 ${L.caught}・丟中阿婆 ${L.shellHits}・被丟中 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
+let lastPay = { gross: 0, pen: 0, earn: 0 }, nameWait = false;
 function endDay() { inputGuard(); if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
   if (state === 'end') return; state = 'end'; setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
@@ -1309,7 +1310,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   if (worked && shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
   if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
   const LC = locNow(), base0 = meatPay + perfects * PERFECT_PAY + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
-  const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty);
+  const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty); lastPay = { gross: base0 + locBonus + nightBonus + bonus, pen: penalty, earn };
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
   save.days++; tickTrial(); autoUnlock(); save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
@@ -1418,7 +1419,10 @@ const btn = (id: string, f: () => void, upF?: () => void) => {
   el.addEventListener('pointercancel', () => ok = false);
   el.addEventListener('pointerup', e => { e.stopPropagation(); if (ok && performance.now() - st < 800) f(); ok = false; });
 };
-btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); if (confirm('確定要翹班嗎？這一工會直接收工結算。')) { endReason = 'quit'; endDay(); } }); btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
+btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); $('backMenu').classList.add('show'); });
+$('bmStay').onclick = () => $('backMenu').classList.remove('show');
+$('bmGo').onclick = () => { $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return; const m0 = save.money; endReason = 'quit'; endDay(); $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; void m0; const P = lastPay; if (P.gross || P.pen) { const r = (ic: string, l: string, v: string, c = '') => `<div class="row"><span><i class="ic ic-${ic}"></i> ${l}</span><b${c}>${v}</b></div>`; $('psBody').innerHTML = r('oyster', '收入', `+$${P.gross}`) + (P.pen ? r('warn', '罰款／扣價', `-$${P.pen}`, ' style="color:#ff8a7a"') + r('coin', '淨收入', `$${P.earn}`) : '') + `<p style="font-size:14px;opacity:.85">已入帳，身上共有 $${save.money}</p>`; $('paySum').classList.add('show'); } };
+$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
@@ -1488,6 +1492,7 @@ const go = (len: number) => { shiftLen = len; audio(); if (!save.tutDone) tutSta
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 $('start').onclick = () => { shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 btn('again', startDay);
+btn('resMenu', () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); };
 $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
@@ -1750,7 +1755,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['nameAsk', 'naClose'], ['gift', 'giftClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['nameAsk', 'naClose'], ['gift', 'giftClose'], ['paySum', 'psOk']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -2128,6 +2133,7 @@ async function shareOutfit() {
 }
 // 第一次收工後提醒取名字（只出現一次）
 function namePrompt() {
+  if ($('paySum').classList.contains('show')) { nameWait = true; return; }
   if (save.namePrompted || save.name || tut) return; save.namePrompted = 1; persist(); ($('naIn') as HTMLInputElement).value = ''; $('nameAsk').classList.add('show');
 }
 $('naOk').onclick = () => { const i = $('myName') as HTMLInputElement; i.value = ($('naIn') as HTMLInputElement).value; i.dispatchEvent(new Event('change')); $('nameAsk').classList.remove('show'); };
@@ -2310,7 +2316,7 @@ installBackGuard(() => {
   if (open('npcTip')) { $('npcTip').classList.remove('show'); return 'handled'; }
   if (open('medList')) { $('medList').classList.remove('show'); return 'handled'; }
   for (const [id, close] of [['lb', 'lbClose'], ['fb', 'fbClose'], ['redeem', 'rdClose'], ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose']]) if (open(id)) { ($(close) as HTMLElement).click(); return 'handled'; }
-  if (state === 'play') { toast('上工中按返回不會離開；要收工請按「🏃 翹班」或等時間到', '#ffcf8a'); return 'handled'; }
+  if (state === 'play') { toast('上工中按返回不會離開；要收工請按「回主選單」或等時間到', '#ffcf8a'); return 'handled'; }
   return 'confirm-exit';
 }, () => state === 'play');
 
