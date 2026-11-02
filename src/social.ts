@@ -1,12 +1,12 @@
 // 全服彈幕＋全球排行榜（後端：StatsServer /s/*）。後端關機時全部安靜失敗。
 const API = 'https://game-status.gwtech.org/s';
-type Deps = { id: string; test: boolean; nick: () => string; setNick: (v: string) => void; inTut: () => boolean; on: () => boolean; label: (kind: string, item: number) => string; toast: (t: string) => void; LS: { getItem(k: string): string | null; setItem(k: string, v: string): void } };
+type Deps = { id: string; test: boolean; nick: () => string; setNick: (v: string) => void; inTut: () => boolean; on: () => boolean; label: (kind: string, item: number) => string; title?: () => string; toast: (t: string) => void; LS: { getItem(k: string): string | null; setItem(k: string, v: string): void } };
 let D: Deps;
 const $ = (id: string) => document.getElementById(id)!;
 const esc = (v: string) => v.replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
 const tq = () => D.test ? '&test=1' : '';
 function post(p: string, data: object) {
-  return fetch(API + p, { method: 'POST', body: JSON.stringify({ id: D.id, nick: D.nick(), test: D.test, ...data }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(r => r.ok ? r.json() : null).catch(() => null);
+  return fetch(API + p, { method: 'POST', body: JSON.stringify({ id: D.id, nick: D.nick(), title: D.title?.() ?? '', test: D.test, ...data }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(r => r.ok ? r.json() : null).catch(() => null);
 }
 const get = (p: string) => fetch(API + p, { mode: 'cors', cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
 
@@ -46,13 +46,15 @@ async function poll() {
     const r = await get(`/events?since=${last}${tq()}`);
     if (r && typeof r.last === 'number') {
       const first = last === 0; last = r.last;
-      if (!first) for (const e of r.events ?? []) { const t = `<b>${esc(e.nick)}</b><small>#${esc(e.tag)}</small> ${esc(D.label(e.kind, e.item))}`; if (queue.length >= 3) queue[queue.length - 1] += '　・　' + t; else queue.push(t); }
+      if (!first) for (const e of r.events ?? []) { const t = `${e.atitle ? `<em class="fdA">${esc(e.atitle)}</em>` : ''}<b>${esc(e.nick)}</b><small>#${esc(e.tag)}</small> ${esc(D.label(e.kind, e.item))}`; if (queue.length >= 3) queue[queue.length - 1] += '　・　' + t; else queue.push(t); }
       showNext();
     }
   }
   if (polls % 2 === 0) checkPassed();
 }
-export function report(kind: 'pearl' | 'legend' | 'odd' | 'port', item: number) { if (D.on() && !D.inTut()) post('/event', { kind, item }); }
+// 配戴稱號後同步到伺服器（排行榜、跑馬燈顯示在名字前）
+export function syncTitle() { if (D?.on()) post('/score', { scores: {} }); }
+export function report(kind: 'pearl' | 'legend' | 'odd' | 'port' | 'ach', item: number) { if (D?.on() && !D.inTut()) post('/event', { kind, item }); }
 
 // ---------- 排行榜 ----------
 const BOARDS = [['income', '今日收入', '$'], ['oysters', '單班最多蚵仔', ''], ['pearls', '珍珠收藏', '']] as const;
@@ -79,7 +81,7 @@ async function render() {
   const r = await get(`/top?board=${board}&view=${view}&n=20&me=${D.id}${tq()}`);
   if (!r) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; return; }
   const unit = BOARDS.find(b => b[0] === board)![2];
-  const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}"><span class="lbR">${x.rank}</span><span class="lbN"><b>${esc(x.nick)}</b><small>#${esc(x.tag)}</small>${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
+  const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${x.atitle ? `<em class="lbA">${esc(x.atitle)}</em>` : ''}<b>${esc(x.nick)}</b><small>#${esc(x.tag)}</small>${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
     (x.me ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>` : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span>`) + '</div>';
   const rows = r.rows as any[];
   list.innerHTML = rows.length ? rows.map(row).join('') + (r.mine && !rows.some(x => x.me) ? '<div class="lbGap"></div>' + row(r.mine) : '') : '<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>收工後就會出現你的成績！</small></span></div>';
