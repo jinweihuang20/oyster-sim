@@ -461,7 +461,7 @@ const dstatStr = () => dStat.flat().join(',');
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; streakDay?: number; lastBonusDay?: string; lastSeen?: string; retDay?: string; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; seat?: string; bonusDay?: string; bonusN?: number; streakDay?: number; lastBonusDay?: string; lastSeen?: string; retDay?: string; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number; legendDry?: number; legendN?: number };
 const START_MONEY = 10000; // 首次遊玩見面禮（僅無存檔的新玩家）
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: START_MONEY, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {} }; }
 function loadSave(): Save {
@@ -476,6 +476,7 @@ function loadSave(): Save {
   if (raw.titles && typeof raw.titles === 'object') for (const [k0, v] of Object.entries(raw.titles)) { const k = k0 === '👑 今日蚵后' ? '👑 今日剝蚵冠軍' : k0; out.titles[k] = (out.titles[k] ?? 0) + num(v); }
   if (raw.namePrompted) out.namePrompted = 1;
   if (raw.tpv) out.tpv = 1;
+  out.legendDry = Math.max(0, Math.floor(num(raw.legendDry))); if (typeof raw.legendN === 'number') out.legendN = raw.legendN;
   if (raw.equip && typeof raw.equip === 'object') { out.equip = {}; for (const [k, v] of Object.entries(raw.equip)) if (typeof v === 'string') out.equip[k] = v; }
   if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
   if (raw.shop?.equipped && typeof raw.shop.equipped === 'object') for (const [k, v] of Object.entries(raw.shop.equipped)) if (typeof v === 'string') out.shop.equipped[k] = v;
@@ -547,7 +548,15 @@ const wpick = (arr: { w: number }[]) => { let r = Math.random() * arr.reduce((s,
 // 幸運值：每點 找著機率 ×(1+0.12×luck)；非普通物件權重 ×(1+0.15×luck)，傳說最多 ×1.3
 const luckNow = () => Math.max(0, (knifeNow().luck || 0) + medA('luck') + fxAll().luck);
 const luckW = (arr: { w: number }[], l: number) => arr.map(x => ({ w: x.w <= 2 ? x.w * Math.min(1.3, 1 + 0.15 * l) : x.w <= 20 ? x.w * (1 + 0.15 * l) : x.w }));
+// 傳說保底：連續 LEGEND_PITY 顆沒開到傳說（黑珍珠／傳說奇物，不含活動限定），下一次中奇物必定是傳說奇物（優先沒收集過的）
+const LEGEND_PITY = 600;
+let pityHit = false;
+const LEGEND_ODD = ODD.map((o, i) => ({ o, i })).filter(x => x.o.w > 0 && x.o.w <= 2 && !(x.o as any).ex).map(x => x.i);
+const legendTotal = () => (save.dex[3] ?? 0) + LEGEND_ODD.reduce((a, i) => a + (save.odd[i] ?? 0), 0);
+function legendSync() { const n = legendTotal(); if (save.legendN === undefined || n !== save.legendN) { if (save.legendN !== undefined && n > save.legendN) save.legendDry = 0; save.legendN = n; } }
+function legendPick() { const miss = LEGEND_ODD.filter(i => !(save.odd[i] > 0)); const L = miss.length ? miss : LEGEND_ODD; return L[Math.floor(Math.random() * L.length)]; }
 function rollFind(): { kind: 'pearl' | 'odd' | 'none'; i: number } {
+  legendSync(); save.legendDry = (save.legendDry ?? 0) + 1; const pity = save.legendDry >= LEGEND_PITY;
   const l = luckNow(), f = 1 + 0.12 * l;
   const p = (1 / 50 + Math.max(0, dry - 40) * 0.01) * f * fxAll().pearl;
   if (Math.random() < p) { dry = 0; return { kind: 'pearl', i: wpick(luckW(RAR, l)) }; }
@@ -555,8 +564,8 @@ function rollFind(): { kind: 'pearl' | 'odd' | 'none'; i: number } {
   const common = (arr: { w: number }[]) => luckW(arr, l).map((x, i) => ({ w: arr[i].w >= 20 ? x.w : 0 }));
   if (newbie() && Math.random() < p * 1.5) { dry = 0; return { kind: 'pearl', i: wpick(common(RAR)) }; }
   dry++;
-  if (Math.random() < (1 / 24) * f) return { kind: 'odd', i: wpick(luckW(ODD, l)) };
-  if (newbie() && Math.random() < (1 / 24) * f * 1.5) return { kind: 'odd', i: wpick(common(ODD)) };
+  if (Math.random() < (1 / 24) * f) { if (pity) { pityHit = true; return { kind: 'odd', i: legendPick() }; } return { kind: 'odd', i: wpick(luckW(ODD, l)) }; }
+  if (newbie() && Math.random() < (1 / 24) * f * 1.5) { if (pity) { pityHit = true; return { kind: 'odd', i: legendPick() }; } return { kind: 'odd', i: wpick(common(ODD)) }; }
   // 保底：第一班到第 5 顆還沒找到東西 → 給一顆白珍珠
   if (!tut && save.days === 0 && opened >= 4 && !dayPearls.length && !dayOdd.length) { dry = 0; return { kind: 'pearl', i: 0 }; }
   return { kind: 'none', i: 0 };
@@ -1233,7 +1242,7 @@ function openOyster() {
   updHud();
 }
 function revealOdd(i: number) { react3('cheer');
-  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; persist(); Social.report(rarOf(o.w) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
+  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; const wasPity = pityHit; pityHit = false; if (rarOf(o.w) === 'legend' && !(o as any).ex) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(o.w) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), ...(wasPity ? { pity: 1 } : {}), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
   label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.css; label.classList.add('on');
   npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
@@ -1406,7 +1415,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   $('result').classList.add('show'); later(1.2, namePrompt); if (ac) SFX.endJingle(queen && !handPain);
 }
 function revealPearl(r: number) { react3('cheer');
-  sleeveGold(); dayPearls.push(r); save.dex[r]++; persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
+  sleeveGold(); dayPearls.push(r); save.dex[r]++; if (r === 3) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
   slowmo = 2.6; pearlShow = 2.6;
   (pearlMesh.material as THREE.MeshStandardMaterial).color.setHex(RAR[r].color);
   (pearlMesh.material as THREE.MeshStandardMaterial).emissive.setHex(r === 3 ? 0x302050 : RAR[r].color).multiplyScalar(0.25);
@@ -2765,3 +2774,5 @@ function newAnnounce() {
 }
 setInterval(newAnnounce, 1500); setTimeout(newAnnounce, 2500);
 (window as any).__newShop = { now: () => newNow(), reset: () => { LS.removeItem('shopKnown'); LS.removeItem('shopAnn'); LS.removeItem('shopAnnDay'); } };
+
+(window as any).__pity = { LEGEND_PITY, LEGEND_ODD, get dry() { return save.legendDry ?? 0; }, set dry(v: number) { save.legendDry = v; }, roll: () => rollFind(), sync: () => legendSync(), give: (i: number) => { save.odd[i]++; }, odd: () => save.odd.slice() };
