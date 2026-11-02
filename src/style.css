@@ -674,3 +674,9 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 #medList small{white-space:normal;line-height:1.35;margin-top:2px}#medList>*{flex-shrink:0}
 
 #bubbles{z-index:0;isolation:isolate}
+/* 商店特價：原價劃掉、新價、特價標籤、倒數 */
+.pxSale{display:inline-flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:2px 4px;line-height:1.15}
+.pxSale s{opacity:.7;font-size:.85em}.pxSale b{color:#c8302a}
+.itemCard button{flex:0 0 auto;max-width:120px}.itemCard .itemTx{min-width:0}
+.saleTag{display:inline-block;background:#c8302a;color:#fff8e8;border:1.5px solid #1b1b1b;padding:0 4px;font-size:11px;font-weight:700;letter-spacing:1px}
+.saleCd{display:block;width:100%;font-size:10px;opacity:.9;font-variant-numeric:tabular-nums}
