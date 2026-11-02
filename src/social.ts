@@ -121,8 +121,8 @@ export function init(d: Deps) {
 export function resume() { showNext(); }
 export function local(txt: string) { queue.push(esc(txt)); showNext(); }
 // ---------- 禮物信箱 ----------
-export type Gift = { id: string; type: 'money' | 'equip' | 'odd' | 'pearl'; amount?: number; itemId?: string | number; tier?: number; message?: string; createdAt?: number | string };
-export async function gifts(): Promise<Gift[]> { const r = await get(`/gifts?pid=${encodeURIComponent(D.id)}${tq()}`); return Array.isArray(r?.gifts) ? r.gifts : []; }
+export type Gift = { id: string; type: 'money' | 'equip' | 'odd' | 'pearl' | 'item'; amount?: number; itemId?: string | number; tier?: number; message?: string; createdAt?: number | string };
+export async function gifts(): Promise<Gift[]> { const r = await get(`/gifts?pid=${encodeURIComponent(D.id)}&caps=item${tq()}`); return Array.isArray(r?.gifts) ? r.gifts : []; }
 // 回傳：ok 領到、gone 已領或不存在（從清單移除）、retry 伺服器忙或沒連上（保留）
 export async function claimGift(giftId: string | number): Promise<{ st: 'ok' | 'gone' | 'retry'; gift?: Gift; why?: string }> {
   try { const r = await fetch(API + '/gifts/claim', { method: 'POST', body: JSON.stringify({ pid: D.id, giftId: String(giftId) }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }); const j = await r.json().catch(() => null);
