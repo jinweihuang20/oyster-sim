@@ -10,7 +10,7 @@ interface Fighter {
 }
 interface Shell { pos: THREE.Vector3; vel: THREE.Vector3; owner: Fighter; mesh: THREE.Mesh; life: number; }
 
-const SPEED = 24, HALF = 18, MAXAMMO = 5, EYE = 1.6, R = 0.35;
+const SPEED = 24, HALF = 18, MAXAMMO = 15, EYE = 1.6, R = 0.35;
 const PILES = [[0, 0], [-13, -12], [13, 12], [-12, 12], [12, -12], [0, -6], [5, 15]].map(([x, z]) => new THREE.Vector3(x, 0, z));
 const PICK_R = 1.9;
 // 掩體：木箱堆、藍色塑膠籃堆、剝蚵工作桌
@@ -413,7 +413,7 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
       if (f.umbHeld) { f.umbT -= dt; if (f.umbT <= 0) { f.umbHeld = false; f.umbTired = true; f.umbT = 0; } }
       if (f.umbMesh) f.umbMesh.visible = f.umbHeld;
       // 邊走邊撿：在蚵仔堆旁邊每 0.2 秒自動補一顆（按住拿殼／E 一次補滿）
-      if (f.ammo < MAXAMMO && pileDist(f.pos) <= PICK_R) { f.pickCd -= dt; if (f.pickCd <= 0) { f.ammo++; f.pickCd = 0.2; if (f.isPlayer) { if (f.ammo === MAXAMMO) SND.reload(); else SND.pick(); } } } else f.pickCd = 0;
+      if (f.ammo < MAXAMMO && pileDist(f.pos) <= PICK_R) { f.pickCd -= dt; if (f.pickCd <= 0) { f.ammo++; f.pickCd = 0.12; if (f.isPlayer) { if (f.ammo === MAXAMMO) SND.reload(); else SND.pick(); } } } else f.pickCd = 0;
       if (f.isPlayer && (holdPick || keys.KeyE)) pick(f);
       if (f.isPlayer) {
         let fx = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + joy.x, fz = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0) + joy.y;
