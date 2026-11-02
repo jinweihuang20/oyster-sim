@@ -2396,6 +2396,7 @@ function giftLabel(g: Social.Gift) {
   if (g.type === 'equip') return EQUIP.find(e => e.id === g.itemId)?.n ?? '服飾';
   if (g.type === 'odd') return ODD[+g.itemId!]?.name ?? '奇物';
   if (g.type === 'pearl') return RAR[+(g.tier ?? 0)]?.name ?? '珍珠';
+  if (g.type === 'item') return ITEMS.find(i => 'item-' + i.id === String(g.itemId) || i.id === String(g.itemId))?.n ?? '道具';
   return '禮物';
 }
 function applyGift(g: Social.Gift) {
@@ -2403,6 +2404,7 @@ function applyGift(g: Social.Gift) {
   else if (g.type === 'equip') { if (EQUIP.some(e => e.id === g.itemId) && !save.shop.owned.includes(g.itemId as string)) save.shop.owned.push(g.itemId as string); }
   else if (g.type === 'odd') { const i = +g.itemId!; if (Number.isInteger(i) && i >= 0 && i < save.odd.length) save.odd[i]++; }
   else if (g.type === 'pearl') { const t = +(g.tier ?? 0); if (Number.isInteger(t) && t >= 0 && t < save.dex.length) save.dex[t]++; }
+  else if (g.type === 'item') { const it = ITEMS.find(i => 'item-' + i.id === String(g.itemId) || i.id === String(g.itemId)); if (it) save.meds[it.id] = (save.meds[it.id] ?? 0) + 1; }
   persist(); renderDex();
 }
 function giftBadge() { const ob = document.getElementById('oGift'); if (ob) ob.style.display = giftList.length ? '' : 'none'; }
@@ -2436,7 +2438,7 @@ function giftMsg(ok: boolean, title: string, lines: string[]) {
   m.addEventListener('click', e => { if (e.target === m) close(); });
   document.body.appendChild(m);
 }
-function giftGot(g: Social.Gift) { return g.type === 'money' ? `+${giftLabel(g)}` : `${g.type === 'equip' ? '服飾' : g.type === 'odd' ? '奇物' : '珍珠'}：${giftLabel(g)}`; }
+function giftGot(g: Social.Gift) { return g.type === 'money' ? `+${giftLabel(g)}` : `${g.type === 'equip' ? '服飾' : g.type === 'odd' ? '奇物' : g.type === 'item' ? '道具' : '珍珠'}：${giftLabel(g)}`; }
 function renderGifts() {
   const esc2 = (v: string) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
   $('giftBody').innerHTML = giftList.length ? giftList.map(g => `<div class="gfRow"><div><b>${esc2(giftLabel(g))}</b><small>${esc2(g.message ?? '')}</small></div><button data-gift="${esc2(String(g.id))}">領取</button></div>`).join('') : '<p class="eqHint">目前沒有禮物。</p>';
