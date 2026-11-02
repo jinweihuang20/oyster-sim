@@ -1489,7 +1489,7 @@ $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 $('start').onclick = () => { shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 btn('again', startDay);
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
-$('setBtn').onclick = () => { renderSleeveSet(); $('settings').classList.add('show'); };
+$('setBtn').onclick = () => { $('settings').classList.add('show'); };
 $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
 $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖鑑、生涯紀錄、設定都會清掉，無法復原。')) { LS.removeItem('oyster-sim'); LS.removeItem('oyster-mix'); location.reload(); } };
@@ -2106,12 +2106,6 @@ function renderClothShop() {
     if (b.hasAttribute('data-slbuy')) { if (save.money < s.price) return; save.money -= s.price; save.shop.owned.push(id); track('buy', { item: id, price: s.price }); if (ac) SFX.jingle(); }
     setEquip(s.slot, id); sleeveTry = null; persist(); applySleeve(); applyOutfit3(); renderShop();
   });
-}
-function renderSleeveSet() {
-  const box = document.getElementById('sleeveSet'); if (!box) return; const own = EQUIP.filter(s => s.slot === 'hand' && eqOwned(s.id));
-  box.style.display = own.length > 1 ? '' : 'none'; const cur = equipNow('hand').id;
-  box.innerHTML = `<span class="rl">袖套</span><select id="sleeveSel">${own.map(s => `<option value="${s.id}" ${cur === s.id ? 'selected' : ''}>${s.n}</option>`).join('')}</select>`;
-  ($('sleeveSel') as HTMLSelectElement).onchange = e => { setEquip('hand', (e.target as HTMLSelectElement).value); persist(); applySleeve(); };
 }
 // 分享穿搭卡：直接畫在 canvas 上
 async function shareOutfit() {
