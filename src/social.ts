@@ -105,9 +105,13 @@ export function resume() { showNext(); }
 export type Gift = { id: string; type: 'money' | 'equip' | 'odd' | 'pearl'; amount?: number; itemId?: string | number; tier?: number; message?: string; createdAt?: number | string };
 export async function gifts(): Promise<Gift[]> { const r = await get(`/gifts?pid=${encodeURIComponent(D.id)}${tq()}`); return Array.isArray(r?.gifts) ? r.gifts : []; }
 // 回傳：ok 領到、gone 已領或不存在（從清單移除）、retry 伺服器忙或沒連上（保留）
-export async function claimGift(giftId: string): Promise<{ st: 'ok' | 'gone' | 'retry'; gift?: Gift }> {
-  try { const r = await fetch(API + '/gifts/claim', { method: 'POST', body: JSON.stringify({ pid: D.id, giftId }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }); const j = await r.json().catch(() => null);
-    if (r.ok && j?.ok) return { st: 'ok', gift: j.gift }; if (r.status === 409 || r.status === 404) return { st: 'gone' }; return { st: 'retry' }; } catch { return { st: 'retry' }; }
+export async function claimGift(giftId: string | number): Promise<{ st: 'ok' | 'gone' | 'retry'; gift?: Gift; why?: string }> {
+  try { const r = await fetch(API + '/gifts/claim', { method: 'POST', body: JSON.stringify({ pid: D.id, giftId: String(giftId) }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }); const j = await r.json().catch(() => null);
+    if (r.ok && j?.ok) return { st: 'ok', gift: j.gift };
+    if (r.status === 409) return { st: 'gone', gift: j?.gift, why: '這份禮物已經領過了' };
+    if (r.status === 404) return { st: 'gone', why: '這份禮物已經過期或被收回了' };
+    if (r.status === 429) return { st: 'retry', why: '領得太快了，等一下再試' };
+    return { st: 'retry', why: '信箱忙線中，等一下再試' }; } catch { return { st: 'retry', why: '連不上信箱，檢查一下網路再試' }; }
 }
 
 // ---------- 線上人數（/s/presence、/s/online）。後端沒部署時看板直接隱藏 ----------
