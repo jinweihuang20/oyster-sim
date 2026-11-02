@@ -617,3 +617,11 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 #pidLong{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:#6b5d4f;word-break:break-all;user-select:all;-webkit-user-select:all}
 #tnBody p{margin:6px 0 12px;font-size:16px;line-height:1.5}
 #tnBody b{color:#b3261e;font-size:20px}
+
+.giftMsg{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(10,8,4,.55);padding:16px}
+.giftMsg .gmBox{position:relative;width:min(88vw,360px);max-height:80vh;overflow:auto}
+.giftMsg.bad .gmBox>b{background:#5a4a3a}
+.giftMsg .gmX{position:sticky;top:0;float:right;margin:-4px -6px 0 0;width:32px;height:32px;padding:0;background:#fff8e8;color:#2a3a4a;border:2px solid #2a3a4a;font-size:16px;line-height:1;z-index:2}
+.giftMsg .gmBox>b{padding-right:44px}
+.giftMsg .mbtns{margin-top:10px}
+.gfRow button.busy{opacity:.6}
