@@ -35,7 +35,12 @@ const I = {
   head: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5"/>',
   shield: '<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/>',
   x: '<path d="M5 5l14 14M19 5L5 19"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  play: '<path d="M7 4l13 8-13 8z"/>',
 };
+type DS = { sens: number; tsens: number; invY: boolean; assist: boolean; btn: number; op: number };
+const DS_DEF: DS = { sens: 1, tsens: 1, invY: false, assist: true, btn: 1, op: 0.85 };
+function loadDS(): DS { try { return { ...DS_DEF, ...JSON.parse(localStorage.getItem('oyster-dm-set') || '{}') }; } catch { return { ...DS_DEF }; } }
 let active = false;
 export const isDeathmatchActive = () => active;
 
@@ -82,17 +87,42 @@ export function openDeathmatch(U: DmUmb, onExit: () => void) {
 #dmBoard.show{display:block}#dmBoard h2{margin:0 0 8px;color:#ffd23f;text-align:center;letter-spacing:4px}
 #dmBoard table{border-collapse:collapse;width:100%;font-size:16px}#dmBoard td,#dmBoard th{padding:4px 8px;text-align:center;border-bottom:1px solid #6b3a12}
 #dmBoard tr.me td{color:#ffd23f;font-weight:900}
+#dmRoot{--bs:1;--bo:.85}
+#dmRoot .ctl{opacity:var(--bo);transform:scale(var(--bs));transform-origin:bottom right}
+#dmSetBtn{top:calc(env(safe-area-inset-top) + 10px);right:calc(env(safe-area-inset-right) + 130px);width:48px;height:48px;padding:0!important}
+#dmScoreBtn{width:48px;height:48px;padding:0!important}
+#dmSet{position:absolute;inset:0;background:rgba(10,5,0,.6);display:none;align-items:center;justify-content:center;z-index:5}
+#dmSet.show{display:flex}
+#dmSetBox{position:relative;background:#2a1206;border:4px solid #ffd23f;border-radius:12px;color:#fff6d8;padding:0 16px 14px;width:min(92vw,360px);max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);overflow:auto;touch-action:pan-y}
+#dmSetHd{position:sticky;top:0;background:#2a1206;display:flex;justify-content:space-between;align-items:center;padding:10px 0;color:#ffd23f;z-index:1}
+#dmSetX{position:static!important;width:44px;height:44px;padding:0!important}
+#dmSetBox label{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0;font-weight:900}
+#dmSetBox input[type=range]{flex:1;max-width:180px}
+#dmSetBox input[type=checkbox]{width:26px;height:26px}
+#dmPause{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:#ffd23f;background:rgba(0,0,0,.35);pointer-events:none}
+#dmPause.show{display:flex}
+#dmFJ{position:absolute;width:130px;height:130px;margin:-65px 0 0 -65px;border-radius:50%;border:3px solid rgba(255,210,63,.7);background:rgba(0,0,0,.25);display:none;pointer-events:none;opacity:var(--bo)}
+#dmFJ.show{display:block}#dmFJ.sprint{border-color:#ff7a3b}
+#dmFK{position:absolute;left:40px;top:40px;width:50px;height:50px;border-radius:50%;background:rgba(255,210,63,.85)}
+#dmJoyHint{position:absolute;left:calc(env(safe-area-inset-left) + 40px);bottom:calc(env(safe-area-inset-bottom) + 40px);width:100px;height:100px;border-radius:50%;border:2px dashed rgba(255,210,63,.4);pointer-events:none}
 #dmThrow{right:calc(env(safe-area-inset-right) + 20px);bottom:calc(env(safe-area-inset-bottom) + 30px);width:84px;height:84px;border-radius:50%!important;font-size:24px!important}
 #dmPick{right:calc(env(safe-area-inset-right) + 120px);bottom:calc(env(safe-area-inset-bottom) + 30px)}
 #dmUmb{right:calc(env(safe-area-inset-right) + 120px);bottom:calc(env(safe-area-inset-bottom) + 90px)}
 #dmUmb.held{background:#ffd23f;color:#2a1206}
-#dmJoy{position:absolute;left:calc(env(safe-area-inset-left) + 30px);bottom:calc(env(safe-area-inset-bottom) + 30px);width:120px;height:120px;border-radius:50%;border:3px solid rgba(255,210,63,.7);background:rgba(0,0,0,.25)}
-#dmKnob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,210,63,.8)}
 #dmHelp{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 12px);transform:translateX(-50%);color:#fff6d8;font-size:14px;text-shadow:0 1px 0 #000;pointer-events:none}
 </style><canvas></canvas><div id="dmCross"></div><div id="dmMark"></div><div id="dmMsg"></div><div id="dmHud"></div><div id="dmEdge"></div><div id="dmHp"><div id="dmHpF"></div><div id="dmHpN"></div></div><div id="dmFeed"></div>
 <button class="dmb" id="dmScoreBtn"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" style="vertical-align:-3px"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></button>
+<button class="dmb" id="dmSetBtn" aria-label="設定">${ico(I.gear, 26)}</button><div id="dmPause">${ico(I.play, 64)}</div>
+<div id="dmSet"><div id="dmSetBox"><div id="dmSetHd">${ico(I.gear, 26)}<button class="dmb" id="dmSetX" aria-label="關閉">✕</button></div>
+<label>滑鼠靈敏度<input type="range" id="dsSens" min="0.3" max="3" step="0.05"></label>
+<label>觸控靈敏度<input type="range" id="dsTsens" min="0.3" max="3" step="0.05"></label>
+<label>上下反轉<input type="checkbox" id="dsInv"></label>
+<label>瞄準輔助<input type="checkbox" id="dsAssist"></label>
+<label>按鈕大小<input type="range" id="dsBtn" min="0.7" max="1.5" step="0.05"></label>
+<label>按鈕透明度<input type="range" id="dsOp" min="0.3" max="1" step="0.05"></label>
+</div></div>
 <button class="dmb" id="dmX" aria-label="離開">✕</button><div id="dmBoard"><h2>${ico(I.board, 26)}</h2><div id="dmTable"></div></div>
-${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id="dmPick" aria-label="拿殼">${ico(I.grab, 28)}</button><button class="dmb" id="dmUmb" aria-label="雨傘">${ico(I.umb, 28)}</button><button class="dmb" id="dmThrow" aria-label="丟">${ico(I.throw, 38)}</button>' : '<div id="dmHelp">WASD ・ 滑鼠左鍵 ・ E ・ 按住 R ・ Tab</div>'}`;
+${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div><button class="dmb ctl" id="dmPick" aria-label="拿殼">${ico(I.grab, 28)}</button><button class="dmb ctl" id="dmUmb" aria-label="雨傘">${ico(I.umb, 28)}</button><button class="dmb ctl" id="dmThrow" aria-label="丟">${ico(I.throw, 38)}</button>` : '<div id="dmHelp">WASD ・ Shift ・ 左鍵 ・ 右鍵／R ・ E ・ Tab ・ Esc</div>'}`;
   document.body.appendChild(root);
   const q = (id: string) => root.querySelector('#' + id) as HTMLElement;
   const canvas = root.querySelector('canvas')!;
@@ -253,42 +283,77 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
       const op = now < f.invulnUntil ? 0.35 : 1; h.fm.opacity = op; h.bg.opacity = op * 0.8; }
   }
   // ---- 輸入 ----
-  const keys: Record<string, boolean> = {}; const joy = { x: 0, y: 0 }; let holdPick = false;
-  const blur = () => { for (const k in keys) keys[k] = false; closeUmb(me); holdPick = false; };
+  const DSv = loadDS();
+  const applyDS = () => { root.style.setProperty('--bs', String(DSv.btn)); root.style.setProperty('--bo', String(DSv.op)); try { localStorage.setItem('oyster-dm-set', JSON.stringify(DSv)); } catch { /* 無痕模式 */ } };
+  {
+    const bind = (id: string, k: keyof DS) => { const el = q(id) as HTMLInputElement; if (el.type === 'checkbox') { el.checked = DSv[k] as boolean; el.onchange = () => { (DSv as Record<string, unknown>)[k] = el.checked; applyDS(); }; } else { el.value = String(DSv[k]); el.oninput = () => { (DSv as Record<string, unknown>)[k] = +el.value; applyDS(); }; } };
+    bind('dsSens', 'sens'); bind('dsTsens', 'tsens'); bind('dsInv', 'invY'); bind('dsAssist', 'assist'); bind('dsBtn', 'btn'); bind('dsOp', 'op'); applyDS();
+    q('dmSetBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); q('dmSet').classList.add('show'); };
+    q('dmSetX').onclick = () => q('dmSet').classList.remove('show');
+  }
+  const keys: Record<string, boolean> = {}; const joy = { x: 0, y: 0 }; let holdPick = false, sprint = false, rmb = false;
+  const blur = () => { for (const k in keys) keys[k] = false; closeUmb(me); holdPick = false; rmb = false; };
   addEventListener('blur', blur);
-  let locked = false;
+  let locked = false, wasLocked = false;
   const onKey = (e: KeyboardEvent, d: boolean) => {
+    if ((e.target as HTMLElement).tagName === 'INPUT') return;
     keys[e.code] = d;
     if (e.code === 'Tab') { e.preventDefault(); q('dmBoard').classList.toggle('show', d); if (d) renderBoard(); }
     if (d && e.code === 'KeyE') pick(me);
-    if (e.code === 'KeyR' && !e.repeat) d ? openUmb(me) : closeUmb(me);
+    if (e.code === 'KeyR' && !e.repeat) { if (d) openUmb(me); else if (!rmb) closeUmb(me); }
   };
   const kd = (e: KeyboardEvent) => onKey(e, true), ku = (e: KeyboardEvent) => onKey(e, false);
   addEventListener('keydown', kd); addEventListener('keyup', ku);
-  const plc = () => { locked = document.pointerLockElement === canvas; };
+  const plc = () => { locked = document.pointerLockElement === canvas; if (locked) wasLocked = true; else blur(); };
   document.addEventListener('pointerlockchange', plc);
-  canvas.addEventListener('mousedown', e => { if (isTouch) return; if (!locked) { canvas.requestPointerLock?.(); return; } if (e.button === 0) throwShell(me); });
-  canvas.addEventListener('mousemove', e => { if (!locked) return; me.yaw -= e.movementX * 0.0025; me.pitch = clampP(me.pitch - e.movementY * 0.0025); });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('mousedown', e => { if (isTouch) return; if (!locked) { canvas.requestPointerLock?.(); return; }
+    if (e.button === 0) throwShell(me); if (e.button === 2) { rmb = true; openUmb(me); } });
+  const mu = (e: MouseEvent) => { if (e.button === 2 && rmb) { rmb = false; if (!keys.KeyR) closeUmb(me); } };
+  addEventListener('mouseup', mu);
   const clampP = (p: number) => Math.max(-1.3, Math.min(1.3, p));
+  const inv = () => (DSv.invY ? -1 : 1);
+  canvas.addEventListener('mousemove', e => { if (!locked) return; const k = 0.0025 * DSv.sens; me.yaw -= e.movementX * k; me.pitch = clampP(me.pitch - e.movementY * k * inv()); });
+  // 瞄準輔助：準星靠近阿婆時轉視角變慢
+  const _af = new THREE.Vector3(), _at = new THREE.Vector3();
+  function assistK() {
+    if (!DSv.assist) return 1; const e = eyeOf(me); _af.copy(dirOf(me.yaw, me.pitch)); let best = 1;
+    for (const f of fighters) { if (f === me || f.dead) continue; _at.set(f.pos.x, f.pos.y + 1.3, f.pos.z).sub(e); const d = _at.length(); if (d > 30) continue; const ang = _af.angleTo(_at.normalize()), lim = Math.max(0.04, 0.6 / d);
+      if (ang < lim) best = Math.min(best, 0.45 + 0.55 * (ang / lim)); }
+    return best;
+  }
+  // 觸控轉視角：靈敏度曲線＋輕微加速
+  function touchLook(dx: number, dy: number) {
+    const sp = Math.hypot(dx, dy), acc = 1 + Math.min(1, sp / 25) * 0.6, k = 0.0045 * DSv.tsens * acc * assistK();
+    me.yaw -= dx * k; me.pitch = clampP(me.pitch - dy * k * inv());
+  }
   if (isTouch) {
-    // 多指同時操作：用 pointerId 分開追蹤搖桿、轉視角、各個按鈕
-    const jo = q('dmJoy'), kn = q('dmKnob'), ptr = new Map<number, { k: 'joy' | 'look' | 'btn'; el?: HTMLElement; x: number; y: number }>();
-    const joyAt = (x: number, y: number) => { const r = jo.getBoundingClientRect(); let jx = (x - r.left - 60) / 50, jy = (y - r.top - 60) / 50; const l = Math.hypot(jx, jy); if (l > 1) { jx /= l; jy /= l; } joy.x = jx; joy.y = jy; kn.style.transform = `translate(${jx * 35}px,${jy * 35}px)`; };
+    // 多指同時操作：用 pointerId 分開追蹤浮動搖桿、轉視角、各個按鈕
+    const fj = q('dmFJ'), fk = q('dmFK'), hint = q('dmJoyHint');
+    type P = { k: 'joy' | 'look' | 'btn'; el?: HTMLElement; x: number; y: number; ox: number; oy: number };
+    const ptr = new Map<number, P>(); const DEAD = 0.15, RAD = 55;
+    const joyAt = (p: P, x: number, y: number) => {
+      let jx = (x - p.ox) / RAD, jy = (y - p.oy) / RAD; const l = Math.hypot(jx, jy); if (l > 1) { jx /= l; jy /= l; }
+      const m = Math.min(1, l); fk.style.transform = `translate(${jx * 40}px,${jy * 40}px)`;
+      if (m < DEAD) { joy.x = joy.y = 0; sprint = false; } else { const r = (m - DEAD) / (1 - DEAD) / m; joy.x = jx * r; joy.y = jy * r; sprint = l > 1.15; } // 推出外圈＝衝刺
+      fj.classList.toggle('sprint', sprint);
+    };
     root.addEventListener('pointerdown', e => {
-      if (e.pointerType === 'mouse') return; const t = e.target as HTMLElement, b = t.closest('button') as HTMLElement | null;
-      if (b) { if (b.id === 'dmUmb') openUmb(me); if (b.id === 'dmPick') holdPick = true; ptr.set(e.pointerId, { k: 'btn', el: b, x: e.clientX, y: e.clientY }); return; }
-      if (t.closest('#dmJoy')) { ptr.set(e.pointerId, { k: 'joy', x: e.clientX, y: e.clientY }); joyAt(e.clientX, e.clientY); }
-      else ptr.set(e.pointerId, { k: 'look', x: e.clientX, y: e.clientY });
+      if (e.pointerType === 'mouse' || q('dmSet').classList.contains('show')) return; const t = e.target as HTMLElement, b = t.closest('button') as HTMLElement | null;
+      const rec: P = { k: 'look', x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY };
+      if (b) { if (b.id === 'dmUmb') openUmb(me); if (b.id === 'dmPick') holdPick = true; rec.k = 'btn'; rec.el = b; ptr.set(e.pointerId, rec); return; }
+      if (e.clientX < innerWidth * 0.45 && ![...ptr.values()].some(p => p.k === 'joy')) { rec.k = 'joy'; fj.style.left = e.clientX + 'px'; fj.style.top = e.clientY + 'px'; fj.classList.add('show'); hint.style.display = 'none'; joyAt(rec, e.clientX, e.clientY); }
+      ptr.set(e.pointerId, rec);
     });
     root.addEventListener('pointermove', e => {
       const p = ptr.get(e.pointerId); if (!p) return;
-      if (p.k === 'joy') joyAt(e.clientX, e.clientY);
-      else if (p.k === 'look') { me.yaw -= (e.clientX - p.x) * 0.006; me.pitch = clampP(me.pitch - (e.clientY - p.y) * 0.006); }
+      if (p.k === 'joy') joyAt(p, e.clientX, e.clientY);
+      else if (p.k === 'look' || (p.k === 'btn' && p.el?.id === 'dmThrow')) touchLook(e.clientX - p.x, e.clientY - p.y); // 按住丟可以拖曳瞄準
       p.x = e.clientX; p.y = e.clientY;
     });
     const end = (e: PointerEvent) => {
       const p = ptr.get(e.pointerId); if (!p) return; ptr.delete(e.pointerId);
-      if (p.k === 'joy') { joy.x = joy.y = 0; kn.style.transform = ''; }
+      if (p.k === 'joy') { joy.x = joy.y = 0; sprint = false; fj.classList.remove('show', 'sprint'); fk.style.transform = ''; hint.style.display = ''; }
       if (p.k === 'btn' && p.el) {
         if (p.el.id === 'dmUmb') closeUmb(me);
         if (p.el.id === 'dmPick') { holdPick = false; if (e.type === 'pointerup') pick(me); }
@@ -419,7 +484,7 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
         let fx = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + joy.x, fz = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0) + joy.y;
         const l = Math.hypot(fx, fz); if (l > 1) { fx /= l; fz /= l; }
         const s = Math.sin(f.yaw), c = Math.cos(f.yaw);
-        f.vel.set((fx * c + fz * s) * 5, 0, (-fx * s + fz * c) * 5);
+        const vmax = (keys.ShiftLeft || keys.ShiftRight || sprint) && fz < 0.2 ? 7.5 : 5; f.vel.set((fx * c + fz * s) * vmax, 0, (-fx * s + fz * c) * vmax);
       } else botThink(f, dt);
       if (f.vel.lengthSq() > 0.01) f.invulnUntil = Math.min(f.invulnUntil, now); // 一開始移動就結束無敵
       const spd = f.vel.length(); if (spd > 0.5) { f.stepAcc += spd * dt; if (f.stepAcc > 0.75) { f.stepAcc = 0; if (f.isPlayer || f.pos.distanceTo(me.pos) < 25) SND.step(f); } } else f.stepAcc = 0.6;
@@ -471,7 +536,8 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
   function loop() {
     raf = requestAnimationFrame(loop);
     const t = performance.now(), dt = Math.min(0.05, (t - last) / 1000); last = t;
-    update(dt);
+    const paused = !isTouch && wasLocked && !locked; q('dmPause').classList.toggle('show', paused && !q('dmSet').classList.contains('show'));
+    if (!paused) update(dt);
     cam.position.copy(eyeOf(me)); let roll = 0, pt = me.pitch;
     if (me.dead) { const k = Math.min(1, (now - me.deathAt) / 0.6), e = k * k * (3 - 2 * k); cam.position.y = EYE + (0.25 - EYE) * e; roll = 1.25 * e; pt = me.pitch * (1 - e) + 0.15 * e; }
     cam.rotation.set(pt, me.yaw, roll); root.classList.toggle('dead', me.dead);
@@ -483,10 +549,10 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
   loop();
 
   function exit() {
-    cancelAnimationFrame(raf); removeEventListener('keydown', kd); removeEventListener('keyup', ku); removeEventListener('resize', resize); removeEventListener('blur', blur);
+    cancelAnimationFrame(raf); removeEventListener('keydown', kd); removeEventListener('keyup', ku); removeEventListener('resize', resize); removeEventListener('blur', blur); removeEventListener('mouseup', mu);
     document.removeEventListener('pointerlockchange', plc); if (document.pointerLockElement === canvas) document.exitPointerLock();
     renderer.dispose(); root.remove(); active = false; delete (window as any).__dm; onExit();
   }
   // 測試掛勾
-  (window as any).__dm = { fighters, shells, me, pick, get voices() { return voices; }, bloodLive: () => Array.from(bl).filter(x => x > 0).length, bars: () => fighters.map(f => f.hpBar?.g.visible ?? null), openUmb, closeUmb, throwShell, update, exit, renderBoard, launchPitch, get now() { return now; } };
+  (window as any).__dm = { fighters, shells, me, pick, DSv, assistK, touchLook, get voices() { return voices; }, bloodLive: () => Array.from(bl).filter(x => x > 0).length, bars: () => fighters.map(f => f.hpBar?.g.visible ?? null), openUmb, closeUmb, throwShell, update, exit, renderBoard, launchPitch, get now() { return now; } };
 }
