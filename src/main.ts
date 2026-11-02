@@ -1389,6 +1389,7 @@ const swipePhase = () => phase === 'twist' || phase === 'crab';
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (state !== 'play') return; audio().resume(); if (umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
+  if (moonAimOn) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (swipePhase()) { pry(e.timeStamp); if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) canvas.requestPointerLock(); return; }
   if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
   if (walking) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
@@ -1398,7 +1399,7 @@ canvas.addEventListener('pointerdown', e => {
 let lastMoveT = performance.now();
 window.addEventListener('pointermove', e => {
   const now = performance.now();
-  if (e.pointerType === 'mouse' && state === 'play') {
+  if (e.pointerType === 'mouse' && state === 'play' && !(moonAimOn && down)) {
     if (swipePhase()) { lastMoveT = now; return; }
     lastMoveT = now;
     if (document.pointerLockElement === canvas) { const k = 0.0022 * mix.sens; yaw = tYaw = clamp(tYaw - e.movementX * k * (mix.invX ? -1 : 1), -yl(), yl()); pitch = tPitch = clamp(tPitch - e.movementY * k * (mix.invY ? -1 : 1), P0, P1); camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld(); }
@@ -1406,13 +1407,13 @@ window.addEventListener('pointermove', e => {
   }
   if (!down || down.id !== e.pointerId) return;
   const dx = e.clientX - down.x, dy = e.clientY - down.y;
-  if (swipePhase()) return;
+  if (swipePhase() && !moonAimOn) return;
   if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; if (Math.abs(dx) > 8) down.drag = true; return; }
   if (!down.drag && Math.hypot(dx, dy) > 14) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
   if (down.drag) { const k = 0.006 * mix.sens; tYaw = clamp(down.yaw - dx * k * (mix.invX ? -1 : 1), -yl(), yl()); tPitch = clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), P0, P1); }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); void h; }
-const up = (e: PointerEvent) => { if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else if (phase === 'aim' && tapAim) { const lk = document.pointerLockElement === canvas; if (nearBowl(lk ? innerWidth / 2 : e.clientX, lk ? innerHeight / 2 : e.clientY)) toss(true); else hint.textContent = '點碗或碗附近就能丟進去'; } else release(); } else release(); down = null; } };
+const up = (e: PointerEvent) => { if (moonAimOn && down && down.id === e.pointerId) { const d = down; down = null; if (!d.drag) moonTapAt(e.clientX, e.clientY); return; } if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else if (phase === 'aim' && tapAim) { const lk = document.pointerLockElement === canvas; if (nearBowl(lk ? innerWidth / 2 : e.clientX, lk ? innerHeight / 2 : e.clientY)) toss(true); else hint.textContent = '點碗或碗附近就能丟進去'; } else release(); } else release(); down = null; } };
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
@@ -1540,7 +1541,7 @@ function moonGone(n: Npc) {
 const moonAimEl = document.createElement('div'); moonAimEl.id = 'moonAim';
 moonAimEl.innerHTML = '<div class="maTip">選一個要送上月球的人</div><button class="maX" aria-label="取消">✕</button>';
 document.body.appendChild(moonAimEl);
-moonAimEl.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
+moonAimEl.querySelectorAll('.maX').forEach(b => b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); }));
 moonAimEl.querySelector('.maX')!.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonAimEnd(); });
 function moonStart() {
   if (state !== 'play' || tut || !(save.meds.moon > 0)) return;
@@ -1552,6 +1553,7 @@ function moonStart() {
     b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonFire(n); }); moonAimEl.appendChild(b); }
   moonAimPos();
 }
+function moonTapAt(x: number, y: number) { let best: Npc | null = null, bd = 70; moonAimEl.querySelectorAll<HTMLElement>('.maT').forEach(b => { const r = b.getBoundingClientRect(); const d = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y); if (d < bd) { bd = d; best = (b as any)._n; } }); if (best) moonFire(best); }
 function moonAimEnd() { moonAimOn = false; moonAimEl.classList.remove('on'); }
 function moonAimPos() {
   const cam = viewCam(); moonAimEl.querySelectorAll<HTMLElement>('.maT').forEach(b => { const n = (b as any)._n as Npc; const p = worldOf(n.head).project(cam); if (p.z > 1) { p.x = -Math.sign(p.x || 1); p.y = -0.6; }

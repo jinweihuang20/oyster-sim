@@ -660,3 +660,7 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 @keyframes maP{50%{color:#ffd25a}}
 .itemCard{display:flex;align-items:center;gap:10px;padding:10px;margin:8px 0;border:2px solid #d9952b;border-radius:8px;background:rgba(0,0,0,.2)}
 .itemCard .itemIc{color:#c8401a;flex:none}.itemCard .itemTx{flex:1}.itemCard small{display:block;font-size:12px;margin-top:2px}.itemCard button{min-width:80px;min-height:44px}
+
+#moonAim{pointer-events:none}#moonAim .maX,#moonAim .maT{pointer-events:auto}#moonAim .maTip{pointer-events:none}
+#shopTabs,#shop .ph #shopTabs{display:flex!important;flex-wrap:wrap!important;gap:4px;margin:8px 0 0!important;max-width:100%;box-sizing:border-box}
+#shopTabs button{flex:1 1 calc(25% - 4px)!important;min-width:0!important;max-width:100%;box-sizing:border-box}
