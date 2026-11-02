@@ -664,3 +664,11 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 #moonAim{pointer-events:none}#moonAim .maX,#moonAim .maT{pointer-events:auto}#moonAim .maTip{pointer-events:none}
 #shopTabs,#shop .ph #shopTabs{display:flex!important;flex-wrap:wrap!important;gap:4px;margin:8px 0 0!important;max-width:100%;box-sizing:border-box}
 #shopTabs button{flex:1 1 calc(25% - 4px)!important;min-width:0!important;max-width:100%;box-sizing:border-box}
+
+#medList{width:min(360px,92vw)!important;max-width:360px!important}
+#medList button[data-use],#medList button[data-item]{display:block;flex:none;height:auto;width:100%;box-sizing:border-box;padding:8px 10px;touch-action:manipulation}
+#medList button *{pointer-events:none}
+#medList .mlN{display:flex;align-items:center;gap:6px;min-width:0}
+#medList .mlN .nm{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:keep-all}
+#medList .mlN .ct{flex:none;white-space:nowrap}#medList .mlN .ic{flex:none}
+#medList small{white-space:normal;line-height:1.35;margin-top:2px}#medList>*{flex-shrink:0}
