@@ -779,6 +779,7 @@ function setPhase(p: Phase) {
   if (p !== 'seam') { seamRing.visible = false; sweet = false; }
   phase = p; holding = false; hold = 0; fill.style.marginLeft = '0'; zone.style.left = ''; zone.style.width = ''; if (p === 'twist') { needleStart = performance.now(); combo = 0; pryHits = 0; } gauge.classList.remove('on', 'aim', 'tw'); setInZ('');
   tapAim = p === 'aim'; if (tapAim) tossT0 = performance.now(); bowlRing.visible = tapAim;
+  if (tapAim && !tut && state === 'play' && !LS.getItem('meatTip')) { LS.setItem('meatTip', '1'); later(0.1, () => toast(matchMedia('(pointer: coarse)').matches ? '往上拖畫面找阿婆，點她可以把肉丟過去（不算錢）' : '轉過去用滑鼠點阿婆，可以把肉丟過去（不算錢）', '#ffd76a')); }
   if (p === 'aim' && !tapAim) gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
   on('reticle', (p === 'aim' && !tapAim) || p === 'empty' || p === 'pick' || (document.pointerLockElement === canvas && p !== 'busy')); on('giveUp', (p === 'seam' || p === 'twist') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
   on('rotL', p === 'seam'); on('rotR', p === 'seam'); on('throwBtn', (p === 'seam' || p === 'empty') && state === 'play');
@@ -1432,10 +1433,29 @@ function toss(tapped: boolean) {
   later(0.35, () => { if (meatsLeft > 1 && state === 'play') { meatsLeft--; showExtra(); meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); hint.textContent = `還有 ${meatsLeft} 塊肉！點碗繼續丟`; } else { meatsLeft = 1; showExtra(); emptyT = 2.2; setPhase('empty'); } });
 }
 function discardShell() { if (phase !== 'empty') return; oyster.visible = false; const sh = new THREE.Mesh(halfGeo, shellBotMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.5, () => scene.remove(sh)); setPhase('busy'); later(0.5, goPick); }
+// ----- 丟肉：拿著肉時點阿婆，把肉丟到她頭上（不算入碗、不算錢）-----
+function bowlScrPt() { const p = BOWL.clone().project(viewCam()); return p.z > 1 ? null : [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight]; }
+function npcAtScr(x: number, y: number): Npc | null {
+  const R0 = Math.max(56, Math.min(innerWidth, innerHeight) * 0.11); let best: Npc | null = null, bd = Infinity;
+  for (const n of npcs) {
+    const h = worldOf(n.head), pts = [h, h.clone().add(new THREE.Vector3(0, -0.22, 0)), h.clone().add(new THREE.Vector3(0, -0.45, 0))];
+    for (const w of pts) { const p = w.project(viewCam()); if (p.z > 1) continue; const d = Math.hypot((p.x + 1) / 2 * innerWidth - x, (1 - p.y) / 2 * innerHeight - y); if (d < R0 && d < bd) { bd = d; best = n; } }
+  }
+  if (!best) return null;
+  const b = bowlScrPt(); if (b && Math.hypot(b[0] - x, b[1] - y) < bd) return null; // 比較靠近碗就照舊丟碗
+  return best;
+}
+function throwMeatAt(n: Npc) {
+  if (phase !== 'aim' || !tapAim || state !== 'play') return;
+  setPhase('busy'); meatInHand.visible = false;
+  const m = new THREE.Mesh(meatGeo, crackedNow ? splatMat : meatMat); SFX.whoosh();
+  fly(m, worldOf(oyster), () => worldOf(n.head), 0.45, 0.35, () => { meatOnHead(n, m); persist(); });
+  later(0.35, () => { if (meatsLeft > 1 && state === 'play') { meatsLeft--; showExtra(); meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); hint.textContent = `還有 ${meatsLeft} 塊肉！點碗繼續丟`; } else { meatsLeft = 1; showExtra(); emptyT = 2.2; setPhase('empty'); } });
+}
 function meatOnHead(n: Npc, m: THREE.Mesh) {
   meatHits++; addGrudge(n, 25); if (n.stuck) n.stuck.removeFromParent(); m.removeFromParent(); m.position.set(0, 0.15, 0); m.scale.setScalar(1.6); n.head.add(m); n.stuck = m;
   later(8, () => { if (n.stuck === m) { m.removeFromParent(); n.stuck = null; } });
-  toast(`丟中${n.name}的頭！`, '#ffb070'); SFX.splat();
+  toast(`肉彈命中${n.name}！`, '#ffb070'); SFX.splat();
   anger(n, SCOLD_HIT, 0.85); updHud();
 }
 function anger(n: Npc, lines: string[], retaliate: number) {
@@ -1609,7 +1629,7 @@ window.addEventListener('pointermove', e => {
   if (down.drag) { const k = 0.006 * mix.sens; tYaw = clamp(down.yaw - dx * k * (mix.invX ? -1 : 1), -yl(), yl()); tPitch = clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), P0, P1); }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); void h; }
-const up = (e: PointerEvent) => { if (moonAimOn && down && down.id === e.pointerId) { const d = down; down = null; if (!d.drag) moonTapAt(e.clientX, e.clientY); return; } if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else if (phase === 'aim' && tapAim) { const lk = document.pointerLockElement === canvas; if (nearBowl(lk ? innerWidth / 2 : e.clientX, lk ? innerHeight / 2 : e.clientY)) toss(true); else hint.textContent = '點碗或碗附近就能丟進去'; } else release(); } else release(); down = null; } };
+const up = (e: PointerEvent) => { if (moonAimOn && down && down.id === e.pointerId) { const d = down; down = null; if (!d.drag) moonTapAt(e.clientX, e.clientY); return; } if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else if (phase === 'aim' && tapAim) { const lk = document.pointerLockElement === canvas; const tx = lk ? innerWidth / 2 : e.clientX, ty = lk ? innerHeight / 2 : e.clientY, tn = tut ? null : npcAtScr(tx, ty); if (tn) throwMeatAt(tn); else if (nearBowl(tx, ty)) toss(true); else hint.textContent = '點碗或碗附近就能丟進去'; } else release(); } else release(); down = null; } };
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
@@ -1967,7 +1987,8 @@ function frameBody() {
     if (evRun?.infHp) hp = 100;
     updBlood(rdt);
     if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.6, goPick); setPhase('busy'); } }
-    tickFx(rdt); if (phase === 'aim' && tapAim && performance.now() - tossT0 > 2000) toss(false);
+    tickFx(rdt); if (phase === 'aim' && tapAim && down?.drag) tossT0 = performance.now() - 600; // 拖畫面找阿婆時先不自動入碗
+    if (phase === 'aim' && tapAim && performance.now() - tossT0 > 2000) toss(false);
     if (phase === 'empty') { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
@@ -2835,6 +2856,7 @@ initUpdate(() => state !== 'play' && !document.querySelector('.panel.show:not(#o
 (window as any).__tpTest = () => { const p = BOWL.clone().project(viewCam()); const x = (p.x + 1) / 2 * innerWidth, y = (1 - p.y) / 2 * innerHeight; return { tp: tpOn, x: Math.round(x), y: Math.round(y), hit: nearBowl(x, y), farMiss: nearBowl(x > innerWidth / 2 ? 5 : innerWidth - 5, 5) }; };
 (window as any).__cheer = () => react3('cheer');
 (window as any).__aim = () => setPhase('aim');
+(window as any).__meat = { npcScr: () => npcs.map(n => { const p = worldOf(n.head).add(new THREE.Vector3(0, -0.15, 0)).project(viewCam()); return { name: n.name, x: (p.x + 1) / 2 * innerWidth, y: (1 - p.y) / 2 * innerHeight, z: p.z }; }), get hits() { return meatHits; }, get count() { return count; }, get pay() { return meatPay; }, get phase() { return phase; } };
 
 // ---- 第三人稱雨傘：手舉起來撐一支立體傘（傘骨、傘面分片、把手），開合有動畫，被打中會晃 ----
 const umb3 = new THREE.Group(); umb3.visible = false; me3.add(umb3);
