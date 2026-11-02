@@ -1418,7 +1418,9 @@ const btn = (id: string, f: () => void, upF?: () => void) => {
   el.addEventListener('pointercancel', () => ok = false);
   el.addEventListener('pointerup', e => { e.stopPropagation(); if (ok && performance.now() - st < 800) f(); ok = false; });
 };
-btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); if (confirm('確定要翹班嗎？這一工會直接收工結算。')) { endReason = 'quit'; endDay(); } }); btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
+btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); $('backMenu').classList.add('show'); });
+$('bmStay').onclick = () => $('backMenu').classList.remove('show');
+$('bmGo').onclick = () => { $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return; const m0 = save.money; endReason = 'quit'; endDay(); $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; toast(`這一工收入 $${save.money - m0} 已入帳`, '#9be37a'); }; btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
@@ -2310,7 +2312,7 @@ installBackGuard(() => {
   if (open('npcTip')) { $('npcTip').classList.remove('show'); return 'handled'; }
   if (open('medList')) { $('medList').classList.remove('show'); return 'handled'; }
   for (const [id, close] of [['lb', 'lbClose'], ['fb', 'fbClose'], ['redeem', 'rdClose'], ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose']]) if (open(id)) { ($(close) as HTMLElement).click(); return 'handled'; }
-  if (state === 'play') { toast('上工中按返回不會離開；要收工請按「🏃 翹班」或等時間到', '#ffcf8a'); return 'handled'; }
+  if (state === 'play') { toast('上工中按返回不會離開；要收工請按「回主選單」或等時間到', '#ffcf8a'); return 'handled'; }
   return 'confirm-exit';
 }, () => state === 'play');
 
