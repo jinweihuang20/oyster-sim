@@ -672,3 +672,5 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 #medList .mlN .nm{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:keep-all}
 #medList .mlN .ct{flex:none;white-space:nowrap}#medList .mlN .ic{flex:none}
 #medList small{white-space:normal;line-height:1.35;margin-top:2px}#medList>*{flex-shrink:0}
+
+#bubbles{z-index:0;isolation:isolate}

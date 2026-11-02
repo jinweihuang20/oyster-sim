@@ -1548,7 +1548,7 @@ function moonStart() {
   if (moonUsed >= MOON_MAX) { toast(`這一工已經送 ${MOON_MAX} 位上月球了，下一工再用`, '#ffb08a'); return; }
   if (!npcs.length) { toast('旁邊已經沒有人了', '#ffb08a'); return; }
   $('medList').classList.remove('show'); if (document.pointerLockElement) document.exitPointerLock();
-  if (!walking && !tpOn) tPitch = Math.max(tPitch, -0.3); moonAimOn = true; moonAimEl.classList.add('on'); moonAimEl.querySelectorAll('.maT').forEach(b => b.remove());
+  moonAimOn = true; moonAimEl.classList.add('on'); moonAimEl.querySelectorAll('.maT').forEach(b => b.remove());
   for (const n of npcs) { const b = document.createElement('button'); b.className = 'maT'; b.innerHTML = `<svg viewBox="0 0 40 40" width="56" height="56" fill="none" stroke="currentColor" stroke-width="3"><circle cx="20" cy="20" r="13"/><circle cx="20" cy="20" r="3"/><path d="M20 1v10M20 29v10M1 20h10M29 20h10"/></svg><span>${esc(n.name)}</span>`; (b as any)._n = n;
     b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonFire(n); }); moonAimEl.appendChild(b); }
   moonAimPos();
@@ -1593,7 +1593,7 @@ function moonHit(n: Npc) {
   const away = n.g.position.clone().sub(camera.position).setY(0).normalize();
   const vel = away.multiplyScalar(9).setY(2.2); const spin = new THREE.Vector3(rnd(6, 10), rnd(4, 8), rnd(5, 9));
   const star = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, transparent: true, depthTest: false, fog: false, opacity: 0 })); star.scale.setScalar(0.01); scene.add(star);
-  let lt = 0; const FLY = 2.2, END = 3.2; const pitch0 = tPitch, follow = !walking && !tpOn;
+  let lt = 0; const FLY = 2.2, END = 3.2; const pitch0 = tPitch, follow = false;
   moonFx.push(dt => {
     lt += dt;
     if (follow && state === 'play') { const d = n.g.position.clone().sub(camera.position); const want = lt < END - 0.4 ? Math.min(0.12, Math.atan2(d.y, Math.hypot(d.x, d.z))) : pitch0; tPitch += (want - tPitch) * Math.min(1, dt * 4); }
