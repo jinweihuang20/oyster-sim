@@ -1492,6 +1492,7 @@ const go = (len: number) => { shiftLen = len; audio(); if (!save.tutDone) tutSta
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 $('start').onclick = () => { shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 btn('again', startDay);
+btn('resMenu', () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); };
 $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
