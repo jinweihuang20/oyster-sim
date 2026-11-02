@@ -1176,7 +1176,7 @@ function renderShop() {
     else save.gear[id] = !gearOn(id);
     persist(); renderShop(); drawRadio(); applyGloves();
   });
-  renderClothShop(); renderMedShop(); renderItemShop(); shopTabs();
+  renderClothShop(); renderMedShop(); renderItemShop(); shopTabs(); newDecor();
 }
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : 1); }
 const PRY_GRACE = 0.04;
@@ -2357,7 +2357,7 @@ function giftNew() { return giftList.filter(g => !giftSeen.includes(String(g.id)
 function giftAlert() {
   const n = giftNew(), h = document.getElementById('giftHud');
   if (h) h.style.display = state === 'play' && n.length ? '' : 'none';
-  if (!n.length || state === 'play' || tut || document.getElementById('giftMsg') || $('gift').classList.contains('show')) return;
+  if (!n.length || state === 'play' || tut || document.getElementById('giftMsg') || document.getElementById('newMsg') || $('gift').classList.contains('show')) return;
   for (const g of n) giftSeen.push(String(g.id));
   while (giftSeen.length > 200) giftSeen.shift();
   try { LS.setItem('giftSeen', JSON.stringify(giftSeen)); } catch { /* 忽略 */ }
@@ -2538,7 +2538,7 @@ function shopTabs() {
   groups.forEach((g, i) => { g.style.display = i === shopTab ? '' : 'none'; g.querySelector('h3')!.style.display = 'none'; });
   bar.querySelectorAll('button').forEach(b => (b as HTMLButtonElement).onclick = () => { shopTab = +b.getAttribute('data-tab')!; shopTabs2(groups, bar!); });
 }
-function shopTabs2(groups: HTMLElement[], bar: HTMLElement) { groups.forEach((g, i) => g.style.display = i === shopTab ? '' : 'none'); bar.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === shopTab)); $('shop').scrollTop = 0; }
+function shopTabs2(groups: HTMLElement[], bar: HTMLElement) { groups.forEach((g, i) => g.style.display = i === shopTab ? '' : 'none'); bar.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === shopTab)); $('shop').scrollTop = 0; newDecor(); }
 
 // 手機返回鍵：關掉最上層的視窗；上工中不離開；主畫面連按兩次才離開（同核心回收）
 function cleanName(v: string) { return [...v.replace(/[\u0000-\u001f\u007f<>&"'`]/g, '').trim()].slice(0, 8).join('').trim() || '剝蚵人'; }
@@ -2704,3 +2704,60 @@ new MutationObserver(ms => { for (const m of ms) { const el = m.target as HTMLEl
   if (el.classList.contains('panel') && el.classList.contains('show') && !(m.oldValue || '').includes('show'))
     requestAnimationFrame(() => { void el.offsetHeight; el.style.opacity = '0.999'; requestAnimationFrame(() => { el.style.opacity = ''; }); }); } })
   .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+
+// ---------- 新商品上架提示 ----------
+// 商品 key：類別-id。SHOP_NEW 接後台「標為新品」的 newIds（接受 key 或 id）；SHOP_RECENT 是舊玩家第一次也要提示的近期新品
+const SHOP_NEW = { has: (k: string) => shopNewIds.includes(k) || shopNewIds.includes(k.split('-').slice(1).join('-')) };
+const SHOP_RECENT = ['item-moon'];
+const NEW_CAT: Record<string, string> = { knife: '刀具', umb: '雨傘', bowl: '器具', gear: '器具', cloth: '服飾', med: '藥品', item: '道具' };
+const NEW_ATTR: [string, string][] = [['buy', 'knife'], ['eq', 'knife'], ['ubuy', 'umb'], ['ueq', 'umb'], ['bbuy', 'bowl'], ['beq', 'bowl'], ['gbuy', 'gear'], ['gtog', 'gear'], ['slbuy', 'cloth'], ['sleq', 'cloth'], ['mbuy', 'med'], ['ibuy', 'item']];
+const shopKeys = () => [...KNIVES.filter(k => k.price > 0).map(k => 'knife-' + k.id), ...UMBS.filter(u => u.price > 0).map(u => 'umb-' + u.id), ...BOWLS.filter(b => b.price > 0).map(b => 'bowl-' + b.id), ...GEAR.map(g => 'gear-' + g.id), ...EQUIP.filter(e => e.price > 0).map(e => 'cloth-' + e.id), ...MEDS.map(m => 'med-' + m.id), ...ITEMS.map(i => 'item-' + i.id)];
+const shopName = (k: string) => { const [c, ...r] = k.split('-'); const id = r.join('-'); const L: any[] = c === 'knife' ? KNIVES : c === 'umb' ? UMBS : c === 'bowl' ? BOWLS : c === 'gear' ? GEAR : c === 'cloth' ? EQUIP : c === 'med' ? MEDS : ITEMS; return L.find(x => x.id === id)?.n ?? id; };
+let shopKnown: Set<string>, shopAnn: Set<string>;
+{ let raw: any = null; try { raw = JSON.parse(LS.getItem('shopKnown') ?? 'null'); } catch { }
+  if (Array.isArray(raw)) shopKnown = new Set(raw);
+  else { shopKnown = new Set(shopKeys().filter(k => !(save.days > 0 && SHOP_RECENT.includes(k)))); try { LS.setItem('shopKnown', JSON.stringify([...shopKnown])); } catch { } }
+  let a: any = null; try { a = JSON.parse(LS.getItem('shopAnn') ?? 'null'); } catch { } shopAnn = new Set(Array.isArray(a) ? a : []); }
+const newNow = () => shopKeys().filter(k => !shopKnown.has(k) || (SHOP_NEW.has(k) && !shopAnn.has('seen:' + k)));
+const saveNew = () => { try { LS.setItem('shopKnown', JSON.stringify([...shopKnown])); LS.setItem('shopAnn', JSON.stringify([...shopAnn])); } catch { } };
+const markSeen = (k: string) => { shopKnown.add(k); shopAnn.add('seen:' + k); };
+let newSnap: string[] = [];
+function newDecor() {
+  const shop = $('shop'); if (!shop.classList.contains('show')) newSnap = newNow();
+  const groups = Array.from(document.querySelectorAll<HTMLElement>('#shopList .stab'));
+  let changed = false;
+  groups.forEach((g, i) => { for (const [at, c] of NEW_ATTR) g.querySelectorAll(`button[data-${at}]`).forEach(b => {
+    const k = c + '-' + b.getAttribute('data-' + at); if (!newSnap.includes(k)) return;
+    const card = b.closest('tr, .slCard, .itemCard'); const nm = card?.querySelector('b');
+    if (nm && !card!.querySelector('.newTag')) nm.insertAdjacentHTML('afterend', '<span class="newTag">新品</span>');
+    if (i === shopTab && !shopKnown.has(k) || i === shopTab && !shopAnn.has('seen:' + k)) { markSeen(k); changed = true; } }); });
+  if (changed) saveNew();
+  const left = newNow();
+  document.querySelectorAll<HTMLElement>('#shopTabs button').forEach(b => { const t = b.textContent ?? ''; b.classList.toggle('hasNew', left.some(k => t.includes(NEW_CAT[k.split('-')[0]]))); });
+  newDots();
+}
+function newDots() {
+  const has = newNow().length > 0;
+  for (const id of ['shopBtn', 'shopBtn2', 'oShop', 'eqShop']) { const b = document.getElementById(id); if (!b) continue; let d = b.querySelector('.newDot'); if (has && !d) b.insertAdjacentHTML('beforeend', '<span class="newDot">新</span>'); else if (!has && d) d.remove(); }
+}
+function openShopAt(k: string) {
+  ($('shopBtn2') as HTMLButtonElement).click();
+  const cat = NEW_CAT[k.split('-')[0]]; const i = Array.from(document.querySelectorAll('#shopTabs button')).findIndex(b => (b.textContent ?? '').includes(cat));
+  if (i >= 0) (document.querySelectorAll('#shopTabs button')[i] as HTMLButtonElement).click();
+}
+function newAnnounce() {
+  newDots();
+  const fresh = newNow().filter(k => !shopAnn.has(k)); if (!fresh.length) return;
+  if (state === 'play' || tut || !$('overlay').classList.contains('show') || document.getElementById('giftMsg') || document.getElementById('newMsg') || $('gift').classList.contains('show') || document.querySelector('.panel.show:not(#overlay)')) return;
+  const names = fresh.map(shopName).join('、');
+  fresh.forEach(k => shopAnn.add(k)); saveNew();
+  const day = todayKey(); if (LS.getItem('shopAnnDay') !== day) { try { LS.setItem('shopAnnDay', day); } catch { } Social.local(`雜貨店新上架：${names}`); }
+  const m = document.createElement('div'); m.id = 'newMsg'; m.className = 'giftMsg';
+  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-shop"></i> 雜貨店新上架</b><p class="nmTx">雜貨店新上架：${esc(names)}</p><div class="mbtns"><button class="gmNo">晚點再說</button><button class="gmYes">去看看</button></div></div>`;
+  const close = () => { m.remove(); setTimeout(giftAlert, 300); };
+  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
+  m.querySelector('.gmYes')!.addEventListener('click', () => { close(); openShopAt(fresh[0]); });
+  document.body.appendChild(m);
+}
+setInterval(newAnnounce, 1500); setTimeout(newAnnounce, 2500);
+(window as any).__newShop = { now: () => newNow(), reset: () => { LS.removeItem('shopKnown'); LS.removeItem('shopAnn'); LS.removeItem('shopAnnDay'); } };
