@@ -109,3 +109,23 @@ export async function claimGift(giftId: string): Promise<{ st: 'ok' | 'gone' | '
   try { const r = await fetch(API + '/gifts/claim', { method: 'POST', body: JSON.stringify({ pid: D.id, giftId }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }); const j = await r.json().catch(() => null);
     if (r.ok && j?.ok) return { st: 'ok', gift: j.gift }; if (r.status === 409 || r.status === 404) return { st: 'gone' }; return { st: 'retry' }; } catch { return { st: 'retry' }; }
 }
+
+// ---------- 線上人數（/s/presence、/s/online）。後端沒部署時看板直接隱藏 ----------
+let prsPlaying: () => boolean = () => false;
+function showOnline(r: any) {
+  const el = $('onlineSign');
+  if (!r || typeof r.online !== 'number') { el.style.display = 'none'; return; }
+  const on = Math.max(1, r.online), sh = r.shucking | 0;
+  $('onlineTxt').innerHTML = sh >= 1 ? `現在 <b>${sh}</b> 人正在剝蚵仔` : `現在 <b>${on}</b> 人在蚵寮`;
+  el.style.display = '';
+}
+async function presenceTick() {
+  if (document.hidden) return;
+  const r = await fetch(API + '/presence', { method: 'POST', body: JSON.stringify({ pid: D.id, game: 'oyster', shucking: prsPlaying() }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(x => x.ok ? x.json() : null).catch(() => null);
+  showOnline(r);
+}
+export function startPresence(playing: () => boolean) {
+  prsPlaying = playing;
+  presenceTick(); setInterval(presenceTick, 25000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) presenceTick(); });
+}
