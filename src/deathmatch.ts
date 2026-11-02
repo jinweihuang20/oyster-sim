@@ -6,7 +6,7 @@ interface Fighter {
   name: string; isPlayer: boolean; pos: THREE.Vector3; vel: THREE.Vector3; yaw: number; pitch: number;
   hp: number; ammo: number; dead: boolean; respawnAt: number; invulnUntil: number;
   kills: number; deaths: number; hs: number; shots: number; hits: number;
-  mesh: THREE.Group | null; cd: number; rig: { armR: THREE.Group; legL: THREE.Group; legR: THREE.Group } | null; throwA: number; walkPh: number; pickCd: number; umbT: number; umbHeld: boolean; umbTired: boolean; umbMesh: THREE.Object3D | null; goal: THREE.Vector3; idleUntil: number; pickT: number;
+  mesh: THREE.Group | null; cd: number; stepAcc: number; deathAt: number; fallDir: THREE.Vector3; hpBar: { g: THREE.Group; fill: THREE.Mesh; bg: THREE.MeshBasicMaterial; fm: THREE.MeshBasicMaterial } | null; rig: { armR: THREE.Group; legL: THREE.Group; legR: THREE.Group } | null; throwA: number; walkPh: number; pickCd: number; umbT: number; umbHeld: boolean; umbTired: boolean; umbMesh: THREE.Object3D | null; goal: THREE.Vector3; idleUntil: number; pickT: number;
 }
 interface Shell { pos: THREE.Vector3; vel: THREE.Vector3; owner: Fighter; mesh: THREE.Mesh; life: number; }
 
@@ -22,6 +22,20 @@ const COVER_DEF: [number, number, number, number, number, Kind][] = [
 const COVERS: THREE.Box3[] = COVER_DEF.map(([x, z, w, d, h]) => new THREE.Box3(new THREE.Vector3(x - w / 2, 0, z - d / 2), new THREE.Vector3(x + w / 2, h, z + d / 2)));
 const SPAWNS = [[-15, -15], [15, 15], [-15, 15], [15, -15], [0, -16], [0, 16], [-16, 0], [16, 0]];
 
+// 線條圖示（同遊戲 icons.css 風格：方角粗線、無 emoji）
+const ico = (d: string, sz = 22) => `<svg viewBox="0 0 24 24" width="${sz}" height="${sz}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" style="vertical-align:-4px">${d}</svg>`;
+const I = {
+  shell: '<path d="M4 15c0-6 4-10 8-10s8 4 8 10c-3 2-13 2-16 0z"/><path d="M8 9l1 6M12 7v8M16 9l-1 6"/>',
+  throw: '<path d="M4 18c4-9 10-12 16-12"/><path d="M15 3l5 3-3 5"/>',
+  grab: '<path d="M7 11V6a1.5 1.5 0 013 0v4M10 10V4.5a1.5 1.5 0 013 0V10M13 10V5.5a1.5 1.5 0 013 0V12M16 9.5a1.5 1.5 0 013 0V14a7 7 0 01-7 7h-1a6 6 0 01-5-3l-2.5-4a1.5 1.5 0 012.5-1.6L7 14"/>',
+  umb: '<path d="M2 12a10 10 0 0120 0z"/><path d="M12 12v7a2 2 0 01-4 0"/><path d="M12 2v2"/>',
+  board: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  heart: '<path d="M12 20l-8-8a4.5 4.5 0 016.5-6.3L12 7l1.5-1.3A4.5 4.5 0 0120 12z"/>',
+  skull: '<path d="M5 11a7 7 0 0114 0v4h-2v4H7v-4H5z"/><path d="M9 11h.1M15 11h.1"/><path d="M10 19v-2M14 19v-2"/>',
+  head: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5"/>',
+  shield: '<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/>',
+  x: '<path d="M5 5l14 14M19 5L5 19"/>',
+};
 let active = false;
 export const isDeathmatchActive = () => active;
 
@@ -30,6 +44,7 @@ export interface DmUmb {
   // 沿用上工場景的美術：阿婆模型、蚵殼幾何／材質、藤壺
   makeAma: (top: number, hair: number) => { g: THREE.Group; head: THREE.Group; armL: THREE.Group; armR: THREE.Group; pants: THREE.Material };
   shellGeos: THREE.BufferGeometry[]; shellMat: THREE.Material; greyPick: () => number;
+  audio: () => AudioContext; sfxOut: () => AudioNode; gore: () => boolean;
   barnGeo: THREE.BufferGeometry; barnMat: THREE.Material; placeBarn: (list: THREE.Object3D[], dd: number, y?: number) => void;
 }
 export function openDeathmatch(U: DmUmb, onExit: () => void) {
@@ -42,6 +57,20 @@ export function openDeathmatch(U: DmUmb, onExit: () => void) {
 #dmRoot .dmb{position:absolute;background:#c8102e;color:#fff6d8;border:3px solid #ffd23f;border-radius:10px;font-weight:900;font-size:18px;padding:10px 16px;box-shadow:0 3px 0 #6b0010;letter-spacing:2px}
 #dmX{top:calc(env(safe-area-inset-top) + 10px);right:calc(env(safe-area-inset-right) + 10px);width:48px;height:48px;padding:0!important;font-size:24px!important}
 #dmScoreBtn{top:calc(env(safe-area-inset-top) + 10px);right:calc(env(safe-area-inset-right) + 70px)}
+#dmHp{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 64px);width:min(42vw,280px);height:26px;background:#2a1206;border:3px solid #ffd23f;border-radius:8px;box-shadow:0 3px 0 #6b0010;overflow:hidden;pointer-events:none}
+#dmHpF{position:absolute;left:0;top:0;bottom:0;width:100%;background:#3c3;transition:width .15s}
+#dmHpN{position:absolute;inset:0;text-align:center;color:#fff6d8;font-weight:900;font-size:16px;line-height:20px;text-shadow:0 2px 0 #000;letter-spacing:1px}
+#dmHp.hit{animation:dmHit .3s}@keyframes dmHit{0%{border-color:#fff;transform:translateX(-50%) scale(1.08)}100%{border-color:#ffd23f;transform:translateX(-50%)}}
+#dmEdge{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 90px 20px rgba(220,0,0,.75);opacity:0;transition:opacity .35s}
+#dmEdge.on{opacity:1;transition:none}
+#dmFeed{position:fixed;right:calc(env(safe-area-inset-right) + 12px);top:calc(env(safe-area-inset-top) + 70px);display:flex;flex-direction:column;gap:4px;align-items:flex-end;pointer-events:none}
+#dmFeed div{background:rgba(42,18,6,.8);border:2px solid #ffd23f;border-radius:6px;color:#fff6d8;font-weight:900;padding:2px 8px;font-size:15px;transition:opacity .4s}
+#dmFeed .me{color:#ffd23f}
+#dmHud.empty{border-color:#ff3b3b;color:#ff3b3b}
+#dmUmb.cd{opacity:.45}
+.dmPop svg{filter:drop-shadow(0 2px 0 #000)}
+#dmRoot.dead canvas{filter:saturate(.3) brightness(.75)}
+#dmRoot.dead #dmEdge{opacity:.8}
 #dmHud{position:absolute;left:calc(env(safe-area-inset-left) + 12px);top:calc(env(safe-area-inset-top) + 10px);color:#ffd23f;font-weight:900;font-size:18px;text-shadow:0 2px 0 #000;line-height:1.5;background:rgba(20,10,0,.55);border:2px solid #ffd23f;border-radius:8px;padding:6px 10px}
 #dmCross{position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;pointer-events:none}
 #dmCross:before,#dmCross:after{content:'';position:absolute;background:#fff;box-shadow:0 0 2px #000}
@@ -60,10 +89,10 @@ export function openDeathmatch(U: DmUmb, onExit: () => void) {
 #dmJoy{position:absolute;left:calc(env(safe-area-inset-left) + 30px);bottom:calc(env(safe-area-inset-bottom) + 30px);width:120px;height:120px;border-radius:50%;border:3px solid rgba(255,210,63,.7);background:rgba(0,0,0,.25)}
 #dmKnob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,210,63,.8)}
 #dmHelp{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 12px);transform:translateX(-50%);color:#fff6d8;font-size:14px;text-shadow:0 1px 0 #000;pointer-events:none}
-</style><canvas></canvas><div id="dmCross"></div><div id="dmMark"></div><div id="dmMsg"></div><div id="dmHud"></div>
-<button class="dmb" id="dmScoreBtn"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" style="vertical-align:-3px"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg> 戰績</button>
-<button class="dmb" id="dmX" aria-label="離開">✕</button><div id="dmBoard"><h2>戰績</h2><div id="dmTable"></div></div>
-${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id="dmPick">拿殼</button><button class="dmb" id="dmUmb">雨傘</button><button class="dmb" id="dmThrow">丟</button>' : '<div id="dmHelp">點畫面鎖定滑鼠｜WASD 移動｜左鍵 丟｜E 拿殼｜按住 R 雨傘｜Tab 戰績｜Esc 放開滑鼠</div>'}`;
+</style><canvas></canvas><div id="dmCross"></div><div id="dmMark"></div><div id="dmMsg"></div><div id="dmHud"></div><div id="dmEdge"></div><div id="dmHp"><div id="dmHpF"></div><div id="dmHpN"></div></div><div id="dmFeed"></div>
+<button class="dmb" id="dmScoreBtn"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" style="vertical-align:-3px"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></button>
+<button class="dmb" id="dmX" aria-label="離開">✕</button><div id="dmBoard"><h2>${ico(I.board, 26)}</h2><div id="dmTable"></div></div>
+${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id="dmPick" aria-label="拿殼">${ico(I.grab, 28)}</button><button class="dmb" id="dmUmb" aria-label="雨傘">${ico(I.umb, 28)}</button><button class="dmb" id="dmThrow" aria-label="丟">${ico(I.throw, 38)}</button>' : '<div id="dmHelp">WASD ・ 滑鼠左鍵 ・ E ・ 按住 R ・ Tab</div>'}`;
   document.body.appendChild(root);
   const q = (id: string) => root.querySelector('#' + id) as HTMLElement;
   const canvas = root.querySelector('canvas')!;
@@ -131,15 +160,17 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
     outer.traverse(o => { o.castShadow = true; }); scene.add(outer);
     return { outer, rig: { armR: a.armR, legL, legR } };
   }
-  const mk = (name: string, isPlayer: boolean, color: number): Fighter => ({ name, isPlayer, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, hp: 100, ammo: 0, dead: false, respawnAt: 0, invulnUntil: 0, kills: 0, deaths: 0, hs: 0, shots: 0, hits: 0, mesh: null, rig: null, throwA: 0, walkPh: 0, pickCd: 0, cd: 1, umbT: 0, umbHeld: false, umbTired: false, umbMesh: null, goal: new THREE.Vector3(), idleUntil: 0, pickT: 0 });
+  const mk = (name: string, isPlayer: boolean, color: number): Fighter => ({ name, isPlayer, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, hp: 100, ammo: 0, dead: false, respawnAt: 0, invulnUntil: 0, kills: 0, deaths: 0, hs: 0, shots: 0, hits: 0, mesh: null, rig: null, stepAcc: 0, hpBar: null, deathAt: 0, fallDir: new THREE.Vector3(0, 0, 1), throwA: 0, walkPh: 0, pickCd: 0, cd: 1, umbT: 0, umbHeld: false, umbTired: false, umbMesh: null, goal: new THREE.Vector3(), idleUntil: 0, pickT: 0 });
   const me = mk('你', true, 0);
   const fighters: Fighter[] = [me, mk('阿婆 A', false, 0), mk('阿婆 B', false, 0), mk('阿婆 C', false, 0)];
   ([[0xc84a6a, 0xdddddd], [0x3a7a5a, 0xbbbbbb], [0x6a5aa0, 0x888888]] as const).forEach(([t, h], i) => { const b = makeBot(t, h); fighters[i + 1].mesh = b.outer; fighters[i + 1].rig = b.rig; });
   const shells: Shell[] = [];
   // 雨傘：沿用上工的傘（目前裝備的傘外觀與開傘／可撐／遮擋數值）
   scene.add(cam);
-  me.umbMesh = U.model; U.model.visible = false; cam.add(U.model);
-  for (const f of fighters) if (f.mesh) { const m = U.model.clone(true); m.visible = false; m.position.set(0, 1.35, -0.5); m.rotation.set(-Math.PI / 2.4, 0, 0); m.scale.setScalar(0.8); f.mesh.add(m); f.umbMesh = m; }
+  me.umbMesh = U.model; U.model.visible = false; U.model.position.set(0.12, -0.3, -0.85); U.model.rotation.set(0, 0, 0); U.model.scale.setScalar(0.62);
+  cam.add(U.model); // 像盾牌往前開
+  for (const f of fighters) if (f.mesh) { const m = U.model.clone(true); m.visible = false; m.position.set(0, 1.2, -0.6); m.rotation.set(0, 0, 0); m.scale.setScalar(0.8); f.mesh.add(m); f.umbMesh = m; }
+  U.model.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.material = (m.material as THREE.Material).clone(); Object.assign(m.material, { transparent: true, opacity: 0.6, depthWrite: false }); } }); // 半透明，看得到前方
   const umbUp = (f: Fighter) => f.umbHeld && (U.umb.open + U.umb.dur - f.umbT) >= U.umb.open;
   function openUmb(f: Fighter) { if (f.dead || f.umbHeld || f.umbTired) return; f.umbHeld = true; f.umbT = U.umb.open + U.umb.dur; }
   function closeUmb(f: Fighter) { f.umbTired = false; f.umbHeld = false; f.umbT = 0; }
@@ -154,6 +185,73 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
   const minDist = (p: THREE.Vector3, self: Fighter) => Math.min(...fighters.filter(o => o !== self && !o.dead).map(o => o.pos.distanceTo(p)), 99);
   fighters.forEach(spawn);
 
+  // ---- 音效：程序合成，接到遊戲的音效音量（跟著主音量／靜音設定） ----
+  let voices = 0; const MAXV = 14; let nbuf: AudioBuffer | null = null;
+  function ctx() { try { const a = U.audio(); if (!nbuf) { nbuf = a.createBuffer(1, a.sampleRate, a.sampleRate); const d = nbuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; } return a; } catch { return null; } }
+  function outPan(a: AudioContext, g: GainNode, pan: number) { if (pan && a.createStereoPanner) { const p = a.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(p).connect(U.sfxOut()); } else g.connect(U.sfxOut()); }
+  function nz(dur: number, freq: number, vol: number, pan = 0, sweepTo = 0, delay = 0, qv = 0.8) {
+    const a = ctx(); if (!a || voices >= MAXV || vol < 0.004) return; voices++;
+    const t = a.currentTime + delay, s = a.createBufferSource(); s.buffer = nbuf; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.setValueAtTime(freq, t); f.Q.value = qv;
+    if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t + dur);
+    const g = a.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); s.connect(f).connect(g); outPan(a, g, pan);
+    s.start(t, Math.random() * 0.5, dur + 0.02); setTimeout(() => voices--, (delay + dur) * 1000 + 60);
+  }
+  function tn(freq: number, dur: number, vol: number, type: OscillatorType = 'sine', pan = 0, delay = 0, glideTo = 0) {
+    const a = ctx(); if (!a || voices >= MAXV || vol < 0.004) return; voices++;
+    const t = a.currentTime + delay, o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.setValueAtTime(freq, t); if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + dur);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g); outPan(a, g, pan);
+    o.start(t); o.stop(t + dur + 0.03); setTimeout(() => voices--, (delay + dur) * 1000 + 60);
+  }
+  const _r = new THREE.Vector3(), _d = new THREE.Vector3();
+  // 位置音：距離衰減＋左右聲道
+  function spatial(p: THREE.Vector3) { _d.copy(p).sub(cam.position); const dist = _d.length(); _r.set(1, 0, 0).applyQuaternion(cam.quaternion); return { v: 1 / (1 + dist * 0.22), pan: dist > 0.1 ? _d.normalize().dot(_r) * 0.85 : 0 }; }
+  const SND = {
+    throw(f: Fighter) { const sp = f.isPlayer ? { v: 1, pan: 0 } : spatial(f.pos), k = f.isPlayer ? 1 : 0.5;
+      nz(0.2, 2200, 0.35 * sp.v * k, sp.pan, 500); tn(260, 0.07, 0.12 * sp.v * k, 'square', sp.pan, 0, 110); },
+    pick() { tn(1900, 0.03, 0.05, 'square'); nz(0.03, 3500, 0.06); },
+    reload() { nz(0.035, 3200, 0.3, 0, 0, 0, 3); tn(900, 0.03, 0.08, 'square'); nz(0.06, 1300, 0.35, 0, 600, 0.13, 2); tn(170, 0.07, 0.18, 'square', 0, 0.13, 90); nz(0.03, 4200, 0.18, 0, 0, 0.2, 4); },
+    hit(at: THREE.Vector3, head: boolean, mine: boolean) { const sp = mine ? { v: 1, pan: 0 } : spatial(at);
+      nz(0.09, 380, 0.5 * sp.v, sp.pan); tn(140, 0.1, 0.25 * sp.v, 'sine', sp.pan, 0, 70);
+      if (head) { tn(1500, 0.14, 0.22 * sp.v, 'triangle', sp.pan, 0.01); tn(2250, 0.2, 0.16 * sp.v, 'triangle', sp.pan, 0.05); nz(0.07, 2600, 0.3 * sp.v, sp.pan, 900); } },
+    hurt() { nz(0.12, 300, 0.5); tn(110, 0.15, 0.3, 'sawtooth', 0, 0, 60); },
+    block(at: THREE.Vector3) { const sp = spatial(at); nz(0.12, 240, 0.55 * sp.v, sp.pan); tn(85, 0.14, 0.3 * sp.v, 'sine', sp.pan); },
+    step(f: Fighter) { const sp = f.isPlayer ? { v: 1, pan: 0 } : spatial(f.pos), k = f.isPlayer ? 0.14 : 0.3;
+      nz(0.07, 650 + Math.random() * 300, k * sp.v, sp.pan, 300); nz(0.05, 3500, k * 0.25 * sp.v, sp.pan, 0, 0.01); }, // 濕水泥地
+  };
+  // ---- 血花：一個 InstancedMesh 池，不在命中時配置新物件 ----
+  const BN = 240, blood = new THREE.InstancedMesh(new THREE.BoxGeometry(0.035, 0.035, 0.035), new THREE.MeshBasicMaterial({ color: 0x9a0a0a }), BN);
+  blood.frustumCulled = false; scene.add(blood);
+  const bp = new Float32Array(BN * 3), bv = new Float32Array(BN * 3), bl = new Float32Array(BN); let bi = 0;
+  const _m = new THREE.Matrix4(), _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (let i = 0; i < BN; i++) blood.setMatrixAt(i, _zero);
+  function burst(at: THREE.Vector3, dir: THREE.Vector3, n: number) {
+    if (!U.gore()) return;
+    for (let k = 0; k < n; k++) { const i = bi; bi = (bi + 1) % BN; const sp = 1.5 + Math.random() * 3;
+      bp[i * 3] = at.x; bp[i * 3 + 1] = at.y; bp[i * 3 + 2] = at.z;
+      bv[i * 3] = dir.x * sp + (Math.random() - .5) * 2.2; bv[i * 3 + 1] = dir.y * sp + Math.random() * 2; bv[i * 3 + 2] = dir.z * sp + (Math.random() - .5) * 2.2; bl[i] = 0.35 + Math.random() * 0.35; }
+  }
+  function stepBlood(dt: number) {
+    let any = false;
+    for (let i = 0; i < BN; i++) { if (bl[i] <= 0) continue; any = true; bl[i] -= dt;
+      if (bl[i] <= 0 || bp[i * 3 + 1] < 0.01) { bl[i] = 0; blood.setMatrixAt(i, _zero); continue; }
+      bv[i * 3 + 1] -= 9.8 * dt; bp[i * 3] += bv[i * 3] * dt; bp[i * 3 + 1] += bv[i * 3 + 1] * dt; bp[i * 3 + 2] += bv[i * 3 + 2] * dt;
+      const sc = Math.min(1, bl[i] * 3); _m.makeScale(sc, sc, sc).setPosition(bp[i * 3], bp[i * 3 + 1], bp[i * 3 + 2]); blood.setMatrixAt(i, _m); }
+    if (any) blood.instanceMatrix.needsUpdate = true;
+  }
+  // ---- 阿婆頭上血條（看板，滿血或太遠就藏） ----
+  const barG = new THREE.PlaneGeometry(0.7, 0.09);
+  for (const f of fighters) if (f.mesh) {
+    const g = new THREE.Group(), bg = new THREE.MeshBasicMaterial({ color: 0x2a1206, transparent: true, depthWrite: false }), fm = new THREE.MeshBasicMaterial({ color: 0x33cc33, transparent: true, depthWrite: false });
+    const b = new THREE.Mesh(barG, bg); b.scale.set(1.08, 1.5, 1); const fill = new THREE.Mesh(barG, fm); fill.position.z = 0.001; g.add(b, fill); g.renderOrder = 5; scene.add(g); g.visible = false;
+    f.hpBar = { g, fill, bg, fm };
+  }
+  function stepBars() {
+    for (const f of fighters) { const h = f.hpBar; if (!h) continue;
+      const show = !f.dead && f.hp < 100 && f.pos.distanceTo(me.pos) < 20; h.g.visible = show; if (!show) continue;
+      h.g.position.set(f.pos.x, 2.05, f.pos.z); h.g.quaternion.copy(cam.quaternion);
+      const r = Math.max(0, f.hp) / 100; h.fill.scale.x = Math.max(0.001, r); h.fill.position.x = -0.35 * (1 - r); h.fm.color.set(hpCol(f.hp));
+      const op = now < f.invulnUntil ? 0.35 : 1; h.fm.opacity = op; h.bg.opacity = op * 0.8; }
+  }
   // ---- 輸入 ----
   const keys: Record<string, boolean> = {}; const joy = { x: 0, y: 0 }; let holdPick = false;
   const blur = () => { for (const k in keys) keys[k] = false; closeUmb(me); holdPick = false; };
@@ -205,18 +303,18 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
   // ---- 遊戲邏輯 ----
   function pick(f: Fighter) {
     if (f.dead || f.ammo >= MAXAMMO) return false;
-    if (pileDist(f.pos) > PICK_R) { if (f.isPlayer) msg('離蚵仔堆太遠了', 1); return false; }
-    f.ammo = MAXAMMO; return true;
+    if (pileDist(f.pos) > PICK_R) { return false; }
+    const was = f.ammo; f.ammo = MAXAMMO; if (f.isPlayer && was < MAXAMMO) SND.reload(); return true;
   }
   function eyeOf(f: Fighter) { return new THREE.Vector3(f.pos.x, f.pos.y + EYE, f.pos.z); }
   function dirOf(yaw: number, pitch: number) { return new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)); }
   function throwShell(f: Fighter, yaw = f.yaw, pitch = f.pitch) {
     if (f.dead) return false;
-    if (f.umbHeld) { if (f.isPlayer) msg('撐傘時不能丟，先放開雨傘', 1); return false; }
-    if (f.ammo <= 0) { if (f.isPlayer) msg('沒殼了，去蚵仔堆拿', 1); return false; }
+    if (f.umbHeld) { return false; }
+    if (f.ammo <= 0) { return false; }
     f.ammo--; f.shots++; if (f.isPlayer) f.invulnUntil = 0;
     const d = dirOf(yaw, pitch); const p = eyeOf(f).addScaledVector(d, 0.4);
-    const m = shellMesh(); m.position.copy(p); scene.add(m); f.throwA = 0.35;
+    const m = shellMesh(); m.position.copy(p); scene.add(m); f.throwA = 0.35; SND.throw(f);
     shells.push({ pos: p, vel: d.multiplyScalar(SPEED).add(f.vel.clone().multiplyScalar(0.5)), owner: f, mesh: m, life: 6 });
     return true;
   }
@@ -232,21 +330,22 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
     if (p.y <= 0 || Math.abs(p.x) >= HALF - 0.2 || Math.abs(p.z) >= HALF - 0.2) return true;
     return COVERS.some(b => b.containsPoint(p));
   }
-  function damage(src: Fighter, f: Fighter, part: Part, at: THREE.Vector3) {
+  function damage(src: Fighter, f: Fighter, part: Part, at: THREE.Vector3, dir?: THREE.Vector3) {
     src.hits++;
     if (f.dead) return;
     const inv = now < f.invulnUntil;
-    if (src.isPlayer) { popAt(at, inv ? '無敵' : part === 'head' ? '爆頭' : part === 'body' ? '身體' : '腳'); mark(); }
+    if (!inv) { burst(at, dir ?? _d.set(0, 0, 0), part === 'head' ? 26 : 10); SND.hit(at, part === 'head', src.isPlayer); }
+    if (src.isPlayer) { popAt(at, inv ? ico(I.shield, 28) : part === 'head' ? ico(I.head, 34) : part === 'body' ? '-40' : '-20'); mark(); }
     if (inv) return;
     f.hp -= part === 'head' ? 999 : part === 'body' ? 40 : 20;
-    if (f.isPlayer) flashHurt();
+    if (f.isPlayer) { flashHurt(); SND.hurt(); }
     if (f.hp <= 0) {
-      f.dead = true; f.deaths++; f.respawnAt = now + 3; f.ammo = 0; src.kills++; if (part === 'head') src.hs++;
-      if (f.mesh) f.mesh.visible = false;
-      if (f.isPlayer) msg(`被 ${src.name} 擊倒${part === 'head' ? '（爆頭）' : ''}，3 秒後復活`, 3);
-      else if (src.isPlayer) msg(`擊倒 ${f.name}${part === 'head' ? '（爆頭）' : ''}`, 1.5);
+      f.dead = true; f.deathAt = now; if (dir) f.fallDir.set(dir.x, 0, dir.z).normalize(); if (f.fallDir.lengthSq() < 0.5) f.fallDir.set(0, 0, 1); f.deaths++; f.respawnAt = now + 3; f.ammo = 0; src.kills++; if (part === 'head') src.hs++;
+      if (f.umbMesh) f.umbMesh.visible = false; f.umbHeld = false;
+      feed(src, f, part === 'head');
     }
   }
+  const _dir = new THREE.Vector3();
   function stepShells(dt: number) {
     for (let i = shells.length - 1; i >= 0; i--) {
       const s = shells[i]; const a = s.pos.clone();
@@ -257,9 +356,9 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
         for (const f of fighters) { if (f === s.owner || f.dead) continue;
           if (umbUp(f) && Math.hypot(p.x - f.pos.x, p.z - f.pos.z) < 0.9 && p.y > f.pos.y + 0.3 && p.y < f.pos.y + 2.2) {
             const fwd = dirOf(f.yaw, 0), inc = s.vel.clone().setY(0).normalize();
-            if (-fwd.dot(inc) > Math.cos(Math.PI / 3) && Math.random() < U.umb.cover) { if (f.isPlayer) msg('擋下來了！', 0.8); else if (s.owner.isPlayer) popAt(p, '被傘擋'); done = true; break; }
+            if (-fwd.dot(inc) > Math.cos(Math.PI / 3) && Math.random() < U.umb.cover) { SND.block(p); if (f.isPlayer || s.owner.isPlayer) popAt(p, ico(I.umb, 28)); done = true; break; }
           }
-          const part = hitPart(f, p); if (part) { damage(s.owner, f, part, p); done = true; break; } }
+          const part = hitPart(f, p); if (part) { damage(s.owner, f, part, p, _dir.copy(s.vel).normalize()); done = true; break; } }
         if (!done && hitWorld(p)) done = true;
       }
       s.pos.copy(b); s.mesh.position.copy(b); s.mesh.rotation.y += dt * 20; s.mesh.rotation.x += dt * 9;
@@ -303,14 +402,18 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
       if (f.ammo > 0 && f.cd <= 0 && d < 22) { const err = 0.02 + d * 0.0025; throwShell(f, f.yaw + (Math.random() - .5) * err * 2, f.pitch + (Math.random() - .5) * err * 2); f.cd = 1.1 + Math.random() * 1.2; }
     } else f.yaw = Math.atan2(-f.vel.x, -f.vel.z);
   }
+  const _fq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), _fa = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
   function update(dt: number) {
     now += dt;
     for (const f of fighters) {
-      if (f.dead) { f.vel.set(0, 0, 0); if (now >= f.respawnAt) { spawn(f); if (f.mesh) f.mesh.visible = true; if (f.isPlayer) msg('', 0); } continue; }
-      if (f.umbHeld) { f.umbT -= dt; if (f.umbT <= 0) { f.umbHeld = false; f.umbTired = true; f.umbT = 0; if (f.isPlayer) msg('手痠了，放開再重新撐傘', 1.5); } }
+      if (f.dead && f.mesh) { // 倒地：往被打的方向倒下，躺到復活（沒有命中判定）
+        const k = Math.min(1, (now - f.deathAt) / 0.55), e = k * k * (3 - 2 * k) * (Math.PI / 2 - 0.08) + (k >= 1 ? 0 : Math.sin(k * Math.PI) * 0.05);
+        _fq.setFromAxisAngle(_fa.set(f.fallDir.z, 0, -f.fallDir.x), e); _yq.setFromAxisAngle(_up, f.yaw); f.mesh.quaternion.copy(_fq).multiply(_yq); f.mesh.position.copy(f.pos); f.mesh.visible = true; }
+      if (f.dead) { f.vel.set(0, 0, 0); if (now >= f.respawnAt) { spawn(f); if (f.mesh) f.mesh.visible = true; if (f.isPlayer) q('dmMsg').innerHTML = ''; } continue; }
+      if (f.umbHeld) { f.umbT -= dt; if (f.umbT <= 0) { f.umbHeld = false; f.umbTired = true; f.umbT = 0; } }
       if (f.umbMesh) f.umbMesh.visible = f.umbHeld;
       // 邊走邊撿：在蚵仔堆旁邊每 0.2 秒自動補一顆（按住拿殼／E 一次補滿）
-      if (f.ammo < MAXAMMO && pileDist(f.pos) <= PICK_R) { f.pickCd -= dt; if (f.pickCd <= 0) { f.ammo++; f.pickCd = 0.2; } } else f.pickCd = 0;
+      if (f.ammo < MAXAMMO && pileDist(f.pos) <= PICK_R) { f.pickCd -= dt; if (f.pickCd <= 0) { f.ammo++; f.pickCd = 0.2; if (f.isPlayer) { if (f.ammo === MAXAMMO) SND.reload(); else SND.pick(); } } } else f.pickCd = 0;
       if (f.isPlayer && (holdPick || keys.KeyE)) pick(f);
       if (f.isPlayer) {
         let fx = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + joy.x, fz = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0) + joy.y;
@@ -319,33 +422,45 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
         f.vel.set((fx * c + fz * s) * 5, 0, (-fx * s + fz * c) * 5);
       } else botThink(f, dt);
       if (f.vel.lengthSq() > 0.01) f.invulnUntil = Math.min(f.invulnUntil, now); // 一開始移動就結束無敵
+      const spd = f.vel.length(); if (spd > 0.5) { f.stepAcc += spd * dt; if (f.stepAcc > 0.75) { f.stepAcc = 0; if (f.isPlayer || f.pos.distanceTo(me.pos) < 25) SND.step(f); } } else f.stepAcc = 0.6;
       f.pos.addScaledVector(f.vel, dt); collide(f);
       if (f.rig) { const sp = f.vel.length(); f.walkPh += dt * sp * 2.6; const sw = Math.sin(f.walkPh) * Math.min(1, sp / 3) * 0.6; f.rig.legL.rotation.x = sw; f.rig.legR.rotation.x = -sw;
         f.throwA = Math.max(0, f.throwA - dt); f.rig.armR.rotation.x = f.throwA > 0 ? -2.2 * Math.sin((f.throwA / 0.35) * Math.PI) : f.umbHeld ? -0.8 : 0; }
-      if (f.mesh) { f.mesh.position.copy(f.pos); f.mesh.rotation.y = f.yaw; f.mesh.visible = now < f.invulnUntil ? Math.floor(now * 10) % 2 === 0 : true; }
+      if (f.mesh) { f.mesh.position.copy(f.pos); f.mesh.rotation.set(0, f.yaw, 0); f.mesh.visible = now < f.invulnUntil ? Math.floor(now * 10) % 2 === 0 : true; }
     }
-    stepShells(dt);
+    stepShells(dt); stepBlood(dt); stepBars();
   }
 
   // ---- UI ----
   let msgT = 0;
   function msg(t: string, sec: number) { q('dmMsg').textContent = t; msgT = sec; }
   let markT = 0; function mark() { q('dmMark').style.opacity = '1'; markT = 0.25; }
-  function flashHurt() { root.style.boxShadow = 'inset 0 0 80px #f00'; setTimeout(() => root.style.boxShadow = '', 150); }
+  function flashHurt() { const e = q('dmEdge'); e.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => e.classList.remove('on'))); const h = q('dmHp'); h.classList.remove('hit'); void h.offsetWidth; h.classList.add('hit'); }
+  // 擊殺欄：「擊倒者 圖示 倒下者」，名字只留代號
+  const tag = (f: Fighter) => f.isPlayer ? '你' : f.name.slice(-1);
+  function feed(a: Fighter, b: Fighter, head: boolean) {
+    const box = q('dmFeed'), el = document.createElement('div'); if (a.isPlayer || b.isPlayer) el.className = 'me';
+    el.innerHTML = `${tag(a)} ${ico(head ? I.head : I.skull, 18)} ${tag(b)}`; box.prepend(el);
+    while (box.children.length > 4) box.lastElementChild!.remove(); setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 450); }, 4000);
+  }
   function popAt(p: THREE.Vector3, t: string) {
     const v = p.clone().project(cam); if (v.z > 1) return;
-    const el = document.createElement('div'); el.className = 'dmPop'; el.textContent = t;
+    const el = document.createElement('div'); el.className = 'dmPop'; el.innerHTML = t;
     el.style.left = ((v.x + 1) / 2 * innerWidth) + 'px'; el.style.top = ((1 - v.y) / 2 * innerHeight) + 'px'; root.appendChild(el);
     requestAnimationFrame(() => { el.style.transform = 'translate(-50%,-150%)'; el.style.opacity = '0'; }); setTimeout(() => el.remove(), 900);
   }
   function renderBoard() {
     const rows = [...fighters].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
-    q('dmTable').innerHTML = `<table><tr><th>名字</th><th>擊倒</th><th>倒下</th><th>爆頭</th><th>命中率</th></tr>${rows.map(f => `<tr class="${f.isPlayer ? 'me' : ''}"><td>${f.name}</td><td>${f.kills}</td><td>${f.deaths}</td><td>${f.hs}</td><td>${f.shots ? Math.round(f.hits / f.shots * 100) : 0}%</td></tr>`).join('')}</table>`;
+    q('dmTable').innerHTML = `<table><tr><th></th><th>${ico(I.skull, 18)}</th><th>${ico(I.heart, 18)}</th><th>${ico(I.head, 18)}</th><th>%</th></tr>${rows.map(f => `<tr class="${f.isPlayer ? 'me' : ''}"><td>${tag(f)}</td><td>${f.kills}</td><td>${f.deaths}</td><td>${f.hs}</td><td>${f.shots ? Math.round(f.hits / f.shots * 100) : 0}%</td></tr>`).join('')}</table>`;
   }
+  const hpCol = (hp: number) => `hsl(${Math.max(0, Math.min(100, hp)) * 1.2},80%,45%)`;
   function hud() {
+    q('dmHpF').style.width = Math.max(0, me.hp) + '%'; q('dmHpF').style.background = hpCol(me.hp); q('dmHpN').innerHTML = `${ico(I.heart, 16)} ${Math.max(0, me.hp)}`;
     const atPile = pileDist(me.pos) <= PICK_R;
     if (isTouch) q('dmUmb').classList.toggle('held', me.umbHeld);
-    q('dmHud').innerHTML = `血量 ${Math.max(0, me.hp)}<br>殼 ${me.ammo} / ${MAXAMMO}${now < me.invulnUntil && !me.dead ? '<br>無敵中' : ''}${me.umbHeld ? '<br>撐傘中' : me.umbTired ? '<br>手痠，放開雨傘' : ''}${atPile && me.ammo < MAXAMMO && !me.dead ? '<br>撿殼中' : ''}`;
+    q('dmHud').innerHTML = `${ico(I.shell)} ${me.ammo}/${MAXAMMO}${now < me.invulnUntil && !me.dead ? ' ' + ico(I.shield) : ''}${atPile && me.ammo < MAXAMMO && !me.dead ? ' ' + ico(I.grab) : ''}`;
+    q('dmHud').classList.toggle('empty', me.ammo === 0); if (isTouch) q('dmUmb').classList.toggle('cd', me.umbTired);
+    if (me.dead) q('dmMsg').innerHTML = `${ico(I.skull, 40)}<br>${Math.max(1, Math.ceil(me.respawnAt - now))}`;
     if (q('dmBoard').classList.contains('show')) renderBoard();
   }
 
@@ -357,13 +472,15 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
     raf = requestAnimationFrame(loop);
     const t = performance.now(), dt = Math.min(0.05, (t - last) / 1000); last = t;
     update(dt);
-    cam.position.copy(eyeOf(me)); if (me.dead) cam.position.y = 0.4; cam.rotation.set(me.pitch, me.yaw, 0);
+    cam.position.copy(eyeOf(me)); let roll = 0, pt = me.pitch;
+    if (me.dead) { const k = Math.min(1, (now - me.deathAt) / 0.6), e = k * k * (3 - 2 * k); cam.position.y = EYE + (0.25 - EYE) * e; roll = 1.25 * e; pt = me.pitch * (1 - e) + 0.15 * e; }
+    cam.rotation.set(pt, me.yaw, roll); root.classList.toggle('dead', me.dead);
     if (msgT > 0) { msgT -= dt; if (msgT <= 0) q('dmMsg').textContent = ''; }
     if (markT > 0) { markT -= dt; if (markT <= 0) q('dmMark').style.opacity = '0'; }
     if ((hudT -= dt) <= 0) { hud(); hudT = 0.1; }
     renderer.render(scene, cam);
   }
-  loop(); msg('死鬥（測試）：殼丟完就去蚵仔堆補', 2.5);
+  loop();
 
   function exit() {
     cancelAnimationFrame(raf); removeEventListener('keydown', kd); removeEventListener('keyup', ku); removeEventListener('resize', resize); removeEventListener('blur', blur);
@@ -371,5 +488,5 @@ ${isTouch ? '<div id="dmJoy"><div id="dmKnob"></div></div><button class="dmb" id
     renderer.dispose(); root.remove(); active = false; delete (window as any).__dm; onExit();
   }
   // 測試掛勾
-  (window as any).__dm = { fighters, shells, me, pick, openUmb, closeUmb, throwShell, update, exit, renderBoard, launchPitch, get now() { return now; } };
+  (window as any).__dm = { fighters, shells, me, pick, get voices() { return voices; }, bloodLive: () => Array.from(bl).filter(x => x > 0).length, bars: () => fighters.map(f => f.hpBar?.g.visible ?? null), openUmb, closeUmb, throwShell, update, exit, renderBoard, launchPitch, get now() { return now; } };
 }
