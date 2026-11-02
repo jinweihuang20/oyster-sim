@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
+import { openDeathmatch, isDeathmatchActive } from './deathmatch';
 const LS_P = __PREVIEW__ ? 'preview:' : '';
 const LS = { getItem: (k: string) => localStorage.getItem(LS_P + k), setItem: (k: string, v: string) => localStorage.setItem(LS_P + k, v), removeItem: (k: string) => localStorage.removeItem(LS_P + k) };
 if (__PREVIEW__) document.addEventListener('DOMContentLoaded', () => { const t = document.createElement('div'); t.textContent = '預覽版'; t.style.cssText = 'position:fixed;left:0;bottom:0;z-index:99999;background:#d8402f;color:#fff4dc;font:bold 12px sans-serif;padding:2px 8px;pointer-events:none;box-shadow:2px -2px 0 #1b2a3a'; document.body.appendChild(t); });
@@ -1910,6 +1911,7 @@ function renderItemShop() {
 (window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };
 const go = (len: number) => { evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
+$('oDm').onclick = () => { $('overlay').classList.remove('show'); openDeathmatch(() => { $('overlay').classList.add('show'); }); };
 $('start').onclick = () => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 btn('again', () => { if (evLastId != null) evAgain(); else startDay(); });
 btn('resMenu', () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; });
@@ -1993,6 +1995,7 @@ let frameErr = 0;
 // 主迴圈出錯也不能停：停了計時、暫停、預警都會卡住
 function frame() { try { frameBody(); } catch (e) { if (frameErr++ < 3) console.error('frame', e); requestAnimationFrame(frame); } }
 function frameBody() {
+  if (isDeathmatchActive()) { clock.getDelta(); requestAnimationFrame(frame); return; }
   if (shedAnim.length) { const t = performance.now() / 1000; for (const f of shedAnim) f(t); }
   if (isPaused()) {
     clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); closeUmbrella(); down = null; joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
