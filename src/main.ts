@@ -1202,6 +1202,7 @@ const PRY_GRACE = 0.04;
 // 視覺佮判定攏用同一个時間公式（事件 timeStamp），毋免等下一格
 const needle = (ms = performance.now()) => 0.5 - 0.5 * Math.cos(((ms - needleStart) / 1000) * Math.PI * 2 * prySp());
 (window as any).__sim = () => ({ t: SHIFT - timeLeft, c: npcs.map(n => n.count), names: npcs.map(n => n.name) });
+(window as any).__dbg = { warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }) };
 (window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
 (window as any).__pry = () => { if (phase !== 'twist') return null; const f = prySp(), per = 1000 / f, th = Math.acos(1 - 2 * PRY_C) / (Math.PI * 2) * per; const el = (performance.now() - needleStart) % per; let w = th - el; if (w < 5) w += per / 2 > th ? per - 2 * th + th * 2 - th : per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
 function pryFx(ok: boolean, txt: string) { gauge.classList.remove('hit', 'miss'); void gauge.offsetWidth; gauge.classList.add(ok ? 'hit' : 'miss'); const pp = $('ppop'); pp.textContent = txt; pp.className = ''; void pp.offsetWidth; pp.className = ok ? 'ok' : 'bad'; }
@@ -1516,7 +1517,10 @@ const btn = (id: string, f: () => void, upF?: () => void) => {
   el.addEventListener('pointerdown', e => { e.stopPropagation(); audio().resume(); sx = e.clientX; sy = e.clientY; st = performance.now(); ok = true; });
   el.addEventListener('pointermove', e => { if (ok && Math.hypot(e.clientX - sx, e.clientY - sy) > 12) ok = false; });
   el.addEventListener('pointercancel', () => ok = false);
-  el.addEventListener('pointerup', e => { e.stopPropagation(); if (ok && performance.now() - st < 800) f(); ok = false; });
+  let fired = 0;
+  el.addEventListener('pointerup', e => { e.stopPropagation(); if (ok && performance.now() - st < 800) { fired = performance.now(); f(); } ok = false; });
+  // iOS 偶爾吃掉 pointerup（或被別的觸控搶走）：補一個 click 備援，700ms 內已觸發過就不重複
+  el.addEventListener('click', e => { e.stopPropagation(); if (performance.now() - fired > 700) { fired = performance.now(); f(); } });
 };
 btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); $('backMenu').classList.add('show'); });
 $('bmStay').onclick = () => $('backMenu').classList.remove('show');
@@ -1538,7 +1542,7 @@ function standUp() {
   oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
   walking = true; handRig.visible = false; walkPos.copy(SEAT).setY(1.55); const out = seatGround(seatNow()).setLength(0.45); walkPos.add(out);
   tYaw = yaw = yaw + seatYaw; tPitch = pitch = -0.25; $('diff').textContent = ''; on('standBtn', false); on('joy', true); on('stealBtn', false);
-  hint.textContent = 'WASD／搖桿行路，走去空的藍色板凳邊仔，按 E／「坐落」換位';
+  hint.textContent = COARSE ? '用搖桿行路，走去空的藍色板凳邊仔，按「坐落」換位' : 'WASD 行路，走去空的藍色板凳邊仔，按 E 坐落換位';
 }
 function sitDown(id: string) {
   walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear(); stools.forEach(g => g.userData.tag.visible = false);
@@ -1791,11 +1795,16 @@ const clock = new THREE.Clock(); const v = new THREE.Vector3();
 let chatTimer = 2;
 const warnEl = $('warn');
 let pauseAt = 0;
-const isPaused = () => state === 'play' && (document.hidden || !!document.querySelector('.panel.show') || $('medList').classList.contains('show') || !!document.getElementById('npcTip')?.classList.contains('show'));
-function frame() {
+// 只算真的畫得出來的面板（被隱藏的父層裡的 .show 不算，避免看不到的面板讓遊戲一直暫停）
+const panelOpen = () => { for (const p of Array.from(document.querySelectorAll('.panel.show'))) if ((p as HTMLElement).getClientRects().length) return true; return false; };
+const isPaused = () => state === 'play' && (document.hidden || panelOpen() || $('medList').classList.contains('show') || !!document.getElementById('npcTip')?.classList.contains('show'));
+let frameErr = 0;
+// 主迴圈出錯也不能停：停了計時、暫停、預警都會卡住
+function frame() { try { frameBody(); } catch (e) { if (frameErr++ < 3) console.error('frame', e); requestAnimationFrame(frame); } }
+function frameBody() {
   if (shedAnim.length) { const t = performance.now() / 1000; for (const f of shedAnim) f(t); }
   if (isPaused()) {
-    clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); $('pauseTag').classList.add('on'); }
+    clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); closeUmbrella(); down = null; joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
     renderer.render(scene, viewCam()); requestAnimationFrame(frame); return;
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
@@ -1836,7 +1845,7 @@ function frame() {
     // 偷蚵仔
     on('standBtn', !walking); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     const tgt = walking || evRun?.steal === 'no_steal' ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
-    if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！按住 E／「偷」偷她的肉` : `${tgt.name}在看，不要偷…`;
+    if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！${COARSE ? '按住「偷」' : '按住 E'}偷她的肉` : `${tgt.name}在看，不要偷…`;
     if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
     chatTimer -= dt * seatNow().nag; if (chatTimer <= 0) { chatTimer = 3 + Math.random() * 4; const n = pick(npcs);
       if (n.bubT <= 0 && n.windup <= 0) { if (n.mood > 0) say(n, pick(GRUDGE)); else if (Math.random() < 0.5) { n.distract = rnd(3, 5.5) * seatNow().steal; n.turnDir = Math.random() < 0.5 ? -1 : 1; say(n, pick(TURN_CHAT), n.distract); } else { say(n, pick(GOSSIP)); if (Math.random() < n.chatty) n.pause = 2.5; } } }
@@ -1854,7 +1863,7 @@ function frame() {
   // ⚠ 方向提示
   if (warnNpc && !warnNpc.warned) warnNpc = null;
   if (warnNpc) { const rel = warnNpc.g.position.clone().sub(camera.position); const fwd = camera.getWorldDirection(new THREE.Vector3()); let a = Math.atan2(rel.x, rel.z) - Math.atan2(fwd.x, fwd.z); a = Math.atan2(Math.sin(a), Math.cos(a));
-    warnEl.classList.add('on'); warnEl.style.left = `${clamp(50 - a / 1.2 * 45, 6, 94)}%`; warnEl.style.opacity = String(0.6 + 0.4 * Math.sin(t * 14)); warnEl.textContent = a > 0.5 ? '⚠◀' : a < -0.5 ? '▶⚠' : '⚠'; hint.textContent = `${warnNpc.name}要丟殼過來了！快按 R／「雨傘」！`; }
+    warnEl.classList.add('on'); warnEl.style.left = `${clamp(50 - a / 1.2 * 45, 6, 94)}%`; warnEl.style.opacity = String(0.6 + 0.4 * Math.sin(t * 14)); warnEl.textContent = a > 0.5 ? '⚠◀' : a < -0.5 ? '▶⚠' : '⚠'; hint.textContent = `${warnNpc.name}要丟殼過來了！快${COARSE ? '按住「雨傘」' : '按住 R 撐傘'}！`; }
   else warnEl.classList.remove('on');
   for (const n of npcs) {
     n.look -= dt; n.bubT -= rdt; if (n.bubT <= 0) n.bubble.style.opacity = '0';
@@ -2925,4 +2934,6 @@ async function evLbOpen(id: number) {
 $('evLbClose').onclick = () => $('evLb').classList.remove('show');
 new MutationObserver(() => { const sh = $('overlay').classList.contains('show'); if (sh && !evShown) evFetch(); evShown = sh; }).observe($('overlay'), { attributes: true, attributeFilter: ['class'] });
 evShown = $('overlay').classList.contains('show'); evFetch(); setInterval(() => { if ($('overlay').classList.contains('show') && evCfg) evRender(); }, 30_000);
+// 手機：對話框按鈕統一走 btn()（放開觸發＋click 備援），不只靠 onclick
+if (COARSE) for (const id of ['bmGo', 'bmStay', 'psOk', 'tnOk']) { const el = $(id) as HTMLButtonElement; const f = el.onclick; if (!f) continue; el.onclick = null; btn(id, () => f.call(el, new PointerEvent('click'))); }
 (window as any).__ev = { get run() { return evRun; }, get cfg() { return evCfg; }, get hp() { return hp; }, get npcs() { return npcs.length; }, get left() { return timeLeft; }, minDist: () => { let m = 99; for (let i = 0; i < npcs.length; i++) for (let j = i + 1; j < npcs.length; j++) m = Math.min(m, npcs[i].g.position.distanceTo(npcs[j].g.position)); return m; }, refetch: evFetch, meat: (k: number) => { for (let i = 0; i < k; i++) { count++; evMeat(); } updHud(); }, hurt: (d: number) => hurt(d, '測試') };

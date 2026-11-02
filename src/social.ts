@@ -19,7 +19,7 @@ function endCur() { const el = $('feed'); cur = null; el.classList.remove('on');
 function placeFeed() {
   const f = document.getElementById('feed'); if (!f) return;
   let b = 0;
-  if (!document.querySelector('.panel.show')) for (const id of ['top', 'stats']) {
+  for (const id of ['top', 'stats']) {
     const e = document.getElementById(id); if (!e) continue;
     const r = e.getBoundingClientRect();
     if (r.height > 0 && r.width > 0 && r.top < innerHeight * 0.4 && getComputedStyle(e).visibility !== 'hidden' && (e.textContent || '').trim()) b = Math.max(b, r.bottom);
@@ -98,6 +98,8 @@ export function init(d: Deps) {
   f.innerHTML = '<div id="fdTrack"></div><button id="fdX" type="button" aria-label="關閉這則消息"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
   document.body.appendChild(f);
   addEventListener('resize', placeFeed);
+  // 面板開關後重新定位（之前只在 resize 時算，主選單時算的位置會留到上工，蓋住上方 HUD）
+  { let q = 0; new MutationObserver(() => { if (!q) q = requestAnimationFrame(() => { q = 0; placeFeed(); }); }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] }); }
   if ('ResizeObserver' in window) { const ro = new ResizeObserver(placeFeed); for (const id of ['top', 'stats', 'hint']) { const e = document.getElementById(id); if (e) ro.observe(e); } }
   // 只關掉當下這則；放開才觸發，且需在同一顆按鈕上按下
   const x = f.querySelector('#fdX') as HTMLButtonElement; let down = false;
