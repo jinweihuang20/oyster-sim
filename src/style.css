@@ -74,7 +74,7 @@ button{touch-action:manipulation}
  #umbBtn{min-height:64px!important;min-width:120px!important;font-size:20px!important}
  #rotL{left:calc(env(safe-area-inset-left) + 12px)}#rotR{right:calc(env(safe-area-inset-right) + 12px)}
  .mb{bottom:calc(env(safe-area-inset-bottom) + 30%)}
- .panel{touch-action:pan-y;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);width:min(calc(100vw - 16px),460px);padding:14px 14px calc(14px + env(safe-area-inset-bottom))}
+ .panel{touch-action:pan-y;overscroll-behavior:contain;max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);width:min(calc(100vw - 16px),460px);padding:14px 14px calc(14px + env(safe-area-inset-bottom))}
  .panel button{min-height:48px;min-width:88px;margin:4px}
  .panel ul{font-size:15px;padding-left:16px}
  .row{min-height:44px;align-items:center;font-size:16px}
@@ -587,7 +587,7 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .eqSetI{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0 4px}
 .eqSetI div{display:flex;flex-direction:column;align-items:center;padding:4px 2px;border:2px dashed rgba(22,25,29,.35);min-width:0}
 .eqSetI svg{width:40px;height:34px;min-height:34px;flex:none;display:block}.eqSetI small{font-size:10px;line-height:1.2;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.eqSetI .no{filter:grayscale(1);opacity:.4}.eqSetI .own{border-style:solid;border-color:var(--ink)}.eqSetI .worn{border:2px solid var(--ink);background:#ffd25a}
+.eqSetI .no{color:rgba(22,25,29,.5)}.eqSetI .own{border-style:solid;border-color:var(--ink)}.eqSetI .worn{border:2px solid var(--ink);background:#ffd25a}
 .eqSet p{margin:0;font-size:12px}
 .eqStamp{position:absolute;right:8px;top:30px;transform:rotate(-14deg);font:900 18px var(--sign);font-style:normal;color:var(--red);border:3px double var(--red);padding:2px 8px;opacity:.85;pointer-events:none;background:rgba(255,243,207,.5)}
 .eqDock{position:sticky;bottom:0;z-index:4;display:flex;gap:8px;margin:8px -16px 0;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:var(--paint2);border-top:3px solid var(--ink)}

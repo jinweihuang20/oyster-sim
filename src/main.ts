@@ -1960,8 +1960,9 @@ function applySleeve() {
 }
 function sleeveGold() { if (!slOn('sl_dragon')) return; let k = 0; const iv = setInterval(() => { sleeve.emissive.set(k % 2 ? 0x000000 : 0xb08010); if (++k > 8) { clearInterval(iv); sleeve.emissive.set(0); } }, 150); }
 // 線條圖示：各部位一個簡單輪廓，填該件顏色
-function eqSvg(e: Eq, w = 72) {
-  const s = '#1b1b1b', f = e.base;
+let eqSvgN = 0;
+function eqSvg(e: Eq, w = 72, grey = false) {
+  const s = '#1b1b1b', f = grey ? '#a8a8a8' : e.base;
   const P: Record<Slot, string> = {
     head: `<path d="M10 40Q36 6 62 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M6 40H66" stroke="${s}" stroke-width="2.5"/>`,
     hand: `<rect x="6" y="18" width="44" height="22" rx="8" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
@@ -1985,7 +1986,11 @@ function eqSvg(e: Eq, w = 72) {
     ft_boots: `<path d="M18 8h18v28q16 2 22 10v6H18Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
     ft_work: `<path d="M16 18h20v14q18 2 22 12v8H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 24h10M22 30h10" stroke="#e8d8a8" stroke-width="2"/>`,
     lg_flower: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="26" cy="22" r="3" fill="#fff3c8"/><circle cx="46" cy="36" r="3" fill="#fff3c8"/>` };
-  return `<svg class="slv" viewBox="0 0 72 60" width="${w}" height="${w * 60 / 72}">${ID[e.id] ?? P[e.slot]}</svg>`;
+  // iOS WebKit：多個同名 clipPath id 會解析到第一個（可能在隱藏元素裡），每個實例改用唯一 id
+  const u = `_${++eqSvgN}`;
+  let body = (ID[e.id] ?? P[e.slot]).replace(/id="(c_[a-z0-9_]+)"/g, `id="$1${u}"`).replace(/url\(#(c_[a-z0-9_]+)\)/g, `url(#$1${u})`);
+  if (grey) body = body.replace(/fill="#(?!a8a8a8)[0-9a-fA-F]{3,6}"/g, 'fill="#c4c4c4"');
+  return `<svg class="slv" viewBox="0 0 72 60" width="${w}" height="${w * 60 / 72}">${body}</svg>`;
 }
 // 全身人形（裝備面板與分享卡共用的配色）
 function figSvg() {
@@ -2082,7 +2087,7 @@ function renderEquip() {
     `<div class="eqStage">${SVG_SHED}<div class="eqFigW">${figSvg()}</div><svg class="eqLines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${hits}${cards}</div>` +
     (eqPick ? `<div class="eqList"><div class="eqListT">換${pickName}<small>點一件就換上，換穿免費</small></div>${EQUIP.filter(e => e.slot === eqPick && eqOwned(e.id)).map(e => `<button data-eqset="${e.id}" class="${equipNow(e.slot).id === e.id ? 'on' : ''}">${eqSvg(e, 48)}<span><b>${e.n}</b><small>${e.eff}</small></span>${equipNow(e.slot).id === e.id ? '<em>穿著中</em>' : ''}</button>`).join('')}<p class="eqHint">想要更多款式，去服飾店看看。</p></div>` : '<p class="eqHint">點人身上的部位或旁邊的木牌來換裝。</p>') +
     `<div class="eqSecT">套裝收集</div><div class="eqSets">${SETS.map(s => { const done = sets.includes(s), have = s.need.filter(i => eqOwned(i)).length;
-      return `<div class="eqSet${done ? ' done' : ''}"><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqSvg(e, 40)}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}</div>`; }).join('')}</div>` +
+      return `<div class="eqSet${done ? ' done' : ''}"><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqSvg(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}</div>`; }).join('')}</div>` +
     `<div id="eqShareOut"></div><p class="eqHint">分享到 Discord 有機會拿神秘好禮</p><div class="eqDock"><button id="eqShare"><i class="ic ic-send"></i>分享穿搭</button><button id="eqShop"><i class="ic ic-shop"></i>去服飾店</button></div>`;
   $('eqBody').querySelectorAll('button[data-slot]').forEach(b => (b as HTMLButtonElement).onclick = () => { const s = b.getAttribute('data-slot') as Slot; eqPick = eqPick === s ? null : s; renderEquip(); if (eqPick) $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
   $('eqBody').querySelectorAll('button[data-eqset]').forEach(b => (b as HTMLButtonElement).onclick = () => { const e = EQUIP.find(x => x.id === b.getAttribute('data-eqset'))!; setEquip(e.slot, e.id); persist(); applySleeve(); applyOutfit3(); renderEquip(); });
@@ -2235,9 +2240,11 @@ tpv = !!save.tpv; applyOutfit3(); drawCamBtn(); tpReady = true;
 $('camBtn').onclick = () => setTpv(!tpv);
 { const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) { c.checked = tpv; c.onchange = () => setTpv(c.checked); } }
 let eqFromRes = false;
+// iOS：面板顯示後才重畫一次內容，避免隱藏時插入的 SVG 不上色
+function openEquip() { renderEquip(); $('equip').classList.add('show'); requestAnimationFrame(() => { void $('equip').offsetHeight; renderEquip(); }); }
 $('eqClose').onclick = () => { $('equip').classList.remove('show'); if (eqFromRes) { eqFromRes = false; $('result').classList.add('show'); } };
-$('rEquip').onclick = () => { eqFromRes = true; $('result').classList.remove('show'); eqPick = null; renderEquip(); $('equip').classList.add('show'); };
-$('oEquip').onclick = () => { eqPick = null; renderEquip(); $('equip').classList.add('show'); };
+$('rEquip').onclick = () => { eqFromRes = true; $('result').classList.remove('show'); eqPick = null; openEquip(); };
+$('oEquip').onclick = () => { eqPick = null; openEquip(); };
 let shopTab = 0;
 function shopTabs() {
   const list = $('shopList'), kids = Array.from(list.children); const groups: HTMLElement[] = []; let cur: HTMLElement | null = null; const head = document.createElement('div');
@@ -2410,3 +2417,9 @@ function umbTick3(dt: number, show: boolean) {
 }
 function umbArm() { if (!umb3Ready || !umb3.visible) return; const e = 1 - Math.pow(1 - umb3Open, 3); meArmR.rotation.x = 1.35 * e + 0.2; meArmR.rotation.z = -0.1; }
 (window as any).__umb3 = { open: () => openUmbrella(), close: () => closeUmbrella(), throwAt: () => throwOne(npcs[2]), get o() { return umb3Open; }, set slow(v: number) { umbSlow = v; } };
+// iOS WebKit：面板從 display:none 變成顯示時，捲動容器內未進入畫面的內容（SVG、按鈕）有時不會繪製，
+// 直到下一次重畫。顯示後下一幀強制重排並觸發一次重繪。
+new MutationObserver(ms => { for (const m of ms) { const el = m.target as HTMLElement;
+  if (el.classList.contains('panel') && el.classList.contains('show') && !(m.oldValue || '').includes('show'))
+    requestAnimationFrame(() => { void el.offsetHeight; el.style.opacity = '0.999'; requestAnimationFrame(() => { el.style.opacity = ''; }); }); } })
+  .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
