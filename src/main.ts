@@ -3115,7 +3115,7 @@ const ACHS: AchDef[] = [
   { id: 'evtop', cat: 'veteran', n: '活動前十名', d: '活動排行榜擠進前 10 名', t: [1], v: () => AS('top') },
   { id: 'tut', cat: 'veteran', n: '學會剝蚵', d: '完成新手教學', t: [1], v: () => save.tutDone ? 1 : 0 },
 ];
-const TIER_N = ['銅', '銀', '金'], TIER_PTS = [10, 25, 50], TIER_PAY = [300, 1000, 3000], ONE_PTS = 30, ONE_PAY = 800;
+const TIER_N = ['銅', '銀', '金'], TIER_PTS = [10, 25, 50], TIER_PAY = [1000, 3000, 10000], ONE_PTS = 30, ONE_PAY = 3000;
 const tierName = (a: AchDef, k: number) => a.t.length === 1 ? '達成' : TIER_N[k];
 const tierPts = (a: AchDef, k: number) => a.t.length === 1 ? ONE_PTS : TIER_PTS[k];
 const tierPay = (a: AchDef, k: number) => a.t.length === 1 ? ONE_PAY : TIER_PAY[k];
