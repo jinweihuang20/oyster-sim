@@ -32,6 +32,8 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 .stCell{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:2px 8px;min-width:3.2em;line-height:1.15;border-left:1px solid rgba(255,255,255,.14)}
 .stCell:first-child{border-left:0;padding-left:2px}
 .stL{display:none;font-size:10px;font-weight:700;letter-spacing:.06em;opacity:.7}
+.stI{display:none;align-items:center;justify-content:center;line-height:0}
+.stI .ic{width:14px;height:14px;opacity:.95}
 .stV{font-weight:900;font-variant-numeric:tabular-nums}
 .stCell.warn .stV{color:#ffb08a}
 #onHud,#giftHud{display:inline-flex;align-items:center;gap:4px;align-self:center}
@@ -87,14 +89,22 @@ button{touch-action:manipulation}
  #top .hudV{font-size:inherit}
  #top button{min-width:44px;min-height:44px;padding:0 10px;font-size:15px;border-radius:12px}
  #hpBar{width:40px}
- #stats{top:calc(var(--sa-top) + 58px);font-size:11px;white-space:normal;text-align:center;width:max-content;max-width:calc(100vw - 16px);line-height:1.35;flex-wrap:wrap;justify-content:center}
+ /* 統計列靠左；視角鈕在同一列右側 */
+ #stats{top:calc(var(--sa-top) + 58px);left:calc(var(--sa-left) + 8px);right:calc(var(--sa-right) + 8px);transform:none;font-size:11px;white-space:normal;text-align:left;width:auto;max-width:none;line-height:1.35;flex-wrap:nowrap;justify-content:flex-start;align-items:center;gap:6px;padding:3px 6px 3px 8px}
+ #statsT{flex:1 1 auto;min-width:0;justify-content:flex-start;flex-wrap:wrap}
  #stats .stL{display:none!important}
- #stats .stCell{padding:1px 5px;min-width:0;border-left-width:1px}
- #stats .stV{font-size:11px;font-weight:800}
+ #stats .stI{display:inline-flex}
+ #stats .stCell{flex-direction:row;gap:3px;padding:2px 6px;min-width:0;border-left-width:1px;align-items:center}
+ #stats .stV{font-size:12px;font-weight:800}
+ #camBtn.hudCam{position:static;flex:none;margin-left:auto;z-index:6;pointer-events:auto;display:none;align-items:center;justify-content:center;width:40px;min-width:40px;height:40px;min-height:40px;padding:0;border-radius:10px;font-size:0;gap:0;box-sizing:border-box;align-self:center}
+ #camBtn.hudCam.on{display:inline-flex!important}
+ #camBtn.hudCam svg{width:20px;height:20px}
+ #camBtn.hudCam.tpOn{background-color:#b8862a!important;color:var(--paint)!important}
  #hint{top:calc(var(--sa-top) + 98px)!important;bottom:auto!important;font-size:14px!important;padding:0 12px}
- #btns{right:calc(var(--sa-right) + 10px);bottom:calc(var(--sa-bottom) + 12px);gap:10px}
- #btns button{min-height:48px;min-width:104px;font-size:16px;padding:10px 14px;border-radius:16px}
- #umbBtn{min-height:64px!important;min-width:120px!important;font-size:20px!important}
+ #btns{right:calc(var(--sa-right) + 10px);bottom:calc(var(--sa-bottom) + 12px);gap:10px;align-items:flex-end;min-width:0}
+ #btns button{min-height:48px;min-width:104px;font-size:16px;padding:10px 14px;border-radius:16px;width:auto}
+ #throwBtn,#stealBtn{min-width:118px!important;max-width:132px;padding:12px 16px!important;font-size:18px!important}
+ #umbBtn{min-height:68px!important;min-width:126px!important;max-width:140px;padding:12px 16px!important;font-size:19px!important}
  #rotL{left:calc(var(--sa-left) + 12px)}#rotR{right:calc(var(--sa-right) + 12px)}
  .mb{bottom:calc(var(--sa-bottom) + 30%)}
  .panel{touch-action:pan-y;overscroll-behavior:contain;max-height:calc(100dvh - var(--sa-top) - var(--sa-bottom) - 24px);width:min(calc(100vw - 16px),460px);padding:14px 14px calc(14px + var(--sa-bottom))}
@@ -215,17 +225,22 @@ body.tutOn .ntag{display:none!important}
 /* 手機按鈕重新排版：右下主要（偷/丟殼/雨傘），左下次要一排（藥品/放棄/換位置） */
 #btnsL{display:none}
 @media (pointer:coarse){
- #btnsL{position:fixed;left:calc(var(--sa-left) + 8px);bottom:calc(var(--sa-bottom) + 12px);display:flex;flex-direction:column;gap:8px;align-items:flex-start;pointer-events:none;z-index:5}
+ #btnsL{position:fixed;left:calc(var(--sa-left) + 8px);bottom:calc(var(--sa-bottom) + 58px);display:flex;flex-direction:column;gap:8px;align-items:flex-start;pointer-events:none;z-index:5}
  #btnsL button{display:none;pointer-events:auto;min-height:44px;font-size:15px;padding:8px 12px;border-radius:14px;background:rgba(120,60,40,.85);color:#fff;white-space:nowrap}
  #btnsL button.on{display:block}#btnsL #medBtn{background:#6a3fa0}#btnsL #medBtn small{display:none}
- #btns{gap:8px}#btns button{min-width:92px}
- #stealBtn{min-height:60px!important;min-width:104px!important;font-size:19px!important}
+ #btnsCorner{position:fixed;left:calc(var(--sa-left) + 8px);bottom:calc(var(--sa-bottom) + 12px);z-index:6;display:flex;flex-direction:row;align-items:flex-end;gap:6px;pointer-events:none}
+ #btnsCorner button{pointer-events:auto;display:none;min-height:44px;font-size:15px;padding:8px 12px;border-radius:14px;background:rgba(120,60,40,.85);color:#fff;white-space:nowrap;margin:0}
+ #btnsCorner button.on{display:block}
+ #btns{gap:8px;align-items:flex-end;min-width:0}#btns button{min-width:92px;width:auto}
+ #throwBtn,#stealBtn{min-height:62px!important;min-width:114px!important;max-width:128px;font-size:18px!important;padding:12px 14px!important}
+ #umbBtn{min-height:68px!important;min-width:122px!important;max-width:136px;font-size:19px!important;padding:12px 14px!important}
  .mb{top:40%!important;bottom:auto!important}
- #medList{bottom:calc(var(--sa-bottom) + 130px)}
+ #medList{bottom:calc(var(--sa-bottom) + 170px)}
 }
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
  #btns{flex-direction:column;flex-wrap:nowrap;max-width:none}
- #btnsL{flex-direction:row}
+ #btnsL{flex-direction:row;bottom:calc(var(--sa-bottom) + 52px);left:calc(var(--sa-left) + 8px);max-width:calc(100vw - 140px)}
+ #btnsCorner{left:calc(var(--sa-left) + 6px);bottom:calc(var(--sa-bottom) + 6px)}
  .mb{top:22%!important}#rotL{left:calc(var(--sa-left) + 12px)!important}#rotR{right:calc(var(--sa-right) + 140px)!important}
  #medList{bottom:70px}
 }
@@ -240,13 +255,15 @@ body.tutOn .ntag{display:none!important}
 
 /* 手機觸控區：中間留大片滑動區，按鈕貼邊、縮小 */
 @media (pointer:coarse){
- #btns{right:calc(var(--sa-right) + 6px);bottom:calc(var(--sa-bottom) + 6px);gap:6px}
- #btns button{min-width:84px!important;min-height:44px!important;font-size:15px!important;padding:6px 10px!important}
- #umbBtn{min-height:56px!important;min-width:96px!important;font-size:18px!important}
- #stealBtn{min-height:52px!important;min-width:90px!important;font-size:17px!important}
- #btnsL{left:calc(var(--sa-left) + 6px);bottom:calc(var(--sa-bottom) + 6px);flex-direction:row!important;gap:6px;max-width:calc(100vw - 120px);flex-wrap:wrap;align-items:flex-end}
+ #btns{right:calc(var(--sa-right) + 6px);bottom:calc(var(--sa-bottom) + 6px);gap:6px;align-items:flex-end;min-width:0}
+ #btns button{min-width:84px!important;min-height:44px!important;font-size:15px!important;padding:6px 10px!important;width:auto}
+ #throwBtn,#stealBtn{min-width:110px!important;max-width:124px;min-height:56px!important;font-size:17px!important;padding:10px 14px!important}
+ #umbBtn{min-height:60px!important;min-width:118px!important;max-width:132px;font-size:18px!important;padding:10px 14px!important}
+ #btnsL{left:calc(var(--sa-left) + 6px);bottom:calc(var(--sa-bottom) + 52px);flex-direction:row!important;gap:6px;max-width:calc(100vw - 120px);flex-wrap:wrap;align-items:flex-end}
  #btnsL button{min-height:40px;font-size:13px;padding:6px 9px}
- #joy{bottom:calc(var(--sa-bottom) + 64px)!important}
+ #btnsCorner{left:calc(var(--sa-left) + 6px);bottom:calc(var(--sa-bottom) + 6px);gap:6px}
+ #btnsCorner button{min-height:40px;font-size:13px;padding:6px 9px}
+ #joy{bottom:calc(var(--sa-bottom) + 110px)!important}
  #rotL{left:calc(var(--sa-left) + 4px)!important}#rotR{right:calc(var(--sa-right) + 4px)!important}
  #btns button.mb{min-width:52px!important;min-height:52px!important;width:52px;height:52px}
 }
@@ -424,7 +441,7 @@ button:disabled{filter:grayscale(.8);opacity:.55}
  #medAct{top:calc(148px + var(--sa-top));gap:8px}
  #medAct span{font-size:14px;padding:4px 10px;border:2px solid var(--ink);border-radius:0}
 }
-#btns button,#btnsL button{background:var(--iron) var(--corr);color:var(--paint);border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink)}
+#btns button,#btnsL button,#btnsCorner button{background:var(--iron) var(--corr);color:var(--paint);border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink)}
 #umbBtn{background-color:var(--red)!important}#stealBtn{background-color:#4a3a6a!important}#quitBtn{background-color:#55595e!important}
 #btnsL #medBtn{background-color:#2f6b4f}
 .mb{border-radius:2px!important}
@@ -642,7 +659,7 @@ html,body{overflow-x:hidden;max-width:100%}
 .clTabs{display:grid!important;grid-template-columns:repeat(5,1fr);gap:4px}.clTabs button{min-width:0!important;padding:6px 2px!important;font-size:13px!important;white-space:nowrap}
 .slGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:stretch}.slCard{min-width:0;overflow:visible;height:auto}.slCard .slv{width:100%;height:auto;max-height:90px;flex:none}.slBtns{flex:none}.slBtns button{flex:1 1 100%!important;width:100%}.slCard small{overflow-wrap:anywhere;word-break:break-word;flex:1}.slBtns{margin-top:auto}
 
-#btns #camBtn.tpOn,#btnsL #camBtn.tpOn{background-color:#b8862a}
+#btns #camBtn.tpOn,#btnsL #camBtn.tpOn,#camBtn.hudCam.tpOn{background-color:#b8862a}
 
 /* 結算列 7 顆：一排排完 */
 #result .sysGrid{grid-template-columns:repeat(7,1fr)!important;gap:4px!important}

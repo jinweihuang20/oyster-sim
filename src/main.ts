@@ -1115,15 +1115,15 @@ function updHud() {
   $('count').innerHTML = `<i class="ic ic-oyster"></i> ${count}`; $('pearls').innerHTML = `<i class="ic ic-pearl"></i> ${dayPearls.length + dayOdd.length}`;
   evHud();
   const wastePct = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
-  const cell = (lab: string, val: string | number, warn = false) =>
-    `<span class="stCell${warn ? ' warn' : ''}"><span class="stL">${lab}</span><b class="stV">${val}</b></span>`;
+  const cell = (lab: string, icon: string, val: string | number, warn = false) =>
+    `<span class="stCell${warn ? ' warn' : ''}" title="${lab}"><span class="stL">${lab}</span><span class="stI" aria-hidden="true"><i class="ic ic-${icon}"></i></span><b class="stV">${val}</b></span>`;
   $('statsT').innerHTML =
-    cell('開殼', opened) +
-    cell('入碗', count) +
-    cell('浪費', `${wastePct}%`, wastePct >= 30) +
-    cell('殼屑', cracked, cracked > 0) +
-    cell('偷／被抓', `${steals}/${caught}`, caught > 0) +
-    cell('割手', stabs, stabs > 0);
+    cell('開殼', 'knife', opened) +
+    cell('入碗', 'bowl', count) +
+    cell('浪費', 'warn', `${wastePct}%`, wastePct >= 30) +
+    cell('殼屑', 'oyster', cracked, cracked > 0) +
+    cell('偷／被抓', 'run', `${steals}/${caught}`, caught > 0) +
+    cell('割手', 'hand', stabs, stabs > 0);
 }
 function worldOf(o: THREE.Object3D) { return o.getWorldPosition(new THREE.Vector3()); }
 function nagFrom(n: Npc, lines: string[], dur = 3) { let t = pick(lines); if (t === lastNag && lines.length > 1) t = lines[(lines.indexOf(t) + 1) % lines.length]; lastNag = t; n.look = dur; say(n, t, dur); }
@@ -1803,7 +1803,19 @@ $('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) 
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
 // 手機：次要按鈕放左下一排（不收選單）
-if (matchMedia('(pointer:coarse)').matches) { const L = $('btnsL'); for (const id of ['radioBtn', 'medBtn', 'quitBtn', 'giveUp', 'standBtn', 'camBtn']) L.appendChild($(id)); }
+if (matchMedia('(pointer:coarse)').matches) {
+  const L = $('btnsL');
+  for (const id of ['radioBtn', 'medBtn', 'standBtn']) L.appendChild($(id));
+  // 左下角固定列：回主選單 ＋ 右側放棄這顆
+  const corner = document.createElement('div');
+  corner.id = 'btnsCorner';
+  $('hud').appendChild(corner);
+  corner.appendChild($('quitBtn'));
+  corner.appendChild($('giveUp'));
+  // 視角：掛在統計列右側；統計列本身靠左
+  $('camBtn').classList.add('hudCam');
+  $('stats').appendChild($('camBtn'));
+}
 else $('btns').insertBefore($('radioBtn'), $('medBtn'));
 btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, () => rotKey = 0);
 // ----- 徛起來行路、換位 -----
@@ -2858,7 +2870,7 @@ function applyOutfit3() {
   for (const s of ['head', 'body', 'legs', 'feet'] as const) { const e = equipNow(s), m = pm[s]; m.map?.dispose(); m.map = eqTex(e); m.map.repeat.set(1, 1); m.color.set(0xffffff); m.emissive.set(e.pat === 'neon' ? 0x3a1a50 : 0); m.needsUpdate = true; }
 }
 function setTpv(v: boolean) { tpv = v; save.tpv = v ? 1 : 0; persist(); applyOutfit3(); drawCamBtn(); const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) c.checked = v; }
-function drawCamBtn() { const b = document.getElementById('camBtn'); if (!b) return; b.classList.toggle('on', tpv); b.title = tpv ? '視角：第三人稱' : '視角：第一人稱'; }
+function drawCamBtn() { const b = document.getElementById('camBtn'); if (!b) return; b.classList.toggle('tpOn', tpv); b.title = tpv ? '視角：第三人稱' : '視角：第一人稱'; }
 function react3(kind: 'cheer' | 'ouch') { if (!tpReady) return; if (kind === 'cheer') cheerT = 1.4; else ouchT = 0.6; }
 // 每幀：放好角色、把鏡頭拉到身後上方；手和蚵仔仍跟著鏡頭，操作不變
 function camTick(dt: number) {
