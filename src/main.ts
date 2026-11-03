@@ -812,7 +812,7 @@ umb.position.set(0, 0, -0.75);
 let tapAim = false, tossT0 = 0; const TAP_HINT = '肉在刀尖上！點一下碗（或碗附近）丟進去，越快越俐落';
 type Phase = 'pick' | 'scoop' | 'seam' | 'twist' | 'aim' | 'empty' | 'crab' | 'busy';
 let state: 'menu' | 'play' | 'end' = 'menu';
-let tut: { i: number; c0: number; t0: number; b0: number; s0: number } | null = null; // 教學進行中
+let tut: { i: number; c0: number; t0: number; b0: number; s0: number; m0: number; d0: number } | null = null; // 教學進行中
 let phase: Phase = 'busy';
 let hp = 100, stabs = 0, flinch = 0, hurtT = 0, handPain = false;
 let timeLeft = SHIFT, count = 0, bowlBonus = 0, cracked = 0, opened = 0, missed = 0, abandoned = 0, perfects = 0, dayPearls: number[] = [], dayOdd: number[] = [];
@@ -1502,7 +1502,8 @@ function toss(tapped: boolean) {
   });
   later(0.35, () => { if (meatsLeft > 1 && state === 'play') { meatsLeft--; showExtra(); meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); hint.textContent = `還有 ${meatsLeft} 塊肉！點碗繼續丟`; } else { meatsLeft = 1; showExtra(); emptyT = 2.2; setPhase('empty'); } });
 }
-function discardShell() { if (phase !== 'empty') return; oyster.visible = false; const sh = new THREE.Mesh(halfGeo, shellBotMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.5, () => scene.remove(sh)); setPhase('busy'); later(0.5, goPick); }
+let shellsOut = 0;
+function discardShell() { if (phase !== 'empty') return; shellsOut++; oyster.visible = false; const sh = new THREE.Mesh(halfGeo, shellBotMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.5, () => scene.remove(sh)); setPhase('busy'); later(0.5, goPick); }
 // ----- 丟肉：拿著肉時點阿婆，把肉丟到她頭上（不算入碗、不算錢）-----
 function bowlScrPt() { const p = BOWL.clone().project(viewCam()); return p.z > 1 ? null : [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight]; }
 function npcAtScr(x: number, y: number): Npc | null {
@@ -1699,7 +1700,7 @@ window.addEventListener('pointermove', e => {
   if (down.drag) { const k = 0.006 * mix.sens; tYaw = clamp(down.yaw - dx * k * (mix.invX ? -1 : 1), -yl(), yl()); tPitch = clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), P0, P1); }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); void h; }
-const up = (e: PointerEvent) => { if (moonAimOn && down && down.id === e.pointerId) { const d = down; down = null; if (!d.drag) moonTapAt(e.clientX, e.clientY); return; } if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else if (phase === 'aim' && tapAim) { const lk = document.pointerLockElement === canvas; const tx = lk ? innerWidth / 2 : e.clientX, ty = lk ? innerHeight / 2 : e.clientY, tn = tut ? null : npcAtScr(tx, ty); if (tn) throwMeatAt(tn); else if (nearBowl(tx, ty)) toss(true); else hint.textContent = '點碗或碗附近就能丟進去'; } else release(); } else release(); down = null; } };
+const up = (e: PointerEvent) => { if (moonAimOn && down && down.id === e.pointerId) { const d = down; down = null; if (!d.drag) moonTapAt(e.clientX, e.clientY); return; } if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'empty' && tut && TUT[tut.i].id === 'empty') discardShell(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else if (phase === 'aim' && tapAim) { const lk = document.pointerLockElement === canvas; const tx = lk ? innerWidth / 2 : e.clientX, ty = lk ? innerHeight / 2 : e.clientY, tn = tut && !tutMeat() ? null : npcAtScr(tx, ty); if (tn) throwMeatAt(tn); else if (tutMeat()) hint.textContent = '點一下阿婆，把肉丟過去'; else if (nearBowl(tx, ty)) toss(true); else hint.textContent = '點碗或碗附近就能丟進去'; } else release(); } else release(); down = null; } };
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
@@ -1712,7 +1713,7 @@ window.addEventListener('keydown', e => {
   if (walking) { walkKeys.add(e.code); if (e.code === 'KeyE' && nearSeat) sitDown(nearSeat.id); return; }
   if (e.code === 'KeyG') { standUp(); return; }
   if (e.code === 'Space' && !e.repeat && umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
-  if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) toss(true); else if (phase === 'aim') { holding = true; hold = 0; } }
+  if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) { if (!tutMeat()) toss(true); } else if (phase === 'aim') { holding = true; hold = 0; } }
   if (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
     const l = e.code === 'KeyA' || e.code === 'ArrowLeft';
     if (phase === 'seam') rotKey = l ? -1 : 1; else if (!e.repeat && swipePhase()) keyTwist(l ? 'L' : 'R');
@@ -2061,8 +2062,8 @@ function frameBody() {
     updBlood(rdt);
     if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.6, goPick); setPhase('busy'); } }
     tickFx(rdt); if (phase === 'aim' && tapAim && down?.drag) tossT0 = performance.now() - 600; // 拖畫面找阿婆時先不自動入碗
-    if (phase === 'aim' && tapAim && performance.now() - tossT0 > 2000) toss(false);
-    if (phase === 'empty') { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
+    if (phase === 'aim' && tapAim && !tutMeat() && performance.now() - tossT0 > 2000) toss(false);
+    if (phase === 'empty' && !(tut && (TUT[tut.i].id === 'empty' || TUT[tut.i].id === 'shell'))) { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
     on('standBtn', !walking); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
@@ -2144,6 +2145,8 @@ const TUT: TutStep[] = [
   { id: 'seam', line: '蚵仔殼有一條縫，要轉到對準刀尖喔。', pc: '用滾輪／A D 轉蚵仔，金色的縫對準刀尖時點一下（或按 Space）插刀', mb: '按住 ◀ ▶ 或拖動蚵仔來轉，縫對準刀尖時點一下蚵仔插刀', hi: ['rotL', 'rotR'], done: () => phase === 'twist' || phase === 'aim' },
   { id: 'pry', line: '刀插進去了！看指針，到綠區再撬，不要太用力喔～', pc: '指針走到綠區就點滑鼠／按 Space，撬到殼打開', mb: '指針走到綠區就點一下螢幕，撬到殼打開', hi: ['gauge'], done: () => phase === 'aim' },
   { id: 'toss', line: '蚵仔肉出來了！碗亮起來的時候，點一下碗就能丟進去。', pc: '點一下碗（或碗附近），蚵仔肉就會飛進去', mb: '點一下碗（或碗附近），蚵仔肉就會飛進去', hi: [], done: () => count > tut!.c0 },
+  { id: 'meat', line: '試試看：再開一顆，點一下阿婆，把蚵仔肉丟過去！', pc: '再開一顆蚵仔，肉出來後轉過去對準阿婆點一下（這步肉不會自己入盆）', mb: '再開一顆蚵仔，肉出來後往上拖畫面找阿婆，點一下她（這步肉不會自己入盆）', hi: [], done: () => meatHits > tut!.m0 },
+  { id: 'empty', line: '肉丟出去了，手上剩下空殼。空殼可以自己丟到殼堆，或對準阿婆丟過去；平常放著不管，過一下也會自動丟到殼堆。', pc: '這步空殼不會自動丟：點一下畫面丟到殼堆，或對準阿婆按 F／右鍵丟過去', mb: '這步空殼不會自動丟：點一下畫面丟到殼堆，或對準阿婆按「丟殼」丟過去', hi: ['throwBtn'], done: () => thrown > tut!.t0 || shellsOut > tut!.d0 },
   { id: 'steal', line: '偷偷跟你說：阿婆轉頭聊天的時候，可以偷她碗裡的肉…', pc: '看到阿婆在聊天，對準她的碗按住 E 偷（被看到她會生氣）', mb: '看到阿婆在聊天，對準她的碗按住「偷」（被看到她會生氣）', hi: ['stealBtn'], next: '知道了 ▶', done: () => steals > tut!.s0 },
   { id: 'shell', line: '撬出空殼，也可以丟向別人！', pc: '手上有空殼時，對準阿婆按 F 或右鍵丟過去', mb: '手上有空殼時，對準阿婆按「丟殼」丟過去', hi: ['throwBtn'], next: '知道了 ▶', done: () => thrown > tut!.t0 },
   { id: 'umb', line: '小心！阿婆要丟殼過來了！', pc: '看到 ⚠ 趕快按住 R 打開雨傘擋', mb: '看到 ⚠ 趕快按住「雨傘」擋', hi: ['umbBtn'], next: '知道了 ▶', done: () => umbT > 0, enter: () => later(1.2, () => { if (tut && TUT[tut.i].id === 'umb') windUp(npcs[0]); }) },
@@ -2153,6 +2156,7 @@ const TUT: TutStep[] = [
   { id: 'daily', line: '還有，每天來上工，阿姨都發上工費給你！連續來領會越領越多。', pc: '在開始畫面按「領今日上工費」，每天一次，從 $1000 起跳，連續 7 天最多 $3000', mb: '在開始畫面按「領今日上工費」，每天一次，從 $1000 起跳，連續 7 天最多 $3000', next: '學會了！🎉' },
 ];
 let tutHi: string[] = [];
+function tutMeat() { return !!tut && TUT[tut.i].id === 'meat'; }
 function tutShow() {
   if (!tut) return; const st = TUT[tut.i];
   tutHi.forEach(id => $(id).classList.remove('tutHi')); tutHi = st.hi ?? []; tutHi.forEach(id => $(id).classList.add('tutHi'));
@@ -2161,11 +2165,11 @@ function tutShow() {
 }
 function tutGo(i: number) {
   if (!tut) return; if (i >= TUT.length) { tutEnd(true); return; }
-  tut.i = i; tut.b0 = missed; tut.c0 = count; tut.t0 = thrown; tut.s0 = steals; track('tutorial_step', { step: TUT[i].id, i }); TUT[i].enter?.(); tutShow();
+  tut.i = i; tut.b0 = missed; tut.c0 = count; tut.t0 = thrown; tut.s0 = steals; tut.m0 = meatHits; tut.d0 = shellsOut; track('tutorial_step', { step: TUT[i].id, i }); TUT[i].enter?.(); tutPrep(); tutShow();
 }
 function tutStart() {
   audio(); ['overlay', 'result', 'dex', 'settings', 'shop'].forEach(i => $(i).classList.remove('show'));
-  tut = { i: 0, c0: 0, t0: 0, b0: 0, s0: 0 }; startDay(); document.body.classList.add('tutOn'); on('tut', true); track('tutorial_start', { replay: save.tutDone ? 1 : 0 }); tutGo(0);
+  tut = { i: 0, c0: 0, t0: 0, b0: 0, s0: 0, m0: 0, d0: 0 }; startDay(); document.body.classList.add('tutOn'); on('tut', true); track('tutorial_start', { replay: save.tutDone ? 1 : 0 }); tutGo(0);
 }
 function tutEnd(done: boolean) {
   if (!tut) return; const st = TUT[tut.i].id; tut = null;
@@ -2184,15 +2188,42 @@ setInterval(() => {
   if (st.done?.()) tutGo(tut.i + 1);
 }, 120);
 $('tutNext').onclick = e => { e.stopPropagation(); if (!tut) return; const st = TUT[tut.i]; if (st.id === 'sit' && walking) sitDown(save.seat ?? 'door'); tutGo(tut.i + 1); };
+$('tutStepSkip').onclick = e => { e.stopPropagation(); if (!tut || state !== 'play') return; const st = TUT[tut.i];
+  // 跳過這步：把狀態整理好，讓下一步做得到
+  if (st.id === 'empty' && phase === 'empty') discardShell();
+  if (st.id === 'sit' && walking) sitDown(save.seat ?? 'door');
+  tutGo(tut.i + 1); };
+// 每一步開始時補齊前置條件（不算錢、不算統計）
+const tutHas = { held: () => ['seam', 'twist', 'aim', 'empty', 'crab'].includes(phase) };
+function tutGive(want: 'pick' | 'seam' | 'twist' | 'aim' | 'empty') {
+  if (!tut || state !== 'play') return; if (walking && want !== 'pick') sitDown(save.seat ?? 'door'); if (walking) return;
+  const OK: Record<string, string[]> = { pick: ['pick'], seam: ['seam', 'twist', 'aim'], twist: ['twist', 'aim'], aim: ['aim'], empty: ['empty'] }; if (OK[want].includes(phase)) return;
+  if (want === 'pick') { if (phase !== 'busy') goPick(); return; }
+  if (want === 'seam') { holdOyster(0); return; }
+  if (phase !== 'seam' && phase !== 'twist') holdOyster(0);
+  seamGlow.visible = false; seamRing.visible = false;
+  if (want === 'twist') { progress = 0; crackedNow = false; setPhase('twist'); return; }
+  seamMark.visible = false; shellTop.visible = false; meatsLeft = 1; showExtra(); find = { kind: 'none', i: 0 };
+  if (want === 'aim') { meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); return; }
+  meatInHand.visible = false; emptyT = 2.2; setPhase('empty');
+}
+const TUT_NEED: Record<string, () => void> = {
+  grab: () => tutGive('pick'), seam: () => tutGive('seam'), pry: () => tutGive('twist'),
+  toss: () => tutGive('aim'), meat: () => tutGive('aim'), empty: () => tutGive('empty'),
+  steal: () => { if (walking) sitDown(save.seat ?? 'door'); }, shell: () => tutGive('empty'), umb: () => { if (walking) sitDown(save.seat ?? 'door'); },
+  stand: () => { if (walking) sitDown(save.seat ?? 'door'); }, sit: () => { if (!walking) standUp(); },
+  menu: () => { if (walking) sitDown(save.seat ?? 'door'); }, daily: () => { if (walking) sitDown(save.seat ?? 'door'); },
+};
+function tutPrep() { if (!tut) return; const id = TUT[tut.i].id; TUT_NEED[id]?.(); [0.7, 1.5, 2.5].forEach(t => later(t, () => { if (tut && TUT[tut.i].id === id && phase !== 'busy') TUT_NEED[id]?.(); })); }
 $('tutSkip').onclick = e => { e.stopPropagation(); tutEnd(false); };
-['tutNext', 'tutSkip'].forEach(id => $(id).addEventListener('pointerdown', e => e.stopPropagation()));
+['tutNext', 'tutSkip', 'tutStepSkip'].forEach(id => $(id).addEventListener('pointerdown', e => e.stopPropagation()));
 $('oTut').onclick = () => tutStart();
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
   label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : k === 'odd' ? `開到「${ODD[i]?.name ?? '奇物'}」` : k === 'ach' ? `達成金牌成就「${ACHS[i]?.n ?? '成就'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！`, title: () => achTitle() });
 Social.startPresence(() => state === 'play');
 $('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; } tutStart(); };
-(window as any).__oy = { get phase() { return phase; }, get umb() { return { held: umbHeld, t: umbT, vis: umb.visible }; }, get tut() { return tut && TUT[tut.i].id; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, P0, P1); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
+(window as any).__oy = { get phase() { return phase; }, get umb() { return { held: umbHeld, t: umbT, vis: umb.visible }; }, get tut() { return tut && TUT[tut.i].id; }, get npcN() { return npcs.length; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, P0, P1); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
 // ---------- 截圖模式 ----------
 if (SHOT) setTimeout(() => {
   startDay(); npcs.forEach((n, i) => { n.count = 5 + i * 3; n.throwCd = 999; });
