@@ -10,7 +10,7 @@ interface Fighter {
 }
 interface Shell { pos: THREE.Vector3; vel: THREE.Vector3; owner: Fighter; mesh: THREE.Mesh; life: number; }
 
-const SPEED = 45, HALF = 18, MAXAMMO = 15, EYE = 1.6, R = 0.35;
+const SPEED = 90, HALF = 18, MAXAMMO = 15, EYE = 1.6, R = 0.35;
 const PILES = [[0, 0], [-13, -12], [13, 12], [-12, 12], [12, -12], [0, -6], [5, 15]].map(([x, z]) => new THREE.Vector3(x, 0, z));
 const PICK_R = 1.9;
 // 掩體：木箱堆、藍色塑膠籃堆、剝蚵工作桌
@@ -37,12 +37,13 @@ const I = {
   head: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5"/>',
   shield: '<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/>',
   x: '<path d="M5 5l14 14M19 5L5 19"/>',
-  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>',
   play: '<path d="M7 4l13 8-13 8z"/>',
 };
 type DS = { sens: number; tsens: number; invY: boolean; assist: boolean; btn: number; op: number };
-const DS_DEF: DS = { sens: 1, tsens: 1, invY: false, assist: true, btn: 1, op: 0.85 };
-function loadDS(): DS { try { return { ...DS_DEF, ...JSON.parse(localStorage.getItem('oyster-dm-set') || '{}') }; } catch { return { ...DS_DEF }; } }
+const DS_DEF: DS = { sens: 1, tsens: 1, invY: false, assist: false, btn: 1, op: 0.85 };
+const DS_VER = 2; // 版本 2：瞄準輔助預設改關，舊存檔重設一次
+function loadDS(): DS { try { const o = JSON.parse(localStorage.getItem('oyster-dm-set') || '{}'); if ((o.v || 1) < DS_VER) o.assist = false; o.v = DS_VER; return { ...DS_DEF, ...o }; } catch { return { ...DS_DEF }; } }
 let active = false;
 export const isDeathmatchActive = () => active;
 
@@ -361,7 +362,7 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
   }
   const keys: Record<string, boolean> = {}; const joy = { x: 0, y: 0 }; let holdPick = false, sprint = false, rmb = false;
   // 按住連發：按下立刻丟第一發，之後依冷卻連續丟，放開或沒殼就停（開傘時不能丟）
-  const FIRE_CD = 0.24; let fireHeld = 0, fireCd = 0;
+  const FIRE_CD = 0.15; let fireHeld = 0, fireCd = 0;
   const fireDown = () => { fireHeld++; if (fireCd <= 0 && throwShell(me)) fireCd = FIRE_CD; };
   const fireUp = () => { fireHeld = Math.max(0, fireHeld - 1); };
   const blur = () => { for (const k in keys) keys[k] = false; closeUmb(me); holdPick = false; rmb = false; fireHeld = 0; };
@@ -396,7 +397,7 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
   }
   // 觸控轉視角：靈敏度曲線＋輕微加速
   function touchLook(dx: number, dy: number) {
-    const sp = Math.hypot(dx, dy), acc = 1 + Math.min(1, sp / 25) * 0.6, k = 0.0045 * DSv.tsens * acc * assistK();
+    const k = 0.0055 * DSv.tsens * assistK(); // 線性，無加速曲線
     me.yaw -= dx * k; me.pitch = clampP(me.pitch - dy * k * inv());
   }
   if (isTouch) {
@@ -453,7 +454,8 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
     f.ammo--; f.shots++; shotAt.set(f, now); if (f.isPlayer) f.invulnUntil = 0;
     const d = dirOf(yaw, pitch); const p = eyeOf(f).addScaledVector(d, 0.4);
     const m = shellMesh(); m.position.copy(p); scene.add(m); f.throwA = 0.35; SND.throw(f);
-    shells.push({ pos: p, vel: d.multiplyScalar(SPEED).add(f.vel.clone().multiplyScalar(0.5)), owner: f, mesh: m, life: 6 });
+    // 玩家不加移動速度，殼沿準星直線飛
+    shells.push({ pos: p, vel: f.isPlayer ? d.multiplyScalar(SPEED) : d.multiplyScalar(SPEED).add(f.vel.clone().multiplyScalar(0.5)), owner: f, mesh: m, life: 6 });
     return true;
   }
   // 點是否在某人的命中區（頭為球，身體與腳為圓柱）
