@@ -28,6 +28,8 @@ const I = {
   shell: '<path d="M4 15c0-6 4-10 8-10s8 4 8 10c-3 2-13 2-16 0z"/><path d="M8 9l1 6M12 7v8M16 9l-1 6"/>',
   throw: '<path d="M4 18c4-9 10-12 16-12"/><path d="M15 3l5 3-3 5"/>',
   grab: '<path d="M7 11V6a1.5 1.5 0 013 0v4M10 10V4.5a1.5 1.5 0 013 0V10M13 10V5.5a1.5 1.5 0 013 0V12M16 9.5a1.5 1.5 0 013 0V14a7 7 0 01-7 7h-1a6 6 0 01-5-3l-2.5-4a1.5 1.5 0 012.5-1.6L7 14"/>',
+  person: '<circle cx="12" cy="7" r="4"/><path d="M4 22a8 8 0 0116 0"/>',
+  rotate: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M2 15a10 10 0 0010 7M22 9A10 10 0 0012 2"/><path d="M20 5l2 4-4 1"/>',
   umb: '<path d="M2 12a10 10 0 0120 0z"/><path d="M12 12v7a2 2 0 01-4 0"/><path d="M12 2v2"/>',
   board: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   heart: '<path d="M12 20l-8-8a4.5 4.5 0 016.5-6.3L12 7l1.5-1.3A4.5 4.5 0 0120 12z"/>',
@@ -61,14 +63,11 @@ export function openDeathmatch(U: DmUmb, onExit: () => void) {
 #dmRoot canvas{position:absolute;inset:0;width:100%;height:100%}
 #dmRoot .dmb{position:absolute;background:#c8102e;color:#fff6d8;border:3px solid #ffd23f;border-radius:10px;font-weight:900;font-size:18px;padding:10px 16px;box-shadow:0 3px 0 #6b0010;letter-spacing:2px}
 #dmX{top:calc(env(safe-area-inset-top) + 10px);right:calc(env(safe-area-inset-right) + 10px);width:48px;height:48px;padding:0!important;font-size:24px!important}
-#dmScoreBtn{top:calc(env(safe-area-inset-top) + 10px);right:calc(env(safe-area-inset-right) + 70px)}
-#dmHp{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 64px);width:min(42vw,280px);height:26px;background:#2a1206;border:3px solid #ffd23f;border-radius:8px;box-shadow:0 3px 0 #6b0010;overflow:hidden;pointer-events:none}
 #dmHpF{position:absolute;left:0;top:0;bottom:0;width:100%;background:#3c3;transition:width .15s}
 #dmHpN{position:absolute;inset:0;text-align:center;color:#fff6d8;font-weight:900;font-size:16px;line-height:20px;text-shadow:0 2px 0 #000;letter-spacing:1px}
-#dmHp.hit{animation:dmHit .3s}@keyframes dmHit{0%{border-color:#fff;transform:translateX(-50%) scale(1.08)}100%{border-color:#ffd23f;transform:translateX(-50%)}}
+#dmHp.hit{animation:dmHit .3s}@keyframes dmHit{0%{border-color:#fff}100%{border-color:#ffd23f}}
 #dmEdge{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 90px 20px rgba(220,0,0,.75);opacity:0;transition:opacity .35s}
 #dmEdge.on{opacity:1;transition:none}
-#dmFeed{position:fixed;right:calc(env(safe-area-inset-right) + 12px);top:calc(env(safe-area-inset-top) + 70px);display:flex;flex-direction:column;gap:4px;align-items:flex-end;pointer-events:none}
 #dmFeed div{background:rgba(42,18,6,.8);border:2px solid #ffd23f;border-radius:6px;color:#fff6d8;font-weight:900;padding:2px 8px;font-size:15px;transition:opacity .4s}
 #dmFeed .me{color:#ffd23f}
 #dmHud.empty{border-color:#ff3b3b;color:#ff3b3b}
@@ -76,7 +75,6 @@ export function openDeathmatch(U: DmUmb, onExit: () => void) {
 .dmPop svg{filter:drop-shadow(0 2px 0 #000)}
 #dmRoot.dead canvas{filter:saturate(.3) brightness(.75)}
 #dmRoot.dead #dmEdge{opacity:.8}
-#dmHud{position:absolute;left:calc(env(safe-area-inset-left) + 12px);top:calc(env(safe-area-inset-top) + 10px);color:#ffd23f;font-weight:900;font-size:18px;text-shadow:0 2px 0 #000;line-height:1.5;background:rgba(20,10,0,.55);border:2px solid #ffd23f;border-radius:8px;padding:6px 10px}
 #dmCross{position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;pointer-events:none}
 #dmCross:before,#dmCross:after{content:'';position:absolute;background:#fff;box-shadow:0 0 2px #000}
 #dmCross:before{left:10px;top:0;width:2px;height:22px}#dmCross:after{top:10px;left:0;height:2px;width:22px}
@@ -88,9 +86,6 @@ export function openDeathmatch(U: DmUmb, onExit: () => void) {
 #dmBoard table{border-collapse:collapse;width:100%;font-size:16px}#dmBoard td,#dmBoard th{padding:4px 8px;text-align:center;border-bottom:1px solid #6b3a12}
 #dmBoard tr.me td{color:#ffd23f;font-weight:900}
 #dmRoot{--bs:1;--bo:.85}
-#dmRoot .ctl{opacity:var(--bo);transform:scale(var(--bs));transform-origin:bottom right}
-#dmSetBtn{top:calc(env(safe-area-inset-top) + 10px);right:calc(env(safe-area-inset-right) + 130px);width:48px;height:48px;padding:0!important}
-#dmScoreBtn{width:48px;height:48px;padding:0!important}
 #dmSet{position:absolute;inset:0;background:rgba(10,5,0,.6);display:none;align-items:center;justify-content:center;z-index:5}
 #dmSet.show{display:flex}
 #dmSetBox{position:relative;background:#2a1206;border:4px solid #ffd23f;border-radius:12px;color:#fff6d8;padding:0 16px 14px;width:min(92vw,360px);max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);overflow:auto;touch-action:pan-y}
@@ -101,16 +96,43 @@ export function openDeathmatch(U: DmUmb, onExit: () => void) {
 #dmSetBox input[type=checkbox]{width:26px;height:26px}
 #dmPause{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:#ffd23f;background:rgba(0,0,0,.35);pointer-events:none}
 #dmPause.show{display:flex}
-#dmFJ{position:absolute;width:130px;height:130px;margin:-65px 0 0 -65px;border-radius:50%;border:3px solid rgba(255,210,63,.7);background:rgba(0,0,0,.25);display:none;pointer-events:none;opacity:var(--bo)}
 #dmFJ.show{display:block}#dmFJ.sprint{border-color:#ff7a3b}
-#dmFK{position:absolute;left:40px;top:40px;width:50px;height:50px;border-radius:50%;background:rgba(255,210,63,.85)}
-#dmJoyHint{position:absolute;left:calc(env(safe-area-inset-left) + 40px);bottom:calc(env(safe-area-inset-bottom) + 40px);width:100px;height:100px;border-radius:50%;border:2px dashed rgba(255,210,63,.4);pointer-events:none}
-#dmThrow{right:calc(env(safe-area-inset-right) + 20px);bottom:calc(env(safe-area-inset-bottom) + 30px);width:84px;height:84px;border-radius:50%!important;font-size:24px!important}
-#dmPick{right:calc(env(safe-area-inset-right) + 120px);bottom:calc(env(safe-area-inset-bottom) + 30px)}
-#dmUmb{right:calc(env(safe-area-inset-right) + 120px);bottom:calc(env(safe-area-inset-bottom) + 90px)}
 #dmUmb.held{background:#ffd23f;color:#2a1206}
 #dmHelp{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 12px);transform:translateX(-50%);color:#fff6d8;font-size:14px;text-shadow:0 1px 0 #000;pointer-events:none}
-</style><canvas></canvas><div id="dmCross"></div><div id="dmMark"></div><div id="dmMsg"></div><div id="dmHud"></div><div id="dmEdge"></div><div id="dmHp"><div id="dmHpF"></div><div id="dmHpN"></div></div><div id="dmFeed"></div>
+
+/* ---- HUD 版面（橫向為主，直向備援） ---- */
+#dmX,#dmScoreBtn,#dmSetBtn{top:calc(env(safe-area-inset-top) + 8px);width:44px;height:44px;padding:0!important;display:flex;align-items:center;justify-content:center}
+#dmX{right:calc(env(safe-area-inset-right) + 8px)}#dmScoreBtn{right:calc(env(safe-area-inset-right) + 60px)}#dmSetBtn{right:calc(env(safe-area-inset-right) + 112px)}
+#dmRoot #dmMap{position:absolute;left:auto;bottom:auto;top:calc(env(safe-area-inset-top) + 60px);right:calc(env(safe-area-inset-right) + 8px);width:96px;height:96px;border:2px solid #ffd23f;border-radius:8px;background:rgba(20,10,0,.55);pointer-events:none}
+#dmHud{position:absolute;left:calc(env(safe-area-inset-left) + 8px);top:calc(env(safe-area-inset-top) + 8px);color:#ffd23f;font-weight:900;font-size:17px;text-shadow:0 2px 0 #000;background:rgba(20,10,0,.55);border:2px solid #ffd23f;border-radius:8px;padding:4px 10px;pointer-events:none;white-space:nowrap}
+#dmHud svg,#dmAmmo svg{vertical-align:-3px}
+#dmFeed{position:absolute;left:calc(env(safe-area-inset-left) + 8px);top:calc(env(safe-area-inset-top) + 50px);display:flex;flex-direction:column;gap:3px;align-items:flex-start;pointer-events:none;max-width:30vw;max-height:26vh;overflow:hidden}
+#dmFeed div{font-size:13px!important;padding:1px 6px!important;white-space:nowrap}
+#dmBar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 14px);display:flex;gap:8px;align-items:center;pointer-events:none}
+#dmHp{position:relative;width:min(24vw,200px);height:24px;background:#2a1206;border:3px solid #ffd23f;border-radius:8px;overflow:hidden}
+#dmAmmo{color:#ffd23f;font-weight:900;font-size:17px;text-shadow:0 2px 0 #000;background:rgba(20,10,0,.6);border:2px solid #ffd23f;border-radius:8px;padding:2px 8px;white-space:nowrap}
+#dmAmmo.empty{border-color:#ff3b3b;color:#ff3b3b}
+#dmRoot .ctl{opacity:var(--bo);border-radius:50%!important;padding:0!important;display:flex;align-items:center;justify-content:center}
+#dmThrow{right:calc(env(safe-area-inset-right) + 22px);bottom:calc(env(safe-area-inset-bottom) + 22px);width:calc(92px*var(--bs));height:calc(92px*var(--bs))}
+#dmUmb{right:calc(env(safe-area-inset-right) + 22px + 104px*var(--bs));bottom:calc(env(safe-area-inset-bottom) + 26px);width:calc(60px*var(--bs));height:calc(60px*var(--bs))}
+#dmPick{right:calc(env(safe-area-inset-right) + 22px + 96px*var(--bs));bottom:calc(env(safe-area-inset-bottom) + 22px + 96px*var(--bs));width:calc(60px*var(--bs));height:calc(60px*var(--bs))}
+#dmFireL{left:calc(env(safe-area-inset-left) + 30px + 124px*var(--bs));bottom:calc(env(safe-area-inset-bottom) + 22px + 110px*var(--bs));width:calc(64px*var(--bs));height:calc(64px*var(--bs))}
+#dmJoyHint{position:absolute;left:calc(env(safe-area-inset-left) + 30px);bottom:calc(env(safe-area-inset-bottom) + 22px);width:calc(120px*var(--bs));height:calc(120px*var(--bs));border-radius:50%;border:3px solid rgba(255,210,63,.55);background:radial-gradient(circle,rgba(255,210,63,.55) 0 22%,rgba(0,0,0,.25) 23%);pointer-events:none;opacity:var(--bo)}
+#dmFJ{position:absolute;width:130px;height:130px;margin:-65px 0 0 -65px;border-radius:50%;border:3px solid rgba(255,210,63,.7);background:rgba(0,0,0,.25);display:none;pointer-events:none;opacity:var(--bo)}
+#dmFK{position:absolute;left:40px;top:40px;width:50px;height:50px;border-radius:50%;background:rgba(255,210,63,.85)}
+#dmRot{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(20,10,0,.82);color:#ffd23f;z-index:6}
+#dmRotOk{position:static!important}#dmRot>svg{animation:dmTurn 1.6s ease-in-out infinite}@keyframes dmTurn{0%,30%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
+@media (orientation:landscape) and (max-width:720px){#dmBar{left:45%}#dmHp{width:18vw}#dmAmmo{font-size:15px;padding:2px 6px}}
+@media (orientation:portrait){
+ #dmFireL{left:calc(env(safe-area-inset-left) + 30px + 28px*var(--bs));bottom:calc(env(safe-area-inset-bottom) + 22px + 136px*var(--bs))}
+ #dmUmb{right:calc(env(safe-area-inset-right) + 22px + 16px*var(--bs));bottom:calc(env(safe-area-inset-bottom) + 22px + 104px*var(--bs))}
+ #dmPick{right:calc(env(safe-area-inset-right) + 22px + 96px*var(--bs));bottom:calc(env(safe-area-inset-bottom) + 22px + 150px*var(--bs))}
+ #dmRoot.touch:not(.rotOk) #dmRot{display:flex}
+ #dmBar{bottom:calc(env(safe-area-inset-bottom) + 34px + 220px*var(--bs));flex-direction:row}
+ #dmHp{width:min(52vw,220px)}
+ #dmFeed{top:calc(env(safe-area-inset-top) + 50px);max-width:55vw}
+}
+</style><canvas></canvas><div id="dmCross"></div><div id="dmMark"></div><div id="dmMsg"></div><div id="dmHud"></div><div id="dmEdge"></div><div id="dmBar"><div id="dmAmmo"></div><div id="dmHp"><div id="dmHpF"></div><div id="dmHpN"></div></div></div><canvas id="dmMap" width="192" height="192"></canvas><div id="dmFeed"></div>
 <button class="dmb" id="dmScoreBtn"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" style="vertical-align:-3px"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></button>
 <button class="dmb" id="dmSetBtn" aria-label="設定">${ico(I.gear, 26)}</button><div id="dmPause">${ico(I.play, 64)}</div>
 <div id="dmSet"><div id="dmSetBox"><div id="dmSetHd">${ico(I.gear, 26)}<button class="dmb" id="dmSetX" aria-label="關閉">✕</button></div>
@@ -118,24 +140,35 @@ export function openDeathmatch(U: DmUmb, onExit: () => void) {
 <label>觸控靈敏度<input type="range" id="dsTsens" min="0.3" max="3" step="0.05"></label>
 <label>上下反轉<input type="checkbox" id="dsInv"></label>
 <label>瞄準輔助<input type="checkbox" id="dsAssist"></label>
-<label>按鈕大小<input type="range" id="dsBtn" min="0.7" max="1.5" step="0.05"></label>
+<label>按鈕大小<input type="range" id="dsBtn" min="0.7" max="1.3" step="0.05"></label>
 <label>按鈕透明度<input type="range" id="dsOp" min="0.3" max="1" step="0.05"></label>
 </div></div>
 <button class="dmb" id="dmX" aria-label="離開">✕</button><div id="dmBoard"><h2>${ico(I.board, 26)}</h2><div id="dmTable"></div></div>
-${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div><button class="dmb ctl" id="dmPick" aria-label="拿殼">${ico(I.grab, 28)}</button><button class="dmb ctl" id="dmUmb" aria-label="雨傘">${ico(I.umb, 28)}</button><button class="dmb ctl" id="dmThrow" aria-label="丟">${ico(I.throw, 38)}</button>` : '<div id="dmHelp">WASD ・ Shift ・ 左鍵 ・ 右鍵／R ・ E ・ Tab ・ Esc</div>'}`;
+${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div><button class="dmb ctl" id="dmPick" aria-label="拿殼">${ico(I.grab, 28)}</button><button class="dmb ctl" id="dmUmb" aria-label="雨傘">${ico(I.umb, 28)}</button><button class="dmb ctl" id="dmFireL" aria-label="丟">${ico(I.throw, 30)}</button><div id="dmRot">${ico(I.rotate, 72)}<button class="dmb" id="dmRotOk" aria-label="繼續">${ico(I.play, 26)}</button></div><button class="dmb ctl" id="dmThrow" aria-label="丟">${ico(I.throw, 38)}</button>` : '<div id="dmHelp">WASD ・ Shift ・ 左鍵 ・ 右鍵／R ・ E ・ Tab ・ Esc</div>'}`;
   document.body.appendChild(root);
   const q = (id: string) => root.querySelector('#' + id) as HTMLElement;
   const canvas = root.querySelector('canvas')!;
+  if (isTouch) { root.classList.add('touch'); q('dmRotOk').onclick = () => root.classList.add('rotOk'); }
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x3a3050); scene.fog = new THREE.Fog(0x4a3a50, 14, 44);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x6a5070); scene.fog = new THREE.Fog(0x8a6070, 20, 70);
   const cam = new THREE.PerspectiveCamera(70, 1, 0.05, 100); cam.rotation.order = 'YXZ';
   const M = (c: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true, ...o });
   const add = (g: THREE.BufferGeometry, m: THREE.Material, p: [number, number, number], parent: THREE.Object3D = scene, shadow = true) => { const x = new THREE.Mesh(g, m); x.position.set(...p); x.castShadow = shadow; x.receiveShadow = true; parent.add(x); return x; };
   // 黃昏漁港燈光（同上工場景色調，亮度調高方便瞄準）
-  scene.add(new THREE.HemisphereLight(0xc08a9a, 0x201810, 1.0));
-  const sun = new THREE.DirectionalLight(0xff9a60, 1.1); sun.position.set(-12, 16, -18); sun.castShadow = true;
+  scene.add(new THREE.HemisphereLight(0xffc8b0, 0x3a2a20, 1.5)); scene.add(new THREE.AmbientLight(0xffe0c8, 0.35));
+  const sun = new THREE.DirectionalLight(0xffb070, 1.6);
+  // 黃昏漸層天空＋夕陽光暈
+  {
+    const sunDir = new THREE.Vector3(-12, 5, -18).normalize();
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(60, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { sd: { value: sunDir } },
+      vertexShader: 'varying vec3 v;void main(){v=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+      fragmentShader: 'uniform vec3 sd;varying vec3 v;void main(){float h=v.y;vec3 top=vec3(.16,.17,.42),mid=vec3(.62,.38,.52),hor=vec3(1.,.6,.4),low=vec3(.35,.24,.26);' +
+        'vec3 c=h>0.?mix(hor,mix(mid,top,smoothstep(.15,.7,h)),smoothstep(0.,.18,h)):mix(hor,low,smoothstep(0.,-.15,h));' +
+        'float s=max(dot(v,sd),0.);c+=vec3(1.,.7,.4)*(pow(s,8.)*.45+pow(s,200.)*1.2);gl_FragColor=vec4(c,1.);}' }));
+    sky.renderOrder = -1; sky.frustumCulled = false; scene.add(sky);
+  } sun.position.set(-12, 16, -18); sun.castShadow = true;
   Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, far: 60 }); sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.002; scene.add(sun);
   // 水泥地＋水漬
   add(new THREE.PlaneGeometry(HALF * 2 + 4, HALF * 2 + 4), M(0x5a544c, { roughness: 0.95 }), [0, 0, 0]).rotation.x = -Math.PI / 2;
@@ -283,7 +316,7 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
       const op = now < f.invulnUntil ? 0.35 : 1; h.fm.opacity = op; h.bg.opacity = op * 0.8; }
   }
   // ---- 輸入 ----
-  const DSv = loadDS();
+  const DSv = loadDS(); DSv.btn = Math.min(1.3, Math.max(0.7, DSv.btn));
   const applyDS = () => { root.style.setProperty('--bs', String(DSv.btn)); root.style.setProperty('--bo', String(DSv.op)); try { localStorage.setItem('oyster-dm-set', JSON.stringify(DSv)); } catch { /* 無痕模式 */ } };
   {
     const bind = (id: string, k: keyof DS) => { const el = q(id) as HTMLInputElement; if (el.type === 'checkbox') { el.checked = DSv[k] as boolean; el.onchange = () => { (DSv as Record<string, unknown>)[k] = el.checked; applyDS(); }; } else { el.value = String(DSv[k]); el.oninput = () => { (DSv as Record<string, unknown>)[k] = +el.value; applyDS(); }; } };
@@ -348,7 +381,7 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
     root.addEventListener('pointermove', e => {
       const p = ptr.get(e.pointerId); if (!p) return;
       if (p.k === 'joy') joyAt(p, e.clientX, e.clientY);
-      else if (p.k === 'look' || (p.k === 'btn' && p.el?.id === 'dmThrow')) touchLook(e.clientX - p.x, e.clientY - p.y); // 按住丟可以拖曳瞄準
+      else if (p.k === 'look' || (p.k === 'btn' && (p.el?.id === 'dmThrow' || p.el?.id === 'dmFireL'))) touchLook(e.clientX - p.x, e.clientY - p.y); // 按住丟可以拖曳瞄準
       p.x = e.clientX; p.y = e.clientY;
     });
     const end = (e: PointerEvent) => {
@@ -357,7 +390,7 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
       if (p.k === 'btn' && p.el) {
         if (p.el.id === 'dmUmb') closeUmb(me);
         if (p.el.id === 'dmPick') { holdPick = false; if (e.type === 'pointerup') pick(me); }
-        if (p.el.id === 'dmThrow' && e.type === 'pointerup') throwShell(me); // 放開才發射
+        if ((p.el.id === 'dmThrow' || p.el.id === 'dmFireL') && e.type === 'pointerup') throwShell(me); // 放開才發射
       }
     };
     root.addEventListener('pointerup', end); root.addEventListener('pointercancel', end);
@@ -373,11 +406,12 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
   }
   function eyeOf(f: Fighter) { return new THREE.Vector3(f.pos.x, f.pos.y + EYE, f.pos.z); }
   function dirOf(yaw: number, pitch: number) { return new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)); }
+  const shotAt = new Map<Fighter, number>();
   function throwShell(f: Fighter, yaw = f.yaw, pitch = f.pitch) {
     if (f.dead) return false;
     if (f.umbHeld) { return false; }
     if (f.ammo <= 0) { return false; }
-    f.ammo--; f.shots++; if (f.isPlayer) f.invulnUntil = 0;
+    f.ammo--; f.shots++; shotAt.set(f, now); if (f.isPlayer) f.invulnUntil = 0;
     const d = dirOf(yaw, pitch); const p = eyeOf(f).addScaledVector(d, 0.4);
     const m = shellMesh(); m.position.copy(p); scene.add(m); f.throwA = 0.35; SND.throw(f);
     shells.push({ pos: p, vel: d.multiplyScalar(SPEED).add(f.vel.clone().multiplyScalar(0.5)), owner: f, mesh: m, life: 6 });
@@ -519,12 +553,23 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
     q('dmTable').innerHTML = `<table><tr><th></th><th>${ico(I.skull, 18)}</th><th>${ico(I.heart, 18)}</th><th>${ico(I.head, 18)}</th><th>%</th></tr>${rows.map(f => `<tr class="${f.isPlayer ? 'me' : ''}"><td>${tag(f)}</td><td>${f.kills}</td><td>${f.deaths}</td><td>${f.hs}</td><td>${f.shots ? Math.round(f.hits / f.shots * 100) : 0}%</td></tr>`).join('')}</table>`;
   }
   const hpCol = (hp: number) => `hsl(${Math.max(0, Math.min(100, hp)) * 1.2},80%,45%)`;
+  // 小地圖：場地外框、殼堆、玩家箭頭，最近有開火的阿婆才顯示紅點
+  const mapC = (q('dmMap') as HTMLCanvasElement).getContext('2d')!;
+  function drawMap() {
+    const W = 192, k = (W - 16) / (HALF * 2), X = (x: number) => W / 2 + x * k, c = mapC;
+    c.clearRect(0, 0, W, W); c.strokeStyle = '#ffd23f'; c.lineWidth = 3; c.strokeRect(8, 8, W - 16, W - 16);
+    c.fillStyle = '#d8c8a8'; for (const p of PILES) { c.beginPath(); c.arc(X(p.x), X(p.z), 5, 0, 7); c.fill(); }
+    c.fillStyle = '#ff3b3b'; for (const f of fighters) { if (f === me || f.dead || now - (shotAt.get(f) ?? -9) > 2) continue; c.beginPath(); c.arc(X(f.pos.x), X(f.pos.z), 7, 0, 7); c.fill(); }
+    c.save(); c.translate(X(me.pos.x), X(me.pos.z)); c.rotate(-me.yaw); c.fillStyle = '#ffd23f'; c.strokeStyle = '#000'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(0, -13); c.lineTo(9, 9); c.lineTo(0, 4); c.lineTo(-9, 9); c.closePath(); c.fill(); c.stroke(); c.restore();
+  }
   function hud() {
     q('dmHpF').style.width = Math.max(0, me.hp) + '%'; q('dmHpF').style.background = hpCol(me.hp); q('dmHpN').innerHTML = `${ico(I.heart, 16)} ${Math.max(0, me.hp)}`;
     const atPile = pileDist(me.pos) <= PICK_R;
     if (isTouch) q('dmUmb').classList.toggle('held', me.umbHeld);
-    q('dmHud').innerHTML = `${ico(I.shell)} ${me.ammo}/${MAXAMMO}${now < me.invulnUntil && !me.dead ? ' ' + ico(I.shield) : ''}${atPile && me.ammo < MAXAMMO && !me.dead ? ' ' + ico(I.grab) : ''}`;
-    q('dmHud').classList.toggle('empty', me.ammo === 0); if (isTouch) q('dmUmb').classList.toggle('cd', me.umbTired);
+    q('dmAmmo').innerHTML = `${ico(I.shell)} ${me.ammo}/${MAXAMMO}`; q('dmAmmo').classList.toggle('empty', me.ammo === 0);
+    q('dmHud').innerHTML = `${ico(I.person)} ${fighters.filter(f => !f.dead).length}　${ico(I.skull)} ${me.kills}${now < me.invulnUntil && !me.dead ? ' ' + ico(I.shield) : ''}${atPile && me.ammo < MAXAMMO && !me.dead ? ' ' + ico(I.grab) : ''}`;
+    drawMap(); if (isTouch) q('dmUmb').classList.toggle('cd', me.umbTired);
     if (me.dead) q('dmMsg').innerHTML = `${ico(I.skull, 40)}<br>${Math.max(1, Math.ceil(me.respawnAt - now))}`;
     if (q('dmBoard').classList.contains('show')) renderBoard();
   }
