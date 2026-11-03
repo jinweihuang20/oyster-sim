@@ -24,7 +24,7 @@ alwaysApply: true
 |------|------|
 | `src/main.ts` | **幾乎全部玩法**（場景、相位、商店、圖鑑、成就、活動 UI、藥品、裝備…） |
 | `src/deathmatch.ts` | 死鬥相容入口（re-export `src/dm/`） |
-| `src/dm/` | 死鬥模組：`session` 對局、`weapons` 槍械、`shop` 武器店（目前免費）、`arena` 場地、`breakables`、`character` 方塊玩家（持槍臂段對準）、`constants`／`types`／`icons`／`settings`（`adsMode`: tap／hold／mix，DS_VER 3） |
+| `src/dm/` | 死鬥：`session`；`match`（`ffa` 限時混戰／`horde` 肉鴿關卡、`teamId`／獎勵）；`piles`（蚵堆填彈冷卻＋圓環）；`weapons`／`loot`／`shop`／`weaponPreview`／`arena`… |
 | `src/style.css` / `icons.css` | UI |
 | `src/social.ts` | 排行榜、跑馬燈、禮物、線上人數、限時活動 API（`/s/*`） |
 | `src/redeem.ts` + `redeemCodes.ts` | 兌換碼（只存 SHA-256 hash，不明碼） |
@@ -35,7 +35,8 @@ alwaysApply: true
 | `src/discord.ts` | 回饋 webhook |
 | `src/build.d.ts` | `__VERSION__` `__BUILD__` `__PREVIEW__` |
 | `index.html` | HUD／面板 DOM（非 React） |
-| `scripts/catalog.mjs` | build 時從 `main.ts` 抽物品 → `catalog.json` |
+| `src/oddities.ts` | 奇物圖鑑 `ODD`（主線／死鬥共用；尾端追加） |
+| `scripts/catalog.mjs` | build 時從 `main.ts`＋`oddities.ts` 抽物品 → `catalog.json` |
 | `scripts/hash-code.mjs` | `npm run hash-code -- 碼` 產生兌換 hash |
 | `.github/workflows/pages.yml` | `main` → GitHub Pages |
 | `.github/workflows/preview.yml` | `dev` → preview 站 |
@@ -74,12 +75,12 @@ alwaysApply: true
 
 夜班：裝置時間 20:00–05:00 → 收入 +20%（天色 `SKY` 跟裝置時鐘）。
 
-## 內容資料（都在 `main.ts` 常數陣列）
+## 內容資料（常數陣列）
 
 | 陣列 | 用途 | 備註 |
 |------|------|------|
-| `RAR` | 白／粉／金／黑珍珠 | |
-| `ODD` | 奇物圖鑑 | 尾端追加；`ex: true`＝活動限定 |
+| `RAR` | 白／粉／金／黑珍珠（`main.ts`） | |
+| `ODD` | 奇物圖鑑（`src/oddities.ts`） | 尾端追加；欄位 `color`／`weight`／`emoji`｜`icon`／`limited`；死鬥掉落 `rollOddIndex` |
 | `LOCS` | 自家／王功／東石／布袋 | `need`＝解鎖累計入碗；`m/thr/ang` |
 | `KNIVES` | 刀 | id：`basic dull wide point seam master` |
 | `UMBS` | 傘 | 按住撐、放開收，無冷卻 |
@@ -129,3 +130,4 @@ Base：`https://game-status.gwtech.org`
 5. 文案維持蚵寮／阿婆口語，短句
 6. 改平衡先對照現有常數（`DIFF` `PRY_*` `DPAY` knife／seat／loc 衍生函式），一次一條曲線
 7. 開發流程細節見 `.cursor/skills/oyster-sim-dev/SKILL.md`
+8. **命名**：型別／資料欄位可讀全名，禁止難懂縮寫——見 `.cursor/rules/naming.mdc`

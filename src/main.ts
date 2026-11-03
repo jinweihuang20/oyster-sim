@@ -7,9 +7,11 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
-import { openDeathmatch, isDeathmatchActive } from './deathmatch';
+import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
+import { ODD } from './oddities';
 import { installNoZoom } from './nozoom';
 installNoZoom();
+{ const s = document.createElement('style'); s.textContent = weaponPreviewCss(); document.head.appendChild(s); }
 const LS_P = __PREVIEW__ ? 'preview:' : '';
 const LS = { getItem: (k: string) => localStorage.getItem(LS_P + k), setItem: (k: string, v: string) => localStorage.setItem(LS_P + k, v), removeItem: (k: string) => localStorage.removeItem(LS_P + k) };
 if (__PREVIEW__) document.addEventListener('DOMContentLoaded', () => { const t = document.createElement('div'); t.textContent = '預覽版'; t.style.cssText = 'position:fixed;left:0;bottom:0;z-index:99999;background:#d8402f;color:#fff4dc;font:bold 12px sans-serif;padding:2px 8px;pointer-events:none;box-shadow:2px -2px 0 #1b2a3a'; document.body.appendChild(t); });
@@ -604,43 +606,6 @@ const RAR = [
   { name: '金珍珠', color: 0xf2c440, css: '#f2c440', w: 8, price: 1800, emo: '🟡', tease: '金光閃閃的…有人說過' },
   { name: '黑珍珠', color: 0x22202a, css: '#3a3548', w: 2, price: 6000, emo: '⚫', tease: '傳說中的黑色寶貝，剝一輩子才看到一次' },
 ];
-const ODD = [
-  { name: '假牙', css: '#f0e8e0', w: 30, emo: '🦷', tease: '聽說有人在蚵裡挖到…會笑的東西', price: 50, line: '誰的假牙啦！？', cry: ['哎唷，那不是阿雄伯的嗎？', '笑死，假牙也會長蚵仔'] },
-  { name: '古早硬幣', css: '#c08a40', w: 30, emo: '🪙', tease: '圓圓的、銀色的，老古董', price: 300, line: '日治時代的銀幣！', cry: ['古董喔！可以賣錢！', '我阿公以前也有收'] },
-  { name: '金戒指', css: '#f2c440', w: 10, emo: '💍', tease: '某人的定情物遺落在海裡…', price: 2500, line: '金戒指！誰的定情物？', cry: ['金的耶！給我看看！', '這要不要報警？'] },
-  { name: '小螃蟹', css: '#e05a3a', w: 30, emo: '🦀', tease: '小心，會夾手！', price: 0, line: '螃蟹夾手了！！', cry: ['快甩！快甩！', '哈哈哈，牠夾得好緊'] },
-  { name: '統一發票', css: '#f4f4f0', w: 24, price: 5, emo: '🧾', tease: '溼溼的紙…上面有號碼', line: '誰的發票塞進蚵仔裡！', cry: ['快對對看有沒有中！', '溼答答的，號碼看不清了'] },
-  { name: '幾枚銅板', css: '#c89a50', w: 24, price: 20, emo: '🪙', tease: '叮叮噹噹的零錢聲', line: '十塊、五塊…發財了！', cry: ['蚵仔也會存錢喔', '拿去買飲料'] },
-  { name: '機車鎖匙', css: '#a8b0b8', w: 16, price: 0, emo: '🔑', tease: '某人一直在找的東西', line: '誰的機車鑰匙？！', cry: ['阿明找一整天了！', '快去廣播！'] },
-  { name: '珍奶吸管', css: '#3a6ad8', w: 16, price: 1, emo: '🥤', tease: '粗粗的、塑膠的…海洋垃圾', line: '珍珠奶茶的粗吸管…', cry: ['海洋垃圾啦！', '不是那種珍珠啦'] },
-  { name: '紅包', css: '#d8282a', w: 9, price: 600, emo: '🧧', tease: '紅紅的、過年才有', line: '紅包！裡面有錢！', cry: ['恭喜發財！', '分我一半啦'] },
-  { name: '媽祖平安符', css: '#e8b030', w: 7, price: 888, emo: '🏮', tease: '有神明保佑的東西', line: '媽祖的平安符！', cry: ['媽祖保佑！', '今天一定好運'] },
-  { name: '筊杯', css: '#c0302a', w: 6, price: 400, emo: '🌙', tease: '一對紅紅的半月', line: '一對筊杯！聖筊！', cry: ['問神明今天會不會贏', '笑死人了哈哈'] },
-  { name: '大同電鍋公仔', css: '#e04a3a', w: 4, price: 1200, emo: '🍚', tease: '台灣人家家都有一台的…迷你版', line: '大同電鍋迷你公仔！', cry: ['收藏價值高喔！', '我家那台用三十年了'] },
-  { name: '中獎發票', css: '#ffe07a', w: 1, price: 8000, emo: '🎫', tease: '傳說有人在蚵裡挖到千萬…', line: '中獎了！！是頭獎！', cry: ['快去領！快去領！', '請客！請客！'] },
-  { name: '開港紀念蚵', css: '#c8443a', w: 0, price: 0, emo: '⚓', tease: '活動限定：開港紀念包才拿得到', line: '開港紀念，蚵仔大豐收！', cry: ['這顆是紀念的喔！', '開港大吉！'], ex: true },
-  // 2026-11 新增 20 種怪奇物（只能接在最後面，存檔用索引）
-  { name: '會說話的鹹酥雞', css: '#d8962a', w: 22, price: 30, emo: '', tease: '聞起來很香…好像還會講話', line: '一直說「加辣嗎？」', cry: ['不要辣，謝謝！', '鹹酥雞怎麼跑進蚵裡啦'], ic: "<path d='M6 9h12l-2 12H8z'/><path d='M9 9V6a3 3 0 0 1 6 0v3M10 14h.01M14 14h.01M10 17h4'/>" },
-  { name: '插著吸管的蚵', css: '#b8b0a0', w: 22, price: 15, emo: '', tease: '有人在蚵裡留了一根管子', line: '好像有人先喝過了', cry: ['誰先喝的啦！', '蚵仔也可以外帶喔？'], ic: "<path d='M3 15c0-4 4-7 9-7s9 3 9 7-4 5-9 5-9-1-9-5z'/><path d='M13 12l5-10h3'/>" },
-  { name: '迷你斑馬線', css: '#f4f4f0', w: 22, price: 40, emo: '', tease: '一條一條白白的…有誰在等', line: '有一隻螃蟹正在乖乖等紅燈', cry: ['好有交通道德', '綠燈了，快過！'], ic: "<path d='M3 20h18M3 4h18M6 7v10M10 7v10M14 7v10M18 7v10'/>" },
-  { name: '會自己捲起來的海帶', css: '#4a8a4a', w: 22, price: 25, emo: '', tease: '軟軟的、綠綠的，會自己動', line: '捲成「謝謝光臨」四個字', cry: ['這海帶很有禮貌', '歡迎再來！'], ic: "<path d='M12 21c-4-3 4-6 0-9s4-6 0-9'/><path d='M7 21c-3-3 3-6 0-9M17 12c3-3-3-6 0-9'/>" },
-  { name: '夾娃娃機的夾子', css: '#c0c8d0', w: 22, price: 60, emo: '', tease: '鐵做的，三根爪子', line: '裡面還夾著一顆更小的蚵', cry: ['保夾成功！', '這台機台好佛心'], ic: "<path d='M12 2v7M8 9h8M8 9l-3 6 3 4M16 9l3 6-3 4M12 9v9'/><circle cx='12' cy='19' r='2'/>" },
-  { name: '珍珠奶茶的珍珠', css: '#a07858', w: 14, price: 120, emo: '', tease: '黑黑圓圓的…不像珍珠', line: '這顆不是我生的。', cry: ['蚵仔說不是牠的', '拿去配奶茶啦'], ic: "<circle cx='12' cy='13' r='7'/><path d='M9 11a3 3 0 0 1 3-2M12 6V2'/>" },
-  { name: '迷你麥克風', css: '#8a8a98', w: 14, price: 200, emo: '', tease: '小小的，好像想唱歌', line: '一拿出來就自己開始唱〈愛拚才會贏〉', cry: ['三分天註定！', '七分靠打拚！'], ic: "<rect x='9' y='2' width='6' height='11' rx='3'/><path d='M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8'/>" },
-  { name: '里長的名片', css: '#f0e6c8', w: 14, price: 150, emo: '', tease: '一張小紙片，上面印著頭銜', line: '背面寫著「有事找我」', cry: ['里長伯人真好', '水溝不通也可以找嗎？'], ic: "<rect x='2' y='6' width='20' height='12'/><circle cx='8' cy='12' r='2'/><path d='M13 10h6M13 14h4'/>" },
-  { name: '會發熱的暖暖包', css: '#e87a4a', w: 14, price: 100, emo: '', tease: '摸起來…怎麼是溫的？', line: '在海裡泡了不知道多久，還是熱的', cry: ['好暖喔，借我握一下', '品質太好了吧'], ic: "<rect x='5' y='5' width='14' height='16'/><path d='M9 2c-1 1 1 2 0 3M12 2c-1 1 1 2 0 3M15 2c-1 1 1 2 0 3M9 13h6'/>" },
-  { name: '小烏龜', css: '#5a9a5a', w: 14, price: 0, emo: '', tease: '慢吞吞的，背著一個家', line: '自己慢慢爬出蚵殼走了', cry: ['慢走喔～', '不要跑太快'], ic: "<path d='M4 15a8 6 0 0 1 16 0z'/><path d='M20 13h2M5 15l-1 3M19 15l1 3M9 15l-1 3M15 15l1 3M9 11l3-2 3 2'/>" },
-  { name: '迷你神明', css: '#e8b030', w: 5, price: 1500, emo: '', tease: '坐得很端正，好像在保佑誰', line: '一尊小小的土地公，坐得很端正', cry: ['快拜一下！', '福德正神保佑'], ic: "<circle cx='12' cy='6' r='3'/><path d='M7 21v-8l5-3 5 3v8zM5 21h14M10 16c1 1 3 1 4 0'/>" },
-  { name: '摺好的紅包', css: '#d8282a', w: 5, price: 3, emo: '', tease: '紅紅的、摺得很整齊', line: '裡面是 3 塊錢和一張「謝謝」', cry: ['三塊也是心意', '哈哈哈，好有禮貌'], ic: "<rect x='6' y='2' width='12' height='20'/><path d='M6 8l6 4 6-4'/><circle cx='12' cy='15' r='2'/>" },
-  { name: '會響的手機', css: '#8ab0d8', w: 5, price: 800, emo: '', tease: '裡面傳出鈴聲…', line: '來電顯示「阿母」', cry: ['快接！是阿母！', '阿母找你吃飯啦'], ic: "<rect x='7' y='2' width='10' height='20'/><path d='M11 18h2M3 7c-1 2-1 4 0 6M21 7c1 2 1 4 0 6'/>" },
-  { name: '一副假睫毛', css: '#e0a8c0', w: 5, price: 600, emo: '', tease: '彎彎的、黑黑的兩條', line: '比蚵還要漂亮', cry: ['好會畫喔', '借我戴一下'], ic: "<path d='M2 12c3-3 6-3 9 0M13 12c3-3 6-3 9 0M3 11l-1-3M6 9.5l-1-3M9 10l1-3M14 11l-1-3M17 9.5l-1-3M20 10l1-3'/>" },
-  { name: '迷你漁船', css: '#3a7ac0', w: 5, price: 1200, emo: '', tease: '小小的，有船帆', line: '裡面坐著更小的阿伯在補網', cry: ['阿伯辛苦了！', '今天有沒有漁獲？'], ic: "<path d='M3 15h18l-3 5H6z'/><path d='M12 15V3l6 9h-6'/>" },
-  { name: '一整碗蚵仔煎', css: '#e86a4a', w: 1, price: 6000, emo: '', tease: '熱熱的…還有醬汁的味道', line: '熱騰騰的，還附醬', cry: ['蚵仔煎自己出來了！', '分我一口啦'], ic: "<path d='M3 11h18a9 9 0 0 1-18 0z'/><path d='M9 20h6M8 3c-1 2 1 3 0 5M12 3c-1 2 1 3 0 5M16 3c-1 2 1 3 0 5'/>" },
-  { name: '另一個蚵', css: '#b8a890', w: 1, price: 8000, emo: '', tease: '蚵裡面…好像還有東西', line: '打開裡面還有一個蚵，裡面又有一個蚵……', cry: ['剝不完了啦！', '蚵中蚵中蚵'], ic: "<path d='M2 13c0-5 4-9 10-9s10 4 10 9-4 7-10 7S2 18 2 13z'/><path d='M7 13c0-2 2-4 5-4s5 2 5 4-2 3-5 3-5-1-5-3z'/><circle cx='12' cy='13' r='1'/>" },
-  { name: '外星人名片', css: '#7ae0a0', w: 1, price: 9999, emo: '', tease: '不像是地球的東西', line: '聯絡方式是「看天上」', cry: ['外星人也剝蚵喔？', '快抬頭看看！'], ic: "<rect x='2' y='7' width='20' height='12'/><path d='M7 15c-2 0-2-5 0-5s2 5 0 5zM12 11h6M12 15h4M17 3l-2 4'/>" },
-  { name: '過期的樂透彩券', css: '#f2d060', w: 1, price: 0, emo: '', tease: '六個號碼…好像哪裡不對', line: '對了六個號碼，但是是去年的', cry: ['差一年啦！！', '好可惜喔…'], ic: "<rect x='3' y='4' width='18' height='16'/><circle cx='8' cy='10' r='1.5'/><circle cx='12' cy='10' r='1.5'/><circle cx='16' cy='10' r='1.5'/><path d='M6 16h12M4 5l16 14'/>" },
-  { name: '縮小的阿婆', css: '#d0a0b0', w: 1, price: 10000, emo: '', tease: '有人說…在蚵裡看到自己', line: '長得跟你一模一樣，正在剝更小的蚵', cry: ['那不是你嗎！？', '她也在剝蚵耶'], ic: "<circle cx='12' cy='5' r='3'/><path d='M8 21l1-8h6l1 8M9 13l-3 3M15 13l2 2M17 15l2-2'/>" },
-];
 const dexN = () => save.dex.filter(x => x).length + save.odd.filter(x => x).length;
 const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'uncommon' : 'common';
 // 入碗工錢依難度：易／普通／硬／超硬；殼屑 = 70%（至少 $1）
@@ -733,7 +698,7 @@ function checkReturn() {
   const big = days >= 30, amt = big ? 30000 : 10000;
   save.money += amt; save.retDay = t; save.streakDay = 0; save.lastBonusDay = undefined;
   let item: string;
-  if (big) { const rs = ODD.map((o, i) => ({ o, i })).filter(x => rarOf(x.o.w) === 'rare'); const p = rs[Math.floor(Math.random() * rs.length)] ?? { o: ODD[0], i: 0 }; save.odd[p.i]++; item = `稀有奇物：${p.o.name}`; }
+  if (big) { const rs = ODD.map((o, i) => ({ o, i })).filter(x => rarOf(x.o.weight) === 'rare'); const p = rs[Math.floor(Math.random() * rs.length)] ?? { o: ODD[0], i: 0 }; save.odd[p.i]++; item = `稀有奇物：${p.o.name}`; }
   else { save.dex[0]++; item = '白珍珠 1 顆'; }
   persist(); renderDex(); renderDaily();
   track('return_bonus', { days, amount: amt });
@@ -743,14 +708,15 @@ let achT = 0; // 進度一變就排一次成就檢查（成就區塊載入後才
 const persist = () => { try { LS.setItem('oyster-sim', JSON.stringify(save)); } catch { /* 私密模式等 */ } if ((window as any).__achOk && !achT) achT = window.setTimeout(() => { achT = 0; achCheck(); }, 250); };
 persist();
 let dry = 0;
-const wpick = (arr: { w: number }[]) => { let r = Math.random() * arr.reduce((s, x) => s + x.w, 0); for (let i = 0; i < arr.length; i++) { r -= arr[i].w; if (r < 0) return i; } return 0; };
+const itemW = (x: { w?: number; weight?: number }) => x.weight ?? x.w ?? 0;
+const wpick = (arr: { w?: number; weight?: number }[]) => { let r = Math.random() * arr.reduce((s, x) => s + itemW(x), 0); for (let i = 0; i < arr.length; i++) { r -= itemW(arr[i]); if (r < 0) return i; } return 0; };
 // 幸運值：每點 找著機率 ×(1+0.12×luck)；非普通物件權重 ×(1+0.15×luck)，傳說最多 ×1.3
 const luckNow = () => Math.max(0, (knifeNow().luck || 0) + medA('luck') + fxAll().luck);
-const luckW = (arr: { w: number }[], l: number) => arr.map(x => ({ w: x.w <= 2 ? x.w * Math.min(1.3, 1 + 0.15 * l) : x.w <= 20 ? x.w * (1 + 0.15 * l) : x.w }));
+const luckW = (arr: { w?: number; weight?: number }[], l: number) => arr.map(x => { const w = itemW(x); return { w: w <= 2 ? w * Math.min(1.3, 1 + 0.15 * l) : w <= 20 ? w * (1 + 0.15 * l) : w }; });
 // 傳說保底：連續 LEGEND_PITY 顆沒開到傳說（黑珍珠／傳說奇物，不含活動限定），下一次中奇物必定是傳說奇物（優先沒收集過的）
 const LEGEND_PITY = 600;
 let pityHit = false;
-const LEGEND_ODD = ODD.map((o, i) => ({ o, i })).filter(x => x.o.w > 0 && x.o.w <= 2 && !(x.o as any).ex).map(x => x.i);
+const LEGEND_ODD = ODD.map((o, i) => ({ o, i })).filter(x => x.o.weight > 0 && x.o.weight <= 2 && !x.o.limited).map(x => x.i);
 const legendTotal = () => (save.dex[3] ?? 0) + LEGEND_ODD.reduce((a, i) => a + (save.odd[i] ?? 0), 0);
 function legendSync() { const n = legendTotal(); if (save.legendN === undefined || n !== save.legendN) { if (save.legendN !== undefined && n > save.legendN) save.legendDry = 0; save.legendN = n; } }
 function legendPick() { const miss = LEGEND_ODD.filter(i => !(save.odd[i] > 0)); const L = miss.length ? miss : LEGEND_ODD; return L[Math.floor(Math.random() * L.length)]; }
@@ -760,7 +726,7 @@ function rollFind(): { kind: 'pearl' | 'odd' | 'none'; i: number } {
   const p = (1 / 50 + Math.max(0, dry - 40) * 0.01) * f * fxAll().pearl;
   if (Math.random() < p) { dry = 0; return { kind: 'pearl', i: wpick(luckW(RAR, l)) }; }
   // 新手：普通／少見（權重 ≥20）額外 +1.5 倍機率 → 合計約 ×2.5；稀有／傳說不加
-  const common = (arr: { w: number }[]) => luckW(arr, l).map((x, i) => ({ w: arr[i].w >= 20 ? x.w : 0 }));
+  const common = (arr: { w?: number; weight?: number }[]) => luckW(arr, l).map((x, i) => ({ w: itemW(arr[i]) >= 20 ? x.w : 0 }));
   if (newbie() && Math.random() < p * 1.5) { dry = 0; return { kind: 'pearl', i: wpick(common(RAR)) }; }
   dry++;
   if (Math.random() < (1 / 24) * f) { if (pity) { pityHit = true; return { kind: 'odd', i: legendPick() }; } return { kind: 'odd', i: wpick(luckW(ODD, l)) }; }
@@ -777,7 +743,7 @@ const oddMeshes: THREE.Object3D[] = ODD.map((o, i) => {
   if (i === 1) mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.006, 16), mat(0xb0b0b8, { metalness: 0.7, roughness: 0.3 }), [0, 0, 0], g);
   if (i === 2) { const r = mesh(new THREE.TorusGeometry(0.022, 0.006, 8, 16), mat(0xf2c440, { metalness: 0.9, roughness: 0.2 }), [0, 0.01, 0], g); r.rotation.x = 1.2; mesh(new THREE.OctahedronGeometry(0.01), mat(0xffffff, { roughness: 0.1 }), [0, 0.034, 0], g); }
   if (i === 3) { const b = mesh(new THREE.SphereGeometry(0.035, 8, 6), mat(0xd04a2a), [0, 0, 0], g); b.scale.y = 0.5; for (const s of [-1, 1]) { mesh(new THREE.SphereGeometry(0.016, 6, 5), mat(0xe05a3a), [s * 0.045, 0.005, -0.03], g); for (let k = 0; k < 3; k++) mesh(new THREE.BoxGeometry(0.03, 0.004, 0.004), mat(0xc04a2a), [s * 0.04, -0.005, -0.01 + k * 0.015], g); } }
-  if (i >= 4) { const c = parseInt(o.css.slice(1), 16), M = mat(c, { roughness: 0.5 });
+  if (i >= 4) { const c = parseInt(o.color.slice(1), 16), M = mat(c, { roughness: 0.5 });
     if (o.name.includes('發票')) { const b = mesh(new THREE.BoxGeometry(0.05, 0.002, 0.07), M, [0, 0.005, 0], g); b.rotation.z = 0.15; }
     else if (o.name.includes('銅板')) for (let k = 0; k < 3; k++) mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.004, 14), mat(c, { metalness: 0.8, roughness: 0.3 }), [k * 0.02 - 0.02, k * 0.004, k % 2 * 0.01], g);
     else if (o.name.includes('鎖匙')) { mesh(new THREE.TorusGeometry(0.012, 0.004, 6, 12), mat(c, { metalness: 0.8 }), [-0.02, 0, 0], g).rotation.x = Math.PI / 2; mesh(new THREE.BoxGeometry(0.04, 0.004, 0.008), mat(c, { metalness: 0.8 }), [0.012, 0, 0], g); }
@@ -786,7 +752,7 @@ const oddMeshes: THREE.Object3D[] = ODD.map((o, i) => {
     else if (o.name.includes('平安符')) { mesh(new THREE.BoxGeometry(0.03, 0.004, 0.05), mat(0xe8b030), [0, 0.005, 0], g); mesh(new THREE.BoxGeometry(0.02, 0.005, 0.012), mat(0xc0302a), [0, 0.006, 0.012], g); }
     else if (o.name === '筊杯') for (const sx of [-1, 1]) { const h = mesh(new THREE.SphereGeometry(0.022, 10, 6, 0, Math.PI), M, [sx * 0.018, 0.008, 0], g); h.scale.set(0.6, 1, 1.4); h.rotation.set(-Math.PI / 2, 0, sx * 0.3); }
     else if (o.name.includes('電鍋')) { mesh(new THREE.CylinderGeometry(0.024, 0.026, 0.035, 16), M, [0, 0.018, 0], g); mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.006, 16), mat(0xf4f0e8), [0, 0.038, 0], g); mesh(new THREE.SphereGeometry(0.006, 6, 4), mat(0x222222), [0, 0.044, 0], g); }
-    else if ('ic' in o) { const b = mesh(new THREE.SphereGeometry(0.028, 10, 8), M, [0, 0.012, 0], g); b.scale.y = 0.55; mesh(new THREE.BoxGeometry(0.02, 0.012, 0.02), mat(0xffffff, { roughness: 0.3 }), [0, 0.026, 0], g); }
+    else if (o.icon) { const b = mesh(new THREE.SphereGeometry(0.028, 10, 8), M, [0, 0.012, 0], g); b.scale.y = 0.55; mesh(new THREE.BoxGeometry(0.02, 0.012, 0.02), mat(0xffffff, { roughness: 0.3 }), [0, 0.026, 0], g); }
     else { mesh(new THREE.BoxGeometry(0.055, 0.003, 0.075), mat(0xffe07a, { emissive: 0x806010, roughness: 0.3 } as any), [0, 0.005, 0], g); }
   }
   return g;
@@ -1347,8 +1313,27 @@ async function payFor(k: string, base: number, name: string): Promise<number | n
   }
   return save.money >= price ? price : null;
 }
+function ensureStarterWeapons() {
+  for (const w of shopWeapons()) if (w.price <= 0 && !save.shop.owned.includes(w.id)) save.shop.owned.push(w.id);
+}
+/** 開發模式（vite dev）視為已購買全部上架槍，方便測死鬥 */
+function ownsWeapon(id: string) {
+  if (save.shop.owned.includes(id)) return true;
+  return import.meta.env.DEV && isWeaponId(id) && WEAPON_DEFS[id].inShop;
+}
+function ownedWeaponIds(): WeaponId[] {
+  ensureStarterWeapons();
+  if (import.meta.env.DEV) return shopWeapons().map(w => w.id);
+  return shopWeapons().map(w => w.id).filter(id => save.shop.owned.includes(id));
+}
+function weaponNow(): WeaponId {
+  const id = save.shop.equipped.weapon;
+  const owned = ownedWeaponIds();
+  return id && isWeaponId(id) && owned.includes(id) ? id : 'oysterGun';
+}
 function renderShop() {
   if (!save.shop.owned.includes('basic')) save.shop.owned.push('basic');
+  ensureStarterWeapons();
   const cur = knifeNow().id;
   $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><h3><i class="ic ic-knife"></i> 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>找縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
     const own = save.shop.owned.includes(k.id);
@@ -1390,6 +1375,56 @@ function renderShop() {
     if (b.hasAttribute('data-gbuy')) { const pr = await payFor(id, g.price, g.n.replace(/^\S+\s/, '')); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); save.gear[id] = true; track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
     else save.gear[id] = !gearOn(id);
     persist(); renderShop(); drawRadio(); applyGloves();
+  });
+  const cw = weaponNow();
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg> 槍枝</h3><p style="font-size:12px;opacity:.8"><b style="color:#d9952b">點整列可預覽 3D 模型</b>（進去後拖曳旋轉）；買了才能在死鬥裡裝備；${WEAPON_DEFS.oysterGun.name}開局就送。${import.meta.env.DEV ? '（開發模式：全部已解鎖）' : ''}</p><table class="kt"><tr><th>槍</th><th>彈匣</th><th>射速</th><th>彈速</th><th></th></tr>` + shopWeapons().map(w => {
+    const own = ownsWeapon(w.id);
+    const btn = w.id === cw ? '<b>死鬥預設</b>' : own ? `<button data-weq="${w.id}">設為預設</button>` : `<button data-wbuy="${w.id}" ${save.money < px(w.id, w.price) ? 'disabled' : ''}>${pxHtml(w.id, w.price)}</button>`;
+    return `<tr class="wpnRow" data-wprev="${w.id}" role="button" tabindex="0" title="點擊預覽"><td><b>${w.name}</b> <small style="opacity:.7">預覽</small><br><small>${w.blurb}</small>${pxCd(w.id)}</td><td>${w.maxAmmo}</td><td>${w.fireRate.toFixed(1)}/s${w.burstCount > 1 ? `<br><small>${w.burstCount} 連發</small>` : ''}${w.pelletCount > 1 ? `<br><small>散彈 ×${w.pelletCount}</small>` : ''}</td><td>${w.bulletSpeed}</td><td>${btn}</td></tr>`;
+  }).join('') + '</table>');
+  const wpnPrevCtx = () => ({ shellGeos: SHELL_GEOS, shellMat: pileMat });
+  const showWpnPrev = (id: WeaponId) => {
+    const w = WEAPON_DEFS[id];
+    const own = ownsWeapon(id);
+    const isDef = weaponNow() === id;
+    const act = isDef
+      ? '<button type="button" class="ghost" disabled>死鬥預設中</button>'
+      : own
+        ? `<button type="button" data-prev-eq="${id}">設為死鬥預設</button>`
+        : `<button type="button" data-prev-buy="${id}" ${save.money < px(id, w.price) ? 'disabled' : ''}>${pxHtml(id, w.price, '購買 ')}</button>`;
+    openWeaponPreview({
+      id,
+      ctx: wpnPrevCtx(),
+      actionsHtml: `${act}<button type="button" class="ghost" data-prev-x>關閉</button>`,
+      bindActions: (box, close) => {
+        box.querySelector('[data-prev-x]')?.addEventListener('click', close);
+        box.querySelector(`[data-prev-eq="${id}"]`)?.addEventListener('click', () => {
+          save.shop.equipped.weapon = id; persist(); close(); renderShop();
+        });
+        box.querySelector(`[data-prev-buy="${id}"]`)?.addEventListener('click', async () => {
+          const pr = await payFor(id, w.price, w.name); if (pr == null) return;
+          save.money -= pr; save.shop.owned.push(id); save.shop.equipped.weapon = id;
+          track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); persist(); close(); renderShop();
+        });
+      },
+    });
+  };
+  $('shopList').querySelectorAll<HTMLElement>('.wpnRow').forEach(row => {
+    row.onclick = e => {
+      if ((e.target as HTMLElement).closest('button')) return;
+      const id = row.dataset.wprev; if (id && isWeaponId(id)) showWpnPrev(id);
+    };
+  });
+  $('shopList').querySelectorAll('button[data-wbuy],button[data-weq]').forEach(b => (b as HTMLButtonElement).onclick = async e => {
+    e.stopPropagation();
+    const id = (b.getAttribute('data-wbuy') || b.getAttribute('data-weq'))!;
+    if (!isWeaponId(id)) return;
+    const w = WEAPON_DEFS[id];
+    if (b.hasAttribute('data-wbuy')) {
+      const pr = await payFor(id, w.price, w.name); if (pr == null) return;
+      save.money -= pr; save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle();
+    }
+    save.shop.equipped.weapon = id; persist(); renderShop();
   });
   renderClothShop(); renderMedShop(); renderItemShop(); shopTabs(); newDecor();
 }
@@ -1448,9 +1483,9 @@ function openOyster() {
   updHud();
 }
 function revealOdd(i: number) { react3('cheer');
-  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; const wasPity = pityHit; pityHit = false; if (rarOf(o.w) === 'legend' && !(o as any).ex) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(o.w) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.w), ...(wasPity ? { pity: 1 } : {}), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
+  const o = ODD[i]; dayOdd.push(i); save.odd[i]++; const wasPity = pityHit; pityHit = false; if (rarOf(o.weight) === 'legend' && !o.limited) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(o.weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.weight), ...(wasPity ? { pity: 1 } : {}), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
-  label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.css; label.classList.add('on');
+  label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.color; label.classList.add('on');
   npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
   if (i === 3) { later(0.6, () => { flinch = 1; SFX.pinch(); bleed(8); hurt(4, '夾！'); crabShakes = 0; strokeDir = 0; strokeLen = 0; setPhase('crab'); }); }
   else later(2.2, () => { oddMeshes[i].visible = false; setPhase('aim'); });
@@ -1658,10 +1693,13 @@ function revealPearl(r: number) { react3('cheer');
 }
 function renderDex() {
   const RZ: Record<string, string> = { common: '普通', uncommon: '少見', rare: '稀有', legend: '傳說' };
-  const all = [...RAR.map((r, i) => ({ ...r, has: save.dex[i] ?? 0 })), ...ODD.map((o, i) => ({ ...o, has: save.odd[i] ?? 0 }))];
-  const item = (x: typeof all[number]) => { const rr = rarOf(x.w); return `<div class="dexItem ${x.has ? '' : 'locked'}">${x.has ? `<div class="dot" style="background:${x.css};box-shadow:0 0 8px ${x.css}">${'ic' in x && (x as any).ic ? `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#1e1a16" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${(x as any).ic}</svg>` : x.emo}</div>` : '<div class="dot unk" aria-hidden="true">?</div>'}<div><b>${x.has ? x.name : '？？？'}</b>${x.has ? ` <span class="dexN">×${x.has}</span>` : ''} <span class="rb r-${rr}">${RZ[rr]}</span><br><small>${x.has ? `收集 ${x.has} 件・值 $${x.price}${'line' in x ? `<br>「${(x as any).line}」` : ''}` : `💭 ${x.tease}`}</small></div></div>`; };
+  const all = [
+    ...RAR.map((r, i) => ({ name: r.name, color: r.css, weight: r.w, price: r.price, tease: r.tease, emoji: r.emo as string | undefined, icon: undefined as string | undefined, line: undefined as string | undefined, has: save.dex[i] ?? 0 })),
+    ...ODD.map((o, i) => ({ name: o.name, color: o.color, weight: o.weight, price: o.price, tease: o.tease, emoji: o.emoji, icon: o.icon, line: o.line, has: save.odd[i] ?? 0 })),
+  ];
+  const item = (x: typeof all[number]) => { const rr = rarOf(x.weight); return `<div class="dexItem ${x.has ? '' : 'locked'}">${x.has ? `<div class="dot" style="background:${x.color};box-shadow:0 0 8px ${x.color}">${x.icon ? `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#1e1a16" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${x.icon}</svg>` : (x.emoji ?? '')}</div>` : '<div class="dot unk" aria-hidden="true">?</div>'}<div><b>${x.has ? x.name : '？？？'}</b>${x.has ? ` <span class="dexN">×${x.has}</span>` : ''} <span class="rb r-${rr}">${RZ[rr]}</span><br><small>${x.has ? `收集 ${x.has} 件・值 ${x.price}${x.line ? `<br>「${x.line}」` : ''}` : `💭 ${x.tease}`}</small></div></div>`; };
   const got = all.filter(x => x.has).length;
-  const per = (['common', 'uncommon', 'rare', 'legend'] as const).map(r => { const xs = all.filter(x => rarOf(x.w) === r); return `<span class="rb r-${r}">${RZ[r]} ${xs.filter(x => x.has).length}/${xs.length}</span>`; }).join(' ');
+  const per = (['common', 'uncommon', 'rare', 'legend'] as const).map(r => { const xs = all.filter(x => rarOf(x.weight) === r); return `<span class="rb r-${r}">${RZ[r]} ${xs.filter(x => x.has).length}/${xs.length}</span>`; }).join(' ');
   $('dexList').innerHTML = `<div class="dexProg"><b>已收集 ${got} / ${all.length} 種</b>・累計挖到 <b>${all.reduce((a, x) => a + x.has, 0)}</b> 個<div class="dexBar"><i style="width:${got / all.length * 100}%"></i></div>${per}</div>` +
     '<h3>珍珠</h3>' + all.slice(0, RAR.length).map(item).join('') + '<h3>奇物</h3>' + all.slice(RAR.length).map(item).join('') + lifeHtml();
 }
@@ -1939,7 +1977,13 @@ function renderItemShop() {
 (window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };
 const go = (len: number) => { evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
-$('oDm').onclick = () => { $('overlay').classList.remove('show'); openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })() }, () => { $('overlay').classList.add('show'); duckAmb(); }); duckAmb(); };
+function launchDeathmatch(mode: DmMode) {
+  $('overlay').classList.remove('show');
+  openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })(), grantOdd: (i) => { if (!Number.isInteger(i) || i < 0 || i >= ODD.length || ODD[i].limited) return null; save.odd[i] = (save.odd[i] ?? 0) + 1; if (rarOf(ODD[i].weight) === 'legend') { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(ODD[i].weight), via: 'dm' }); return { name: ODD[i].name, line: ODD[i].line, n: save.odd[i], color: ODD[i].color }; }, ownedWeapons: ownedWeaponIds(), equippedWeapon: weaponNow(), setEquippedWeapon: (id) => { if (!isWeaponId(id) || !ownsWeapon(id)) return; save.shop.equipped.weapon = id; persist(); }, grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); track('dm_reward', { amount: n, via, money: save.money }); } }, () => { $('overlay').classList.add('show'); duckAmb(); }, DM_PRESETS[mode]);
+  duckAmb();
+}
+$('oDmFfa').onclick = () => launchDeathmatch('ffa');
+$('oDmHorde').onclick = () => launchDeathmatch('horde');
 $('start').onclick = () => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 btn('again', () => { if (evLastId != null) evAgain(); else startDay(); });
 btn('resMenu', () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; });
@@ -2306,7 +2350,7 @@ function rewardText(d: RedeemCodeDef) {
   if (r.money) p.push(`$${r.money}`);
   for (const id of r.items ?? []) { const it = [...KNIVES, ...UMBS].find(x => x.id === id) as { n: string } | undefined; p.push(it ? it.n : id); }
   (r.pearls ?? []).forEach((n, i) => { if (n > 0 && RAR[i]) p.push(`${RAR[i].emo}${RAR[i].name}×${n}`); });
-  for (const [k, n] of Object.entries(r.odd ?? {})) { const o = ODD[+k]; if (o && n > 0) p.push(`${o.emo}${o.name}×${n}`); }
+  for (const [k, n] of Object.entries(r.odd ?? {})) { const o = ODD[+k]; if (o && n > 0) p.push(`${o.emoji || ''}${o.name}×${n}`); }
   for (const [k, n] of Object.entries(r.meds ?? {})) { const m = MEDS.find(x => x.id === k); if (m && n > 0) p.push(`${m.emo}${m.n}×${n}`); }
   return p.join('、') || '（無）';
 }
@@ -2672,7 +2716,7 @@ function giftNew() { return giftList.filter(g => !giftSeen.includes(String(g.id)
 function giftAlert() {
   const n = giftNew(), h = document.getElementById('giftHud');
   if (h) h.style.display = state === 'play' && n.length ? '' : 'none';
-  if (!n.length || state === 'play' || tut || document.getElementById('giftMsg') || document.getElementById('newMsg') || $('gift').classList.contains('show')) return;
+  if (!n.length || state === 'play' || tut || document.getElementById('giftMsg') || document.getElementById('newMsg') || document.getElementById('featMsg') || $('gift').classList.contains('show')) return;
   for (const g of n) giftSeen.push(String(g.id));
   while (giftSeen.length > 200) giftSeen.shift();
   try { LS.setItem('giftSeen', JSON.stringify(giftSeen)); } catch { /* 忽略 */ }
@@ -3063,10 +3107,15 @@ function openShopAt(k: string) {
   const cat = NEW_CAT[k.split('-')[0]]; const i = Array.from(document.querySelectorAll('#shopTabs button')).findIndex(b => (b.textContent ?? '').includes(cat));
   if (i >= 0) (document.querySelectorAll('#shopTabs button')[i] as HTMLButtonElement).click();
 }
+function menuModalBusy() {
+  return state === 'play' || tut || !$('overlay').classList.contains('show')
+    || !!document.getElementById('giftMsg') || !!document.getElementById('newMsg') || !!document.getElementById('featMsg')
+    || $('gift').classList.contains('show') || !!document.querySelector('.panel.show:not(#overlay)');
+}
 function newAnnounce() {
   newDots();
   const fresh = newNow().filter(k => !shopAnn.has(k)); if (!fresh.length) return;
-  if (state === 'play' || tut || !$('overlay').classList.contains('show') || document.getElementById('giftMsg') || document.getElementById('newMsg') || $('gift').classList.contains('show') || document.querySelector('.panel.show:not(#overlay)')) return;
+  if (menuModalBusy()) return;
   const names = fresh.map(shopName).join('、');
   fresh.forEach(k => shopAnn.add(k)); saveNew();
   const day = todayKey(); if (LS.getItem('shopAnnDay') !== day) { try { LS.setItem('shopAnnDay', day); } catch { } Social.local(`雜貨店新上架：${names}`); }
@@ -3079,6 +3128,59 @@ function newAnnounce() {
 }
 setInterval(newAnnounce, 1500); setTimeout(newAnnounce, 2500);
 (window as any).__newShop = { now: () => newNow(), reset: () => { LS.removeItem('shopKnown'); LS.removeItem('shopAnn'); LS.removeItem('shopAnnDay'); } };
+
+/** 玩法／模式更新公告（進主畫面跳一次；之後換 id 再發） */
+const FEAT_NOTES: { id: string; title: string; lines: string[] }[] = [
+  {
+    id: 'dm-modes-weapons-2026-11b',
+    title: '死鬥大更新',
+    lines: [
+      '雜貨店新上架多把死鬥槍：蚵卡拉什、蚵殼卡賓、烏茲、沙鷹、噴子、狙擊…',
+      '「死鬥・混戰」：3 分鐘搶擊殺榜，結算依名次發錢',
+      '「死鬥・圍毆」：一關接一關，BOT 越來越多也越兇，看你能撐幾關',
+      '蚵仔堆填彈有冷卻（圓環進度），補完要換下一堆',
+    ],
+  },
+];
+const FEAT_LS = LS_P + 'featNotes';
+let featSeen: Set<string>;
+{ let raw: any = null; try { raw = JSON.parse(LS.getItem(FEAT_LS) ?? 'null'); } catch { } featSeen = new Set(Array.isArray(raw) ? raw : []); }
+const featSave = () => { try { LS.setItem(FEAT_LS, JSON.stringify([...featSeen])); } catch { } };
+const featPending = () => FEAT_NOTES.filter(n => !featSeen.has(n.id));
+function featDots() {
+  const has = featPending().length > 0;
+  for (const id of ['oDmFfa', 'oDmHorde']) {
+    const b = document.getElementById(id); if (!b) continue;
+    b.style.position = b.style.position || 'relative';
+    let d = b.querySelector('.newDot');
+    if (has && !d) b.insertAdjacentHTML('beforeend', '<span class="newDot">新</span>');
+    else if (!has && d) d.remove();
+  }
+}
+function featAnnounce() {
+  featDots();
+  const next = featPending()[0]; if (!next) return;
+  if (menuModalBusy()) return;
+  featSeen.add(next.id); featSave(); featDots();
+  Social.local(next.title + '：' + next.lines[0]);
+  const m = document.createElement('div'); m.id = 'featMsg'; m.className = 'giftMsg';
+  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b>${esc(next.title)}</b>
+<ul class="featList">${next.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
+<div class="mbtns"><button class="gmNo">知道了</button><button class="gmYes">去雜貨店看槍</button></div></div>`;
+  const close = () => { m.remove(); setTimeout(() => { giftAlert(); newAnnounce(); }, 300); };
+  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
+  m.querySelector('.gmYes')!.addEventListener('click', () => {
+    close();
+    ($('oShop') as HTMLButtonElement).click();
+    requestAnimationFrame(() => {
+      const h = Array.from($('shopList').querySelectorAll('h3')).find(el => (el.textContent ?? '').includes('槍枝'));
+      h?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+  document.body.appendChild(m);
+}
+setInterval(featAnnounce, 1500); setTimeout(featAnnounce, 1800);
+(window as any).__featNotes = { pending: () => featPending().map(n => n.id), reset: () => { LS.removeItem(FEAT_LS); featSeen = new Set(); featDots(); } };
 
 (window as any).__pity = { LEGEND_PITY, LEGEND_ODD, get dry() { return save.legendDry ?? 0; }, set dry(v: number) { save.legendDry = v; }, roll: () => rollFind(), sync: () => legendSync(), give: (i: number) => { save.odd[i]++; }, odd: () => save.odd.slice() };
 
@@ -3108,8 +3210,8 @@ function evFinish(ev: EvCfg, done: boolean, early: boolean): string {
   const odds = done ? [...evOdds(ev.oddDone), ...(early ? evOdds(ev.oddEarly) : [])] : [];
   if (fresh) {
     save.evClaim.push(sid); save.evClaim = save.evClaim.slice(-30);
-    for (const o of odds) { save.odd[o.i] = (save.odd[o.i] ?? 0) + o.n; const w = ODD[o.i]; if (rarOf(w.w) === 'legend' && !(w as any).ex) { save.legendDry = 0; save.legendN = legendTotal(); } }
-    for (const i of new Set(odds.map(o => o.i))) Social.report(rarOf(ODD[i].w) === 'legend' ? 'legend' : 'odd', i);
+    for (const o of odds) { save.odd[o.i] = (save.odd[o.i] ?? 0) + o.n; const def = ODD[o.i]; if (rarOf(def.weight) === 'legend' && !def.limited) { save.legendDry = 0; save.legendN = legendTotal(); } }
+    for (const i of new Set(odds.map(o => o.i))) Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i);
     renderDex();
   }
   const score = count * 1000 + (early ? Math.max(0, Math.ceil(timeLeft)) : 0);
@@ -3200,7 +3302,7 @@ const achS = (): AchSave => (save.ach ??= { got: {}, st: {}, locs: [], seats: []
 const AS = (k: string) => achS().st[k] ?? 0;
 // 上工中把這一工的即時數字加進去，剝到就跳成就，不用等收工
 const L_ = () => { const L = save.life; if (state !== 'play' || tut) return L; return { ...L, inBowl: L.inBowl + count, opened: L.opened + opened, perfects: L.perfects + perfects, steals: L.steals + steals, caught: L.caught + caught, meatHits: L.meatHits + meatHits, blocks: L.blocks + blocks, reflects: L.reflects + reflects, shellHits: L.shellHits + shellHits }; };
-const dexPct = () => { const odd = ODD.map((o, i) => [o, i] as const).filter(([o]) => !(o as any).ex); const tot = 4 + odd.length, have = save.dex.filter(x => x).length + odd.filter(([, i]) => save.odd[i]).length; return Math.floor(have / tot * 100); };
+const dexPct = () => { const odd = ODD.map((o, i) => [o, i] as const).filter(([o]) => !o.limited); const tot = 4 + odd.length, have = save.dex.filter(x => x).length + odd.filter(([, i]) => save.odd[i]).length; return Math.floor(have / tot * 100); };
 const ACHS: AchDef[] = [
   { id: 'inbowl', cat: 'shuck', n: '蚵仔入碗', d: '累積剝進碗裡的蚵仔', t: [100, 1000, 10000], v: () => L_().inBowl, unit: '顆' },
   { id: 'opened', cat: 'shuck', n: '開殼達人', d: '累積開殼次數', t: [200, 2000, 20000], v: () => L_().opened, unit: '次' },

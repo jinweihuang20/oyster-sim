@@ -21,6 +21,7 @@ description: >-
 | 棧 | Three.js + Vite + TypeScript |
 | 主邏輯 | 幾乎都在 `src/main.ts`（大檔；改玩法先搜現有區塊註解） |
 | 週邊模組 | `redeem*`、`social`、`discord`、`update`、`inapp`、`backguard`、`nozoom` — 非玩法別塞進 main |
+| 死鬥對局 | `src/dm/match.ts`：`DmMatchConfig`／`DM_PRESETS`；敵我用 `teamId`＋`isHostile`（`ffa` 互打、`horde` BOT 只打玩家）。線上之後接同一介面，不要另寫一套 AI／命中 |
 | 音效 | **全部 WebAudio 即時合成**，禁止加外部音檔 |
 | 存檔 | `LS` wrapper → localStorage（預覽版有 `preview:` 前綴）；主鍵 `oyster-sim` |
 | UI 文案 | 台語口吻／夜市阿婆語氣；短、口語、可吐槽 |
@@ -38,13 +39,13 @@ description: >-
 
 ### 存檔相容（硬規則）
 
-- `ODD`（奇物）**只能接在陣列最後面**；存檔用索引，插入／刪除／重排會弄壞圖鑑。
+- `ODD`（奇物，在 `src/oddities.ts`）**只能接在陣列最後面**；存檔用索引，插入／刪除／重排會弄壞圖鑑。
 - 新增存檔欄位：更新 `Save` type、`defaultSave()`、`loadSave()` 補預設；必要時升 `SAVE_V`。
 - 珍珠 `RAR`／奇物 `odd` 計數長度要對得上陣列。
 
 ### 程式風格（貼近現況）
 
-- 沿用短名 helper：`mat`、`mesh`、`rnd`、`pick`、`$`、`persist()`。
+- **命名**：型別／資料欄位可讀全名（見 `.cursor/rules/naming.mdc`）；禁止新公開欄位用 `w`／`ic`／`ex` 這類縮寫。區域 helper 可短：`mat`、`mesh`、`rnd`、`pick`、`$`、`persist()`。
 - 場景 mesh 多用 flatShading；顏色偏黃昏蚵寮（暖燈、紫灰霧）。
 - 狀態機相位（`pick`／`twist`／`busy`…）改動時檢查 hint、教學字串、活動 `evRun` 特例。
 
@@ -69,10 +70,10 @@ description: >-
 ### 加新奇物（圖鑑）
 
 ```
-- [ ] 只在 ODD 陣列「最末」追加一筆
-- [ ] 填 name / css / w / price / emo 或 ic / tease / line / cry
-- [ ] 活動限定加 ex: true，並確認掉落邏輯有擋一般池
-- [ ] 稀有度用 w 對齊 rarOf（legend≤2、rare≤10…）
+- [ ] 只在 src/oddities.ts 的 ODD「最末」追加一筆（不要塞回 main.ts）
+- [ ] 填 name / color / weight / price / emoji 或 icon / tease / line / cry
+- [ ] 活動限定加 limited: true，並確認掉落邏輯有擋一般池（含死鬥 rollOddIndex）
+- [ ] 稀有度用 weight 對齊 rarOf（legend≤2、rare≤10…）
 - [ ] 文案：夜市／台式吐槽；阿婆 cry 兩句左右
 - [ ] npm run build；實機開殼抽幾次看 UI／toast
 ```
@@ -92,10 +93,11 @@ description: >-
 
 ```
 - [ ] 實作在 src/dm/，不要把系統塞回單檔 deathmatch.ts
-- [ ] WeaponId + WEAPON_DEFS（name / blurb / maxAmmo / fireCd / projSpeed / price；有鏡則 zoom／adsBreakOnFire）
+- [ ] WeaponId + WEAPON_DEFS（name / blurb / maxAmmo / fireRate / bulletSpeed / price；連發另填 burstCount／burstPause；有鏡則 zoom／adsBreakOnFire）
 - [ ] buildWeaponView 加第一人稱模型
-- [ ] 商店／目錄只 import ./dm/weapons（WEAPON_DEFS / weaponList）
+- [ ] 商店／目錄只 import ./dm/weapons（WEAPON_DEFS / weaponList）；雜貨店賣槍寫入 `save.shop.owned`，死鬥只能裝備已購買
 - [ ] 死鬥換槍走 equipWeapon；驗證射速／彈匣／view；開鏡走 scopePress／scopeRelease（設定 adsMode）
+- [ ] 擊殺奇物掉落在 dm/loot.ts；寫入存檔走 DmUmb.grantOdd；種類用 oddities.rollOddIndex
 ```
 
 ### 加新蚵寮地點
@@ -140,7 +142,7 @@ description: >-
 | 想改… | 大致位置（`src/main.ts` 內搜） |
 |--------|--------------------------------|
 | 難度／撬殼 | `DIFF`、`PRY`、`halfTwist`、phase `twist` |
-| 珍珠／奇物 | `RAR`、`ODD`、開殼掉落、`persist` |
+| 珍珠／奇物 | `RAR`、`src/oddities.ts` 的 `ODD`、開殼／死鬥掉落、`persist` |
 | 存檔 | `SAVE_V`、`Save`、`loadSave`、`defaultSave` |
 | 刀傘盆位 | `KNIVES`、`UMBS`、`BOWLS`、`SEATS`、shop HTML |
 | 地點 | `LOCS`、`locNow` |

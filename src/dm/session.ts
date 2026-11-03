@@ -2,21 +2,39 @@
 import * as THREE from 'three';
 import { WALK, SPRINT, HALF, EYE, R, PILES, PICK_R, SPAWNS, makeCoverBoxes } from './constants';
 import type { Part, Fighter, Shell, DmUmb } from './types';
-import { WEAPON_DEFS, makeWeapon, buildWeaponView, type Weapon, type WeaponId } from './weapons';
+import { WEAPON_DEFS, makeWeapon, buildWeaponView, armBurst, cooldownAfterShot, isWeaponId, type Weapon, type WeaponId } from './weapons';
 import { ico, I } from './icons';
 import { loadDS, DM_DEV, type DS } from './settings';
 import { makeMeshHelpers } from './mesh';
 import { createBreakables, type CrackSfx } from './breakables';
 import { buildArena } from './arena';
-import { shopCss, shopOverlayHtml, renderShopList, SHOP_FREE } from './shop';
+import { shopCss, shopOverlayHtml, renderShopList } from './shop';
+import { openWeaponPreview, weaponPreviewCss } from './weaponPreview';
 import { makePlayerAvatar, poseAimArms, poseUmbArms } from './character';
+import { spawnOddLoot, stepOddLoot, tryPickOddLoot, type OddLoot } from './loot';
+import {
+  resolveMatchConfig, isHostile, teamIdForSeat, DM_MODE_LABEL,
+  hordeBotCount, hordeAggression, ffaReward, hordeReward, type DmMatchConfig,
+} from './match';
+import {
+  createPileRuntimes, findPickPile, markPileUsed, sealPileIfNeeded, stepPileCools,
+  pileCanPick, nearestPileIndex, PILE_COOL_SEC,
+} from './piles';
 
 let active = false;
 export const isDeathmatchActive = () => active;
 export type { DmUmb };
 
-export function openDeathmatch(U: DmUmb, onExit: () => void) {
+export function openDeathmatch(U: DmUmb, onExit: () => void, cfg?: Partial<DmMatchConfig>) {
   if (active) return; active = true;
+  const match = resolveMatchConfig(cfg);
+  const isHorde = match.mode === 'horde';
+  let roundLeft = match.durationSec;
+  let roundOver = false;
+  let payout = 0;
+  let wave = 1, wavesCleared = 0, waveBreakT = 0;
+  let agr = hordeAggression(1);
+  let msgT = 0; // 須在首波 msg() 之前初始化，避免 TDZ 黑屏
   const isTouch = matchMedia('(pointer: coarse)').matches;
   const root = document.createElement('div'); root.id = 'dmRoot';
   root.innerHTML = `<style>
@@ -44,7 +62,7 @@ export function openDeathmatch(U: DmUmb, onExit: () => void) {
 #dmHs{position:absolute;left:50%;top:calc(env(safe-area-inset-top) + 56px);transform:translate(-50%,-8px);color:#ffd23f;font-weight:900;font-size:clamp(22px,4.5vw,36px);letter-spacing:.08em;text-shadow:0 2px 0 #000,0 0 18px rgba(255,60,40,.55);pointer-events:none;opacity:0;transition:opacity .15s,transform .15s;z-index:4;white-space:nowrap}
 #dmHs.on{opacity:1;transform:translate(-50%,0)}
 .dmPop{position:absolute;color:#ffd23f;font-weight:900;font-size:22px;text-shadow:0 2px 0 #000;pointer-events:none;transform:translate(-50%,-50%);transition:transform .8s,opacity .8s}
-#dmBoard{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#2a1206;border:4px solid #ffd23f;border-radius:12px;color:#fff6d8;padding:14px 18px;display:none;min-width:300px;max-width:92vw}
+#dmBoard{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#2a1206;border:4px solid #ffd23f;border-radius:12px;color:#fff6d8;padding:14px 18px;display:none;min-width:300px;max-width:92vw;z-index:12;pointer-events:auto}
 #dmBoard.show{display:block}#dmBoard h2{margin:0 0 8px;color:#ffd23f;text-align:center;letter-spacing:4px}
 #dmBoard table{border-collapse:collapse;width:100%;font-size:16px}#dmBoard td,#dmBoard th{padding:4px 8px;text-align:center;border-bottom:1px solid #6b3a12}
 #dmBoard tr.me td{color:#ffd23f;font-weight:900}
@@ -186,6 +204,7 @@ ${isTouch
   const crackSfx: CrackSfx = { crack: () => {} };
   const { breakables, regBreak, hitBreakable, propContains, stepBreakables, stepScrap, placeScar, stepScars } = createBreakables({ scene, LO, covers, sfx: crackSfx });
   buildArena({ scene, LO, M, add, U, regBreak });
+  const piles = createPileRuntimes(scene);
 
   const BARN_N = LO ? 3 : 8;
   function shellMesh() {
@@ -244,13 +263,24 @@ ${isTouch
     scene.add(a.outer);
     return { outer: a.outer, rig: a };
   }
-  const mk = (name: string, isPlayer: boolean, color: number): Fighter => ({ name, isPlayer, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, hp: 100, wpn: makeWeapon('oysterGun'), dead: false, respawnAt: 0, invulnUntil: 0, kills: 0, deaths: 0, hs: 0, shots: 0, hits: 0, mesh: null, rig: null, stepAcc: 0, hpBar: null, deathAt: 0, fallDir: new THREE.Vector3(0, 0, 1), throwA: 0, walkPh: 0, pickCd: 0, cd: 1, umbT: 0, umbHeld: false, umbTired: false, umbMesh: null, goal: new THREE.Vector3(), idleUntil: 0, pickT: 0 });
-  const me = mk('你', true, 0);
-  const fighters: Fighter[] = [me, mk('玩家 A', false, 0), mk('玩家 B', false, 0), mk('玩家 C', false, 0)];
-  ([[0x3a6fc0, 0x2a2a2a, 0x2a3548], [0xc84a3a, 0x4a3020, 0x1a2838], [0x3a8a5a, 0x555555, 0x2a2a40]] as const).forEach(([shirt, hair, pants], i) => {
-    const b = makeBot({ shirt, hair, pants });
-    fighters[i + 1].mesh = b.outer; fighters[i + 1].rig = b.rig;
-  });
+  const mk = (name: string, isPlayer: boolean, teamId: number): Fighter => ({ name, isPlayer, teamId, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, hp: 100, wpn: makeWeapon('oysterGun'), dead: false, respawnAt: 0, invulnUntil: 0, kills: 0, deaths: 0, hs: 0, shots: 0, hits: 0, mesh: null, rig: null, stepAcc: 0, hpBar: null, deathAt: 0, fallDir: new THREE.Vector3(0, 0, 1), throwA: 0, walkPh: 0, pickCd: 0, cd: 1, umbT: 0, umbHeld: false, umbTired: false, umbMesh: null, goal: new THREE.Vector3(), idleUntil: 0, pickT: 0 });
+  const me = mk('你', true, teamIdForSeat(match.mode, 0));
+  const BOT_NAMES = ['BOT 阿桃', 'BOT 阿春', 'BOT 阿嬌', 'BOT 阿明', 'BOT 阿雄', 'BOT 阿美', 'BOT 阿福', 'BOT 阿珍'];
+  const BOT_LOOKS = [
+    [0x3a6fc0, 0x2a2a2a, 0x2a3548], [0xc84a3a, 0x4a3020, 0x1a2838], [0x3a8a5a, 0x555555, 0x2a2a40], [0xc8a03a, 0x3a2818, 0x283040],
+    [0x7a4ac0, 0x1a1a1a, 0x2a3040], [0xc05a8a, 0x4a3030, 0x203038], [0x3a9aaa, 0x2a3038, 0x1a2830], [0x6a7040, 0x403020, 0x2a2a38],
+  ] as const;
+  const botSlots = isHorde ? 8 : match.botCount;
+  const fighters: Fighter[] = [me];
+  for (let i = 0; i < botSlots; i++) {
+    const f = mk(BOT_NAMES[i] ?? `BOT ${i + 1}`, false, teamIdForSeat(match.mode, i + 1));
+    const look = BOT_LOOKS[i % BOT_LOOKS.length];
+    const b = makeBot({ shirt: look[0], hair: look[1], pants: look[2] });
+    f.mesh = b.outer; f.rig = b.rig;
+    fighters.push(f);
+  }
+  const botsOnly = () => fighters.filter(f => !f.isPlayer);
+  const oddLoots: OddLoot[] = [];
   const shells: Shell[] = [];
   const wpnCtx = () => ({ M, add, LO, shellGeos: U.shellGeos, shellMat: U.shellMat });
   function attachWeaponView(w: Weapon) {
@@ -283,9 +313,16 @@ ${isTouch
     if (f.isPlayer) { attachWeaponView(f.wpn); syncScopeBtn(); }
     else attachTpGun(f);
   }
-  // 對手初始各拿一把（之後＝該玩家裝備）
-  const botLoadout: WeaponId[] = ['oysterGun', 'oysterSniper', 'oysterGun'];
+  // 對手初始各拿一把；玩家只能用雜貨店已買的槍
+  const botLoadout: WeaponId[] = ['oysterAk', 'oysterM4', 'oysterSmg', 'oysterDeagle', 'oysterNova', 'oysterGun', 'oysterAk', 'oysterM4'];
   fighters.forEach((f, i) => { if (!f.isPlayer) equipWeapon(f, botLoadout[i - 1] ?? 'oysterGun'); });
+  const ownedWpns = new Set<WeaponId>([
+    'oysterGun',
+    ...U.ownedWeapons.filter(isWeaponId),
+    ...(DM_DEV ? (Object.keys(WEAPON_DEFS) as WeaponId[]).filter(id => WEAPON_DEFS[id].inShop) : []),
+  ]);
+  const startWpn: WeaponId = ownedWpns.has(U.equippedWeapon) ? U.equippedWeapon : 'oysterGun';
+  me.wpn = makeWeapon(startWpn);
   // 雨傘：沿用上工的傘
   scene.add(cam);
   me.umbMesh = U.model; U.model.visible = false; U.model.position.set(0.12, -0.3, -0.85); U.model.rotation.set(0, 0, 0); U.model.scale.setScalar(0.62);
@@ -379,13 +416,42 @@ ${isTouch
   function spawn(f: Fighter) {
     const opts = SPAWNS.map(([x, z]) => new THREE.Vector3(x, 0, z)).sort((a, b) => minDist(b, f) - minDist(a, f));
     f.pos.copy(opts[Math.floor(Math.random() * 3)]); f.vel.set(0, 0, 0); f.hp = 100; f.wpn.ammo = f.wpn.def.maxAmmo; f.wpn.kick = 0; f.dead = false;
-    f.invulnUntil = now + 3; f.idleUntil = now + 1; f.umbHeld = false; f.umbTired = false; f.umbT = 0; f.yaw = Math.atan2(-f.pos.x, -f.pos.z) + Math.PI; f.pitch = 0; f.goal.copy(nearPile(f.pos)); f.pickT = 0;
+    f.invulnUntil = now + 3; f.idleUntil = now + 1; f.umbHeld = false; f.umbTired = false; f.umbT = 0; f.yaw = Math.atan2(-f.pos.x, -f.pos.z) + Math.PI; f.pitch = 0; f.goal.copy(nearOpenPile(f.pos)); f.pickT = 0;
+    if (f.mesh) f.mesh.visible = true;
     if (f.isPlayer) setAds(false);
   }
-  const nearPile = (p: THREE.Vector3) => PILES.reduce((a, b) => (Math.hypot(b.x - p.x, b.z - p.z) < Math.hypot(a.x - p.x, a.z - p.z) ? b : a));
-  const pileDist = (p: THREE.Vector3) => { const n = nearPile(p); return Math.hypot(n.x - p.x, n.z - p.z); };
-  const minDist = (p: THREE.Vector3, self: Fighter) => Math.min(...fighters.filter(o => o !== self && !o.dead).map(o => o.pos.distanceTo(p)), 99);
-  fighters.forEach(spawn);
+  function nearOpenPile(p: THREE.Vector3) {
+    const open = piles.filter(pileCanPick);
+    const list = open.length ? open : piles;
+    return list.reduce((a, b) => (Math.hypot(b.pos.x - p.x, b.pos.z - p.z) < Math.hypot(a.pos.x - p.x, a.pos.z - p.z) ? b : a)).pos;
+  }
+  const pileDist = (p: THREE.Vector3) => {
+    const i = nearestPileIndex(p, piles);
+    return Math.hypot(piles[i].pos.x - p.x, piles[i].pos.z - p.z);
+  };
+  const minDist = (p: THREE.Vector3, self: Fighter) => Math.min(...fighters.filter(o => isHostile(self, o) && !o.dead).map(o => o.pos.distanceTo(p)), 99);
+  function parkBot(f: Fighter) {
+    f.dead = true; f.respawnAt = 1e12; f.vel.set(0, 0, 0); f.hp = 0;
+    if (f.mesh) f.mesh.visible = false;
+    if (f.hpBar) f.hpBar.g.visible = false;
+  }
+  function startHordeWave(w: number) {
+    wave = w; agr = hordeAggression(w);
+    const n = hordeBotCount(w);
+    const bots = botsOnly();
+    bots.forEach((b, i) => {
+      if (i < n) spawn(b);
+      else parkBot(b);
+    });
+    msg(`第 ${w} 關 · ${n} 人來亂`, 2.5);
+  }
+  if (isHorde) {
+    spawn(me);
+    botsOnly().forEach(parkBot);
+    startHordeWave(1);
+  } else {
+    fighters.forEach(spawn);
+  }
 
   // ---- 音效：程序合成，接到遊戲的音效音量（跟著主音量／靜音設定） ----
   let voices = 0; const MAXV = 14; let nbuf: AudioBuffer | null = null;
@@ -564,19 +630,40 @@ ${isTouch
     q('dmSetBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); q('dmShop').classList.remove('show'); q('dmSet').classList.add('show'); };
     q('dmSetX').onclick = () => q('dmSet').classList.remove('show');
   }
-  // ---- 武器店（免費領／換槍）----
-  const ownedWpns = new Set<WeaponId>(['oysterGun']);
+  // ---- 換槍（僅雜貨店已購買；點開預覽，預覽內可裝備）----
+  function doEquipWpn(id: WeaponId) {
+    if (!ownedWpns.has(id)) { msg('這把還沒買，先去雜貨店', 1.8); return false; }
+    if (me.wpn.def.id === id) { msg(`已在用 ${me.wpn.def.name}`, 1.0); return true; }
+    equipWeapon(me, id);
+    U.setEquippedWeapon(id);
+    msg(`換上 ${me.wpn.def.name}`, 1.2);
+    return true;
+  }
   function refreshShop() {
     renderShopList(q('dmShopList'), {
       equipped: me.wpn.def.id,
       owned: ownedWpns,
       onPick: (id) => {
-        const first = !ownedWpns.has(id);
-        ownedWpns.add(id);
-        equipWeapon(me, id);
-        if (first && SHOP_FREE) msg(`領了 ${me.wpn.def.name}`, 1.4);
-        else msg(`換上 ${me.wpn.def.name}`, 1.2);
-        refreshShop();
+        const own = ownedWpns.has(id);
+        const eq = me.wpn.def.id === id;
+        const act = eq
+          ? '<button type="button" class="ghost" disabled>使用中</button>'
+          : own
+            ? `<button type="button" data-prev-eq="${id}">裝備</button>`
+            : '<button type="button" class="ghost" disabled>未購買</button>';
+        openWeaponPreview({
+          id,
+          ctx: { shellGeos: U.shellGeos, shellMat: U.shellMat },
+          actionsHtml: `${act}<button type="button" class="ghost" data-prev-x>關閉</button>`,
+          bindActions: (box, close) => {
+            box.querySelector('[data-prev-x]')?.addEventListener('click', e => { e.stopPropagation(); close(); });
+            box.querySelector(`[data-prev-eq="${id}"]`)?.addEventListener('click', e => {
+              e.stopPropagation();
+              if (doEquipWpn(id)) { close(); refreshShop(); }
+            });
+          },
+        });
+        if (!own) msg('這把還沒買，先去雜貨店', 1.6);
       },
     });
   }
@@ -589,11 +676,17 @@ ${isTouch
   q('dmShopBtn').onclick = () => openShop();
   q('dmShopX').onclick = () => q('dmShop').classList.remove('show');
   const keys: Record<string, boolean> = {}; const joy = { x: 0, y: 0 }; let holdPick = false, sprint = false, rmb = false;
-  // 按住連發：按下立刻丟第一發，之後依冷卻連續丟，放開或沒殼就停（開傘時不能丟）
+  // 按住開火：按下立刻第一發；基本槍為 3 連發節奏（組內短間隔、組間停頓），放開或沒殼就停
   let fireHeld = 0, fireCd = 0;
-  const fireDown = () => { fireHeld++; if (fireCd <= 0 && throwShell(me)) fireCd = me.wpn.def.fireCd; };
-  const fireUp = () => { fireHeld = Math.max(0, fireHeld - 1); };
-  const blur = () => { for (const k in keys) keys[k] = false; closeUmb(me); clearMixTimer(); adsNeedRelease = false; setAds(false); holdPick = false; rmb = false; fireHeld = 0; };
+  const tryAutoFire = () => {
+    if (roundOver || fireCd > 0 || me.dead) return;
+    if (me.wpn.ammo <= 0 && !(DM_DEV && cheatAmmo)) { fireHeld = 0; me.wpn.burstLeft = 0; return; }
+    armBurst(me.wpn);
+    if (throwShell(me)) fireCd = cooldownAfterShot(me.wpn);
+  };
+  const fireDown = () => { fireHeld++; tryAutoFire(); };
+  const fireUp = () => { fireHeld = Math.max(0, fireHeld - 1); if (!fireHeld) me.wpn.burstLeft = 0; };
+  const blur = () => { for (const k in keys) keys[k] = false; closeUmb(me); clearMixTimer(); adsNeedRelease = false; setAds(false); holdPick = false; rmb = false; fireHeld = 0; me.wpn.burstLeft = 0; };
   addEventListener('blur', blur);
   let locked = false, wasLocked = false;
   const onKey = (e: KeyboardEvent, d: boolean) => {
@@ -701,8 +794,15 @@ ${isTouch
   // ---- 遊戲邏輯 ----
   function pick(f: Fighter) {
     if (f.dead || f.wpn.ammo >= f.wpn.def.maxAmmo) return false;
-    if (pileDist(f.pos) > PICK_R) { return false; }
-    const was = f.wpn.ammo; f.wpn.ammo = f.wpn.def.maxAmmo; if (f.isPlayer && was < f.wpn.def.maxAmmo) SND.reload(); return true;
+    const pile = findPickPile(f.pos, piles);
+    if (!pile) {
+      if (f.isPlayer && pileDist(f.pos) <= PICK_R) msg('這堆冷卻中，換一堆蚵仔', 1.6);
+      return false;
+    }
+    const was = f.wpn.ammo; f.wpn.ammo = f.wpn.def.maxAmmo;
+    markPileUsed(pile); sealPileIfNeeded(pile, true, true);
+    if (f.isPlayer && was < f.wpn.def.maxAmmo) SND.reload();
+    return true;
   }
   function eyeOf(f: Fighter) { return new THREE.Vector3(f.pos.x, f.pos.y + EYE, f.pos.z); }
   function dirOf(yaw: number, pitch: number) { return new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)); }
@@ -713,16 +813,23 @@ ${isTouch
     const w = f.wpn, infAmmo = DM_DEV && cheatAmmo && f.isPlayer;
     if (w.ammo <= 0 && !infAmmo) { return false; }
     if (!infAmmo) w.ammo--; f.shots++; shotAt.set(f, now); if (f.isPlayer) f.invulnUntil = 0;
-    const spd = w.def.projSpeed;
-    const d = dirOf(yaw, pitch); const p = eyeOf(f).addScaledVector(d, 0.4);
-    const m = shellMesh(); m.position.copy(p); scene.add(m); f.throwA = 0.35; w.kick = 1; SND.throw(f);
-    const aim = d.clone();
-    const vel = f.isPlayer ? d.multiplyScalar(spd) : d.multiplyScalar(spd).add(f.vel.clone().multiplyScalar(0.5));
-    emitMuzzleFlash(f, aim);
-    // FP 殼粉改由槍口火花負責，避免準心附近一堆碎片；TP 保留出手煙
-    if (!f.isPlayer) emitAsh(p, vel, LO ? 2 : 4, 0.85);
-    // 玩家不加移動速度，殼沿準星直線飛
-    shells.push({ pos: p, vel, owner: f, mesh: m, life: 6, trail: 0 });
+    if (f.isPlayer && !infAmmo && w.ammo === 0) msg('沒殼了！去蚵仔堆塡彈', 3.2);
+    const spd = w.def.bulletSpeed;
+    const n = Math.max(1, w.def.pelletCount | 0);
+    const spr = Math.max(0, w.def.spread);
+    f.throwA = 0.35; w.kick = 1; SND.throw(f);
+    const aim0 = dirOf(yaw, pitch);
+    emitMuzzleFlash(f, aim0);
+    for (let i = 0; i < n; i++) {
+      const yy = yaw + (spr ? (Math.random() - 0.5) * 2 * spr : 0);
+      const pp = pitch + (spr ? (Math.random() - 0.5) * 2 * spr : 0);
+      const d = dirOf(yy, pp);
+      const p = eyeOf(f).addScaledVector(aim0, 0.4);
+      const m = shellMesh(); m.position.copy(p); scene.add(m);
+      const vel = f.isPlayer ? d.multiplyScalar(spd) : d.multiplyScalar(spd).add(f.vel.clone().multiplyScalar(0.5));
+      if (!f.isPlayer && i === 0) emitAsh(p, vel, LO ? 2 : 4, 0.85);
+      shells.push({ pos: p, vel, owner: f, mesh: m, life: 6, trail: 0 });
+    }
     if (f.isPlayer && w.def.adsBreakOnFire) { adsNeedRelease = true; setAds(false); }
     return true;
   }
@@ -756,7 +863,18 @@ ${isTouch
       if (f.umbMesh) f.umbMesh.visible = false; f.umbHeld = false;
       feed(src, f, part === 'head');
       if (src.isPlayer && part === 'head') showHeadshot();
+      if (src.isPlayer && !f.isPlayer) spawnOddLoot(_at.set(f.pos.x, f.pos.y + 0.95, f.pos.z), scene, LO, oddLoots);
+      if (isHorde && f.isPlayer) { f.respawnAt = 1e12; endRound('你倒下了'); }
+      else if (isHorde && !f.isPlayer) checkHordeWaveClear();
     }
+  }
+  function checkHordeWaveClear() {
+    if (roundOver || waveBreakT > 0) return;
+    if (botsOnly().some(b => !b.dead)) return;
+    wavesCleared = wave;
+    me.hp = Math.min(100, me.hp + 30);
+    waveBreakT = 3.2;
+    msg(`第 ${wave} 關過關！休息一下…`, 2.8);
   }
   const _dir = new THREE.Vector3(), _sa = new THREE.Vector3(), _sb = new THREE.Vector3(), _sp = new THREE.Vector3(), _inc = new THREE.Vector3();
   function stepShells(dt: number) {
@@ -773,7 +891,8 @@ ${isTouch
       const n = Math.max(1, Math.ceil(_sa.distanceTo(_sb) / step)); let done = false;
       for (let k = 1; k <= n && !done; k++) {
         _sp.lerpVectors(_sa, _sb, k / n);
-        for (const f of fighters) { if (f === s.owner || f.dead) continue;
+        for (const f of fighters) {
+          if (f.dead || !isHostile(s.owner, f)) continue;
           if (umbUp(f) && Math.hypot(_sp.x - f.pos.x, _sp.z - f.pos.z) < 0.9 && _sp.y > f.pos.y + 0.3 && _sp.y < f.pos.y + 2.2) {
             const fwd = dirOf(f.yaw, 0); _inc.copy(s.vel).setY(0).normalize();
             if (-fwd.dot(_inc) > Math.cos(Math.PI / 3) && Math.random() < U.umb.cover) { SND.block(_sp); emitAsh(_sp, s.vel, LO ? 2 : 4, 1.0); if (f.isPlayer || s.owner.isPlayer) popAt(_sp, ico(I.umb, 28)); done = true; break; }
@@ -808,47 +927,77 @@ ${isTouch
   }
   function botThink(f: Fighter, dt: number) {
     if (now < f.idleUntil) { f.vel.set(0, 0, 0); return; }
-    if (f.umbHeld) { if (!shells.some(s => s.owner !== f && s.pos.distanceTo(f.pos) < 8)) closeUmb(f); }
-    else if (f.cd > 0.4) for (const s of shells) { if (s.owner === f) continue; const rel = f.pos.clone().sub(s.pos); rel.y = 0; if (rel.length() < 8 && rel.normalize().dot(s.vel.clone().setY(0).normalize()) > 0.95 && Math.random() < 0.02) { f.yaw = Math.atan2(s.pos.x - f.pos.x, s.pos.z - f.pos.z) + Math.PI; openUmb(f); break; } }
-    const targets = fighters.filter(o => o !== f && !o.dead);
+    if (f.umbHeld) { if (!shells.some(s => isHostile(s.owner, f) && s.pos.distanceTo(f.pos) < 8)) closeUmb(f); }
+    else if (f.cd > 0.4) for (const s of shells) { if (!isHostile(s.owner, f)) continue; const rel = f.pos.clone().sub(s.pos); rel.y = 0; if (rel.length() < 8 && rel.normalize().dot(s.vel.clone().setY(0).normalize()) > 0.95 && Math.random() < 0.02) { f.yaw = Math.atan2(s.pos.x - f.pos.x, s.pos.z - f.pos.z) + Math.PI; openUmb(f); break; } }
+    const targets = fighters.filter(o => isHostile(f, o) && !o.dead);
     let tgt: Fighter | null = null, best = 1e9;
     for (const o of targets) { const d = o.pos.distanceTo(f.pos) * (o.isPlayer ? 0.8 : 1); if (d < best) { best = d; tgt = o; } }
     if (f.wpn.ammo === 0 || (f.pickT > 0 && f.wpn.ammo < f.wpn.def.maxAmmo)) {
-      f.goal.copy(nearPile(f.pos)); f.pickT = 1; // 去最近的蚵仔堆，經過就會自動撿
+      f.goal.copy(nearOpenPile(f.pos)); f.pickT = 1; // 去最近可填的蚵仔堆
     } else if (f.pos.distanceTo(f.goal) < 1.5 || Math.random() < dt * 0.3) {
-      f.pickT = 0; const base = tgt ? tgt.pos : nearPile(f.pos); const a = Math.random() * 6.28, r = 7 + Math.random() * 6;
+      f.pickT = 0; const base = tgt ? tgt.pos : nearOpenPile(f.pos); const a = Math.random() * 6.28, r = 7 + Math.random() * 6;
       f.goal.set(base.x + Math.cos(a) * r, 0, base.z + Math.sin(a) * r);
     }
     const to = f.goal.clone().sub(f.pos); to.y = 0;
-    if (to.length() > 0.3) f.vel.copy(to.normalize().multiplyScalar(WALK * 0.72)); else f.vel.set(0, 0, 0);
+    const spd = WALK * 0.72 * (isHorde ? agr.spdMul : 1);
+    if (to.length() > 0.3) f.vel.copy(to.normalize().multiplyScalar(spd)); else f.vel.set(0, 0, 0);
     if (tgt && !f.umbHeld) {
       // 預判：用飛行時間估計目標位置
-      const pspd = f.wpn.def.projSpeed;
+      const pspd = f.wpn.def.bulletSpeed;
       let aim = tgt.pos.clone(); for (let k = 0; k < 3; k++) { const t = eyeOf(f).distanceTo(aim) / (pspd * 0.95); aim = tgt.pos.clone().addScaledVector(tgt.vel, t); }
-      aim.y += 1.15 + (Math.random() < 0.15 ? 0.45 : 0);
+      // 圍毆後期較常瞄頭
+      const headP = isHorde ? Math.min(0.42, 0.1 + wave * 0.03) : 0.15;
+      aim.y += 1.15 + (Math.random() < headP ? 0.45 : 0);
       const e = eyeOf(f), dx = aim.x - e.x, dz = aim.z - e.z, d = Math.hypot(dx, dz);
       f.yaw = Math.atan2(-dx, -dz); f.pitch = launchPitch(d, aim.y - e.y);
       f.cd -= dt;
-      if (f.wpn.ammo > 0 && f.cd <= 0 && d < 22) { const err = 0.02 + d * 0.0025; throwShell(f, f.yaw + (Math.random() - .5) * err * 2, f.pitch + (Math.random() - .5) * err * 2); f.cd = 0.75 + Math.random() * 0.8; }
+      if (f.wpn.ammo > 0 && f.cd <= 0 && d < 22) {
+        const err = (0.02 + d * 0.0025) * (isHorde ? agr.errMul : 1);
+        throwShell(f, f.yaw + (Math.random() - .5) * err * 2, f.pitch + (Math.random() - .5) * err * 2);
+        f.cd = (0.75 + Math.random() * 0.8) * (isHorde ? agr.cdMul : 1);
+      }
     } else f.yaw = Math.atan2(-f.vel.x, -f.vel.z);
   }
   const _fq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), _fa = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
   const _mv = new THREE.Vector3();
   function update(dt: number) {
+    if (roundOver) return;
     if (DM_DEV && cheatAmmo && !me.dead) me.wpn.ammo = me.wpn.def.maxAmmo;
     if (DM_DEV && cheatHp && !me.dead) me.hp = 100;
-    fireCd -= dt; if (fireHeld && fireCd <= 0) { if ((me.wpn.ammo <= 0 && !(DM_DEV && cheatAmmo)) || me.dead) fireHeld = 0; else if (throwShell(me)) fireCd = me.wpn.def.fireCd; }
+    fireCd -= dt; if (fireHeld) tryAutoFire();
     now += dt;
+    if (!isHorde) {
+      roundLeft -= dt;
+      if (roundLeft <= 0) { endRound('時間到'); return; }
+    } else if (waveBreakT > 0) {
+      waveBreakT -= dt;
+      if (waveBreakT <= 0) startHordeWave(wave + 1);
+    }
+    stepPileCools(dt, piles, cam);
     for (const f of fighters) {
       f.wpn.kick = Math.max(0, f.wpn.kick - dt * 9);
       if (f.dead && f.mesh) { // 倒地：往被打的方向倒下，躺到復活（沒有命中判定）
         const k = Math.min(1, (now - f.deathAt) / 0.55), e = k * k * (3 - 2 * k) * (Math.PI / 2 - 0.08) + (k >= 1 ? 0 : Math.sin(k * Math.PI) * 0.05);
         _fq.setFromAxisAngle(_fa.set(f.fallDir.z, 0, -f.fallDir.x), e); _yq.setFromAxisAngle(_up, f.yaw); f.mesh.quaternion.copy(_fq).multiply(_yq); f.mesh.position.copy(f.pos); f.mesh.visible = true; }
-      if (f.dead) { f.vel.set(0, 0, 0); if (now >= f.respawnAt) { spawn(f); if (f.mesh) f.mesh.visible = true; if (f.isPlayer) q('dmMsg').innerHTML = ''; } continue; }
+      if (f.dead) {
+        f.vel.set(0, 0, 0);
+        if (!isHorde && now >= f.respawnAt) { spawn(f); if (f.mesh) f.mesh.visible = true; if (f.isPlayer) q('dmMsg').innerHTML = ''; }
+        continue;
+      }
       if (f.umbHeld) { f.umbT -= dt; if (f.umbT <= 0) { f.umbHeld = false; f.umbTired = true; f.umbT = 0; } }
       if (f.umbMesh) f.umbMesh.visible = f.umbHeld;
-      // 邊走邊撿：在蚵仔堆旁邊每 0.2 秒自動補一顆（按住拿殼／E 一次補滿）
-      if (f.wpn.ammo < f.wpn.def.maxAmmo && pileDist(f.pos) <= PICK_R) { f.pickCd -= dt; if (f.pickCd <= 0) { f.wpn.ammo++; f.pickCd = 0.12; if (f.isPlayer) { if (f.wpn.ammo === f.wpn.def.maxAmmo) SND.reload(); else SND.pick(); } } } else f.pickCd = 0;
+      // 邊走邊撿：可填的蚵堆每 0.12 秒補一顆；填滿或離開後該堆進冷卻
+      {
+        const pile = findPickPile(f.pos, piles);
+        if (pile && f.wpn.ammo < f.wpn.def.maxAmmo) {
+          f.pickCd -= dt;
+          if (f.pickCd <= 0) {
+            f.wpn.ammo++; f.pickCd = 0.12; markPileUsed(pile);
+            if (f.isPlayer) { if (f.wpn.ammo === f.wpn.def.maxAmmo) SND.reload(); else SND.pick(); }
+            if (f.wpn.ammo >= f.wpn.def.maxAmmo) sealPileIfNeeded(pile, true, true);
+          }
+        } else f.pickCd = 0;
+      }
       if (f.isPlayer && (holdPick || keys.KeyE)) pick(f);
       if (f.isPlayer) {
         let fx = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + joy.x, fz = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0) + joy.y;
@@ -899,11 +1048,48 @@ ${isTouch
       if (f.mesh) { f.mesh.position.copy(f.pos); f.mesh.rotation.set(0, f.yaw, 0); f.mesh.visible = now < f.invulnUntil ? Math.floor(now * 10) % 2 === 0 : true; }
     }
     stepShells(dt); stepAsh(dt); stepBreakables(dt); stepScrap(dt); stepScars(dt); stepFlash(dt); stepBlood(dt); stepBars();
+    for (const pile of piles) {
+      if (!pile.dirty || pile.cool > 0) continue;
+      const someone = fighters.some(f => !f.dead && Math.hypot(f.pos.x - pile.pos.x, f.pos.z - pile.pos.z) <= PICK_R);
+      sealPileIfNeeded(pile, someone, false);
+    }
+    stepOddLoot(dt, oddLoots, scene, HALF);
+    if (!me.dead) {
+      const got = tryPickOddLoot(me.pos, oddLoots, scene, U.grantOdd);
+      if (got) {
+        const first = got.n === 1 ? ' 🆕第一次！' : `（×${got.n}）`;
+        msg(`獲得奇物「${got.name}」${first}`, 2.8);
+        popAt(got.pos, got.name);
+        SND.pick();
+      }
+    }
   }
 
   // ---- UI ----
-  let msgT = 0;
   function msg(t: string, sec: number) { q('dmMsg').textContent = t; msgT = sec; }
+  msg(isHorde
+    ? `${DM_MODE_LABEL.horde} · 一關接一關，看你能撐幾關`
+    : `${DM_MODE_LABEL.ffa} · ${match.botCount} BOT · ${Math.round(match.durationSec / 60)} 分鐘`, 2.6);
+  function endRound(reason: string) {
+    if (roundOver) return;
+    roundOver = true; roundLeft = 0; waveBreakT = 0; fireHeld = 0; me.wpn.burstLeft = 0;
+    if (ads) setAds(false);
+    for (const f of fighters) f.vel.set(0, 0, 0);
+    if (document.pointerLockElement === canvas) document.exitPointerLock();
+    if (isHorde) payout = hordeReward(wavesCleared, me.kills);
+    else {
+      const rows = [...fighters].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+      const place = Math.max(1, rows.findIndex(f => f.isPlayer) + 1);
+      payout = ffaReward(place, me.kills);
+    }
+    if (payout > 0) U.grantMoney(payout, isHorde ? 'dm-horde' : 'dm-ffa');
+    q('dmBoard').classList.add('show'); renderBoard();
+    msg(`${reason}${payout > 0 ? `　+$${payout}` : ''}`, 10);
+  }
+  function fmtClock(sec: number) {
+    const s = Math.max(0, Math.ceil(sec)), m = (s / 60) | 0, r = s % 60;
+    return `${m}:${r < 10 ? '0' : ''}${r}`;
+  }
   let markT = 0; function mark() { q('dmMark').style.opacity = '1'; markT = 0.25; }
   let hsT = 0;
   function showHeadshot() {
@@ -929,8 +1115,18 @@ ${isTouch
     requestAnimationFrame(() => { el.style.transform = 'translate(-50%,-150%)'; el.style.opacity = '0'; }); setTimeout(() => el.remove(), 900);
   }
   function renderBoard() {
-    const rows = [...fighters].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
-    q('dmTable').innerHTML = `<table><tr><th></th><th>${ico(I.skull, 18)}</th><th>${ico(I.heart, 18)}</th><th>${ico(I.head, 18)}</th><th>%</th></tr>${rows.map(f => `<tr class="${f.isPlayer ? 'me' : ''}"><td>${tag(f)}</td><td>${f.kills}</td><td>${f.deaths}</td><td>${f.hs}</td><td>${f.shots ? Math.round(f.hits / f.shots * 100) : 0}%</td></tr>`).join('')}</table>`;
+    const rows = isHorde
+      ? [me, ...botsOnly().filter(b => b.kills + b.deaths + b.shots > 0 || !b.dead)].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths)
+      : [...fighters].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+    const hd = q('dmBoard').querySelector('h2');
+    if (hd) {
+      const title = roundOver
+        ? (isHorde ? ` 撐到第 ${wavesCleared} 關` : ' 時間到')
+        : (isHorde ? ` 第 ${wave} 關` : '');
+      hd.innerHTML = `${ico(I.board, 26)}${title}`;
+    }
+    const payLine = roundOver && payout > 0 ? `<div style="text-align:center;margin:6px 0 8px;font-weight:800;color:#ffd23f">獎勵 +$${payout}</div>` : '';
+    q('dmTable').innerHTML = `${payLine}<table><tr><th></th><th>${ico(I.skull, 18)}</th><th>${ico(I.heart, 18)}</th><th>${ico(I.head, 18)}</th><th>%</th></tr>${rows.map(f => `<tr class="${f.isPlayer ? 'me' : ''}"><td>${tag(f)}</td><td>${f.kills}</td><td>${f.deaths}</td><td>${f.hs}</td><td>${f.shots ? Math.round(f.hits / f.shots * 100) : 0}%</td></tr>`).join('')}</table>`;
   }
   const hpCol = (hp: number) => `hsl(${Math.max(0, Math.min(100, hp)) * 1.05},32%,52%)`; // 低飽和：綠→琥珀→紅
   // 小地圖：場地外框、殼堆、玩家箭頭，最近有開火的對手才顯示紅點
@@ -939,7 +1135,15 @@ ${isTouch
     const W = 192, k = (W - 16) / (HALF * 2), X = (x: number) => W / 2 + x * k, c = mapC;
     c.clearRect(0, 0, W, W); c.fillStyle = 'rgba(180,150,100,.35)'; c.fillRect(8, 8, W - 16, W - 16);
     c.strokeStyle = 'rgba(235,235,235,.7)'; c.lineWidth = 2; c.strokeRect(8, 8, W - 16, W - 16);
-    c.fillStyle = 'rgba(210,190,150,.7)'; for (const p of PILES) { c.beginPath(); c.arc(X(p.x), X(p.z), 5, 0, 7); c.fill(); }
+    for (let i = 0; i < piles.length; i++) {
+      const p = piles[i];
+      c.fillStyle = p.cool > 0 ? 'rgba(80,80,90,.75)' : 'rgba(210,190,150,.7)';
+      c.beginPath(); c.arc(X(p.pos.x), X(p.pos.z), 5, 0, 7); c.fill();
+      if (p.cool > 0) {
+        c.strokeStyle = '#ffd23f'; c.lineWidth = 2; c.beginPath();
+        c.arc(X(p.pos.x), X(p.pos.z), 7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (p.cool / PILE_COOL_SEC)); c.stroke();
+      }
+    }
     c.fillStyle = '#c0605a'; for (const f of fighters) { if (f === me || f.dead || now - (shotAt.get(f) ?? -9) > 2) continue; c.beginPath(); c.arc(X(f.pos.x), X(f.pos.z), 7, 0, 7); c.fill(); }
     c.save(); c.translate(X(me.pos.x), X(me.pos.z)); c.rotate(-me.yaw); c.fillStyle = '#f2f2f2'; c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1.5;
     c.beginPath(); c.moveTo(0, -13); c.lineTo(9, 9); c.lineTo(0, 4); c.lineTo(-9, 9); c.closePath(); c.fill(); c.stroke(); c.restore();
@@ -949,10 +1153,21 @@ ${isTouch
     const atPile = pileDist(me.pos) <= PICK_R;
     if (isTouch) q('dmUmb').classList.toggle('held', me.umbHeld);
     syncScopeBtn();
-    q('dmAmmo').innerHTML = `${ico(I.gun)} ${me.wpn.def.name}　${ico(I.shell)} ${DM_DEV && cheatAmmo ? '∞' : `${me.wpn.ammo}/${me.wpn.def.maxAmmo}`}`; q('dmAmmo').classList.toggle('empty', me.wpn.ammo === 0 && !(DM_DEV && cheatAmmo));
-    q('dmHud').innerHTML = `${ico(I.person)} ${fighters.filter(f => !f.dead).length}　${ico(I.skull)} ${me.kills}${now < me.invulnUntil && !me.dead ? ' ' + ico(I.shield) : ''}${atPile && me.wpn.ammo < me.wpn.def.maxAmmo && !me.dead ? ' ' + ico(I.grab) : ''}`;
+    const outAmmo = me.wpn.ammo === 0 && !(DM_DEV && cheatAmmo);
+    q('dmAmmo').innerHTML = `${ico(I.gun)} ${me.wpn.def.name}　${ico(I.shell)} ${DM_DEV && cheatAmmo ? '∞' : `${me.wpn.ammo}/${me.wpn.def.maxAmmo}`}${outAmmo && !atPile ? '　去蚵堆' : ''}`;
+    q('dmAmmo').classList.toggle('empty', outAmmo);
+    const aliveBots = botsOnly().filter(b => !b.dead).length;
+    const clock = isHorde ? `第${wave}關` : fmtClock(roundLeft);
+    const pile = findPickPile(me.pos, piles);
+    const nearCool = !pile && atPile;
+    q('dmHud').innerHTML = `${clock}　${DM_MODE_LABEL[match.mode]}　${ico(I.person)} ${aliveBots + (me.dead ? 0 : 1)}　${ico(I.skull)} ${me.kills}${now < me.invulnUntil && !me.dead ? ' ' + ico(I.shield) : ''}${pile && me.wpn.ammo < me.wpn.def.maxAmmo && !me.dead ? ' ' + ico(I.grab) : ''}${nearCool ? ' 冷卻' : ''}`;
     drawMap(); if (isTouch) q('dmUmb').classList.toggle('cd', me.umbTired);
-    if (me.dead) q('dmMsg').innerHTML = `${ico(I.skull, 40)}<br>${Math.max(1, Math.ceil(me.respawnAt - now))}`;
+    if (!roundOver && me.dead && !isHorde) q('dmMsg').innerHTML = `${ico(I.skull, 40)}<br>${Math.max(1, Math.ceil(me.respawnAt - now))}`;
+    else if (!roundOver && !me.dead && msgT <= 0) {
+      q('dmMsg').textContent = outAmmo
+        ? (nearCool ? '這堆冷卻中 — 換下一堆填彈' : '沒殼了 — 去蚵仔堆塡彈')
+        : '';
+    }
     if (q('dmBoard').classList.contains('show')) renderBoard();
   }
 

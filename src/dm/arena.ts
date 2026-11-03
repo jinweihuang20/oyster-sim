@@ -207,22 +207,41 @@ export function buildArena(deps: ArenaDeps) {
     const n = add(new THREE.PlaneGeometry(4.5, 2.2), netM, [x, 1.5, z], scene, false); n.rotation.y = rx;
   }
   for (const [x, z, a] of [[-10, -HALF + 0.25, 0], [10, HALF - 0.25, 0]] as const) { const t = add(new THREE.PlaneGeometry(3.2, 1.6), tarpM, [x, 2.0, z], scene, false); t.rotation.y = a; t.rotation.x = -0.15; }
-  // 中央上方電線＋燈泡（手機只留發光球，不掛 PointLight）
+  // 中央掛燈：電線兩端栓在圍牆柱頂，燈泡用短線垂下（不再浮空）
   const glowM = new THREE.MeshBasicMaterial({ color: 0xffd9a0 }), wireM = M(0x1a1a1a);
+  const ceramic = M(0xe8e4d8, { roughness: 0.7 });
+  const wireY = 3.15, wallSpan = HALF * 2 - 0.6;
   const bulbAt = (x: number, y: number, z: number, lit = false) => {
     add(new THREE.SphereGeometry(0.09, LO ? 6 : 8, LO ? 4 : 6), glowM, [x, y, z], scene, false);
     add(new THREE.CylinderGeometry(0.03, 0.04, 0.08, 6), M(0x333333), [x, y + 0.08, z], scene, false);
     if (lit && !LO) { const l = new THREE.PointLight(0xffb060, 14, 12, 1.6); l.position.set(x, y, z); scene.add(l); }
   };
-  add(new THREE.BoxGeometry(22, 0.03, 0.03), wireM, [0, 3.4, 0], scene, false);
-  add(new THREE.BoxGeometry(0.03, 0.03, 18), wireM, [0, 3.35, 0], scene, false);
-  for (const [x, z, lit] of [[-8, 0, false], [-4, 0, true], [0, 0, false], [4, 0, true], [8, 0, false], [0, -6, false], [0, 6, false]] as const) {
-    add(new THREE.BoxGeometry(0.02, 0.45, 0.02), wireM, [x, 3.15, z], scene, false); bulbAt(x, 2.9, z, lit);
+  // 十字主線：拉到四面牆邊，端點加絕緣瓷瓶
+  add(new THREE.BoxGeometry(wallSpan, 0.025, 0.025), wireM, [0, wireY, 0], scene, false);
+  add(new THREE.BoxGeometry(0.025, 0.025, wallSpan), wireM, [0, wireY - 0.02, 0], scene, false);
+  for (const [x, z] of [[-HALF + 0.3, 0], [HALF - 0.3, 0], [0, -HALF + 0.3], [0, HALF - 0.3]] as const) {
+    add(new THREE.CylinderGeometry(0.05, 0.06, 0.14, 6), ceramic, [x, wireY + 0.04, z], scene, false); // 瓷瓶
+    add(new THREE.BoxGeometry(0.2, 0.08, 0.2), woodPost, [x, 2.55, z], scene, false); // 牆頂夾具
+    add(new THREE.BoxGeometry(0.03, wireY - 2.55, 0.03), wireM, [x, (wireY + 2.55) / 2, z], scene, false); // 立線下到牆頂
   }
-  // 轉角路燈（手機：僅兩角＋無點光）
+  for (const [x, z, lit] of [[-8, 0, false], [-4, 0, true], [0, 0, false], [4, 0, true], [8, 0, false], [0, -6, false], [0, 6, false]] as const) {
+    const drop = 0.42;
+    add(new THREE.BoxGeometry(0.018, drop, 0.018), wireM, [x, wireY - drop / 2, z], scene, false);
+    bulbAt(x, wireY - drop - 0.05, z, lit);
+  }
+  // 轉角路燈：立柱＋向場內懸臂＋垂吊燈泡（手機：僅兩角＋無點光）
   const lampPos = LO ? [[-17, -17], [17, 17]] as const : [[-17, -17], [17, 17], [-17, 17], [17, -17]] as const;
-  for (const [x, z] of lampPos) { add(new THREE.CylinderGeometry(0.05, 0.06, 3.4, 6), steel, [x * 0.97, 1.7, z * 0.97]); add(new THREE.SphereGeometry(0.12, 8, 6), glowM, [x * 0.97, 3.4, z * 0.97], scene, false);
-    if (!LO) { const l = new THREE.PointLight(0xffb060, 16, 13, 1.6); l.position.set(x * 0.93, 3.3, z * 0.93); scene.add(l); } }
+  for (const [x, z] of lampPos) {
+    const px = x * 0.97, pz = z * 0.97, topY = 3.25;
+    const ix = -Math.sign(x) * 0.95, iz = -Math.sign(z) * 0.95; // 臂朝場內
+    add(new THREE.CylinderGeometry(0.06, 0.08, topY, 6), steel, [px, topY / 2, pz]); // 立柱落地
+    add(new THREE.BoxGeometry(Math.abs(ix) + 0.08, 0.06, Math.abs(iz) + 0.08), steel, [px + ix / 2, topY, pz + iz / 2], scene, false); // 懸臂
+    const bx = px + ix, bz = pz + iz;
+    add(new THREE.BoxGeometry(0.02, 0.35, 0.02), wireM, [bx, topY - 0.18, bz], scene, false);
+    add(new THREE.SphereGeometry(0.11, LO ? 6 : 8, LO ? 5 : 6), glowM, [bx, topY - 0.4, bz], scene, false);
+    add(new THREE.CylinderGeometry(0.035, 0.04, 0.07, 6), M(0x333333), [bx, topY - 0.32, bz], scene, false);
+    if (!LO) { const l = new THREE.PointLight(0xffb060, 16, 13, 1.6); l.position.set(bx, topY - 0.35, bz); scene.add(l); }
+  }
   // 靠牆機車（大型：只留彈痕）
   {
     const bike = new THREE.Group(); bike.position.set(15.5, 0, 14.2); bike.rotation.y = -0.6; scene.add(bike);

@@ -1,12 +1,12 @@
 import type * as THREE from 'three';
-import type { Weapon } from './weapons';
+import type { Weapon, WeaponId } from './weapons';
 import type { PlayerRig } from './character';
 
 export type Part = 'head' | 'body' | 'legs';
 export type CoverKind = 'crate' | 'basket' | 'table' | 'tires';
 
 export interface Fighter {
-  name: string; isPlayer: boolean; pos: THREE.Vector3; vel: THREE.Vector3; yaw: number; pitch: number;
+  name: string; isPlayer: boolean; teamId: number; pos: THREE.Vector3; vel: THREE.Vector3; yaw: number; pitch: number;
   hp: number; wpn: Weapon; dead: boolean; respawnAt: number; invulnUntil: number;
   kills: number; deaths: number; hs: number; shots: number; hits: number;
   mesh: THREE.Group | null; cd: number; stepAcc: number; deathAt: number; fallDir: THREE.Vector3;
@@ -28,4 +28,14 @@ export interface DmUmb {
   shellGeos: THREE.BufferGeometry[]; shellMat: THREE.Material; greyPick: () => number;
   audio: () => AudioContext; sfxOut: () => AudioNode; gore: () => boolean;
   barnGeo: THREE.BufferGeometry; barnMat: THREE.Material; placeBarn: (list: THREE.Object3D[], dd: number, y?: number) => void;
+  /** 撿到奇物：寫入存檔並回傳提示資料；失敗回 null */
+  grantOdd: (index: number) => { name: string; line: string; n: number; color: string } | null;
+  /** 雜貨店已購買、可在死鬥裝備的槍 */
+  ownedWeapons: WeaponId[];
+  /** 進場預設裝備（須在 ownedWeapons 內） */
+  equippedWeapon: WeaponId;
+  /** 死鬥內換槍時寫回存檔 */
+  setEquippedWeapon: (id: WeaponId) => void;
+  /** 結算發錢（寫入主線錢包） */
+  grantMoney: (amount: number, via: string) => void;
 }

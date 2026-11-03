@@ -4,16 +4,35 @@ import * as THREE from 'three';
  * 死鬥／商店共用的武器定義。
  * 加新槍：1) 擴 WeaponId 2) 填 WEAPON_DEFS 3) 在 buildWeaponView 加模型
  */
-export type WeaponId = 'oysterGun' | 'oysterSniper';
+export type WeaponId =
+  | 'oysterGun'
+  | 'oysterSniper'
+  | 'oysterAk'
+  | 'oysterM4'
+  | 'oysterDeagle'
+  | 'oysterSmg'
+  | 'oysterNova';
 
 export interface WeaponDef {
   id: WeaponId;
-  name: string;
   /** 商店／圖鑑短述 */
+  name: string;
   blurb: string;
   maxAmmo: number;
-  fireCd: number;
-  projSpeed: number;
+  /** 射速（發／秒）；實際間隔＝`1 / fireRate`（連發組內同此） */
+  fireRate: number;
+  /**
+   * 長按連發組大小。1＝每冷卻一發；>1＝打完一組後停 `burstPause` 再下一組
+   */
+  burstCount: number;
+  /** 一組連發打完後的停頓（秒）；`burstCount ≤ 1` 時忽略 */
+  burstPause: number;
+  /** 子彈飛行速度（世界單位／秒） */
+  bulletSpeed: number;
+  /** 每次扣板機的彈丸數（散彈＞1） */
+  pelletCount: number;
+  /** 彈丸散布（弧度） */
+  spread: number;
   /** 後座力強度（相對） */
   kickScale: number;
   /** 開鏡倍率；1＝不能開鏡，FOV＝基準／zoom */
@@ -25,9 +44,9 @@ export interface WeaponDef {
   /** 第一人稱靜止握持（相機本地） */
   hip: [number, number, number];
   hipRot: [number, number, number];
-  /** 商店標價；目前死鬥免費領，之後接金錢 */
+  /** 雜貨店標價；0＝開局贈送 */
   price: number;
-  /** 是否在死鬥武器店上架 */
+  /** 是否在雜貨店／死鬥武器選單出現 */
   inShop: boolean;
 }
 
@@ -37,16 +56,22 @@ export interface Weapon {
   ammo: number;
   kick: number;
   view: THREE.Group | null;
+  /** 本組連發還剩幾發（含剛要打的那發）；0＝下一發開新組 */
+  burstLeft: number;
 }
 
 export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
   oysterGun: {
     id: 'oysterGun',
     name: '蚵仔槍',
-    blurb: '鐵管＋木托＋蚵殼漏斗，夜市土砲入門款',
+    blurb: '鐵管＋木托＋蚵殼漏斗；長按三連發節奏',
     maxAmmo: 15,
-    fireCd: 0.15,
-    projSpeed: 90,
+    fireRate: 10,
+    burstCount: 3,
+    burstPause: 0.48,
+    bulletSpeed: 90,
+    pelletCount: 1,
+    spread: 0,
     kickScale: 1,
     zoom: 1,
     adsBreakOnFire: false,
@@ -56,30 +81,156 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     price: 0,
     inShop: true,
   },
+  oysterAk: {
+    id: 'oysterAk',
+    name: '蚵卡拉什',
+    blurb: '彎彈匣塞滿乾蚵，木托還黏著殼屑；全自動土砲',
+    maxAmmo: 30,
+    fireRate: 9.5,
+    burstCount: 1,
+    burstPause: 0,
+    bulletSpeed: 100,
+    pelletCount: 1,
+    spread: 0.012,
+    kickScale: 1.35,
+    zoom: 1,
+    adsBreakOnFire: false,
+    hipCross: true,
+    hip: [0.26, -0.3, -0.52],
+    hipRot: [0.1, 0.16, 0.04],
+    price: 5500,
+    inShop: true,
+  },
+  oysterM4: {
+    id: 'oysterM4',
+    name: '蚵殼卡賓',
+    blurb: '寶特瓶護木＋蚵灰塗裝，射速穩、後座較收',
+    maxAmmo: 30,
+    fireRate: 11,
+    burstCount: 1,
+    burstPause: 0,
+    bulletSpeed: 105,
+    pelletCount: 1,
+    spread: 0.008,
+    kickScale: 0.95,
+    zoom: 1.2,
+    adsBreakOnFire: false,
+    hipCross: true,
+    hip: [0.25, -0.3, -0.55],
+    hipRot: [0.08, 0.14, 0.03],
+    price: 6200,
+    inShop: true,
+  },
+  oysterDeagle: {
+    id: 'oysterDeagle',
+    name: '珍珠沙鷹',
+    blurb: '握把鑲半顆黑珍珠，一槍一個響；半自動手槍',
+    maxAmmo: 7,
+    fireRate: 2.2,
+    burstCount: 1,
+    burstPause: 0,
+    bulletSpeed: 130,
+    pelletCount: 1,
+    spread: 0.01,
+    kickScale: 2.2,
+    zoom: 1,
+    adsBreakOnFire: false,
+    hipCross: true,
+    hip: [0.22, -0.28, -0.42],
+    hipRot: [0.05, 0.2, 0.02],
+    price: 3800,
+    inShop: true,
+  },
+  oysterSmg: {
+    id: 'oysterSmg',
+    name: '蚵仔烏茲',
+    blurb: '短鐵管＋蚵網彈鼓，近身掃起來像撒殼',
+    maxAmmo: 25,
+    fireRate: 14,
+    burstCount: 1,
+    burstPause: 0,
+    bulletSpeed: 75,
+    pelletCount: 1,
+    spread: 0.028,
+    kickScale: 0.75,
+    zoom: 1,
+    adsBreakOnFire: false,
+    hipCross: true,
+    hip: [0.24, -0.28, -0.48],
+    hipRot: [0.12, 0.18, 0.05],
+    price: 2200,
+    inShop: true,
+  },
+  oysterNova: {
+    id: 'oysterNova',
+    name: '蚵殼噴子',
+    blurb: '雙管塞蚵殼，一扣散出一盆碎殼',
+    maxAmmo: 8,
+    fireRate: 1.15,
+    burstCount: 1,
+    burstPause: 0,
+    bulletSpeed: 70,
+    pelletCount: 6,
+    spread: 0.085,
+    kickScale: 2.4,
+    zoom: 1,
+    adsBreakOnFire: false,
+    hipCross: true,
+    hip: [0.27, -0.32, -0.55],
+    hipRot: [0.12, 0.1, 0.02],
+    price: 3000,
+    inShop: true,
+  },
   oysterSniper: {
     id: 'oysterSniper',
     name: '蚵殼狙擊',
     blurb: '加長鐵管＋寶特瓶瞄具，開鏡 3.5×，開火後要重新開鏡',
     maxAmmo: 6,
-    fireCd: 0.95,
-    projSpeed: 160,
+    fireRate: 1.05,
+    burstCount: 1,
+    burstPause: 0,
+    bulletSpeed: 160,
+    pelletCount: 1,
+    spread: 0,
     kickScale: 1.85,
     zoom: 3.5,
     adsBreakOnFire: true,
     hipCross: false,
     hip: [0.28, -0.34, -0.58],
     hipRot: [0.06, 0.12, 0.02],
-    price: 0,
+    price: 8800,
     inShop: true,
   },
 };
+
+export const isWeaponId = (id: string): id is WeaponId => id in WEAPON_DEFS;
 
 export const makeWeapon = (id: WeaponId): Weapon => ({
   def: WEAPON_DEFS[id],
   ammo: WEAPON_DEFS[id].maxAmmo,
   kick: 0,
   view: null,
+  burstLeft: 0,
 });
+
+/** 依射速換算單發間隔（秒） */
+export function shotInterval(d: WeaponDef): number {
+  return 1 / Math.max(0.05, d.fireRate);
+}
+
+/** 開火成功後寫入下一發冷卻；連發組內用射速，組末用 burstPause */
+export function cooldownAfterShot(w: Weapon): number {
+  const d = w.def;
+  const gap = shotInterval(d);
+  if (d.burstCount <= 1) return gap;
+  w.burstLeft = Math.max(0, w.burstLeft - 1);
+  return w.burstLeft > 0 ? gap : d.burstPause;
+}
+
+/** 長按開新一組連發 */
+export function armBurst(w: Weapon) {
+  if (w.def.burstCount > 1 && w.burstLeft <= 0) w.burstLeft = w.def.burstCount;
+}
 
 export const weaponList = (): WeaponDef[] => Object.values(WEAPON_DEFS);
 export const shopWeapons = (): WeaponDef[] => weaponList().filter(w => w.inShop);
@@ -103,33 +254,142 @@ export type WeaponViewCtx = {
 
 /** 槍口錨點（火花／彈道用），存在 userData.muzzle */
 function tagMuzzle(g: THREE.Group, y: number, z: number) {
-  const m = new THREE.Object3D(); m.position.set(0, y, z); g.add(m); g.userData.muzzle = m; return g;
+  const m = new THREE.Object3D();
+  m.position.set(0, y, z);
+  g.add(m);
+  g.userData.muzzle = m;
+  return g;
+}
+
+function stickShell(
+  g: THREE.Group,
+  shellGeos: THREE.BufferGeometry[],
+  shellMat: THREE.Material,
+  i: number,
+  pos: [number, number, number],
+  scale = 0.75,
+  rot: [number, number, number] = [0.4, 0.8, 0.2],
+) {
+  const sh = new THREE.Mesh(shellGeos[i % shellGeos.length], shellMat);
+  sh.scale.setScalar(scale);
+  sh.position.set(...pos);
+  sh.rotation.set(...rot);
+  g.add(sh);
 }
 
 export function buildWeaponView(id: WeaponId, ctx: WeaponViewCtx): THREE.Group {
   const { M, add, LO, shellGeos, shellMat } = ctx;
+  const segs = LO ? 6 : 8;
+
   if (id === 'oysterGun') {
     const g = new THREE.Group();
     const wood = M(0x8a5a32), metal = M(0x6a7078, { metalness: 0.45, roughness: 0.4 }), rust = M(0x7a5a40), tape = M(0xc8b060);
     add(new THREE.BoxGeometry(0.07, 0.11, 0.26), wood, [0, -0.05, 0.1], g, false);
     add(new THREE.BoxGeometry(0.065, 0.15, 0.085), wood, [0, -0.13, 0.12], g, false);
     add(new THREE.BoxGeometry(0.085, 0.09, 0.2), metal, [0, 0.01, -0.04], g, false);
-    const barrel = add(new THREE.CylinderGeometry(0.032, 0.038, 0.52, LO ? 6 : 8), rust, [0, 0.015, -0.4], g, false);
+    const barrel = add(new THREE.CylinderGeometry(0.032, 0.038, 0.52, segs), rust, [0, 0.015, -0.4], g, false);
     barrel.rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.045, 0.045, 0.04, LO ? 6 : 8), metal, [0, 0.015, -0.66], g, false).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.045, 0.045, 0.04, segs), metal, [0, 0.015, -0.66], g, false).rotation.x = Math.PI / 2;
     add(new THREE.CylinderGeometry(0.07, 0.045, 0.11, 6), M(0x3a5a3a), [0, 0.11, -0.02], g, false);
-    for (let i = 0; i < 2; i++) {
-      const sh = new THREE.Mesh(shellGeos[i % shellGeos.length], shellMat);
-      sh.scale.setScalar(0.85);
-      sh.position.set((i - 0.5) * 0.035, 0.16, -0.02);
-      sh.rotation.set(0.4, i * 1.2, 0.2);
-      g.add(sh);
-    }
-    const wrap = add(new THREE.TorusGeometry(0.042, 0.011, 4, LO ? 6 : 10), tape, [0, 0.015, -0.22], g, false);
-    wrap.rotation.y = Math.PI / 2;
+    stickShell(g, shellGeos, shellMat, 0, [-0.018, 0.16, -0.02], 0.85);
+    stickShell(g, shellGeos, shellMat, 1, [0.018, 0.16, -0.02], 0.85, [0.4, 1.2, 0.2]);
+    add(new THREE.TorusGeometry(0.042, 0.011, 4, LO ? 6 : 10), tape, [0, 0.015, -0.22], g, false).rotation.y = Math.PI / 2;
     add(new THREE.BoxGeometry(0.02, 0.04, 0.06), metal, [0, -0.05, 0.02], g, false);
     return tagMuzzle(g, 0.015, -0.72);
   }
+
+  if (id === 'oysterAk') {
+    const g = new THREE.Group();
+    const wood = M(0x7a4a28), metal = M(0x4a5048, { metalness: 0.5, roughness: 0.45 }), rust = M(0x6a5038);
+    add(new THREE.BoxGeometry(0.065, 0.1, 0.34), wood, [0, -0.04, 0.12], g, false);
+    add(new THREE.BoxGeometry(0.055, 0.18, 0.07), wood, [0, -0.15, 0.16], g, false);
+    add(new THREE.BoxGeometry(0.08, 0.08, 0.28), metal, [0, 0.02, -0.06], g, false);
+    // 彎彈匣（塞乾蚵）
+    const mag = add(new THREE.BoxGeometry(0.045, 0.2, 0.07), rust, [0, -0.14, -0.02], g, false);
+    mag.rotation.z = 0.35;
+    stickShell(g, shellGeos, shellMat, 2, [0.02, -0.12, -0.02], 0.45, [1.2, 0.3, 0.5]);
+    stickShell(g, shellGeos, shellMat, 3, [-0.01, -0.18, 0.0], 0.4, [0.8, 1.5, 0.2]);
+    const barrel = add(new THREE.CylinderGeometry(0.028, 0.034, 0.62, segs), metal, [0, 0.025, -0.48], g, false);
+    barrel.rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.05, 0.04, 0.1, segs), rust, [0, 0.025, -0.82], g, false).rotation.x = Math.PI / 2;
+    // 蚵殼護木
+    stickShell(g, shellGeos, shellMat, 0, [0.05, 0.06, -0.2], 0.55, [0.2, 0.5, 1.2]);
+    stickShell(g, shellGeos, shellMat, 1, [-0.05, 0.05, -0.28], 0.5, [0.3, -0.4, -1]);
+    add(new THREE.BoxGeometry(0.03, 0.05, 0.08), metal, [0, 0.07, -0.12], g, false);
+    return tagMuzzle(g, 0.025, -0.9);
+  }
+
+  if (id === 'oysterM4') {
+    const g = new THREE.Group();
+    const dark = M(0x2e3238, { metalness: 0.4, roughness: 0.5 }), teal = M(0x3a6a5a), plastic = M(0x4a5560);
+    add(new THREE.BoxGeometry(0.06, 0.09, 0.3), plastic, [0, -0.05, 0.14], g, false);
+    add(new THREE.BoxGeometry(0.05, 0.16, 0.065), plastic, [0, -0.14, 0.18], g, false);
+    add(new THREE.BoxGeometry(0.07, 0.07, 0.32), dark, [0, 0.01, -0.05], g, false);
+    // 直彈匣
+    add(new THREE.BoxGeometry(0.04, 0.18, 0.06), teal, [0, -0.12, -0.02], g, false);
+    const barrel = add(new THREE.CylinderGeometry(0.022, 0.026, 0.58, segs), dark, [0, 0.015, -0.48], g, false);
+    barrel.rotation.x = Math.PI / 2;
+    // 寶特瓶護木
+    add(new THREE.CylinderGeometry(0.04, 0.04, 0.22, segs), M(0x5a9aaa, { transparent: true, opacity: 0.55, roughness: 0.2 }), [0, 0.015, -0.28], g, false).rotation.x = Math.PI / 2;
+    add(new THREE.BoxGeometry(0.035, 0.04, 0.12), dark, [0, 0.06, -0.08], g, false);
+    stickShell(g, shellGeos, shellMat, 4, [0.0, 0.1, 0.08], 0.55, [0.6, 0.2, 0.4]);
+    // 簡易紅點（蚵珠）
+    add(new THREE.CylinderGeometry(0.018, 0.018, 0.06, 6), M(0x222222), [0, 0.08, -0.1], g, false).rotation.x = Math.PI / 2;
+    add(new THREE.SphereGeometry(0.01, 6, 6), M(0xff4040, { emissive: 0xaa2020, emissiveIntensity: 0.6 }), [0, 0.08, -0.07], g, false);
+    return tagMuzzle(g, 0.015, -0.8);
+  }
+
+  if (id === 'oysterDeagle') {
+    const g = new THREE.Group();
+    const metal = M(0xb0a090, { metalness: 0.7, roughness: 0.25 }), dark = M(0x2a2a2a), pearl = M(0x1a1520, { metalness: 0.3, roughness: 0.15 });
+    add(new THREE.BoxGeometry(0.055, 0.08, 0.18), metal, [0, 0.0, -0.02], g, false);
+    add(new THREE.BoxGeometry(0.05, 0.14, 0.06), dark, [0, -0.1, 0.06], g, false);
+    // 黑珍珠握把飾
+    add(new THREE.SphereGeometry(0.022, 8, 8), pearl, [0.03, -0.1, 0.06], g, false);
+    const barrel = add(new THREE.CylinderGeometry(0.02, 0.024, 0.28, segs), metal, [0, 0.02, -0.22], g, false);
+    barrel.rotation.x = Math.PI / 2;
+    add(new THREE.BoxGeometry(0.04, 0.035, 0.08), metal, [0, 0.045, -0.08], g, false);
+    stickShell(g, shellGeos, shellMat, 0, [0, 0.07, 0.04], 0.4, [0.5, 1, 0.3]);
+    add(new THREE.BoxGeometry(0.015, 0.03, 0.04), dark, [0, -0.02, 0.02], g, false);
+    return tagMuzzle(g, 0.02, -0.38);
+  }
+
+  if (id === 'oysterSmg') {
+    const g = new THREE.Group();
+    const metal = M(0x5a6068, { metalness: 0.45, roughness: 0.4 }), mesh = M(0x8a7a50), dark = M(0x333338);
+    add(new THREE.BoxGeometry(0.07, 0.08, 0.22), metal, [0, 0.0, 0.02], g, false);
+    add(new THREE.BoxGeometry(0.055, 0.12, 0.06), dark, [0, -0.1, 0.08], g, false);
+    // 蚵網彈鼓
+    add(new THREE.CylinderGeometry(0.09, 0.09, 0.05, LO ? 8 : 12), mesh, [0, -0.08, -0.04], g, false).rotation.x = Math.PI / 2;
+    stickShell(g, shellGeos, shellMat, 1, [0.05, -0.08, -0.04], 0.35, [0.2, 0.9, 0.5]);
+    stickShell(g, shellGeos, shellMat, 2, [-0.04, -0.1, -0.02], 0.32, [1, 0.2, 0.8]);
+    const barrel = add(new THREE.CylinderGeometry(0.024, 0.028, 0.32, segs), metal, [0, 0.01, -0.28], g, false);
+    barrel.rotation.x = Math.PI / 2;
+    add(new THREE.BoxGeometry(0.04, 0.04, 0.1), dark, [0, 0.05, -0.05], g, false);
+    // 折疊托（短）
+    add(new THREE.BoxGeometry(0.03, 0.04, 0.12), dark, [0, 0.02, 0.16], g, false);
+    return tagMuzzle(g, 0.01, -0.46);
+  }
+
+  if (id === 'oysterNova') {
+    const g = new THREE.Group();
+    const wood = M(0x6a4020), metal = M(0x6a7078, { metalness: 0.5, roughness: 0.35 }), rust = M(0x7a5a40);
+    add(new THREE.BoxGeometry(0.07, 0.09, 0.28), wood, [0, -0.04, 0.1], g, false);
+    add(new THREE.BoxGeometry(0.06, 0.14, 0.07), wood, [0, -0.13, 0.14], g, false);
+    // 雙管
+    for (const sx of [-0.028, 0.028]) {
+      const b = add(new THREE.CylinderGeometry(0.022, 0.026, 0.55, segs), metal, [sx, 0.02, -0.35], g, false);
+      b.rotation.x = Math.PI / 2;
+    }
+    add(new THREE.BoxGeometry(0.09, 0.05, 0.12), rust, [0, 0.02, -0.08], g, false);
+    // 管口蚵殼裝飾
+    stickShell(g, shellGeos, shellMat, 0, [-0.04, 0.05, -0.62], 0.5, [0.3, 0.5, 1.4]);
+    stickShell(g, shellGeos, shellMat, 3, [0.04, 0.04, -0.6], 0.48, [0.4, -0.6, -1.2]);
+    stickShell(g, shellGeos, shellMat, 1, [0, 0.1, 0.0], 0.6, [0.7, 0.3, 0.2]);
+    add(new THREE.BoxGeometry(0.025, 0.04, 0.05), metal, [0, -0.04, 0.02], g, false);
+    return tagMuzzle(g, 0.02, -0.66);
+  }
+
   if (id === 'oysterSniper') {
     const g = new THREE.Group();
     const wood = M(0x6e4428), metal = M(0x5a6068, { metalness: 0.55, roughness: 0.35 }), dark = M(0x2a2a2a);
@@ -137,17 +397,16 @@ export function buildWeaponView(id: WeaponId, ctx: WeaponViewCtx): THREE.Group {
     add(new THREE.BoxGeometry(0.06, 0.09, 0.32), wood, [0, -0.06, 0.14], g, false);
     add(new THREE.BoxGeometry(0.055, 0.16, 0.07), wood, [0, -0.14, 0.18], g, false);
     add(new THREE.BoxGeometry(0.07, 0.07, 0.28), metal, [0, 0.0, -0.02], g, false);
-    const barrel = add(new THREE.CylinderGeometry(0.022, 0.028, 0.95, LO ? 6 : 8), metal, [0, 0.01, -0.62], g, false);
+    const barrel = add(new THREE.CylinderGeometry(0.022, 0.028, 0.95, segs), metal, [0, 0.01, -0.62], g, false);
     barrel.rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.034, 0.034, 0.05, LO ? 6 : 8), dark, [0, 0.01, -1.08], g, false).rotation.x = Math.PI / 2;
-    // 寶特瓶／鐵罐瞄具
-    add(new THREE.CylinderGeometry(0.028, 0.028, 0.18, LO ? 6 : 8), plastic, [0, 0.08, -0.12], g, false).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.034, 0.034, 0.05, segs), dark, [0, 0.01, -1.08], g, false).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.028, 0.028, 0.18, segs), plastic, [0, 0.08, -0.12], g, false).rotation.x = Math.PI / 2;
     add(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 6), dark, [0, 0.08, -0.03], g, false).rotation.x = Math.PI / 2;
     add(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 6), dark, [0, 0.08, -0.21], g, false).rotation.x = Math.PI / 2;
-    const sh = new THREE.Mesh(shellGeos[0], shellMat);
-    sh.scale.setScalar(0.7); sh.position.set(0.0, 0.12, 0.06); sh.rotation.set(0.5, 0.8, 0.2); g.add(sh);
+    stickShell(g, shellGeos, shellMat, 0, [0, 0.12, 0.06], 0.7, [0.5, 0.8, 0.2]);
     add(new THREE.BoxGeometry(0.018, 0.035, 0.05), dark, [0, -0.05, 0.04], g, false);
     return tagMuzzle(g, 0.01, -1.14);
   }
+
   return tagMuzzle(new THREE.Group(), 0, -0.4);
 }

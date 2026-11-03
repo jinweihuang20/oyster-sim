@@ -1,14 +1,14 @@
 import { shopWeapons, type WeaponDef, type WeaponId } from './weapons';
 import { ico, I } from './icons';
 
-/** 死鬥武器店：目前免費領取；之後可接 price／金錢 */
-export const SHOP_FREE = true;
+/** 死鬥內只換槍，不賣；購買在主線雜貨店 */
+export const SHOP_FREE = false;
 
 export function shopOverlayHtml(): string {
   return `<div id="dmShop"><div id="dmShopBox">
-<div id="dmShopHd"><span>${ico(I.shop, 22)} 武器店${SHOP_FREE ? '　<small style="opacity:.65;font-weight:500">開發中・免費領</small>' : ''}</span>
+<div id="dmShopHd"><span>${ico(I.shop, 22)} 換槍</span>
 <button class="dmb" id="dmShopX" aria-label="關閉">✕</button></div>
-<div id="dmShopHint">隨便挑一把裝備，不用錢。</div>
+<div id="dmShopHint">點槍可預覽（拖曳旋轉）；只能裝備雜貨店已買的槍。</div>
 <div id="dmShopList"></div>
 </div></div>`;
 }
@@ -26,6 +26,8 @@ export function shopCss(): string {
 .dmShopItem{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid rgba(235,235,235,.22);border-radius:12px;background:rgba(255,255,255,.04);cursor:pointer;text-align:left;color:inherit;font:inherit}
 .dmShopItem:hover,.dmShopItem:focus{border-color:rgba(235,235,235,.55);background:rgba(255,255,255,.08)}
 .dmShopItem.on{border-color:#3dcf6a;box-shadow:0 0 0 1px #3dcf6a}
+.dmShopItem.locked{opacity:.45;cursor:not-allowed}
+.dmShopItem.locked:hover,.dmShopItem.locked:focus{border-color:rgba(235,235,235,.22);background:rgba(255,255,255,.04)}
 .dmShopItem b{font-weight:700;font-size:16px}
 .dmShopItem small{opacity:.72;font-size:12px;line-height:1.35}
 .dmShopMeta{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;opacity:.8;margin-top:2px}
@@ -34,7 +36,7 @@ export function shopCss(): string {
 }
 
 function itemStats(d: WeaponDef): string {
-  return `<span>彈匣 ${d.maxAmmo}</span><span>射速 ${(1 / d.fireCd).toFixed(1)}/s</span><span>彈速 ${d.projSpeed}</span>${d.zoom > 1 ? `<span>開鏡 ${d.zoom}×</span>` : ''}${d.adsBreakOnFire ? '<span>開火須重開鏡</span>' : ''}${SHOP_FREE ? '<span>免費</span>' : `<span>$${d.price}</span>`}`;
+  return `<span>彈匣 ${d.maxAmmo}</span><span>射速 ${d.fireRate.toFixed(1)}/s</span>${d.burstCount > 1 ? `<span>${d.burstCount} 連發</span>` : ''}${d.pelletCount > 1 ? `<span>散彈 ×${d.pelletCount}</span>` : ''}<span>彈速 ${d.bulletSpeed}</span>${d.zoom > 1 ? `<span>開鏡 ${d.zoom}×</span>` : ''}${d.adsBreakOnFire ? '<span>開火須重開鏡</span>' : ''}`;
 }
 
 export function renderShopList(
@@ -45,8 +47,8 @@ export function renderShopList(
   listEl.innerHTML = rows.map(d => {
     const eq = d.id === opts.equipped;
     const own = opts.owned.has(d.id);
-    const act = eq ? '使用中' : own ? '裝備' : (SHOP_FREE ? '免費領取' : `購買 $${d.price}`);
-    return `<button type="button" class="dmShopItem${eq ? ' on' : ''}" data-id="${d.id}">
+    const act = eq ? '使用中' : own ? '裝備' : '未購買・去雜貨店';
+    return `<button type="button" class="dmShopItem${eq ? ' on' : ''}${own ? '' : ' locked'}" data-id="${d.id}" ${own ? '' : 'aria-disabled="true"'}>
 <b>${ico(I.gun, 18)} ${d.name}</b>
 <small>${d.blurb}</small>
 <div class="dmShopMeta">${itemStats(d)}</div>
