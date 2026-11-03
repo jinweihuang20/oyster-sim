@@ -10,7 +10,7 @@ interface Fighter {
 }
 interface Shell { pos: THREE.Vector3; vel: THREE.Vector3; owner: Fighter; mesh: THREE.Mesh; life: number; }
 
-const SPEED = 90, HALF = 18, MAXAMMO = 15, EYE = 1.6, R = 0.35;
+const WALK = 5, SPEED = 90, HALF = 18, MAXAMMO = 15, EYE = 1.6, R = 0.35;
 const PILES = [[0, 0], [-13, -12], [13, 12], [-12, 12], [12, -12], [0, -6], [5, 15]].map(([x, z]) => new THREE.Vector3(x, 0, z));
 const PICK_R = 1.9;
 // 掩體：木箱堆、藍色塑膠籃堆、剝蚵工作桌
@@ -543,6 +543,7 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
     } else f.yaw = Math.atan2(-f.vel.x, -f.vel.z);
   }
   const _fq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), _fa = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+  const _mv = new THREE.Vector3();
   function update(dt: number) {
     fireCd -= dt; if (fireHeld && fireCd <= 0) { if (me.ammo <= 0 || me.dead) fireHeld = 0; else if (throwShell(me)) fireCd = FIRE_CD; }
     now += dt;
@@ -560,7 +561,10 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
         let fx = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + joy.x, fz = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0) + joy.y;
         const l = Math.hypot(fx, fz); if (l > 1) { fx /= l; fz /= l; }
         const s = Math.sin(f.yaw), c = Math.cos(f.yaw);
-        const vmax = (keys.ShiftLeft || keys.ShiftRight || sprint) && fz < 0.2 ? 7.5 : 5; f.vel.set((fx * c + fz * s) * vmax, 0, (-fx * s + fz * c) * vmax);
+        // 各方向同一最高速：輸入長度≤1（搖桿類比保留），衝刺全方向一致×1.5，後退方向平滑降到 0.85，加減速與幀率無關
+        const ln = Math.hypot(fx, fz), back = ln > 0 ? Math.max(0, fz / ln) : 0;
+        const vmax = WALK * ((keys.ShiftLeft || keys.ShiftRight || sprint) ? 1.5 : 1) * (1 - 0.15 * back);
+        _mv.set((fx * c + fz * s) * vmax, 0, (-fx * s + fz * c) * vmax); f.vel.lerp(_mv, 1 - Math.exp(-14 * dt));
       } else botThink(f, dt);
       if (f.vel.lengthSq() > 0.01) f.invulnUntil = Math.min(f.invulnUntil, now); // 一開始移動就結束無敵
       const spd = f.vel.length(); if (spd > 0.5) { f.stepAcc += spd * dt; if (f.stepAcc > 0.75) { f.stepAcc = 0; if (f.isPlayer || f.pos.distanceTo(me.pos) < 25) SND.step(f); } } else f.stepAcc = 0.6;
@@ -643,5 +647,5 @@ ${isTouch ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div
     renderer.dispose(); root.remove(); active = false; delete (window as any).__dm; onExit();
   }
   // 測試掛勾
-  (window as any).__dm = { fighters, shells, me, pick, fireDown, fireUp, fireHeldN: () => fireHeld, DSv, assistK, touchLook, get voices() { return voices; }, bloodLive: () => Array.from(bl).filter(x => x > 0).length, bars: () => fighters.map(f => f.hpBar?.g.visible ?? null), openUmb, closeUmb, throwShell, update, exit, renderBoard, launchPitch, get now() { return now; } };
+  (window as any).__dm = { fighters, shells, me, pick, input: { keys, joy, setSprint: (v: boolean) => { sprint = v; } }, fireDown, fireUp, fireHeldN: () => fireHeld, DSv, assistK, touchLook, get voices() { return voices; }, bloodLive: () => Array.from(bl).filter(x => x > 0).length, bars: () => fighters.map(f => f.hpBar?.g.visible ?? null), openUmb, closeUmb, throwShell, update, exit, renderBoard, launchPitch, get now() { return now; } };
 }
