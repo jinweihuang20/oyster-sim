@@ -7,6 +7,9 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
+import { openDeathmatch, isDeathmatchActive } from './deathmatch';
+import { installNoZoom } from './nozoom';
+installNoZoom();
 const LS_P = __PREVIEW__ ? 'preview:' : '';
 const LS = { getItem: (k: string) => localStorage.getItem(LS_P + k), setItem: (k: string, v: string) => localStorage.setItem(LS_P + k, v), removeItem: (k: string) => localStorage.removeItem(LS_P + k) };
 if (__PREVIEW__) document.addEventListener('DOMContentLoaded', () => { const t = document.createElement('div'); t.textContent = '預覽版'; t.style.cssText = 'position:fixed;left:0;bottom:0;z-index:99999;background:#d8402f;color:#fff4dc;font:bold 12px sans-serif;padding:2px 8px;pointer-events:none;box-shadow:2px -2px 0 #1b2a3a'; document.body.appendChild(t); });
@@ -308,7 +311,10 @@ function track(t: string, d: Record<string, unknown> = {}) {
   } catch { }
 }
 let ac: AudioContext | null = null, masterG: GainNode, ambG: GainNode, sfxG: GainNode, musG: GainNode;
-function applyMix() { if (!ac) { try { LS.setItem('oyster-mix', JSON.stringify(mix)); } catch { } return; } masterG.gain.value = mix.mute ? 0 : mix.master; ambG.gain.value = mix.amb; sfxG.gain.value = mix.sfx; musG.gain.value = mix.music * 0.5; try { LS.setItem('oyster-mix', JSON.stringify(mix)); } catch { } }
+// 環境音（海浪、漁船引擎、海鷗、收音機都走 ambG）：死鬥模式中靜音，離開後照使用者設定恢復
+const ambLevel = () => (isDeathmatchActive() ? 0 : mix.amb);
+function duckAmb() { if (!ac) return; const t = ac.currentTime; ambG.gain.cancelScheduledValues(t); ambG.gain.setValueAtTime(ambG.gain.value, t); ambG.gain.linearRampToValueAtTime(ambLevel(), t + 0.4); }
+function applyMix() { if (!ac) { try { LS.setItem('oyster-mix', JSON.stringify(mix)); } catch { } return; } masterG.gain.value = mix.mute ? 0 : mix.master; ambG.gain.value = ambLevel(); sfxG.gain.value = mix.sfx; musG.gain.value = mix.music * 0.5; try { LS.setItem('oyster-mix', JSON.stringify(mix)); } catch { } }
 function noiseBuf(a: AudioContext, sec: number) { const n = a.sampleRate * sec, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }
 function lfo(a: AudioContext, rate: number, depth: number, target: AudioParam) { const o = a.createOscillator(), g = a.createGain(); o.frequency.value = rate; g.gain.value = depth; o.connect(g).connect(target); o.start(); }
 function startAmbience(a: AudioContext) {
@@ -364,6 +370,28 @@ function vHorn(a: AudioContext, out: AudioNode, t: number, d: number, v: number)
   for (const f of [110, 111.3, 165.5]) { const o = a.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(t); o.stop(t + d + 0.05); }
 }
 const TRACKS: Record<string, Trk> = {
+  // 死鬥：放克律動（約 110 BPM，16 分音符格），音量壓低、低通，不蓋過腳步和音效
+  dm: { bpm: 220, make: (a, out) => {
+    const bus = a.createGain(); bus.gain.value = 0.5; const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; bus.connect(lp).connect(out);
+    const nb = a.createBuffer(1, a.sampleRate * 0.3, a.sampleRate), nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
+    const nz = (t: number, d: number, f: number, v: number, type: BiquadFilterType = 'bandpass') => { const s = a.createBufferSource(); s.buffer = nb; const fl = a.createBiquadFilter(); fl.type = type; fl.frequency.value = f; const g = a.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); s.connect(fl).connect(g).connect(bus); s.start(t); s.stop(t + d + 0.02); };
+    const kick = (t: number, v: number) => { const o = a.createOscillator(), g = a.createGain(); o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2); o.connect(g).connect(bus); o.start(t); o.stop(t + 0.22); };
+    const bass = (t: number, m: number, d: number, v: number) => { const o = a.createOscillator(), f = a.createBiquadFilter(), g = a.createGain(); o.type = 'sawtooth'; o.frequency.value = hz(m); f.type = 'lowpass'; f.Q.value = 6; f.frequency.setValueAtTime(1400, t); f.frequency.exponentialRampToValueAtTime(260, t + d); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(f).connect(g).connect(bus); o.start(t); o.stop(t + d + 0.02); };
+    const clav = (t: number, ch: number[], v: number) => { const f = a.createBiquadFilter(), g = a.createGain(); f.type = 'bandpass'; f.Q.value = 4; f.frequency.setValueAtTime(700, t); f.frequency.exponentialRampToValueAtTime(2200, t + 0.06); f.frequency.exponentialRampToValueAtTime(900, t + 0.11); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.11); f.connect(g).connect(bus);
+      for (const m of ch) { const o = a.createOscillator(); o.type = 'square'; o.frequency.value = hz(m); o.connect(f); o.start(t); o.stop(t + 0.13); } };
+    // E 小調放克：bass 16 格（0＝休止），兩小節換和弦 Em7 → A7
+    const BL = [40, 0, 0, 52, 0, 40, 0, 43, 0, 45, 0, 40, 52, 0, 50, 0], BL2 = [45, 0, 0, 57, 0, 45, 0, 48, 0, 50, 0, 45, 57, 0, 55, 52];
+    const EM7 = [64, 67, 71, 74], A7 = [64, 67, 69, 73];
+    return (step, t) => {
+      const i = step % 16, bar = Math.floor(step / 16) % 4, sec = bar < 2 ? 0 : 1;
+      if (i === 0 || i === 10 || (i === 7 && bar % 2)) kick(t, 0.5);
+      if (i === 4 || i === 12) nz(t, 0.14, 1800, 0.32); else if (i === 7 || i === 15 || i === 9) nz(t, 0.05, 1600, 0.06); // 鼓邊鬼音
+      if (i % 2 === 0) nz(t, 0.03, 8000, i % 4 === 2 ? 0.07 : 0.035, 'highpass');
+      const bn = (sec ? BL2 : BL)[i]; if (bn) bass(t, bn, i % 4 === 3 ? 0.08 : 0.16, i === 0 ? 0.26 : 0.18);
+      if (i === 2 || i === 6 || i === 11 || (i === 14 && bar % 2)) clav(t, sec ? A7 : EM7, 0.05);
+    };
+  } },
   // 主選單／教學／結算：台式電子琴（那卡西／廟口風），原本那首
   temple: { bpm: 128, make: (a, out) => {
     const mel = [76, 0, 79, 76, 74, 0, 72, 74, 76, 79, 81, 0, 79, 76, 74, 0, 72, 0, 74, 72, 69, 0, 67, 69, 72, 74, 76, 74, 72, 0, 0, 0,
@@ -488,6 +516,7 @@ function setupRadioBus(a: AudioContext) {
 const radioSt = () => ((save.radioSt ?? 0) % STATIONS.length + STATIONS.length) % STATIONS.length;
 // 現在該播哪一首
 function pickTrack(): string {
+  if (isDeathmatchActive()) return 'dm';
   if (state !== 'play' || tut) return 'temple';
   if (gearOn('radio')) return STATIONS[radioSt()].id;
   if (evRun) return 'event';
@@ -1909,6 +1938,7 @@ function renderItemShop() {
 (window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };
 const go = (len: number) => { evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
+$('oDm').onclick = () => { $('overlay').classList.remove('show'); openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })() }, () => { $('overlay').classList.add('show'); duckAmb(); }); duckAmb(); };
 $('start').onclick = () => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
 btn('again', () => { if (evLastId != null) evAgain(); else startDay(); });
 btn('resMenu', () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; });
@@ -1992,6 +2022,7 @@ let frameErr = 0;
 // 主迴圈出錯也不能停：停了計時、暫停、預警都會卡住
 function frame() { try { frameBody(); } catch (e) { if (frameErr++ < 3) console.error('frame', e); requestAnimationFrame(frame); } }
 function frameBody() {
+  if (isDeathmatchActive()) { clock.getDelta(); requestAnimationFrame(frame); return; }
   if (shedAnim.length) { const t = performance.now() / 1000; for (const f of shedAnim) f(t); }
   if (isPaused()) {
     clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); closeUmbrella(); down = null; joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
