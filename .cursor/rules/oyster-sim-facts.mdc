@@ -23,6 +23,8 @@ alwaysApply: true
 | 路徑 | 職責 |
 |------|------|
 | `src/main.ts` | **幾乎全部玩法**（場景、相位、商店、圖鑑、成就、活動 UI、藥品、裝備…） |
+| `src/deathmatch.ts` | 死鬥相容入口（re-export `src/dm/`） |
+| `src/dm/` | 死鬥模組：`session` 對局、`weapons` 槍械、`shop` 武器店（目前免費）、`arena` 場地、`breakables`、`character` 方塊玩家（持槍臂段對準）、`constants`／`types`／`icons`／`settings`（`adsMode`: tap／hold／mix，DS_VER 3） |
 | `src/style.css` / `icons.css` | UI |
 | `src/social.ts` | 排行榜、跑馬燈、禮物、線上人數、限時活動 API（`/s/*`） |
 | `src/redeem.ts` + `redeemCodes.ts` | 兌換碼（只存 SHA-256 hash，不明碼） |
@@ -38,7 +40,7 @@ alwaysApply: true
 | `.github/workflows/pages.yml` | `main` → GitHub Pages |
 | `.github/workflows/preview.yml` | `dev` → preview 站 |
 
-**沒有**獨立 scene／ecs／asset pipeline／後端 repo 在本專案內。
+死鬥以外**沒有**獨立 scene／ecs／asset pipeline／後端 repo。新槍／商店賣槍：改 `src/dm/weapons.ts`（`WEAPON_DEFS` + `buildWeaponView`），不要塞回單檔。
 
 ## 建置與環境變數
 

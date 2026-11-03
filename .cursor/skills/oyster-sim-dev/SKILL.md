@@ -12,6 +12,7 @@ description: >-
 台式夜市剝蚵模擬器。核心玩法：找縫 → 撬殼 → 點碗丟肉；可偷阿婆、撐傘擋殼、逛雜貨店、收集圖鑑。
 
 專案硬事實（防幻覺）見 `.cursor/rules/oyster-sim-facts.mdc`（alwaysApply）。本 skill 負責「怎麼改」。
+玩法／數值／關卡／文案設計方法見 `.cursor/skills/game-designer/SKILL.md`。
 
 ## 技術邊界
 
@@ -85,6 +86,16 @@ description: >-
 - [ ] 確認 shop 列表渲染與 equipped 讀取走 id
 - [ ] 價格與後台 key（若有）一致；失敗時用內建價
 - [ ] 手機＋桌面各買一次、裝備進一班驗證數值有生效
+```
+
+### 死鬥／加新槍（可給商店共用）
+
+```
+- [ ] 實作在 src/dm/，不要把系統塞回單檔 deathmatch.ts
+- [ ] WeaponId + WEAPON_DEFS（name / blurb / maxAmmo / fireCd / projSpeed / price；有鏡則 zoom／adsBreakOnFire）
+- [ ] buildWeaponView 加第一人稱模型
+- [ ] 商店／目錄只 import ./dm/weapons（WEAPON_DEFS / weaponList）
+- [ ] 死鬥換槍走 equipWeapon；驗證射速／彈匣／view；開鏡走 scopePress／scopeRelease（設定 adsMode）
 ```
 
 ### 加新蚵寮地點
