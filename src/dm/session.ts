@@ -66,6 +66,8 @@ export function openDeathmatch(U: DmUmb, onExit: () => void, cfg?: Partial<DmMat
 #dmBoard.show{display:block}#dmBoard h2{margin:0 0 8px;color:#ffd23f;text-align:center;letter-spacing:4px}
 #dmBoard table{border-collapse:collapse;width:100%;font-size:16px}#dmBoard td,#dmBoard th{padding:4px 8px;text-align:center;border-bottom:1px solid #6b3a12}
 #dmBoard tr.me td{color:#ffd23f;font-weight:900}
+#dmBoardAct{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+#dmBoardAct .dmb{position:static;min-height:48px;min-width:120px;font-size:16px}
 #dmRoot{--bs:1;--bo:.85}
 #dmSet{position:absolute;inset:0;background:rgba(10,5,0,.6);display:none;align-items:center;justify-content:center;z-index:5}
 #dmSet.show{display:flex}
@@ -1126,7 +1128,14 @@ ${isTouch
       hd.innerHTML = `${ico(I.board, 26)}${title}`;
     }
     const payLine = roundOver && payout > 0 ? `<div style="text-align:center;margin:6px 0 8px;font-weight:800;color:#ffd23f">獎勵 +$${payout}</div>` : '';
-    q('dmTable').innerHTML = `${payLine}<table><tr><th></th><th>${ico(I.skull, 18)}</th><th>${ico(I.heart, 18)}</th><th>${ico(I.head, 18)}</th><th>%</th></tr>${rows.map(f => `<tr class="${f.isPlayer ? 'me' : ''}"><td>${tag(f)}</td><td>${f.kills}</td><td>${f.deaths}</td><td>${f.hs}</td><td>${f.shots ? Math.round(f.hits / f.shots * 100) : 0}%</td></tr>`).join('')}</table>`;
+    const act = roundOver
+      ? `<div id="dmBoardAct"><button type="button" class="dmb" id="dmAgain">${ico(I.play, 20)} 再來一次</button><button type="button" class="dmb" id="dmLeave">離開</button></div>`
+      : '';
+    q('dmTable').innerHTML = `${payLine}<table><tr><th></th><th>${ico(I.skull, 18)}</th><th>${ico(I.heart, 18)}</th><th>${ico(I.head, 18)}</th><th>%</th></tr>${rows.map(f => `<tr class="${f.isPlayer ? 'me' : ''}"><td>${tag(f)}</td><td>${f.kills}</td><td>${f.deaths}</td><td>${f.hs}</td><td>${f.shots ? Math.round(f.hits / f.shots * 100) : 0}%</td></tr>`).join('')}</table>${act}`;
+    if (roundOver) {
+      q('dmAgain')?.addEventListener('click', () => replay());
+      q('dmLeave')?.addEventListener('click', () => exit());
+    }
   }
   const hpCol = (hp: number) => `hsl(${Math.max(0, Math.min(100, hp)) * 1.05},32%,52%)`; // 低飽和：綠→琥珀→紅
   // 小地圖：場地外框、殼堆、玩家箭頭，最近有開火的對手才顯示紅點
@@ -1168,7 +1177,7 @@ ${isTouch
         ? (nearCool ? '這堆冷卻中 — 換下一堆填彈' : '沒殼了 — 去蚵仔堆塡彈')
         : '';
     }
-    if (q('dmBoard').classList.contains('show')) renderBoard();
+    if (q('dmBoard').classList.contains('show') && !roundOver) renderBoard();
   }
 
   // ---- 迴圈 ----
@@ -1225,12 +1234,22 @@ ${isTouch
   }
   loop();
 
-  function exit() {
+  function teardown() {
     cancelAnimationFrame(raf); removeEventListener('keydown', kd); removeEventListener('keyup', ku); removeEventListener('resize', resize); removeEventListener('blur', blur); removeEventListener('mouseup', mu);
     document.removeEventListener('pointerlockchange', plc); if (document.pointerLockElement === canvas) document.exitPointerLock();
-    renderer.dispose(); root.remove(); active = false; delete (window as any).__dm; onExit();
+    renderer.dispose(); root.remove(); active = false; delete (window as any).__dm;
+  }
+  function exit() {
+    teardown(); onExit();
+  }
+  function replay() {
+    const cfg = { mode: match.mode, botCount: match.botCount, arenaId: match.arenaId, durationSec: match.durationSec };
+    const umb = U, done = onExit;
+    teardown();
+    // 同一幀清完再開，避免 active 卡死
+    queueMicrotask(() => openDeathmatch(umb, done, cfg));
   }
   // 測試掛勾
-  (window as any).__dm = { fighters, shells, me, pick, equipWeapon, WEAPON_DEFS, input: { keys, joy, setSprint: (v: boolean) => { sprint = v; } }, fireDown, fireUp, fireHeldN: () => fireHeld, DSv, assistK, touchLook, get voices() { return voices; }, bloodLive: () => Array.from(bl).filter(x => x > 0).length, bars: () => fighters.map(f => f.hpBar?.g.visible ?? null), openUmb, closeUmb, throwShell, update, exit, renderBoard, launchPitch, get now() { return now; } };
+  (window as any).__dm = { fighters, shells, me, pick, equipWeapon, WEAPON_DEFS, input: { keys, joy, setSprint: (v: boolean) => { sprint = v; } }, fireDown, fireUp, fireHeldN: () => fireHeld, DSv, assistK, touchLook, get voices() { return voices; }, bloodLive: () => Array.from(bl).filter(x => x > 0).length, bars: () => fighters.map(f => f.hpBar?.g.visible ?? null), openUmb, closeUmb, throwShell, update, exit, replay, renderBoard, launchPitch, get now() { return now; } };
 }
 
