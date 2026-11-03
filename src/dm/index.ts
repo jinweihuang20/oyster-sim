@@ -8,4 +8,4 @@ export {
 } from './match';
 export { WEAPON_DEFS, makeWeapon, weaponList, shopWeapons, isWeaponId, type WeaponId, type WeaponDef, type Weapon } from './weapons';
 export { SHOP_FREE } from './shop';
-export { openWeaponPreview, weaponPreviewCss } from './weaponPreview';
+export { openWeaponPreview, closeWeaponPreview, weaponPreviewCss } from './weaponPreview';

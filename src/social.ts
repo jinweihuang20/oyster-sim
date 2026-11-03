@@ -188,3 +188,33 @@ export async function evStart(eventId: number): Promise<{ st: 'ok'; token: strin
 }
 export function evResult(d: { eventId: number; token: string; sid: string; score: number; meat: number; completed: boolean; early: boolean }) { return post('/events/result', d); }
 export function evTop(eventId: number) { return get(`/events/top?eventId=${eventId}&id=${encodeURIComponent(D.id)}${tq()}`); }
+
+// ---------- 問卷調查 ----------
+export type SurveyQ = { id: string; type: 'single' | 'multi' | 'text'; text: string; required: boolean; options?: string[]; maxLen?: number };
+export type SurveyCfg = { id: number; title: string; desc: string; questions: SurveyQ[]; rewardMoney: number; start: number; end: number; done?: boolean };
+/** 進行中問卷；連不上回傳 undefined（呼叫端要隱藏入口） */
+export async function svActive(): Promise<{ surveys: SurveyCfg[]; serverTime: number } | undefined> {
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 6000);
+  try {
+    const r = await fetch(API + '/surveys/active?game=oyster-sim&id=' + encodeURIComponent(D.id), { mode: 'cors', cache: 'no-store', signal: ac.signal });
+    if (!r.ok) return undefined;
+    const j = await r.json();
+    return j && typeof j.serverTime === 'number' && Array.isArray(j.surveys) ? j : undefined;
+  } catch { return undefined; } finally { clearTimeout(t); }
+}
+/** 提交問卷：ok 帶回現金獎勵；already／ended／bad／net */
+export async function svSubmit(surveyId: number, answers: Record<string, unknown>): Promise<{ st: 'ok'; money: number } | { st: 'already' | 'ended' | 'bad' | 'net'; error?: string }> {
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 10000);
+  try {
+    const r = await fetch(API + '/surveys/submit', {
+      method: 'POST', body: JSON.stringify({ id: D.id, nick: D.nick(), test: D.test, surveyId, answers }),
+      headers: { 'Content-Type': 'text/plain' }, mode: 'cors', signal: ac.signal,
+    });
+    const j = await r.json().catch(() => null);
+    if (r.ok && j?.ok) return { st: 'ok', money: Math.max(0, Math.floor(Number(j.reward?.money) || 0)) };
+    if (j?.error === 'already') return { st: 'already' };
+    if (j?.error === 'ended') return { st: 'ended' };
+    if (r.status === 400) return { st: 'bad', error: typeof j?.error === 'string' ? j.error : undefined };
+    return { st: 'net' };
+  } catch { return { st: 'net' }; } finally { clearTimeout(t); }
+}

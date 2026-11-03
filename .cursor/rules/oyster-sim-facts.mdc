@@ -111,6 +111,7 @@ Base：`https://game-status.gwtech.org`
 | 社群／榜／彈幕 | `/s/*`（score、event、events、top、react、gifts、presence、me、move） |
 | 商店動態價 | `/s/shop/prices?game=oyster-sim`（失敗用內建價） |
 | 限時活動 | `/s/events/active|start|result|top`；client `EvCfg` 含 npc/dur/throwX/angerX/bonus/steal… |
+| 問卷調查 | `/s/surveys/active|submit`；client `sv*`：題型 single／multi／text，完成獎勵現金（`reward.money`），每人每份一次 |
 
 後端掛掉必須**安靜失敗**，遊戲仍可單機玩。
 

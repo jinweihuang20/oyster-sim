@@ -7,4 +7,4 @@ export {
 } from './dm';
 export { WEAPON_DEFS, makeWeapon, weaponList, shopWeapons, isWeaponId, type WeaponId, type WeaponDef, type Weapon } from './dm/weapons';
 export { SHOP_FREE } from './dm/shop';
-export { openWeaponPreview, weaponPreviewCss } from './dm/weaponPreview';
+export { openWeaponPreview, closeWeaponPreview, weaponPreviewCss } from './dm/weaponPreview';

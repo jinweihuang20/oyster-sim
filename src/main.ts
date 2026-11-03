@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
-import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
+import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
 import { ODD } from './oddities';
 import { installNoZoom } from './nozoom';
 installNoZoom();
@@ -621,7 +621,7 @@ const dstatStr = () => dStat.flat().join(',');
 const SAVE_V = 3;
 const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; evClaim?: string[]; seat?: string; bonusDay?: string; bonusN?: number; streakDay?: number; lastBonusDay?: string; lastSeen?: string; retDay?: string; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; radioSt?: number; ach?: AchSave; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number; legendDry?: number; legendN?: number };
+type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; evClaim?: string[]; svClaim?: number[]; seat?: string; bonusDay?: string; bonusN?: number; streakDay?: number; lastBonusDay?: string; lastSeen?: string; retDay?: string; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; radioSt?: number; ach?: AchSave; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number; legendDry?: number; legendN?: number };
 const START_MONEY = 10000; // 首次遊玩見面禮（僅無存檔的新玩家）
 function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: START_MONEY, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {} }; }
 function loadSave(): Save {
@@ -637,6 +637,7 @@ function loadSave(): Save {
   if (raw.namePrompted) out.namePrompted = 1;
   if (raw.tpv) out.tpv = 1;
   if (Array.isArray(raw.evClaim)) out.evClaim = raw.evClaim.filter((x: unknown) => typeof x === 'string').slice(-30);
+  if (Array.isArray(raw.svClaim)) out.svClaim = raw.svClaim.filter((x: unknown) => typeof x === 'number' && Number.isInteger(x) && x > 0).slice(-50);
   out.legendDry = Math.max(0, Math.floor(num(raw.legendDry))); if (typeof raw.legendN === 'number') out.legendN = raw.legendN;
   if (raw.equip && typeof raw.equip === 'object') { out.equip = {}; for (const [k, v] of Object.entries(raw.equip)) if (typeof v === 'string') out.equip[k] = v; }
   if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
@@ -778,6 +779,8 @@ umb.position.set(0, 0, -0.75);
 let tapAim = false, tossT0 = 0; const TAP_HINT = '肉在刀尖上！點一下碗（或碗附近）丟進去，越快越俐落';
 type Phase = 'pick' | 'scoop' | 'seam' | 'twist' | 'aim' | 'empty' | 'crab' | 'busy';
 let state: 'menu' | 'play' | 'end' = 'menu';
+const syncShiftUi = () => document.body.classList.toggle('onShift', state === 'play');
+syncShiftUi();
 let tut: { i: number; c0: number; t0: number; b0: number; s0: number; m0: number; d0: number } | null = null; // 教學進行中
 let phase: Phase = 'busy';
 let hp = 100, stabs = 0, flinch = 0, hurtT = 0, handPain = false;
@@ -1097,7 +1100,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   nightShift = isNight(); updSky(); $('nightTag').style.display = nightShift ? '' : 'none'; if (nightShift) later(1.5, () => toast('🌙 夜班上工！這一工收入 +20%', '#b8c8ff'));
   moonReset(); npcs.forEach(dressAma); applyCrew();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
-  state = 'play'; achShiftGot = []; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
+  state = 'play'; syncShiftUi(); achShiftGot = []; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); if (!tut) track('start', { seat: save.seat ?? 'door', loc: locNow().id });
   const sidNow = statsSid; const pingT = setInterval(() => { if (tut || state !== 'play' || statsSid !== sidNow || document.hidden) { if (statsSid !== sidNow || state !== 'play') clearInterval(pingT); return; } track('ping'); }, 60_000);
   count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
@@ -1107,10 +1110,20 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
 }
 function updHud() {
   ($('hpFill') as HTMLElement).style.width = `${hp}%`;
+  const hpEl = document.getElementById('hpPct'); if (hpEl) hpEl.textContent = String(Math.round(hp));
   const s = Math.max(0, Math.ceil(timeLeft)); $('timer').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   $('count').innerHTML = `<i class="ic ic-oyster"></i> ${count}`; $('pearls').innerHTML = `<i class="ic ic-pearl"></i> ${dayPearls.length + dayOdd.length}`;
   evHud();
-  $('statsT').textContent = `開 ${opened}・入碗 ${count}・浪費率 ${opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0}%・殼屑 ${cracked}・偷 ${steals}/掠 ${caught}・割手 ${stabs}`;
+  const wastePct = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
+  const cell = (lab: string, val: string | number, warn = false) =>
+    `<span class="stCell${warn ? ' warn' : ''}"><span class="stL">${lab}</span><b class="stV">${val}</b></span>`;
+  $('statsT').innerHTML =
+    cell('開殼', opened) +
+    cell('入碗', count) +
+    cell('浪費', `${wastePct}%`, wastePct >= 30) +
+    cell('殼屑', cracked, cracked > 0) +
+    cell('偷／被抓', `${steals}/${caught}`, caught > 0) +
+    cell('割手', stabs, stabs > 0);
 }
 function worldOf(o: THREE.Object3D) { return o.getWorldPosition(new THREE.Vector3()); }
 function nagFrom(n: Npc, lines: string[], dur = 3) { let t = pick(lines); if (t === lastNag && lines.length > 1) t = lines[(lines.indexOf(t) + 1) % lines.length]; lastNag = t; n.look = dur; say(n, t, dur); }
@@ -1649,7 +1662,7 @@ function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.r
 let lastPay = { gross: 0, pen: 0, earn: 0 }, nameWait = false;
 function endDay() { inputGuard(); if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
-  if (state === 'end') return; state = 'end'; setTimeout(giftAlert, 1500); setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
+  if (state === 'end') return; state = 'end'; syncShiftUi(); setTimeout(giftAlert, 1500); setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
   const all = [{ name: `你（${esc(myName())}）`, count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= 5, queen = all[0].me && !temp && worked, PAY = OYSTER_PRICE - (temp ? TEMP_CUT : 0);
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
@@ -1742,6 +1755,9 @@ const up = (e: PointerEvent) => { if (moonAimOn && down && down.id === e.pointer
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
+  if (e.code === 'Escape' || e.key === 'Escape') {
+    if (closeTopModal()) { e.preventDefault(); e.stopPropagation(); return; }
+  }
   if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
   if (e.code === 'KeyV' && !e.repeat) toggleRadio();
   if (state === 'play' && !tut && e.code === 'KeyM') { const L = $('medList'); if (document.pointerLockElement) document.exitPointerLock(); L.classList.toggle('show'); if (L.classList.contains('show')) renderMedList(); return; }
@@ -2222,7 +2238,7 @@ function tutEnd(done: boolean) {
   tutHi.forEach(id => $(id).classList.remove('tutHi')); tutHi = []; document.body.classList.remove('tutOn'); on('tut', false);
   if (document.pointerLockElement) document.exitPointerLock();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); }
-  stopSteal(); state = 'menu'; setTimeout(giftAlert, 300); renderLocs(); setPhase('busy'); oyster.visible = false; closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
+  stopSteal(); state = 'menu'; syncShiftUi(); setTimeout(giftAlert, 300); renderLocs(); setPhase('busy'); oyster.visible = false; closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
   if (done) toast('出師了！去剝蚵仔賺錢吧～', '#9be37a');
   renderDaily(); $('overlay').classList.add('show');
 }
@@ -2266,7 +2282,7 @@ $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
   label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : k === 'odd' ? `開到「${ODD[i]?.name ?? '奇物'}」` : k === 'ach' ? `達成金牌成就「${ACHS[i]?.n ?? '成就'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！`, title: () => achTitle() });
 Social.startPresence(() => state === 'play');
-$('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; } tutStart(); };
+$('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; syncShiftUi(); } tutStart(); };
 (window as any).__oy = { get phase() { return phase; }, get umb() { return { held: umbHeld, t: umbT, vis: umb.visible }; }, get tut() { return tut && TUT[tut.i].id; }, get npcN() { return npcs.length; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, P0, P1); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
 // ---------- 截圖模式 ----------
 if (SHOT) setTimeout(() => {
@@ -2953,11 +2969,33 @@ $('fbSend').onclick = () => {
     else { fbLast = 0; fbCool(); toast('送出失敗，稍後再試'); } });
 };
 (window as any).__fbDone = () => fbShow(true);
+/** 關閉最上層可關視窗（ESC／手機返回共用）。主選單／結算不關。 */
+function closeTopModal(): boolean {
+  if (closeWeaponPreview()) return true;
+  for (const id of ['giftMsg', 'newMsg', 'featMsg', 'svMsg']) {
+    const m = document.getElementById(id);
+    if (!m) continue;
+    const btn = m.querySelector('.gmX, .gmNo, .gmOk') as HTMLElement | null;
+    if (btn) btn.click(); else m.remove();
+    return true;
+  }
+  const shown = (id: string) => !!document.getElementById(id)?.classList.contains('show');
+  if (shown('npcTip')) { $('npcTip').classList.remove('show'); return true; }
+  if (shown('medList')) { $('medList').classList.remove('show'); return true; }
+  if (shown('hg')) { hgEnd(); return true; }
+  // 由上到下：確認框／子面板先關
+  for (const [id, close] of [
+    ['backMenu', 'bmStay'], ['sv', 'svClose'], ['ach', 'achClose'], ['evLb', 'evLbClose'], ['lb', 'lbClose'],
+    ['fb', 'fbClose'], ['redeem', 'rdClose'], ['equip', 'eqClose'], ['gift', 'giftClose'],
+    ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose'],
+    ['nameAsk', 'naSkip'], ['paySum', 'psOk'], ['tagNote', 'tnOk'],
+  ] as const) {
+    if (shown(id)) { ($(close) as HTMLElement).click(); return true; }
+  }
+  return false;
+}
 installBackGuard(() => {
-  const open = (id: string) => document.getElementById(id)?.classList.contains('show');
-  if (open('npcTip')) { $('npcTip').classList.remove('show'); return 'handled'; }
-  if (open('medList')) { $('medList').classList.remove('show'); return 'handled'; }
-  for (const [id, close] of [['ach', 'achClose'], ['lb', 'lbClose'], ['fb', 'fbClose'], ['redeem', 'rdClose'], ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose']]) if (open(id)) { ($(close) as HTMLElement).click(); return 'handled'; }
+  if (closeTopModal()) return 'handled';
   if (state === 'play') { toast('上工中按返回不會離開；要收工請按「回主選單」或等時間到', '#ffcf8a'); return 'handled'; }
   return 'confirm-exit';
 }, () => state === 'play');
@@ -3289,8 +3327,160 @@ async function evLbOpen(id: number) {
     (r.rows.length ? r.rows.map(row).join('') + (r.mine ? '<div class="lbGap"></div>' + row(r.mine) : '') : '<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>完成活動就會出現你的成績</small></span></div>');
 }
 $('evLbClose').onclick = () => $('evLb').classList.remove('show');
-new MutationObserver(() => { const sh = $('overlay').classList.contains('show'); if (sh && !evShown) evFetch(); evShown = sh; }).observe($('overlay'), { attributes: true, attributeFilter: ['class'] });
-evShown = $('overlay').classList.contains('show'); evFetch(); setInterval(() => { if ($('overlay').classList.contains('show') && evCfg) evRender(); }, 30_000);
+
+// ---------- 問卷調查（宣告須在首次 svFetch 之前，避免 let TDZ） ----------
+type SvCfg = Social.SurveyCfg;
+let svList: SvCfg[] = [], svSkew = 0, svBusy = false, svOpenId: number | null = null;
+const svClaimed = (id: number) => (save.svClaim ??= []).includes(id);
+const svPending = () => svList.filter(s => !s.done && !svClaimed(s.id) && Date.now() + svSkew < s.end);
+function svValid(s: any): s is SvCfg {
+  return s && Number.isInteger(s.id) && typeof s.title === 'string' && Array.isArray(s.questions) && s.questions.length > 0 && Number.isFinite(s.end);
+}
+function svNormalize(s: any): SvCfg | null {
+  if (!svValid(s)) return null;
+  const qs: Social.SurveyQ[] = [];
+  for (const q of s.questions) {
+    if (!q || typeof q.id !== 'string' || typeof q.text !== 'string') continue;
+    const type = q.type === 'multi' || q.type === 'text' ? q.type : 'single';
+    if (type === 'text') qs.push({ id: q.id, type, text: q.text, required: q.required !== false, maxLen: Math.min(500, Math.max(1, Math.floor(Number(q.maxLen) || 200))) });
+    else {
+      const options = Array.isArray(q.options) ? q.options.filter((o: unknown) => typeof o === 'string').map((o: string) => o.slice(0, 80)) : [];
+      if (options.length < 2) continue;
+      qs.push({ id: q.id, type, text: q.text, required: q.required !== false, options });
+    }
+  }
+  if (!qs.length) return null;
+  return { id: s.id, title: String(s.title).slice(0, 40), desc: typeof s.desc === 'string' ? s.desc.slice(0, 400) : '', questions: qs, rewardMoney: Math.max(0, Math.floor(Number(s.rewardMoney) || 0)), start: Number(s.start) || 0, end: Number(s.end), done: s.done === true || svClaimed(s.id) };
+}
+let svPrompted = false;
+function svRender() {
+  const box = $('svEntry');
+  const now = Date.now() + svSkew;
+  svList = svList.filter(s => now < s.end);
+  const pending = svPending();
+  if (!pending.length) { box.style.display = 'none'; box.classList.remove('svNeed'); return; }
+  const soon = Math.min(...pending.map(s => s.end));
+  box.innerHTML = `<div class="svHd"><i class="ic ic-chat"></i><b>問卷調查</b><span class="svBadge">未填 ${pending.length}</span><span class="svLeft"><i class="ic ic-timer"></i> 剩 ${evLeft(soon - now)}</span></div>` +
+    `<p class="svMeta">填完送出可領現金・每人每份只能填一次</p>` +
+    `<div class="svList">${pending.map(s => `<div class="svRow"><b>${esc(s.title)}</b><span class="svMeta">$${s.rewardMoney.toLocaleString()}・${s.questions.length} 題</span><button type="button" data-sv="${s.id}">填寫</button></div>`).join('')}</div>`;
+  box.classList.add('svNeed');
+  box.style.display = '';
+}
+async function svFetch() {
+  svList = []; svRender();
+  const r = await Social.svActive();
+  if (!r) { svList = []; svRender(); return; }
+  svSkew = r.serverTime - Date.now();
+  svList = r.surveys.map(svNormalize).filter((s): s is SvCfg => !!s);
+  svRender();
+  svAlert();
+}
+/** 回主選單時提示有未填問卷（每次打開主選單最多一次） */
+function svAlert() {
+  const pending = svPending();
+  if (svPrompted || !pending.length) return;
+  if (state === 'play' || tut || !$('overlay').classList.contains('show')) return;
+  if (document.getElementById('giftMsg') || document.getElementById('svMsg') || $('sv').classList.contains('show')) return;
+  svPrompted = true;
+  const m = document.createElement('div'); m.id = 'svMsg'; m.className = 'giftMsg';
+  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-chat"></i> 有未填寫的問卷</b>` +
+    `<ul class="gnList">${pending.map(s => `<li><b>${esc(s.title)}</b>${s.rewardMoney ? `<br><small>完成可領 $${s.rewardMoney.toLocaleString()}</small>` : ''}</li>`).join('')}</ul>` +
+    `<div class="mbtns"><button class="gmNo">稍後</button><button class="gmYes"><i class="ic ic-chat"></i> 去填寫</button></div></div>`;
+  const close = () => m.remove();
+  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
+  m.addEventListener('click', e => { if (e.target === m) close(); });
+  m.querySelector('.gmYes')?.addEventListener('click', () => {
+    close();
+    $('overlay').scrollTop = Math.max(0, $('svEntry').offsetTop - 40);
+    const first = pending[0];
+    if (first) svOpen(first.id);
+  });
+  document.body.appendChild(m);
+}
+function svOpen(id: number) {
+  const s = svList.find(x => x.id === id);
+  if (!s || s.done || svClaimed(id)) { toast('這份問卷你填過了'); svRender(); return; }
+  document.getElementById('svMsg')?.remove();
+  svOpenId = id;
+  const body = $('svBody');
+  body.innerHTML = `<div class="svName">${esc(s.title)}</div>${s.desc ? `<p class="svDesc">${esc(s.desc)}</p>` : ''}<p class="svMeta">完成獎勵 $${s.rewardMoney.toLocaleString()}</p>` +
+    s.questions.map((q, i) => {
+      const req = q.required ? '<span class="req">必填</span>' : '';
+      if (q.type === 'text') return `<div class="svQ" data-qid="${esc(q.id)}" data-type="text"><h3>${i + 1}. ${esc(q.text)}${req}</h3><textarea maxlength="${q.maxLen ?? 200}" placeholder="寫在這裡…"></textarea><p class="svHint">最多 ${q.maxLen ?? 200} 字</p></div>`;
+      const input = q.type === 'multi' ? 'checkbox' : 'radio';
+      const opts = (q.options ?? []).map((o, oi) => `<label><input type="${input}" name="sv_${esc(q.id)}" value="${oi}"> <span>${esc(o)}</span></label>`).join('');
+      return `<div class="svQ" data-qid="${esc(q.id)}" data-type="${q.type}"><h3>${i + 1}. ${esc(q.text)}${req}</h3><div class="svOpts">${opts}</div></div>`;
+    }).join('') + '<p id="svErr" class="svErr" style="display:none"></p>';
+  $('svSubmit').style.display = '';
+  $('sv').classList.add('show');
+}
+function svCollect(s: SvCfg): { answers: Record<string, unknown> } | { error: string } {
+  const answers: Record<string, unknown> = {};
+  for (const q of s.questions) {
+    const box = Array.from(document.querySelectorAll('#svBody .svQ')).find(el => (el as HTMLElement).dataset.qid === q.id) as HTMLElement | undefined;
+    if (!box) return { error: '畫面有問題，請關閉重開' };
+    if (q.type === 'text') {
+      const t = (box.querySelector('textarea') as HTMLTextAreaElement)?.value ?? '';
+      if (q.required && !t.trim()) return { error: `請回答「${q.text}」` };
+      if (t.length > (q.maxLen ?? 200)) return { error: `「${q.text}」太長了` };
+      if (t.trim() || q.required) answers[q.id] = t;
+      continue;
+    }
+    const picked = Array.from(box.querySelectorAll('input:checked')).map(el => +(el as HTMLInputElement).value).filter(n => Number.isInteger(n));
+    if (q.type === 'single') {
+      if (!picked.length) { if (q.required) return { error: `請回答「${q.text}」` }; continue; }
+      answers[q.id] = picked[0];
+    } else {
+      if (!picked.length) { if (q.required) return { error: `請回答「${q.text}」` }; continue; }
+      answers[q.id] = picked;
+    }
+  }
+  return { answers };
+}
+async function svDoSubmit() {
+  if (svBusy || svOpenId == null) return;
+  const s = svList.find(x => x.id === svOpenId);
+  if (!s) { $('sv').classList.remove('show'); return; }
+  const errEl = document.getElementById('svErr');
+  const got = svCollect(s);
+  if ('error' in got) { if (errEl) { errEl.style.display = ''; errEl.textContent = got.error; } return; }
+  if (errEl) errEl.style.display = 'none';
+  svBusy = true; const btn = $('svSubmit') as HTMLButtonElement; btn.disabled = true;
+  const r = await Social.svSubmit(s.id, got.answers);
+  svBusy = false; btn.disabled = false;
+  if (r.st === 'ok') {
+    save.svClaim ??= []; if (!save.svClaim.includes(s.id)) save.svClaim.push(s.id);
+    save.svClaim = save.svClaim.slice(-50);
+    if (r.money > 0) save.money += r.money;
+    s.done = true; persist(); renderDaily();
+    $('sv').classList.remove('show'); svOpenId = null; svRender();
+    toast(r.money > 0 ? `問卷送出了！領到 $${r.money}` : '問卷送出了，多謝幫忙！', '#9fe0ff');
+    try { SFX.jingle(); } catch { /* */ }
+    return;
+  }
+  if (r.st === 'already') { s.done = true; save.svClaim ??= []; if (!save.svClaim.includes(s.id)) { save.svClaim.push(s.id); persist(); } $('sv').classList.remove('show'); svRender(); toast('這份問卷你填過了'); return; }
+  if (r.st === 'ended') { toast('問卷已經結束了'); $('sv').classList.remove('show'); svFetch(); return; }
+  if (r.st === 'bad') { if (errEl) { errEl.style.display = ''; errEl.textContent = r.error ?? '答案有問題，再檢查一下'; } return; }
+  toast('連不上伺服器，等一下再試');
+}
+$('svEntry').onclick = (e) => {
+  const t = (e.target as HTMLElement | null)?.closest?.('[data-sv]') as HTMLElement | null;
+  if (!t) return;
+  e.preventDefault();
+  svOpen(+t.getAttribute('data-sv')!);
+};
+$('svClose').onclick = () => { $('sv').classList.remove('show'); svOpenId = null; };
+$('svSubmit').onclick = () => { void svDoSubmit(); };
+
+new MutationObserver(() => {
+  const sh = $('overlay').classList.contains('show');
+  if (!sh) svPrompted = false;
+  if (sh && !evShown) { evFetch(); svFetch(); }
+  else if (sh && evShown) svAlert();
+  evShown = sh;
+}).observe($('overlay'), { attributes: true, attributeFilter: ['class'] });
+evShown = $('overlay').classList.contains('show'); evFetch(); svFetch();
+setInterval(() => { if ($('overlay').classList.contains('show') && evCfg) evRender(); if ($('overlay').classList.contains('show') && svList.length) svRender(); }, 30_000);
 // 手機：對話框按鈕統一走 btn()（放開觸發＋click 備援），不只靠 onclick
 if (COARSE) for (const id of ['bmGo', 'bmStay', 'psOk', 'tnOk']) { const el = $(id) as HTMLButtonElement; const f = el.onclick; if (!f) continue; el.onclick = null; btn(id, () => f.call(el, new PointerEvent('click'))); }
 // ===================== 成就系統 =====================

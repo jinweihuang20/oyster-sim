@@ -1,6 +1,6 @@
 // 死鬥模式 session：場景組裝＋對局邏輯（武器／場地／破壞物見同目錄模組）
 import * as THREE from 'three';
-import { WALK, SPRINT, HALF, EYE, R, PILES, PICK_R, SPAWNS, makeCoverBoxes } from './constants';
+import { WALK, SPRINT, HALF, EYE, R, PILES, PICK_R, SPAWNS, MAX_HP, makeCoverBoxes } from './constants';
 import type { Part, Fighter, Shell, DmUmb } from './types';
 import { WEAPON_DEFS, makeWeapon, buildWeaponView, armBurst, cooldownAfterShot, isWeaponId, type Weapon, type WeaponId } from './weapons';
 import { ico, I } from './icons';
@@ -9,7 +9,7 @@ import { makeMeshHelpers } from './mesh';
 import { createBreakables, type CrackSfx } from './breakables';
 import { buildArena } from './arena';
 import { shopCss, shopOverlayHtml, renderShopList } from './shop';
-import { openWeaponPreview, weaponPreviewCss } from './weaponPreview';
+import { openWeaponPreview, closeWeaponPreview, weaponPreviewCss } from './weaponPreview';
 import { makePlayerAvatar, poseAimArms, poseUmbArms } from './character';
 import { spawnOddLoot, stepOddLoot, tryPickOddLoot, type OddLoot } from './loot';
 import {
@@ -81,7 +81,7 @@ export function openDeathmatch(U: DmUmb, onExit: () => void, cfg?: Partial<DmMat
 #dmPause.show{display:flex}
 #dmFJ.show{display:block}#dmFJ.sprint{border-color:#ff7a3b}
 #dmUmb.held{background:#ffd23f;color:#2a1206}
-#dmHelp{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 12px);transform:translateX(-50%);color:#fff6d8;font-size:14px;text-shadow:0 1px 0 #000;pointer-events:none}
+#dmHelp{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 12px);transform:translateX(-50%);color:#fff6d8;font-size:14px;text-shadow:0 1px 0 #000;pointer-events:none;text-align:center;line-height:1.45;max-width:min(92vw,720px);white-space:normal}
 
 /* ---- HUD 版面（橫向為主，直向備援） ---- */
 #dmX,#dmScoreBtn,#dmSetBtn,#dmShopBtn{top:calc(env(safe-area-inset-top) + 8px);width:44px;height:44px;padding:0!important;display:flex;align-items:center;justify-content:center}
@@ -161,6 +161,14 @@ ${shopCss()}
 #dmSet{background:rgba(0,0,0,.45)!important}
 @media (orientation:portrait){#dmTL{flex-direction:column;align-items:flex-start}#dmFeed{top:calc(env(safe-area-inset-top) + 82px)!important}#dmRoot #dmHpN{left:calc(50% + 22px);font-size:13px}}
 #dmPause,#dmRot{color:var(--tx)!important}#dmRot{background:rgba(15,15,15,.82)!important}
+/* 電腦版：底部血條加寬加厚；操作提示抬到血條上方，避免擋道 */
+@media (pointer:fine){
+ #dmRoot #dmBar{left:50%!important;right:auto;bottom:calc(env(safe-area-inset-bottom) + 18px)!important;transform:translateX(-50%);width:min(52vw,560px);display:block;z-index:2}
+ #dmRoot #dmHp{position:relative;left:auto;right:auto;bottom:auto;width:100%!important;height:20px;border:1px solid var(--ln);border-radius:8px;background:rgba(20,20,20,.55);overflow:hidden}
+ #dmRoot #dmHpN{inset:0;left:0;bottom:auto;transform:none;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;letter-spacing:.04em}
+ #dmHelp{bottom:calc(env(safe-area-inset-bottom) + 52px);font-size:13px;opacity:.9;z-index:1;color:var(--tx)}
+ #dmHelp b{font-weight:800;color:#fff}
+}
 </style><canvas></canvas><div id="dmCross"></div><div id="dmScopeFx"></div><div id="dmMark"></div><div id="dmHs">Headshot !</div><div id="dmMsg"></div><div id="dmTL"><div id="dmAmmo"></div><div id="dmHud"></div></div><div id="dmEdge"></div><div id="dmBar"><div id="dmHp"><div id="dmHpF"></div><div id="dmHpN"></div></div></div><canvas id="dmMap" width="192" height="192"></canvas><div id="dmFeed"></div>
 <button class="dmb" id="dmScoreBtn" aria-label="戰績"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" style="vertical-align:-3px"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></button>
 <button class="dmb" id="dmShopBtn" aria-label="武器店">${ico(I.shop, 22)}</button>
@@ -187,7 +195,7 @@ ${DM_DEV ? `<div id="dmDevSec" style="margin-top:12px;padding-top:10px;border-to
 <button class="dmb" id="dmX" aria-label="離開">✕</button><div id="dmBoard"><h2>${ico(I.board, 26)}</h2><div id="dmTable"></div></div>
 ${isTouch
     ? `<div id="dmJoyHint"></div><div id="dmFJ"><div id="dmFK"></div></div><button class="dmb ctl" id="dmPick" aria-label="拿殼">${ico(I.grab, 28)}</button><button class="dmb ctl" id="dmScope" aria-label="開鏡">${ico(I.scope, 26)}</button><button class="dmb ctl" id="dmUmb" aria-label="雨傘">${ico(I.umb, 28)}</button><button class="dmb ctl" id="dmFireL" aria-label="丟">${ico(I.throw, 30)}</button><div id="dmRot">${ico(I.rotate, 72)}<button class="dmb" id="dmRotOk" aria-label="繼續">${ico(I.play, 26)}</button></div><button class="dmb ctl" id="dmThrow" aria-label="丟">${ico(I.throw, 38)}</button>`
-    : `<button class="dmb ctl" id="dmScope" aria-label="開鏡" style="position:absolute;right:calc(env(safe-area-inset-right) + 18px);bottom:calc(env(safe-area-inset-bottom) + 56px);width:52px;height:52px">${ico(I.scope, 24)}</button><div id="dmHelp">WASD ・ Shift ・ 左鍵 ・ 右鍵開鏡／R 傘 ・ E ・ Tab ・ 設定可切開鏡模式</div>`}`;
+    : `<button class="dmb ctl" id="dmScope" aria-label="開鏡" style="position:absolute;right:calc(env(safe-area-inset-right) + 18px);bottom:calc(env(safe-area-inset-bottom) + 56px);width:52px;height:52px">${ico(I.scope, 24)}</button><div id="dmHelp"><b>WASD</b> 移動　<b>Shift</b> 衝刺　<b>滑鼠</b> 轉視角<br><b>左鍵</b> 開火　<b>右鍵</b> 開鏡（狙擊等）　<b>R</b> 撐傘擋彈　<b>E</b> 撿蚵殼補彈　<b>Tab</b> 戰績<br>開鏡手感可在右上角「設定」切換（長按／輕觸）</div>`}`;
   document.body.appendChild(root);
   const q = (id: string) => root.querySelector('#' + id) as HTMLElement;
   const canvas = root.querySelector('canvas')!;
@@ -265,7 +273,7 @@ ${isTouch
     scene.add(a.outer);
     return { outer: a.outer, rig: a };
   }
-  const mk = (name: string, isPlayer: boolean, teamId: number): Fighter => ({ name, isPlayer, teamId, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, hp: 100, wpn: makeWeapon('oysterGun'), dead: false, respawnAt: 0, invulnUntil: 0, kills: 0, deaths: 0, hs: 0, shots: 0, hits: 0, mesh: null, rig: null, stepAcc: 0, hpBar: null, deathAt: 0, fallDir: new THREE.Vector3(0, 0, 1), throwA: 0, walkPh: 0, pickCd: 0, cd: 1, umbT: 0, umbHeld: false, umbTired: false, umbMesh: null, goal: new THREE.Vector3(), idleUntil: 0, pickT: 0 });
+  const mk = (name: string, isPlayer: boolean, teamId: number): Fighter => ({ name, isPlayer, teamId, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, hp: MAX_HP, wpn: makeWeapon('oysterGun'), dead: false, respawnAt: 0, invulnUntil: 0, kills: 0, deaths: 0, hs: 0, shots: 0, hits: 0, mesh: null, rig: null, stepAcc: 0, hpBar: null, deathAt: 0, fallDir: new THREE.Vector3(0, 0, 1), throwA: 0, walkPh: 0, pickCd: 0, cd: 1, umbT: 0, umbHeld: false, umbTired: false, umbMesh: null, goal: new THREE.Vector3(), idleUntil: 0, pickT: 0 });
   const me = mk('你', true, teamIdForSeat(match.mode, 0));
   const BOT_NAMES = ['BOT 阿桃', 'BOT 阿春', 'BOT 阿嬌', 'BOT 阿明', 'BOT 阿雄', 'BOT 阿美', 'BOT 阿福', 'BOT 阿珍'];
   const BOT_LOOKS = [
@@ -417,7 +425,7 @@ ${isTouch
   let now = 0;
   function spawn(f: Fighter) {
     const opts = SPAWNS.map(([x, z]) => new THREE.Vector3(x, 0, z)).sort((a, b) => minDist(b, f) - minDist(a, f));
-    f.pos.copy(opts[Math.floor(Math.random() * 3)]); f.vel.set(0, 0, 0); f.hp = 100; f.wpn.ammo = f.wpn.def.maxAmmo; f.wpn.kick = 0; f.dead = false;
+    f.pos.copy(opts[Math.floor(Math.random() * 3)]); f.vel.set(0, 0, 0); f.hp = MAX_HP; f.wpn.ammo = f.wpn.def.maxAmmo; f.wpn.kick = 0; f.dead = false;
     f.invulnUntil = now + 3; f.idleUntil = now + 1; f.umbHeld = false; f.umbTired = false; f.umbT = 0; f.yaw = Math.atan2(-f.pos.x, -f.pos.z) + Math.PI; f.pitch = 0; f.goal.copy(nearOpenPile(f.pos)); f.pickT = 0;
     if (f.mesh) f.mesh.visible = true;
     if (f.isPlayer) setAds(false);
@@ -608,9 +616,9 @@ ${isTouch
   }
   function stepBars() {
     for (const f of fighters) { const h = f.hpBar; if (!h) continue;
-      const show = !f.dead && f.hp < 100 && f.pos.distanceTo(me.pos) < 20; h.g.visible = show; if (!show) continue;
+      const show = !f.dead && f.hp < MAX_HP && f.pos.distanceTo(me.pos) < 20; h.g.visible = show; if (!show) continue;
       h.g.position.set(f.pos.x, 2.05, f.pos.z); h.g.quaternion.copy(cam.quaternion);
-      const r = Math.max(0, f.hp) / 100; h.fill.scale.x = Math.max(0.001, r); h.fill.position.x = -0.35 * (1 - r); h.fm.color.set(hpCol(f.hp));
+      const r = Math.max(0, f.hp) / MAX_HP; h.fill.scale.x = Math.max(0.001, r); h.fill.position.x = -0.35 * (1 - r); h.fm.color.set(hpCol(Math.max(0, f.hp) / MAX_HP * 100));
       const op = now < f.invulnUntil ? 0.35 : 1; h.fm.opacity = op; h.bg.opacity = op * 0.8; }
   }
   // ---- 輸入 ----
@@ -626,7 +634,7 @@ ${isTouch
     if (DM_DEV) {
       const hpEl = q('dsGodHp') as HTMLInputElement, ammoEl = q('dsGodAmmo') as HTMLInputElement;
       hpEl.checked = cheatHp; ammoEl.checked = cheatAmmo;
-      hpEl.onchange = () => { cheatHp = hpEl.checked; if (cheatHp && me.dead) { spawn(me); if (me.mesh) me.mesh.visible = true; q('dmMsg').innerHTML = ''; } else if (cheatHp) me.hp = 100; };
+      hpEl.onchange = () => { cheatHp = hpEl.checked; if (cheatHp && me.dead) { spawn(me); if (me.mesh) me.mesh.visible = true; q('dmMsg').innerHTML = ''; } else if (cheatHp) me.hp = MAX_HP; };
       ammoEl.onchange = () => { cheatAmmo = ammoEl.checked; if (cheatAmmo && !me.dead) me.wpn.ammo = me.wpn.def.maxAmmo; };
     }
     q('dmSetBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); q('dmShop').classList.remove('show'); q('dmSet').classList.add('show'); };
@@ -637,6 +645,7 @@ ${isTouch
     if (!ownedWpns.has(id)) { msg('這把還沒買，先去雜貨店', 1.8); return false; }
     if (me.wpn.def.id === id) { msg(`已在用 ${me.wpn.def.name}`, 1.0); return true; }
     equipWeapon(me, id);
+    U.equippedWeapon = id;
     U.setEquippedWeapon(id);
     msg(`換上 ${me.wpn.def.name}`, 1.2);
     return true;
@@ -692,6 +701,12 @@ ${isTouch
   addEventListener('blur', blur);
   let locked = false, wasLocked = false;
   const onKey = (e: KeyboardEvent, d: boolean) => {
+    if (d && (e.code === 'Escape' || e.key === 'Escape')) {
+      if (closeWeaponPreview()) { e.preventDefault(); return; }
+      if (q('dmSet').classList.contains('show')) { q('dmSet').classList.remove('show'); e.preventDefault(); return; }
+      if (q('dmShop').classList.contains('show')) { q('dmShop').classList.remove('show'); e.preventDefault(); return; }
+      if (q('dmBoard').classList.contains('show') && !roundOver) { q('dmBoard').classList.remove('show'); e.preventDefault(); return; }
+    }
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
     keys[e.code] = d;
     if (e.code === 'Tab') { e.preventDefault(); q('dmBoard').classList.toggle('show', d); if (d) renderBoard(); }
@@ -791,7 +806,7 @@ ${isTouch
     root.addEventListener('pointerup', end); root.addEventListener('pointercancel', end);
   }
   q('dmScoreBtn').onclick = () => { q('dmBoard').classList.toggle('show'); renderBoard(); };
-  q('dmX').onclick = () => exit();
+  q('dmX').onclick = () => requestExit();
 
   // ---- 遊戲邏輯 ----
   function pick(f: Fighter) {
@@ -874,7 +889,7 @@ ${isTouch
     if (roundOver || waveBreakT > 0) return;
     if (botsOnly().some(b => !b.dead)) return;
     wavesCleared = wave;
-    me.hp = Math.min(100, me.hp + 30);
+    me.hp = Math.min(MAX_HP, me.hp + 30);
     waveBreakT = 3.2;
     msg(`第 ${wave} 關過關！休息一下…`, 2.8);
   }
@@ -965,7 +980,7 @@ ${isTouch
   function update(dt: number) {
     if (roundOver) return;
     if (DM_DEV && cheatAmmo && !me.dead) me.wpn.ammo = me.wpn.def.maxAmmo;
-    if (DM_DEV && cheatHp && !me.dead) me.hp = 100;
+    if (DM_DEV && cheatHp && !me.dead) me.hp = MAX_HP;
     fireCd -= dt; if (fireHeld) tryAutoFire();
     now += dt;
     if (!isHorde) {
@@ -1134,7 +1149,7 @@ ${isTouch
     q('dmTable').innerHTML = `${payLine}<table><tr><th></th><th>${ico(I.skull, 18)}</th><th>${ico(I.heart, 18)}</th><th>${ico(I.head, 18)}</th><th>%</th></tr>${rows.map(f => `<tr class="${f.isPlayer ? 'me' : ''}"><td>${tag(f)}</td><td>${f.kills}</td><td>${f.deaths}</td><td>${f.hs}</td><td>${f.shots ? Math.round(f.hits / f.shots * 100) : 0}%</td></tr>`).join('')}</table>${act}`;
     if (roundOver) {
       q('dmAgain')?.addEventListener('click', () => replay());
-      q('dmLeave')?.addEventListener('click', () => exit());
+      q('dmLeave')?.addEventListener('click', () => requestExit());
     }
   }
   const hpCol = (hp: number) => `hsl(${Math.max(0, Math.min(100, hp)) * 1.05},32%,52%)`; // 低飽和：綠→琥珀→紅
@@ -1158,7 +1173,7 @@ ${isTouch
     c.beginPath(); c.moveTo(0, -13); c.lineTo(9, 9); c.lineTo(0, 4); c.lineTo(-9, 9); c.closePath(); c.fill(); c.stroke(); c.restore();
   }
   function hud() {
-    q('dmHpF').style.width = Math.max(0, me.hp) + '%'; q('dmHpF').style.background = hpCol(me.hp); q('dmHpN').innerHTML = `${ico(I.heart, 16)} ${DM_DEV && cheatHp ? '∞' : Math.max(0, me.hp)}`;
+    const hpPct = Math.max(0, me.hp) / MAX_HP * 100; q('dmHpF').style.width = hpPct + '%'; q('dmHpF').style.background = hpCol(hpPct); q('dmHpN').innerHTML = `${ico(I.heart, 16)} ${DM_DEV && cheatHp ? '∞' : Math.max(0, me.hp)}`;
     const atPile = pileDist(me.pos) <= PICK_R;
     if (isTouch) q('dmUmb').classList.toggle('held', me.umbHeld);
     syncScopeBtn();
@@ -1239,12 +1254,23 @@ ${isTouch
     document.removeEventListener('pointerlockchange', plc); if (document.pointerLockElement === canvas) document.exitPointerLock();
     renderer.dispose(); root.remove(); active = false; delete (window as any).__dm;
   }
+  function requestExit() {
+    if (document.pointerLockElement) document.exitPointerLock();
+    const tip = roundOver
+      ? '確定要離開死鬥？'
+      : '確定要離開死鬥？本局將直接結束，不會結算獎勵。';
+    if (!confirm(tip)) return;
+    exit();
+  }
   function exit() {
     teardown(); onExit();
   }
   function replay() {
     const cfg = { mode: match.mode, botCount: match.botCount, arenaId: match.arenaId, durationSec: match.durationSec };
     const umb = U, done = onExit;
+    // 再來一次：延續本局模式／人數／場地／時長，以及目前裝備的槍
+    umb.equippedWeapon = me.wpn.def.id;
+    umb.setEquippedWeapon(me.wpn.def.id);
     teardown();
     // 同一幀清完再開，避免 active 卡死
     queueMicrotask(() => openDeathmatch(umb, done, cfg));

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { CoverKind } from './types';
 
 export const WALK = 3.8, SPRINT = 1.35, HALF = 18, EYE = 1.6, R = 0.35, PICK_R = 1.9;
+/** 死鬥基本生命上限 */
+export const MAX_HP = 200;
 
 /** 蚵仔堆（補彈點）；座標避開圍牆內緣 */
 export const PILES = [

@@ -124,6 +124,13 @@ export function openWeaponPreview(opts: WeaponPreviewOpts) {
   return close;
 }
 
+/** ESC／關閉鈕：關掉目前開著的武器預覽 */
+export function closeWeaponPreview(): boolean {
+  if (!activeClose) return false;
+  activeClose();
+  return true;
+}
+
 export function weaponPreviewCss(): string {
   return `
 .wpnPrev{position:fixed;inset:0;z-index:10050;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:12px;touch-action:none}
