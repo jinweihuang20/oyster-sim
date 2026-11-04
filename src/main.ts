@@ -1995,7 +1995,19 @@ const go = (len: number) => { evRun = null; shiftLen = len; audio(); if (!save.t
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 function launchDeathmatch(mode: DmMode) {
   $('overlay').classList.remove('show');
-  openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })(), grantOdd: (i) => { if (!Number.isInteger(i) || i < 0 || i >= ODD.length || ODD[i].limited) return null; save.odd[i] = (save.odd[i] ?? 0) + 1; if (rarOf(ODD[i].weight) === 'legend') { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(ODD[i].weight), via: 'dm' }); return { name: ODD[i].name, line: ODD[i].line, n: save.odd[i], color: ODD[i].color }; }, ownedWeapons: ownedWeaponIds(), equippedWeapon: weaponNow(), setEquippedWeapon: (id) => { if (!isWeaponId(id) || !ownsWeapon(id)) return; save.shop.equipped.weapon = id; persist(); }, grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); track('dm_reward', { amount: n, via, money: save.money }); } }, () => { $('overlay').classList.add('show'); duckAmb(); }, DM_PRESETS[mode]);
+  openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })(), grantOdd: (i) => { if (!Number.isInteger(i) || i < 0 || i >= ODD.length || ODD[i].limited) return null; save.odd[i] = (save.odd[i] ?? 0) + 1; if (rarOf(ODD[i].weight) === 'legend') { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(ODD[i].weight), via: 'dm' }); return { name: ODD[i].name, line: ODD[i].line, n: save.odd[i], color: ODD[i].color }; }, ownedWeapons: ownedWeaponIds(), equippedWeapon: weaponNow(), setEquippedWeapon: (id) => { if (!isWeaponId(id) || !ownsWeapon(id)) return; save.shop.equipped.weapon = id; persist(); },     grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); track('dm_reward', { amount: n, via, mode: via === 'dm-horde' ? 'horde' : 'ffa', money: save.money }); },
+    reportMatchStart: (m) => {
+      statsSid = crypto.randomUUID?.() ?? statsId + '-dm-' + Date.now();
+      track('dm_start', { item: 'dm-' + m, mode: m });
+    },
+    reportMatchEnd: (info) => {
+      track('dm_end', { item: 'dm-' + info.mode, mode: info.mode, kills: info.kills, waves: info.wavesCleared, earn: info.payout, reason: info.reason, dur: info.durationSec });
+      const scores: { dmKills?: number; dmWaves?: number } = {};
+      if (info.mode === 'ffa') scores.dmKills = Math.max(0, info.kills);
+      else scores.dmWaves = Math.max(0, info.wavesCleared);
+      Social.submit(scores);
+    },
+  }, () => { $('overlay').classList.add('show'); duckAmb(); }, DM_PRESETS[mode]);
   duckAmb();
 }
 $('oDmFfa').onclick = () => launchDeathmatch('ffa');

@@ -26,7 +26,7 @@ alwaysApply: true
 | `src/deathmatch.ts` | 死鬥相容入口（re-export `src/dm/`） |
 | `src/dm/` | 死鬥：`session`；`match`（`ffa` 限時混戰／`horde` 肉鴿關卡、`teamId`／獎勵）；`piles`（蚵堆填彈冷卻＋圓環）；`weapons`／`loot`／`shop`／`weaponPreview`／`arena`… |
 | `src/style.css` / `icons.css` | UI |
-| `src/social.ts` | 排行榜、跑馬燈、禮物、線上人數、限時活動 API（`/s/*`） |
+| `src/social.ts` | 排行榜（含死鬥 `dmKills`／`dmWaves`）、跑馬燈、禮物、線上人數、限時活動 API（`/s/*`） |
 | `src/redeem.ts` + `redeemCodes.ts` | 兌換碼（只存 SHA-256 hash，不明碼） |
 | `src/update.ts` | 輪詢 `version.json` 新版提示 |
 | `src/inapp.ts` | Threads/IG/FB/LINE 內建瀏覽器逃脫＋`/s/move` 搬存檔 |
@@ -108,7 +108,8 @@ Base：`https://game-status.gwtech.org`
 |------|----------|
 | 匿名事件統計 | `POST /e`（`STATS_URL`），game=`oyster-sim` |
 | 回饋 | `/feedback` |
-| 社群／榜／彈幕 | `/s/*`（score、event、events、top、react、gifts、presence、me、move） |
+| 社群／榜／彈幕 | `/s/*`（score、event、events、top、react、gifts、presence、me、move）；榜 board：`income`／`oysters`／`pearls`／`dmKills`／`dmWaves`（當日 MAX） |
+| 死鬥統計 | `POST /e` 事件 `dm_start`／`dm_end`／`dm_reward`（`mode`＝ffa｜horde）；後台 oyster 報表「死鬥模式」看每日開戰人數 |
 | 商店動態價 | `/s/shop/prices?game=oyster-sim`（失敗用內建價） |
 | 限時活動 | `/s/events/active|start|result|top`；client `EvCfg` 含 npc/dur/throwX/angerX/bonus/steal… |
 | 問卷調查 | `/s/surveys/active|submit`；client `sv*`：題型 single／multi／text，完成獎勵現金（`reward.money`），每人每份一次 |

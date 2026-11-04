@@ -40,4 +40,15 @@ export interface DmUmb {
   setEquippedWeapon: (id: WeaponId) => void;
   /** 結算發錢（寫入主線錢包） */
   grantMoney: (amount: number, via: string) => void;
+  /** 進場（統計開戰人數） */
+  reportMatchStart?: (mode: 'ffa' | 'horde') => void;
+  /** 正常結算後上報成績／排行榜 */
+  reportMatchEnd?: (info: {
+    mode: 'ffa' | 'horde';
+    kills: number;
+    wavesCleared: number;
+    payout: number;
+    reason: 'time' | 'death';
+    durationSec: number;
+  }) => void;
 }
