@@ -614,9 +614,11 @@ body.tutOn #feed{display:none!important}
 @media (max-width:500px){.panel.sheet{top:calc(8px + var(--sa-top))!important;max-height:calc(100dvh - 16px - var(--sa-bottom))!important}}
 /* 排行榜 */
 #lb .pb{display:flex;flex-direction:column;gap:12px}
-#lbTabs{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink)}
-#lbTabs button{margin:0!important;min-width:0!important;min-height:44px!important;height:44px;padding:0 4px;font-size:14px;border:0;border-right:3px solid var(--ink);border-radius:0;box-shadow:none;background-color:var(--paint2);color:var(--ink);white-space:nowrap;transform:none}
-#lbTabs button:last-child{border-right:0}
+/* 上排 3（剝蚵榜）＋下排 2（死鬥）；gap 當分隔線，避免多 tab 邊框疊厚／缺線 */
+#lbTabs{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;margin:0;background:var(--ink);border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink)}
+#lbTabs button{margin:0!important;min-width:0!important;min-height:44px!important;height:auto;padding:8px 4px;font-size:13px;line-height:1.2;border:0!important;border-radius:0;box-shadow:none!important;background-color:var(--paint2);color:var(--ink);white-space:normal;transform:none;overflow:hidden}
+#lbTabs button:nth-child(-n+3){grid-column:span 2}
+#lbTabs button:nth-child(n+4){grid-column:span 3}
 #lbTabs button.on{background-color:var(--red);color:var(--paint)}
 #lbView{display:inline-flex;align-self:center;gap:0;margin:0;border:2px solid var(--ink);border-radius:999px;overflow:hidden;background:var(--paint)}
 #lbView button{margin:0!important;min-width:64px!important;min-height:32px!important;height:32px;padding:0 14px;font-size:13px;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--ink);transform:none}

@@ -61,8 +61,8 @@ const BOARDS = [
   ['income', '今日收入', '$'],
   ['oysters', '單班最多蚵仔', ''],
   ['pearls', '珍珠收藏', ''],
-  ['dmKills', '死鬥擊殺', ''],
-  ['dmWaves', '圍毆關卡', ''],
+  ['dmKills', '死鬥-混戰', ''],
+  ['dmWaves', '死鬥-圍毆', ''],
 ] as const;
 let board = 'income', view: 'daily' | 'weekly' = 'daily';
 export function submit(s: { income?: number; oysters?: number; pearls?: number; dmKills?: number; dmWaves?: number }) {
