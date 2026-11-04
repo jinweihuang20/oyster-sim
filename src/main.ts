@@ -1951,9 +1951,9 @@ function plazaEnterWalkPose(fromSeat = true) {
   oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
   walking = true; handRig.visible = false;
   if (fromSeat) { walkPos.copy(SEAT).setY(1.55); walkPos.x += Math.sin(seatYaw) * 0.55; walkPos.z += Math.cos(seatYaw) * 0.55; tYaw = yaw = yaw + seatYaw; }
-  tPitch = pitch = -0.2; $('diff').textContent = ''; on('standBtn', false); on('umbBtn', false); on('medBtn', false); on('stealBtn', false); on('joy', true);
+  tPitch = pitch = -0.2; $('diff').textContent = ''; on('standBtn', false); on('umbBtn', false); on('medBtn', false); on('stealBtn', false); on('joy', true); on('camBtn', true);
   stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
-  hint.textContent = COARSE ? '廣場裡隨意走走，靠近空板凳按「坐落」剝蚵' : 'WASD 在廣場走動，靠近空板凳按 E 坐下剝蚵';
+  hint.textContent = COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V／視角鈕切換・E 坐下剝蚵';
 }
 function sitDown(id: string) {
   walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear(); stools.forEach(g => g.userData.tag.visible = false);
@@ -1996,19 +1996,45 @@ function giveUp() {
 }
 // 入碗數達標自動解鎖地點（不用錢）
 function autoUnlock() { const tot = save.life.inBowl ?? 0; save.locs ??= []; for (const l of LOCS) if (l.need && tot >= l.need && !save.locs.includes(l.id)) { save.locs.push(l.id); persist(); Social.report('port', LOCS.indexOf(l)); track('buy', { item: 'loc-' + l.id, price: 0 }); toast(`📍 新地點解鎖：${l.n}`); } }
+const isPlazaPicked = () => save.loc === 'plaza';
+function syncStartUi() {
+  const start = $('start');
+  const temp = $('tempRow');
+  if (isPlazaPicked()) {
+    start.innerHTML = '進入廣場';
+    if (temp) temp.style.display = 'none';
+  } else {
+    start.innerHTML = '開始剝蚵';
+    if (temp) temp.style.display = 'flex';
+  }
+}
 function renderLocs() { autoUnlock();
   const el = $('locPick'); const tot = save.life.inBowl ?? 0;
-  const seen = save.locSeen ?? (save.locSeen = ['home']); const cl = locNow();
+  const seen = save.locSeen ?? (save.locSeen = ['home']);
+  const plazaCur = isPlazaPicked();
+  const cl = plazaCur ? null : locNow();
   const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && save.locs!.includes(l.id);
   const anyNew = LOCS.some(isNew);
-  el.innerHTML = `<div class="locHead"><b><i class="ic ic-pin"></i> 上工地點：${cl.n} ×${cl.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small></div><div class="locRow">` + LOCS.map(l => { const own = l.need === 0 || save.locs!.includes(l.id), cur = cl.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
+  const headTxt = plazaCur
+    ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場</b><small>休閒多人・不趕時間</small>`
+    : `<b><i class="ic ic-pin"></i> 上工地點：${cl!.n} ×${cl!.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small>`;
+  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}" data-loc="plaza"><span class="ln">🦪 蚵仔廣場</span><span class="lm">休閒</span><small>${plazaCur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">多人一起剝蚵，隨便坐、無倒數，離開再結算</small></button>`;
+  el.innerHTML = `<div class="locHead">${headTxt}</div><div class="locRow">` + plazaCard + LOCS.map(l => {
+    const own = l.need === 0 || save.locs!.includes(l.id), cur = !plazaCur && cl!.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
     if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small>${cur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${l.d}</small></button>`;
-    return `<button class="loc locked" disabled>${head}<small><i class="ic ic-lock"></i> 解鎖條件：入碗 ${tot}/${l.need} 顆</small><small class="ld">${l.d}</small></button>`; }).join('') + '</div>';
+    return `<button class="loc locked" disabled>${head}<small><i class="ic ic-lock"></i> 解鎖條件：入碗 ${tot}/${l.need} 顆</small><small class="ld">${l.d}</small></button>`;
+  }).join('') + '</div>';
   const mark = (id?: string) => { if (id && !seen.includes(id)) { seen.push(id); persist(); } };
   el.querySelectorAll<HTMLButtonElement>('button.loc').forEach(b => b.addEventListener('click', () => mark(b.dataset.loc || b.dataset.lbuy), { capture: true }));
   requestAnimationFrame(() => el.querySelector('.loc.cur')?.scrollIntoView({ block: 'nearest', inline: 'center' }));
-  el.querySelectorAll<HTMLButtonElement>('[data-loc]').forEach(b => b.onclick = () => { save.loc = b.dataset.loc; persist(); renderLocs(); updSky(); });
+  el.querySelectorAll<HTMLButtonElement>('[data-loc]').forEach(b => b.onclick = () => {
+    save.loc = b.dataset.loc;
+    persist(); renderLocs();
+    if (save.loc !== 'plaza') updSky();
+    syncStartUi();
+  });
+  syncStartUi();
 }
 renderLocs();
 let achFromRes = false; // 從收工畫面打開成就，關掉後回到收工畫面
@@ -2139,7 +2165,10 @@ function renderItemShop() {
   });
 }
 (window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };
-const go = (len: number) => { evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); };
+const go = (len: number) => {
+  if (isPlazaPicked()) { launchPlaza(); return; }
+  evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay();
+};
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 function launchDeathmatch(mode: DmMode) {
   $('overlay').classList.remove('show');
@@ -2187,8 +2216,36 @@ function plazaEnsureTpView() {
   plazaForceTp = true; tpv = true; drawCamBtn();
   toast('第三人稱較好看旁邊的人，可按「視角」切回', '#9fe0ff');
 }
+function showPlazaLoading(show = true) {
+  let el = document.getElementById('plazaLoad');
+  if (show) {
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'plazaLoad';
+      el.innerHTML = `<div class="pzLoadTitle">蚵仔廣場</div><div class="pzLoadSub">正在入場…</div><div class="pzLoadBar" aria-hidden="true"><i></i></div><button type="button" id="plazaLoadCancel">取消</button>`;
+      document.body.appendChild(el);
+      el.querySelector('#plazaLoadCancel')!.addEventListener('click', () => {
+        showPlazaLoading(false);
+        if (isPlazaActive()) void closePlaza(true);
+        plazaMode = false; plazaPlayAt = 0;
+        document.body.classList.remove('plazaRoam');
+        plazaHideYard(false);
+        applySeat(save.seat ?? 'door');
+        walking = false; handRig.visible = true; on('joy', false);
+        state = 'menu'; syncShiftUi();
+        renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+      });
+    }
+    const sub = el.querySelector('.pzLoadSub'); if (sub) sub.textContent = '正在入場…';
+    el.classList.add('on');
+  } else {
+    el?.classList.remove('on');
+  }
+}
 function launchPlaza() {
   if (isDeathmatchActive() || isPlazaActive()) return;
+  // 先蓋住工寮場景，連線完成再進廣場
+  showPlazaLoading(true);
   $('overlay').classList.remove('show');
   openPlaza({
     id: statsId,
@@ -2198,6 +2255,8 @@ function launchPlaza() {
     scene,
     camera: () => viewCam(),
     bubbles: $('bubbles'),
+    shellGeo,
+    shellMat: pileMat,
     applySeatPose: (pos, yaw) => applyPlazaSeatPose(pos, yaw),
     getPhase: () => phase,
     getCount: () => count,
@@ -2212,6 +2271,7 @@ function launchPlaza() {
     track: (t, d) => track(t, d),
     onPayout: () => { /* 結算走 plazaReportEarn */ },
     onExit: () => {
+      showPlazaLoading(false);
       if (state === 'play' && plazaMode && plazaShiftStarted()) { endReason = 'quit'; endDay(); return; }
       plazaMode = false; plazaPlayAt = 0; document.body.classList.remove('plazaRoam'); plazaHideYard(false); void closePlaza(); applySeat(save.seat ?? 'door');
       walking = false; handRig.visible = true; on('joy', false);
@@ -2223,11 +2283,13 @@ function launchPlaza() {
       plazaHideYard(true);
       state = 'play'; syncShiftUi();
       moonReset(); // 0 NPC
+      // 站在南側，yaw=0 看向 -Z（廣場蚵堆）
       walkPos.set(0, 1.55, plazaWalkBound() * 0.72);
-      tYaw = yaw = Math.PI; tPitch = pitch = -0.18;
+      tYaw = yaw = 0; tPitch = pitch = -0.18;
       plazaEnterWalkPose(false);
       on('quitBtn', true); on('camBtn', true); on('seatCard', false);
       document.body.classList.add('plazaRoam');
+      showPlazaLoading(false);
       toast('蚵仔廣場・休閒剝蚵，隨便坐、不趕時間', '#9be37a');
     },
     beginShift: () => {
@@ -2253,8 +2315,10 @@ function launchPlaza() {
     goWalk: () => { document.body.classList.add('plazaRoam'); plazaEnterWalkPose(true); },
   });
 }
-$('oPlaza')?.addEventListener('click', () => launchPlaza());
-$('start').onclick = () => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
+$('start').onclick = () => {
+  if (isPlazaPicked()) { launchPlaza(); return; }
+  evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay();
+};
 btn('again', () => {
   if (evLastId != null) evAgain();
   else if (plazaMode) return; // 廣場休閒：離開後回主選單，不跑再次上工

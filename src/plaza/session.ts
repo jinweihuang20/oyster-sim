@@ -15,6 +15,9 @@ export type PlazaDeps = {
   scene: THREE.Scene;
   camera: () => THREE.Camera;
   bubbles: HTMLElement;
+  /** 與工寮同款蚵殼幾何／材質 */
+  shellGeo: THREE.BufferGeometry;
+  shellMat: THREE.Material;
   /** 連上後進廣場自由走動 */
   enterWalk: () => void;
   /** 第一次坐下：開始無 NPC 剝蚵工班 */
@@ -86,7 +89,11 @@ export function openPlaza(D: PlazaDeps) {
   myPile = null; mySlot = null; snap = null; near = null; sittingBusy = false;
   D.audio();
   client = new PlazaClient();
-  view = createPlazaWorldView(D.scene, D.bubbles, matchMedia('(pointer: coarse)').matches);
+  view = createPlazaWorldView(D.scene, D.bubbles, {
+    shellGeo: D.shellGeo,
+    shellMat: D.shellMat,
+    lowDetail: matchMedia('(pointer: coarse)').matches,
+  });
   buildUi();
   wireClient(D);
   void boot(D);
@@ -117,8 +124,16 @@ function wireClient(D: PlazaDeps) {
       if (!seated) setHud(`廣場休閒 ${snap.occupied}/${snap.capacity}　靠近空位坐下`);
       else setHud(`休閒・在線 ${snap.occupied}/${snap.capacity}`);
     },
-    onJoined: (p) => { view?.applyPose(normPlayer(p), D.id); },
-    onLeft: (p) => { view?.remove(normPlayer(p)); },
+    onJoined: (p) => {
+      const n = normPlayer(p);
+      view?.applyPose(n, D.id);
+      if (n.pid && n.pid !== D.id) D.toast(`${n.nick} 進來廣場了`, '#9fe0ff');
+    },
+    onLeft: (p) => {
+      const n = normPlayer(p);
+      view?.remove(n);
+      if (n.pid && n.pid !== D.id) D.toast(`${n.nick} 離開廣場了`, '#ffb08a');
+    },
     onSeatChanged: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onPose: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onPhase: (p) => { view?.applyPose(normPlayer(p), D.id); },
@@ -179,32 +194,52 @@ function buildUi() {
 <style>
 #plazaRoot{position:fixed;inset:0;z-index:8500;pointer-events:none;font-family:inherit}
 #plazaRoot *{box-sizing:border-box}
-#pzHud{pointer-events:none;position:absolute;top:calc(env(safe-area-inset-top) + 12px);left:50%;transform:translateX(-50%);max-width:min(92vw,420px);background:rgba(20,12,6,.72);border:2px solid #d9952b;border-radius:12px;padding:6px 12px;font-weight:800;font-size:14px;color:#ffd23f;text-align:center;line-height:1.35}
-#pzChat{display:none;pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 8px);bottom:calc(env(safe-area-inset-bottom) + 12px);width:min(72vw,320px);background:rgba(20,12,6,.72);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8}
-#pzChat.on{display:block}
-#pzLog{height:72px;overflow:auto;font-size:12px;line-height:1.35;margin-bottom:6px}
+#pzHud{pointer-events:none;position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:50%;transform:translateX(-50%);max-width:min(78vw,340px);background:rgba(20,12,6,.72);border:2px solid #d9952b;border-radius:12px;padding:5px 10px;font-weight:800;font-size:13px;color:#ffd23f;text-align:center;line-height:1.3;z-index:1}
+#pzX{pointer-events:auto;position:absolute;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 8px);width:42px;height:42px;font-size:20px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800}
+#pzChatFab{pointer-events:auto;position:absolute;right:calc(env(safe-area-inset-right) + 10px);bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
+#pzChat{display:none;pointer-events:auto;position:absolute;right:calc(env(safe-area-inset-right) + 10px);bottom:calc(env(safe-area-inset-bottom) + 66px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
+#pzChat.open{display:block}
+#pzChatHd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-size:12px;font-weight:800;color:#ffd23f}
+#pzChatMin{pointer-events:auto;background:transparent;border:0;color:#ffd23f;font-size:18px;line-height:1;padding:2px 6px;font-weight:900}
+#pzLog{height:64px;overflow:auto;font-size:12px;line-height:1.35;margin-bottom:6px}
 #pzRow{display:flex;gap:6px}
 #pzRow input{flex:1;min-width:0;border-radius:8px;border:2px solid #6b3a12;background:#1a1008;color:#fff6d8;padding:6px 8px;font-size:14px}
-#pzRow button,#pzX{pointer-events:auto;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;padding:8px 12px}
-#pzX{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:calc(env(safe-area-inset-right) + 10px);width:44px;height:44px;font-size:22px;z-index:2}
-#pzSitPrompt{display:none;pointer-events:none;position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 88px);transform:translateX(-50%);background:rgba(20,12,6,.8);border:2px solid #9be37a;border-radius:12px;padding:8px 14px;color:#9be37a;font-weight:900;font-size:15px;text-align:center}
+#pzRow button{pointer-events:auto;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;padding:8px 12px}
+#pzSitPrompt{display:none;pointer-events:none;position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 150px);transform:translateX(-50%);background:rgba(20,12,6,.8);border:2px solid #9be37a;border-radius:12px;padding:8px 14px;color:#9be37a;font-weight:900;font-size:14px;text-align:center;z-index:1;max-width:min(90vw,360px)}
 #pzSitPrompt.on{display:block}
+@media (pointer:fine){#pzSitPrompt{bottom:calc(env(safe-area-inset-bottom) + 72px)}}
+@media (max-width:420px){#pzChat{width:min(70vw,240px)}#pzLog{height:52px}}
 </style>
 <button id="pzX" type="button" aria-label="離開">✕</button>
 <div id="pzHud">準備中…</div>
 <div id="pzSitPrompt"></div>
-<div id="pzChat"><div id="pzLog"></div><div id="pzRow"><input id="pzIn" maxlength="80" placeholder="跟廣場打招呼…"/><button id="pzSend" type="button">送</button></div></div>`;
+<button id="pzChatFab" type="button" aria-label="聊天">聊天</button>
+<div id="pzChat">
+  <div id="pzChatHd"><span>廣場聊天</span><button id="pzChatMin" type="button" aria-label="縮小">–</button></div>
+  <div id="pzLog"></div>
+  <div id="pzRow"><input id="pzIn" maxlength="80" placeholder="跟廣場打招呼…"/><button id="pzSend" type="button">送</button></div>
+</div>`;
   document.body.appendChild(ui);
   ui.querySelector('#pzX')!.addEventListener('click', () => {
     if (shiftStarted) deps?.onExit();
     else { const exit = deps?.onExit; void closePlaza(true).then(() => exit?.()); }
   });
+  const chat = ui.querySelector('#pzChat') as HTMLElement;
+  const fab = ui.querySelector('#pzChatFab') as HTMLElement;
+  const setChatOpen = (open: boolean) => {
+    chat.classList.toggle('open', open);
+    fab.textContent = open ? '聊天' : '聊天';
+    fab.style.opacity = open ? '0.55' : '1';
+  };
+  fab.addEventListener('click', () => setChatOpen(!chat.classList.contains('open')));
+  ui.querySelector('#pzChatMin')!.addEventListener('click', () => setChatOpen(false));
   ui.querySelector('#pzSend')!.addEventListener('click', sendChat);
   ui.querySelector('#pzIn')!.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') sendChat(); });
+  setChatOpen(false);
 }
 
 function showRoamUi() {
-  (ui?.querySelector('#pzChat') as HTMLElement | null)?.classList.add('on');
+  /* 預設縮小聊天，避免擋搖桿／坐落 */
 }
 
 function setHud(t: string) {

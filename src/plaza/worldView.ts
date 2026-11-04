@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makePlayerAvatar, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
+import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, CHAIR_SEAT_Y } from './props';
 import type { PlazaPlayer, PlazaSnapshot } from './types';
 
 type Remote = {
@@ -15,13 +16,17 @@ type Remote = {
   nick: string;
   seated: boolean;
   moving: boolean;
-  tx: number; tz: number; tyaw: number; // 目標
-  x: number; z: number; yaw: number; // 插值中
+  tx: number; tz: number; tyaw: number;
+  x: number; z: number; yaw: number;
   bob: number;
 };
 
 const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
 const HAIRS = [0x222222, 0x555555, 0x888888, 0x3a2a1a, 0xdddddd];
+
+/** 髖關節在 root 本地 y≈0.72；坐下時對齊椅面 */
+const HIP_Y = 0.72;
+const SIT_ROOT_Y = CHAIR_SEAT_Y - HIP_Y + 0.02; // ≈ -0.28
 
 export type PlazaWorldView = {
   root: THREE.Group;
@@ -38,7 +43,18 @@ export type PlazaWorldView = {
   dispose: () => void;
 };
 
-export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElement, LO = false): PlazaWorldView {
+export type PlazaWorldOpts = {
+  shellGeo: THREE.BufferGeometry;
+  shellMat: THREE.Material;
+  lowDetail?: boolean;
+};
+
+export function createPlazaWorldView(
+  scene: THREE.Scene,
+  bubblesHost: HTMLElement,
+  opts: PlazaWorldOpts,
+): PlazaWorldView {
+  const LO = !!opts.lowDetail;
   const root = new THREE.Group(); root.name = 'plazaWorld'; scene.add(root);
   const { M, add } = makeMeshHelpers(scene, LO);
   const remotes = new Map<string, Remote>();
@@ -46,38 +62,34 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
   const pileGroups: THREE.Group[] = [];
   let nearKey: string | null = null;
 
-  const floor = add(new THREE.PlaneGeometry(WALK_BOUND * 2.4, WALK_BOUND * 2.4), M(0x5e5e58, { roughness: 0.95 }), [0, 0.002, 0], root, false);
+  // 水泥廣場貼皮（分格對齊蚵堆）
+  const floorMaps = makePlazaFloorMaps(LO ? 384 : 512);
+  const floorMat = new THREE.MeshStandardMaterial({
+    map: floorMaps.map,
+    roughnessMap: floorMaps.rough,
+    roughness: 0.92,
+    metalness: 0.02,
+    color: 0xffffff,
+  });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(WALK_BOUND * 2.4, WALK_BOUND * 2.4), floorMat);
   floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0.002;
+  floor.receiveShadow = !LO;
+  root.add(floor);
 
-  const shellM = M(0xe4dcd2, { roughness: 0.9 });
   for (let i = 0; i < PILE_COUNT; i++) {
-    const g = new THREE.Group();
-    g.userData.pileId = i;
     const c = pileCenter(i);
-    g.position.copy(c);
-    // 坐下時面前要一眼看出是蚵堆：錐體＋散殼
-    const cone = add(new THREE.ConeGeometry(1.05, 0.9, 11), shellM, [0, 0.45, 0], g, true);
-    cone.userData.pileId = i;
-    cone.rotation.y = i * 0.3;
-    for (let k = 0; k < 10; k++) {
-      const bit = add(new THREE.SphereGeometry(0.1 + (k % 3) * 0.035, 6, 4), M(k % 2 ? 0xd8cfc6 : 0xc8beb4), [
-        Math.sin(k * 1.7 + i) * (0.25 + (k % 4) * 0.08),
-        0.12 + (k % 3) * 0.1,
-        Math.cos(k * 2.1 + i) * (0.25 + (k % 4) * 0.08),
-      ], g, false);
-      bit.userData.pileId = i;
-      bit.scale.set(1.25, 0.65, 1.05);
-    }
+    const pile = makeYardLikePile(opts.shellGeo, opts.shellMat, i, LO ? 70 : 110);
+    pile.position.copy(c);
+    root.add(pile);
+    pileGroups.push(pile);
+
     for (let s = 0; s < SLOTS_PER_PILE; s++) {
       const pose = seatPose(i, s);
-      const stool = add(new THREE.CylinderGeometry(0.16, 0.16, 0.06, 10), M(0x3a7ac0), [0, 0.4, 0], root);
-      stool.position.set(pose.pos.x, 0.4, pose.pos.z);
-      const pad = add(new THREE.CylinderGeometry(0.18, 0.18, 0.04, 10), M(0x5a9ad0, { transparent: true, opacity: 0.35 }), [0, 0.02, 0], root, false);
-      pad.position.set(pose.pos.x, 0.02, pose.pos.z);
+      const { group, pad } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
+      root.add(group);
       seatMeshes.set(seatKey(i, s), pad);
     }
-    root.add(g);
-    pileGroups.push(g);
   }
 
   function hitPile(raycaster: THREE.Raycaster): number | null {
@@ -96,26 +108,39 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
     return { shirt: SHIRTS[Math.abs(h) % SHIRTS.length], hair: HAIRS[Math.abs(h >> 3) % HAIRS.length], pants: 0x2a2a40 };
   }
 
+  // 獨立圖層，避免被 #bubbles z-index:0 或廣場 UI 蓋住
+  const tagsHost = document.createElement('div');
+  tagsHost.id = 'plazaTags';
+  tagsHost.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(tagsHost);
+  void bubblesHost;
+
   function ensureTag(nick: string) {
-    const tag = document.createElement('button');
-    tag.className = 'ntag plazaTag';
+    const tag = document.createElement('div');
+    tag.className = 'plazaTag';
     tag.textContent = nick;
-    tag.style.pointerEvents = 'none';
-    bubblesHost.appendChild(tag);
+    tagsHost.appendChild(tag);
     return tag;
   }
 
+  /** 坐下：髖部落在椅面；大腿朝面前（-Z），小腿下垂踩地 */
   function poseSit(r: Remote) {
-    r.rig.root.position.y = 0.05;
-    r.rig.legL.rotation.x = -1.1; r.rig.legR.rotation.x = -1.1;
-    r.rig.shinL.rotation.x = 1.2; r.rig.shinR.rotation.x = 1.2;
-    r.rig.torso.rotation.x = 0.12;
+    r.rig.root.position.y = SIT_ROOT_Y;
+    // 腿 mesh 沿 -Y；+Rx 才會把大腿甩向 -Z（面前），舊的 -Rx 會往背後折
+    r.rig.legL.rotation.set(1.38, 0.1, 0.14);
+    r.rig.legR.rotation.set(1.38, -0.1, -0.14);
+    r.rig.shinL.rotation.set(-1.55, 0, 0);
+    r.rig.shinR.rotation.set(-1.55, 0, 0);
+    r.rig.torso.rotation.x = 0.1;
+    r.rig.torso.position.y = 0;
   }
 
   function poseStand(r: Remote) {
     r.rig.root.position.y = 0;
-    r.rig.legL.rotation.x = 0; r.rig.legR.rotation.x = 0;
-    r.rig.shinL.rotation.x = 0; r.rig.shinR.rotation.x = 0;
+    r.rig.legL.rotation.set(0, 0, 0);
+    r.rig.legR.rotation.set(0, 0, 0);
+    r.rig.shinL.rotation.set(0, 0, 0);
+    r.rig.shinR.rotation.set(0, 0, 0);
     r.rig.torso.rotation.x = 0;
   }
 
@@ -123,7 +148,6 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
     const ph = r.phase;
     if (r.seated) {
       poseSit(r);
-      // 剝蚵動作示意
       if (ph === 'twist' || ph === 'pry') {
         r.rig.head.rotation.x = 0.2;
         r.rig.upperR.rotation.x = -0.6; r.rig.lowerR.rotation.x = -0.4;
@@ -261,21 +285,30 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
       }
       r.rig.outer.position.set(r.x, 0, r.z);
       r.rig.outer.rotation.y = r.yaw;
-      _v.set(r.x, r.seated ? 1.35 : 1.7, r.z).project(camera);
+      // 頭上方
+      _v.set(r.x, r.seated ? CHAIR_SEAT_Y + 1.15 : 1.85, r.z).project(camera);
       const x = (_v.x * 0.5 + 0.5) * innerWidth, y = (-_v.y * 0.5 + 0.5) * innerHeight;
-      const behind = _v.z > 1;
-      r.tag.style.display = behind ? 'none' : '';
-      r.tag.style.transform = `translate(${x}px,${y}px) translate(-50%,-100%)`;
+      const behind = _v.z > 1 || x < -40 || x > innerWidth + 40 || y < -20 || y > innerHeight + 40;
+      r.tag.style.display = behind ? 'none' : 'block';
+      r.tag.style.left = `${x}px`;
+      r.tag.style.top = `${y}px`;
     }
   }
 
   function dispose() {
     for (const r of remotes.values()) { root.remove(r.rig.outer); r.tag.remove(); }
     remotes.clear();
+    tagsHost.remove();
     scene.remove(root);
+    floorMaps.map.dispose();
+    floorMaps.rough.dispose();
     root.traverse(o => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) { m.geometry?.dispose(); const mat = m.material as THREE.Material | THREE.Material[]; if (Array.isArray(mat)) mat.forEach(x => x.dispose()); else mat?.dispose?.(); }
+      if (!m.isMesh) return;
+      if (m.geometry && !m.userData.sharedGeo && m.geometry !== opts.shellGeo) m.geometry.dispose();
+      const mat = m.material as THREE.Material | THREE.Material[];
+      if (Array.isArray(mat)) mat.forEach(x => { if (x !== opts.shellMat) x.dispose(); });
+      else if (mat && mat !== opts.shellMat) mat.dispose();
     });
   }
 
