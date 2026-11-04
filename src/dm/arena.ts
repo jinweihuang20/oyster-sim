@@ -16,17 +16,17 @@ export type ArenaDeps = {
 /** 燈光、場地、外景、圍牆、掩體、氛圍道具、蚵仔堆 */
 export function buildArena(deps: ArenaDeps) {
   const { scene, LO, M, add, U, regBreak } = deps;
-  // 黃昏漁港燈光（同上工場景色調，亮度調高方便瞄準）
-  scene.add(new THREE.HemisphereLight(0xffc8b0, 0x3a2a20, LO ? 1.7 : 1.5)); scene.add(new THREE.AmbientLight(0xffe0c8, LO ? 0.55 : 0.35));
+  // 黃昏漁港燈光：暖琥珀／沙色，避開紫粉夢核
+  scene.add(new THREE.HemisphereLight(0xffd4b0, 0x3a2a18, LO ? 1.7 : 1.5)); scene.add(new THREE.AmbientLight(0xffe8d0, LO ? 0.55 : 0.35));
   const sun = new THREE.DirectionalLight(0xffb070, LO ? 1.35 : 1.6);
-  // 黃昏漸層天空＋夕陽光暈
+  // 黃昏漸層天空＋夕陽光暈（頂部灰藍、中層琥珀，無紫）
   {
     const sunDir = new THREE.Vector3(-12, 5, -18).normalize();
     const sky = new THREE.Mesh(new THREE.SphereGeometry(60, LO ? 16 : 32, LO ? 8 : 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { sd: { value: sunDir } },
       vertexShader: 'varying vec3 v;void main(){v=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-      fragmentShader: 'uniform vec3 sd;varying vec3 v;void main(){float h=v.y;vec3 top=vec3(.16,.17,.42),mid=vec3(.62,.38,.52),hor=vec3(1.,.6,.4),low=vec3(.35,.24,.26);' +
+      fragmentShader: 'uniform vec3 sd;varying vec3 v;void main(){float h=v.y;vec3 top=vec3(.20,.28,.40),mid=vec3(.82,.48,.30),hor=vec3(1.,.68,.42),low=vec3(.30,.24,.18);' +
         'vec3 c=h>0.?mix(hor,mix(mid,top,smoothstep(.15,.7,h)),smoothstep(0.,.18,h)):mix(hor,low,smoothstep(0.,-.15,h));' +
-        'float s=max(dot(v,sd),0.);c+=vec3(1.,.7,.4)*(pow(s,8.)*.45+pow(s,200.)*1.2);gl_FragColor=vec4(c,1.);}' }));
+        'float s=max(dot(v,sd),0.);c+=vec3(1.,.72,.42)*(pow(s,8.)*.45+pow(s,200.)*1.2);gl_FragColor=vec4(c,1.);}' }));
     sky.renderOrder = -1; sky.frustumCulled = false; scene.add(sky);
   } sun.position.set(-12, 16, -18); sun.castShadow = !LO;
   if (!LO) { Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, far: 60 }); sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.002; }
@@ -36,20 +36,18 @@ export function buildArena(deps: ArenaDeps) {
     const sz = LO ? 128 : 256;
     const cv = document.createElement('canvas'); cv.width = cv.height = sz;
     const ctx = cv.getContext('2d')!;
-    // 底：暖沙
-    ctx.fillStyle = '#c4a878'; ctx.fillRect(0, 0, sz, sz);
-    // 粗粒雜訊：淺沙／深沙／殼白點
-    for (let i = 0; i < (LO ? 2800 : 9000); i++) {
-      const x = Math.random() * sz, y = Math.random() * sz, r = 0.4 + Math.random() * 1.8;
+    // 底：自然蚵寮沙（偏黃褐，勿粉）
+    ctx.fillStyle = '#c2a070'; ctx.fillRect(0, 0, sz, sz);
+    for (let i = 0; i < (LO ? 3200 : 11000); i++) {
+      const x = Math.random() * sz, y = Math.random() * sz, r = 0.35 + Math.random() * 1.9;
       const roll = Math.random();
-      ctx.fillStyle = roll < 0.55 ? `rgba(${168 + Math.random() * 40 | 0},${130 + Math.random() * 35 | 0},${80 + Math.random() * 30 | 0},${0.25 + Math.random() * 0.45})`
-        : roll < 0.88 ? `rgba(${210 + Math.random() * 35 | 0},${185 + Math.random() * 30 | 0},${130 + Math.random() * 25 | 0},${0.2 + Math.random() * 0.4})`
-        : `rgba(${220 + Math.random() * 30 | 0},${210 + Math.random() * 25 | 0},${190 + Math.random() * 20 | 0},${0.15 + Math.random() * 0.35})`;
+      ctx.fillStyle = roll < 0.55 ? `rgba(${160 + Math.random() * 36 | 0},${120 + Math.random() * 32 | 0},${70 + Math.random() * 28 | 0},${0.22 + Math.random() * 0.4})`
+        : roll < 0.88 ? `rgba(${205 + Math.random() * 32 | 0},${175 + Math.random() * 28 | 0},${120 + Math.random() * 22 | 0},${0.18 + Math.random() * 0.35})`
+        : `rgba(${215 + Math.random() * 28 | 0},${200 + Math.random() * 22 | 0},${175 + Math.random() * 18 | 0},${0.12 + Math.random() * 0.3})`;
       ctx.beginPath(); ctx.arc(x, y, r, 0, 6.28); ctx.fill();
     }
-    // 幾道被踩過的淺痕
-    for (let i = 0; i < (LO ? 4 : 9); i++) {
-      ctx.strokeStyle = `rgba(140,110,70,${0.12 + Math.random() * 0.18})`;
+    for (let i = 0; i < (LO ? 5 : 11); i++) {
+      ctx.strokeStyle = `rgba(120,95,58,${0.1 + Math.random() * 0.16})`;
       ctx.lineWidth = 2 + Math.random() * 5;
       ctx.beginPath();
       const x0 = Math.random() * sz, y0 = Math.random() * sz;
@@ -62,10 +60,10 @@ export function buildArena(deps: ArenaDeps) {
     sandTex.wrapS = sandTex.wrapT = THREE.RepeatWrapping;
     sandTex.anisotropy = LO ? 1 : 4;
     sandTex.repeat.set(8, 8);
-    const floor = add(new THREE.PlaneGeometry(HALF * 2 + 4, HALF * 2 + 4), M(0xc2a67a, { map: sandTex, roughness: 1, metalness: 0 }), [0, 0, 0]);
+    const floor = add(new THREE.PlaneGeometry(HALF * 2 + 4, HALF * 2 + 4), M(0xc0a474, { map: sandTex, roughness: 1, metalness: 0 }), [0, 0, 0]);
     floor.rotation.x = -Math.PI / 2;
     // 濕沙斑（潮水／潑水）
-    const wet = M(0x8a7048, { roughness: 0.55, transparent: true, opacity: 0.42 }), wetG = new THREE.CircleGeometry(1, LO ? 8 : 14);
+    const wet = M(0x7a6540, { roughness: 0.55, transparent: true, opacity: 0.4 }), wetG = new THREE.CircleGeometry(1, LO ? 8 : 14);
     for (let i = 0; i < (LO ? 10 : 22); i++) {
       const d = add(wetG, wet, [(Math.random() - .5) * 34, 0.012, (Math.random() - .5) * 34], scene, false);
       d.rotation.x = -Math.PI / 2; d.scale.set(0.6 + Math.random() * 2.2, 0.4 + Math.random() * 1.4, 1);

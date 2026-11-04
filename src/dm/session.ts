@@ -1269,7 +1269,7 @@ ${isTouch
 
   // ---- 迴圈 ----
   let raf = 0, last = performance.now(), hudT = 0;
-  // 第一人稱頭晃：相位跟腳步距離對齊（每 0.75m 一步），停下平滑收斂；只動鏡頭不影響射擊起點
+  // 第一人稱頭晃：輕量腳步感（振幅刻意壓低，避免走路太暈）
   let bobPh = 0, bobW = 0;
   function resize() { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); }
   addEventListener('resize', resize); resize();
@@ -1288,16 +1288,16 @@ ${isTouch
     if (me.dead) { bobW = 0; const k = Math.min(1, (now - me.deathAt) / 0.6), e = k * k * (3 - 2 * k); cam.position.y = EYE + (0.25 - EYE) * e; roll = 1.25 * e; pt = me.pitch * (1 - e) + 0.15 * e; }
     else {
       const spd = Math.hypot(me.vel.x, me.vel.z);
-      const tgt = adsT > 0.5 ? 0 : (spd > 0.4 ? Math.min(1.2, spd / WALK) : 0); // 開鏡壓過頭晃
-      bobW += (tgt - bobW) * (1 - Math.exp(-(tgt > bobW ? 16 : 9) * dt));
-      if (spd > 0.4 && adsT < 0.5) bobPh += dt * spd * (Math.PI / 0.75);
+      const tgt = adsT > 0.5 ? 0 : (spd > 0.4 ? Math.min(0.75, spd / WALK) : 0); // 開鏡壓過頭晃；上限壓低
+      bobW += (tgt - bobW) * (1 - Math.exp(-(tgt > bobW ? 14 : 10) * dt));
+      if (spd > 0.4 && adsT < 0.5) bobPh += dt * spd * (Math.PI / 0.85);
       const w = bobW * bobW * (1 - adsT), sy = Math.sin(bobPh), cy = Math.cos(bobPh);
-      const ox = cy * 0.03 * w, oy = sy * 0.055 * w, oz = -Math.abs(sy) * 0.014 * w;
+      const ox = cy * 0.012 * w, oy = sy * 0.02 * w, oz = -Math.abs(sy) * 0.005 * w;
       const rs = Math.sin(me.yaw), rc = Math.cos(me.yaw);
       cam.position.x += rc * ox - rs * oz; cam.position.y += oy; cam.position.z += -rs * ox - rc * oz;
-      pt += cy * 0.014 * w; roll += sy * 0.02 * w;
+      pt += cy * 0.005 * w; roll += sy * 0.007 * w;
       const lat = me.vel.x * rc - me.vel.z * rs;
-      roll += Math.max(-1, Math.min(1, lat / WALK)) * 0.04 * Math.min(1, bobW + 0.25) * (1 - adsT);
+      roll += Math.max(-1, Math.min(1, lat / WALK)) * 0.018 * Math.min(1, bobW + 0.2) * (1 - adsT);
     }
     // 第一人稱武器：開鏡時藏起；走路晃＋射擊後座；撐傘／死亡時收起
     {
@@ -1306,7 +1306,7 @@ ${isTouch
         const hide = me.dead || me.umbHeld || adsT > 0.35; v.visible = !hide;
         if (!hide) {
           const d = w.def, k = w.kick * w.kick * d.kickScale, sw = bobW * bobW;
-          const sx = Math.sin(bobPh) * 0.014 * sw, sy = Math.cos(bobPh) * 0.012 * sw;
+          const sx = Math.sin(bobPh) * 0.008 * sw, sy = Math.cos(bobPh) * 0.006 * sw;
           v.position.set(d.hip[0] + k * 0.025 + sx, d.hip[1] + k * 0.05 + sy, d.hip[2] + k * 0.1);
           v.rotation.set(d.hipRot[0] - k * 0.32, d.hipRot[1] + sx * 0.4, d.hipRot[2] + k * 0.06);
         }

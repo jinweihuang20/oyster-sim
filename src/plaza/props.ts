@@ -3,93 +3,96 @@ import { PILE_SPACING, pileCenter, seatPose, PILE_COUNT, SLOTS_PER_PILE } from '
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 
-/**
- * 漁港水泥廣場貼皮：粗砂水泥＋對齊蚵堆的分格縫＋水漬／磨損。
- * 一張 canvas，無外部圖檔。
- */
-export function makePlazaFloorMaps(sizePx = 512) {
-  let seed = 42017;
-  const rn = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+type FloorPaintKind = 'plaza' | 'yard';
 
-  const mk = (paint: (c: CanvasRenderingContext2D, S: number) => void) => {
+/** 漁港水泥貼皮（無外圖）：中性灰褐、砂粒、水漬、分格縫——避開紫／粉夢核調 */
+function paintConcreteFloor(c: CanvasRenderingContext2D, S: number, rn: () => number, kind: FloorPaintKind) {
+  // 底：中性水泥（略暖，非紫灰）
+  c.fillStyle = kind === 'yard' ? '#7a766e' : '#747068';
+  c.fillRect(0, 0, S, S);
+  const n = kind === 'yard' ? 12000 : 10000;
+  for (let i = 0; i < n; i++) {
+    const g = 88 + (rn() * 55) | 0;
+    const warm = (rn() * 8) | 0;
+    c.fillStyle = `rgba(${g + warm},${g + (warm >> 1)},${g - 4},${0.1 + rn() * 0.2})`;
+    c.fillRect((rn() * S) | 0, (rn() * S) | 0, 1 + (rn() * 2.5) | 0, 1 + (rn() * 2) | 0);
+  }
+  // 舊水泥深淺斑
+  for (let i = 0; i < (kind === 'yard' ? 36 : 30); i++) {
+    const x = rn() * S, y = rn() * S, rx = 16 + rn() * 50, ry = 12 + rn() * 36;
+    const dark = rn() < 0.5;
+    c.fillStyle = dark
+      ? `rgba(52,50,46,${0.07 + rn() * 0.11})`
+      : `rgba(198,192,180,${0.05 + rn() * 0.09})`;
+    c.beginPath(); c.ellipse(x, y, rx, ry, rn() * 3, 0, 7); c.fill();
+  }
+  // 海水／蚵汁水漬：褐灰，勿橄欖／紫
+  for (let i = 0; i < (kind === 'yard' ? 14 : 18); i++) {
+    c.fillStyle = `rgba(${62 + rn() * 28 | 0},${58 + rn() * 18 | 0},${48 + rn() * 14 | 0},${0.06 + rn() * 0.1})`;
+    c.beginPath();
+    c.ellipse(rn() * S, rn() * S, 8 + rn() * 32, 5 + rn() * 16, rn() * 4, 0, 7);
+    c.fill();
+  }
+  // 分格縫
+  c.strokeStyle = 'rgba(42,40,36,0.5)';
+  c.lineWidth = kind === 'yard' ? 2.5 : 3;
+  c.strokeRect(2, 2, S - 4, S - 4);
+  c.strokeStyle = 'rgba(220,214,200,0.14)';
+  c.lineWidth = 1;
+  c.strokeRect(5, 5, S - 10, S - 10);
+  for (let i = 0; i < 36; i++) {
+    const edge = (rn() * 4) | 0;
+    let x = 0, y = 0;
+    if (edge === 0) { x = rn() * S; y = rn() * 5; }
+    else if (edge === 1) { x = rn() * S; y = S - 5 + rn() * 5; }
+    else if (edge === 2) { x = rn() * 5; y = rn() * S; }
+    else { x = S - 5 + rn() * 5; y = rn() * S; }
+    c.fillStyle = `rgba(45,43,40,${0.2 + rn() * 0.3})`;
+    c.fillRect(x, y, 1 + rn() * 3, 1 + rn() * 2);
+  }
+}
+
+function makeFloorMaps(kind: FloorPaintKind, sizePx: number, tiles: number, seed0: number) {
+  let seed = seed0;
+  const rn = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const mk = (paint: (c: CanvasRenderingContext2D, S: number) => void, srgb: boolean) => {
     const cv = document.createElement('canvas'); cv.width = cv.height = sizePx;
     const c = cv.getContext('2d')!;
     paint(c, sizePx);
     const t = new THREE.CanvasTexture(cv);
-    t.colorSpace = THREE.SRGBColorSpace;
+    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.anisotropy = 4;
     t.needsUpdate = true;
+    t.repeat.set(tiles, tiles);
     return t;
   };
-
-  // 世界：地板邊長 ≈ WALK_BOUND*2.4；一格 = PILE_SPACING → repeat 對齊 4×4
-  const worldSize = 11.5 * 2.4;
-  const tiles = worldSize / PILE_SPACING;
-
-  const map = mk((c, S) => {
-    // 底：偏暖灰水泥
-    c.fillStyle = '#6a6862';
-    c.fillRect(0, 0, S, S);
-    // 細砂雜訊
-    for (let i = 0; i < 9000; i++) {
-      const g = 70 + (rn() * 70) | 0;
-      c.fillStyle = `rgba(${g},${g - 2},${g - 6},${0.08 + rn() * 0.18})`;
-      c.fillRect((rn() * S) | 0, (rn() * S) | 0, 1 + (rn() * 2) | 0, 1 + (rn() * 2) | 0);
-    }
-    // 大塊色斑（舊水泥深淺）
-    for (let i = 0; i < 28; i++) {
-      const x = rn() * S, y = rn() * S, rx = 18 + rn() * 55, ry = 14 + rn() * 40;
-      const dark = rn() < 0.55;
-      c.fillStyle = dark ? `rgba(48,46,42,${0.08 + rn() * 0.12})` : `rgba(190,186,176,${0.06 + rn() * 0.1})`;
-      c.beginPath(); c.ellipse(x, y, rx, ry, rn() * 3, 0, 7); c.fill();
-    }
-    // 蚵汁／水漬（偏橄欖褐）
-    for (let i = 0; i < 16; i++) {
-      c.fillStyle = `rgba(${55 + rn() * 30 | 0},${52 + rn() * 20 | 0},${40 + rn() * 16 | 0},${0.07 + rn() * 0.12})`;
-      c.beginPath();
-      c.ellipse(rn() * S, rn() * S, 10 + rn() * 35, 6 + rn() * 18, rn() * 4, 0, 7);
-      c.fill();
-    }
-    // 分格縫（對齊 repeat 一格＝一堆區）
-    const cell = S; // 整張貼圖＝一格，靠 repeat 鋪
-    c.strokeStyle = 'rgba(36,34,30,0.55)';
-    c.lineWidth = 3;
-    c.strokeRect(1.5, 1.5, cell - 3, cell - 3);
-    c.strokeStyle = 'rgba(210,205,195,0.18)';
-    c.lineWidth = 1;
-    c.strokeRect(4, 4, cell - 8, cell - 8);
-    // 縫邊碎裂
-    for (let i = 0; i < 40; i++) {
-      const edge = (rn() * 4) | 0;
-      let x = 0, y = 0;
-      if (edge === 0) { x = rn() * S; y = rn() * 6; }
-      else if (edge === 1) { x = rn() * S; y = S - 6 + rn() * 6; }
-      else if (edge === 2) { x = rn() * 6; y = rn() * S; }
-      else { x = S - 6 + rn() * 6; y = rn() * S; }
-      c.fillStyle = `rgba(40,38,34,${0.25 + rn() * 0.35})`;
-      c.fillRect(x, y, 1 + rn() * 3, 1 + rn() * 2);
-    }
-  });
-  map.repeat.set(tiles, tiles);
-
+  const map = mk((c, S) => paintConcreteFloor(c, S, rn, kind), true);
   const rough = mk((c, S) => {
-    c.fillStyle = '#a0a0a0';
+    c.fillStyle = '#9a9a9a';
     c.fillRect(0, 0, S, S);
-    for (let i = 0; i < 6000; i++) {
-      const g = (80 + rn() * 140) | 0;
+    for (let i = 0; i < 7000; i++) {
+      const g = (70 + rn() * 150) | 0;
       c.fillStyle = `rgb(${g},${g},${g})`;
       c.fillRect((rn() * S) | 0, (rn() * S) | 0, 1 + (rn() * 2) | 0, 1);
     }
-    // 縫較粗
-    c.strokeStyle = '#e8e8e8';
+    c.strokeStyle = '#e4e4e4';
     c.lineWidth = 4;
     c.strokeRect(2, 2, S - 4, S - 4);
-  });
-  rough.colorSpace = THREE.NoColorSpace;
-  rough.repeat.set(tiles, tiles);
-
+  }, false);
   return { map, rough, tiles };
+}
+
+/** 廣場：分格對齊蚵堆 */
+export function makePlazaFloorMaps(sizePx = 512) {
+  const worldSize = 11.5 * 2.4;
+  const tiles = worldSize / PILE_SPACING;
+  return makeFloorMaps('plaza', sizePx, tiles, 42017);
+}
+
+/** 工寮水泥地 */
+export function makeYardFloorMaps(sizePx = 384) {
+  return makeFloorMaps('yard', sizePx, 5.5, 91013);
 }
 
 /** 與工寮蚵山同款：InstancedMesh 蚵殼堆 */

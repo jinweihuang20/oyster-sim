@@ -26,11 +26,19 @@ type Remote = {
   bowlNode: THREE.Object3D;
   meatRoot: THREE.Group;
   meatMeshes: THREE.Mesh[];
+  /** 手持蚵仔刀／蚵仔（掛 torso） */
+  knife: THREE.Group;
+  oyster: THREE.Group;
   tx: number; tz: number; tyaw: number;
   x: number; z: number; yaw: number;
   bob: number;
   /** 遠端丟殼甩臂剩餘秒數 */
   throwT: number;
+  /** 目標／目前轉頭 */
+  tLookYaw: number; lookYaw: number;
+  tPitch: number; pitch: number;
+  /** 工作姿勢附加的頭傾（再疊 look pitch） */
+  headWorkX: number;
 };
 
 const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
@@ -142,6 +150,8 @@ export function createPlazaWorldView(
       out.push({
         connId: r.key,
         nick: r.nick,
+        pileId: r.pileId,
+        phase: r.phase || '',
         x: r.x, z: r.z, yaw: r.yaw,
         seated: true,
         count: r.count,
@@ -188,22 +198,92 @@ export function createPlazaWorldView(
     return el;
   }
 
+  /** 遠端雨傘：跟本機一樣「往前開」擋殼，不是頭頂撐雨 */
   function makeRemoteUmb() {
     const g = new THREE.Group();
     g.visible = false;
     const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.012, 0.012, 0.55, 5),
+      new THREE.CylinderGeometry(0.012, 0.012, 0.72, 5),
       new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.85, flatShading: true }),
     );
-    pole.position.set(0.18, 1.35, -0.05);
+    // 傘柄在近 y=0（手握處），傘面沿 +Y；整組再往前傾
+    pole.position.set(0, 0.2, 0);
     g.add(pole);
     const canopy = new THREE.Mesh(
-      new THREE.ConeGeometry(0.42, 0.18, 10, 1, true),
+      new THREE.ConeGeometry(0.45, 0.2, 10, 1, true),
       new THREE.MeshStandardMaterial({ color: 0xc0392b, side: THREE.DoubleSide, roughness: 0.7, flatShading: true }),
     );
-    canopy.position.set(0.18, 1.62, -0.05);
+    canopy.position.set(0, 0.58, 0);
     g.add(canopy);
+    layoutRemoteUmb(g, true);
     return g;
+  }
+
+  function layoutRemoteUmb(g: THREE.Group, seated: boolean) {
+    // 略偏右、壓低；rotation.x 把傘面轉向 -Z（正面擋來殼）
+    if (seated) g.position.set(0.22, 0.9, -0.42);
+    else g.position.set(0.22, 1.18, -0.48);
+    g.rotation.set(-1.22, 0, -0.16);
+  }
+
+  /** 開傘：右臂往前伸握柄 */
+  function poseUmb(r: Remote) {
+    if (!r?.rig?.upperR || !r.rig?.lowerR || !r.rig?.head) return;
+    if (r.seated) poseSit(r); else poseStand(r);
+    placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.32, 0, 0.26, 0.28, -0.3, 0.24, 0.24, -0.55);
+    r.headWorkX = -0.08;
+    hideHold(r);
+  }
+
+  /** 簡易蚵仔刀＋蚵仔（遠端剝殼手持） */
+  function makeRemoteHold(): { knife: THREE.Group; oyster: THREE.Group } {
+    const knife = new THREE.Group();
+    knife.visible = false;
+    const handle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.012, 0.014, 0.09, 5),
+      new THREE.MeshStandardMaterial({ color: 0x7a4a20, roughness: 0.85, flatShading: true }),
+    );
+    handle.rotation.z = Math.PI / 2;
+    knife.add(handle);
+    const blade = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.006, 0.022),
+      new THREE.MeshStandardMaterial({ color: 0xd0d0d8, metalness: 0.7, roughness: 0.3, flatShading: true }),
+    );
+    blade.position.set(-0.08, 0, 0);
+    knife.add(blade);
+
+    const oyster = new THREE.Group();
+    oyster.visible = false;
+    const bot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 7, 5),
+      new THREE.MeshStandardMaterial({ color: 0xe0dcd8, roughness: 0.85, flatShading: true }),
+    );
+    bot.scale.set(1.15, 0.45, 1);
+    oyster.add(bot);
+    const top = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 7, 5),
+      new THREE.MeshStandardMaterial({ color: 0xf0ecea, roughness: 0.85, flatShading: true }),
+    );
+    top.scale.set(1.1, 0.4, 0.95);
+    top.position.set(0, 0.03, 0);
+    oyster.add(top);
+    return { knife, oyster };
+  }
+
+  function hideHold(r: Remote) {
+    r.knife.visible = false;
+    r.oyster.visible = false;
+  }
+
+  function placeHold(r: Remote, kx: number, ky: number, kz: number, ox: number, oy: number, oz: number, showOy: boolean) {
+    r.knife.visible = true;
+    r.knife.position.set(kx, ky, kz);
+    r.knife.rotation.set(0.15, 0.9, 0.2);
+    r.oyster.visible = showOy;
+    if (showOy) {
+      r.oyster.position.set(ox, oy, oz);
+      r.oyster.rotation.set(0.2, 0.3, 0);
+    }
   }
 
   const remoteMeatGeo = new THREE.SphereGeometry(0.03, 6, 5);
@@ -281,15 +361,45 @@ export function createPlazaWorldView(
     return out;
   }
 
-  /** 臂段 box 沿 +Y；從肩→肘→腕串起來，避免袖／小臂脫節 */
+  /**
+   * 臂段沿 +Y；固定 restLen，只跟方向走。
+   * 舊版用端點距離去 scale 會在相位切換時橡皮筋忽長忽短。
+   */
   function placeArmSeg(seg: THREE.Group, ax: number, ay: number, az: number, bx: number, by: number, bz: number) {
-    const len = Math.max(0.04, Math.hypot(bx - ax, by - ay, bz - az));
-    seg.position.set((ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5);
-    _hangDir.set(bx - ax, by - ay, bz - az).normalize();
+    if (!seg) return;
+    const base = (seg.userData.restLen as number) || 0.26;
+    _hangDir.set(bx - ax, by - ay, bz - az);
+    const raw = _hangDir.length();
+    if (raw < 1e-6) {
+      seg.position.set(ax, ay - base * 0.5, az);
+      seg.quaternion.identity();
+      seg.rotation.set(0, 0, 0);
+      seg.scale.set(1, 1, 1);
+      return;
+    }
+    _hangDir.multiplyScalar(1 / raw);
+    seg.position.set(ax + _hangDir.x * base * 0.5, ay + _hangDir.y * base * 0.5, az + _hangDir.z * base * 0.5);
     seg.quaternion.setFromUnitVectors(_hangUp, _hangDir);
     seg.rotation.setFromQuaternion(seg.quaternion);
-    const base = (seg.userData.restLen as number) || 0.26;
-    seg.scale.set(1, len / base, 1);
+    seg.scale.set(1, 1, 1);
+  }
+
+  /** 上臂→實際肘→下臂，肘點用上臂固定長，避免兩段脫節／拉長 */
+  function placeArmChain(
+    upper: THREE.Group, lower: THREE.Group,
+    shx: number, shy: number, shz: number,
+    elx: number, ely: number, elz: number,
+    wrx: number, wry: number, wrz: number,
+  ) {
+    const uLen = (upper.userData.restLen as number) || 0.26;
+    const lLen = (lower.userData.restLen as number) || 0.24;
+    _hangDir.set(elx - shx, ely - shy, elz - shz);
+    if (_hangDir.lengthSq() < 1e-8) _hangDir.set(0, -1, 0); else _hangDir.normalize();
+    const e2x = shx + _hangDir.x * uLen, e2y = shy + _hangDir.y * uLen, e2z = shz + _hangDir.z * uLen;
+    placeArmSeg(upper, shx, shy, shz, e2x, e2y, e2z);
+    _hangDir.set(wrx - e2x, wry - e2y, wrz - e2z);
+    if (_hangDir.lengthSq() < 1e-8) _hangDir.set(0, -1, 0); else _hangDir.normalize();
+    placeArmSeg(lower, e2x, e2y, e2z, e2x + _hangDir.x * lLen, e2y + _hangDir.y * lLen, e2z + _hangDir.z * lLen);
   }
 
   /** 廣場不持槍：藏槍架；臂段從肩垂掛成鏈（否則袖與小臂會分開） */
@@ -299,46 +409,44 @@ export function createPlazaWorldView(
     r.rig.handR.visible = false;
     const hang = (upper: THREE.Group, lower: THREE.Group, side: number) => {
       const shx = side * 0.22, shy = 0.30, shz = 0;
-      // 坐下略前擺，站著自然下垂
+      // 角色朝 -Z；前＝負 Z
       const uFwd = sit ? 0.42 : 0.1;
       const lFwd = sit ? 0.55 : 0.22;
       const out = side * (sit ? 0.06 : 0.04);
       const elbowX = shx + out;
       const elbowY = shy - (sit ? 0.22 : 0.24);
-      const elbowZ = shz + uFwd;
+      const elbowZ = shz - uFwd;
       const wristX = elbowX + out * 0.5;
       const wristY = elbowY - (sit ? 0.16 : 0.2);
-      const wristZ = elbowZ + lFwd - uFwd;
-      placeArmSeg(upper, shx, shy, shz, elbowX, elbowY, elbowZ);
-      placeArmSeg(lower, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
+      const wristZ = elbowZ - (lFwd - uFwd);
+      placeArmChain(upper, lower, shx, shy, shz, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
     };
     hang(r.rig.upperL, r.rig.lowerL, -1);
     hang(r.rig.upperR, r.rig.lowerR, 1);
   }
 
-  /** 走路擺臂：與腿反向（swing>0＝左腿前→右臂前） */
+  /** 走路擺臂：與腿反向（swing>0＝左腿前→右臂前）；前＝負 Z */
   function swingArms(r: Remote, swing: number) {
     r.rig.weaponMount.visible = false;
     r.rig.handL.visible = false;
     r.rig.handR.visible = false;
     const amp = 0.32;
     const base = 0.06;
-    const fwdL = base - swing * amp;
-    const fwdR = base + swing * amp;
-    const hangSwing = (upper: THREE.Group, lower: THREE.Group, side: number, fwd: number) => {
+    const frontL = base - swing * amp;
+    const frontR = base + swing * amp;
+    const hangSwing = (upper: THREE.Group, lower: THREE.Group, side: number, front: number) => {
       const shx = side * 0.22, shy = 0.30;
       const out = side * 0.05;
       const elbowX = shx + out;
       const elbowY = shy - 0.22;
-      const elbowZ = fwd;
+      const elbowZ = -front;
       const wristX = elbowX + out * 0.4;
       const wristY = elbowY - 0.18;
-      const wristZ = fwd + 0.08;
-      placeArmSeg(upper, shx, shy, 0, elbowX, elbowY, elbowZ);
-      placeArmSeg(lower, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
+      const wristZ = -(front + 0.08);
+      placeArmChain(upper, lower, shx, shy, 0, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
     };
-    hangSwing(r.rig.upperL, r.rig.lowerL, -1, fwdL);
-    hangSwing(r.rig.upperR, r.rig.lowerR, 1, fwdR);
+    hangSwing(r.rig.upperL, r.rig.lowerL, -1, frontL);
+    hangSwing(r.rig.upperR, r.rig.lowerR, 1, frontR);
   }
 
   /** makePlayerAvatar 預設 torso.y=0.92、髖=0.72；勿覆寫成 0 否則頭身壓進腳 */
@@ -346,22 +454,30 @@ export function createPlazaWorldView(
 
   /** 坐下丟殼：右手往前甩（肩→肘→腕連續） */
   function poseThrow(r: Remote) {
-    if (!r.seated) return;
+    if (!r?.seated || !r.rig?.upperR || !r.rig?.lowerR || !r.rig?.head) return;
     poseSit(r);
-    placeArmSeg(r.rig.upperR, 0.22, 0.32, 0, 0.28, 0.22, -0.2);
-    placeArmSeg(r.rig.lowerR, 0.28, 0.22, -0.2, 0.3, 0.18, -0.42);
-    r.rig.head.rotation.x = -0.12;
+    placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.32, 0, 0.28, 0.22, -0.2, 0.3, 0.18, -0.42);
+    r.headWorkX = -0.12;
+    hideHold(r);
+  }
+
+  function applyHeadLook(r: Remote) {
+    if (!r.rig?.head) return;
+    r.rig.head.rotation.x = r.headWorkX + r.pitch * 0.85;
+    r.rig.head.rotation.y = r.lookYaw;
   }
 
   function playThrowFx(connId: string) {
     if (!connId) return;
-    let r = remotes.get(connId);
-    if (!r) {
-      for (const x of remotes.values()) { if (x.key === connId || x.pid === connId) { r = x; break; } }
-    }
-    if (!r || !r.seated) return;
-    r.throwT = 0.55;
-    poseThrow(r);
+    try {
+      let r = remotes.get(connId);
+      if (!r) {
+        for (const x of remotes.values()) { if (x.key === connId || x.pid === connId) { r = x; break; } }
+      }
+      if (!r || !r.seated) return;
+      r.throwT = 0.55;
+      poseThrow(r);
+    } catch { /* 遠端已離場／骨架異常時略過甩臂 */ }
   }
 
   /** 坐下：大腿貼椅面、小腿下垂；略後仰離蚵堆 */
@@ -403,35 +519,57 @@ export function createPlazaWorldView(
   }
 
   function applyActionPose(r: Remote) {
-    if (r.throwT > 0) { poseThrow(r); return; }
-    const ph = r.phase;
+    if (r.throwT > 0) { poseThrow(r); applyHeadLook(r); return; }
+    if (r.umb) { poseUmb(r); applyHeadLook(r); return; }
+    const ph = (r.phase || '').toLowerCase();
     if (r.seated) {
       poseSit(r);
       if (ph === 'twist' || ph === 'pry') {
-        r.rig.head.rotation.x = 0.15;
-        placeArmSeg(r.rig.upperR, 0.22, 0.3, 0, 0.26, 0.18, -0.16);
-        placeArmSeg(r.rig.lowerR, 0.26, 0.18, -0.16, 0.24, 0.1, -0.32);
+        // 左手握蚵、右手持刀撬
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.14, 0.2, -0.26, -0.08, 0.14, -0.4);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.16, 0.18, -0.22, 0.02, 0.12, -0.38);
+        placeHold(r, 0.02, 0.12, -0.38, -0.08, 0.14, -0.4, true);
+        r.headWorkX = 0.12;
       } else if (ph === 'seam') {
-        r.rig.head.rotation.x = 0.1;
-        placeArmSeg(r.rig.upperR, 0.22, 0.3, 0, 0.24, 0.16, -0.14);
-        placeArmSeg(r.rig.lowerR, 0.24, 0.16, -0.14, 0.22, 0.08, -0.28);
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.14, 0.2, -0.24, -0.08, 0.14, -0.38);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.14, 0.18, -0.2, 0.0, 0.12, -0.36);
+        placeHold(r, 0.0, 0.12, -0.36, -0.08, 0.14, -0.38, true);
+        r.headWorkX = 0.1;
       } else if (ph === 'aim' || ph === 'toss') {
-        placeArmSeg(r.rig.upperL, -0.22, 0.3, 0, -0.2, 0.22, -0.18);
-        placeArmSeg(r.rig.lowerL, -0.2, 0.22, -0.18, -0.16, 0.16, -0.36);
-        r.rig.head.rotation.x = -0.05;
+        // 左手托肉／蚵往前，右手刀收一點
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.16, 0.22, -0.28, -0.1, 0.16, -0.44);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.2, 0.22, -0.12, 0.18, 0.12, -0.28);
+        placeHold(r, 0.18, 0.12, -0.28, -0.1, 0.16, -0.44, true);
+        r.headWorkX = -0.05;
+      } else if (ph === 'empty') {
+        // 空手殼：右手持殼要丟
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.2, 0.22, -0.1, -0.18, 0.1, -0.22);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.2, 0.24, -0.22, 0.16, 0.18, -0.4);
+        placeHold(r, 0.16, 0.18, -0.4, 0, 0, 0, false);
+        r.oyster.visible = true;
+        r.oyster.position.set(0.16, 0.2, -0.42);
+        r.headWorkX = -0.08;
       } else if (ph === 'scoop' || ph === 'pick') {
-        placeArmSeg(r.rig.upperL, -0.22, 0.3, 0, -0.2, 0.2, -0.14);
-        placeArmSeg(r.rig.lowerL, -0.2, 0.2, -0.14, -0.18, 0.12, -0.3);
-        placeArmSeg(r.rig.upperR, 0.22, 0.3, 0, 0.2, 0.2, -0.12);
-        placeArmSeg(r.rig.lowerR, 0.2, 0.2, -0.12, 0.18, 0.12, -0.28);
-        r.rig.head.rotation.x = 0.08;
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.18, 0.16, -0.22, -0.14, 0.08, -0.36);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.18, 0.16, -0.18, 0.14, 0.08, -0.32);
+        placeHold(r, 0.14, 0.08, -0.32, 0, 0, 0, false);
+        r.headWorkX = 0.08;
+      } else if (ph === 'crab') {
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.12, 0.22, -0.2, -0.06, 0.18, -0.34);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.12, 0.22, -0.2, 0.06, 0.18, -0.34);
+        placeHold(r, 0.06, 0.18, -0.34, -0.06, 0.18, -0.34, true);
+        r.headWorkX = 0.15;
       } else {
-        r.rig.head.rotation.x = 0.05;
+        // busy／其他：刀具在側、暫無蚵
+        placeHold(r, 0.2, 0.12, -0.22, 0, 0, 0, false);
+        r.headWorkX = 0.04;
       }
     } else {
       poseStand(r);
-      r.rig.head.rotation.x = 0;
+      hideHold(r);
+      r.headWorkX = 0;
     }
+    applyHeadLook(r);
   }
 
   function ensure(p: PlazaPlayer, selfPid: string): Remote | null {
@@ -446,14 +584,18 @@ export function createPlazaWorldView(
       rig.outer.scale.setScalar(AVATAR_SCALE);
       const umbMesh = makeRemoteUmb();
       const { props, bowlNode, meatRoot } = makeRemoteProps();
+      const { knife, oyster } = makeRemoteHold();
       rig.outer.add(umbMesh);
       rig.outer.add(props);
+      rig.torso.add(knife);
+      rig.torso.add(oyster);
       r = {
         key, pid: p.pid || '', rig, tag: ensureTag(p.nick || '剝蚵人'), bubble: ensureBubble(), bubUntil: 0,
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
-        props, bowlNode, meatRoot, meatMeshes: [],
+        props, bowlNode, meatRoot, meatMeshes: [], knife, oyster,
         tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0, throwT: 0,
+        tLookYaw: 0, lookYaw: 0, tPitch: 0, pitch: 0, headWorkX: 0,
       };
       remotes.set(key, r);
       r.props.visible = r.seated;
@@ -470,7 +612,11 @@ export function createPlazaWorldView(
     r.pileId = p.pileId; r.slot = p.slot; r.phase = p.phase || r.phase; r.count = p.count ?? r.count;
     r.seated = !!p.seated; r.moving = !!p.moving;
     r.umb = !!p.umb;
+    r.tLookYaw = Number.isFinite(p.lookYaw) ? Math.max(-1.6, Math.min(1.6, p.lookYaw!)) : 0;
+    r.tPitch = Number.isFinite(p.pitch) ? Math.max(-1.4, Math.min(0.85, p.pitch!)) : 0;
+    if (!r.seated) r.tLookYaw = 0;
     r.umbMesh.visible = r.umb;
+    if (r.umb) layoutRemoteUmb(r.umbMesh, r.seated);
     r.props.visible = r.seated;
     if (r.seated) syncRemoteMeats(r);
     if (p.nick && p.nick !== r.nick) { r.nick = p.nick; }
@@ -582,6 +728,7 @@ export function createPlazaWorldView(
   }
 
   const _v = new THREE.Vector3();
+  const _tagHead = new THREE.Vector3();
   const now = () => performance.now();
 
   function placeHud(el: HTMLElement, x: number, z: number, yWorld: number, camera: THREE.Camera, yOff = 0) {
@@ -591,6 +738,12 @@ export function createPlazaWorldView(
     el.style.display = behind ? 'none' : 'block';
     el.style.left = `${sx}px`;
     el.style.top = `${sy}px`;
+  }
+
+  /** 名字／氣泡錨在頭骨上方（勿用估算身高，坐下／走路會偏到胸口或腳邊） */
+  function placeAboveHead(el: HTMLElement, r: Remote, camera: THREE.Camera, yLift: number, yOff = 0) {
+    r.rig.head.getWorldPosition(_tagHead);
+    placeHud(el, _tagHead.x, _tagHead.z, _tagHead.y + yLift, camera, yOff);
   }
 
   function tick(dt: number, camera: THREE.Camera) {
@@ -603,41 +756,44 @@ export function createPlazaWorldView(
       while (dy > Math.PI) dy -= Math.PI * 2;
       while (dy < -Math.PI) dy += Math.PI * 2;
       r.yaw += dy * k;
+      r.lookYaw += (r.tLookYaw - r.lookYaw) * Math.min(1, dt * 10);
+      r.pitch += (r.tPitch - r.pitch) * Math.min(1, dt * 10);
       if (!r.seated && r.moving) {
         r.bob += dt * 10;
         const swing = Math.sin(r.bob) * 0.55;
         r.rig.legL.rotation.x = swing; r.rig.legR.rotation.x = -swing;
         r.rig.shinL.rotation.x = Math.max(0, -swing * 0.5); r.rig.shinR.rotation.x = Math.max(0, swing * 0.5);
         r.rig.root.position.y = Math.abs(Math.sin(r.bob * 2)) * 0.03;
-        if (r.throwT <= 0) swingArms(r, swing);
+        if (r.throwT <= 0) { swingArms(r, swing); hideHold(r); }
       } else if (!r.seated) {
         r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
         r.rig.shinL.rotation.x *= 0.8; r.rig.shinR.rotation.x *= 0.8;
         r.rig.root.position.y *= 0.8;
-        if (r.throwT <= 0) hangArms(r, false);
+        if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
       }
       if (r.throwT > 0) {
         r.throwT -= dt;
         poseThrow(r);
         if (r.throwT <= 0) { r.throwT = 0; applyActionPose(r); }
       }
+      applyHeadLook(r);
       // 坐下略往後移，避免身體埋進蚵堆
       const back = r.seated ? 0.22 : 0;
       const ox = r.x + Math.sin(r.yaw) * back;
       const oz = r.z + Math.cos(r.yaw) * back;
       r.rig.outer.position.set(ox, 0, oz);
       r.rig.outer.rotation.y = r.yaw;
-      const headY = r.seated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.78 : 1.5;
-      placeHud(r.tag, ox, oz, headY, camera);
-      if (r.bubUntil > t) placeHud(r.bubble, ox, oz, headY + 0.18, camera, -28);
+      r.rig.outer.updateMatrixWorld(true);
+      placeAboveHead(r.tag, r, camera, 0.22);
+      if (r.bubUntil > t) placeAboveHead(r.bubble, r, camera, 0.38, -6);
       else if (r.bubble.style.display !== 'none') r.bubble.style.display = 'none';
     }
     if (selfBubUntil > t) {
-      const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.78 : 1.5;
+      const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
       const back = selfSeated ? 0.22 : 0;
       const ox = selfX + Math.sin(selfYaw) * back;
       const oz = selfZ + Math.cos(selfYaw) * back;
-      placeHud(selfBubble, ox, oz, headY + 0.18, camera, -28);
+      placeHud(selfBubble, ox, oz, headY, camera, -6);
     } else if (selfBubble.style.display !== 'none') selfBubble.style.display = 'none';
   }
 

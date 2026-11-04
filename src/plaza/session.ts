@@ -35,6 +35,10 @@ export type PlazaDeps = {
   getMoving: () => boolean;
   /** 是否正撐傘（同步給其他人） */
   getUmb: () => boolean;
+  /** 坐下時左右轉頭（相對座位）；走動時 0 */
+  getLookYaw?: () => number;
+  /** 視角俯仰 */
+  getPitch?: () => number;
   /** 別人丟殼飛過（含打向自己，先播飛行動畫） */
   onShellThrow?: (e: PlazaShellEvent) => void;
   /** 殼飛到自己：結算擋／中 */
@@ -64,6 +68,9 @@ let sittingBusy = false;
 /** 斷線後手動重連 timer */
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let netDown = false;
+/** 聊天縮小時未讀數；打開後清零 */
+let chatUnread = 0;
+let chatPeekTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const isPlazaActive = () => active;
 export const plazaSeated = () => seated;
@@ -138,9 +145,19 @@ const ERR_ZH: Record<string, string> = {
   empty: '碗裡沒肉了',
   throw_fail: '丟殼失敗',
   steal_fail: '偷失敗',
+  other_pile: '只能偷同一堆的人',
+  newcomer: '剛坐下要先剝一會才能偷',
+  protected: '對方碗裡太少，先別偷',
+  umb: '對方撐著傘，偷不到',
+  busy: '對方正在撬殼，下手不了',
+  immune: '對方剛被偷過，先等等',
+  pair_cd: '同一個目標要隔一下再偷',
+  victim_cap: '對方這分鐘被偷太多次了',
+  steal_ban: '偷被抓太多次，先冷靜一下',
 };
 
-function zhErr(e?: string) { return (e && ERR_ZH[e]) || e || '失敗了'; }
+export function plazaZhErr(e?: string) { return (e && ERR_ZH[e]) || e || '失敗了'; }
+function zhErr(e?: string) { return plazaZhErr(e); }
 
 export function openPlaza(D: PlazaDeps) {
   if (active) return;
@@ -269,9 +286,9 @@ function wireClient(D: PlazaDeps) {
     onPose: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onPhase: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onChat: (m) => pushChat(normChat(m)),
-    onShellThrow: (e) => D.onShellThrow?.(e),
-    onShellInbound: (e) => D.onShellInbound?.(e),
-    onStealResult: (e) => D.onStealResult?.(e),
+    onShellThrow: (e) => { try { D.onShellThrow?.(e); } catch (err) { console.error('onShellThrow', err); } },
+    onShellInbound: (e) => { try { D.onShellInbound?.(e); } catch (err) { console.error('onShellInbound', err); } },
+    onStealResult: (e) => { try { D.onStealResult?.(e); } catch (err) { console.error('onStealResult', err); } },
     onReconnecting: (attempt) => {
       if (!active) return;
       netDown = true;
@@ -342,6 +359,8 @@ function normPlayer(p: any): PlazaPlayer {
     seated,
     moving: !!(p?.moving ?? p?.Moving),
     umb: !!(p?.umb ?? p?.Umb),
+    lookYaw: Number(p?.lookYaw ?? p?.LookYaw ?? 0),
+    pitch: Number(p?.pitch ?? p?.Pitch ?? 0),
   };
 }
 function normChat(m: any): PlazaChat {
@@ -380,14 +399,23 @@ function buildUi() {
 #pzX.hide{display:none}
 /* 聊天放左側，避開右下雨傘／丟殼／偷 */
 #pzChatFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 168px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
+#pzChatFab .pzBadge{display:none;position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e23b2f;color:#fff;font-size:11px;font-weight:900;line-height:18px;text-align:center;box-shadow:0 1px 0 #1b1208;pointer-events:none}
+#pzChatFab.hasUnread .pzBadge{display:block}
+#pzChatFab.hasUnread{animation:pzFabPulse .9s ease-in-out 2}
+@keyframes pzFabPulse{0%,100%{transform:scale(1)}40%{transform:scale(1.06)}}
+#pzChatPeek{display:none;pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 220px);max-width:min(70vw,280px);background:rgba(20,12,6,.92);border:2px solid #d9952b;border-radius:12px;padding:8px 10px;color:#fff6d8;font-size:12px;line-height:1.35;z-index:3;cursor:pointer;box-shadow:2px 2px 0 #1b1208}
+#pzChatPeek.on{display:block}
+#pzChatPeek b{color:#ffd23f;font-weight:900}
 #pzChat{display:none;pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 220px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
 #pzChat.open{display:block}
 @media (pointer:fine){
   #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 88px)}
+  #pzChatPeek{bottom:calc(env(safe-area-inset-bottom) + 140px)}
   #pzChat{bottom:calc(env(safe-area-inset-bottom) + 140px)}
 }
 @media (pointer:coarse) and (orientation:landscape){
   #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 120px)}
+  #pzChatPeek{bottom:calc(env(safe-area-inset-bottom) + 172px);max-width:min(42vw,240px)}
   #pzChat{bottom:calc(env(safe-area-inset-bottom) + 172px);width:min(42vw,240px)}
 }
 #pzChatHd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-size:12px;font-weight:800;color:#ffd23f}
@@ -405,7 +433,8 @@ function buildUi() {
 <div id="pzHud">準備中…</div>
 <div id="pzNet" role="status" aria-live="polite"></div>
 <div id="pzSitPrompt"></div>
-<button id="pzChatFab" type="button" aria-label="聊天">聊天</button>
+<button id="pzChatFab" type="button" aria-label="聊天">聊天<span class="pzBadge" aria-hidden="true">0</span></button>
+<button id="pzChatPeek" type="button" aria-label="打開聊天"></button>
 <div id="pzChat">
   <div id="pzChatHd"><span>廣場聊天</span><button id="pzChatMin" type="button" aria-label="縮小">–</button></div>
   <div id="pzLog"></div>
@@ -418,16 +447,90 @@ function buildUi() {
   });
   const chat = ui.querySelector('#pzChat') as HTMLElement;
   const fab = ui.querySelector('#pzChatFab') as HTMLElement;
-  const setChatOpen = (open: boolean) => {
-    chat.classList.toggle('open', open);
-    fab.textContent = open ? '聊天' : '聊天';
-    fab.style.opacity = open ? '0.55' : '1';
-  };
-  fab.addEventListener('click', () => setChatOpen(!chat.classList.contains('open')));
-  ui.querySelector('#pzChatMin')!.addEventListener('click', () => setChatOpen(false));
+  const peek = ui.querySelector('#pzChatPeek') as HTMLElement;
+  const inp = ui.querySelector('#pzIn') as HTMLInputElement;
+  fab.addEventListener('click', () => {
+    if (chat.classList.contains('open')) plazaCloseChat();
+    else plazaFocusChat();
+  });
+  peek.addEventListener('click', () => plazaFocusChat());
+  ui.querySelector('#pzChatMin')!.addEventListener('click', () => plazaCloseChat());
   ui.querySelector('#pzSend')!.addEventListener('click', sendChat);
-  ui.querySelector('#pzIn')!.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') sendChat(); });
+  inp.addEventListener('keydown', (e) => {
+    const ke = e as KeyboardEvent;
+    if (ke.key === 'Enter') { ke.preventDefault(); sendChat(); }
+    if (ke.key === 'Escape') { ke.preventDefault(); plazaCloseChat(); }
+  });
+  chatUnread = 0;
+  plazaCloseChat();
+  hideChatPeek();
+}
+
+function setChatOpen(open: boolean) {
+  const chat = ui?.querySelector('#pzChat') as HTMLElement | null;
+  const fab = ui?.querySelector('#pzChatFab') as HTMLElement | null;
+  if (!chat || !fab) return;
+  chat.classList.toggle('open', open);
+  fab.style.opacity = open ? '0.55' : '1';
+  if (open) {
+    chatUnread = 0;
+    hideChatPeek();
+    syncChatBadge();
+  }
+}
+
+function syncChatBadge() {
+  const fab = ui?.querySelector('#pzChatFab') as HTMLElement | null;
+  const badge = fab?.querySelector('.pzBadge') as HTMLElement | null;
+  if (!fab || !badge) return;
+  const n = chatUnread;
+  fab.classList.toggle('hasUnread', n > 0);
+  badge.textContent = n > 99 ? '99+' : String(n);
+  fab.setAttribute('aria-label', n > 0 ? `聊天，${n} 則未讀` : '聊天');
+}
+
+function hideChatPeek() {
+  if (chatPeekTimer) { clearTimeout(chatPeekTimer); chatPeekTimer = null; }
+  ui?.querySelector('#pzChatPeek')?.classList.remove('on');
+}
+
+/** 縮小中：短暫預覽最新一句，點了開聊天 */
+function showChatPeek(nick: string, text: string) {
+  const peek = ui?.querySelector('#pzChatPeek') as HTMLElement | null;
+  if (!peek || plazaChatIsOpen()) return;
+  const short = text.length > 36 ? text.slice(0, 35) + '…' : text;
+  peek.innerHTML = `<b>${escChat(nick)}</b> ${escChat(short)}`;
+  peek.classList.add('on');
+  if (chatPeekTimer) clearTimeout(chatPeekTimer);
+  chatPeekTimer = setTimeout(() => { chatPeekTimer = null; peek.classList.remove('on'); }, 4200);
+}
+
+function escChat(s: string) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
+
+/** Enter／點聊天：打開並直接打字 */
+export function plazaFocusChat() {
+  if (!active || !ui) return false;
+  setChatOpen(true);
+  const inp = ui.querySelector('#pzIn') as HTMLInputElement | null;
+  if (!inp) return true;
+  // 下一幀 focus，避開 pointer lock 剛退出／按鍵還在冒泡
+  requestAnimationFrame(() => {
+    try { inp.focus({ preventScroll: true }); } catch { inp.focus(); }
+  });
+  return true;
+}
+
+export function plazaCloseChat() {
+  const inp = ui?.querySelector('#pzIn') as HTMLInputElement | null;
+  if (inp && document.activeElement === inp) inp.blur();
   setChatOpen(false);
+  return true;
+}
+
+export function plazaChatIsOpen() {
+  return !!ui?.querySelector('#pzChat')?.classList.contains('open');
 }
 
 function showRoamUi() {
@@ -523,7 +626,7 @@ export async function plazaStandWalk() {
   // 立刻把站起後座標推出去，避免遠端還停在椅上或飛向舊 Sync 點
   if (client?.connected && deps) {
     const p = deps.getWalkXZ();
-    void client.sync(p.x, p.z, deps.getYaw(), 'walk', deps.getCount(), false, deps.getUmb());
+    void client.sync(p.x, p.z, deps.getYaw(), 'walk', deps.getCount(), false, deps.getUmb(), 0, deps.getPitch?.() ?? 0);
   }
 }
 
@@ -544,6 +647,12 @@ function pushChat(m: PlazaChat) {
   while (log.childElementCount > 40) log.firstChild?.remove();
   const isSelf = Boolean(deps && (m.pid === deps.id || (!!m.connId && m.connId === client?.connectionId)));
   view?.showChat({ connId: m.connId || undefined, pid: m.pid || undefined, nick: m.nick, text: m.text, self: isSelf });
+  // 縮小中：角標＋短暫預覽（不自動展開，避免打斷剝蚵）
+  if (!isSelf && !plazaChatIsOpen()) {
+    chatUnread = Math.min(99, chatUnread + 1);
+    syncChatBadge();
+    showChatPeek(m.nick || '誰', m.text || '');
+  }
 }
 
 export function tickPlaza(dt: number) {
@@ -560,7 +669,9 @@ export function tickPlaza(dt: number) {
     const yaw = deps.getYaw();
     const phase = seated ? deps.getPhase() : 'walk';
     const moving = !seated && deps.getMoving();
-    void client.sync(p.x, p.z, yaw, phase, deps.getCount(), moving, deps.getUmb());
+    const lookYaw = seated ? (deps.getLookYaw?.() ?? 0) : 0;
+    const pitch = deps.getPitch?.() ?? 0;
+    void client.sync(p.x, p.z, yaw, phase, deps.getCount(), moving, deps.getUmb(), lookYaw, pitch);
   }
 }
 
@@ -585,6 +696,7 @@ export async function plazaReportEarn(raw: number, oysters: number, durationSec:
 export async function closePlaza(leaveSeat = true) {
   if (!active) return;
   active = false; seated = false; shiftStarted = false; netDown = false;
+  chatUnread = 0; hideChatPeek();
   clearReconnectTimer();
   if (leaveSeat) await client?.leaveSeat();
   await client?.disconnect();

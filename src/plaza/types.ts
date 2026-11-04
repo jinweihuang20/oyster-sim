@@ -13,6 +13,10 @@ export type PlazaPlayer = {
   seated: boolean;
   moving: boolean;
   umb?: boolean;
+  /** 坐下相對座位的左右轉頭 */
+  lookYaw?: number;
+  /** 視角俯仰 */
+  pitch?: number;
 };
 
 export type PlazaSnapshot = {
@@ -54,6 +58,8 @@ export type PlazaStealEvent = {
 export type PlazaAimTarget = {
   connId: string;
   nick: string;
+  pileId: number;
+  phase: string;
   x: number;
   z: number;
   yaw: number;

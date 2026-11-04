@@ -38,17 +38,21 @@ export function plazaHubUrl() {
   return DEFAULT_HUB;
 }
 
+function fin(n: unknown, fallback = 0) {
+  const v = Number(n);
+  return Number.isFinite(v) ? v : fallback;
+}
 function normShell(e: any): PlazaShellEvent {
   return {
-    fromConnId: e?.fromConnId ?? e?.FromConnId ?? '',
-    fromNick: e?.fromNick ?? e?.FromNick ?? '?',
-    toConnId: e?.toConnId ?? e?.ToConnId ?? '',
-    fromX: Number(e?.fromX ?? e?.FromX ?? 0),
-    fromY: Number(e?.fromY ?? e?.FromY ?? 0),
-    fromZ: Number(e?.fromZ ?? e?.FromZ ?? 0),
-    toX: Number(e?.toX ?? e?.ToX ?? 0),
-    toY: Number(e?.toY ?? e?.ToY ?? 0),
-    toZ: Number(e?.toZ ?? e?.ToZ ?? 0),
+    fromConnId: String(e?.fromConnId ?? e?.FromConnId ?? ''),
+    fromNick: String(e?.fromNick ?? e?.FromNick ?? '?'),
+    toConnId: String(e?.toConnId ?? e?.ToConnId ?? ''),
+    fromX: fin(e?.fromX ?? e?.FromX),
+    fromY: fin(e?.fromY ?? e?.FromY),
+    fromZ: fin(e?.fromZ ?? e?.FromZ),
+    toX: fin(e?.toX ?? e?.ToX),
+    toY: fin(e?.toY ?? e?.ToY),
+    toZ: fin(e?.toZ ?? e?.ToZ),
   };
 }
 
@@ -123,9 +127,15 @@ export class PlazaClient {
     conn.on('Pose', (p: PlazaPlayer) => this.handlers.onPose?.(p));
     conn.on('Phase', (p: PlazaPlayer) => this.handlers.onPhase?.(p));
     conn.on('Chat', (m: PlazaChat) => this.handlers.onChat?.(m));
-    conn.on('ShellThrow', (e: any) => this.handlers.onShellThrow?.(normShell(e)));
-    conn.on('ShellInbound', (e: any) => this.handlers.onShellInbound?.(normShell(e)));
-    conn.on('StealResult', (e: any) => this.handlers.onStealResult?.(normSteal(e)));
+    conn.on('ShellThrow', (e: any) => {
+      try { this.handlers.onShellThrow?.(normShell(e)); } catch (err) { console.error('ShellThrow', err); }
+    });
+    conn.on('ShellInbound', (e: any) => {
+      try { this.handlers.onShellInbound?.(normShell(e)); } catch (err) { console.error('ShellInbound', err); }
+    });
+    conn.on('StealResult', (e: any) => {
+      try { this.handlers.onStealResult?.(normSteal(e)); } catch (err) { console.error('StealResult', err); }
+    });
   }
 
   private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string }> {
@@ -197,9 +207,9 @@ export class PlazaClient {
     try { await this.conn.invoke('LeaveSeat'); } catch { /* ignore */ }
   }
 
-  async sync(x: number, z: number, yaw: number, phase: string, count: number, moving: boolean, umb = false) {
+  async sync(x: number, z: number, yaw: number, phase: string, count: number, moving: boolean, umb = false, lookYaw = 0, pitch = 0) {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return;
-    try { await this.conn.invoke('Sync', x, z, yaw, phase, count, moving, umb); } catch { /* ignore */ }
+    try { await this.conn.invoke('Sync', x, z, yaw, phase, count, moving, umb, lookYaw, pitch); } catch { /* ignore */ }
   }
 
   async setPhase(phase: string, count: number) {
