@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PlazaClient } from './hubClient';
 import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST,
-  seatPose, seatKey, nearestFreeSeat, pileObstacles, type PlazaSeatRef,
+  seatPose, seatKey, nearestFreeSeat, pileObstacles, pileCenter, type PlazaSeatRef,
 } from './layout';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
 import type { PlazaChat, PlazaPlayer, PlazaSnapshot } from './types';
@@ -55,6 +55,15 @@ export function plazaMySeat() { return myPile != null && mySlot != null ? { pile
 export function plazaWalkBound() { return WALK_BOUND; }
 export function plazaPileObs() { return pileObstacles(); }
 export function plazaNearSeat() { return near; }
+/** 點擊射線打到哪一堆（給補蚵用） */
+export function plazaHitPile(raycaster: THREE.Raycaster): number | null {
+  return view?.hitPile(raycaster) ?? null;
+}
+/** 自己坐下的那堆中心（補蚵飛出起點） */
+export function plazaMyPileOrigin(out = new THREE.Vector3()) {
+  if (myPile == null) return null;
+  return pileCenter(myPile, out);
+}
 
 const ERR_ZH: Record<string, string> = {
   taken: '這個位子有人了',

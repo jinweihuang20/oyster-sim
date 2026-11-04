@@ -24,8 +24,8 @@ export function seatPose(pileId: number, slot: number) {
     0,
     center.z + Math.cos(a) * SEAT_RADIUS,
   );
-  // 面向堆心
-  const yaw = Math.atan2(center.x - pos.x, center.z - pos.z);
+  // 相機／角色預設看向 -Z；yaw 使 -Z 對準堆心（atan2 用「位置相對堆心」）
+  const yaw = Math.atan2(pos.x - center.x, pos.z - center.z);
   return { pos, yaw, center, angle: a };
 }
 
@@ -56,7 +56,7 @@ export function pileObstacles(): [number, number, number][] {
   const out: [number, number, number][] = [];
   for (let i = 0; i < PILE_COUNT; i++) {
     const c = pileCenter(i);
-    out.push([c.x, c.z, 0.95]);
+    out.push([c.x, c.z, 1.05]);
   }
   return out;
 }

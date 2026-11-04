@@ -25,6 +25,7 @@ const HAIRS = [0x222222, 0x555555, 0x888888, 0x3a2a1a, 0xdddddd];
 
 export type PlazaWorldView = {
   root: THREE.Group;
+  pileGroups: THREE.Group[];
   syncRoster: (snap: PlazaSnapshot, selfPid: string) => void;
   upsert: (p: PlazaPlayer, selfPid: string) => void;
   remove: (p: PlazaPlayer) => void;
@@ -32,6 +33,7 @@ export type PlazaWorldView = {
   setPhase: (p: PlazaPlayer) => void;
   highlight: (pileId: number | null, slot: number | null) => void;
   highlightNear: (seat: PlazaSeatRef | null) => void;
+  hitPile: (raycaster: THREE.Raycaster) => number | null;
   tick: (dt: number, camera: THREE.Camera) => void;
   dispose: () => void;
 };
@@ -41,23 +43,30 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
   const { M, add } = makeMeshHelpers(scene, LO);
   const remotes = new Map<string, Remote>();
   const seatMeshes = new Map<string, THREE.Mesh>();
+  const pileGroups: THREE.Group[] = [];
   let nearKey: string | null = null;
 
   const floor = add(new THREE.PlaneGeometry(WALK_BOUND * 2.4, WALK_BOUND * 2.4), M(0x5e5e58, { roughness: 0.95 }), [0, 0.002, 0], root, false);
   floor.rotation.x = -Math.PI / 2;
 
-  const shellM = M(0xd8d0c8, { roughness: 0.92 });
+  const shellM = M(0xe4dcd2, { roughness: 0.9 });
   for (let i = 0; i < PILE_COUNT; i++) {
     const g = new THREE.Group();
+    g.userData.pileId = i;
     const c = pileCenter(i);
     g.position.copy(c);
-    const cone = add(new THREE.ConeGeometry(0.85, 0.7, 10), shellM, [0, 0.35, 0], g, true);
+    // 坐下時面前要一眼看出是蚵堆：錐體＋散殼
+    const cone = add(new THREE.ConeGeometry(1.05, 0.9, 11), shellM, [0, 0.45, 0], g, true);
+    cone.userData.pileId = i;
     cone.rotation.y = i * 0.3;
-    for (let k = 0; k < 5; k++) {
-      const bit = add(new THREE.SphereGeometry(0.12 + (k % 3) * 0.03, 6, 4), M(0xcfc6bc), [
-        Math.sin(k * 1.7) * 0.35, 0.15 + (k % 2) * 0.08, Math.cos(k * 2.1) * 0.35,
+    for (let k = 0; k < 10; k++) {
+      const bit = add(new THREE.SphereGeometry(0.1 + (k % 3) * 0.035, 6, 4), M(k % 2 ? 0xd8cfc6 : 0xc8beb4), [
+        Math.sin(k * 1.7 + i) * (0.25 + (k % 4) * 0.08),
+        0.12 + (k % 3) * 0.1,
+        Math.cos(k * 2.1 + i) * (0.25 + (k % 4) * 0.08),
       ], g, false);
-      bit.scale.set(1.2, 0.7, 1);
+      bit.userData.pileId = i;
+      bit.scale.set(1.25, 0.65, 1.05);
     }
     for (let s = 0; s < SLOTS_PER_PILE; s++) {
       const pose = seatPose(i, s);
@@ -68,6 +77,18 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
       seatMeshes.set(seatKey(i, s), pad);
     }
     root.add(g);
+    pileGroups.push(g);
+  }
+
+  function hitPile(raycaster: THREE.Raycaster): number | null {
+    const hits = raycaster.intersectObjects(pileGroups, true);
+    if (!hits.length) return null;
+    let o: THREE.Object3D | null = hits[0].object;
+    while (o) {
+      if (typeof o.userData.pileId === 'number') return o.userData.pileId as number;
+      o = o.parent;
+    }
+    return null;
   }
 
   function hashLook(pid: string) {
@@ -258,7 +279,7 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
     });
   }
 
-  return { root, syncRoster, upsert, remove, applyPose, setPhase, highlight, highlightNear, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, applyPose, setPhase, highlight, highlightNear, hitPile, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {

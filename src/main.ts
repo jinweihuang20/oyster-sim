@@ -11,6 +11,7 @@ import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponI
 import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaPileObs, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
+  plazaHitPile, plazaMyPileOrigin,
 } from './plaza';
 import { ODD } from './oddities';
 import { installNoZoom } from './nozoom';
@@ -837,7 +838,7 @@ function setPhase(p: Phase) {
   if (p === 'seam' || p === 'twist') updDiff();
 }
 function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・要撬 ${pryNeed()} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
-function goPick() { if (state !== 'play' || walking) return; if (evRun?.steal === 'steal_only') { oyster.visible = false; setPhase('busy'); hint.textContent = '本活動只能用偷的：趁阿婆轉頭聊天，偷她碗裡的肉'; return; } oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = plazaMode ? '臉盆空了！點一下再撈一把' : '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把'; }
+function goPick() { if (state !== 'play' || walking) return; if (evRun?.steal === 'steal_only') { oyster.visible = false; setPhase('busy'); hint.textContent = '本活動只能用偷的：趁阿婆轉頭聊天，偷她碗裡的肉'; return; } oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把'; }
 function holdOyster(dd: number) {
   if (state !== 'play' || walking) return;
   if (saltNext && !tut) { saltNext = false; if (dd > 1) dd = Math.random() < 0.5 ? 0 : 1; toast('🧂 粗鹽搓過，這顆比較好開', '#cfc3ff'); drawMeds(); }
@@ -1179,7 +1180,16 @@ function makeBasinOyster(dd: number) {
 function basinSlot(i: number) { const a = i * 2.4, r = 0.06 + (i % 4) * 0.05; return new THREE.Vector3(BASIN.x + Math.cos(a) * r, 0.14 + Math.floor(i / 6) * 0.04, BASIN.z + Math.sin(a) * r); }
 function fillBasin(animate: boolean) {
   for (let i = 0; i < 8; i++) { const m = makeBasinOyster(wpick((newbie() ? [50, 50, 0, 0] : locW()).map(w => ({ w })))); const slot = basinSlot(i); m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2)); basinOy.push(m);
-    if (animate) { const p0 = plazaMode ? BASIN.clone().add(new THREE.Vector3(rnd(-0.25, 0.25), 0.35, rnd(-0.25, 0.25))) : pileSpot(); fly(m, p0, slot, 0.4 + i * 0.05, 0.4, () => m.position.copy(slot)); } else { m.position.copy(slot); scene.add(m); } }
+    if (animate) {
+      let p0: THREE.Vector3;
+      if (plazaMode) {
+        const origin = plazaMyPileOrigin();
+        p0 = origin
+          ? origin.clone().add(new THREE.Vector3(rnd(-0.35, 0.35), 0.35 + rnd(0, 0.2), rnd(-0.35, 0.35)))
+          : BASIN.clone().add(new THREE.Vector3(rnd(-0.25, 0.25), 0.35, rnd(-0.25, 0.25)));
+      } else p0 = pileSpot();
+      fly(m, p0, slot, 0.4 + i * 0.05, 0.4, () => m.position.copy(slot));
+    } else { m.position.copy(slot); scene.add(m); } }
 }
 function hitsOyster(cx: number, cy: number) { camera.updateMatrixWorld(); viewCam().updateMatrixWorld(); ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), viewCam()); return ray.intersectObject(oyster, true).length > 0; }
 function pickAt(cx: number, cy: number) {
@@ -1192,9 +1202,16 @@ function pickAt(cx: number, cy: number) {
   let best: THREE.Mesh | null = null, bd = Math.max(110, innerWidth * 0.12);
   for (const m of basinOy) { const p = m.position.clone().project(viewCam()); if (p.z > 1) continue; const d = Math.hypot((p.x + 1) / 2 * innerWidth - cx, (1 - p.y) / 2 * innerHeight - cy); if (d < bd) { bd = d; best = m; } }
   if (best) { grab(best); return; }
-  if (plazaMode && !basinOy.length) { scoop(); return; }
-  if (ray.intersectObject(pileHit, false).length || ray.intersectObject(pile, false).length) { scoop(); return; }
-  hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : (plazaMode ? '臉盆空了！再點一下撈一把' : '臉盆空了！點中間的蚵殼山撈一把');
+  if (plazaMode) {
+    // 臉盆空了：點自己面前蚵堆（或畫面）就撈
+    if (!basinOy.length) {
+      const hitId = plazaHitPile(ray);
+      const mine = plazaMySeat()?.pileId;
+      if (hitId == null || mine == null || hitId === mine) { scoop(); return; }
+      toast('請點自己面前這一堆蚵仔', '#ffb08a'); return;
+    }
+  } else if (ray.intersectObject(pileHit, false).length || ray.intersectObject(pile, false).length) { scoop(); return; }
+  hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : (plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！點中間的蚵殼山撈一把');
 }
 function grab(m: THREE.Mesh) {
   basinOy.splice(basinOy.indexOf(m), 1); setPhase('busy'); reach = 0.35; tone(500, 0.05, 0.08, 'triangle'); noise(0.05, 1200, 0.2);
@@ -2112,7 +2129,8 @@ $('oDmHorde').onclick = () => launchDeathmatch('horde');
 function plazaHideYard(hide: boolean) {
   if (hide) {
     plazaHomeHide = [];
-    for (const o of [pile, ground, ...stools, ...ALL_NPCS.map(n => n.g)]) {
+    const baseCone = typeof pileHit !== 'undefined' ? pileHit : null;
+    for (const o of [pile, ground, baseCone, ...stools, ...ALL_NPCS.map(n => n.g)]) {
       if (!o || (o as any).__plazaHid) continue;
       (o as any).__plazaHid = o.visible; o.visible = false; plazaHomeHide.push(o);
     }
@@ -2173,7 +2191,8 @@ function launchPlaza() {
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.85;
       startDay();
       on('standBtn', true);
-      hint.textContent = '坐下了，開始剝蚵！按「🚶」可站起來換堆';
+      hint.textContent = '坐下了！點面前蚵仔堆撈蚵，臉盆空了再點堆補貨。按「🚶」可換堆';
+      toast('點面前的蚵仔堆就能撈蚵進臉盆', '#9be37a');
     },
     resumeSit: () => {
       walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear();

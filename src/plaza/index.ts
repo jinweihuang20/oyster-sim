@@ -1,6 +1,7 @@
 export {
   openPlaza, closePlaza, isPlazaActive, plazaSeated, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaPileObs, plazaNearSeat, plazaTrySit, plazaStandWalk,
+  plazaHitPile, plazaMyPileOrigin,
   tickPlaza, plazaReportEarn, plazaEndCleanup, type PlazaDeps,
 } from './session';
-export { PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, seatPose, WALK_BOUND } from './layout';
+export { PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, seatPose, WALK_BOUND, pileCenter } from './layout';
