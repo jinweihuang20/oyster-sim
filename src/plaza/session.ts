@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PlazaClient } from './hubClient';
 import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST,
-  seatPose, seatKey, nearestFreeSeat, pileObstacles, pileCenter, type PlazaSeatRef,
+  seatPose, seatKey, nearestFreeSeat, pileObstacles, pileCenter, randomWalkSpawn, type PlazaSeatRef,
 } from './layout';
 import { plazaShedPosts } from './props';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
@@ -35,10 +35,12 @@ export type PlazaDeps = {
   getMoving: () => boolean;
   /** 是否正撐傘（同步給其他人） */
   getUmb: () => boolean;
-  /** 坐下時左右轉頭（相對座位）；走動時 0 */
+  /** 坐下時左右轉頭（相對座位）；第一人稱走動也可送，第三人稱走動為 0 */
   getLookYaw?: () => number;
-  /** 視角俯仰 */
+  /** 視角俯仰；第三人稱走動鎖 0，其餘照本機 */
   getPitch?: () => number;
+  /** 是否第三人稱（走動時用來決定要不要鎖頭／俯仰同步） */
+  getTpv?: () => boolean;
   /** 別人丟殼飛過（含打向自己，先播飛行動畫） */
   onShellThrow?: (e: PlazaShellEvent) => void;
   /** 殼飛到自己：結算擋／中 */
@@ -81,6 +83,11 @@ export function plazaPileObs(): [number, number, number][] {
   const out = pileObstacles();
   for (const p of plazaShedPosts()) out.push([p.x, p.z, 0.22]);
   return out;
+}
+/** 入場隨機站位（避開蚵堆／棚柱，面向中心） */
+export function plazaRandomSpawn() {
+  const posts: [number, number, number][] = plazaShedPosts().map(p => [p.x, p.z, 0.22]);
+  return randomWalkSpawn(posts);
 }
 export function plazaNearSeat() { return near; }
 /** 點擊射線打到哪一堆（給補蚵用） */
@@ -415,6 +422,12 @@ function buildUi() {
   #pzChatPeek{bottom:calc(env(safe-area-inset-bottom) + 140px)}
   #pzChat{bottom:calc(env(safe-area-inset-bottom) + 140px)}
 }
+/* 電腦寬螢幕：聊天窗加寬，方便看長句 */
+@media (pointer:fine) and (min-width:900px){
+  #pzChat{width:min(36vw,420px)}
+  #pzChatPeek{max-width:min(36vw,420px)}
+  #pzLog{height:88px}
+}
 @media (pointer:coarse) and (orientation:landscape){
   #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 120px)}
   #pzChatPeek{bottom:calc(env(safe-area-inset-bottom) + 172px);max-width:min(42vw,240px)}
@@ -628,7 +641,12 @@ export async function plazaStandWalk() {
   // 立刻把站起後座標推出去，避免遠端還停在椅上或飛向舊 Sync 點
   if (client?.connected && deps) {
     const p = deps.getWalkXZ();
-    void client.sync(p.x, p.z, deps.getYaw(), 'walk', deps.getCount(), false, deps.getUmb(), 0, deps.getPitch?.() ?? 0);
+    const lockLook = deps.getTpv?.() ?? false;
+    void client.sync(
+      p.x, p.z, deps.getYaw(), 'walk', deps.getCount(), false, deps.getUmb(),
+      lockLook ? 0 : (deps.getLookYaw?.() ?? 0),
+      lockLook ? 0 : (deps.getPitch?.() ?? 0),
+    );
   }
 }
 
@@ -671,8 +689,10 @@ export function tickPlaza(dt: number) {
     const yaw = deps.getYaw();
     const phase = seated ? deps.getPhase() : 'walk';
     const moving = !seated && deps.getMoving();
-    const lookYaw = seated ? (deps.getLookYaw?.() ?? 0) : 0;
-    const pitch = deps.getPitch?.() ?? 0;
+    // 第三人稱走動：鎖 look，避免遠端上下點頭；第一人稱／坐下照常同步頭
+    const lockLook = !seated && (deps.getTpv?.() ?? false);
+    const lookYaw = lockLook ? 0 : (deps.getLookYaw?.() ?? 0);
+    const pitch = lockLook ? 0 : (deps.getPitch?.() ?? 0);
     void client.sync(p.x, p.z, yaw, phase, deps.getCount(), moving, deps.getUmb(), lookYaw, pitch);
   }
 }

@@ -96,7 +96,7 @@ alwaysApply: true
 
 ## 操作（必須雙端）
 
-- 桌面：滑鼠＋Pointer Lock；Space／A D／E 偷／F 丟殼／R 傘／Q 放棄／G 換位／V 收音機／M 藥
+- 桌面：滑鼠＋Pointer Lock；Space／A D／E 偷／F 丟殼／R 傘／Q 放棄／G 換位／V 視角／M 藥；收音機點按鈕
 - 觸控：點螢幕撬、半畫面拖轉蚵、螢幕按鈕；`COARSE` 文案分支
 - `?shot=` 截圖測試；`?stattest=1`／`?feedtest=1` 測試旗標
 

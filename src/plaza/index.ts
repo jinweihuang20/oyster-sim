@@ -1,6 +1,6 @@
 export {
   openPlaza, closePlaza, isPlazaActive, plazaSeated, plazaMySeat, plazaShiftStarted,
-  plazaWalkBound, plazaPileObs, plazaNearSeat, plazaTrySit, plazaStandWalk,
+  plazaWalkBound, plazaPileObs, plazaRandomSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk,
   plazaHitPile, plazaMyPileOrigin,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
   tickPlaza, plazaReportEarn, plazaEndCleanup, plazaHideChrome,

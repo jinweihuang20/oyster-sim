@@ -42,6 +42,8 @@ type Remote = {
   tPitch: number; pitch: number;
   /** 工作姿勢附加的頭傾（再疊 look pitch） */
   headWorkX: number;
+  /** 剛進場、座標尚不可信：先藏模型，避免從原點高速滑行 */
+  awaitingPose: boolean;
 };
 
 const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
@@ -467,6 +469,7 @@ export function createPlazaWorldView(
 
   function applyHeadLook(r: Remote) {
     if (!r.rig?.head) return;
+    // 坐下：lookYaw＝相對座位；走動：lookYaw 多為 0（身體跟 yaw），pitch 第一人稱會同步
     r.rig.head.rotation.x = r.headWorkX + r.pitch * 0.85;
     r.rig.head.rotation.y = r.lookYaw;
   }
@@ -626,6 +629,8 @@ export function createPlazaWorldView(
       rig.outer.add(props);
       rig.torso.add(knife);
       rig.torso.add(oyster);
+      // Joined 常帶 (0,0)；未入座時先藏，等第一次可信座標再顯示
+      const awaitingPose = !p.seated && Math.hypot(x, z) < 0.2;
       r = {
         key: pid, connId: p.connId || '', pid, rig, tag: ensureTag(p.nick || '剝蚵人'), bubble: ensureBubble(), bubUntil: 0,
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
@@ -633,11 +638,13 @@ export function createPlazaWorldView(
         props, bowlNode, meatRoot, meatMeshes: [], knife, oyster,
         tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0, throwT: 0,
         tLookYaw: 0, lookYaw: 0, tPitch: 0, pitch: 0, headWorkX: 0,
+        awaitingPose,
       };
       remotes.set(pid, r);
       r.props.visible = r.seated;
       if (r.seated) syncRemoteMeats(r);
       hangArms(r, r.seated);
+      if (awaitingPose) { rig.outer.visible = false; r.tag.style.display = 'none'; }
     }
     if (p.connId) r.connId = p.connId;
     return r;
@@ -652,7 +659,7 @@ export function createPlazaWorldView(
     r.umb = !!p.umb;
     r.tLookYaw = Number.isFinite(p.lookYaw) ? Math.max(-1.6, Math.min(1.6, p.lookYaw!)) : 0;
     r.tPitch = Number.isFinite(p.pitch) ? Math.max(-1.4, Math.min(0.85, p.pitch!)) : 0;
-    if (!r.seated) r.tLookYaw = 0;
+    // 走動時身體已朝 yaw；頭左右相對量通常為 0（由傳送端決定是否鎖 pitch）
     r.umbMesh.visible = r.umb;
     if (r.umb) layoutRemoteUmb(r.umbMesh, r.seated);
     r.props.visible = r.seated;
@@ -679,10 +686,30 @@ export function createPlazaWorldView(
         if (typeof p.x === 'number') r.tx = p.x;
         if (typeof p.z === 'number') r.tz = p.z;
         if (typeof p.yaw === 'number') r.tyaw = p.yaw;
+        // 進場／瞬移：目標離現況太遠就直接貼上，避免從 (0,0) 高速滑行
+        snapRemoteIfFar(r);
+        revealRemoteIfReady(r);
       }
     }
+    if (r.seated && r.awaitingPose) revealRemoteIfReady(r);
     applyActionPose(r);
     paintOcc();
+  }
+
+  /** 距離過大視為瞬移（新進廣場、重連），不走插值 */
+  function snapRemoteIfFar(r: Remote, maxDist = 2.8) {
+    if (Math.hypot(r.tx - r.x, r.tz - r.z) <= maxDist) return;
+    r.x = r.tx; r.z = r.tz; r.yaw = r.tyaw;
+  }
+
+  function revealRemoteIfReady(r: Remote) {
+    if (!r.awaitingPose) return;
+    // 已入座，或座標離開原點附近 → 可視
+    if (!r.seated && Math.hypot(r.tx, r.tz) < 0.2) return;
+    r.x = r.tx; r.z = r.tz; r.yaw = r.tyaw;
+    r.awaitingPose = false;
+    r.rig.outer.visible = true;
+    r.tag.style.display = '';
   }
 
   function upsert(p: PlazaPlayer, selfPid: string) { applyPose(p, selfPid); }
@@ -815,6 +842,7 @@ export function createPlazaWorldView(
     const k = Math.min(1, dt * 10);
     const t = now();
     for (const r of remotes.values()) {
+      snapRemoteIfFar(r);
       r.x += (r.tx - r.x) * k;
       r.z += (r.tz - r.z) * k;
       let dy = r.tyaw - r.yaw;
@@ -842,8 +870,8 @@ export function createPlazaWorldView(
         if (r.throwT <= 0) { r.throwT = 0; applyActionPose(r); }
       }
       applyHeadLook(r);
-      // 坐下略往後移，避免身體埋進蚵堆
-      const back = r.seated ? 0.22 : 0;
+      // 坐下略往前（負＝朝蚵堆），避免後背穿出椅背
+      const back = r.seated ? -0.08 : 0;
       const ox = r.x + Math.sin(r.yaw) * back;
       const oz = r.z + Math.cos(r.yaw) * back;
       r.rig.outer.position.set(ox, 0, oz);
@@ -855,7 +883,7 @@ export function createPlazaWorldView(
     }
     if (selfBubUntil > t) {
       const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
-      const back = selfSeated ? 0.22 : 0;
+      const back = selfSeated ? -0.08 : 0;
       const ox = selfX + Math.sin(selfYaw) * back;
       const oz = selfZ + Math.cos(selfYaw) * back;
       placeHud(selfBubble, ox, oz, headY, camera, -6);

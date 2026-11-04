@@ -61,3 +61,25 @@ export function pileObstacles(): [number, number, number][] {
   }
   return out;
 }
+
+/**
+ * 入場隨機站位：在走動界內、避開蚵堆圓，並朝廣場中心。
+ * `extraObs` 可帶入棚柱等 `[x, z, radius]`。
+ */
+export function randomWalkSpawn(extraObs: [number, number, number][] = []): { x: number; z: number; yaw: number } {
+  const bound = WALK_BOUND * 0.82;
+  const obs = [...pileObstacles(), ...extraObs];
+  const clear = 0.5;
+  for (let n = 0; n < 48; n++) {
+    const x = (Math.random() * 2 - 1) * bound;
+    const z = (Math.random() * 2 - 1) * bound;
+    let hit = false;
+    for (const [ox, oz, radius] of obs) {
+      if (Math.hypot(x - ox, z - oz) < radius + clear) { hit = true; break; }
+    }
+    if (hit) continue;
+    // yaw=0 看 -Z；atan2(x,z) 讓面前朝向原點
+    return { x, z, yaw: Math.atan2(x, z) };
+  }
+  return { x: 0, z: WALK_BOUND * 0.72, yaw: 0 };
+}
