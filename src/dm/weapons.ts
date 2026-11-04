@@ -29,6 +29,11 @@ export interface WeaponDef {
   burstPause: number;
   /** 子彈飛行速度（世界單位／秒） */
   bulletSpeed: number;
+  /**
+   * 軀幹傷害／彈（對齊 CS 無甲胸傷 ×2，因死鬥 MAX_HP=200）。
+   * 頭＝×4、腿＝×0.5；散彈為每顆彈丸傷害。
+   */
+  damage: number;
   /** 每次扣板機的彈丸數（散彈＞1） */
   pelletCount: number;
   /** 彈丸散布（弧度） */
@@ -50,6 +55,16 @@ export interface WeaponDef {
   inShop: boolean;
 }
 
+/** 部位倍率（近似 CS：頭×4、腿×0.75→本作 leg 用 0.5 對齊舊手感） */
+export const HEAD_DAMAGE_MUL = 4;
+export const LEGS_DAMAGE_MUL = 0.5;
+
+export function partDamage(bodyDamage: number, part: 'head' | 'body' | 'legs'): number {
+  if (part === 'head') return Math.round(bodyDamage * HEAD_DAMAGE_MUL);
+  if (part === 'legs') return Math.round(bodyDamage * LEGS_DAMAGE_MUL);
+  return Math.round(bodyDamage);
+}
+
 /** 運行中實例：彈藥／後座力／view 掛這裡 */
 export interface Weapon {
   def: WeaponDef;
@@ -61,6 +76,7 @@ export interface Weapon {
 }
 
 export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
+  // 傷害對照 CS 無甲胸傷 ×2（MAX_HP 200≈CS 100）
   oysterGun: {
     id: 'oysterGun',
     name: '蚵仔槍',
@@ -70,6 +86,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     burstCount: 3,
     burstPause: 0.48,
     bulletSpeed: 90,
+    damage: 60, // FAMAS 30
     pelletCount: 1,
     spread: 0,
     kickScale: 1,
@@ -90,6 +107,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     burstCount: 1,
     burstPause: 0,
     bulletSpeed: 100,
+    damage: 72, // AK-47 36 → 約 3 槍軀幹
     pelletCount: 1,
     spread: 0.012,
     kickScale: 1.35,
@@ -110,6 +128,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     burstCount: 1,
     burstPause: 0,
     bulletSpeed: 105,
+    damage: 66, // M4A4 33 → 約 4 槍軀幹，射速補
     pelletCount: 1,
     spread: 0.008,
     kickScale: 0.95,
@@ -130,6 +149,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     burstCount: 1,
     burstPause: 0,
     bulletSpeed: 130,
+    damage: 106, // Deagle 53 → 約 2 槍軀幹／頭秒殺
     pelletCount: 1,
     spread: 0.01,
     kickScale: 2.2,
@@ -150,6 +170,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     burstCount: 1,
     burstPause: 0,
     bulletSpeed: 75,
+    damage: 50, // MAC-10／MP9 一帶；射速換單發較低
     pelletCount: 1,
     spread: 0.028,
     kickScale: 0.75,
@@ -170,6 +191,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     burstCount: 1,
     burstPause: 0,
     bulletSpeed: 70,
+    damage: 34, // Nova 單彈丸 ~26；×6 近距約可收掉滿血
     pelletCount: 6,
     spread: 0.085,
     kickScale: 2.4,
@@ -190,6 +212,7 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
     burstCount: 1,
     burstPause: 0,
     bulletSpeed: 160,
+    damage: 110, // 近 AWP 無甲胸傷；滿血軀幹要兩槍，頭仍秒殺（×4）
     pelletCount: 1,
     spread: 0,
     kickScale: 1.85,

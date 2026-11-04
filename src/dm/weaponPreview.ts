@@ -40,7 +40,7 @@ export function openWeaponPreview(opts: WeaponPreviewOpts) {
 <b class="wpnPrevTitle">${def.name}</b>
 <small class="wpnPrevBlurb">${def.blurb}</small>
 <div class="wpnPrevStage"><canvas></canvas><span class="wpnPrevHint">拖曳可旋轉</span></div>
-<div class="wpnPrevMeta">彈匣 ${def.maxAmmo}　射速 ${def.fireRate.toFixed(1)}/s${def.burstCount > 1 ? `　${def.burstCount} 連發` : ''}${def.pelletCount > 1 ? `　散彈 ×${def.pelletCount}` : ''}　彈速 ${def.bulletSpeed}${def.zoom > 1 ? `　開鏡 ${def.zoom}×` : ''}</div>
+<div class="wpnPrevMeta">傷害 ${def.damage}　彈匣 ${def.maxAmmo}　射速 ${def.fireRate.toFixed(1)}/s${def.burstCount > 1 ? `　${def.burstCount} 連發` : ''}${def.pelletCount > 1 ? `　散彈 ×${def.pelletCount}` : ''}　彈速 ${def.bulletSpeed}${def.zoom > 1 ? `　開鏡 ${def.zoom}×` : ''}</div>
 <div class="wpnPrevAct">${opts.actionsHtml ?? ''}</div>
 </div>`;
   document.body.appendChild(root);
