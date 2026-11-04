@@ -12,6 +12,8 @@ import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaPileObs, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin,
+  plazaConnId, plazaAimTargets, plazaThrowAt, plazaStealFrom,
+  type PlazaAimTarget, type PlazaShellEvent,
 } from './plaza';
 import { ODD } from './oddities';
 import { installNoZoom } from './nozoom';
@@ -1644,14 +1646,106 @@ function grudgeUI(n: Npc) {
   const g = n.grudge ?? 0; n.gIcon.visible = n.gBar!.visible = g > 4; n.gIcon.scale.setScalar(0.12 + g * 0.0015); n.gBar!.scale.set(0.006 + g * 0.0032, 0.035, 1);
   (n.gBar!.material as THREE.SpriteMaterial).color.setHSL(0.12 - g * 0.0012, 1, 0.5);
 }
+function plazaThrowTarget(): PlazaAimTarget | null {
+  let best: PlazaAimTarget | null = null, bestScore = 1e9;
+  for (const t of plazaAimTargets()) {
+    const p = new THREE.Vector3(t.head.x, t.head.y, t.head.z).project(camera);
+    if (p.z >= 1) continue;
+    const s = Math.abs(p.x) * 1.2 + Math.abs(p.y);
+    if (Math.abs(p.x) < 0.32 && Math.abs(p.y) < 0.5 && s < bestScore) { best = t; bestScore = s; }
+  }
+  return best;
+}
+function plazaStealTarget(): PlazaAimTarget | null {
+  for (const t of plazaAimTargets()) {
+    const p = new THREE.Vector3(t.bowl.x, t.bowl.y, t.bowl.z).project(camera);
+    if (p.z < 1 && Math.abs(p.x) < 0.32 && Math.abs(p.y) < 0.4) return t;
+  }
+  return null;
+}
+/** 對方是否大致看著自己（盯著就不能偷） */
+function plazaWatchingMe(t: PlazaAimTarget) {
+  const me = camera.position;
+  const dx = me.x - t.x, dz = me.z - t.z;
+  const len = Math.hypot(dx, dz) || 1;
+  const fx = -Math.sin(t.yaw), fz = -Math.cos(t.yaw);
+  return (fx * dx + fz * dz) / len > 0.25;
+}
+function plazaFlyShell(e: PlazaShellEvent, onArrive?: () => void) {
+  const sh = new THREE.Mesh(halfGeo, shellBotMat);
+  const from = new THREE.Vector3(e.fromX, e.fromY, e.fromZ);
+  const to = new THREE.Vector3(e.toX, e.toY, e.toZ);
+  SFX.whoosh();
+  fly(sh, from, to, 0.55, 0.35, () => { scene.remove(sh); onArrive?.(); });
+}
+function resolvePlazaInbound(e: PlazaShellEvent) {
+  const U = umbNow(), up = umbT > 0 && umbAge() >= U.open, covered = up && Math.random() < U.cover;
+  if (up && !covered) toast('傘縫裡鑽進來了！', '#ff9a8a');
+  if (covered && umbAge() - U.open < U.perf) {
+    reflects++; blockStreak++; SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
+    const sh = new THREE.Mesh(halfGeo, shellBotMat);
+    const from = new THREE.Vector3(e.toX, e.toY, e.toZ);
+    const back = new THREE.Vector3(e.fromX, e.fromY, e.fromZ);
+    fly(sh, from, back, 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); });
+  } else if (covered) {
+    blocks++; blockStreak++; SFX.boing(); toast(`擋住 ${e.fromNick} 的殼！`, '#9be37a');
+  } else {
+    blockStreak = 0; hitsTaken++;
+    ($('splat') as HTMLElement).style.opacity = '1';
+    later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0');
+    hurt(8, `${e.fromNick} 丟中你了！`); hitInHand();
+  }
+  updHud();
+}
+let plazaStealTgt: PlazaAimTarget | null = null;
+function startPlazaSteal() {
+  if (state !== 'play' || umbHeld || !plazaSeated()) return;
+  const t = plazaStealTarget(); if (!t) return;
+  plazaStealTgt = t; stealT = 0; SFX.sneak();
+  if (plazaWatchingMe(t)) {
+    caught++; plazaStealTgt = null; stealT = 0; penalty += 5;
+    toast(`${t.nick} 抓到你偷了！罰 $5`, '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
+    void plazaStealFrom(t.connId, true);
+  }
+}
+function stopPlazaSteal() { plazaStealTgt = null; stealT = 0; on('prog', phase === 'twist' || phase === 'crab' || phase === 'scoop'); }
+async function finishPlazaSteal(t: PlazaAimTarget) {
+  stopPlazaSteal();
+  if (t.count <= 0) { toast('碗裡沒肉了'); return; }
+  const r = await plazaStealFrom(t.connId, false);
+  if (!r.ok || !r.steal) { toast(r.err === 'empty' ? '碗裡沒肉了' : '偷失敗了', '#ffb08a'); return; }
+  if (r.steal.caught) {
+    caught++; penalty += 5; toast(`${t.nick} 抓到你偷了！罰 $5`, '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
+    return;
+  }
+  count = r.steal.fromCount;
+  meatPay += DPAY[1]; steals++; evMeat();
+  const m = new THREE.Mesh(meatGeo, meatMat);
+  const from = new THREE.Vector3(t.bowl.x, t.bowl.y, t.bowl.z);
+  fly(m, from, BOWL.clone().add(new THREE.Vector3(rnd(-0.08, 0.08), 0.06, rnd(-0.08, 0.08))), 0.5, 0.3, () => bowlMeat.push(m));
+  SFX.sneak(); toast(`偷到 ${t.nick} 一顆！`, '#c9a0ff'); updHud();
+}
 // ----- 6. 擲殼仔 -----
 function throwShell() {
   if (state !== 'play' || (phase !== 'empty' && phase !== 'seam')) return;
   thrown++; if (phase === 'seam') { abandoned++; wasteShells++; }
   const from = worldOf(oyster); oyster.visible = false;
+  const sh = new THREE.Mesh(halfGeo, shellBotMat); SFX.whoosh();
+  if (plazaMode) {
+    const pt = plazaThrowTarget();
+    if (pt) {
+      const to = new THREE.Vector3(pt.head.x, pt.head.y, pt.head.z);
+      fly(sh, from, to, 0.5, 0.3, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); });
+      void plazaThrowAt(pt.connId, from, to);
+    } else {
+      const a = aimPoint(); a.y = 0.02;
+      fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh)));
+    }
+    setPhase('busy'); later(0.6, goPick);
+    return;
+  }
   let target: Npc | undefined;
   for (const n of npcs) { const p = worldOf(n.head).project(camera); if (p.z < 1 && Math.abs(p.x) < 0.25 && Math.abs(p.y) < 0.45) target = n; }
-  const sh = new THREE.Mesh(halfGeo, shellBotMat); SFX.whoosh();
   if (target) { const t = target; fly(sh, from, () => worldOf(t.head), 0.5, 0.3, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟中${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 35); npcHurt(t); updHud(); }); }
   else { let stray: Npc | undefined; for (const n of npcs) { const p = worldOf(n.head).project(camera); if (p.z < 1 && Math.abs(p.x) < 0.7 && Math.abs(p.y) < 0.8 && Math.random() < 0.4) stray = n; }
     if (stray) { const t = stray; fly(sh, from, () => worldOf(t.head), 0.55, 0.35, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟歪打中${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 30); npcHurt(t); updHud(); }); }
@@ -1697,8 +1791,14 @@ let umbLen = 0.9;
 const umbAge = () => umbLen - umbT;
 // ----- 4. 偷蚵仔 -----
 function stealTarget() { for (const n of npcs) { const p = n.bowl.clone().project(camera); if (p.z < 1 && Math.abs(p.x) < 0.3 && Math.abs(p.y) < 0.35) return n; } return null; }
-function startSteal() { if (state !== 'play' || umbHeld || evRun?.steal === 'no_steal') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n); }
-function stopSteal() { stealNpc = null; stealT = 0; on('prog', phase === 'twist' || phase === 'crab' || phase === 'scoop'); }
+function startSteal() {
+  if (plazaMode) { startPlazaSteal(); return; }
+  if (state !== 'play' || umbHeld || evRun?.steal === 'no_steal') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n);
+}
+function stopSteal() {
+  if (plazaMode) { stopPlazaSteal(); return; }
+  stealNpc = null; stealT = 0; on('prog', phase === 'twist' || phase === 'crab' || phase === 'scoop');
+}
 function caughtBy(n: Npc) {
   caught++; stopSteal(); penalty += 5;
   n.distract = 0; n.pause = 0; addGrudge(n, 20); anger(n, SCOLD_STEAL, 0.5); toast('被抓到了！罰 $5', '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
@@ -2193,7 +2293,8 @@ function plazaHideYard(hide: boolean) {
   if (hide) {
     plazaHomeHide = [];
     const baseCone = typeof pileHit !== 'undefined' ? pileHit : null;
-    for (const o of [pile, ground, baseCone, ...stools, ...ALL_NPCS.map(n => n.g)]) {
+    // 工寮木柱／厝頂／時鐘也藏：否則會穿在廣場蚵堆與椅子上擋視線
+    for (const o of [pile, ground, baseCone, shedG, clockG, ...stools, ...ALL_NPCS.map(n => n.g)]) {
       if (!o || (o as any).__plazaHid) continue;
       (o as any).__plazaHid = o.visible; o.visible = false; plazaHomeHide.push(o);
     }
@@ -2268,6 +2369,29 @@ function launchPlaza() {
       for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) return true;
       return false;
     },
+    getUmb: () => umbHeld || umbT > 0,
+    onShellThrow: (e) => {
+      // 自己丟的已經在本地飛過；別人的殼（含打向自己）播飛行動畫
+      if (e.fromConnId && e.fromConnId === plazaConnId()) return;
+      plazaFlyShell(e);
+    },
+    onShellInbound: (e) => {
+      // 飛行動畫約 0.55s 後結算
+      later(0.55, () => resolvePlazaInbound(e));
+    },
+    onStealResult: (e) => {
+      const me = plazaConnId();
+      if (!me) return;
+      if (e.toConnId === me && !e.caught) {
+        const lostN = Math.max(0, count - e.toCount);
+        count = Math.max(0, e.toCount);
+        for (let i = 0; i < lostN; i++) { const lm = bowlMeat.pop(); if (lm) scene.remove(lm); }
+        toast(`${e.fromNick} 偷走你一顆！`, '#ff8a7a');
+        updHud();
+      } else if (e.caught && e.fromConnId !== me && e.toConnId === me) {
+        toast(`${e.fromNick} 想偷你被抓了`, '#9be37a');
+      }
+    },
     track: (t, d) => track(t, d),
     onPayout: () => { /* 結算走 plazaReportEarn */ },
     onExit: () => {
@@ -2295,7 +2419,7 @@ function launchPlaza() {
     beginShift: () => {
       plazaMode = true; evRun = null; shiftLen = SHIFT; walking = false;
       document.body.classList.remove('plazaRoam');
-      on('standBtn', true); on('stealBtn', false); on('joy', false); on('umbBtn', true); on('medBtn', true); on('seatCard', false);
+      on('standBtn', true); on('joy', false); on('umbBtn', true); on('medBtn', true); on('seatCard', false);
       // 略抬視角＋第三人稱看向堆心，同堆其他人入鏡
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
       plazaEnsureTpView();
@@ -2463,9 +2587,30 @@ function frameBody() {
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
     on('standBtn', !walking && (!plazaMode || plazaSeated())); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
-    const tgt = plazaMode || walking || evRun?.steal === 'no_steal' ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
+    if (plazaMode) {
+      const pt = walking || !plazaSeated() ? null : plazaStealTarget();
+      on('stealBtn', !!pt);
+      if (!pt) stopPlazaSteal();
+      if (pt && !plazaStealTgt && phase !== 'busy') {
+        hint.textContent = plazaWatchingMe(pt)
+          ? `${pt.nick} 在看你，先別偷…`
+          : `${pt.nick} 沒注意！${COARSE ? '按住「偷」' : '按住 E'}偷肉`;
+      }
+      if (plazaStealTgt) {
+        if (plazaWatchingMe(plazaStealTgt)) {
+          const t = plazaStealTgt; stopPlazaSteal(); caught++; penalty += 5;
+          toast(`${t.nick} 抓到你偷了！罰 $5`, '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
+          void plazaStealFrom(t.connId, true);
+        } else {
+          stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`;
+          if (stealT >= 0.9) { const t = plazaStealTgt; stealT = 0; void finishPlazaSteal(t); }
+        }
+      }
+    } else {
+    const tgt = walking || evRun?.steal === 'no_steal' ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
     if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！${COARSE ? '按住「偷」' : '按住 E'}偷她的肉` : `${tgt.name}在看，不要偷…`;
     if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
+    }
     if (!plazaMode) {
     chatTimer -= dt * seatNow().nag; if (chatTimer <= 0) { chatTimer = 3 + Math.random() * 4; const n = pick(npcs);
       if (n && n.bubT <= 0 && n.windup <= 0) { if (n.mood > 0) say(n, pick(GRUDGE)); else if (Math.random() < 0.5) { n.distract = rnd(3, 5.5) * seatNow().steal; n.turnDir = Math.random() < 0.5 ? -1 : 1; say(n, pick(TURN_CHAT), n.distract); } else { say(n, pick(GOSSIP)); if (Math.random() < n.chatty) n.pause = 2.5; } } }

@@ -5,7 +5,7 @@ import {
   seatPose, seatKey, nearestFreeSeat, pileObstacles, pileCenter, type PlazaSeatRef,
 } from './layout';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
-import type { PlazaChat, PlazaPlayer, PlazaSnapshot } from './types';
+import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaSnapshot, PlazaStealEvent } from './types';
 
 export type PlazaDeps = {
   id: string;
@@ -32,6 +32,14 @@ export type PlazaDeps = {
   getWalkXZ: () => { x: number; z: number };
   getYaw: () => number;
   getMoving: () => boolean;
+  /** 是否正撐傘（同步給其他人） */
+  getUmb: () => boolean;
+  /** 別人丟殼飛過（含打向自己，先播飛行動畫） */
+  onShellThrow?: (e: PlazaShellEvent) => void;
+  /** 殼飛到自己：結算擋／中 */
+  onShellInbound?: (e: PlazaShellEvent) => void;
+  /** 偷肉結果（含自己被偷） */
+  onStealResult?: (e: PlazaStealEvent) => void;
   track: (t: string, d?: Record<string, unknown>) => void;
   onPayout: (clamped: number, meta: { oysters: number; dur: number; raw: number }) => void;
   onExit: () => void;
@@ -68,6 +76,27 @@ export function plazaMyPileOrigin(out = new THREE.Vector3()) {
   return pileCenter(myPile, out);
 }
 
+export function plazaConnId() { return client?.connectionId ?? ''; }
+
+/** 坐下遠端玩家瞄準點 */
+export function plazaAimTargets(): PlazaAimTarget[] {
+  return view?.aimTargets() ?? [];
+}
+
+export async function plazaThrowAt(
+  targetConnId: string,
+  from: { x: number; y: number; z: number },
+  to: { x: number; y: number; z: number },
+) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn' };
+  return client.throwAt(targetConnId, from.x, from.y, from.z, to.x, to.y, to.z);
+}
+
+export async function plazaStealFrom(targetConnId: string, caught = false) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn', steal: undefined };
+  return client.stealFrom(targetConnId, caught);
+}
+
 const ERR_ZH: Record<string, string> = {
   taken: '這個位子有人了',
   full: '廣場滿了，等有人離開再來',
@@ -79,6 +108,12 @@ const ERR_ZH: Record<string, string> = {
   join_fail: '進廣場失敗',
   already_paid: '這一工已經結過算了',
   bad_token: '場次失效，請重新進廣場',
+  no_target: '對方不在了',
+  target_walk: '對方站起來了',
+  bad_target: '不能對自己',
+  empty: '碗裡沒肉了',
+  throw_fail: '丟殼失敗',
+  steal_fail: '偷失敗',
 };
 
 function zhErr(e?: string) { return (e && ERR_ZH[e]) || e || '失敗了'; }
@@ -122,7 +157,6 @@ function wireClient(D: PlazaDeps) {
       snap = normalizeSnap(s);
       view?.syncRoster(snap, D.id);
       if (!seated) setHud(`廣場休閒 ${snap.occupied}/${snap.capacity}　靠近空位坐下`);
-      else setHud(`休閒・在線 ${snap.occupied}/${snap.capacity}`);
     },
     onJoined: (p) => {
       const n = normPlayer(p);
@@ -138,6 +172,9 @@ function wireClient(D: PlazaDeps) {
     onPose: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onPhase: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onChat: (m) => pushChat(normChat(m)),
+    onShellThrow: (e) => D.onShellThrow?.(e),
+    onShellInbound: (e) => D.onShellInbound?.(e),
+    onStealResult: (e) => D.onStealResult?.(e),
     onClose: (err) => {
       if (!active) return;
       D.toast(err ? `廣場斷線：${err}` : '廣場連線中斷', '#ffb08a');
@@ -172,6 +209,7 @@ function normPlayer(p: any): PlazaPlayer {
     yaw: Number(p?.yaw ?? p?.Yaw ?? 0),
     seated,
     moving: !!(p?.moving ?? p?.Moving),
+    umb: !!(p?.umb ?? p?.Umb),
   };
 }
 function normChat(m: any): PlazaChat {
@@ -195,7 +233,9 @@ function buildUi() {
 #plazaRoot{position:fixed;inset:0;z-index:8500;pointer-events:none;font-family:inherit}
 #plazaRoot *{box-sizing:border-box}
 #pzHud{pointer-events:none;position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:50%;transform:translateX(-50%);max-width:min(78vw,340px);background:rgba(20,12,6,.72);border:2px solid #d9952b;border-radius:12px;padding:5px 10px;font-weight:800;font-size:13px;color:#ffd23f;text-align:center;line-height:1.3;z-index:1}
-#pzX{pointer-events:auto;position:absolute;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 8px);width:42px;height:42px;font-size:20px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800}
+#pzHud.hide{display:none}
+#pzX{pointer-events:auto;position:absolute;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 8px);min-width:42px;height:42px;padding:0 12px;font-size:14px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;white-space:nowrap}
+#pzX.hide{display:none}
 #pzChatFab{pointer-events:auto;position:absolute;right:calc(env(safe-area-inset-right) + 10px);bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
 #pzChat{display:none;pointer-events:auto;position:absolute;right:calc(env(safe-area-inset-right) + 10px);bottom:calc(env(safe-area-inset-bottom) + 66px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
 #pzChat.open{display:block}
@@ -210,7 +250,7 @@ function buildUi() {
 @media (pointer:fine){#pzSitPrompt{bottom:calc(env(safe-area-inset-bottom) + 72px)}}
 @media (max-width:420px){#pzChat{width:min(70vw,240px)}#pzLog{height:52px}}
 </style>
-<button id="pzX" type="button" aria-label="離開">✕</button>
+<button id="pzX" type="button" aria-label="離開廣場">離開廣場</button>
 <div id="pzHud">準備中…</div>
 <div id="pzSitPrompt"></div>
 <button id="pzChatFab" type="button" aria-label="聊天">聊天</button>
@@ -239,11 +279,20 @@ function buildUi() {
 }
 
 function showRoamUi() {
-  /* 預設縮小聊天，避免擋搖桿／坐落 */
+  syncSeatChrome();
+}
+
+/** 走動才顯示離開／頂部提示；坐下改用遊戲內 quit／🚶，避免擋 #top */
+function syncSeatChrome() {
+  const leave = ui?.querySelector('#pzX') as HTMLElement | null;
+  const hud = ui?.querySelector('#pzHud') as HTMLElement | null;
+  if (leave) leave.classList.toggle('hide', seated);
+  if (hud) hud.classList.toggle('hide', seated);
 }
 
 function setHud(t: string) {
   const el = ui?.querySelector('#pzHud'); if (el) el.textContent = t;
+  syncSeatChrome();
 }
 
 function setSitPrompt(t: string | null) {
@@ -290,7 +339,7 @@ export async function plazaTrySit(): Promise<boolean> {
     deps.applySeatPose(pose.pos, pose.yaw);
     view?.highlight(seat.pileId, seat.slot);
     seated = true; near = null; setSitPrompt(null);
-    setHud(`休閒・第 ${seat.pileId + 1} 堆　（🚶 換堆・離開再結算）`);
+    syncSeatChrome();
     if (first) { shiftStarted = true; deps.beginShift(seat.pileId, seat.slot); }
     else deps.resumeSit(seat.pileId, seat.slot);
     return true;
@@ -304,6 +353,7 @@ export async function plazaStandWalk() {
   myPile = null; mySlot = null; seated = false;
   view?.highlight(null, null);
   setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　靠近空位坐下，不趕時間`);
+  syncSeatChrome();
   deps.goWalk();
 }
 
@@ -340,7 +390,7 @@ export function tickPlaza(dt: number) {
     const yaw = deps.getYaw();
     const phase = seated ? deps.getPhase() : 'walk';
     const moving = !seated && deps.getMoving();
-    void client.sync(p.x, p.z, yaw, phase, deps.getCount(), moving);
+    void client.sync(p.x, p.z, yaw, phase, deps.getCount(), moving, deps.getUmb());
   }
 }
 

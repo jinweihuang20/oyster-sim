@@ -1,5 +1,5 @@
 import * as signalR from '@microsoft/signalr';
-import type { PlazaPlayer, PlazaSnapshot, PlazaChat } from './types';
+import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaStealEvent } from './types';
 
 export type PlazaHubHandlers = {
   onRoster?: (snap: PlazaSnapshot) => void;
@@ -9,6 +9,9 @@ export type PlazaHubHandlers = {
   onPose?: (p: PlazaPlayer) => void;
   onPhase?: (p: PlazaPlayer) => void;
   onChat?: (m: PlazaChat) => void;
+  onShellThrow?: (e: PlazaShellEvent) => void;
+  onShellInbound?: (e: PlazaShellEvent) => void;
+  onStealResult?: (e: PlazaStealEvent) => void;
   onClose?: (err?: string) => void;
 };
 
@@ -23,6 +26,32 @@ export function plazaHubUrl() {
   return DEFAULT_HUB;
 }
 
+function normShell(e: any): PlazaShellEvent {
+  return {
+    fromConnId: e?.fromConnId ?? e?.FromConnId ?? '',
+    fromNick: e?.fromNick ?? e?.FromNick ?? '?',
+    toConnId: e?.toConnId ?? e?.ToConnId ?? '',
+    fromX: Number(e?.fromX ?? e?.FromX ?? 0),
+    fromY: Number(e?.fromY ?? e?.FromY ?? 0),
+    fromZ: Number(e?.fromZ ?? e?.FromZ ?? 0),
+    toX: Number(e?.toX ?? e?.ToX ?? 0),
+    toY: Number(e?.toY ?? e?.ToY ?? 0),
+    toZ: Number(e?.toZ ?? e?.ToZ ?? 0),
+  };
+}
+
+function normSteal(e: any): PlazaStealEvent {
+  return {
+    fromConnId: e?.fromConnId ?? e?.FromConnId ?? '',
+    fromNick: e?.fromNick ?? e?.FromNick ?? '?',
+    toConnId: e?.toConnId ?? e?.ToConnId ?? '',
+    toNick: e?.toNick ?? e?.ToNick ?? '?',
+    fromCount: Number(e?.fromCount ?? e?.FromCount ?? 0),
+    toCount: Number(e?.toCount ?? e?.ToCount ?? 0),
+    caught: !!(e?.caught ?? e?.Caught),
+  };
+}
+
 export class PlazaClient {
   conn: signalR.HubConnection | null = null;
   token = '';
@@ -30,6 +59,8 @@ export class PlazaClient {
   private handlers: PlazaHubHandlers = {};
 
   setHandlers(h: PlazaHubHandlers) { this.handlers = h; }
+
+  get connectionId() { return this.conn?.connectionId ?? ''; }
 
   async connect(pid: string, nick: string): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot }> {
     this.pid = pid;
@@ -47,6 +78,9 @@ export class PlazaClient {
     conn.on('Pose', (p: PlazaPlayer) => this.handlers.onPose?.(p));
     conn.on('Phase', (p: PlazaPlayer) => this.handlers.onPhase?.(p));
     conn.on('Chat', (m: PlazaChat) => this.handlers.onChat?.(m));
+    conn.on('ShellThrow', (e: any) => this.handlers.onShellThrow?.(normShell(e)));
+    conn.on('ShellInbound', (e: any) => this.handlers.onShellInbound?.(normShell(e)));
+    conn.on('StealResult', (e: any) => this.handlers.onStealResult?.(normSteal(e)));
     conn.onclose((e) => this.handlers.onClose?.(e?.message));
     try {
       await conn.start();
@@ -84,14 +118,28 @@ export class PlazaClient {
     try { await this.conn.invoke('LeaveSeat'); } catch { /* ignore */ }
   }
 
-  async sync(x: number, z: number, yaw: number, phase: string, count: number, moving: boolean) {
+  async sync(x: number, z: number, yaw: number, phase: string, count: number, moving: boolean, umb = false) {
     if (!this.conn) return;
-    try { await this.conn.invoke('Sync', x, z, yaw, phase, count, moving); } catch { /* ignore */ }
+    try { await this.conn.invoke('Sync', x, z, yaw, phase, count, moving, umb); } catch { /* ignore */ }
   }
 
   async setPhase(phase: string, count: number) {
-    // 相容：轉成 Sync（坐下時座標由伺服器忽略）
-    return this.sync(0, 0, 0, phase, count, false);
+    return this.sync(0, 0, 0, phase, count, false, false);
+  }
+
+  async throwAt(targetConnId: string, fromX: number, fromY: number, fromZ: number, toX: number, toY: number, toZ: number) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn' };
+    try {
+      return await this.conn.invoke<{ ok: boolean; err?: string }>('ThrowAt', targetConnId, fromX, fromY, fromZ, toX, toY, toZ);
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'throw_fail' }; }
+  }
+
+  async stealFrom(targetConnId: string, caught = false) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn', steal: undefined as PlazaStealEvent | undefined };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; steal?: any }>('StealFrom', targetConnId, caught);
+      return { ok: !!r?.ok, err: r?.err, steal: r?.steal ? normSteal(r.steal) : undefined };
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'steal_fail', steal: undefined }; }
   }
 
   async chat(text: string, pileOnly = false) {

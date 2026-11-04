@@ -3,7 +3,7 @@ import { makePlayerAvatar, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, CHAIR_SEAT_Y } from './props';
-import type { PlazaPlayer, PlazaSnapshot } from './types';
+import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 
 type Remote = {
   key: string;
@@ -16,6 +16,8 @@ type Remote = {
   nick: string;
   seated: boolean;
   moving: boolean;
+  umb: boolean;
+  umbMesh: THREE.Group;
   tx: number; tz: number; tyaw: number;
   x: number; z: number; yaw: number;
   bob: number;
@@ -39,6 +41,8 @@ export type PlazaWorldView = {
   highlight: (pileId: number | null, slot: number | null) => void;
   highlightNear: (seat: PlazaSeatRef | null) => void;
   hitPile: (raycaster: THREE.Raycaster) => number | null;
+  /** 坐下遠端玩家的瞄準點（丟殼／偷肉） */
+  aimTargets: () => PlazaAimTarget[];
   tick: (dt: number, camera: THREE.Camera) => void;
   dispose: () => void;
 };
@@ -103,6 +107,26 @@ export function createPlazaWorldView(
     return null;
   }
 
+  function aimTargets(): PlazaAimTarget[] {
+    const out: PlazaAimTarget[] = [];
+    for (const r of remotes.values()) {
+      if (!r.seated || r.pileId < 0) continue;
+      const h = headWorld(r, new THREE.Vector3());
+      const b = bowlWorld(r, new THREE.Vector3());
+      out.push({
+        connId: r.key,
+        nick: r.nick,
+        x: r.x, z: r.z, yaw: r.yaw,
+        seated: true,
+        count: r.count,
+        umb: r.umb,
+        head: { x: h.x, y: h.y, z: h.z },
+        bowl: { x: b.x, y: b.y, z: b.z },
+      });
+    }
+    return out;
+  }
+
   function hashLook(pid: string) {
     let h = 0; for (let i = 0; i < pid.length; i++) h = (h * 31 + pid.charCodeAt(i)) | 0;
     return { shirt: SHIRTS[Math.abs(h) % SHIRTS.length], hair: HAIRS[Math.abs(h >> 3) % HAIRS.length], pants: 0x2a2a40 };
@@ -121,6 +145,39 @@ export function createPlazaWorldView(
     tag.textContent = nick;
     tagsHost.appendChild(tag);
     return tag;
+  }
+
+  function makeRemoteUmb() {
+    const g = new THREE.Group();
+    g.visible = false;
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.012, 0.012, 0.55, 5),
+      new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.85, flatShading: true }),
+    );
+    pole.position.set(0.18, 1.35, -0.05);
+    g.add(pole);
+    const canopy = new THREE.Mesh(
+      new THREE.ConeGeometry(0.42, 0.18, 10, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0xc0392b, side: THREE.DoubleSide, roughness: 0.7, flatShading: true }),
+    );
+    canopy.position.set(0.18, 1.62, -0.05);
+    g.add(canopy);
+    return g;
+  }
+
+  const _head = new THREE.Vector3();
+  const _bowl = new THREE.Vector3();
+
+  function headWorld(r: Remote, out = _head) {
+    r.rig.head.getWorldPosition(out);
+    return out;
+  }
+
+  function bowlWorld(r: Remote, out = _bowl) {
+    // 面前矮桌高度：角色朝向 -Z（yaw）
+    const fx = -Math.sin(r.yaw), fz = -Math.cos(r.yaw);
+    out.set(r.x + fx * 0.5, r.seated ? 0.52 : 0.7, r.z + fz * 0.5);
+    return out;
   }
 
   /** 坐下：髖部落在椅面；大腿朝面前（-Z），小腿下垂踩地 */
@@ -181,10 +238,12 @@ export function createPlazaWorldView(
       const rig = makePlayerAvatar(look, M, add, LO);
       root.add(rig.outer);
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
+      const umbMesh = makeRemoteUmb();
+      rig.outer.add(umbMesh);
       r = {
         key, rig, tag: ensureTag(p.nick || '剝蚵人'),
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
-        seated: !!p.seated, moving: !!p.moving,
+        seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
         tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0,
       };
       remotes.set(key, r);
@@ -196,6 +255,8 @@ export function createPlazaWorldView(
     const r = ensure(p, selfPid); if (!r) return;
     r.pileId = p.pileId; r.slot = p.slot; r.phase = p.phase || r.phase; r.count = p.count ?? r.count;
     r.seated = !!p.seated; r.moving = !!p.moving;
+    r.umb = !!p.umb;
+    r.umbMesh.visible = r.umb;
     if (p.nick && p.nick !== r.nick) { r.nick = p.nick; }
     r.tag.textContent = r.seated ? `${r.nick} · ${r.count}` : r.nick;
     if (r.seated && p.pileId >= 0) {
@@ -312,7 +373,7 @@ export function createPlazaWorldView(
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, applyPose, setPhase, highlight, highlightNear, hitPile, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, applyPose, setPhase, highlight, highlightNear, hitPile, aimTargets, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {
