@@ -39,6 +39,9 @@ export function openDeathmatch(U: DmUmb, onExit: () => void, cfg?: Partial<DmMat
   const INTRO_GO = 0.42;
   let introT = 3 + INTRO_GO;
   let introShown = 0;
+  let matchClock = 0;
+  let matchReported = false;
+  try { U.reportMatchStart?.(match.mode); } catch { /* 後端掛掉安靜失敗 */ }
   const isTouch = matchMedia('(pointer: coarse)').matches;
   const root = document.createElement('div'); root.id = 'dmRoot';
   root.innerHTML = `<style>
@@ -1038,6 +1041,7 @@ ${isTouch
     if (DM_DEV && cheatHp && !me.dead) me.hp = MAX_HP;
     fireCd -= dt; if (fireHeld) tryAutoFire();
     now += dt;
+    matchClock += dt;
     if (!isHorde) {
       roundLeft -= dt;
       if (roundLeft <= 0) { endRound('時間到'); return; }
@@ -1154,6 +1158,19 @@ ${isTouch
       payout = ffaReward(place, me.kills);
     }
     if (payout > 0) U.grantMoney(payout, isHorde ? 'dm-horde' : 'dm-ffa');
+    if (!matchReported) {
+      matchReported = true;
+      try {
+        U.reportMatchEnd?.({
+          mode: match.mode,
+          kills: me.kills,
+          wavesCleared,
+          payout,
+          reason: isHorde && reason.includes('倒下') ? 'death' : 'time',
+          durationSec: Math.max(0, Math.round(matchClock)),
+        });
+      } catch { /* 安靜失敗 */ }
+    }
     q('dmBoard').classList.add('show'); renderBoard();
     msg(`${reason}${payout > 0 ? `　+$${payout}` : ''}`, 10);
   }

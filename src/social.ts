@@ -57,9 +57,15 @@ export function syncTitle() { if (D?.on()) post('/score', { scores: {} }); }
 export function report(kind: 'pearl' | 'legend' | 'odd' | 'port' | 'ach', item: number) { if (D?.on() && !D.inTut()) post('/event', { kind, item }); }
 
 // ---------- 排行榜 ----------
-const BOARDS = [['income', '今日收入', '$'], ['oysters', '單班最多蚵仔', ''], ['pearls', '珍珠收藏', '']] as const;
+const BOARDS = [
+  ['income', '今日收入', '$'],
+  ['oysters', '單班最多蚵仔', ''],
+  ['pearls', '珍珠收藏', ''],
+  ['dmKills', '死鬥擊殺', ''],
+  ['dmWaves', '圍毆關卡', ''],
+] as const;
 let board = 'income', view: 'daily' | 'weekly' = 'daily';
-export function submit(s: { income?: number; oysters?: number; pearls?: number }) {
+export function submit(s: { income?: number; oysters?: number; pearls?: number; dmKills?: number; dmWaves?: number }) {
   return post('/score', { scores: s }).then(() => { lastRank = 0; checkPassed(); });
 }
 let lastRank = 0;
@@ -84,7 +90,8 @@ async function render() {
   const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${x.atitle ? `<em class="lbA">${esc(x.atitle)}</em>` : ''}<b>${esc(x.nick)}</b><small>#${esc(x.tag)}</small>${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
     (x.me ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>` : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span>`) + '</div>';
   const rows = r.rows as any[];
-  list.innerHTML = rows.length ? rows.map(row).join('') + (r.mine && !rows.some(x => x.me) ? '<div class="lbGap"></div>' + row(r.mine) : '') : '<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>收工後就會出現你的成績！</small></span></div>';
+  const emptyHint = board.startsWith('dm') ? '死鬥結算後就會出現成績！' : '收工後就會出現你的成績！';
+  list.innerHTML = rows.length ? rows.map(row).join('') + (r.mine && !rows.some(x => x.me) ? '<div class="lbGap"></div>' + row(r.mine) : '') : `<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>${emptyHint}</small></span></div>`;
   list.querySelectorAll<HTMLButtonElement>('button[data-k]').forEach(b => b.onclick = async () => {
     b.disabled = true; const ok = await post('/react', { k: b.dataset.k, kind: b.dataset.r });
     if (ok) { const n = b.lastChild as Text; n.textContent = String(Number(n.textContent) + 1); D.toast(b.dataset.r === 'like' ? '按讚送出！' : '丟一顆蚵殼過去！'); }

@@ -62,15 +62,15 @@ export function hordeAggression(wave: number): { errMul: number; cdMul: number; 
   };
 }
 
-/** 混戰結算：名次 1-based */
+/** 混戰結算：名次 1-based（對齊槍價 2k–9k，好局約半把中價槍） */
 export function ffaReward(place: number, kills: number): number {
-  const placePay = place === 1 ? 180 : place === 2 ? 110 : place === 3 ? 70 : 35;
-  return placePay + kills * 8;
+  const placePay = place === 1 ? 650 : place === 2 ? 400 : place === 3 ? 250 : 120;
+  return placePay + kills * 28;
 }
 
 /** 圍毆結算：過關數＋擊殺 */
 export function hordeReward(wavesCleared: number, kills: number): number {
-  let pay = kills * 10;
-  for (let w = 1; w <= wavesCleared; w++) pay += 40 + w * 25;
+  let pay = kills * 32;
+  for (let w = 1; w <= wavesCleared; w++) pay += 140 + w * 80;
   return pay;
 }
