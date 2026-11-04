@@ -2078,9 +2078,13 @@ function plazaEnterWalkPose(fromSeat = true) {
       walkPos.x += Math.sin(seatYaw) * 0.55; walkPos.z += Math.cos(seatYaw) * 0.55;
       tYaw = yaw = seatYaw;
     }
+    // 站起還原存檔的視角偏好
+    tpv = !!save.tpv; drawCamBtn();
   }
   drawRadio();
   tPitch = pitch = -0.2; $('diff').textContent = ''; on('standBtn', false); on('umbBtn', false); on('medBtn', false); on('stealBtn', false); on('joy', true); on('camBtn', true);
+  // 確保視角鈕在閒逛時可見（手機 camBtn 掛在 #stats 裡）
+  const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; }
   stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
   hint.textContent = COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V／視角鈕切換・E 坐下剝蚵';
 }
@@ -2382,10 +2386,12 @@ function plazaHideYard(hide: boolean) {
     updSky();
   }
 }
-function plazaEnsureTpView() {
-  if (tpv) return;
-  plazaForceTp = true; tpv = true; drawCamBtn();
-  toast('第三人稱較好看旁邊的人，可按「視角」切回', '#9fe0ff');
+/** 廣場坐下：強制第一人稱（不寫入存檔偏好；站起再還原） */
+function plazaEnsureFpView() {
+  if (!tpv) { drawCamBtn(); return; }
+  plazaForceTp = false;
+  tpv = false;
+  drawCamBtn();
 }
 function showPlazaLoading(show = true) {
   let el = document.getElementById('plazaLoad');
@@ -2494,6 +2500,7 @@ function launchPlaza() {
       drawRadio();
       on('quitBtn', true); on('camBtn', true); on('seatCard', false);
       document.body.classList.add('plazaRoam');
+      { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
       showPlazaLoading(false);
       toast('蚵仔廣場・休閒剝蚵，隨便坐、不趕時間', '#9be37a');
     },
@@ -2501,9 +2508,8 @@ function launchPlaza() {
       plazaMode = true; evRun = null; shiftLen = SHIFT; walking = false;
       document.body.classList.remove('plazaRoam');
       on('standBtn', true); on('joy', false); on('umbBtn', true); on('medBtn', true); on('seatCard', false);
-      // 略抬視角＋第三人稱看向堆心，同堆其他人入鏡
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
-      plazaEnsureTpView();
+      plazaEnsureFpView();
       startDay();
       on('standBtn', true);
       hint.textContent = '休閒模式：點面前蚵堆撈蚵，想換堆按「🚶」。無倒數，離開再結算。';
@@ -2513,11 +2519,16 @@ function launchPlaza() {
       walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear();
       document.body.classList.remove('plazaRoam');
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
-      plazaEnsureTpView();
+      plazaEnsureFpView();
       on('standBtn', true); on('umbBtn', true); on('medBtn', true);
       toast('換位坐下', '#9fe0ff'); SFX.pop(); later(0.3, goPick);
     },
-    goWalk: () => { document.body.classList.add('plazaRoam'); plazaEnterWalkPose(true); },
+    goWalk: () => {
+      document.body.classList.add('plazaRoam');
+      plazaEnterWalkPose(true);
+      on('camBtn', true);
+      const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; }
+    },
   });
 }
 $('start').onclick = () => {

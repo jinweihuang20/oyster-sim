@@ -166,7 +166,7 @@ async function boot(D: PlazaDeps) {
   }
   snap = r.snap ?? null;
   if (snap) view?.syncRoster(snap, D.id);
-  setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　隨便坐、不趕時間`);
+  setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
   D.enterWalk();
   showRoamUi();
 }
@@ -216,7 +216,7 @@ async function restoreAfterRejoin(s?: PlazaSnapshot) {
       if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
       flashNetOk('已重連，位子還在');
       deps.toast('已重連，位子還在', '#9be37a');
-      setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}`);
+      setHud(plazaHudPeople(snap));
       return;
     }
     // 位子被佔：站起來繼續逛
@@ -226,12 +226,12 @@ async function restoreAfterRejoin(s?: PlazaSnapshot) {
     deps.goWalk();
     flashNetOk('已重連');
     deps.toast(r.err === 'taken' ? '已重連，原位子有人了，請另找空位' : '已重連，請重新找位子坐下', '#ffd76a');
-    setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　靠近空位坐下`);
+    setHud(`${plazaHudPeople(snap)}　靠近空位坐下`);
     return;
   }
   flashNetOk('廣場已重新連線');
   deps.toast('廣場已重新連線', '#9be37a');
-  if (!seated) setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　靠近空位坐下`);
+  if (!seated) setHud(`${plazaHudPeople(snap)}　靠近空位坐下`);
 }
 
 function wireClient(D: PlazaDeps) {
@@ -239,7 +239,7 @@ function wireClient(D: PlazaDeps) {
     onRoster: (s) => {
       snap = normalizeSnap(s);
       view?.syncRoster(snap, D.id);
-      if (!netDown && !seated) setHud(`廣場休閒 ${snap.occupied}/${snap.capacity}　靠近空位坐下`);
+      if (!netDown && !seated) setHud(`${plazaHudPeople(snap)}　靠近空位坐下`);
     },
     onJoined: (p) => {
       const n = normPlayer(p);
@@ -292,13 +292,24 @@ function wireClient(D: PlazaDeps) {
 
 function normalizeSnap(s: any): PlazaSnapshot {
   const players: PlazaPlayer[] = (s?.players ?? s?.Players ?? []).map(normPlayer);
+  // occupied = 在場總人數（含自己／走動）；舊後端若仍回「入座數」則改以 players.length 為準
+  const rawOcc = s?.occupied ?? s?.Occupied;
+  const occupied = players.length > 0 ? players.length
+    : (typeof rawOcc === 'number' ? rawOcc : 0);
   return {
     players,
     pileCount: s?.pileCount ?? s?.PileCount ?? PILE_COUNT,
     slotsPerPile: s?.slotsPerPile ?? s?.SlotsPerPile ?? SLOTS_PER_PILE,
-    occupied: s?.occupied ?? s?.Occupied ?? players.filter(p => p.seated).length,
+    occupied,
     capacity: s?.capacity ?? s?.Capacity ?? PLAZA_CAPACITY,
   };
+}
+
+/** HUD：目前在場幾人 */
+function plazaHudPeople(s?: PlazaSnapshot | null) {
+  const n = s?.players?.length ?? s?.occupied ?? 0;
+  const cap = s?.capacity ?? PLAZA_CAPACITY;
+  return `廣場休閒・目前 ${n} 人（可坐 ${cap}）`;
 }
 function normPlayer(p: any): PlazaPlayer {
   const seated = !!(p?.seated ?? p?.Seated ?? ((p?.pileId ?? p?.PileId ?? -1) >= 0));
@@ -492,7 +503,7 @@ export async function plazaStandWalk() {
   deps.goWalk();
   myPile = null; mySlot = null;
   view?.highlight(null, null);
-  setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　靠近空位坐下，不趕時間`);
+  setHud(`${plazaHudPeople(snap)}　靠近空位坐下，不趕時間`);
   syncSeatChrome();
   await client?.leaveSeat();
   // 立刻把站起後座標推出去，避免遠端還停在椅上或飛向舊 Sync 點
