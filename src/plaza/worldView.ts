@@ -21,6 +21,11 @@ type Remote = {
   moving: boolean;
   umb: boolean;
   umbMesh: THREE.Group;
+  /** 坐下時面前的臉盆＋肉碗 */
+  props: THREE.Group;
+  bowlNode: THREE.Object3D;
+  meatRoot: THREE.Group;
+  meatMeshes: THREE.Mesh[];
   tx: number; tz: number; tyaw: number;
   x: number; z: number; yaw: number;
   bob: number;
@@ -201,6 +206,62 @@ export function createPlazaWorldView(
     return g;
   }
 
+  const remoteMeatGeo = new THREE.SphereGeometry(0.03, 6, 5);
+  remoteMeatGeo.scale(1.35, 0.55, 1);
+  const remoteMeatMat = M(0xd8cbb0, { roughness: 0.35, flatShading: true });
+
+  /** 坐下面前：紅臉盆＋裝肉碗（本地相對 outer，面向 -Z） */
+  function makeRemoteProps(): { props: THREE.Group; bowlNode: THREE.Object3D; meatRoot: THREE.Group } {
+    const props = new THREE.Group();
+    props.visible = false;
+    const basinMat = M(0xc84030, { side: THREE.DoubleSide, roughness: 0.55, flatShading: true });
+    const basin = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.16, 0.11, 12, 1, true), basinMat);
+    basin.position.set(-0.3, 0.1, -0.52);
+    props.add(basin);
+    const basinFl = new THREE.Mesh(new THREE.CircleGeometry(0.16, 12), M(0xa03028, { roughness: 0.65, flatShading: true }));
+    basinFl.rotation.x = -Math.PI / 2;
+    basinFl.position.set(-0.3, 0.045, -0.52);
+    props.add(basinFl);
+    // 盆裡幾顆殼示意
+    for (let i = 0; i < 5; i++) {
+      const a = i * 1.1, rr = 0.04 + (i % 3) * 0.02;
+      const oy = new THREE.Mesh(
+        new THREE.SphereGeometry(0.035, 5, 4),
+        M(0xc8c2c0, { roughness: 0.8, flatShading: true }),
+      );
+      oy.scale.set(1.2, 0.55, 1);
+      oy.position.set(-0.3 + Math.cos(a) * rr, 0.1, -0.52 + Math.sin(a) * rr);
+      props.add(oy);
+    }
+    const bowlNode = new THREE.Group();
+    const bowlMat = M(0x4a8ac0, { side: THREE.DoubleSide, roughness: 0.45, flatShading: true });
+    const wall = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.09, 12, 1, true), bowlMat);
+    wall.position.y = 0.045;
+    bowlNode.add(wall);
+    const fl = new THREE.Mesh(new THREE.CircleGeometry(0.1, 12), M(0x3a6a98, { roughness: 0.5, flatShading: true }));
+    fl.rotation.x = -Math.PI / 2;
+    bowlNode.add(fl);
+    bowlNode.position.set(0.34, 0.06, -0.68);
+    props.add(bowlNode);
+    const meatRoot = new THREE.Group();
+    meatRoot.position.set(0.34, 0.12, -0.68);
+    props.add(meatRoot);
+    return { props, bowlNode, meatRoot };
+  }
+
+  function syncRemoteMeats(r: Remote) {
+    const n = Math.min(8, Math.max(0, r.count | 0));
+    while (r.meatMeshes.length < n) {
+      const m = new THREE.Mesh(remoteMeatGeo, remoteMeatMat);
+      const i = r.meatMeshes.length;
+      const a = i * 2.3, rr = 0.02 + (i % 4) * 0.015;
+      m.position.set(Math.cos(a) * rr, (i % 3) * 0.02, Math.sin(a) * rr);
+      r.meatRoot.add(m);
+      r.meatMeshes.push(m);
+    }
+    for (let i = 0; i < r.meatMeshes.length; i++) r.meatMeshes[i].visible = i < n;
+  }
+
   const _head = new THREE.Vector3();
   const _bowl = new THREE.Vector3();
 
@@ -210,7 +271,11 @@ export function createPlazaWorldView(
   }
 
   function bowlWorld(r: Remote, out = _bowl) {
-    // 面前矮桌高度：角色朝向 -Z（yaw）
+    if (r.seated && r.props.visible) {
+      r.bowlNode.getWorldPosition(out);
+      out.y += 0.06;
+      return out;
+    }
     const fx = -Math.sin(r.yaw), fz = -Math.cos(r.yaw);
     out.set(r.x + fx * 0.5, r.seated ? 0.52 : 0.7, r.z + fz * 0.5);
     return out;
@@ -233,8 +298,6 @@ export function createPlazaWorldView(
     r.rig.handL.visible = false;
     r.rig.handR.visible = false;
     const hang = (upper: THREE.Group, lower: THREE.Group, side: number) => {
-      upper.scale.set(1, 1, 1);
-      lower.scale.set(1, 1, 1);
       const shx = side * 0.22, shy = 0.30, shz = 0;
       // 坐下略前擺，站著自然下垂
       const uFwd = sit ? 0.42 : 0.1;
@@ -251,6 +314,31 @@ export function createPlazaWorldView(
     };
     hang(r.rig.upperL, r.rig.lowerL, -1);
     hang(r.rig.upperR, r.rig.lowerR, 1);
+  }
+
+  /** 走路擺臂：與腿反向（swing>0＝左腿前→右臂前） */
+  function swingArms(r: Remote, swing: number) {
+    r.rig.weaponMount.visible = false;
+    r.rig.handL.visible = false;
+    r.rig.handR.visible = false;
+    const amp = 0.32;
+    const base = 0.06;
+    const fwdL = base - swing * amp;
+    const fwdR = base + swing * amp;
+    const hangSwing = (upper: THREE.Group, lower: THREE.Group, side: number, fwd: number) => {
+      const shx = side * 0.22, shy = 0.30;
+      const out = side * 0.05;
+      const elbowX = shx + out;
+      const elbowY = shy - 0.22;
+      const elbowZ = fwd;
+      const wristX = elbowX + out * 0.4;
+      const wristY = elbowY - 0.18;
+      const wristZ = fwd + 0.08;
+      placeArmSeg(upper, shx, shy, 0, elbowX, elbowY, elbowZ);
+      placeArmSeg(lower, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
+    };
+    hangSwing(r.rig.upperL, r.rig.lowerL, -1, fwdL);
+    hangSwing(r.rig.upperR, r.rig.lowerR, 1, fwdR);
   }
 
   /** makePlayerAvatar 預設 torso.y=0.92、髖=0.72；勿覆寫成 0 否則頭身壓進腳 */
@@ -357,14 +445,19 @@ export function createPlazaWorldView(
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
       rig.outer.scale.setScalar(AVATAR_SCALE);
       const umbMesh = makeRemoteUmb();
+      const { props, bowlNode, meatRoot } = makeRemoteProps();
       rig.outer.add(umbMesh);
+      rig.outer.add(props);
       r = {
         key, pid: p.pid || '', rig, tag: ensureTag(p.nick || '剝蚵人'), bubble: ensureBubble(), bubUntil: 0,
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
+        props, bowlNode, meatRoot, meatMeshes: [],
         tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0, throwT: 0,
       };
       remotes.set(key, r);
+      r.props.visible = r.seated;
+      if (r.seated) syncRemoteMeats(r);
       hangArms(r, r.seated);
     } else if (p.pid) r.pid = p.pid;
     return r;
@@ -378,6 +471,8 @@ export function createPlazaWorldView(
     r.seated = !!p.seated; r.moving = !!p.moving;
     r.umb = !!p.umb;
     r.umbMesh.visible = r.umb;
+    r.props.visible = r.seated;
+    if (r.seated) syncRemoteMeats(r);
     if (p.nick && p.nick !== r.nick) { r.nick = p.nick; }
     r.tag.textContent = r.seated ? `${r.nick} · ${r.count}` : r.nick;
     if (r.seated && p.pileId >= 0) {
@@ -514,9 +609,12 @@ export function createPlazaWorldView(
         r.rig.legL.rotation.x = swing; r.rig.legR.rotation.x = -swing;
         r.rig.shinL.rotation.x = Math.max(0, -swing * 0.5); r.rig.shinR.rotation.x = Math.max(0, swing * 0.5);
         r.rig.root.position.y = Math.abs(Math.sin(r.bob * 2)) * 0.03;
+        if (r.throwT <= 0) swingArms(r, swing);
       } else if (!r.seated) {
         r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
+        r.rig.shinL.rotation.x *= 0.8; r.rig.shinR.rotation.x *= 0.8;
         r.rig.root.position.y *= 0.8;
+        if (r.throwT <= 0) hangArms(r, false);
       }
       if (r.throwT > 0) {
         r.throwT -= dt;
