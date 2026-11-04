@@ -104,7 +104,7 @@ async function boot(D: PlazaDeps) {
   }
   snap = r.snap ?? null;
   if (snap) view?.syncRoster(snap, D.id);
-  setHud(`廣場 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　走走看，靠近空板凳坐下`);
+  setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　隨便坐、不趕時間`);
   D.enterWalk();
   showRoamUi();
 }
@@ -114,8 +114,8 @@ function wireClient(D: PlazaDeps) {
     onRoster: (s) => {
       snap = normalizeSnap(s);
       view?.syncRoster(snap, D.id);
-      if (!seated) setHud(`廣場 ${snap.occupied}/${snap.capacity}　走走看，靠近空板凳坐下`);
-      else setHud(`廣場 ${snap.occupied}/${snap.capacity}`);
+      if (!seated) setHud(`廣場休閒 ${snap.occupied}/${snap.capacity}　靠近空位坐下`);
+      else setHud(`休閒・在線 ${snap.occupied}/${snap.capacity}`);
     },
     onJoined: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onLeft: (p) => { view?.remove(normPlayer(p)); },
@@ -255,7 +255,7 @@ export async function plazaTrySit(): Promise<boolean> {
     deps.applySeatPose(pose.pos, pose.yaw);
     view?.highlight(seat.pileId, seat.slot);
     seated = true; near = null; setSitPrompt(null);
-    setHud(`第 ${seat.pileId + 1} 堆 · 座 ${seat.slot + 1}　（站起來可換堆）`);
+    setHud(`休閒・第 ${seat.pileId + 1} 堆　（🚶 換堆・離開再結算）`);
     if (first) { shiftStarted = true; deps.beginShift(seat.pileId, seat.slot); }
     else deps.resumeSit(seat.pileId, seat.slot);
     return true;
@@ -268,7 +268,7 @@ export async function plazaStandWalk() {
   await client?.leaveSeat();
   myPile = null; mySlot = null; seated = false;
   view?.highlight(null, null);
-  setHud(`廣場 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　走走看，靠近空板凳坐下`);
+  setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　靠近空位坐下，不趕時間`);
   deps.goWalk();
 }
 
