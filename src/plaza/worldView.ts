@@ -24,6 +24,8 @@ type Remote = {
   tx: number; tz: number; tyaw: number;
   x: number; z: number; yaw: number;
   bob: number;
+  /** 遠端丟殼甩臂剩餘秒數 */
+  throwT: number;
 };
 
 const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
@@ -31,11 +33,16 @@ const HAIRS = [0x222222, 0x555555, 0x888888, 0x3a2a1a, 0xdddddd];
 
 /**
  * 與死鬥 NPC 同一套 makePlayerAvatar，比例 1:1（不再縮放）。
- * 坐時只調 rootY 讓髖對齊椅面。
+ * 坐時髖略高於椅面：大腿 mesh 在髖下方，對齊 HIP 會整個人沉進椅子。
  */
 const AVATAR_SCALE = 1;
 const HIP_Y = 0.72;
-const SIT_ROOT_Y = CHAIR_SEAT_Y / AVATAR_SCALE - HIP_Y;
+/** 髖高於坐墊，讓大腿／屁股貼在椅面上 */
+const SIT_HIP_LIFT = 0.14;
+const SIT_ROOT_Y = (CHAIR_SEAT_Y + SIT_HIP_LIFT) / AVATAR_SCALE - HIP_Y;
+
+const _hangDir = new THREE.Vector3();
+const _hangUp = new THREE.Vector3(0, 1, 0);
 
 export type PlazaWorldView = {
   root: THREE.Group;
@@ -53,6 +60,7 @@ export type PlazaWorldView = {
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) => void;
   setSelfPose: (x: number, z: number, yaw: number, seated: boolean) => void;
+  playThrowFx: (connId: string) => void;
   tick: (dt: number, camera: THREE.Camera) => void;
   dispose: () => void;
 };
@@ -208,7 +216,18 @@ export function createPlazaWorldView(
     return out;
   }
 
-  /** 廣場不持槍：藏槍架；臂段從持槍 IK 改回自然垂掛（否則會伸進蚵堆只剩腳） */
+  /** 臂段 box 沿 +Y；從肩→肘→腕串起來，避免袖／小臂脫節 */
+  function placeArmSeg(seg: THREE.Group, ax: number, ay: number, az: number, bx: number, by: number, bz: number) {
+    const len = Math.max(0.04, Math.hypot(bx - ax, by - ay, bz - az));
+    seg.position.set((ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5);
+    _hangDir.set(bx - ax, by - ay, bz - az).normalize();
+    seg.quaternion.setFromUnitVectors(_hangUp, _hangDir);
+    seg.rotation.setFromQuaternion(seg.quaternion);
+    const base = (seg.userData.restLen as number) || 0.26;
+    seg.scale.set(1, len / base, 1);
+  }
+
+  /** 廣場不持槍：藏槍架；臂段從肩垂掛成鏈（否則袖與小臂會分開） */
   function hangArms(r: Remote, sit = false) {
     r.rig.weaponMount.visible = false;
     r.rig.handL.visible = false;
@@ -216,12 +235,19 @@ export function createPlazaWorldView(
     const hang = (upper: THREE.Group, lower: THREE.Group, side: number) => {
       upper.scale.set(1, 1, 1);
       lower.scale.set(1, 1, 1);
-      upper.position.set(side * 0.22, 0.28, 0);
-      lower.position.set(side * 0.22, 0.02, sit ? 0.04 : 0.02);
-      upper.rotation.set(sit ? 0.55 : 0.12, 0, side * 0.12);
-      lower.rotation.set(sit ? 0.35 : 0.18, 0, 0);
-      upper.quaternion.setFromEuler(upper.rotation);
-      lower.quaternion.setFromEuler(lower.rotation);
+      const shx = side * 0.22, shy = 0.30, shz = 0;
+      // 坐下略前擺，站著自然下垂
+      const uFwd = sit ? 0.42 : 0.1;
+      const lFwd = sit ? 0.55 : 0.22;
+      const out = side * (sit ? 0.06 : 0.04);
+      const elbowX = shx + out;
+      const elbowY = shy - (sit ? 0.22 : 0.24);
+      const elbowZ = shz + uFwd;
+      const wristX = elbowX + out * 0.5;
+      const wristY = elbowY - (sit ? 0.16 : 0.2);
+      const wristZ = elbowZ + lFwd - uFwd;
+      placeArmSeg(upper, shx, shy, shz, elbowX, elbowY, elbowZ);
+      placeArmSeg(lower, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
     };
     hang(r.rig.upperL, r.rig.lowerL, -1);
     hang(r.rig.upperR, r.rig.lowerR, 1);
@@ -230,7 +256,27 @@ export function createPlazaWorldView(
   /** makePlayerAvatar 預設 torso.y=0.92、髖=0.72；勿覆寫成 0 否則頭身壓進腳 */
   const TORSO_Y = 0.92;
 
-  /** 坐下：髖對椅面、略後仰離蚵堆；大腿前擺、小腿下垂 */
+  /** 坐下丟殼：右手往前甩（肩→肘→腕連續） */
+  function poseThrow(r: Remote) {
+    if (!r.seated) return;
+    poseSit(r);
+    placeArmSeg(r.rig.upperR, 0.22, 0.32, 0, 0.28, 0.22, -0.2);
+    placeArmSeg(r.rig.lowerR, 0.28, 0.22, -0.2, 0.3, 0.18, -0.42);
+    r.rig.head.rotation.x = -0.12;
+  }
+
+  function playThrowFx(connId: string) {
+    if (!connId) return;
+    let r = remotes.get(connId);
+    if (!r) {
+      for (const x of remotes.values()) { if (x.key === connId || x.pid === connId) { r = x; break; } }
+    }
+    if (!r || !r.seated) return;
+    r.throwT = 0.55;
+    poseThrow(r);
+  }
+
+  /** 坐下：大腿貼椅面、小腿下垂；略後仰離蚵堆 */
   function poseSit(r: Remote) {
     hangArms(r, true);
     r.rig.outer.scale.setScalar(AVATAR_SCALE);
@@ -241,13 +287,13 @@ export function createPlazaWorldView(
     r.rig.shinL.scale.set(1, 1, 1);
     r.rig.shinR.scale.set(1, 1, 1);
     r.rig.torso.scale.set(1, 1, 1);
-    r.rig.legL.rotation.set(1.15, 0.08, 0.1);
-    r.rig.legR.rotation.set(1.15, -0.08, -0.1);
-    r.rig.shinL.rotation.set(-1.25, 0, 0);
-    r.rig.shinR.rotation.set(-1.25, 0, 0);
-    // 略後仰離蚵堆（維持 torso 預設高度）
-    r.rig.torso.rotation.x = -0.08;
-    r.rig.torso.position.y = TORSO_Y;
+    // 大腿近水平貼坐墊，小腿垂下
+    r.rig.legL.rotation.set(1.25, 0.06, 0.08);
+    r.rig.legR.rotation.set(1.25, -0.06, -0.08);
+    r.rig.shinL.rotation.set(-1.35, 0, 0);
+    r.rig.shinR.rotation.set(-1.35, 0, 0);
+    r.rig.torso.rotation.x = -0.06;
+    r.rig.torso.position.y = TORSO_Y - 0.02;
   }
 
   function poseStand(r: Remote) {
@@ -269,34 +315,27 @@ export function createPlazaWorldView(
   }
 
   function applyActionPose(r: Remote) {
+    if (r.throwT > 0) { poseThrow(r); return; }
     const ph = r.phase;
     if (r.seated) {
       poseSit(r);
       if (ph === 'twist' || ph === 'pry') {
         r.rig.head.rotation.x = 0.15;
-        r.rig.upperR.position.set(0.22, 0.3, -0.05);
-        r.rig.upperR.rotation.set(0.9, 0, -0.1);
-        r.rig.lowerR.position.set(0.22, 0.08, -0.12);
-        r.rig.lowerR.rotation.set(0.55, 0, 0);
-        r.rig.upperR.quaternion.setFromEuler(r.rig.upperR.rotation);
-        r.rig.lowerR.quaternion.setFromEuler(r.rig.lowerR.rotation);
+        placeArmSeg(r.rig.upperR, 0.22, 0.3, 0, 0.26, 0.18, -0.16);
+        placeArmSeg(r.rig.lowerR, 0.26, 0.18, -0.16, 0.24, 0.1, -0.32);
       } else if (ph === 'seam') {
         r.rig.head.rotation.x = 0.1;
-        r.rig.upperR.rotation.set(0.7, 0, -0.08);
-        r.rig.upperR.quaternion.setFromEuler(r.rig.upperR.rotation);
+        placeArmSeg(r.rig.upperR, 0.22, 0.3, 0, 0.24, 0.16, -0.14);
+        placeArmSeg(r.rig.lowerR, 0.24, 0.16, -0.14, 0.22, 0.08, -0.28);
       } else if (ph === 'aim' || ph === 'toss') {
-        r.rig.upperL.position.set(-0.22, 0.32, -0.08);
-        r.rig.upperL.rotation.set(1.0, 0, 0.1);
-        r.rig.lowerL.position.set(-0.22, 0.1, -0.16);
-        r.rig.lowerL.rotation.set(0.4, 0, 0);
-        r.rig.upperL.quaternion.setFromEuler(r.rig.upperL.rotation);
-        r.rig.lowerL.quaternion.setFromEuler(r.rig.lowerL.rotation);
+        placeArmSeg(r.rig.upperL, -0.22, 0.3, 0, -0.2, 0.22, -0.18);
+        placeArmSeg(r.rig.lowerL, -0.2, 0.22, -0.18, -0.16, 0.16, -0.36);
         r.rig.head.rotation.x = -0.05;
       } else if (ph === 'scoop' || ph === 'pick') {
-        r.rig.upperL.rotation.set(0.75, 0, 0.12);
-        r.rig.upperR.rotation.set(0.6, 0, -0.1);
-        r.rig.upperL.quaternion.setFromEuler(r.rig.upperL.rotation);
-        r.rig.upperR.quaternion.setFromEuler(r.rig.upperR.rotation);
+        placeArmSeg(r.rig.upperL, -0.22, 0.3, 0, -0.2, 0.2, -0.14);
+        placeArmSeg(r.rig.lowerL, -0.2, 0.2, -0.14, -0.18, 0.12, -0.3);
+        placeArmSeg(r.rig.upperR, 0.22, 0.3, 0, 0.2, 0.2, -0.12);
+        placeArmSeg(r.rig.lowerR, 0.2, 0.2, -0.12, 0.18, 0.12, -0.28);
         r.rig.head.rotation.x = 0.08;
       } else {
         r.rig.head.rotation.x = 0.05;
@@ -323,7 +362,7 @@ export function createPlazaWorldView(
         key, pid: p.pid || '', rig, tag: ensureTag(p.nick || '剝蚵人'), bubble: ensureBubble(), bubUntil: 0,
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
-        tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0,
+        tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0, throwT: 0,
       };
       remotes.set(key, r);
       hangArms(r, r.seated);
@@ -479,19 +518,24 @@ export function createPlazaWorldView(
         r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
         r.rig.root.position.y *= 0.8;
       }
+      if (r.throwT > 0) {
+        r.throwT -= dt;
+        poseThrow(r);
+        if (r.throwT <= 0) { r.throwT = 0; applyActionPose(r); }
+      }
       // 坐下略往後移，避免身體埋進蚵堆
       const back = r.seated ? 0.22 : 0;
       const ox = r.x + Math.sin(r.yaw) * back;
       const oz = r.z + Math.cos(r.yaw) * back;
       r.rig.outer.position.set(ox, 0, oz);
       r.rig.outer.rotation.y = r.yaw;
-      const headY = r.seated ? CHAIR_SEAT_Y + 0.78 : 1.5;
+      const headY = r.seated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.78 : 1.5;
       placeHud(r.tag, ox, oz, headY, camera);
       if (r.bubUntil > t) placeHud(r.bubble, ox, oz, headY + 0.18, camera, -28);
       else if (r.bubble.style.display !== 'none') r.bubble.style.display = 'none';
     }
     if (selfBubUntil > t) {
-      const headY = selfSeated ? CHAIR_SEAT_Y + 0.78 : 1.5;
+      const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.78 : 1.5;
       const back = selfSeated ? 0.22 : 0;
       const ox = selfX + Math.sin(selfYaw) * back;
       const oz = selfZ + Math.cos(selfYaw) * back;
@@ -517,7 +561,7 @@ export function createPlazaWorldView(
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, applyPose, setPhase, highlight, highlightNear, hitPile, aimTargets, showChat, setSelfPose, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, applyPose, setPhase, highlight, highlightNear, hitPile, aimTargets, showChat, setSelfPose, playThrowFx, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {

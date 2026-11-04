@@ -102,6 +102,20 @@ export async function plazaThrowAt(
   return client.throwAt(targetConnId, from.x, from.y, from.z, to.x, to.y, to.z);
 }
 
+/** 飛殼純視覺（丟空／丟地上），其他人看得到 */
+export async function plazaShellFx(
+  from: { x: number; y: number; z: number },
+  to: { x: number; y: number; z: number },
+) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn' };
+  return client.shellFx(from.x, from.y, from.z, to.x, to.y, to.z);
+}
+
+/** 遠端丟殼甩臂 */
+export function plazaPlayThrowFx(connId: string) {
+  view?.playThrowFx(connId);
+}
+
 export async function plazaStealFrom(targetConnId: string, caught = false) {
   if (!client?.connected) return { ok: false as const, err: 'no_conn', steal: undefined };
   return client.stealFrom(targetConnId, caught);

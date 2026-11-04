@@ -2,7 +2,7 @@ export {
   openPlaza, closePlaza, isPlazaActive, plazaSeated, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaPileObs, plazaNearSeat, plazaTrySit, plazaStandWalk,
   plazaHitPile, plazaMyPileOrigin,
-  plazaConnId, plazaAimTargets, plazaThrowAt, plazaStealFrom,
+  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaPlayThrowFx, plazaStealFrom,
   tickPlaza, plazaReportEarn, plazaEndCleanup, plazaHideChrome, type PlazaDeps,
 } from './session';
 export type { PlazaAimTarget, PlazaShellEvent, PlazaStealEvent } from './types';

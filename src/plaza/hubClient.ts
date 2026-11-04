@@ -213,6 +213,14 @@ export class PlazaClient {
     } catch (e: any) { return { ok: false as const, err: e?.message || 'throw_fail' }; }
   }
 
+  /** 純視覺飛殼（無受擊目標） */
+  async shellFx(fromX: number, fromY: number, fromZ: number, toX: number, toY: number, toZ: number) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn' };
+    try {
+      return await this.conn.invoke<{ ok: boolean; err?: string }>('ShellFx', fromX, fromY, fromZ, toX, toY, toZ);
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'throw_fail' }; }
+  }
+
   async stealFrom(targetConnId: string, caught = false) {
     if (!this.conn) return { ok: false as const, err: 'no_conn', steal: undefined as PlazaStealEvent | undefined };
     try {

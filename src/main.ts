@@ -14,7 +14,7 @@ import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaPileObs, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin,
-  plazaConnId, plazaAimTargets, plazaThrowAt, plazaStealFrom,
+  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaPlayThrowFx, plazaStealFrom,
   plazaEndCleanup, plazaHideChrome, seatPose,
   type PlazaAimTarget, type PlazaShellEvent,
 } from './plaza';
@@ -1619,7 +1619,18 @@ function toss(tapped: boolean) {
   later(0.35, () => { if (meatsLeft > 1 && state === 'play') { meatsLeft--; showExtra(); meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); hint.textContent = `還有 ${meatsLeft} 塊肉！點碗繼續丟`; } else { meatsLeft = 1; showExtra(); emptyT = 2.2; setPhase('empty'); } });
 }
 let shellsOut = 0;
-function discardShell() { if (phase !== 'empty') return; shellsOut++; oyster.visible = false; const sh = new THREE.Mesh(halfGeo, shellBotMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.5, () => scene.remove(sh)); setPhase('busy'); later(0.5, goPick); }
+function discardShell() {
+  if (phase !== 'empty') return;
+  shellsOut++; oyster.visible = false;
+  const from = worldOf(oyster);
+  const to = plazaMode
+    ? (() => { const o = plazaMyPileOrigin(); return o ? o.clone().setY(0.35) : pileSpot(); })()
+    : pileSpot();
+  const sh = new THREE.Mesh(halfGeo, shellBotMat);
+  fly(sh, from, to, 0.6, 0.5, () => scene.remove(sh));
+  if (plazaMode) void plazaShellFx(from, to);
+  setPhase('busy'); later(0.5, goPick);
+}
 // ----- 丟肉：拿著肉時點阿婆，把肉丟到她頭上（不算入碗、不算錢）-----
 function bowlScrPt() { const p = BOWL.clone().project(viewCam()); return p.z > 1 ? null : [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight]; }
 function npcAtScr(x: number, y: number): Npc | null {
@@ -1752,6 +1763,7 @@ function throwShell() {
     } else {
       const a = aimPoint(); a.y = 0.02;
       fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh)));
+      void plazaShellFx(from, a);
     }
     setPhase('busy'); later(0.6, goPick);
     return;
@@ -2460,8 +2472,9 @@ function launchPlaza() {
     },
     getUmb: () => umbHeld || umbT > 0,
     onShellThrow: (e) => {
-      // 自己丟的已經在本地飛過；別人的殼（含打向自己）播飛行動畫
+      // 自己丟的已經在本地飛過；別人的殼（含打向自己）播飛行動畫＋甩臂
       if (e.fromConnId && e.fromConnId === plazaConnId()) return;
+      plazaPlayThrowFx(e.fromConnId);
       plazaFlyShell(e);
     },
     onShellInbound: (e) => {
