@@ -8,6 +8,7 @@ import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
+import { openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat } from './plaza';
 import { ODD } from './oddities';
 import { installNoZoom } from './nozoom';
 installNoZoom();
@@ -27,6 +28,9 @@ let shiftLen = SHIFT; // 臨時工 60／120 秒
 type EvOdd = { i: number; n: number };
 type EvCfg = { id: number; name: string; desc: string; npc: number; dur: number; throwX: number; angerX: number; bonus: number; earlyBonus: number; earlyMeat: number | null; infHp: boolean; steal: 'normal' | 'steal_only' | 'no_steal'; oddDone: EvOdd[]; oddEarly: EvOdd[]; left?: number | null; start: number; end: number };
 let evRun: EvCfg | null = null, evToken: string | null = null, evLastId: number | null = null, evBusy = false;
+/** 廣場多人：無 NPC、座位由 Hub 權威 */
+let plazaMode = false;
+let plazaPayWait: Promise<number> | null = null;
 const TEMP_CUT = 1;
 const canvas = $('c') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: !!SHOT });
@@ -829,7 +833,7 @@ function setPhase(p: Phase) {
   if (p === 'seam' || p === 'twist') updDiff();
 }
 function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・要撬 ${pryNeed()} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
-function goPick() { if (state !== 'play' || walking) return; if (evRun?.steal === 'steal_only') { oyster.visible = false; setPhase('busy'); hint.textContent = '本活動只能用偷的：趁阿婆轉頭聊天，偷她碗裡的肉'; return; } oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把'; }
+function goPick() { if (state !== 'play' || walking) return; if (evRun?.steal === 'steal_only') { oyster.visible = false; setPhase('busy'); hint.textContent = '本活動只能用偷的：趁阿婆轉頭聊天，偷她碗裡的肉'; return; } oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = plazaMode ? '臉盆空了！點一下再撈一把' : '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把'; }
 function holdOyster(dd: number) {
   if (state !== 'play' || walking) return;
   if (saltNext && !tut) { saltNext = false; if (dd > 1) dd = Math.random() < 0.5 ? 0 : 1; toast('🧂 粗鹽搓過，這顆比較好開', '#cfc3ff'); drawMeds(); }
@@ -1101,7 +1105,11 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   moonReset(); npcs.forEach(dressAma); applyCrew();
   if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; syncShiftUi(); achShiftGot = []; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
-  statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now(); if (!tut) track('start', { seat: save.seat ?? 'door', loc: locNow().id });
+  statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now();
+  if (!tut) {
+    if (plazaMode) { const s = plazaMySeat(); track('plaza_start', { seat: s ? `p${s.pileId}s${s.slot}` : 'plaza', loc: locNow().id, mode: 'plaza' }); }
+    else track('start', { seat: save.seat ?? 'door', loc: locNow().id });
+  }
   const sidNow = statsSid; const pingT = setInterval(() => { if (tut || state !== 'play' || statsSid !== sidNow || document.hidden) { if (statsSid !== sidNow || state !== 'play') clearInterval(pingT); return; } track('ping'); }, 60_000);
   count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
@@ -1167,7 +1175,7 @@ function makeBasinOyster(dd: number) {
 function basinSlot(i: number) { const a = i * 2.4, r = 0.06 + (i % 4) * 0.05; return new THREE.Vector3(BASIN.x + Math.cos(a) * r, 0.14 + Math.floor(i / 6) * 0.04, BASIN.z + Math.sin(a) * r); }
 function fillBasin(animate: boolean) {
   for (let i = 0; i < 8; i++) { const m = makeBasinOyster(wpick((newbie() ? [50, 50, 0, 0] : locW()).map(w => ({ w })))); const slot = basinSlot(i); m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2)); basinOy.push(m);
-    if (animate) { const p0 = pileSpot(); fly(m, p0, slot, 0.4 + i * 0.05, 0.4, () => m.position.copy(slot)); } else { m.position.copy(slot); scene.add(m); } }
+    if (animate) { const p0 = plazaMode ? BASIN.clone().add(new THREE.Vector3(rnd(-0.25, 0.25), 0.35, rnd(-0.25, 0.25))) : pileSpot(); fly(m, p0, slot, 0.4 + i * 0.05, 0.4, () => m.position.copy(slot)); } else { m.position.copy(slot); scene.add(m); } }
 }
 function hitsOyster(cx: number, cy: number) { camera.updateMatrixWorld(); viewCam().updateMatrixWorld(); ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), viewCam()); return ray.intersectObject(oyster, true).length > 0; }
 function pickAt(cx: number, cy: number) {
@@ -1180,8 +1188,9 @@ function pickAt(cx: number, cy: number) {
   let best: THREE.Mesh | null = null, bd = Math.max(110, innerWidth * 0.12);
   for (const m of basinOy) { const p = m.position.clone().project(viewCam()); if (p.z > 1) continue; const d = Math.hypot((p.x + 1) / 2 * innerWidth - cx, (1 - p.y) / 2 * innerHeight - cy); if (d < bd) { bd = d; best = m; } }
   if (best) { grab(best); return; }
+  if (plazaMode && !basinOy.length) { scoop(); return; }
   if (ray.intersectObject(pileHit, false).length || ray.intersectObject(pile, false).length) { scoop(); return; }
-  hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : '臉盆空了！點中間的蚵殼山撈一把';
+  hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : (plazaMode ? '臉盆空了！再點一下撈一把' : '臉盆空了！點中間的蚵殼山撈一把');
 }
 function grab(m: THREE.Mesh) {
   basinOy.splice(basinOy.indexOf(m), 1); setPhase('busy'); reach = 0.35; tone(500, 0.05, 0.08, 'triangle'); noise(0.05, 1200, 0.2);
@@ -1261,6 +1270,16 @@ const stools = SEATS.map(st => { const g = new THREE.Group(); const p = seatGrou
 function applySeat(id: string) {
   const old = seatRig.matrixWorld.clone().invert(); save.seat = id; const st = seatNow();
   seatRig.rotation.y = -st.a; seatRig.position.copy(seatGround(st).multiplyScalar((st.r - 2) / st.r || 0)); seatRig.updateMatrixWorld(true); seatYaw = -st.a;
+  const M = seatRig.matrixWorld.clone().multiply(old);
+  [...basinOy, ...bowlMeat].forEach(m => m.position.applyMatrix4(M));
+  SEAT.copy(seatRig.localToWorld(SEAT0.clone())); BASIN.copy(seatRig.localToWorld(BASIN0.clone())); applyBowl();
+}
+/** 廣場：把座椅／鏡頭綁到指定世界座標（面向 yaw） */
+function applyPlazaSeatPose(pos: THREE.Vector3, yaw: number) {
+  const old = seatRig.matrixWorld.clone().invert();
+  seatYaw = yaw; seatRig.rotation.y = yaw;
+  seatRig.position.set(pos.x - Math.sin(yaw) * SEAT0.z, 0, pos.z - Math.cos(yaw) * SEAT0.z);
+  seatRig.updateMatrixWorld(true);
   const M = seatRig.matrixWorld.clone().multiply(old);
   [...basinOy, ...bowlMeat].forEach(m => m.position.applyMatrix4(M));
   SEAT.copy(seatRig.localToWorld(SEAT0.clone())); BASIN.copy(seatRig.localToWorld(BASIN0.clone())); applyBowl();
@@ -1674,21 +1693,39 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   const ev = evRun, evDone = !!ev && endReason !== 'quit' && !handPain, evEarly = evDone && endReason === 'early', evCash = ev && evDone ? Math.max(0, ev.bonus) + (evEarly ? Math.max(0, ev.earlyBonus) : 0) : 0;
   const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty) + evCash; lastPay = { gross: base0 + locBonus + nightBonus + bonus + evCash, pen: penalty, earn };
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
-  save.days++; tickTrial(); autoUnlock(); save.best = Math.max(save.best, count); save.money += earn; if (queen) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
+  const durSec = Math.round(shiftLen - Math.max(0, timeLeft));
+  const seatLabel = plazaMode ? (() => { const s = plazaMySeat(); return s ? `p${s.pileId}s${s.slot}` : 'plaza'; })() : (save.seat ?? 'door');
+  save.days++; tickTrial(); autoUnlock(); save.best = Math.max(save.best, count); if (queen && !plazaMode) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
   for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
   achShift({ worked, temp, waste, cracked, steals, caught, hitsTaken, thrown, ev, evDone, evEarly, cnt: count });
   const evHtml = ev ? evFinish(ev, evDone, evEarly) : '';
-  persist();
-  if (!tut && !SHOT) { const td = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); let inc = 0; try { const o = JSON.parse(LS.getItem('oyster-lb-day') || '{}'); inc = o.d === td ? o.v : 0; } catch { } inc += Math.max(0, earn); try { LS.setItem('oyster-lb-day', JSON.stringify({ d: td, v: inc })); } catch { } Social.submit({ income: inc, oysters: count, pearls: save.dex.reduce((a, b) => a + b, 0) }); }
-  track('day', { loc: locNow().id, item: 't' + shiftLen,  count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, maxAnger: Math.round(dayMaxGrudge), double: dayMulti2, triple: dayMulti3, dur: Math.round(shiftLen - Math.max(0, timeLeft)), dex: dexN(), seat: save.seat ?? 'door', reason: handPain ? 'hand' : endReason, dstat: dstatStr() });
-  $('resTitle').textContent = ev ? (evEarly ? `${ev.name}・提前完工！` : evDone ? `${ev.name}・完工` : `${ev.name}・提早收工`) : handPain ? '🩹 手痛收工' : queen ? '👑 今日剝蚵冠軍！' : '收工了～';
+  const creditLocal = () => {
+    save.money += lastPay.earn; persist();
+    if (!tut && !SHOT) { const td = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); let inc = 0; try { const o = JSON.parse(LS.getItem('oyster-lb-day') || '{}'); inc = o.d === td ? o.v : 0; } catch { } inc += Math.max(0, lastPay.earn); try { LS.setItem('oyster-lb-day', JSON.stringify({ d: td, v: inc })); } catch { } Social.submit({ income: inc, oysters: count, pearls: save.dex.reduce((a, b) => a + b, 0) }); }
+  };
+  if (plazaMode) {
+    persist();
+    track('plaza_end', { loc: locNow().id, item: 'plaza', count, opened, missed, perfects, cracked, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, dur: durSec, seat: seatLabel, reason: handPain ? 'hand' : endReason, dstat: dstatStr(), mode: 'plaza' });
+    plazaPayWait = plazaReportEarn(earn, count, durSec).then(payout => {
+      lastPay.earn = payout;
+      creditLocal();
+      const note = payout !== earn ? `<p style="color:#9be37a">廣場結算 $${payout}（本機試算 $${earn}）</p>` : `<p style="color:#9be37a">廣場結算 $${payout}</p>`;
+      $('resBody')?.insertAdjacentHTML('beforeend', note + `<p style="font-size:13px;opacity:.8">身上共有 $${save.money}</p>`);
+      return payout;
+    });
+  } else {
+    plazaPayWait = null;
+    creditLocal();
+    track('day', { loc: locNow().id, item: 't' + shiftLen, count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, maxAnger: Math.round(dayMaxGrudge), double: dayMulti2, triple: dayMulti3, dur: durSec, dex: dexN(), seat: seatLabel, reason: handPain ? 'hand' : endReason, dstat: dstatStr() });
+  }
+  $('resTitle').textContent = plazaMode ? (handPain ? '🩹 手痛收工' : '廣場收工～') : ev ? (evEarly ? `${ev.name}・提前完工！` : evDone ? `${ev.name}・完工` : `${ev.name}・提早收工`) : handPain ? '🩹 手痛收工' : queen ? '👑 今日剝蚵冠軍！' : '收工了～';
   $('resBody').innerHTML = evHtml + all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 顆入碗</b></div>`).join('') +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美／俐落 ${perfects}・放棄 ${abandoned}・割手 ${stabs}<br>` +
     `偷 ${steals}・被抓到 ${caught}・肉丟中阿婆 ${meatHits}・殼丟中阿婆 ${shellHits}<br>雨傘擋 ${blocks}・完美反彈 ${reflects}・被丟中 ${hitsTaken}・丟殼 ${thrown}・蚵仔掉地上 ${lost}</p>` + (titles.length ? `<p style="font-size:18px"><b>${titles.join('　')}</b></p>` : '') +
-    `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 易$6・普$8・硬$12・超硬$18，殼屑 ${cracked} 顆只算 70%${temp ? `，臨時工抽成 -$${TEMP_CUT}／顆` : ''}</small>${perfects ? `<br>完美／俐落 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
-    `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>` +
-    `<p>${caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
+    `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 易$6・普$8・硬$12・超硬$18，殼屑 ${cracked} 顆只算 70%${temp ? `，臨時工抽成 -$${TEMP_CUT}／顆` : ''}</small>${perfects ? `<br>完美／俐落 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b>${plazaMode ? '（待伺服器確認）' : ''}</p>` +
+    (plazaMode ? '' : `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>`) +
+    `<p>${plazaMode ? '廣場裡大家慢慢剝，不趕時間～' : caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
   if (achShiftGot.length) $('resBody').insertAdjacentHTML('afterbegin', `<div class="resAch"><b><i class="ic ic-trophy"></i> 這一工達成的成就</b><ul>${achShiftGot.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`);
   if (ev) { evLastId = ev.id; evRun = null; evToken = null; shiftLen = SHIFT; } else evLastId = null;
   $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); later(1.2, namePrompt); if (ac) SFX.endJingle(queen && !handPain);
@@ -1797,7 +1834,18 @@ const btn = (id: string, f: () => void, upF?: () => void) => {
 };
 btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); $('backMenu').classList.add('show'); });
 $('bmStay').onclick = () => $('backMenu').classList.remove('show');
-$('bmGo').onclick = () => { $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return; const m0 = save.money; endReason = 'quit'; endDay(); $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; void m0; const P = lastPay; if (P.gross || P.pen) { const r = (ic: string, l: string, v: string, c = '') => `<div class="row"><span><i class="ic ic-${ic}"></i> ${l}</span><b${c}>${v}</b></div>`; $('psBody').innerHTML = r('oyster', '收入', `+$${P.gross}`) + (P.pen ? r('warn', '罰款／扣價', `-$${P.pen}`, ' style="color:#ff8a7a"') + r('coin', '淨收入', `$${P.earn}`) : '') + `<p style="font-size:14px;opacity:.85">已入帳，身上共有 $${save.money}</p>`; $('paySum').classList.add('show'); } };
+$('bmGo').onclick = () => { void (async () => {
+  $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return;
+  const wasPlaza = plazaMode; endReason = 'quit'; endDay();
+  $('result').classList.remove('show');
+  if (wasPlaza) { await plazaPayWait?.catch(() => 0); plazaMode = false; plazaPayWait = null; void closePlaza(); applySeat(save.seat ?? 'door'); }
+  renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+  const P = lastPay; if (P.gross || P.pen) {
+    const r = (ic: string, l: string, v: string, c = '') => `<div class="row"><span><i class="ic ic-${ic}"></i> ${l}</span><b${c}>${v}</b></div>`;
+    $('psBody').innerHTML = r('oyster', '收入', `+$${P.gross}`) + (P.pen ? r('warn', '罰款／扣價', `-$${P.pen}`, ' style="color:#ff8a7a"') + r('coin', '淨收入', `$${P.earn}`) : '') + `<p style="font-size:14px;opacity:.85">已入帳，身上共有 $${save.money}</p>`;
+    $('paySum').classList.add('show');
+  }
+})(); };
 $('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
@@ -1914,7 +1962,7 @@ type MoonFx = (dt: number) => boolean;
 const moonFx: MoonFx[] = [];
 function moonReset() {
   moonFx.length = 0; moonUsed = 0; moonAimEnd();
-  const N = evRun ? Math.max(1, Math.min(50, evRun.npc)) : NPC_DEF.length; evEnsure(N);
+  const N = plazaMode ? 0 : (evRun ? Math.max(1, Math.min(50, evRun.npc)) : NPC_DEF.length); if (N > 0) evEnsure(N);
   npcs.length = 0; ALL_NPCS.forEach((n, i) => { const use = i < N; if (n.bowlM) n.bowlM.visible = use; if (!use) { n.g.visible = false; n.tag.style.display = 'none'; n.bubble.style.display = 'none'; n.windup = 0; n.throwCd = 999; return; } npcs.push(n); n.g.position.copy(NPC_HOME[i].p); n.g.rotation.copy(NPC_HOME[i].r); n.g.scale.setScalar(1); if (!n.g.parent) scene.add(n.g); n.g.visible = true; delete n.g.userData.moon; });
 }
 function moonGone(n: Npc) {
@@ -2024,9 +2072,51 @@ function launchDeathmatch(mode: DmMode) {
 }
 $('oDmFfa').onclick = () => launchDeathmatch('ffa');
 $('oDmHorde').onclick = () => launchDeathmatch('horde');
+function launchPlaza() {
+  if (isDeathmatchActive() || isPlazaActive()) return;
+  $('overlay').classList.remove('show');
+  openPlaza({
+    id: statsId,
+    nick: () => myName(),
+    toast: (t, c) => toast(t, c),
+    audio: () => audio(),
+    scene,
+    camera: () => viewCam(),
+    bubbles: $('bubbles'),
+    applySeatPose: (pos, yaw) => applyPlazaSeatPose(pos, yaw),
+    getPhase: () => phase,
+    getCount: () => count,
+    track: (t, d) => track(t, d),
+    onPayout: () => { /* 結算走 plazaReportEarn */ },
+    onExit: () => {
+      if (state === 'play' && plazaMode) { endReason = 'quit'; endDay(); return; }
+      plazaMode = false; void closePlaza(); applySeat(save.seat ?? 'door');
+      renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+    },
+    beginShift: () => {
+      plazaMode = true; evRun = null; shiftLen = SHIFT; walking = false;
+      on('standBtn', false); on('stealBtn', false); on('joy', false);
+      startDay();
+    },
+  });
+}
+$('oPlaza')?.addEventListener('click', () => launchPlaza());
 $('start').onclick = () => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); };
-btn('again', () => { if (evLastId != null) evAgain(); else startDay(); });
-btn('resMenu', () => { $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; });
+btn('again', () => {
+  if (evLastId != null) evAgain();
+  else if (plazaMode && isPlazaActive()) startDay();
+  else startDay();
+});
+btn('resMenu', () => { void (async () => {
+  $('result').classList.remove('show');
+  if (plazaMode) {
+    await plazaPayWait?.catch(() => 0);
+    plazaMode = false; plazaPayWait = null;
+    void closePlaza();
+    applySeat(save.seat ?? 'door');
+  }
+  renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+})(); });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
 $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
@@ -2150,12 +2240,13 @@ function frameBody() {
     if (phase === 'empty' && !(tut && (TUT[tut.i].id === 'empty' || TUT[tut.i].id === 'shell'))) { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
-    on('standBtn', !walking); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
-    const tgt = walking || evRun?.steal === 'no_steal' ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
+    on('standBtn', !walking && !plazaMode); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
+    const tgt = plazaMode || walking || evRun?.steal === 'no_steal' ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
     if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！${COARSE ? '按住「偷」' : '按住 E'}偷她的肉` : `${tgt.name}在看，不要偷…`;
     if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
+    if (!plazaMode) {
     chatTimer -= dt * seatNow().nag; if (chatTimer <= 0) { chatTimer = 3 + Math.random() * 4; const n = pick(npcs);
-      if (n.bubT <= 0 && n.windup <= 0) { if (n.mood > 0) say(n, pick(GRUDGE)); else if (Math.random() < 0.5) { n.distract = rnd(3, 5.5) * seatNow().steal; n.turnDir = Math.random() < 0.5 ? -1 : 1; say(n, pick(TURN_CHAT), n.distract); } else { say(n, pick(GOSSIP)); if (Math.random() < n.chatty) n.pause = 2.5; } } }
+      if (n && n.bubT <= 0 && n.windup <= 0) { if (n.mood > 0) say(n, pick(GRUDGE)); else if (Math.random() < 0.5) { n.distract = rnd(3, 5.5) * seatNow().steal; n.turnDir = Math.random() < 0.5 ? -1 : 1; say(n, pick(TURN_CHAT), n.distract); } else { say(n, pick(GOSSIP)); if (Math.random() < n.chatty) n.pause = 2.5; } } }
     for (const n of npcs) {
       n.distract -= dt; n.angry -= dt; n.mood -= dt;
       npcShuck(n, dt, t);
@@ -2165,8 +2256,10 @@ function frameBody() {
       if (n.windup > 0) { warnNpc = n; n.windup -= rdt; if (!n.warned && n.windup <= warnLead(n)) { n.warned = true; SFX.alert(); } if (n.windup <= 0) npcThrow(n); }
       if (n.peek && n.look <= 0 && n.distract <= 0 && Math.random() < dt * 0.05) { n.look = 2.5; say(n, pick(PEEK), 2.5); }
     }
+    }
     updHud();
   }
+  tickPlaza(rdt);
   // ⚠ 方向提示
   if (warnNpc && !warnNpc.warned) warnNpc = null;
   if (warnNpc) { const rel = warnNpc.g.position.clone().sub(camera.position); const fwd = camera.getWorldDirection(new THREE.Vector3()); let a = Math.atan2(rel.x, rel.z) - Math.atan2(fwd.x, fwd.z); a = Math.atan2(Math.sin(a), Math.cos(a));
@@ -3020,9 +3113,10 @@ function closeTopModal(): boolean {
 }
 installBackGuard(() => {
   if (closeTopModal()) return 'handled';
+  if (isPlazaActive() && !plazaMode) { void closePlaza(); applySeat(save.seat ?? 'door'); renderLocs(); $('overlay').classList.add('show'); return 'handled'; }
   if (state === 'play') { toast('上工中按返回不會離開；要收工請按「回主選單」或等時間到', '#ffcf8a'); return 'handled'; }
   return 'confirm-exit';
-}, () => state === 'play');
+}, () => state === 'play' || isPlazaActive());
 
 // ── 主畫面導覽（新玩家第一次看到主畫面時；阿婆逐一介紹按鈕）──
 const HG: [string, string][] = [
