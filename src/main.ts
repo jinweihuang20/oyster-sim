@@ -2191,6 +2191,7 @@ moonAimEl.querySelectorAll('.maX').forEach(b => b.addEventListener('pointerdown'
 moonAimEl.querySelector('.maX')!.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonAimEnd(); });
 function moonStart() {
   if (state !== 'play' || tut || !(save.meds.moon > 0)) return;
+  if (plazaMode) { toast('廣場不能用飛彈鐵拳', '#ffb08a'); return; }
   if (moonUsed >= MOON_MAX) { toast(`這一工已經送 ${MOON_MAX} 位上月球了，下一工再用`, '#ffb08a'); return; }
   if (!npcs.length) { toast('旁邊已經沒有人了', '#ffb08a'); return; }
   $('medList').classList.remove('show'); if (document.pointerLockElement) document.exitPointerLock();
@@ -2935,9 +2936,12 @@ function useMed(id: string) {
 function renderMedList() {
   const L = $('medList'); const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0);
   const ownI = ITEMS.filter(m => (save.meds[m.id] ?? 0) > 0);
-  L.innerHTML = '<div class="mlH"><b>藥品</b><button class="mlX" aria-label="關閉">✕</button></div>' + (own.length ? own.map((m, i) => `<button data-use="${m.id}"><span class="mlN"><span class="nm"><span class="key">${i + 1}. </span>${m.emo} ${m.n}</span><b class="ct">×${save.meds[m.id]}</b></span><small>${m.good}／${m.bad}${m.dur ? `・${m.dur} 秒` : "・立即"}${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「藥品」買吧</p>') + '<div class="mlH"><b>道具</b></div>' + (ownI.length ? ownI.map(m => `<button data-item="${m.id}"><span class="mlN"><i class="ic ic-moon"></i><span class="nm">${m.n}</span><b class="ct">×${save.meds[m.id]}</b></span><small>${m.good}（這一工剩 ${Math.max(0, MOON_MAX - moonUsed)} 次）</small></button>`).join('') : '<p>身上沒有道具，去雜貨店的「道具」買吧</p>');
+  const itemHint = plazaMode
+    ? '廣場不能用飛彈鐵拳'
+    : `這一工剩 ${Math.max(0, MOON_MAX - moonUsed)} 次`;
+  L.innerHTML = '<div class="mlH"><b>藥品</b><button class="mlX" aria-label="關閉">✕</button></div>' + (own.length ? own.map((m, i) => `<button data-use="${m.id}"><span class="mlN"><span class="nm"><span class="key">${i + 1}. </span>${m.emo} ${m.n}</span><b class="ct">×${save.meds[m.id]}</b></span><small>${m.good}／${m.bad}${m.dur ? `・${m.dur} 秒` : "・立即"}${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「藥品」買吧</p>') + '<div class="mlH"><b>道具</b></div>' + (ownI.length ? ownI.map(m => `<button data-item="${m.id}"${plazaMode ? ' disabled' : ''}><span class="mlN"><i class="ic ic-moon"></i><span class="nm">${m.n}</span><b class="ct">×${save.meds[m.id]}</b></span><small>${plazaMode ? itemHint : `${m.good}（${itemHint}）`}</small></button>`).join('') : '<p>身上沒有道具，去雜貨店的「道具」買吧</p>');
   L.querySelector('.mlX')?.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); L.classList.remove('show'); });
-  L.querySelectorAll('button[data-item]').forEach(b => b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonStart(); }));
+  L.querySelectorAll('button[data-item]').forEach(b => b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); if (plazaMode) { toast('廣場不能用飛彈鐵拳', '#ffb08a'); return; } moonStart(); }));
   L.querySelectorAll('button[data-use]').forEach(b => b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); useMed(b.getAttribute('data-use')!); renderMedList(); }));
 }
 {
