@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { makePlayerAvatar, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
-import { PILE_COUNT, SLOTS_PER_PILE, pileCenter, seatPose, seatKey } from './layout';
+import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
 import type { PlazaPlayer, PlazaSnapshot } from './types';
 
 type Remote = {
@@ -13,6 +13,11 @@ type Remote = {
   phase: string;
   count: number;
   nick: string;
+  seated: boolean;
+  moving: boolean;
+  tx: number; tz: number; tyaw: number; // 目標
+  x: number; z: number; yaw: number; // 插值中
+  bob: number;
 };
 
 const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
@@ -23,8 +28,11 @@ export type PlazaWorldView = {
   syncRoster: (snap: PlazaSnapshot, selfPid: string) => void;
   upsert: (p: PlazaPlayer, selfPid: string) => void;
   remove: (p: PlazaPlayer) => void;
+  applyPose: (p: PlazaPlayer, selfPid: string) => void;
   setPhase: (p: PlazaPlayer) => void;
   highlight: (pileId: number | null, slot: number | null) => void;
+  highlightNear: (seat: PlazaSeatRef | null) => void;
+  tick: (dt: number, camera: THREE.Camera) => void;
   dispose: () => void;
 };
 
@@ -33,7 +41,10 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
   const { M, add } = makeMeshHelpers(scene, LO);
   const remotes = new Map<string, Remote>();
   const seatMeshes = new Map<string, THREE.Mesh>();
-  const pileMats: THREE.MeshStandardMaterial[] = [];
+  let nearKey: string | null = null;
+
+  const floor = add(new THREE.PlaneGeometry(WALK_BOUND * 2.4, WALK_BOUND * 2.4), M(0x5e5e58, { roughness: 0.95 }), [0, 0.002, 0], root, false);
+  floor.rotation.x = -Math.PI / 2;
 
   const shellM = M(0xd8d0c8, { roughness: 0.92 });
   for (let i = 0; i < PILE_COUNT; i++) {
@@ -48,8 +59,6 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
       ], g, false);
       bit.scale.set(1.2, 0.7, 1);
     }
-    const label = document.createElement('div');
-    // 座位標記
     for (let s = 0; s < SLOTS_PER_PILE; s++) {
       const pose = seatPose(i, s);
       const stool = add(new THREE.CylinderGeometry(0.16, 0.16, 0.06, 10), M(0x3a7ac0), [0, 0.4, 0], root);
@@ -59,7 +68,6 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
       seatMeshes.set(seatKey(i, s), pad);
     }
     root.add(g);
-    void label;
   }
 
   function hashLook(pid: string) {
@@ -76,59 +84,106 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
     return tag;
   }
 
-  function placeRemote(r: Remote) {
-    const pose = seatPose(r.pileId, r.slot);
-    r.rig.outer.position.set(pose.pos.x, 0, pose.pos.z);
-    r.rig.outer.rotation.y = pose.yaw;
+  function poseSit(r: Remote) {
     r.rig.root.position.y = 0.05;
-    // 簡易坐姿：腿彎
     r.rig.legL.rotation.x = -1.1; r.rig.legR.rotation.x = -1.1;
     r.rig.shinL.rotation.x = 1.2; r.rig.shinR.rotation.x = 1.2;
     r.rig.torso.rotation.x = 0.12;
   }
 
-  function upsert(p: PlazaPlayer, selfPid: string) {
-    if (!p || p.pid === selfPid || p.pileId < 0) return;
-    const key = p.connId || seatKey(p.pileId, p.slot);
+  function poseStand(r: Remote) {
+    r.rig.root.position.y = 0;
+    r.rig.legL.rotation.x = 0; r.rig.legR.rotation.x = 0;
+    r.rig.shinL.rotation.x = 0; r.rig.shinR.rotation.x = 0;
+    r.rig.torso.rotation.x = 0;
+  }
+
+  function applyActionPose(r: Remote) {
+    const ph = r.phase;
+    if (r.seated) {
+      poseSit(r);
+      // 剝蚵動作示意
+      if (ph === 'twist' || ph === 'pry') {
+        r.rig.head.rotation.x = 0.2;
+        r.rig.upperR.rotation.x = -0.6; r.rig.lowerR.rotation.x = -0.4;
+      } else if (ph === 'seam') {
+        r.rig.head.rotation.x = 0.12;
+        r.rig.upperR.rotation.x = -0.35;
+      } else if (ph === 'aim' || ph === 'toss') {
+        r.rig.upperL.rotation.x = -0.8;
+        r.rig.head.rotation.x = -0.05;
+      } else if (ph === 'scoop' || ph === 'pick') {
+        r.rig.upperL.rotation.x = -0.5; r.rig.upperR.rotation.x = -0.3;
+        r.rig.head.rotation.x = 0.1;
+      } else {
+        r.rig.head.rotation.x = 0.08;
+        r.rig.upperL.rotation.x = 0; r.rig.upperR.rotation.x = 0;
+        r.rig.lowerR.rotation.x = 0;
+      }
+    } else {
+      poseStand(r);
+      r.rig.head.rotation.x = 0;
+      r.rig.upperL.rotation.x = 0; r.rig.upperR.rotation.x = 0;
+    }
+  }
+
+  function ensure(p: PlazaPlayer, selfPid: string): Remote | null {
+    if (!p || p.pid === selfPid) return null;
+    const key = p.connId || p.pid;
     let r = remotes.get(key);
     if (!r) {
       const look = hashLook(p.pid || key);
       const rig = makePlayerAvatar(look, M, add, LO);
       root.add(rig.outer);
-      r = { key, rig, tag: ensureTag(p.nick || '剝蚵人'), pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick };
+      const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
+      r = {
+        key, rig, tag: ensureTag(p.nick || '剝蚵人'),
+        pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
+        seated: !!p.seated, moving: !!p.moving,
+        tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0,
+      };
       remotes.set(key, r);
-    } else {
-      r.pileId = p.pileId; r.slot = p.slot; r.phase = p.phase; r.count = p.count;
-      if (p.nick && p.nick !== r.nick) { r.nick = p.nick; r.tag.textContent = p.nick; }
     }
-    placeRemote(r);
+    return r;
+  }
+
+  function applyPose(p: PlazaPlayer, selfPid: string) {
+    const r = ensure(p, selfPid); if (!r) return;
+    r.pileId = p.pileId; r.slot = p.slot; r.phase = p.phase || r.phase; r.count = p.count ?? r.count;
+    r.seated = !!p.seated; r.moving = !!p.moving;
+    if (p.nick && p.nick !== r.nick) { r.nick = p.nick; }
+    r.tag.textContent = r.seated ? `${r.nick} · ${r.count}` : r.nick;
+    if (r.seated && p.pileId >= 0) {
+      const pose = seatPose(p.pileId, p.slot);
+      r.tx = pose.pos.x; r.tz = pose.pos.z; r.tyaw = pose.yaw;
+      r.x = pose.pos.x; r.z = pose.pos.z; r.yaw = pose.yaw;
+    } else {
+      if (typeof p.x === 'number') r.tx = p.x;
+      if (typeof p.z === 'number') r.tz = p.z;
+      if (typeof p.yaw === 'number') r.tyaw = p.yaw;
+    }
+    applyActionPose(r);
     paintOcc();
   }
 
+  function upsert(p: PlazaPlayer, selfPid: string) { applyPose(p, selfPid); }
+
   function remove(p: PlazaPlayer) {
-    const key = p.connId || seatKey(p.pileId, p.slot);
+    const key = p.connId || p.pid;
     const r = remotes.get(key);
     if (!r) return;
     root.remove(r.rig.outer); r.tag.remove(); remotes.delete(key);
     paintOcc();
   }
 
-  function setPhase(p: PlazaPlayer) {
-    const key = p.connId;
-    const r = remotes.get(key);
-    if (!r) { upsert(p, ''); return; }
-    r.phase = p.phase; r.count = p.count;
-    r.tag.textContent = `${r.nick} · ${r.count}`;
-    // 輕動畫：busy 時微點頭
-    r.rig.head.rotation.x = p.phase === 'twist' || p.phase === 'seam' ? 0.15 : 0;
-  }
+  function setPhase(p: PlazaPlayer) { applyPose(p, ''); }
 
   function syncRoster(snap: PlazaSnapshot, selfPid: string) {
     const alive = new Set<string>();
     for (const p of snap?.players ?? []) {
       if (p.pid === selfPid) continue;
-      alive.add(p.connId);
-      upsert(p, selfPid);
+      alive.add(p.connId || p.pid);
+      applyPose(p, selfPid);
     }
     for (const [k, r] of [...remotes]) {
       if (!alive.has(k)) { root.remove(r.rig.outer); r.tag.remove(); remotes.delete(k); }
@@ -138,8 +193,8 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
 
   function paintOcc(snap?: PlazaSnapshot) {
     const taken = new Set<string>();
-    if (snap) for (const p of snap.players) taken.add(seatKey(p.pileId, p.slot));
-    else for (const r of remotes.values()) taken.add(seatKey(r.pileId, r.slot));
+    if (snap) for (const p of snap.players) { if (p.seated && p.pileId >= 0) taken.add(seatKey(p.pileId, p.slot)); }
+    else for (const r of remotes.values()) { if (r.seated && r.pileId >= 0) taken.add(seatKey(r.pileId, r.slot)); }
     for (const [k, m] of seatMeshes) {
       const mat = m.material as THREE.MeshStandardMaterial;
       const busy = taken.has(k);
@@ -149,26 +204,49 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
   }
 
   function highlight(pileId: number | null, slot: number | null) {
+    nearKey = pileId != null && slot != null ? seatKey(pileId, slot) : null;
     for (const [k, m] of seatMeshes) {
       const mat = m.material as THREE.MeshStandardMaterial;
-      const mine = pileId != null && slot != null && k === seatKey(pileId, slot);
-      if (mine) { mat.emissive?.setHex(0x224400); mat.opacity = 0.7; }
-      else if (mat.emissive) mat.emissive.setHex(0x000000);
+      if (!mat.emissive) continue;
+      const mine = nearKey != null && k === nearKey;
+      mat.emissive.setHex(mine ? 0x336610 : 0x000000);
+      if (mine) mat.opacity = 0.75;
     }
   }
 
-  // 每幀更新名牌螢幕位置（由外部 tick 呼叫也可；這裡用簡易 billboard via CSS in main tick）
+  function highlightNear(seat: PlazaSeatRef | null) {
+    highlight(seat?.pileId ?? null, seat?.slot ?? null);
+  }
+
   const _v = new THREE.Vector3();
-  function tickTags(camera: THREE.Camera) {
+  function tick(dt: number, camera: THREE.Camera) {
+    const k = Math.min(1, dt * 10);
     for (const r of remotes.values()) {
-      _v.set(r.rig.outer.position.x, 1.55, r.rig.outer.position.z).project(camera);
+      r.x += (r.tx - r.x) * k;
+      r.z += (r.tz - r.z) * k;
+      let dy = r.tyaw - r.yaw;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      r.yaw += dy * k;
+      if (!r.seated && r.moving) {
+        r.bob += dt * 10;
+        const swing = Math.sin(r.bob) * 0.55;
+        r.rig.legL.rotation.x = swing; r.rig.legR.rotation.x = -swing;
+        r.rig.shinL.rotation.x = Math.max(0, -swing * 0.5); r.rig.shinR.rotation.x = Math.max(0, swing * 0.5);
+        r.rig.root.position.y = Math.abs(Math.sin(r.bob * 2)) * 0.03;
+      } else if (!r.seated) {
+        r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
+        r.rig.root.position.y *= 0.8;
+      }
+      r.rig.outer.position.set(r.x, 0, r.z);
+      r.rig.outer.rotation.y = r.yaw;
+      _v.set(r.x, r.seated ? 1.35 : 1.7, r.z).project(camera);
       const x = (_v.x * 0.5 + 0.5) * innerWidth, y = (-_v.y * 0.5 + 0.5) * innerHeight;
       const behind = _v.z > 1;
       r.tag.style.display = behind ? 'none' : '';
       r.tag.style.transform = `translate(${x}px,${y}px) translate(-50%,-100%)`;
     }
   }
-  (root as any).tickTags = tickTags;
 
   function dispose() {
     for (const r of remotes.values()) { root.remove(r.rig.outer); r.tag.remove(); }
@@ -178,14 +256,12 @@ export function createPlazaWorldView(scene: THREE.Scene, bubblesHost: HTMLElemen
       const m = o as THREE.Mesh;
       if (m.isMesh) { m.geometry?.dispose(); const mat = m.material as THREE.Material | THREE.Material[]; if (Array.isArray(mat)) mat.forEach(x => x.dispose()); else mat?.dispose?.(); }
     });
-    pileMats.length = 0;
   }
 
-  return { root, syncRoster, upsert, remove, setPhase, highlight, dispose };
+  return { root, syncRoster, upsert, remove, applyPose, setPhase, highlight, highlightNear, tick, dispose };
 }
 
-export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera) {
+export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {
   if (!view) return;
-  const fn = (view.root as any).tickTags as ((c: THREE.Camera) => void) | undefined;
-  fn?.(camera);
+  view.tick(dt, camera);
 }

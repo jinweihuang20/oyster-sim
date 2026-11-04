@@ -8,7 +8,10 @@ import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
-import { openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat } from './plaza';
+import {
+  openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
+  plazaWalkBound, plazaPileObs, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
+} from './plaza';
 import { ODD } from './oddities';
 import { installNoZoom } from './nozoom';
 installNoZoom();
@@ -28,9 +31,10 @@ let shiftLen = SHIFT; // 臨時工 60／120 秒
 type EvOdd = { i: number; n: number };
 type EvCfg = { id: number; name: string; desc: string; npc: number; dur: number; throwX: number; angerX: number; bonus: number; earlyBonus: number; earlyMeat: number | null; infHp: boolean; steal: 'normal' | 'steal_only' | 'no_steal'; oddDone: EvOdd[]; oddEarly: EvOdd[]; left?: number | null; start: number; end: number };
 let evRun: EvCfg | null = null, evToken: string | null = null, evLastId: number | null = null, evBusy = false;
-/** 廣場多人：無 NPC、座位由 Hub 權威 */
+/** 廣場多人：無 NPC、座位由 Hub 權威；進場先走動再坐下開剝 */
 let plazaMode = false;
 let plazaPayWait: Promise<number> | null = null;
+let plazaHomeHide: THREE.Object3D[] = [];
 const TEMP_CUT = 1;
 const canvas = $('c') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: !!SHOT });
@@ -1801,7 +1805,14 @@ window.addEventListener('keydown', e => {
   if (state === 'play' && $('medList').classList.contains('show') && /^Digit[1-9]$/.test(e.code)) { const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0); const m = own[+e.code.slice(5) - 1]; if (m) { useMed(m.id); renderMedList(); } return; }
   if (tut && e.code === 'Enter' && TUT[tut.i].next) { $('tutNext').click(); return; }
   if (state !== 'play') return; audio().resume();
-  if (walking) { walkKeys.add(e.code); if (e.code === 'KeyE' && nearSeat) sitDown(nearSeat.id); return; }
+  if (walking) {
+    walkKeys.add(e.code);
+    if (e.code === 'KeyE') {
+      if (plazaMode) void plazaTrySit();
+      else if (nearSeat) sitDown(nearSeat.id);
+    }
+    return;
+  }
   if (e.code === 'KeyG') { standUp(); return; }
   if (e.code === 'Space' && !e.repeat && umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
   if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) { if (!tutMeat()) toss(true); } else if (phase === 'aim') { holding = true; hold = 0; } }
@@ -1836,9 +1847,15 @@ btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (
 $('bmStay').onclick = () => $('backMenu').classList.remove('show');
 $('bmGo').onclick = () => { void (async () => {
   $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return;
-  const wasPlaza = plazaMode; endReason = 'quit'; endDay();
+  const wasPlaza = plazaMode;
+  if (wasPlaza && !plazaShiftStarted()) {
+    plazaMode = false; document.body.classList.remove('plazaRoam'); plazaHideYard(false); void closePlaza(); applySeat(save.seat ?? 'door');
+    walking = false; handRig.visible = true; on('joy', false); state = 'menu'; syncShiftUi();
+    renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; return;
+  }
+  endReason = 'quit'; endDay();
   $('result').classList.remove('show');
-  if (wasPlaza) { await plazaPayWait?.catch(() => 0); plazaMode = false; plazaPayWait = null; void closePlaza(); applySeat(save.seat ?? 'door'); }
+  if (wasPlaza) { await plazaPayWait?.catch(() => 0); plazaMode = false; plazaPayWait = null; document.body.classList.remove('plazaRoam'); plazaHideYard(false); void closePlaza(); applySeat(save.seat ?? 'door'); walking = false; handRig.visible = true; on('joy', false); }
   renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
   const P = lastPay; if (P.gross || P.pen) {
     const r = (ic: string, l: string, v: string, c = '') => `<div class="row"><span><i class="ic ic-${ic}"></i> ${l}</span><b${c}>${v}</b></div>`;
@@ -1846,7 +1863,7 @@ $('bmGo').onclick = () => { void (async () => {
     $('paySum').classList.add('show');
   }
 })(); };
-$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
+$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (plazaMode) void plazaTrySit(); else if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
@@ -1871,11 +1888,21 @@ let walking = false, nearSeat: Seat | null = null; const walkPos = new THREE.Vec
 const NAG_STAND = ['剝一半就要走喔？', '蚵仔丟著就走，好浪費！', '要去哪裡？工作先做完啦'];
 function standUp() {
   if (state !== 'play' || walking) return;
+  if (plazaMode && plazaSeated()) { void plazaStandWalk(); return; }
   if (['seam', 'twist', 'crab', 'aim', 'empty'].includes(phase)) { abandoned++; const sh = new THREE.Mesh(shellGeo, shellTopMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.6, () => scene.remove(sh)); nag(NAG_STAND); if (!seatNow().nag || Math.random() > seatNow().nag) { const n = pick(npcs); n.look = 2.5; say(n, pick(NAG_STAND), 3); } }
   oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
   walking = true; handRig.visible = false; walkPos.copy(SEAT).setY(1.55); const out = seatGround(seatNow()).setLength(0.45); walkPos.add(out);
   tYaw = yaw = yaw + seatYaw; tPitch = pitch = -0.25; $('diff').textContent = ''; on('standBtn', false); on('joy', true); on('stealBtn', false);
   hint.textContent = COARSE ? '用搖桿行路，走去空的藍色板凳邊仔，按「坐落」換位' : 'WASD 行路，走去空的藍色板凳邊仔，按 E 坐落換位';
+}
+/** 廣場：站起後的本地走動狀態（由 plazaStandWalk 呼叫） */
+function plazaEnterWalkPose(fromSeat = true) {
+  oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
+  walking = true; handRig.visible = false;
+  if (fromSeat) { walkPos.copy(SEAT).setY(1.55); walkPos.x += Math.sin(seatYaw) * 0.55; walkPos.z += Math.cos(seatYaw) * 0.55; tYaw = yaw = yaw + seatYaw; }
+  tPitch = pitch = -0.2; $('diff').textContent = ''; on('standBtn', false); on('umbBtn', false); on('medBtn', false); on('stealBtn', false); on('joy', true);
+  stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
+  hint.textContent = COARSE ? '廣場裡隨意走走，靠近空板凳按「坐落」剝蚵' : 'WASD 在廣場走動，靠近空板凳按 E 坐下剝蚵';
 }
 function sitDown(id: string) {
   walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear(); stools.forEach(g => g.userData.tag.visible = false);
@@ -1885,12 +1912,22 @@ function walkStep(dt: number) {
   const k = (c: string) => walkKeys.has(c) ? 1 : 0;
   let f = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - joy.y, r = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + joy.x;
   const l = Math.hypot(f, r); if (l > 1) { f /= l; r /= l; }
-  const sp = 1.7 * dt; walkPos.x += (-Math.sin(yaw) * f + Math.cos(yaw) * r) * sp; walkPos.z += (-Math.cos(yaw) * f - Math.sin(yaw) * r) * sp;
-  const obs: [number, number, number][] = [[0, 0, 1.15], [BASIN.x, BASIN.z, 0.42], [BOWL.x, BOWL.z, BOWL_R + 0.12], [2.6, 2.6, 0.75], [2.9, -2.5, 0.35], [3.1, -1.9, 0.35], [-2.9, 2.6, 0.35], [3.0, 0.5, 0.3], [-3.0, 0.2, 0.3]];
-  npcs.forEach(n => obs.push([n.g.position.x, n.g.position.z, 0.5])); stools.forEach(g => obs.push([g.position.x, g.position.z, 0.28]));
+  const sp = (plazaMode ? 2.4 : 1.7) * dt; walkPos.x += (-Math.sin(yaw) * f + Math.cos(yaw) * r) * sp; walkPos.z += (-Math.cos(yaw) * f - Math.sin(yaw) * r) * sp;
+  const obs: [number, number, number][] = plazaMode
+    ? [...plazaPileObs()]
+    : [[0, 0, 1.15], [BASIN.x, BASIN.z, 0.42], [BOWL.x, BOWL.z, BOWL_R + 0.12], [2.6, 2.6, 0.75], [2.9, -2.5, 0.35], [3.1, -1.9, 0.35], [-2.9, 2.6, 0.35], [3.0, 0.5, 0.3], [-3.0, 0.2, 0.3]];
+  if (!plazaMode) { npcs.forEach(n => obs.push([n.g.position.x, n.g.position.z, 0.5])); stools.forEach(g => obs.push([g.position.x, g.position.z, 0.28])); }
   for (let it = 0; it < 3; it++) for (const [x, z, rr] of obs) { const dx = walkPos.x - x, dz = walkPos.z - z, d = Math.hypot(dx, dz); if (d < rr + 0.2 && d > 1e-4) { walkPos.x = x + dx / d * (rr + 0.2); walkPos.z = z + dz / d * (rr + 0.2); } }
-  if (walkPos.z < -2.55 && walkPos.x < -1.3) walkPos.z = -2.55; // 保麗龍箱
-  walkPos.x = clamp(walkPos.x, -3.25, 3.25); walkPos.z = clamp(walkPos.z, -3.25, 3.25); walkPos.y = 1.55 + Math.sin(performance.now() / 120) * 0.012 * Math.min(1, l);
+  if (!plazaMode && walkPos.z < -2.55 && walkPos.x < -1.3) walkPos.z = -2.55; // 保麗龍箱
+  const bound = plazaMode ? plazaWalkBound() : 3.25;
+  walkPos.x = clamp(walkPos.x, -bound, bound); walkPos.z = clamp(walkPos.z, -bound, bound); walkPos.y = 1.55 + Math.sin(performance.now() / 120) * 0.012 * Math.min(1, l);
+  if (plazaMode) {
+    nearSeat = null; stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
+    const n = plazaNearSeat();
+    on('seatCard', !!n);
+    if (n) $('seatInfo').innerHTML = `<b>🪑 第 ${n.pileId + 1} 堆 · 座 ${n.slot + 1}</b><br><span style="color:#9be37a">空位可坐，坐下開始剝蚵</span>`;
+    return;
+  }
   let best: Seat | null = null, bd = 0.85; SEATS.forEach((st, i) => { const d = Math.hypot(walkPos.x - stools[i].position.x, walkPos.z - stools[i].position.z); stools[i].userData.tag.visible = true; if (d < bd) { bd = d; best = st; } });
   if (best !== nearSeat) { nearSeat = best; on('seatCard', !!best); if (best) { const st = best as Seat; $('seatInfo').innerHTML = `<b>🪑 ${st.n}</b>${st.id === seatNow().id ? '（這馬的位）' : ''}<br><span style="color:#9be37a">＋ ${st.pro}</span><br><span style="color:#ff8a7a">－ ${st.con}</span>`; } }
 }
@@ -2072,6 +2109,20 @@ function launchDeathmatch(mode: DmMode) {
 }
 $('oDmFfa').onclick = () => launchDeathmatch('ffa');
 $('oDmHorde').onclick = () => launchDeathmatch('horde');
+function plazaHideYard(hide: boolean) {
+  if (hide) {
+    plazaHomeHide = [];
+    for (const o of [pile, ground, ...stools, ...ALL_NPCS.map(n => n.g)]) {
+      if (!o || (o as any).__plazaHid) continue;
+      (o as any).__plazaHid = o.visible; o.visible = false; plazaHomeHide.push(o);
+    }
+    ALL_NPCS.forEach(n => { n.tag.style.display = 'none'; n.bubble.style.display = 'none'; });
+  } else {
+    for (const o of plazaHomeHide) { o.visible = !!(o as any).__plazaHid; delete (o as any).__plazaHid; }
+    plazaHomeHide = [];
+    stools.forEach(g => { g.visible = true; });
+  }
+}
 function launchPlaza() {
   if (isDeathmatchActive() || isPlazaActive()) return;
   $('overlay').classList.remove('show');
@@ -2086,18 +2137,52 @@ function launchPlaza() {
     applySeatPose: (pos, yaw) => applyPlazaSeatPose(pos, yaw),
     getPhase: () => phase,
     getCount: () => count,
+    getWalkXZ: () => (walking ? { x: walkPos.x, z: walkPos.z } : { x: SEAT.x, z: SEAT.z }),
+    getYaw: () => (walking ? yaw : seatYaw),
+    getMoving: () => {
+      if (!walking) return false;
+      if (joy.x * joy.x + joy.y * joy.y > 0.04) return true;
+      for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) return true;
+      return false;
+    },
     track: (t, d) => track(t, d),
     onPayout: () => { /* 結算走 plazaReportEarn */ },
     onExit: () => {
-      if (state === 'play' && plazaMode) { endReason = 'quit'; endDay(); return; }
-      plazaMode = false; void closePlaza(); applySeat(save.seat ?? 'door');
+      if (state === 'play' && plazaMode && plazaShiftStarted()) { endReason = 'quit'; endDay(); return; }
+      plazaMode = false; document.body.classList.remove('plazaRoam'); plazaHideYard(false); void closePlaza(); applySeat(save.seat ?? 'door');
+      walking = false; handRig.visible = true; on('joy', false);
+      state = 'menu'; syncShiftUi();
       renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+    },
+    enterWalk: () => {
+      plazaMode = true; evRun = null; shiftLen = SHIFT; timeLeft = SHIFT;
+      plazaHideYard(true);
+      state = 'play'; syncShiftUi();
+      moonReset(); // 0 NPC
+      walkPos.set(0, 1.55, plazaWalkBound() * 0.72);
+      tYaw = yaw = Math.PI; tPitch = pitch = -0.18;
+      plazaEnterWalkPose(false);
+      on('quitBtn', true); on('camBtn', true); on('seatCard', false);
+      document.body.classList.add('plazaRoam');
+      toast('歡迎來到蚵仔廣場！到處走走，找堆坐下', '#9be37a');
     },
     beginShift: () => {
       plazaMode = true; evRun = null; shiftLen = SHIFT; walking = false;
-      on('standBtn', false); on('stealBtn', false); on('joy', false);
+      document.body.classList.remove('plazaRoam');
+      on('standBtn', true); on('stealBtn', false); on('joy', false); on('umbBtn', true); on('medBtn', true); on('seatCard', false);
+      handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.85;
       startDay();
+      on('standBtn', true);
+      hint.textContent = '坐下了，開始剝蚵！按「🚶」可站起來換堆';
     },
+    resumeSit: () => {
+      walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear();
+      document.body.classList.remove('plazaRoam');
+      handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.85;
+      on('standBtn', true); on('umbBtn', true); on('medBtn', true);
+      toast('換位坐下', '#9fe0ff'); SFX.pop(); later(0.3, goPick);
+    },
+    goWalk: () => { document.body.classList.add('plazaRoam'); plazaEnterWalkPose(true); },
   });
 }
 $('oPlaza')?.addEventListener('click', () => launchPlaza());
@@ -2112,8 +2197,11 @@ btn('resMenu', () => { void (async () => {
   if (plazaMode) {
     await plazaPayWait?.catch(() => 0);
     plazaMode = false; plazaPayWait = null;
+    document.body.classList.remove('plazaRoam');
+    plazaHideYard(false);
     void closePlaza();
     applySeat(save.seat ?? 'door');
+    walking = false; handRig.visible = true; on('joy', false);
   }
   renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
 })(); });
@@ -2214,7 +2302,7 @@ function frameBody() {
   const us = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0; umbS = us; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
   let warnNpc: Npc | null = null;
   if (state === 'play') {
-    if (!tut) timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); }
+    if (!tut && !(plazaMode && !plazaShiftStarted())) { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
     hp = Math.min(100, hp + dt / 6 * medM('regen')); tickMeds(dt);
     if (phase === 'seam') {
       rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
@@ -2240,7 +2328,7 @@ function frameBody() {
     if (phase === 'empty' && !(tut && (TUT[tut.i].id === 'empty' || TUT[tut.i].id === 'shell'))) { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
-    on('standBtn', !walking && !plazaMode); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
+    on('standBtn', !walking && (!plazaMode || plazaSeated())); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     const tgt = plazaMode || walking || evRun?.steal === 'no_steal' ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
     if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！${COARSE ? '按住「偷」' : '按住 E'}偷她的肉` : `${tgt.name}在看，不要偷…`;
     if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }

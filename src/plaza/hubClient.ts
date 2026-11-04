@@ -6,6 +6,7 @@ export type PlazaHubHandlers = {
   onJoined?: (p: PlazaPlayer) => void;
   onLeft?: (p: PlazaPlayer) => void;
   onSeatChanged?: (p: PlazaPlayer) => void;
+  onPose?: (p: PlazaPlayer) => void;
   onPhase?: (p: PlazaPlayer) => void;
   onChat?: (m: PlazaChat) => void;
   onClose?: (err?: string) => void;
@@ -43,6 +44,7 @@ export class PlazaClient {
     conn.on('PlayerJoined', (p: PlazaPlayer) => this.handlers.onJoined?.(p));
     conn.on('PlayerLeft', (p: PlazaPlayer) => this.handlers.onLeft?.(p));
     conn.on('SeatChanged', (p: PlazaPlayer) => this.handlers.onSeatChanged?.(p));
+    conn.on('Pose', (p: PlazaPlayer) => this.handlers.onPose?.(p));
     conn.on('Phase', (p: PlazaPlayer) => this.handlers.onPhase?.(p));
     conn.on('Chat', (m: PlazaChat) => this.handlers.onChat?.(m));
     conn.onclose((e) => this.handlers.onClose?.(e?.message));
@@ -82,9 +84,14 @@ export class PlazaClient {
     try { await this.conn.invoke('LeaveSeat'); } catch { /* ignore */ }
   }
 
-  async setPhase(phase: string, count: number) {
+  async sync(x: number, z: number, yaw: number, phase: string, count: number, moving: boolean) {
     if (!this.conn) return;
-    try { await this.conn.invoke('SetPhase', phase, count); } catch { /* ignore */ }
+    try { await this.conn.invoke('Sync', x, z, yaw, phase, count, moving); } catch { /* ignore */ }
+  }
+
+  async setPhase(phase: string, count: number) {
+    // 相容：轉成 Sync（坐下時座標由伺服器忽略）
+    return this.sync(0, 0, 0, phase, count, false);
   }
 
   async chat(text: string, pileOnly = false) {

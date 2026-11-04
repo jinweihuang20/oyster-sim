@@ -7,6 +7,11 @@ export type PlazaPlayer = {
   phase: string;
   count: number;
   joinedAt: number;
+  x: number;
+  z: number;
+  yaw: number;
+  seated: boolean;
+  moving: boolean;
 };
 
 export type PlazaSnapshot = {
