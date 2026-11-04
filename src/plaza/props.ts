@@ -178,72 +178,92 @@ export function makePlazaChair(
   return { group, pad };
 }
 
-export type PlazaCanopySite = {
-  cx: number; cz: number;
-  /** 柱腳世界座標（給碰撞用） */
-  posts: { x: number; z: number }[];
-};
-
-/**
- * 遮雨棚落點：外圈／走道口，避開蚵堆（r≈1.05）與椅子（座心 r≈0.35）。
- * 工寮棚架進廣場仍隱藏，改用這組專屬棚。
- */
-export function plazaCanopySites(): PlazaCanopySite[] {
-  const half = 1.25; // 柱相對棚心偏移
-  const raw: { cx: number; cz: number }[] = [
-    // 四角（略出蚵堆圈）
-    { cx: 10.9, cz: 10.9 }, { cx: -10.9, cz: 10.9 },
-    { cx: 10.9, cz: -10.9 }, { cx: -10.9, cz: -10.9 },
-    // 四邊中段
-    { cx: 0, cz: 10.9 }, { cx: 0, cz: -10.9 },
-    { cx: 10.9, cz: 0 }, { cx: -10.9, cz: 0 },
-  ];
-  const sites: PlazaCanopySite[] = [];
-  for (const { cx, cz } of raw) {
-    const posts = [
-      { x: cx - half, z: cz - half }, { x: cx + half, z: cz - half },
-      { x: cx - half, z: cz + half }, { x: cx + half, z: cz + half },
-    ].filter(p => canopyPostClear(p.x, p.z));
-    if (posts.length < 2) continue;
-    sites.push({ cx, cz, posts });
-  }
-  return sites;
+/** 大棚柱腳（外圈），給走動碰撞用 */
+export function plazaShedPosts(): { x: number; z: number }[] {
+  return collectPlazaShedPosts();
 }
 
-function canopyPostClear(x: number, z: number, pad = 0.22) {
+function shedPostClear(x: number, z: number, pad = 0.28) {
   for (let i = 0; i < PILE_COUNT; i++) {
     const c = pileCenter(i);
     if (Math.hypot(x - c.x, z - c.z) < 1.05 + pad) return false;
     for (let s = 0; s < SLOTS_PER_PILE; s++) {
       const seat = seatPose(i, s).pos;
-      if (Math.hypot(x - seat.x, z - seat.z) < 0.38 + pad) return false;
+      if (Math.hypot(x - seat.x, z - seat.z) < 0.4 + pad) return false;
     }
   }
   return true;
 }
 
-/** 鐵皮遮雨棚＋木／鋼柱（柱位已避開堆與椅） */
-export function makePlazaCanopy(
-  site: PlazaCanopySite,
+/** 外圈柱位：覆蓋廣場、不踩進蚵堆／椅子 */
+function collectPlazaShedPosts(): { x: number; z: number }[] {
+  const ring = 10.6;
+  const along = [-10.6, -5.2, 0, 5.2, 10.6];
+  const out: { x: number; z: number }[] = [];
+  const add = (x: number, z: number) => {
+    if (!shedPostClear(x, z)) return;
+    if (out.some(p => Math.hypot(p.x - x, p.z - z) < 0.5)) return;
+    out.push({ x, z });
+  };
+  for (const a of along) {
+    add(-ring, a); add(ring, a); add(a, -ring); add(a, ring);
+  }
+  return out;
+}
+
+/**
+ * 廣場大棚：鏽鐵皮厝頂＋外圈木柱（風格同自家工寮，柱只立外圈避開堆椅）。
+ * 工寮原棚進廣場仍隱藏，改用這座加大棚架。
+ */
+export function makePlazaBigShed(
   M: (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial,
   add: (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], parent: THREE.Object3D, cast?: boolean) => THREE.Mesh,
   lowDetail = false,
-): THREE.Group {
+): { group: THREE.Group; posts: { x: number; z: number }[] } {
   const g = new THREE.Group();
-  g.position.set(site.cx, 0, site.cz);
-  const wood = M(0x5a4030, { roughness: 0.85 });
-  const tin = M(0x6f7a80, { roughness: 0.55, metalness: 0.35 });
-  const tinD = M(0x56606a, { roughness: 0.55, metalness: 0.3 });
-  const postH = 3.05;
-  for (const p of site.posts) {
-    const lx = p.x - site.cx, lz = p.z - site.cz;
-    add(new THREE.CylinderGeometry(0.055, 0.065, postH, lowDetail ? 5 : 7), wood, [lx, postH / 2, lz], g, true);
+  g.name = 'plazaBigShed';
+  const posts = collectPlazaShedPosts();
+  const wood = M(0x5a4a3a, { roughness: 0.88 });
+  const rust = [0x8a5a3a, 0x9a6a48, 0x7a6a5e];
+  const postH = 3.15;
+  const roofY = 3.08;
+  const segs = lowDetail ? 5 : 7;
+
+  for (const p of posts) {
+    add(new THREE.CylinderGeometry(0.07, 0.08, postH, segs), wood, [p.x, postH / 2, p.z], g, true);
   }
-  // 棚頂略大於柱距
-  const span = 3.2;
-  add(new THREE.BoxGeometry(span, 0.07, span), tinD, [0, postH + 0.02, 0], g, false);
-  // 簡易斜脊
-  const ridge = add(new THREE.BoxGeometry(span * 0.15, 0.1, span), tin, [0, postH + 0.12, 0], g, false);
-  ridge.rotation.z = 0.08;
-  return g;
+  // 外框樑
+  const beam = (x: number, y: number, z: number, w: number, d: number) =>
+    add(new THREE.BoxGeometry(w, 0.12, d), wood, [x, y, z], g, false);
+  beam(0, roofY - 0.08, -10.6, 21.4, 0.14);
+  beam(0, roofY - 0.08, 10.6, 21.4, 0.14);
+  beam(-10.6, roofY - 0.08, 0, 0.14, 21.4);
+  beam(10.6, roofY - 0.08, 0, 0.14, 21.4);
+
+  // 鏽鐵皮厝頂（長條斜舖，蓋住整場）
+  const n = lowDetail ? 22 : 34;
+  const span = 21.6;
+  const stripW = span / n;
+  for (let i = 0; i < n; i++) {
+    const x = -span / 2 + (i + 0.5) * stripW;
+    const panel = add(
+      new THREE.BoxGeometry(stripW * 1.02, 0.035, span),
+      M(rust[i % 3], { side: THREE.DoubleSide, metalness: 0.35, roughness: 0.88 }),
+      [x, roofY + (i % 2) * 0.025, 0],
+      g,
+      false,
+    );
+    panel.rotation.z = 0.05;
+  }
+
+  // 幾顆吊燈（不擋視線）
+  if (!lowDetail) {
+    const glow = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
+    for (const [x, z] of [[-5.2, -5.2], [5.2, 5.2], [-5.2, 5.2], [5.2, -5.2], [0, 0]] as const) {
+      add(new THREE.SphereGeometry(0.08, 8, 6), glow, [x, roofY - 0.55, z], g, false);
+      add(new THREE.CylinderGeometry(0.008, 0.008, 0.5, 4), M(0x111111), [x, roofY - 0.25, z], g, false);
+    }
+  }
+
+  return { group: g, posts };
 }

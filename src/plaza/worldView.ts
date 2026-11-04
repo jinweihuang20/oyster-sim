@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makePlayerAvatar, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
-import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaCanopy, plazaCanopySites, CHAIR_SEAT_Y } from './props';
+import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 
 type Remote = {
@@ -100,10 +100,8 @@ export function createPlazaWorldView(
     }
   }
 
-  // 場邊遮雨棚＋柱（落點已避開蚵堆／椅子；工寮棚架進廣場仍隱藏）
-  for (const site of plazaCanopySites()) {
-    root.add(makePlazaCanopy(site, M, add, LO));
-  }
+  // 廣場大棚（鏽鐵皮＋外圈木柱，避開堆／椅；工寮原棚進場仍隱藏）
+  root.add(makePlazaBigShed(M, add, LO).group);
 
   function hitPile(raycaster: THREE.Raycaster): number | null {
     const hits = raycaster.intersectObjects(pileGroups, true);

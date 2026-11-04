@@ -4,7 +4,7 @@ import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST,
   seatPose, seatKey, nearestFreeSeat, pileObstacles, pileCenter, type PlazaSeatRef,
 } from './layout';
-import { plazaCanopySites } from './props';
+import { plazaShedPosts } from './props';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaSnapshot, PlazaStealEvent } from './types';
 
@@ -67,9 +67,7 @@ export function plazaMySeat() { return myPile != null && mySlot != null ? { pile
 export function plazaWalkBound() { return WALK_BOUND; }
 export function plazaPileObs(): [number, number, number][] {
   const out = pileObstacles();
-  for (const site of plazaCanopySites()) {
-    for (const p of site.posts) out.push([p.x, p.z, 0.2]);
-  }
+  for (const p of plazaShedPosts()) out.push([p.x, p.z, 0.22]);
   return out;
 }
 export function plazaNearSeat() { return near; }
@@ -243,9 +241,18 @@ function buildUi() {
 #pzHud.hide{display:none}
 #pzX{pointer-events:auto;position:absolute;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 8px);min-width:42px;height:42px;padding:0 12px;font-size:14px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;white-space:nowrap}
 #pzX.hide{display:none}
-#pzChatFab{pointer-events:auto;position:absolute;right:calc(env(safe-area-inset-right) + 10px);bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
-#pzChat{display:none;pointer-events:auto;position:absolute;right:calc(env(safe-area-inset-right) + 10px);bottom:calc(env(safe-area-inset-bottom) + 66px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
+/* 聊天放左側，避開右下雨傘／丟殼／偷 */
+#pzChatFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 168px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
+#pzChat{display:none;pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 220px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
 #pzChat.open{display:block}
+@media (pointer:fine){
+  #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 88px)}
+  #pzChat{bottom:calc(env(safe-area-inset-bottom) + 140px)}
+}
+@media (pointer:coarse) and (orientation:landscape){
+  #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 120px)}
+  #pzChat{bottom:calc(env(safe-area-inset-bottom) + 172px);width:min(42vw,240px)}
+}
 #pzChatHd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-size:12px;font-weight:800;color:#ffd23f}
 #pzChatMin{pointer-events:auto;background:transparent;border:0;color:#ffd23f;font-size:18px;line-height:1;padding:2px 6px;font-weight:900}
 #pzLog{height:64px;overflow:auto;font-size:12px;line-height:1.35;margin-bottom:6px}
@@ -255,7 +262,7 @@ function buildUi() {
 #pzSitPrompt{display:none;pointer-events:none;position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 150px);transform:translateX(-50%);background:rgba(20,12,6,.8);border:2px solid #9be37a;border-radius:12px;padding:8px 14px;color:#9be37a;font-weight:900;font-size:14px;text-align:center;z-index:1;max-width:min(90vw,360px)}
 #pzSitPrompt.on{display:block}
 @media (pointer:fine){#pzSitPrompt{bottom:calc(env(safe-area-inset-bottom) + 72px)}}
-@media (max-width:420px){#pzChat{width:min(70vw,240px)}#pzLog{height:52px}}
+@media (max-width:420px){#pzChat{width:min(72vw,240px)}#pzLog{height:52px}}
 </style>
 <button id="pzX" type="button" aria-label="離開廣場">離開廣場</button>
 <div id="pzHud">準備中…</div>
