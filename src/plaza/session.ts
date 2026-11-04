@@ -235,6 +235,8 @@ async function restoreAfterRejoin(s?: PlazaSnapshot) {
   netDown = false;
   clearReconnectTimer();
   syncSeatChrome();
+  // 重連後先清掉可能殘留的「自己」遠端分身，再套 roster
+  view?.pruneSelf(deps.id);
   if (s) {
     snap = normalizeSnap(s);
     view?.syncRoster(snap, deps.id);

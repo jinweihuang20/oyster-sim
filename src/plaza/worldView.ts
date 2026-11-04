@@ -6,7 +6,10 @@ import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed,
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 
 type Remote = {
+  /** Map key＝pid（同一人只留一具模型，重連換 connId 不複製） */
   key: string;
+  /** 目前 Hub connectionId（丟殼／偷肉瞄準用） */
+  connId: string;
   pid: string;
   rig: PlayerRig;
   tag: HTMLElement;
@@ -63,6 +66,7 @@ export type PlazaWorldView = {
   syncRoster: (snap: PlazaSnapshot, selfPid: string) => void;
   upsert: (p: PlazaPlayer, selfPid: string) => void;
   remove: (p: PlazaPlayer) => void;
+  pruneSelf: (selfPid: string) => void;
   applyPose: (p: PlazaPlayer, selfPid: string) => void;
   setPhase: (p: PlazaPlayer) => void;
   highlight: (pileId: number | null, slot: number | null) => void;
@@ -148,7 +152,7 @@ export function createPlazaWorldView(
       const h = headWorld(r, new THREE.Vector3());
       const b = bowlWorld(r, new THREE.Vector3());
       out.push({
-        connId: r.key,
+        connId: r.connId || r.key,
         nick: r.nick,
         pileId: r.pileId,
         phase: r.phase || '',
@@ -470,9 +474,9 @@ export function createPlazaWorldView(
   function playThrowFx(connId: string) {
     if (!connId) return;
     try {
-      let r = remotes.get(connId);
-      if (!r) {
-        for (const x of remotes.values()) { if (x.key === connId || x.pid === connId) { r = x; break; } }
+      let r: Remote | undefined;
+      for (const x of remotes.values()) {
+        if (x.connId === connId || x.pid === connId || x.key === connId) { r = x; break; }
       }
       if (!r || !r.seated) return;
       r.throwT = 0.55;
@@ -572,12 +576,45 @@ export function createPlazaWorldView(
     applyHeadLook(r);
   }
 
+  function findRemoteByPid(pid: string): Remote | undefined {
+    const direct = remotes.get(pid);
+    if (direct) return direct;
+    for (const [k, r] of remotes) {
+      if (r.pid === pid || r.key === pid) {
+        if (k !== pid) {
+          remotes.delete(k);
+          r.key = pid;
+          remotes.set(pid, r);
+        }
+        return r;
+      }
+    }
+    return undefined;
+  }
+
   function ensure(p: PlazaPlayer, selfPid: string): Remote | null {
-    if (!p || p.pid === selfPid) return null;
-    const key = p.connId || p.pid;
-    let r = remotes.get(key);
+    if (!p || !p.pid || p.pid === selfPid) return null;
+    const pid = p.pid;
+    // 以 pid 為唯一 key；掃掉同 pid 的舊 connId key／重複分身
+    let r = findRemoteByPid(pid);
+    if (!r && p.connId) {
+      const legacy = remotes.get(p.connId);
+      if (legacy) {
+        remotes.delete(p.connId);
+        legacy.key = pid;
+        legacy.pid = pid;
+        remotes.set(pid, legacy);
+        r = legacy;
+      }
+    }
+    // 再建新模型前，清掉同 pid 殘留（避免 Map 裡一具、場景裡多具）
+    if (r) {
+      for (const x of [...remotes.values()]) {
+        if (x !== r && x.pid === pid) destroyRemote(x);
+      }
+    }
     if (!r) {
-      const look = hashLook(p.pid || key);
+      const look = hashLook(pid);
       const rig = makePlayerAvatar(look, M, add, LO);
       root.add(rig.outer);
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
@@ -590,18 +627,19 @@ export function createPlazaWorldView(
       rig.torso.add(knife);
       rig.torso.add(oyster);
       r = {
-        key, pid: p.pid || '', rig, tag: ensureTag(p.nick || '剝蚵人'), bubble: ensureBubble(), bubUntil: 0,
+        key: pid, connId: p.connId || '', pid, rig, tag: ensureTag(p.nick || '剝蚵人'), bubble: ensureBubble(), bubUntil: 0,
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
         props, bowlNode, meatRoot, meatMeshes: [], knife, oyster,
         tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0, throwT: 0,
         tLookYaw: 0, lookYaw: 0, tPitch: 0, pitch: 0, headWorkX: 0,
       };
-      remotes.set(key, r);
+      remotes.set(pid, r);
       r.props.visible = r.seated;
       if (r.seated) syncRemoteMeats(r);
       hangArms(r, r.seated);
-    } else if (p.pid) r.pid = p.pid;
+    }
+    if (p.connId) r.connId = p.connId;
     return r;
   }
 
@@ -649,12 +687,37 @@ export function createPlazaWorldView(
 
   function upsert(p: PlazaPlayer, selfPid: string) { applyPose(p, selfPid); }
 
+  function destroyRemote(r: Remote) {
+    root.remove(r.rig.outer); r.tag.remove(); r.bubble.remove();
+    // 只刪「指向同一具模型」的 key，避免誤刪同 pid 的另一筆
+    for (const [k, x] of [...remotes]) {
+      if (x === r) remotes.delete(k);
+    }
+  }
+
   function remove(p: PlazaPlayer) {
-    const key = p.connId || p.pid;
-    const r = remotes.get(key);
+    const byPid = p.pid ? findRemoteByPid(p.pid) : undefined;
+    const r = byPid
+      || (p.connId ? remotes.get(p.connId) : undefined)
+      || [...remotes.values()].find(x => (!!p.connId && x.connId === p.connId) || (!!p.pid && x.pid === p.pid));
     if (!r) return;
-    root.remove(r.rig.outer); r.tag.remove(); r.bubble.remove(); remotes.delete(key);
+    // 同 pid 可能還有殘留分身，一次清乾淨
+    const pid = r.pid || p.pid;
+    destroyRemote(r);
+    if (pid) {
+      for (const x of [...remotes.values()]) {
+        if (x.pid === pid) destroyRemote(x);
+      }
+    }
     paintOcc();
+  }
+
+  /** 清掉誤生的「自己」遠端模型（重連分身） */
+  function pruneSelf(selfPid: string) {
+    if (!selfPid) return;
+    for (const r of [...remotes.values()]) {
+      if (r.pid === selfPid || r.key === selfPid) destroyRemote(r);
+    }
   }
 
   function showChat(opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) {
@@ -668,9 +731,9 @@ export function createPlazaWorldView(
       return;
     }
     let r: Remote | undefined;
-    if (opts.connId) r = remotes.get(opts.connId);
-    if (!r && opts.pid) {
-      for (const x of remotes.values()) { if (x.pid === opts.pid) { r = x; break; } }
+    if (opts.pid) r = remotes.get(opts.pid);
+    if (!r && opts.connId) {
+      for (const x of remotes.values()) { if (x.connId === opts.connId) { r = x; break; } }
     }
     if (!r && opts.nick) {
       for (const x of remotes.values()) { if (x.nick === opts.nick) { r = x; break; } }
@@ -685,17 +748,19 @@ export function createPlazaWorldView(
     selfX = x; selfZ = z; selfYaw = yaw; selfSeated = seated;
   }
 
-  function setPhase(p: PlazaPlayer) { applyPose(p, ''); }
+  function setPhase(p: PlazaPlayer) { applyPose(p, /* 勿用空字串，否則會把「自己」建成遠端分身 */ '\0'); }
 
   function syncRoster(snap: PlazaSnapshot, selfPid: string) {
+    pruneSelf(selfPid);
     const alive = new Set<string>();
     for (const p of snap?.players ?? []) {
-      if (p.pid === selfPid) continue;
-      alive.add(p.connId || p.pid);
+      if (!p.pid || p.pid === selfPid) continue;
+      alive.add(p.pid);
       applyPose(p, selfPid);
     }
     for (const [k, r] of [...remotes]) {
-      if (!alive.has(k)) { root.remove(r.rig.outer); r.tag.remove(); r.bubble.remove(); remotes.delete(k); }
+      // 不在 roster、或 key 不是正規 pid、或誤生的自己 → 刪
+      if (r.pid === selfPid || k === selfPid || !alive.has(r.pid) || k !== r.pid) destroyRemote(r);
     }
     paintOcc(snap);
   }
@@ -798,7 +863,7 @@ export function createPlazaWorldView(
   }
 
   function dispose() {
-    for (const r of remotes.values()) { root.remove(r.rig.outer); r.tag.remove(); r.bubble.remove(); }
+    for (const r of [...remotes.values()]) destroyRemote(r);
     remotes.clear();
     selfBubble.remove();
     tagsHost.remove();
@@ -815,7 +880,7 @@ export function createPlazaWorldView(
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, applyPose, setPhase, highlight, highlightNear, hitPile, aimTargets, showChat, setSelfPose, playThrowFx, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, aimTargets, showChat, setSelfPose, playThrowFx, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {
