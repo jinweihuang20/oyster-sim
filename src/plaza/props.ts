@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PILE_SPACING } from './layout';
+import { PILE_SPACING, pileCenter, seatPose, PILE_COUNT, SLOTS_PER_PILE } from './layout';
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 
@@ -176,4 +176,74 @@ export function makePlazaChair(
     false,
   );
   return { group, pad };
+}
+
+export type PlazaCanopySite = {
+  cx: number; cz: number;
+  /** 柱腳世界座標（給碰撞用） */
+  posts: { x: number; z: number }[];
+};
+
+/**
+ * 遮雨棚落點：外圈／走道口，避開蚵堆（r≈1.05）與椅子（座心 r≈0.35）。
+ * 工寮棚架進廣場仍隱藏，改用這組專屬棚。
+ */
+export function plazaCanopySites(): PlazaCanopySite[] {
+  const half = 1.25; // 柱相對棚心偏移
+  const raw: { cx: number; cz: number }[] = [
+    // 四角（略出蚵堆圈）
+    { cx: 10.9, cz: 10.9 }, { cx: -10.9, cz: 10.9 },
+    { cx: 10.9, cz: -10.9 }, { cx: -10.9, cz: -10.9 },
+    // 四邊中段
+    { cx: 0, cz: 10.9 }, { cx: 0, cz: -10.9 },
+    { cx: 10.9, cz: 0 }, { cx: -10.9, cz: 0 },
+  ];
+  const sites: PlazaCanopySite[] = [];
+  for (const { cx, cz } of raw) {
+    const posts = [
+      { x: cx - half, z: cz - half }, { x: cx + half, z: cz - half },
+      { x: cx - half, z: cz + half }, { x: cx + half, z: cz + half },
+    ].filter(p => canopyPostClear(p.x, p.z));
+    if (posts.length < 2) continue;
+    sites.push({ cx, cz, posts });
+  }
+  return sites;
+}
+
+function canopyPostClear(x: number, z: number, pad = 0.22) {
+  for (let i = 0; i < PILE_COUNT; i++) {
+    const c = pileCenter(i);
+    if (Math.hypot(x - c.x, z - c.z) < 1.05 + pad) return false;
+    for (let s = 0; s < SLOTS_PER_PILE; s++) {
+      const seat = seatPose(i, s).pos;
+      if (Math.hypot(x - seat.x, z - seat.z) < 0.38 + pad) return false;
+    }
+  }
+  return true;
+}
+
+/** 鐵皮遮雨棚＋木／鋼柱（柱位已避開堆與椅） */
+export function makePlazaCanopy(
+  site: PlazaCanopySite,
+  M: (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial,
+  add: (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], parent: THREE.Object3D, cast?: boolean) => THREE.Mesh,
+  lowDetail = false,
+): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(site.cx, 0, site.cz);
+  const wood = M(0x5a4030, { roughness: 0.85 });
+  const tin = M(0x6f7a80, { roughness: 0.55, metalness: 0.35 });
+  const tinD = M(0x56606a, { roughness: 0.55, metalness: 0.3 });
+  const postH = 3.05;
+  for (const p of site.posts) {
+    const lx = p.x - site.cx, lz = p.z - site.cz;
+    add(new THREE.CylinderGeometry(0.055, 0.065, postH, lowDetail ? 5 : 7), wood, [lx, postH / 2, lz], g, true);
+  }
+  // 棚頂略大於柱距
+  const span = 3.2;
+  add(new THREE.BoxGeometry(span, 0.07, span), tinD, [0, postH + 0.02, 0], g, false);
+  // 簡易斜脊
+  const ridge = add(new THREE.BoxGeometry(span * 0.15, 0.1, span), tin, [0, postH + 0.12, 0], g, false);
+  ridge.rotation.z = 0.08;
+  return g;
 }

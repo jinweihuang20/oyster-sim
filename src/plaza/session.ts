@@ -4,6 +4,7 @@ import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST,
   seatPose, seatKey, nearestFreeSeat, pileObstacles, pileCenter, type PlazaSeatRef,
 } from './layout';
+import { plazaCanopySites } from './props';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaSnapshot, PlazaStealEvent } from './types';
 
@@ -64,7 +65,13 @@ export const plazaSeated = () => seated;
 export const plazaShiftStarted = () => shiftStarted;
 export function plazaMySeat() { return myPile != null && mySlot != null ? { pileId: myPile, slot: mySlot } : null; }
 export function plazaWalkBound() { return WALK_BOUND; }
-export function plazaPileObs() { return pileObstacles(); }
+export function plazaPileObs(): [number, number, number][] {
+  const out = pileObstacles();
+  for (const site of plazaCanopySites()) {
+    for (const p of site.posts) out.push([p.x, p.z, 0.2]);
+  }
+  return out;
+}
 export function plazaNearSeat() { return near; }
 /** 點擊射線打到哪一堆（給補蚵用） */
 export function plazaHitPile(raycaster: THREE.Raycaster): number | null {

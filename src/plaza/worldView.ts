@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makePlayerAvatar, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
-import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, CHAIR_SEAT_Y } from './props';
+import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaCanopy, plazaCanopySites, CHAIR_SEAT_Y } from './props';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 
 type Remote = {
@@ -26,9 +26,13 @@ type Remote = {
 const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
 const HAIRS = [0x222222, 0x555555, 0x888888, 0x3a2a1a, 0xdddddd];
 
-/** 髖關節在 root 本地 y≈0.72；坐下時對齊椅面 */
+/**
+ * 死鬥 avatar 站立頭頂 ≈1.5m，第三人稱主角／阿婆頭 ≈1.05m。
+ * 統一縮小，坐時髖仍對齊椅面（worldY = (rootY + HIP_Y) * SCALE）。
+ */
+const AVATAR_SCALE = 0.75;
 const HIP_Y = 0.72;
-const SIT_ROOT_Y = CHAIR_SEAT_Y - HIP_Y + 0.02; // ≈ -0.28
+const SIT_ROOT_Y = CHAIR_SEAT_Y / AVATAR_SCALE - HIP_Y;
 
 export type PlazaWorldView = {
   root: THREE.Group;
@@ -94,6 +98,11 @@ export function createPlazaWorldView(
       root.add(group);
       seatMeshes.set(seatKey(i, s), pad);
     }
+  }
+
+  // 場邊遮雨棚＋柱（落點已避開蚵堆／椅子；工寮棚架進廣場仍隱藏）
+  for (const site of plazaCanopySites()) {
+    root.add(makePlazaCanopy(site, M, add, LO));
   }
 
   function hitPile(raycaster: THREE.Raycaster): number | null {
@@ -238,6 +247,7 @@ export function createPlazaWorldView(
       const rig = makePlayerAvatar(look, M, add, LO);
       root.add(rig.outer);
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
+      rig.outer.scale.setScalar(AVATAR_SCALE);
       const umbMesh = makeRemoteUmb();
       rig.outer.add(umbMesh);
       r = {
@@ -346,8 +356,8 @@ export function createPlazaWorldView(
       }
       r.rig.outer.position.set(r.x, 0, r.z);
       r.rig.outer.rotation.y = r.yaw;
-      // 頭上方
-      _v.set(r.x, r.seated ? CHAIR_SEAT_Y + 1.15 : 1.85, r.z).project(camera);
+      // 頭上方（對齊縮放後身高）
+      _v.set(r.x, r.seated ? CHAIR_SEAT_Y + 0.72 : 1.2, r.z).project(camera);
       const x = (_v.x * 0.5 + 0.5) * innerWidth, y = (-_v.y * 0.5 + 0.5) * innerHeight;
       const behind = _v.z > 1 || x < -40 || x > innerWidth + 40 || y < -20 || y > innerHeight + 40;
       r.tag.style.display = behind ? 'none' : 'block';

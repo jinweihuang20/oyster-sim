@@ -51,7 +51,7 @@ export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDis
   return best;
 }
 
-/** 碰撞用：每堆一個圓 */
+/** 碰撞用：每堆一個圓（遮雨棚柱另見 plazaCanopySites） */
 export function pileObstacles(): [number, number, number][] {
   const out: [number, number, number][] = [];
   for (let i = 0; i < PILE_COUNT; i++) {
