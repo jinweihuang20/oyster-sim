@@ -1,0 +1,135 @@
+---
+description: oyster-sim 專案事實卡——防幻覺；回答或改 code 前必須對齊這些事實，不確定就搜 repo
+alwaysApply: true
+---
+
+# oyster-sim 事實卡（防幻覺）
+
+不確定就搜 `src/`／本檔；**禁止臆造**不存在的檔案、API、系統、道具 id、奇物索引。
+
+## 產品與棧
+
+- 遊戲：**剝蚵仔模擬器**（台式夜市／蚵寮，zh-Hant）
+- 正式版：https://jinweihuang20.github.io/oyster-sim/（`base: /oyster-sim/`）
+- 預覽版：`PREVIEW=1` → `base: /oyster-sim-preview/`，部署到獨立 repo `oyster-sim-preview`；畫面有「預覽版」角標
+- 後台／統計：https://game-status.gwtech.org/admin?game=oyster-sim/
+- 棧：Three.js + Vite + TypeScript；**無 React／無遊戲引擎框架**
+- 音效／BGM／收音機：**全 WebAudio 即時合成**，無外部音檔
+- 存檔：localStorage；PWA：`public/manifest.webmanifest` + `icon.svg`
+- Discord：https://discord.gg/45EZEXyGG4 ；意見回饋 webhook 在 `src/discord.ts`
+
+## 目錄（真實存在的原始碼）
+
+| 路徑 | 職責 |
+|------|------|
+| `src/main.ts` | **幾乎全部玩法**（場景、相位、商店、圖鑑、成就、活動 UI、藥品、裝備…） |
+| `src/deathmatch.ts` | 死鬥相容入口（re-export `src/dm/`） |
+| `src/dm/` | 死鬥：`session`；`match`（`ffa` 限時混戰／`horde` 肉鴿關卡、`teamId`／獎勵）；`piles`（蚵堆填彈冷卻＋圓環）；`weapons`／`loot`／`shop`／`weaponPreview`／`arena`… |
+| `src/style.css` / `icons.css` | UI |
+| `src/social.ts` | 排行榜（含死鬥 `dmKills`／`dmWaves`）、跑馬燈、禮物、線上人數、限時活動 API（`/s/*`） |
+| `src/redeem.ts` + `redeemCodes.ts` | 兌換碼（只存 SHA-256 hash，不明碼） |
+| `src/update.ts` | 輪詢 `version.json` 新版提示 |
+| `src/inapp.ts` | Threads/IG/FB/LINE 內建瀏覽器逃脫＋`/s/move` 搬存檔 |
+| `src/backguard.ts` | 手機返回鍵攔截 |
+| `src/nozoom.ts` | 防雙擊／捏合放大 |
+| `src/discord.ts` | 回饋 webhook |
+| `src/build.d.ts` | `__VERSION__` `__BUILD__` `__PREVIEW__` |
+| `index.html` | HUD／面板 DOM（非 React） |
+| `src/oddities.ts` | 奇物圖鑑 `ODD`（主線／死鬥共用；尾端追加） |
+| `scripts/catalog.mjs` | build 時從 `main.ts`＋`oddities.ts` 抽物品 → `catalog.json` |
+| `scripts/hash-code.mjs` | `npm run hash-code -- 碼` 產生兌換 hash |
+| `.github/workflows/pages.yml` | `main` → GitHub Pages |
+| `.github/workflows/preview.yml` | `dev` → preview 站 |
+
+死鬥以外**沒有**獨立 scene／ecs／asset pipeline／後端 repo。新槍／商店賣槍：改 `src/dm/weapons.ts`（`WEAPON_DEFS` + `buildWeaponView`），不要塞回單檔。
+
+## 建置與環境變數
+
+- `npm run dev` / `npm run build`（`tsc --noEmit` + vite）
+- Vite `define`：`__VERSION__`（git short + 時間）、`__BUILD__`、`__PREVIEW__`
+- build 產出：`dist/version.json`、`dist/catalog.json`
+- 預覽存檔鍵前綴：`preview:`（`LS_P`）；正式版無前綴
+
+## 存檔（硬約束）
+
+- 主鍵：`oyster-sim`；另有 `oyster-mix`、`oyster-stats-id`、`oyster-lb-day` 等
+- `SAVE_V = 3`；`loadSave()` 必須能補舊檔欄位
+- `START_MONEY = 10000`（僅全新無存檔）
+- `ODD`／圖鑑索引：**只能陣列尾端追加**；禁止插入、刪除、重排既有項
+- 珍珠 `dex[4]` ↔ `RAR`；奇物 `odd[i]` ↔ `ODD[i]`
+- 商店擁有／裝備：`save.shop.owned` + `save.shop.equipped`；服裝：`save.equip`；藥品數量：`save.meds`
+- 兌換紀錄：`save.redeemed`（存的是碼的 **id**，不是明碼）
+- 傳說保底：`LEGEND_PITY = 600`（`legendDry`）
+
+## 核心循環（相位）
+
+`Phase = pick | scoop | seam | twist | aim | empty | crab | busy`
+
+流程：臉盆拿蚵 →（空則 scoop 撈殼山）→ seam 找縫插刀 → twist 撬殼 →（珍珠／奇物／螃蟹）→ aim 點碗丟肉（0.8s 俐落）或點阿婆丟肉彈 → empty 丟殼 → 再 pick。
+
+一班預設 `SHIFT = 180` 秒；臨時工 60／120；`TEMP_CUT = 1`／顆。
+
+難度：`DIFF` 易／普通／硬／超硬；入碗價 `DPAY = [6,8,12,18]`；完美／俐落 `PERFECT_PAY = 2`；殼屑約 70% 價。
+
+新手：`save.days < 3` → 較易、綠區＋、割手↓、碗較大等（`newbie()`）。
+
+夜班：裝置時間 20:00–05:00 → 收入 +20%（天色 `SKY` 跟裝置時鐘）。
+
+## 內容資料（常數陣列）
+
+| 陣列 | 用途 | 備註 |
+|------|------|------|
+| `RAR` | 白／粉／金／黑珍珠（`main.ts`） | |
+| `ODD` | 奇物圖鑑（`src/oddities.ts`） | 尾端追加；欄位 `color`／`weight`／`emoji`｜`icon`／`limited`；死鬥掉落 `rollOddIndex` |
+| `LOCS` | 自家／王功／東石／布袋 | `need`＝解鎖累計入碗；`m/thr/ang` |
+| `KNIVES` | 刀 | id：`basic dull wide point seam master` |
+| `UMBS` | 傘 | 按住撐、放開收，無冷卻 |
+| `BOWLS` | 盆 | id `wide` 與刀撞名 → catalog 用 `bowl-wide` |
+| `SEATS` | 位子 | door／pile／bowl／gossip／corner |
+| `GEAR` | 手套／收音機／老花眼鏡 | 擁有後可開關 `save.gear` |
+| `MEDS` | 消耗藥 | tonic oil patch soup okb sweet salt candy |
+| `ITEMS` | 特殊道具 | 目前只有 `moon`（送阿婆上月球，每工最多 2） |
+| `EQUIP` | 頭／手／衣／褲／鞋 | 服飾店；`SETS` 套裝加成 |
+| `NPC_DEF` | 常駐阿婆 | 快手阿桃、講話阿春、好奇阿嬌；活動可加 `EV_EXTRA` |
+
+道具必須有利有弊；活動中部分減怒／減丟效果會被壓掉（`evRun`）。
+
+## 操作（必須雙端）
+
+- 桌面：滑鼠＋Pointer Lock；Space／A D／E 偷／F 丟殼／R 傘／Q 放棄／G 換位／V 視角／M 藥；收音機點按鈕
+- 觸控：點螢幕撬、半畫面拖轉蚵、螢幕按鈕；`COARSE` 文案分支
+- `?shot=` 截圖測試；`?stattest=1`／`?feedtest=1` 測試旗標
+
+## 後端（本 repo 不含伺服器實作）
+
+Base：`https://game-status.gwtech.org`
+
+| 用途 | 端點概念 |
+|------|----------|
+| 匿名事件統計 | `POST /e`（`STATS_URL`），game=`oyster-sim` |
+| 回饋 | `/feedback` |
+| 社群／榜／彈幕 | `/s/*`（score、event、events、top、react、gifts、presence、me、move）；榜 board：`income`／`oysters`／`pearls`／`dmKills`／`dmWaves`（當日 MAX） |
+| 死鬥統計 | `POST /e` 事件 `dm_start`／`dm_end`／`dm_reward`（`mode`＝ffa｜horde）；後台 oyster 報表「死鬥模式」看每日開戰人數 |
+| 商店動態價 | `/s/shop/prices?game=oyster-sim`（失敗用內建價） |
+| 限時活動 | `/s/events/active|start|result|top`；client `EvCfg` 含 npc/dur/throwX/angerX/bonus/steal… |
+| 問卷調查 | `/s/surveys/active|submit`；client `sv*`：題型 single／multi／text，完成獎勵現金（`reward.money`），每人每份一次 |
+
+後端掛掉必須**安靜失敗**，遊戲仍可單機玩。
+
+## 兌換碼流程
+
+1. `npm run hash-code -- 碼`（正規化：去空白＋大寫；hash 前綴 `oyster-sim:`）
+2. 只把 hash 寫進 `redeemCodes.ts` 的 `REDEEM_CODES`
+3. reward 可含 money／items／pearls／odd 索引／meds／trial 刀
+4. 推 `main` 後 Pages 部署生效
+
+## Agent 行為約束
+
+1. 改玩法預設動 `main.ts`；週邊系統動對應小模組，勿重複造輪子
+2. 不要大拆 `main.ts`，除非使用者明確要求重構
+3. 不要新增外部音檔、不要假設有 Unity／Godot／獨立 backend 目錄
+4. 不要改既有 `ODD` 順序或已上線兌換碼 `id`／hash
+5. 文案維持蚵寮／阿婆口語，短句
+6. 改平衡先對照現有常數（`DIFF` `PRY_*` `DPAY` knife／seat／loc 衍生函式），一次一條曲線
+7. 開發流程細節見 `.cursor/skills/oyster-sim-dev/SKILL.md`
+8. **命名**：型別／資料欄位可讀全名，禁止難懂縮寫——見 `.cursor/rules/naming.mdc`

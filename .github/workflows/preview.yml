@@ -1,0 +1,23 @@
+name: Deploy Preview
+on:
+  push: { branches: [dev] }
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency: { group: preview, cancel-in-progress: true }
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
+        env: { PREVIEW: '1' }
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.PREVIEW_DEPLOY_KEY }}
+          external_repository: jinweihuang20/oyster-sim-preview
+          publish_branch: gh-pages
+          publish_dir: ./dist
+          force_orphan: true

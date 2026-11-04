@@ -1,0 +1,43 @@
+name: Deploy Pages
+on:
+  push: { branches: [main] }
+  workflow_dispatch:
+permissions: { contents: read, pages: write, id-token: write }
+concurrency: { group: pages, cancel-in-progress: true }
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: ./dist }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: '${{ steps.d.outputs.page_url }}' }
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4
+  notify:
+    needs: deploy
+    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post update to Discord
+        continue-on-error: true
+        env:
+          DISCORD_CHANGELOG_WEBHOOK: ${{ secrets.DISCORD_CHANGELOG_WEBHOOK }}
+          MSG: ${{ github.event.head_commit.message }}
+          SHA: ${{ github.sha }}
+        run: |
+          [ -z "$DISCORD_CHANGELOG_WEBHOOK" ] && { echo "no webhook, skip"; exit 0; }
+          node -e '
+            const subj=(process.env.MSG||"").split("\n")[0].slice(0,300);
+            const body={username:"gamebot",embeds:[{title:"🦪 剝蚵仔模擬器 已更新",description:`${subj}\n\n立即玩：https://jinweihuang20.github.io/oyster-sim/`,url:"https://jinweihuang20.github.io/oyster-sim/",color:0x2ECC71,footer:{text:process.env.SHA.slice(0,7)}}]};
+            fetch(process.env.DISCORD_CHANGELOG_WEBHOOK,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(r=>console.log("discord",r.status));
+          '
