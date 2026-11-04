@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PILES, PICK_R } from './constants';
 
 /** 同一堆填完／離開後進入冷卻，逼換堆 */
-export const PILE_COOL_SEC = 12;
+export const PILE_COOL_SEC = 5;
 
 export type PileRuntime = {
   pos: THREE.Vector3;
