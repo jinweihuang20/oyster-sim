@@ -30,10 +30,10 @@ const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
 const HAIRS = [0x222222, 0x555555, 0x888888, 0x3a2a1a, 0xdddddd];
 
 /**
- * 死鬥 avatar 站立頭頂 ≈1.5m，第三人稱主角／阿婆頭 ≈1.05m。
- * 統一縮小，坐時髖仍對齊椅面（worldY = (rootY + HIP_Y) * SCALE）。
+ * 死鬥 avatar 站立頭頂 ≈1.5m；第三人稱本體走路頭 ≈1.05、坐下被相機錨點拉高。
+ * 0.75 會顯得過矮，略縮到 0.92 對齊走路身高，坐時髖仍對齊椅面。
  */
-const AVATAR_SCALE = 0.75;
+const AVATAR_SCALE = 0.92;
 const HIP_Y = 0.72;
 const SIT_ROOT_Y = CHAIR_SEAT_Y / AVATAR_SCALE - HIP_Y;
 
@@ -230,7 +230,14 @@ export function createPlazaWorldView(
   /** 坐下：髖對椅面、略後仰離蚵堆；大腿前擺、小腿下垂 */
   function poseSit(r: Remote) {
     hangArms(r, true);
+    r.rig.outer.scale.setScalar(AVATAR_SCALE);
+    r.rig.root.scale.set(1, 1, 1);
     r.rig.root.position.y = SIT_ROOT_Y;
+    r.rig.legL.scale.set(1, 1, 1);
+    r.rig.legR.scale.set(1, 1, 1);
+    r.rig.shinL.scale.set(1, 1, 1);
+    r.rig.shinR.scale.set(1, 1, 1);
+    r.rig.torso.scale.set(1, 1, 1);
     r.rig.legL.rotation.set(1.15, 0.08, 0.1);
     r.rig.legR.rotation.set(1.15, -0.08, -0.1);
     r.rig.shinL.rotation.set(-1.25, 0, 0);
@@ -242,11 +249,18 @@ export function createPlazaWorldView(
 
   function poseStand(r: Remote) {
     hangArms(r, false);
+    r.rig.outer.scale.setScalar(AVATAR_SCALE);
+    r.rig.root.scale.set(1, 1, 1);
     r.rig.root.position.y = 0;
     r.rig.legL.rotation.set(0, 0, 0);
     r.rig.legR.rotation.set(0, 0, 0);
     r.rig.shinL.rotation.set(0, 0, 0);
     r.rig.shinR.rotation.set(0, 0, 0);
+    r.rig.legL.scale.set(1, 1, 1);
+    r.rig.legR.scale.set(1, 1, 1);
+    r.rig.shinL.scale.set(1, 1, 1);
+    r.rig.shinR.scale.set(1, 1, 1);
+    r.rig.torso.scale.set(1, 1, 1);
     r.rig.torso.rotation.x = 0;
     r.rig.torso.position.y = 0;
   }
@@ -468,13 +482,13 @@ export function createPlazaWorldView(
       const oz = r.z + Math.cos(r.yaw) * back;
       r.rig.outer.position.set(ox, 0, oz);
       r.rig.outer.rotation.y = r.yaw;
-      const headY = r.seated ? CHAIR_SEAT_Y + 0.72 : 1.2;
+      const headY = r.seated ? CHAIR_SEAT_Y + 0.78 * AVATAR_SCALE : 1.5 * AVATAR_SCALE;
       placeHud(r.tag, ox, oz, headY, camera);
       if (r.bubUntil > t) placeHud(r.bubble, ox, oz, headY + 0.18, camera, -28);
       else if (r.bubble.style.display !== 'none') r.bubble.style.display = 'none';
     }
     if (selfBubUntil > t) {
-      const headY = selfSeated ? CHAIR_SEAT_Y + 0.72 : 1.2;
+      const headY = selfSeated ? CHAIR_SEAT_Y + 0.78 * AVATAR_SCALE : 1.5 * AVATAR_SCALE;
       const back = selfSeated ? 0.22 : 0;
       const ox = selfX + Math.sin(selfYaw) * back;
       const oz = selfZ + Math.cos(selfYaw) * back;
