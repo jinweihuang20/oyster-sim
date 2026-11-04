@@ -36,7 +36,7 @@ export function shopCss(): string {
 }
 
 function itemStats(d: WeaponDef): string {
-  return `<span>彈匣 ${d.maxAmmo}</span><span>射速 ${d.fireRate.toFixed(1)}/s</span>${d.burstCount > 1 ? `<span>${d.burstCount} 連發</span>` : ''}${d.pelletCount > 1 ? `<span>散彈 ×${d.pelletCount}</span>` : ''}<span>彈速 ${d.bulletSpeed}</span>${d.zoom > 1 ? `<span>開鏡 ${d.zoom}×</span>` : ''}${d.adsBreakOnFire ? '<span>開火須重開鏡</span>' : ''}`;
+  return `<span>傷害 ${d.damage}</span><span>彈匣 ${d.maxAmmo}</span><span>射速 ${d.fireRate.toFixed(1)}/s</span>${d.burstCount > 1 ? `<span>${d.burstCount} 連發</span>` : ''}${d.pelletCount > 1 ? `<span>散彈 ×${d.pelletCount}</span>` : ''}<span>彈速 ${d.bulletSpeed}</span>${d.zoom > 1 ? `<span>開鏡 ${d.zoom}×</span>` : ''}${d.adsBreakOnFire ? '<span>開火須重開鏡</span>' : ''}`;
 }
 
 export function renderShopList(

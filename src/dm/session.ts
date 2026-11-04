@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { WALK, SPRINT, HALF, EYE, R, PILES, PICK_R, SPAWNS, MAX_HP, makeCoverBoxes } from './constants';
 import type { Part, Fighter, Shell, DmUmb } from './types';
-import { WEAPON_DEFS, makeWeapon, buildWeaponView, armBurst, cooldownAfterShot, isWeaponId, type Weapon, type WeaponId } from './weapons';
+import { WEAPON_DEFS, makeWeapon, buildWeaponView, armBurst, cooldownAfterShot, isWeaponId, partDamage, type Weapon, type WeaponId } from './weapons';
 import { ico, I } from './icons';
 import { loadDS, DM_DEV, type DS } from './settings';
 import { makeMeshHelpers } from './mesh';
@@ -35,6 +35,10 @@ export function openDeathmatch(U: DmUmb, onExit: () => void, cfg?: Partial<DmMat
   let wave = 1, wavesCleared = 0, waveBreakT = 0;
   let agr = hordeAggression(1);
   let msgT = 0; // 須在首波 msg() 之前初始化，避免 TDZ 黑屏
+  /** 進場凍結總長＝3 秒數字＋短暫「開始！」；>0 時不能動／開火／計時 */
+  const INTRO_GO = 0.42;
+  let introT = 3 + INTRO_GO;
+  let introShown = 0;
   const isTouch = matchMedia('(pointer: coarse)').matches;
   const root = document.createElement('div'); root.id = 'dmRoot';
   root.innerHTML = `<style>
@@ -59,6 +63,11 @@ export function openDeathmatch(U: DmUmb, onExit: () => void, cfg?: Partial<DmMat
 #dmCross:before{left:10px;top:0;width:2px;height:22px}#dmCross:after{top:10px;left:0;height:2px;width:22px}
 #dmMark{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;pointer-events:none;opacity:0;border:3px solid #ff3b3b;transform:rotate(45deg);transition:opacity .25s}
 #dmMsg{position:absolute;left:50%;top:30%;transform:translateX(-50%);color:#fff6d8;font-weight:900;font-size:28px;text-shadow:0 3px 0 #000;pointer-events:none;text-align:center}
+#dmCount{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:8;background:rgba(0,0,0,.38)}
+#dmCount.hide{display:none}
+#dmCount span{font-size:clamp(110px,32vw,240px);font-weight:900;color:#fff;line-height:1;text-shadow:0 6px 0 rgba(0,0,0,.45),0 0 48px rgba(0,0,0,.35);animation:dmCountPop .28s ease-out}
+#dmCount.go span{font-size:clamp(64px,18vw,140px);letter-spacing:.12em}
+@keyframes dmCountPop{from{transform:scale(1.55);opacity:.25}to{transform:scale(1);opacity:1}}
 #dmHs{position:absolute;left:50%;top:calc(env(safe-area-inset-top) + 56px);transform:translate(-50%,-8px);color:#ffd23f;font-weight:900;font-size:clamp(22px,4.5vw,36px);letter-spacing:.08em;text-shadow:0 2px 0 #000,0 0 18px rgba(255,60,40,.55);pointer-events:none;opacity:0;transition:opacity .15s,transform .15s;z-index:4;white-space:nowrap}
 #dmHs.on{opacity:1;transform:translate(-50%,0)}
 .dmPop{position:absolute;color:#ffd23f;font-weight:900;font-size:22px;text-shadow:0 2px 0 #000;pointer-events:none;transform:translate(-50%,-50%);transition:transform .8s,opacity .8s}
@@ -150,6 +159,8 @@ ${shopCss()}
 #dmMark{border:2px solid var(--red)!important}
 #dmEdge{box-shadow:inset 0 0 90px 20px rgba(150,40,40,.6)!important}
 #dmMsg{color:var(--tx)!important;font-weight:600!important;text-shadow:0 1px 3px rgba(0,0,0,.6)!important}
+#dmCount{background:rgba(0,0,0,.42)!important}
+#dmCount span{color:#fff!important;text-shadow:0 4px 0 rgba(0,0,0,.5),0 0 40px rgba(0,0,0,.4)!important}
 #dmHs{color:#fff!important;text-shadow:0 1px 2px rgba(0,0,0,.75),0 0 16px rgba(255,80,60,.45)!important}
 .dmPop{color:var(--tx)!important;font-weight:600!important;text-shadow:0 1px 3px rgba(0,0,0,.6)!important}
 #dmBoard,#dmSetBox{background:rgba(24,24,24,.78)!important;border:1px solid var(--ln)!important;color:var(--tx)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:14px!important}
@@ -169,7 +180,7 @@ ${shopCss()}
  #dmHelp{bottom:calc(env(safe-area-inset-bottom) + 52px);font-size:13px;opacity:.9;z-index:1;color:var(--tx)}
  #dmHelp b{font-weight:800;color:#fff}
 }
-</style><canvas></canvas><div id="dmCross"></div><div id="dmScopeFx"></div><div id="dmMark"></div><div id="dmHs">Headshot !</div><div id="dmMsg"></div><div id="dmTL"><div id="dmAmmo"></div><div id="dmHud"></div></div><div id="dmEdge"></div><div id="dmBar"><div id="dmHp"><div id="dmHpF"></div><div id="dmHpN"></div></div></div><canvas id="dmMap" width="192" height="192"></canvas><div id="dmFeed"></div>
+</style><canvas></canvas><div id="dmCross"></div><div id="dmScopeFx"></div><div id="dmMark"></div><div id="dmHs">Headshot !</div><div id="dmMsg"></div><div id="dmCount"><span>3</span></div><div id="dmTL"><div id="dmAmmo"></div><div id="dmHud"></div></div><div id="dmEdge"></div><div id="dmBar"><div id="dmHp"><div id="dmHpF"></div><div id="dmHpN"></div></div></div><canvas id="dmMap" width="192" height="192"></canvas><div id="dmFeed"></div>
 <button class="dmb" id="dmScoreBtn" aria-label="戰績"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" style="vertical-align:-3px"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></button>
 <button class="dmb" id="dmShopBtn" aria-label="武器店">${ico(I.shop, 22)}</button>
 <button class="dmb" id="dmSetBtn" aria-label="設定">${ico(I.gear, 26)}</button><div id="dmPause">${ico(I.play, 64)}</div>
@@ -420,7 +431,7 @@ ${isTouch
   }
   syncScopeBtn();
   const umbUp = (f: Fighter) => f.umbHeld && (U.umb.open + U.umb.dur - f.umbT) >= U.umb.open;
-  function openUmb(f: Fighter) { if (f.dead || f.umbHeld || f.umbTired) return; if (f.isPlayer) setAds(false); f.umbHeld = true; f.umbT = U.umb.open + U.umb.dur; }
+  function openUmb(f: Fighter) { if (introT > 0 || f.dead || f.umbHeld || f.umbTired) return; if (f.isPlayer) setAds(false); f.umbHeld = true; f.umbT = U.umb.open + U.umb.dur; }
   function closeUmb(f: Fighter) { f.umbTired = false; f.umbHeld = false; f.umbT = 0; }
   let now = 0;
   function spawn(f: Fighter) {
@@ -458,10 +469,11 @@ ${isTouch
   if (isHorde) {
     spawn(me);
     botsOnly().forEach(parkBot);
-    startHordeWave(1);
+    // 首波等倒數結束再放
   } else {
     fighters.forEach(spawn);
   }
+  const frozen = () => introT > 0 || roundOver;
 
   // ---- 音效：程序合成，接到遊戲的音效音量（跟著主音量／靜音設定） ----
   let voices = 0; const MAXV = 14; let nbuf: AudioBuffer | null = null;
@@ -690,7 +702,7 @@ ${isTouch
   // 按住開火：按下立刻第一發；基本槍為 3 連發節奏（組內短間隔、組間停頓），放開或沒殼就停
   let fireHeld = 0, fireCd = 0;
   const tryAutoFire = () => {
-    if (roundOver || fireCd > 0 || me.dead) return;
+    if (frozen() || fireCd > 0 || me.dead) return;
     if (me.wpn.ammo <= 0 && !(DM_DEV && cheatAmmo)) { fireHeld = 0; me.wpn.burstLeft = 0; return; }
     armBurst(me.wpn);
     if (throwShell(me)) fireCd = cooldownAfterShot(me.wpn);
@@ -810,7 +822,7 @@ ${isTouch
 
   // ---- 遊戲邏輯 ----
   function pick(f: Fighter) {
-    if (f.dead || f.wpn.ammo >= f.wpn.def.maxAmmo) return false;
+    if (introT > 0 || f.dead || f.wpn.ammo >= f.wpn.def.maxAmmo) return false;
     const pile = findPickPile(f.pos, piles);
     if (!pile) {
       if (f.isPlayer && pileDist(f.pos) <= PICK_R) msg('這堆冷卻中，換一堆蚵仔', 1.6);
@@ -825,7 +837,7 @@ ${isTouch
   function dirOf(yaw: number, pitch: number) { return new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)); }
   const shotAt = new Map<Fighter, number>();
   function throwShell(f: Fighter, yaw = f.yaw, pitch = f.pitch) {
-    if (f.dead) return false;
+    if (introT > 0 || f.dead) return false;
     if (f.umbHeld) { return false; }
     const w = f.wpn, infAmmo = DM_DEV && cheatAmmo && f.isPlayer;
     if (w.ammo <= 0 && !infAmmo) { return false; }
@@ -845,7 +857,7 @@ ${isTouch
       const m = shellMesh(); m.position.copy(p); scene.add(m);
       const vel = f.isPlayer ? d.multiplyScalar(spd) : d.multiplyScalar(spd).add(f.vel.clone().multiplyScalar(0.5));
       if (!f.isPlayer && i === 0) emitAsh(p, vel, LO ? 2 : 4, 0.85);
-      shells.push({ pos: p, vel, owner: f, mesh: m, life: 6, trail: 0 });
+      shells.push({ pos: p, vel, owner: f, mesh: m, life: 6, trail: 0, damage: w.def.damage });
     }
     if (f.isPlayer && w.def.adsBreakOnFire) { adsNeedRelease = true; setAds(false); }
     return true;
@@ -866,14 +878,15 @@ ${isTouch
     if (Math.abs(p.z) >= HALF - 0.2) return _wn.set(0, 0, -Math.sign(p.z) || -1);
     return null;
   }
-  function damage(src: Fighter, f: Fighter, part: Part, at: THREE.Vector3, dir?: THREE.Vector3) {
+  function damage(src: Fighter, f: Fighter, part: Part, at: THREE.Vector3, bodyDamage: number, dir?: THREE.Vector3) {
     src.hits++;
     if (f.dead) return;
+    const amt = partDamage(bodyDamage, part);
     const inv = now < f.invulnUntil || (DM_DEV && cheatHp && f.isPlayer);
     if (!inv) { burst(at, dir ?? _d.set(0, 0, 0), part === 'head' ? 26 : 10); SND.hit(at, part === 'head', src.isPlayer); }
-    if (src.isPlayer) { popAt(at, inv ? ico(I.shield, 28) : part === 'head' ? ico(I.head, 34) : part === 'body' ? '-40' : '-20'); mark(); }
+    if (src.isPlayer) { popAt(at, inv ? ico(I.shield, 28) : part === 'head' ? ico(I.head, 34) : `-${amt}`); mark(); }
     if (inv) return;
-    f.hp -= part === 'head' ? 999 : part === 'body' ? 40 : 20;
+    f.hp -= amt;
     if (f.isPlayer) { flashHurt(); SND.hurt(); }
     if (f.hp <= 0) {
       f.dead = true; f.deathAt = now; if (dir) f.fallDir.set(dir.x, 0, dir.z).normalize(); if (f.fallDir.lengthSq() < 0.5) f.fallDir.set(0, 0, 1); f.deaths++; f.respawnAt = now + 3; f.wpn.ammo = 0; f.wpn.kick = 0; src.kills++; if (part === 'head') src.hs++;
@@ -914,7 +927,7 @@ ${isTouch
             const fwd = dirOf(f.yaw, 0); _inc.copy(s.vel).setY(0).normalize();
             if (-fwd.dot(_inc) > Math.cos(Math.PI / 3) && Math.random() < U.umb.cover) { SND.block(_sp); emitAsh(_sp, s.vel, LO ? 2 : 4, 1.0); if (f.isPlayer || s.owner.isPlayer) popAt(_sp, ico(I.umb, 28)); done = true; break; }
           }
-          const part = hitPart(f, _sp); if (part) { damage(s.owner, f, part, _sp, _dir.copy(s.vel).normalize()); emitAsh(_sp, s.vel, LO ? 3 : 5, 1.1); done = true; break; } }
+          const part = hitPart(f, _sp); if (part) { damage(s.owner, f, part, _sp, s.damage, _dir.copy(s.vel).normalize()); emitAsh(_sp, s.vel, LO ? 3 : 5, 1.1); done = true; break; } }
         if (!done) {
           for (const br of breakables) {
             if (propContains(br, _sp)) { hitBreakable(br, _sp, _dir.copy(s.vel).normalize()); emitAsh(_sp, s.vel, LO ? 2 : 4, 1.0); done = true; break; }
@@ -977,8 +990,50 @@ ${isTouch
   }
   const _fq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), _fa = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
   const _mv = new THREE.Vector3();
+  function syncIntro() {
+    const el = q('dmCount');
+    if (introT <= 0) {
+      el.classList.add('hide');
+      el.innerHTML = '';
+      return;
+    }
+    el.classList.remove('hide');
+    if (introT <= INTRO_GO) {
+      if (introShown !== -1) {
+        introShown = -1;
+        el.classList.add('go');
+        el.innerHTML = '<span>開始！</span>';
+        tn(520, 0.12, 0.18, 'square');
+        tn(780, 0.16, 0.14, 'triangle', 0, 0.04);
+      }
+      return;
+    }
+    el.classList.remove('go');
+    const n = Math.max(1, Math.ceil(introT - INTRO_GO));
+    if (introShown !== n) {
+      introShown = n;
+      el.innerHTML = `<span>${n}</span>`;
+      tn(280 + (4 - n) * 90, 0.09, 0.14, 'square');
+    }
+  }
+  function beginMatch() {
+    q('dmCount').classList.add('hide');
+    q('dmCount').innerHTML = '';
+    if (isHorde) startHordeWave(1);
+    else msg(`${DM_MODE_LABEL.ffa} · ${match.botCount} BOT · ${Math.round(match.durationSec / 60)} 分鐘`, 2.6);
+  }
   function update(dt: number) {
     if (roundOver) return;
+    if (introT > 0) {
+      introT -= dt;
+      syncIntro();
+      if (introT <= 0) {
+        introT = 0;
+        syncIntro();
+        beginMatch();
+      }
+      return;
+    }
     if (DM_DEV && cheatAmmo && !me.dead) me.wpn.ammo = me.wpn.def.maxAmmo;
     if (DM_DEV && cheatHp && !me.dead) me.hp = MAX_HP;
     fireCd -= dt; if (fireHeld) tryAutoFire();
@@ -1084,9 +1139,8 @@ ${isTouch
 
   // ---- UI ----
   function msg(t: string, sec: number) { q('dmMsg').textContent = t; msgT = sec; }
-  msg(isHorde
-    ? `${DM_MODE_LABEL.horde} · 一關接一關，看你能撐幾關`
-    : `${DM_MODE_LABEL.ffa} · ${match.botCount} BOT · ${Math.round(match.durationSec / 60)} 分鐘`, 2.6);
+  // 開場文案改由 beginMatch（倒數結束後）再叫；肉鴿提示在 startHordeWave
+  syncIntro();
   function endRound(reason: string) {
     if (roundOver) return;
     roundOver = true; roundLeft = 0; waveBreakT = 0; fireHeld = 0; me.wpn.burstLeft = 0;
@@ -1186,7 +1240,8 @@ ${isTouch
     const nearCool = !pile && atPile;
     q('dmHud').innerHTML = `${clock}　${DM_MODE_LABEL[match.mode]}　${ico(I.person)} ${aliveBots + (me.dead ? 0 : 1)}　${ico(I.skull)} ${me.kills}${now < me.invulnUntil && !me.dead ? ' ' + ico(I.shield) : ''}${pile && me.wpn.ammo < me.wpn.def.maxAmmo && !me.dead ? ' ' + ico(I.grab) : ''}${nearCool ? ' 冷卻' : ''}`;
     drawMap(); if (isTouch) q('dmUmb').classList.toggle('cd', me.umbTired);
-    if (!roundOver && me.dead && !isHorde) q('dmMsg').innerHTML = `${ico(I.skull, 40)}<br>${Math.max(1, Math.ceil(me.respawnAt - now))}`;
+    if (introT > 0) { /* 倒數期間不蓋訊息 */ }
+    else if (!roundOver && me.dead && !isHorde) q('dmMsg').innerHTML = `${ico(I.skull, 40)}<br>${Math.max(1, Math.ceil(me.respawnAt - now))}`;
     else if (!roundOver && !me.dead && msgT <= 0) {
       q('dmMsg').textContent = outAmmo
         ? (nearCool ? '這堆冷卻中 — 換下一堆填彈' : '沒殼了 — 去蚵仔堆塡彈')

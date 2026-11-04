@@ -19,6 +19,8 @@ export interface Fighter {
 
 export interface Shell {
   pos: THREE.Vector3; vel: THREE.Vector3; owner: Fighter; mesh: THREE.Mesh; life: number; trail: number;
+  /** 發射當下槍枝軀幹傷害（彈丸） */
+  damage: number;
 }
 
 /** 死鬥向主遊戲借用的美術／音訊／雨傘 */
