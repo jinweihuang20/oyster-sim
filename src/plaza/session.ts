@@ -44,6 +44,8 @@ export type PlazaDeps = {
   track: (t: string, d?: Record<string, unknown>) => void;
   onPayout: (clamped: number, meta: { oysters: number; dur: number; raw: number }) => void;
   onExit: () => void;
+  /** 入場時連不上後端：不要進廣場，回主選單 */
+  onEnterFail?: (err?: string) => void;
 };
 
 let active = false;
@@ -59,6 +61,9 @@ let seated = false;
 let shiftStarted = false;
 let near: PlazaSeatRef | null = null;
 let sittingBusy = false;
+/** 斷線後手動重連 timer */
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let netDown = false;
 
 export const isPlazaActive = () => active;
 export const plazaSeated = () => seated;
@@ -139,14 +144,24 @@ export function openPlaza(D: PlazaDeps) {
   void boot(D);
 }
 
+async function abortEnter(D: PlazaDeps, err?: string) {
+  active = false; seated = false; shiftStarted = false; netDown = false;
+  clearReconnectTimer();
+  await client?.disconnect();
+  client = null;
+  view?.dispose(); view = null;
+  ui?.remove(); ui = null;
+  myPile = null; mySlot = null; snap = null; near = null; deps = null;
+  D.onEnterFail?.(err);
+}
+
 async function boot(D: PlazaDeps) {
   setHud('連線中…');
   const r = await client!.connect(D.id, D.nick());
+  if (!active || !client) return; // 入場中被取消
   if (!r.ok) {
-    setHud('連線失敗（仍可逛逛，但坐不下）');
-    D.toast(zhErr(r.err), '#ff8a7a');
-    D.enterWalk();
-    showRoamUi();
+    D.toast(`廣場連不上：${zhErr(r.err)}`, '#ff8a7a');
+    await abortEnter(D, r.err);
     return;
   }
   snap = r.snap ?? null;
@@ -156,12 +171,75 @@ async function boot(D: PlazaDeps) {
   showRoamUi();
 }
 
+function clearReconnectTimer() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+}
+
+function scheduleManualReconnect(delayMs = 3000) {
+  clearReconnectTimer();
+  if (!active || !client) return;
+  reconnectTimer = setTimeout(() => { void doManualReconnect(); }, delayMs);
+}
+
+async function doManualReconnect() {
+  reconnectTimer = null;
+  if (!active || !client || !deps) return;
+  setNetBanner(`連線中斷，正在重連…`);
+  const r = await client.tryManualReconnect();
+  if (!active) return;
+  if (!r.ok) {
+    setNetBanner(`重連失敗，稍後再試…`);
+    deps.toast('廣場重連失敗，持續嘗試中', '#ffb08a');
+    scheduleManualReconnect(Math.min(20000, 4000 + Math.random() * 2000));
+  }
+}
+
+function flashNetOk(msg: string) {
+  setNetBanner(msg, true);
+  setTimeout(() => { if (!netDown) setNetBanner(null); }, 2200);
+}
+
+async function restoreAfterRejoin(s?: PlazaSnapshot) {
+  if (!deps || !client) return;
+  netDown = false;
+  clearReconnectTimer();
+  syncSeatChrome();
+  if (s) {
+    snap = normalizeSnap(s);
+    view?.syncRoster(snap, deps.id);
+  }
+  // 斷線期間座位已被清掉：若本地還坐著，試著搶回原位
+  if (seated && myPile != null && mySlot != null) {
+    const r = await client.claimSeat(myPile, mySlot);
+    if (r.ok) {
+      if ((r as any).token) client.token = (r as any).token;
+      if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
+      flashNetOk('已重連，位子還在');
+      deps.toast('已重連，位子還在', '#9be37a');
+      setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}`);
+      return;
+    }
+    // 位子被佔：站起來繼續逛
+    myPile = null; mySlot = null; seated = false;
+    view?.highlight(null, null);
+    syncSeatChrome();
+    deps.goWalk();
+    flashNetOk('已重連');
+    deps.toast(r.err === 'taken' ? '已重連，原位子有人了，請另找空位' : '已重連，請重新找位子坐下', '#ffd76a');
+    setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　靠近空位坐下`);
+    return;
+  }
+  flashNetOk('廣場已重新連線');
+  deps.toast('廣場已重新連線', '#9be37a');
+  if (!seated) setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　靠近空位坐下`);
+}
+
 function wireClient(D: PlazaDeps) {
   client!.setHandlers({
     onRoster: (s) => {
       snap = normalizeSnap(s);
       view?.syncRoster(snap, D.id);
-      if (!seated) setHud(`廣場休閒 ${snap.occupied}/${snap.capacity}　靠近空位坐下`);
+      if (!netDown && !seated) setHud(`廣場休閒 ${snap.occupied}/${snap.capacity}　靠近空位坐下`);
     },
     onJoined: (p) => {
       const n = normPlayer(p);
@@ -180,10 +258,34 @@ function wireClient(D: PlazaDeps) {
     onShellThrow: (e) => D.onShellThrow?.(e),
     onShellInbound: (e) => D.onShellInbound?.(e),
     onStealResult: (e) => D.onStealResult?.(e),
-    onClose: (err) => {
+    onReconnecting: (attempt) => {
       if (!active) return;
-      D.toast(err ? `廣場斷線：${err}` : '廣場連線中斷', '#ffb08a');
-      setHud('已斷線');
+      netDown = true;
+      setNetBanner(`連線不穩，正在重連（第 ${attempt} 次）…`);
+      if (attempt === 1) D.toast('廣場連線中斷，正在重連…', '#ffb08a');
+      // 坐下時也要看得到提示
+      const hud = ui?.querySelector('#pzHud') as HTMLElement | null;
+      if (hud) hud.classList.remove('hide');
+    },
+    onSocketReconnected: () => {
+      if (!active) return;
+      setNetBanner('連上了，正在回到廣場…');
+    },
+    onRejoined: (s) => { if (active) void restoreAfterRejoin(s); },
+    onRejoinFail: (err, attempt) => {
+      if (!active) return;
+      netDown = true;
+      setNetBanner(`重連中（第 ${attempt ?? '?'} 次）…`);
+      D.toast(zhErr(err) || '重連失敗，繼續嘗試', '#ffb08a');
+    },
+    onClose: () => {
+      if (!active) return;
+      netDown = true;
+      setNetBanner('連線中斷，正在重連…');
+      D.toast('廣場連線中斷，正在重連…', '#ffb08a');
+      const hud = ui?.querySelector('#pzHud') as HTMLElement | null;
+      if (hud) hud.classList.remove('hide');
+      scheduleManualReconnect(1500);
     },
   });
 }
@@ -218,7 +320,14 @@ function normPlayer(p: any): PlazaPlayer {
   };
 }
 function normChat(m: any): PlazaChat {
-  return { nick: m?.nick ?? m?.Nick ?? '?', text: m?.text ?? m?.Text ?? '', pileId: m?.pileId ?? m?.PileId ?? null, at: m?.at ?? m?.At ?? Date.now() };
+  return {
+    connId: m?.connId ?? m?.ConnId ?? '',
+    pid: m?.pid ?? m?.Pid ?? '',
+    nick: m?.nick ?? m?.Nick ?? '?',
+    text: m?.text ?? m?.Text ?? '',
+    pileId: m?.pileId ?? m?.PileId ?? null,
+    at: m?.at ?? m?.At ?? Date.now(),
+  };
 }
 
 function takenSet(exceptMine = true) {
@@ -239,6 +348,9 @@ function buildUi() {
 #plazaRoot *{box-sizing:border-box}
 #pzHud{pointer-events:none;position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:50%;transform:translateX(-50%);max-width:min(78vw,340px);background:rgba(20,12,6,.72);border:2px solid #d9952b;border-radius:12px;padding:5px 10px;font-weight:800;font-size:13px;color:#ffd23f;text-align:center;line-height:1.3;z-index:1}
 #pzHud.hide{display:none}
+#pzNet{display:none;pointer-events:none;position:absolute;top:calc(env(safe-area-inset-top) + 52px);left:50%;transform:translateX(-50%);max-width:min(86vw,360px);background:rgba(80,28,12,.92);border:2px solid #ffb08a;border-radius:12px;padding:8px 14px;font-weight:900;font-size:14px;color:#ffe0c0;text-align:center;line-height:1.35;z-index:4;box-shadow:0 4px 14px #0008}
+#pzNet.on{display:block}
+#pzNet.ok{background:rgba(20,48,28,.92);border-color:#9be37a;color:#d8ffc8}
 #pzX{pointer-events:auto;position:absolute;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 8px);min-width:42px;height:42px;padding:0 12px;font-size:14px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;white-space:nowrap}
 #pzX.hide{display:none}
 /* 聊天放左側，避開右下雨傘／丟殼／偷 */
@@ -266,6 +378,7 @@ function buildUi() {
 </style>
 <button id="pzX" type="button" aria-label="離開廣場">離開廣場</button>
 <div id="pzHud">準備中…</div>
+<div id="pzNet" role="status" aria-live="polite"></div>
 <div id="pzSitPrompt"></div>
 <button id="pzChatFab" type="button" aria-label="聊天">聊天</button>
 <div id="pzChat">
@@ -301,12 +414,23 @@ function syncSeatChrome() {
   const leave = ui?.querySelector('#pzX') as HTMLElement | null;
   const hud = ui?.querySelector('#pzHud') as HTMLElement | null;
   if (leave) leave.classList.toggle('hide', seated);
-  if (hud) hud.classList.toggle('hide', seated);
+  // 斷線重連時 HUD 也要看得見
+  if (hud) hud.classList.toggle('hide', seated && !netDown);
 }
 
 function setHud(t: string) {
   const el = ui?.querySelector('#pzHud'); if (el) el.textContent = t;
   syncSeatChrome();
+}
+
+/** 連線狀態條：坐下時也顯示（不跟 #pzHud 一起藏） */
+function setNetBanner(t: string | null, ok = false) {
+  const el = ui?.querySelector('#pzNet') as HTMLElement | null;
+  if (!el) return;
+  if (!t) { el.classList.remove('on', 'ok'); el.textContent = ''; return; }
+  el.textContent = t;
+  el.classList.add('on');
+  el.classList.toggle('ok', ok);
 }
 
 function setSitPrompt(t: string | null) {
@@ -363,12 +487,19 @@ export async function plazaTrySit(): Promise<boolean> {
 /** 站起：釋座並恢復走動（工班繼續） */
 export async function plazaStandWalk() {
   if (!deps || !active || !seated) return;
-  await client?.leaveSeat();
-  myPile = null; mySlot = null; seated = false;
+  // 先 goWalk（仍留著 myPile／mySlot 算站起點），再清座位並通知伺服器
+  seated = false;
+  deps.goWalk();
+  myPile = null; mySlot = null;
   view?.highlight(null, null);
   setHud(`廣場休閒 ${snap?.occupied ?? 0}/${snap?.capacity ?? PLAZA_CAPACITY}　靠近空位坐下，不趕時間`);
   syncSeatChrome();
-  deps.goWalk();
+  await client?.leaveSeat();
+  // 立刻把站起後座標推出去，避免遠端還停在椅上或飛向舊 Sync 點
+  if (client?.connected && deps) {
+    const p = deps.getWalkXZ();
+    void client.sync(p.x, p.z, deps.getYaw(), 'walk', deps.getCount(), false, deps.getUmb());
+  }
 }
 
 function sendChat() {
@@ -386,26 +517,33 @@ function pushChat(m: PlazaChat) {
   row.textContent = `${where}${m.nick}：${m.text}`;
   log.appendChild(row); log.scrollTop = log.scrollHeight;
   while (log.childElementCount > 40) log.firstChild?.remove();
+  const isSelf = Boolean(deps && (m.pid === deps.id || (!!m.connId && m.connId === client?.connectionId)));
+  view?.showChat({ connId: m.connId || undefined, pid: m.pid || undefined, nick: m.nick, text: m.text, self: isSelf });
 }
 
 export function tickPlaza(dt: number) {
   if (!active || !deps) return;
+  const p = deps.getWalkXZ();
+  view?.setSelfPose(p.x, p.z, deps.getYaw(), seated);
   tickPlazaTags(view, deps.camera(), dt);
-  if (!seated) {
-    const p = deps.getWalkXZ();
-    plazaUpdateNear(p.x, p.z);
-  }
+  if (!seated) plazaUpdateNear(p.x, p.z);
   if (!client?.connected) return;
   phaseTimer += dt;
   // ~10Hz 同步位置＋動作
   if (phaseTimer >= 0.1) {
     phaseTimer = 0;
-    const p = deps.getWalkXZ();
     const yaw = deps.getYaw();
     const phase = seated ? deps.getPhase() : 'walk';
     const moving = !seated && deps.getMoving();
     void client.sync(p.x, p.z, yaw, phase, deps.getCount(), moving, deps.getUmb());
   }
+}
+
+/** 收工／結算時藏廣場 UI（離開鈕、聊天），避免擋結果面板 */
+export function plazaHideChrome(hide = true) {
+  if (!ui) return;
+  ui.style.display = hide ? 'none' : '';
+  if (hide) setSitPrompt(null);
 }
 
 export async function plazaReportEarn(raw: number, oysters: number, durationSec: number): Promise<number> {
@@ -421,7 +559,8 @@ export async function plazaReportEarn(raw: number, oysters: number, durationSec:
 
 export async function closePlaza(leaveSeat = true) {
   if (!active) return;
-  active = false; seated = false; shiftStarted = false;
+  active = false; seated = false; shiftStarted = false; netDown = false;
+  clearReconnectTimer();
   if (leaveSeat) await client?.leaveSeat();
   await client?.disconnect();
   client = null;
@@ -432,4 +571,5 @@ export async function closePlaza(leaveSeat = true) {
 
 export function plazaEndCleanup() {
   setSitPrompt(null);
+  plazaHideChrome(true);
 }

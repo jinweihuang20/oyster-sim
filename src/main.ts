@@ -13,6 +13,7 @@ import {
   plazaWalkBound, plazaPileObs, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaStealFrom,
+  plazaEndCleanup, plazaHideChrome, seatPose,
   type PlazaAimTarget, type PlazaShellEvent,
 } from './plaza';
 import { ODD } from './oddities';
@@ -878,9 +879,9 @@ const GEAR = [
   { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
   { id: 'radio', n: '收音機', price: 300, good: '阿婆氣消得快：怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：丟殼預警變晚（⚠ 和提示聲晚一半才出現）' },
   { id: 'glasses', n: '👓 老花眼鏡', price: 200, good: '蚵仔縫更亮更粗、光暈更大；插刀判定範圍 +25%', bad: '看遠有點霧：畫面邊緣微暗' }];
-function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '<i class="ic ic-radio"></i><i class="led"></i>' : `<i class="ic ic-radio"></i> ${on ? STATIONS[radioSt()].n : '關'}<span class="key"> (V)</span>`; b.title = on ? `收音機：${STATIONS[radioSt()].n}` : '收音機：關'; }
+function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && !plazaMode && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '<i class="ic ic-radio"></i><i class="led"></i>' : `<i class="ic ic-radio"></i> ${on ? STATIONS[radioSt()].n : '關'}<span class="key"> (V)</span>`; b.title = on ? `收音機：${STATIONS[radioSt()].n}` : '收音機：關'; }
 // 收音機按鈕循環：關 → 懷舊歌謠台 → 廣播電台 → 台語老歌 → 關
-function toggleRadio() { if (!save.shop.owned.includes('radio') || state !== 'play' || tut) return; save.gear = save.gear ?? {};
+function toggleRadio() { if (!save.shop.owned.includes('radio') || state !== 'play' || tut || plazaMode) return; save.gear = save.gear ?? {};
   if (!gearOn('radio')) { save.gear.radio = true; save.radioSt = 0; } else if (radioSt() < STATIONS.length - 1) save.radioSt = radioSt() + 1; else save.gear.radio = false;
   if (gearOn('radio')) achAdd('radio', STATIONS[radioSt()].id); persist(); achCheck(); drawRadio(); toast(gearOn('radio') ? `收音機：${STATIONS[radioSt()].n}（阿婆心情好，但丟殼預警會變晚）` : '收音機關掉：聽得到丟殼預警了', '#cfc3ff'); }
 const gearOn = (id: string) => save.shop.owned.includes(id) && save.gear?.[id] !== false;
@@ -1880,6 +1881,20 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   if (ev) { evLastId = ev.id; evRun = null; evToken = null; shiftLen = SHIFT; } else evLastId = null;
   const againBtn = $('again');
   if (againBtn) { againBtn.style.display = plazaMode ? 'none' : ''; againBtn.innerHTML = `<i class="ic ic-again"></i> 再次上工`; }
+  // 廣場結算：藏廣場 UI／再次上工；等伺服器入帳前標示結算中
+  if (plazaMode) {
+    plazaEndCleanup();
+    on('quitBtn', false); on('standBtn', false); on('throwBtn', false); on('umbBtn', false); on('stealBtn', false); on('sitBtn', false); on('giveUp', false); on('medBtn', false); on('camBtn', false);
+    const menuBtn = $('resMenu');
+    if (menuBtn) { menuBtn.innerHTML = `<i class="ic ic-home"></i> 回主選單`; (menuBtn as HTMLButtonElement).disabled = true; }
+    void plazaPayWait?.then(() => {
+      const b = $('resMenu') as HTMLButtonElement | null;
+      if (b) b.disabled = false;
+    }).catch(() => {
+      const b = $('resMenu') as HTMLButtonElement | null;
+      if (b) b.disabled = false;
+    });
+  }
   $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); later(1.2, namePrompt); if (ac) SFX.endJingle(queen && !handPain && !plazaMode);
 }
 function revealPearl(r: number) { react3('cheer');
@@ -2050,7 +2065,21 @@ function standUp() {
 function plazaEnterWalkPose(fromSeat = true) {
   oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
   walking = true; handRig.visible = false;
-  if (fromSeat) { walkPos.copy(SEAT).setY(1.55); walkPos.x += Math.sin(seatYaw) * 0.55; walkPos.z += Math.cos(seatYaw) * 0.55; tYaw = yaw = yaw + seatYaw; }
+  if (fromSeat) {
+    // 用座位世界座標往後站（勿用累積的相對 yaw，否則第三人稱／同步會飛掉）
+    const s = plazaMySeat();
+    if (s) {
+      const pose = seatPose(s.pileId, s.slot);
+      walkPos.set(pose.pos.x + Math.sin(pose.yaw) * 0.55, 1.55, pose.pos.z + Math.cos(pose.yaw) * 0.55);
+      tYaw = yaw = pose.yaw;
+      seatYaw = pose.yaw;
+    } else {
+      walkPos.copy(SEAT).setY(1.55);
+      walkPos.x += Math.sin(seatYaw) * 0.55; walkPos.z += Math.cos(seatYaw) * 0.55;
+      tYaw = yaw = seatYaw;
+    }
+  }
+  drawRadio();
   tPitch = pitch = -0.2; $('diff').textContent = ''; on('standBtn', false); on('umbBtn', false); on('medBtn', false); on('stealBtn', false); on('joy', true); on('camBtn', true);
   stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
   hint.textContent = COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V／視角鈕切換・E 坐下剝蚵';
@@ -2108,6 +2137,24 @@ function syncStartUi() {
     if (temp) temp.style.display = 'flex';
   }
 }
+let plazaOnlineN: number | null = null;
+let plazaOnlineAt = 0;
+async function refreshPlazaOnline(force = false) {
+  if (!force && performance.now() - plazaOnlineAt < 12_000) return plazaOnlineN;
+  plazaOnlineAt = performance.now();
+  try {
+    const base = import.meta.env.DEV ? 'http://127.0.0.1:8787/s' : 'https://game-status.gwtech.org/s';
+    const r = await fetch(`${base}/plaza`, { mode: 'cors', cache: 'no-store' }).then(x => x.ok ? x.json() : null).catch(() => null);
+    if (r && typeof r.online === 'number') plazaOnlineN = Math.max(0, r.online | 0);
+  } catch { /* 後端沒開就算了 */ }
+  return plazaOnlineN;
+}
+function plazaCountLabel() {
+  if (plazaOnlineN == null) return '多人一起剝蚵，隨便坐、無倒數，離開再結算';
+  return plazaOnlineN > 0
+    ? `目前 <b>${plazaOnlineN}</b> 人在廣場・隨便坐、無倒數`
+    : '目前沒人・隨便坐、無倒數，離開再結算';
+}
 function renderLocs() { autoUnlock();
   const el = $('locPick'); const tot = save.life.inBowl ?? 0;
   const seen = save.locSeen ?? (save.locSeen = ['home']);
@@ -2116,9 +2163,9 @@ function renderLocs() { autoUnlock();
   const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && save.locs!.includes(l.id);
   const anyNew = LOCS.some(isNew);
   const headTxt = plazaCur
-    ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場</b><small>休閒多人・不趕時間</small>`
+    ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場</b><small>${plazaOnlineN != null ? `目前 ${plazaOnlineN} 人在內・` : ''}休閒多人・不趕時間</small>`
     : `<b><i class="ic ic-pin"></i> 上工地點：${cl!.n} ×${cl!.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small>`;
-  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}" data-loc="plaza"><span class="ln">🦪 蚵仔廣場</span><span class="lm">休閒</span><small>${plazaCur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">多人一起剝蚵，隨便坐、無倒數，離開再結算</small></button>`;
+  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}" data-loc="plaza"><span class="ln">🦪 蚵仔廣場</span><span class="lm">${plazaOnlineN != null ? `${plazaOnlineN} 人` : '休閒'}</span><small>${plazaCur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${plazaCountLabel()}</small></button>`;
   el.innerHTML = `<div class="locHead">${headTxt}</div><div class="locRow">` + plazaCard + LOCS.map(l => {
     const own = l.need === 0 || save.locs!.includes(l.id), cur = !plazaCur && cl!.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
@@ -2135,8 +2182,30 @@ function renderLocs() { autoUnlock();
     syncStartUi();
   });
   syncStartUi();
+  void refreshPlazaOnline().then(n => {
+    if (n == null) return;
+    const card = el.querySelector('.locPlaza .lm');
+    const ld = el.querySelector('.locPlaza .ld');
+    const head = el.querySelector('.locHead small');
+    if (card) card.textContent = `${n} 人`;
+    if (ld) ld.innerHTML = plazaCountLabel();
+    if (plazaCur && head) head.textContent = `目前 ${n} 人在內・休閒多人・不趕時間`;
+  });
 }
 renderLocs();
+setInterval(() => {
+  if (state !== 'menu' || !$('overlay')?.classList.contains('show')) return;
+  void refreshPlazaOnline(true).then(n => {
+    if (n == null) return;
+    const el = $('locPick');
+    const card = el?.querySelector('.locPlaza .lm');
+    const ld = el?.querySelector('.locPlaza .ld');
+    const head = el?.querySelector('.locHead small');
+    if (card) card.textContent = `${n} 人`;
+    if (ld) ld.innerHTML = plazaCountLabel();
+    if (isPlazaPicked() && head) head.textContent = `目前 ${n} 人在內・休閒多人・不趕時間`;
+  });
+}, 20_000);
 let achFromRes = false; // 從收工畫面打開成就，關掉後回到收工畫面
 btn('rAch', () => { achFromRes = true; $('result').classList.remove('show'); achOpen(); });
 const ITEMS = [{ id: 'moon', n: '把你媽的愛送上月球', price: 5000, good: '選一位鄰居，發射飛彈鐵拳把對方送上月球，這一工都不會再出現', bad: '每一工最多用 2 個，下一工對方會回來' }];
@@ -2403,6 +2472,16 @@ function launchPlaza() {
       state = 'menu'; syncShiftUi();
       renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
     },
+    onEnterFail: () => {
+      showPlazaLoading(false);
+      plazaMode = false; plazaPlayAt = 0;
+      document.body.classList.remove('plazaRoam');
+      plazaHideYard(false);
+      applySeat(save.seat ?? 'door');
+      walking = false; handRig.visible = true; on('joy', false);
+      state = 'menu'; syncShiftUi();
+      renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+    },
     enterWalk: () => {
       plazaMode = true; plazaPlayAt = 0; evRun = null; shiftLen = SHIFT; timeLeft = SHIFT;
       plazaHideYard(true);
@@ -2412,6 +2491,7 @@ function launchPlaza() {
       walkPos.set(0, 1.55, plazaWalkBound() * 0.72);
       tYaw = yaw = 0; tPitch = pitch = -0.18;
       plazaEnterWalkPose(false);
+      drawRadio();
       on('quitBtn', true); on('camBtn', true); on('seatCard', false);
       document.body.classList.add('plazaRoam');
       showPlazaLoading(false);
@@ -2450,17 +2530,24 @@ btn('again', () => {
   else startDay();
 });
 btn('resMenu', () => { void (async () => {
+  const menuBtn = $('resMenu') as HTMLButtonElement;
+  if (menuBtn.disabled) return;
+  menuBtn.disabled = true;
   $('result').classList.remove('show');
   if (plazaMode) {
+    menuBtn.innerHTML = `<i class="ic ic-home"></i> 結算中…`;
     await plazaPayWait?.catch(() => 0);
     plazaMode = false; plazaPayWait = null; plazaPlayAt = 0;
     document.body.classList.remove('plazaRoam');
     plazaHideYard(false);
+    plazaHideChrome(true);
     void closePlaza();
     applySeat(save.seat ?? 'door');
     walking = false; handRig.visible = true; on('joy', false);
   }
   const againBtn = $('again'); if (againBtn) againBtn.style.display = '';
+  menuBtn.disabled = false;
+  menuBtn.innerHTML = `<i class="ic ic-home"></i> 回主選單`;
   renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
 })(); });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
@@ -3366,7 +3453,8 @@ function camTick(dt: number) {
     // 走路：站起來、腿手擺動，鏡頭跟在背後上方
     const sp = Math.hypot(walkPos.x - lastWalk.x, walkPos.z - lastWalk.z) / Math.max(dt, 1e-3); lastWalk.copy(walkPos);
     walkPh += Math.min(sp, 3) * dt * 5; const sw = Math.min(1, sp / 1.2) * Math.sin(walkPh);
-    me3.position.set(walkPos.x, walkPos.y - 1.55 - 0.4, walkPos.z); me3.rotation.y = yaw; meTorso.position.y = 0.43; meTorso.rotation.x = 0;
+    // 廣場地面 y=0；工寮沿用 walkPos 眼高換算（再下沉一點）
+    me3.position.set(walkPos.x, plazaMode ? 0 : walkPos.y - 1.55 - 0.4, walkPos.z); me3.rotation.y = yaw; meTorso.position.y = 0.43; meTorso.rotation.x = 0;
     meLegL.rotation.x = sw * 0.6; meLegR.rotation.x = -sw * 0.6; meArmL.rotation.x = -sw * 0.5; meArmR.rotation.x = sw * 0.5; meArmL.rotation.z = meArmR.rotation.z = 0; meHead.rotation.y = 0;
     handRig.visible = false;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw), gy = walkPos.y - 1.95;

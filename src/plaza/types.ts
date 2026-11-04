@@ -24,6 +24,8 @@ export type PlazaSnapshot = {
 };
 
 export type PlazaChat = {
+  connId?: string;
+  pid?: string;
   nick: string;
   text: string;
   pileId: number | null;

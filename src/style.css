@@ -819,6 +819,7 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 /* 廣場玩家頭上名字 */
 #plazaTags{position:fixed;inset:0;pointer-events:none;z-index:8800}
 .plazaTag{position:absolute;transform:translate(-50%,-100%);pointer-events:none;background:rgba(20,12,6,.82);color:#ffe9c0;border:1.5px solid rgba(217,149,43,.85);border-radius:10px;font-size:13px;font-weight:800;padding:3px 10px;white-space:nowrap;text-shadow:0 1px 0 #000;box-shadow:2px 2px 0 rgba(0,0,0,.35)}
+.plazaChatBub{position:absolute;transform:translate(-50%,-100%);pointer-events:none;max-width:min(42vw,220px);background:rgba(255,246,216,.95);color:#2a1600;border:2px solid #d9952b;border-radius:12px 12px 12px 4px;font-size:13px;font-weight:800;padding:5px 10px;line-height:1.25;text-align:center;box-shadow:2px 2px 0 rgba(0,0,0,.28);word-break:break-word}
 
 /* 進廣場載入遮罩（蓋住工寮場景） */
 #plazaLoad{position:fixed;inset:0;z-index:12000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;background:linear-gradient(165deg,#1a1008 0%,#2a1810 45%,#1e140c 100%);color:#ffe9c0;pointer-events:auto}
@@ -830,11 +831,13 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 #plazaLoad #plazaLoadCancel{margin-top:8px;min-height:44px;padding:8px 20px;border:2px solid #d9952b;border-radius:12px;background:#2a1810;color:#ffd23f;font-weight:800;font-size:15px}
 @keyframes pzLoadSlide{0%{transform:translateX(-100%)}100%{transform:translateX(280%)}}
 
-/* 廣場閒逛：先藏工班 HUD，坐下後再顯示；視角鈕仍可用 */
-body.plazaRoam #top,body.plazaRoam #stats,body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #medBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn{visibility:hidden!important;pointer-events:none!important}
-body.plazaRoam #camBtn{visibility:visible!important;pointer-events:auto!important;position:fixed!important;right:calc(var(--sa-right) + 10px)!important;bottom:calc(var(--sa-bottom) + 70px)!important;left:auto!important;top:auto!important;z-index:8600!important;min-height:44px;padding:8px 12px;background:rgba(36,22,10,.9)!important;border:2px solid #d9952b!important;border-radius:12px!important;color:#ffd23f!important;font-weight:800}
-@media (pointer:coarse){body.plazaRoam #camBtn{bottom:calc(var(--sa-bottom) + 88px)!important;right:calc(var(--sa-right) + 68px)!important}}
-body.plazaRoam #joy{z-index:8400}
+/* 廣場閒逛：先藏工班 HUD，坐下後再顯示；視角鈕仍可用；收音機隱藏 */
+body.plazaRoam #top,body.plazaRoam #stats,body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #medBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
+body.plazaRoam #camBtn,body.plazaRoam #camBtn.hudCam{visibility:visible!important;pointer-events:auto!important;position:fixed!important;right:calc(var(--sa-right) + 12px)!important;bottom:calc(var(--sa-bottom) + 18px)!important;left:auto!important;top:auto!important;z-index:8600!important;min-height:44px;min-width:44px;padding:8px 12px;background:rgba(36,22,10,.9)!important;border:2px solid #d9952b!important;border-radius:12px!important;color:#ffd23f!important;font-weight:800;display:inline-flex!important;align-items:center;justify-content:center}
+@media (pointer:coarse){body.plazaRoam #camBtn,body.plazaRoam #camBtn.hudCam{bottom:calc(var(--sa-bottom) + 16px)!important;right:calc(var(--sa-right) + 12px)!important}}
+/* 方向搖桿貼近底部，略留空隙 */
+body.plazaRoam #joy{z-index:8400;left:calc(var(--sa-left) + 16px)!important;bottom:calc(var(--sa-bottom) + 14px)!important}
+@media (pointer:coarse) and (orientation:landscape){body.plazaRoam #joy{bottom:calc(var(--sa-bottom) + 12px)!important;left:calc(var(--sa-left) + 12px)!important}}
 
 /* 安全區（瀏海、動態島、Home 指示條、橫向瀏海側）：統一用變數，桌機為 0 不影響 */
 :root{--sa-top:env(safe-area-inset-top,0px);--sa-right:env(safe-area-inset-right,0px);--sa-bottom:env(safe-area-inset-bottom,0px);--sa-left:env(safe-area-inset-left,0px)}

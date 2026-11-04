@@ -4,7 +4,8 @@ export const PILE_COUNT = 16;
 export const SLOTS_PER_PILE = 4;
 export const PLAZA_CAPACITY = PILE_COUNT * SLOTS_PER_PILE;
 export const PILE_SPACING = 5.2;
-export const SEAT_RADIUS = 1.55;
+/** 椅子離堆心距離：夠遠才不會把坐下身體埋進蚵堆（只剩腳） */
+export const SEAT_RADIUS = 1.9;
 /** 廣場走動邊界（約蓋住 4×4 堆） */
 export const WALK_BOUND = 11.5;
 export const SIT_DIST = 1.15;

@@ -12,10 +12,22 @@ export type PlazaHubHandlers = {
   onShellThrow?: (e: PlazaShellEvent) => void;
   onShellInbound?: (e: PlazaShellEvent) => void;
   onStealResult?: (e: PlazaStealEvent) => void;
+  /** 連線中斷，開始自動重連 */
+  onReconnecting?: (attempt: number) => void;
+  /** 底層 socket 重連成功（尚未重新 Join） */
+  onSocketReconnected?: () => void;
+  /** 重新 Join 成功 */
+  onRejoined?: (snap?: PlazaSnapshot) => void;
+  /** 重新 Join 失敗（仍會再試） */
+  onRejoinFail?: (err?: string, attempt?: number) => void;
+  /** 自動重連耗盡／連線徹底關閉 */
   onClose?: (err?: string) => void;
 };
 
 const DEFAULT_HUB = 'https://game-status.gwtech.org/hubs/plaza';
+
+/** 自動重連間隔（毫秒）；最後仍失敗再交由 session 手動輪詢 */
+const RECONNECT_DELAYS = [0, 800, 1600, 3200, 5000, 8000, 12000, 20000];
 
 export function plazaHubUrl() {
   try {
@@ -56,21 +68,54 @@ export class PlazaClient {
   conn: signalR.HubConnection | null = null;
   token = '';
   pid = '';
+  nick = '';
   private handlers: PlazaHubHandlers = {};
+  private intentionalStop = false;
+  private reconnectAttempt = 0;
+  private rejoining = false;
 
   setHandlers(h: PlazaHubHandlers) { this.handlers = h; }
 
   get connectionId() { return this.conn?.connectionId ?? ''; }
 
-  async connect(pid: string, nick: string): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot }> {
+  async connect(pid: string, nick: string, opts?: { keepAttempt?: boolean }): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot }> {
     this.pid = pid;
+    this.nick = nick;
+    this.intentionalStop = false;
+    if (!opts?.keepAttempt) this.reconnectAttempt = 0;
     await this.disconnect();
+    this.intentionalStop = false;
     const conn = new signalR.HubConnectionBuilder()
       .withUrl(plazaHubUrl(), { withCredentials: false })
-      .withAutomaticReconnect([0, 1000, 2000, 5000, 10000])
+      .withAutomaticReconnect(RECONNECT_DELAYS)
       .configureLogging(signalR.LogLevel.Warning)
       .build();
     this.conn = conn;
+    this.bindHubEvents(conn);
+    conn.onreconnecting(() => {
+      if (this.intentionalStop) return;
+      this.reconnectAttempt += 1;
+      this.handlers.onReconnecting?.(this.reconnectAttempt);
+    });
+    conn.onreconnected(() => {
+      if (this.intentionalStop) return;
+      this.handlers.onSocketReconnected?.();
+      void this.rejoinAfterReconnect();
+    });
+    conn.onclose((e) => {
+      if (this.intentionalStop) return;
+      this.handlers.onClose?.(e?.message);
+    });
+    try {
+      await conn.start();
+    } catch (e: any) {
+      this.conn = null;
+      return { ok: false, err: e?.message || 'connect_fail' };
+    }
+    return this.joinHub();
+  }
+
+  private bindHubEvents(conn: signalR.HubConnection) {
     conn.on('Roster', (snap: PlazaSnapshot) => this.handlers.onRoster?.(snap));
     conn.on('PlayerJoined', (p: PlazaPlayer) => this.handlers.onJoined?.(p));
     conn.on('PlayerLeft', (p: PlazaPlayer) => this.handlers.onLeft?.(p));
@@ -81,22 +126,56 @@ export class PlazaClient {
     conn.on('ShellThrow', (e: any) => this.handlers.onShellThrow?.(normShell(e)));
     conn.on('ShellInbound', (e: any) => this.handlers.onShellInbound?.(normShell(e)));
     conn.on('StealResult', (e: any) => this.handlers.onStealResult?.(normSteal(e)));
-    conn.onclose((e) => this.handlers.onClose?.(e?.message));
+  }
+
+  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string }> {
+    if (!this.conn) return { ok: false, err: 'no_conn' };
     try {
-      await conn.start();
-    } catch (e: any) {
-      this.conn = null;
-      return { ok: false, err: e?.message || 'connect_fail' };
-    }
-    try {
-      const r = await conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot }>('Join', pid, nick);
-      if (!r?.ok) { await this.disconnect(); return { ok: false, err: r?.err || 'join_fail' }; }
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot }>('Join', this.pid, this.nick);
+      if (!r?.ok) return { ok: false, err: r?.err || 'join_fail' };
       this.token = r.token || '';
-      return { ok: true, snap: r.snap };
+      this.reconnectAttempt = 0;
+      return { ok: true, snap: r.snap, token: this.token };
     } catch (e: any) {
-      await this.disconnect();
       return { ok: false, err: e?.message || 'join_fail' };
     }
+  }
+
+  /** socket 重連後重新進廣場（伺服器斷線會清掉玩家） */
+  private async rejoinAfterReconnect() {
+    if (this.rejoining || this.intentionalStop) return;
+    this.rejoining = true;
+    try {
+      const r = await this.joinHub();
+      if (!r.ok) {
+        this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
+        return;
+      }
+      this.handlers.onRejoined?.(r.snap);
+    } finally {
+      this.rejoining = false;
+    }
+  }
+
+  /**
+   * 自動重連耗盡後，手動重建連線並 Join。
+   * 回傳是否成功；呼叫端可輪詢重試。
+   */
+  async tryManualReconnect(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot }> {
+    if (this.intentionalStop) return { ok: false, err: 'stopped' };
+    if (this.connected) {
+      const r = await this.joinHub();
+      if (r.ok) { this.handlers.onRejoined?.(r.snap); return r; }
+      return r;
+    }
+    this.reconnectAttempt += 1;
+    this.handlers.onReconnecting?.(this.reconnectAttempt);
+    const pid = this.pid, nick = this.nick;
+    if (!pid) return { ok: false, err: 'no_pid' };
+    const r = await this.connect(pid, nick, { keepAttempt: true });
+    if (r.ok) this.handlers.onRejoined?.(r.snap);
+    else this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
+    return r;
   }
 
   async claimSeat(pileId: number, slot: number) {
@@ -119,7 +198,7 @@ export class PlazaClient {
   }
 
   async sync(x: number, z: number, yaw: number, phase: string, count: number, moving: boolean, umb = false) {
-    if (!this.conn) return;
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return;
     try { await this.conn.invoke('Sync', x, z, yaw, phase, count, moving, umb); } catch { /* ignore */ }
   }
 
@@ -158,6 +237,7 @@ export class PlazaClient {
   }
 
   async disconnect() {
+    this.intentionalStop = true;
     const c = this.conn; this.conn = null; this.token = '';
     if (!c) return;
     try { await c.stop(); } catch { /* ignore */ }

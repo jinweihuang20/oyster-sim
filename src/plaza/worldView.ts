@@ -7,8 +7,11 @@ import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 
 type Remote = {
   key: string;
+  pid: string;
   rig: PlayerRig;
   tag: HTMLElement;
+  bubble: HTMLElement;
+  bubUntil: number;
   pileId: number;
   slot: number;
   phase: string;
@@ -47,6 +50,9 @@ export type PlazaWorldView = {
   hitPile: (raycaster: THREE.Raycaster) => number | null;
   /** 坐下遠端玩家的瞄準點（丟殼／偷肉） */
   aimTargets: () => PlazaAimTarget[];
+  /** 頭頂氣泡：最後一句聊天，約 5 秒 */
+  showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) => void;
+  setSelfPose: (x: number, z: number, yaw: number, seated: boolean) => void;
   tick: (dt: number, camera: THREE.Camera) => void;
   dispose: () => void;
 };
@@ -146,12 +152,27 @@ export function createPlazaWorldView(
   document.body.appendChild(tagsHost);
   void bubblesHost;
 
+  const selfBubble = document.createElement('div');
+  selfBubble.className = 'plazaChatBub';
+  selfBubble.style.display = 'none';
+  tagsHost.appendChild(selfBubble);
+  let selfBubUntil = 0;
+  let selfX = 0, selfZ = 0, selfYaw = 0, selfSeated = false;
+
   function ensureTag(nick: string) {
     const tag = document.createElement('div');
     tag.className = 'plazaTag';
     tag.textContent = nick;
     tagsHost.appendChild(tag);
     return tag;
+  }
+
+  function ensureBubble() {
+    const el = document.createElement('div');
+    el.className = 'plazaChatBub';
+    el.style.display = 'none';
+    tagsHost.appendChild(el);
+    return el;
   }
 
   function makeRemoteUmb() {
@@ -187,25 +208,47 @@ export function createPlazaWorldView(
     return out;
   }
 
-  /** 坐下：髖部落在椅面；大腿朝面前（-Z），小腿下垂踩地 */
+  /** 廣場不持槍：藏槍架；臂段從持槍 IK 改回自然垂掛（否則會伸進蚵堆只剩腳） */
+  function hangArms(r: Remote, sit = false) {
+    r.rig.weaponMount.visible = false;
+    r.rig.handL.visible = false;
+    r.rig.handR.visible = false;
+    const hang = (upper: THREE.Group, lower: THREE.Group, side: number) => {
+      upper.scale.set(1, 1, 1);
+      lower.scale.set(1, 1, 1);
+      upper.position.set(side * 0.22, 0.28, 0);
+      lower.position.set(side * 0.22, 0.02, sit ? 0.04 : 0.02);
+      upper.rotation.set(sit ? 0.55 : 0.12, 0, side * 0.12);
+      lower.rotation.set(sit ? 0.35 : 0.18, 0, 0);
+      upper.quaternion.setFromEuler(upper.rotation);
+      lower.quaternion.setFromEuler(lower.rotation);
+    };
+    hang(r.rig.upperL, r.rig.lowerL, -1);
+    hang(r.rig.upperR, r.rig.lowerR, 1);
+  }
+
+  /** 坐下：髖對椅面、略後仰離蚵堆；大腿前擺、小腿下垂 */
   function poseSit(r: Remote) {
+    hangArms(r, true);
     r.rig.root.position.y = SIT_ROOT_Y;
-    // 腿 mesh 沿 -Y；+Rx 才會把大腿甩向 -Z（面前），舊的 -Rx 會往背後折
-    r.rig.legL.rotation.set(1.38, 0.1, 0.14);
-    r.rig.legR.rotation.set(1.38, -0.1, -0.14);
-    r.rig.shinL.rotation.set(-1.55, 0, 0);
-    r.rig.shinR.rotation.set(-1.55, 0, 0);
-    r.rig.torso.rotation.x = 0.1;
-    r.rig.torso.position.y = 0;
+    r.rig.legL.rotation.set(1.15, 0.08, 0.1);
+    r.rig.legR.rotation.set(1.15, -0.08, -0.1);
+    r.rig.shinL.rotation.set(-1.25, 0, 0);
+    r.rig.shinR.rotation.set(-1.25, 0, 0);
+    // 略後仰，身體不要埋進面前蚵堆
+    r.rig.torso.rotation.x = -0.12;
+    r.rig.torso.position.y = 0.02;
   }
 
   function poseStand(r: Remote) {
+    hangArms(r, false);
     r.rig.root.position.y = 0;
     r.rig.legL.rotation.set(0, 0, 0);
     r.rig.legR.rotation.set(0, 0, 0);
     r.rig.shinL.rotation.set(0, 0, 0);
     r.rig.shinR.rotation.set(0, 0, 0);
     r.rig.torso.rotation.x = 0;
+    r.rig.torso.position.y = 0;
   }
 
   function applyActionPose(r: Remote) {
@@ -213,26 +256,37 @@ export function createPlazaWorldView(
     if (r.seated) {
       poseSit(r);
       if (ph === 'twist' || ph === 'pry') {
-        r.rig.head.rotation.x = 0.2;
-        r.rig.upperR.rotation.x = -0.6; r.rig.lowerR.rotation.x = -0.4;
+        r.rig.head.rotation.x = 0.15;
+        r.rig.upperR.position.set(0.22, 0.3, -0.05);
+        r.rig.upperR.rotation.set(0.9, 0, -0.1);
+        r.rig.lowerR.position.set(0.22, 0.08, -0.12);
+        r.rig.lowerR.rotation.set(0.55, 0, 0);
+        r.rig.upperR.quaternion.setFromEuler(r.rig.upperR.rotation);
+        r.rig.lowerR.quaternion.setFromEuler(r.rig.lowerR.rotation);
       } else if (ph === 'seam') {
-        r.rig.head.rotation.x = 0.12;
-        r.rig.upperR.rotation.x = -0.35;
+        r.rig.head.rotation.x = 0.1;
+        r.rig.upperR.rotation.set(0.7, 0, -0.08);
+        r.rig.upperR.quaternion.setFromEuler(r.rig.upperR.rotation);
       } else if (ph === 'aim' || ph === 'toss') {
-        r.rig.upperL.rotation.x = -0.8;
+        r.rig.upperL.position.set(-0.22, 0.32, -0.08);
+        r.rig.upperL.rotation.set(1.0, 0, 0.1);
+        r.rig.lowerL.position.set(-0.22, 0.1, -0.16);
+        r.rig.lowerL.rotation.set(0.4, 0, 0);
+        r.rig.upperL.quaternion.setFromEuler(r.rig.upperL.rotation);
+        r.rig.lowerL.quaternion.setFromEuler(r.rig.lowerL.rotation);
         r.rig.head.rotation.x = -0.05;
       } else if (ph === 'scoop' || ph === 'pick') {
-        r.rig.upperL.rotation.x = -0.5; r.rig.upperR.rotation.x = -0.3;
-        r.rig.head.rotation.x = 0.1;
-      } else {
+        r.rig.upperL.rotation.set(0.75, 0, 0.12);
+        r.rig.upperR.rotation.set(0.6, 0, -0.1);
+        r.rig.upperL.quaternion.setFromEuler(r.rig.upperL.rotation);
+        r.rig.upperR.quaternion.setFromEuler(r.rig.upperR.rotation);
         r.rig.head.rotation.x = 0.08;
-        r.rig.upperL.rotation.x = 0; r.rig.upperR.rotation.x = 0;
-        r.rig.lowerR.rotation.x = 0;
+      } else {
+        r.rig.head.rotation.x = 0.05;
       }
     } else {
       poseStand(r);
       r.rig.head.rotation.x = 0;
-      r.rig.upperL.rotation.x = 0; r.rig.upperR.rotation.x = 0;
     }
   }
 
@@ -249,18 +303,21 @@ export function createPlazaWorldView(
       const umbMesh = makeRemoteUmb();
       rig.outer.add(umbMesh);
       r = {
-        key, rig, tag: ensureTag(p.nick || '剝蚵人'),
+        key, pid: p.pid || '', rig, tag: ensureTag(p.nick || '剝蚵人'), bubble: ensureBubble(), bubUntil: 0,
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
         tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0,
       };
       remotes.set(key, r);
-    }
+      hangArms(r, r.seated);
+    } else if (p.pid) r.pid = p.pid;
     return r;
   }
 
   function applyPose(p: PlazaPlayer, selfPid: string) {
     const r = ensure(p, selfPid); if (!r) return;
+    const wasSeated = r.seated;
+    const prevPile = r.pileId, prevSlot = r.slot;
     r.pileId = p.pileId; r.slot = p.slot; r.phase = p.phase || r.phase; r.count = p.count ?? r.count;
     r.seated = !!p.seated; r.moving = !!p.moving;
     r.umb = !!p.umb;
@@ -272,9 +329,22 @@ export function createPlazaWorldView(
       r.tx = pose.pos.x; r.tz = pose.pos.z; r.tyaw = pose.yaw;
       r.x = pose.pos.x; r.z = pose.pos.z; r.yaw = pose.yaw;
     } else {
-      if (typeof p.x === 'number') r.tx = p.x;
-      if (typeof p.z === 'number') r.tz = p.z;
-      if (typeof p.yaw === 'number') r.tyaw = p.yaw;
+      // 剛站起：若封包座標異常（0,0 或離座位太遠），先站在椅後再跟 Sync
+      if (wasSeated && prevPile >= 0) {
+        const pose = seatPose(prevPile, prevSlot);
+        const standX = pose.pos.x + Math.sin(pose.yaw) * 0.55;
+        const standZ = pose.pos.z + Math.cos(pose.yaw) * 0.55;
+        const nx = typeof p.x === 'number' ? p.x : standX;
+        const nz = typeof p.z === 'number' ? p.z : standZ;
+        const far = Math.hypot(nx - pose.pos.x, nz - pose.pos.z) > 3.5;
+        r.x = r.tx = far ? standX : nx;
+        r.z = r.tz = far ? standZ : nz;
+        r.yaw = r.tyaw = typeof p.yaw === 'number' && !far ? p.yaw : pose.yaw;
+      } else {
+        if (typeof p.x === 'number') r.tx = p.x;
+        if (typeof p.z === 'number') r.tz = p.z;
+        if (typeof p.yaw === 'number') r.tyaw = p.yaw;
+      }
     }
     applyActionPose(r);
     paintOcc();
@@ -286,8 +356,36 @@ export function createPlazaWorldView(
     const key = p.connId || p.pid;
     const r = remotes.get(key);
     if (!r) return;
-    root.remove(r.rig.outer); r.tag.remove(); remotes.delete(key);
+    root.remove(r.rig.outer); r.tag.remove(); r.bubble.remove(); remotes.delete(key);
     paintOcc();
+  }
+
+  function showChat(opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) {
+    const text = (opts.text || '').trim();
+    if (!text) return;
+    const until = performance.now() + 5000;
+    if (opts.self) {
+      selfBubble.textContent = text.length > 40 ? text.slice(0, 39) + '…' : text;
+      selfBubble.style.display = 'block';
+      selfBubUntil = until;
+      return;
+    }
+    let r: Remote | undefined;
+    if (opts.connId) r = remotes.get(opts.connId);
+    if (!r && opts.pid) {
+      for (const x of remotes.values()) { if (x.pid === opts.pid) { r = x; break; } }
+    }
+    if (!r && opts.nick) {
+      for (const x of remotes.values()) { if (x.nick === opts.nick) { r = x; break; } }
+    }
+    if (!r) return;
+    r.bubble.textContent = text.length > 40 ? text.slice(0, 39) + '…' : text;
+    r.bubble.style.display = 'block';
+    r.bubUntil = until;
+  }
+
+  function setSelfPose(x: number, z: number, yaw: number, seated: boolean) {
+    selfX = x; selfZ = z; selfYaw = yaw; selfSeated = seated;
   }
 
   function setPhase(p: PlazaPlayer) { applyPose(p, ''); }
@@ -300,7 +398,7 @@ export function createPlazaWorldView(
       applyPose(p, selfPid);
     }
     for (const [k, r] of [...remotes]) {
-      if (!alive.has(k)) { root.remove(r.rig.outer); r.tag.remove(); remotes.delete(k); }
+      if (!alive.has(k)) { root.remove(r.rig.outer); r.tag.remove(); r.bubble.remove(); remotes.delete(k); }
     }
     paintOcc(snap);
   }
@@ -333,8 +431,20 @@ export function createPlazaWorldView(
   }
 
   const _v = new THREE.Vector3();
+  const now = () => performance.now();
+
+  function placeHud(el: HTMLElement, x: number, z: number, yWorld: number, camera: THREE.Camera, yOff = 0) {
+    _v.set(x, yWorld, z).project(camera);
+    const sx = (_v.x * 0.5 + 0.5) * innerWidth, sy = (-_v.y * 0.5 + 0.5) * innerHeight + yOff;
+    const behind = _v.z > 1 || sx < -80 || sx > innerWidth + 80 || sy < -40 || sy > innerHeight + 40;
+    el.style.display = behind ? 'none' : 'block';
+    el.style.left = `${sx}px`;
+    el.style.top = `${sy}px`;
+  }
+
   function tick(dt: number, camera: THREE.Camera) {
     const k = Math.min(1, dt * 10);
+    const t = now();
     for (const r of remotes.values()) {
       r.x += (r.tx - r.x) * k;
       r.z += (r.tz - r.z) * k;
@@ -352,21 +462,30 @@ export function createPlazaWorldView(
         r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
         r.rig.root.position.y *= 0.8;
       }
-      r.rig.outer.position.set(r.x, 0, r.z);
+      // 坐下略往後移，避免身體埋進蚵堆
+      const back = r.seated ? 0.22 : 0;
+      const ox = r.x + Math.sin(r.yaw) * back;
+      const oz = r.z + Math.cos(r.yaw) * back;
+      r.rig.outer.position.set(ox, 0, oz);
       r.rig.outer.rotation.y = r.yaw;
-      // 頭上方（對齊縮放後身高）
-      _v.set(r.x, r.seated ? CHAIR_SEAT_Y + 0.72 : 1.2, r.z).project(camera);
-      const x = (_v.x * 0.5 + 0.5) * innerWidth, y = (-_v.y * 0.5 + 0.5) * innerHeight;
-      const behind = _v.z > 1 || x < -40 || x > innerWidth + 40 || y < -20 || y > innerHeight + 40;
-      r.tag.style.display = behind ? 'none' : 'block';
-      r.tag.style.left = `${x}px`;
-      r.tag.style.top = `${y}px`;
+      const headY = r.seated ? CHAIR_SEAT_Y + 0.72 : 1.2;
+      placeHud(r.tag, ox, oz, headY, camera);
+      if (r.bubUntil > t) placeHud(r.bubble, ox, oz, headY + 0.18, camera, -28);
+      else if (r.bubble.style.display !== 'none') r.bubble.style.display = 'none';
     }
+    if (selfBubUntil > t) {
+      const headY = selfSeated ? CHAIR_SEAT_Y + 0.72 : 1.2;
+      const back = selfSeated ? 0.22 : 0;
+      const ox = selfX + Math.sin(selfYaw) * back;
+      const oz = selfZ + Math.cos(selfYaw) * back;
+      placeHud(selfBubble, ox, oz, headY + 0.18, camera, -28);
+    } else if (selfBubble.style.display !== 'none') selfBubble.style.display = 'none';
   }
 
   function dispose() {
-    for (const r of remotes.values()) { root.remove(r.rig.outer); r.tag.remove(); }
+    for (const r of remotes.values()) { root.remove(r.rig.outer); r.tag.remove(); r.bubble.remove(); }
     remotes.clear();
+    selfBubble.remove();
     tagsHost.remove();
     scene.remove(root);
     floorMaps.map.dispose();
@@ -381,7 +500,7 @@ export function createPlazaWorldView(
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, applyPose, setPhase, highlight, highlightNear, hitPile, aimTargets, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, applyPose, setPhase, highlight, highlightNear, hitPile, aimTargets, showChat, setSelfPose, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {
