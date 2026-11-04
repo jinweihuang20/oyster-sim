@@ -30,14 +30,12 @@ const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
 const HAIRS = [0x222222, 0x555555, 0x888888, 0x3a2a1a, 0xdddddd];
 
 /**
- * 廣場遠端（含尚未坐下、正在走動）：對齊本體第三人稱走路頭高 ≈1.45～1.55。
- * 舊 AVATAR_SCALE 0.75 會讓走動的人看起來像小孩；坐時髖仍對齊椅面。
+ * 與死鬥 NPC 同一套 makePlayerAvatar，比例 1:1（不再縮放）。
+ * 坐時只調 rootY 讓髖對齊椅面。
  */
-const AVATAR_SCALE = 1.25;
+const AVATAR_SCALE = 1;
 const HIP_Y = 0.72;
 const SIT_ROOT_Y = CHAIR_SEAT_Y / AVATAR_SCALE - HIP_Y;
-/** 站立時微抬，腳底貼地且頭高接近第一人稱視線 */
-const STAND_ROOT_Y = 0.06;
 
 export type PlazaWorldView = {
   root: THREE.Group;
@@ -229,6 +227,9 @@ export function createPlazaWorldView(
     hang(r.rig.upperR, r.rig.lowerR, 1);
   }
 
+  /** makePlayerAvatar 預設 torso.y=0.92、髖=0.72；勿覆寫成 0 否則頭身壓進腳 */
+  const TORSO_Y = 0.92;
+
   /** 坐下：髖對椅面、略後仰離蚵堆；大腿前擺、小腿下垂 */
   function poseSit(r: Remote) {
     hangArms(r, true);
@@ -244,16 +245,16 @@ export function createPlazaWorldView(
     r.rig.legR.rotation.set(1.15, -0.08, -0.1);
     r.rig.shinL.rotation.set(-1.25, 0, 0);
     r.rig.shinR.rotation.set(-1.25, 0, 0);
-    // 略後仰離蚵堆；軀幹微抬，坐下時別看起來像縮水
+    // 略後仰離蚵堆（維持 torso 預設高度）
     r.rig.torso.rotation.x = -0.08;
-    r.rig.torso.position.y = 0.06;
+    r.rig.torso.position.y = TORSO_Y;
   }
 
   function poseStand(r: Remote) {
     hangArms(r, false);
     r.rig.outer.scale.setScalar(AVATAR_SCALE);
     r.rig.root.scale.set(1, 1, 1);
-    r.rig.root.position.set(0, STAND_ROOT_Y, 0);
+    r.rig.root.position.set(0, 0, 0);
     r.rig.legL.rotation.set(0, 0, 0);
     r.rig.legR.rotation.set(0, 0, 0);
     r.rig.shinL.rotation.set(0, 0, 0);
@@ -264,8 +265,7 @@ export function createPlazaWorldView(
     r.rig.shinR.scale.set(1, 1, 1);
     r.rig.torso.scale.set(1, 1, 1);
     r.rig.torso.rotation.x = 0;
-    // 對齊本體走路時 torso 上移，避免遠端站著看起來「縮一截」
-    r.rig.torso.position.y = 0.12;
+    r.rig.torso.position.y = TORSO_Y;
   }
 
   function applyActionPose(r: Remote) {
@@ -474,10 +474,10 @@ export function createPlazaWorldView(
         const swing = Math.sin(r.bob) * 0.55;
         r.rig.legL.rotation.x = swing; r.rig.legR.rotation.x = -swing;
         r.rig.shinL.rotation.x = Math.max(0, -swing * 0.5); r.rig.shinR.rotation.x = Math.max(0, swing * 0.5);
-        r.rig.root.position.y = STAND_ROOT_Y + Math.abs(Math.sin(r.bob * 2)) * 0.03;
+        r.rig.root.position.y = Math.abs(Math.sin(r.bob * 2)) * 0.03;
       } else if (!r.seated) {
         r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
-        r.rig.root.position.y += (STAND_ROOT_Y - r.rig.root.position.y) * Math.min(1, dt * 10);
+        r.rig.root.position.y *= 0.8;
       }
       // 坐下略往後移，避免身體埋進蚵堆
       const back = r.seated ? 0.22 : 0;
@@ -485,13 +485,13 @@ export function createPlazaWorldView(
       const oz = r.z + Math.cos(r.yaw) * back;
       r.rig.outer.position.set(ox, 0, oz);
       r.rig.outer.rotation.y = r.yaw;
-      const headY = r.seated ? CHAIR_SEAT_Y + 0.78 * AVATAR_SCALE : (1.5 + STAND_ROOT_Y + 0.12) * AVATAR_SCALE;
+      const headY = r.seated ? CHAIR_SEAT_Y + 0.78 : 1.5;
       placeHud(r.tag, ox, oz, headY, camera);
       if (r.bubUntil > t) placeHud(r.bubble, ox, oz, headY + 0.18, camera, -28);
       else if (r.bubble.style.display !== 'none') r.bubble.style.display = 'none';
     }
     if (selfBubUntil > t) {
-      const headY = selfSeated ? CHAIR_SEAT_Y + 0.78 * AVATAR_SCALE : (1.5 + STAND_ROOT_Y + 0.12) * AVATAR_SCALE;
+      const headY = selfSeated ? CHAIR_SEAT_Y + 0.78 : 1.5;
       const back = selfSeated ? 0.22 : 0;
       const ox = selfX + Math.sin(selfYaw) * back;
       const oz = selfZ + Math.cos(selfYaw) * back;
