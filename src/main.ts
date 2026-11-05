@@ -5,7 +5,7 @@ import { checkCode, REDEEM_MESSAGES } from './redeem';
 import type { RedeemCodeDef } from './redeemCodes';
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { rbox, crease, rcyl } from './geo';
+import { rbox, rboxEnv, crease, rcyl } from './geo';
 import { createSkyDome } from './sky';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
@@ -96,7 +96,7 @@ mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.02, 8), mat(0x111111), [0, 0, 0.
 function updClock() { const d = new Date(), sec = d.getSeconds(), m = d.getMinutes() + sec / 60, h = (d.getHours() % 12) + m / 60; clkS.rotation.z = -sec / 60 * Math.PI * 2; clkM.rotation.z = -m / 60 * Math.PI * 2; clkH.rotation.z = -h / 12 * Math.PI * 2; }
 updClock(); setInterval(updClock, 1000);
 // 港口：碼頭、水、漁船
-mesh(new THREE.BoxGeometry(14, 0.3, 3), mat(0x8a9088), [0, -0.15, -5.8]);
+mesh(rboxEnv(14, 0.3, 3), mat(0x8a9088), [0, -0.15, -5.8]);
 const water = mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x4a98b8, roughness: 0.24, metalness: 0.18 }), [0, -0.5, -27]); water.rotation.x = -Math.PI / 2;
 const skyDome = createSkyDome({ radius: 46, lo: matchMedia('(pointer: coarse)').matches || matchMedia('(max-width: 900px)').matches });
 scene.add(skyDome.mesh);
@@ -104,10 +104,10 @@ const boats: THREE.Group[] = [];
 const flagCols = [0xd03030, 0x2a5ad0, 0xf0c020, 0x30a050];
 for (let i = 0; i < 5; i++) {
   const g = new THREE.Group(); g.position.set(-8 + i * 4 + rnd(-0.5, 0.5), -0.45, -9 - (i % 2) * 2.5); g.rotation.y = rnd(-0.3, 0.3); scene.add(g);
-  const hull = mesh(new THREE.BoxGeometry(3.2, 0.7, 1.1), mat([0xe8e8e0, 0x2a6ab0, 0xd8d0b0][i % 3]), [0, 0.35, 0], g);
-  mesh(new THREE.BoxGeometry(3.25, 0.12, 1.15), mat(0xb03030), [0, 0.05, 0], g); void hull;
-  mesh(new THREE.BoxGeometry(1.0, 0.6, 0.8), mat(0xf0f0e8), [0.6, 1.0, 0], g);
-  mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.2, 4), mat(0x333333), [-0.6, 1.8, 0], g);
+  const hull = mesh(rboxEnv(3.2, 0.7, 1.1), mat([0xe8e8e0, 0x2a6ab0, 0xd8d0b0][i % 3]), [0, 0.35, 0], g);
+  mesh(rboxEnv(3.25, 0.12, 1.15), mat(0xb03030), [0, 0.05, 0], g); void hull;
+  mesh(rboxEnv(1.0, 0.6, 0.8), mat(0xf0f0e8), [0.6, 1.0, 0], g);
+  mesh(rcyl(0.03, 0.03, 2.2, 4), mat(0x333333), [-0.6, 1.8, 0], g);
   for (let k = 0; k < 3; k++) mesh(new THREE.PlaneGeometry(0.35, 0.22), new THREE.MeshBasicMaterial({ color: flagCols[(i + k) % 4], side: THREE.DoubleSide }), [-0.42, 2.7 - k * 0.3, 0], g);
   mesh(new THREE.SphereGeometry(0.06, 6, 5), new THREE.MeshBasicMaterial({ color: [0xffe0a0, 0xff6040, 0x60ff80][i % 3] }), [0.6, 1.4, 0], g);
   boats.push(g);
@@ -163,7 +163,7 @@ const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 const greyPick = () => GREYS[Math.min(4, Math.floor(Math.random() * Math.random() * 6.2))];
 const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX }); m.emissive.setHex(0x0a0c10); m.emissiveIntensity = 0.15; return m; };
 const shellMat = shellM(0xe8e4e0);
-mesh(new THREE.ConeGeometry(0.9, 0.55, 10), mat(0x7a8ca0, { roughness: 0.95, emissive: 0x0a1018, emissiveIntensity: 0.12 }), [0, 0.27, 0]);
+mesh(crease(new THREE.ConeGeometry(0.9, 0.55, 10)), mat(0x7a8ca0, { roughness: 0.95, emissive: 0x0a1018, emissiveIntensity: 0.12 }), [0, 0.27, 0]);
 const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo, pileMat, 260); pile.castShadow = true;
 { const d = new THREE.Object3D(); for (let i = 0; i < 260; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 1.0, h = Math.max(0, 0.55 * (1 - r / 0.95)); d.position.set(Math.cos(a) * r, h + 0.03, Math.sin(a) * r); d.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); d.updateMatrix(); pile.setMatrixAt(i, d.matrix); pile.setColorAt(i, new THREE.Color(greyPick())); } }
 scene.add(pile);
@@ -230,8 +230,8 @@ function makeNpc(d: NpcDef) {
   const meat = mesh(meatGeo, meatMat, [0, 0.025, 0], oy);
   const top = mesh(HALF_GEOS[npcs.length % 6], shellM(greyPick()), [0, 0.04, 0], oy);
   const kn = new THREE.Group(); kn.position.set(0, -0.18, -0.34); a.armR.add(kn);
-  mesh(new THREE.BoxGeometry(0.03, 0.03, 0.09), mat(0x7a4a20), [0, 0, 0], kn);
-  mesh(new THREE.BoxGeometry(0.02, 0.006, 0.09), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [0, 0, -0.09], kn);
+  mesh(rboxEnv(0.03, 0.03, 0.09), mat(0x7a4a20), [0, 0, 0], kn);
+  mesh(rboxEnv(0.02, 0.006, 0.09), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [0, 0, -0.09], kn);
   const bowlL = new THREE.Vector3(0.32, 0, -0.42); const bowl = a.g.localToWorld(bowlL.clone());
   const bowlM = mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, 0.05, bowl.z]);
   bowl.y = 0.08;
@@ -292,8 +292,8 @@ handR.position.set(0.2, -0.26, -0.45); handR.rotation.set(0.3, 0.5, -0.2);
 handRig.add(handL, handR);
 let knifeK = 0; const _kt = new THREE.Vector3(), _kg = new THREE.Vector3(), _ko = new THREE.Vector3(0.05, 0.015, 0);
 const knife = new THREE.Group(); handR.add(knife); knife.position.set(-0.02, 0.03, -0.18); knife.rotation.set(0, 0.9, 0);
-mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.11, 6), mat(0x7a4a20), [0, 0, 0], knife).rotation.z = Math.PI / 2;
-mesh(new THREE.BoxGeometry(0.1, 0.006, 0.025), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [-0.1, 0, 0], knife);
+mesh(rcyl(0.018, 0.02, 0.11, 6), mat(0x7a4a20), [0, 0, 0], knife).rotation.z = Math.PI / 2;
+mesh(rboxEnv(0.1, 0.006, 0.025), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [-0.1, 0, 0], knife);
 const oyster = new THREE.Group(); handL.add(oyster); oyster.position.set(0.02, 0.05, -0.16);
 const shellBotMat = shellM(0xe0dcd8), shellTopMat = shellM(0xf0ecea);
 const shellBot = mesh(halfGeo, shellBotMat, [0, -0.01, 0], oyster);
@@ -933,26 +933,26 @@ function updSky() {
 const LAND: Record<string, THREE.Group> = {};
 {
   const G = (id: string) => { const g = new THREE.Group(); g.visible = false; scene.add(g); LAND[id] = g; return g; };
-  const B = (w: number, h: number, d: number, c: number, p: [number, number, number], g: THREE.Object3D, o: Record<string, unknown> = {}) => mesh(new THREE.BoxGeometry(w, h, d), mat(c, o), p, g);
+  const B = (w: number, h: number, d: number, c: number, p: [number, number, number], g: THREE.Object3D, o: Record<string, unknown> = {}) => mesh(rboxEnv(w, h, d), mat(c, o), p, g);
   // 王功：紅白燈塔 + 防波堤
   const wg = G('wanggong');
-  for (let i = 0; i < 6; i++) mesh(new THREE.CylinderGeometry(0.55 - i * 0.05, 0.6 - i * 0.05, 1.2, 12), mat(i % 2 ? 0xf2f2ee : 0xc8302a), [-9, 0.1 + i * 1.2, -24], wg);
-  mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.7, 10), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }), [-9, 7.6, -24], wg);
+  for (let i = 0; i < 6; i++) mesh(rcyl(0.55 - i * 0.05, 0.6 - i * 0.05, 1.2, 12), mat(i % 2 ? 0xf2f2ee : 0xc8302a), [-9, 0.1 + i * 1.2, -24], wg);
+  mesh(rcyl(0.35, 0.35, 0.7, 10), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }), [-9, 7.6, -24], wg);
   mesh(new THREE.ConeGeometry(0.5, 0.6, 10), mat(0x2a2a2a), [-9, 8.25, -24], wg);
   B(30, 0.6, 1.2, 0x8a8a84, [3, -0.2, -21], wg);
   for (let i = 0; i < 9; i++) B(0.8, 0.8, 0.8, 0x9a9a90, [-10 + i * 2.6, 0.3, -20.3], wg);
   // 東石：蚵棚 + 漁人碼頭木棧道與風車
   const ds = G('dongshi');
-  for (let r = 0; r < 4; r++) for (let c = 0; c < 10; c++) mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.4, 5), mat(0x8a6a3a), [-12 + c * 1.6, 0, -18 - r * 2], ds);
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 10; c++) mesh(rcyl(0.04, 0.04, 1.4, 5), mat(0x8a6a3a), [-12 + c * 1.6, 0, -18 - r * 2], ds);
   for (let r = 0; r < 4; r++) B(16, 0.06, 0.08, 0x6a5030, [-4.8, 0.65, -18 - r * 2], ds);
   B(12, 0.25, 2.5, 0x9a6a3a, [8, 0.2, -23], ds);
-  mesh(new THREE.CylinderGeometry(0.15, 0.25, 5, 8), mat(0xf0ece0), [11, 2.5, -25], ds);
+  mesh(rcyl(0.15, 0.25, 5, 8), mat(0xf0ece0), [11, 2.5, -25], ds);
   const bl = new THREE.Group(); bl.position.set(11, 5, -24.7); ds.add(bl); for (let k = 0; k < 4; k++) { const b = B(0.25, 2.4, 0.05, 0xe8e0d0, [0, 1.2, 0], new THREE.Group()); const h = b.parent!; h.rotation.z = k * Math.PI / 2; bl.add(h); }
   // 布袋：鹽田方格 + 白鹽山 + 濕地蘆葦
   const bd = G('budai');
   for (let r = 0; r < 3; r++) for (let c = 0; c < 6; c++) B(3, 0.05, 2, (r + c) % 2 ? 0xc8d8e0 : 0xb0c8d4, [-12 + c * 3.4, -0.35, -17 - r * 2.4], bd, { roughness: 0.2, metalness: 0.2 });
   for (let i = 0; i < 4; i++) mesh(new THREE.ConeGeometry(1.2 + i * 0.2, 1.6 + i * 0.3, 10), mat(0xfafafa), [7 + i * 2.6, 0.5, -22 - (i % 2) * 2], bd);
-  for (let i = 0; i < 40; i++) mesh(new THREE.CylinderGeometry(0.02, 0.03, 1.2, 4), mat(0x8a9a4a), [-14 + Math.random() * 28, 0.2, -26 - Math.random() * 3], bd);
+  for (let i = 0; i < 40; i++) mesh(rcyl(0.02, 0.03, 1.2, 4), mat(0x8a9a4a), [-14 + Math.random() * 28, 0.2, -26 - Math.random() * 3], bd);
   // 自家：竹竿曬衣 + 小漁船
   const hm = G('home');
   B(3, 0.5, 1.2, 0x2a6aa0, [6, -0.25, -22], hm); B(1, 0.8, 0.8, 0xf0f0e8, [6.5, 0.4, -22], hm);
@@ -975,8 +975,8 @@ function disposeShed() {
 function buildShed(id: string) {
   disposeShed(); shedId = id; const g = new THREE.Group(); scene.add(g); shedG = g;
   const M = (c: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) => mat(c, o);
-  const B = (w: number, h: number, d: number, m: THREE.Material, p: [number, number, number], ry = 0) => { const x = mesh(new THREE.BoxGeometry(w, h, d), m, p, g); x.rotation.y = ry; return x; };
-  const C = (rt: number, rb: number, h: number, m: THREE.Material, p: [number, number, number], seg = 8) => mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m, p, g);
+  const B = (w: number, h: number, d: number, m: THREE.Material, p: [number, number, number], ry = 0) => { const x = mesh(rboxEnv(w, h, d), m, p, g); x.rotation.y = ry; return x; };
+  const C = (rt: number, rb: number, h: number, m: THREE.Material, p: [number, number, number], seg = 8) => mesh(rcyl(rt, rb, h, seg), m, p, g);
   const glow = (c: number) => new THREE.MeshBasicMaterial({ color: c });
   const flat = (w: number, d: number, m: THREE.Material, p: [number, number, number]) => { const x = mesh(new THREE.PlaneGeometry(w, d), m, p, g); x.rotation.x = -Math.PI / 2; x.castShadow = false; x.receiveShadow = true; return x; };
   if (id === 'wanggong') {
@@ -1063,7 +1063,7 @@ function buildShed(id: string) {
     const sack = M(0xc8b088, { roughness: 1 });
     for (let i = 0; i < 6; i++) { const s = mesh(new THREE.SphereGeometry(0.3, 8, 6), sack, [-5.3 + (i % 3) * 0.55, 0.25 + Math.floor(i / 3) * 0.4, 2.8], g); s.scale.set(1, 0.75, 0.8); }
     // 壁扇（扇葉會轉）
-    for (const z of [-2, 2]) { const fg = new THREE.Group(); fg.position.set(5.85, 3.2, z); fg.rotation.y = -Math.PI / 2; g.add(fg); mesh(new THREE.TorusGeometry(0.35, 0.02, 4, 16), M(0xdddddd), [0, 0, 0.05], fg); const bl = new THREE.Group(); fg.add(bl); for (let k = 0; k < 3; k++) { const b = mesh(new THREE.BoxGeometry(0.1, 0.32, 0.01), M(0x8ac0e0), [0, 0.16, 0.05], new THREE.Group()); const h = b.parent!; h.rotation.z = k * 2.094; bl.add(h); } shedAnim.push(t => bl.rotation.z = t * 12); }
+    for (const z of [-2, 2]) { const fg = new THREE.Group(); fg.position.set(5.85, 3.2, z); fg.rotation.y = -Math.PI / 2; g.add(fg); mesh(new THREE.TorusGeometry(0.35, 0.02, 4, 16), M(0xdddddd), [0, 0, 0.05], fg); const bl = new THREE.Group(); fg.add(bl); for (let k = 0; k < 3; k++) { const b = mesh(rboxEnv(0.1, 0.32, 0.01), M(0x8ac0e0), [0, 0.16, 0.05], new THREE.Group()); const h = b.parent!; h.rotation.z = k * 2.094; bl.add(h); } shedAnim.push(t => bl.rotation.z = t * 12); }
   } else {
     // 自家：鏽鐵皮厝頂 + 木柱
     const rust = [0x8a5a3a, 0x9a6a48, 0x7a6a5e];
@@ -1092,11 +1092,11 @@ function buildShed(id: string) {
     const sc = new THREE.Group(); sc.position.set(4.6, 0, -0.8); sc.rotation.y = 0.15; g.add(sc);
     const tire = M(0x1a1a1a);
     for (const z of [-0.55, 0.55]) mesh(new THREE.TorusGeometry(0.2, 0.07, 6, 12), tire, [0, 0.27, z], sc).rotation.y = Math.PI / 2;
-    mesh(new THREE.BoxGeometry(0.34, 0.35, 0.9), M(0xe8e4d8, { roughness: 0.4 }), [0, 0.48, 0.05], sc);
-    mesh(new THREE.BoxGeometry(0.3, 0.1, 0.55), M(0x2a2a2a), [0, 0.7, 0.2], sc);
-    mesh(new THREE.BoxGeometry(0.3, 0.7, 0.15), M(0xc83a3a, { roughness: 0.4 }), [0, 0.75, -0.5], sc);
-    mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.6, 5), M(0x888888), [0, 1.15, -0.55], sc).rotation.x = Math.PI / 2 - 0.1;
-    mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.6, 5), M(0x333333), [0, 1.15, -0.55], sc).rotation.z = Math.PI / 2;
+    mesh(rboxEnv(0.34, 0.35, 0.9), M(0xe8e4d8, { roughness: 0.4 }), [0, 0.48, 0.05], sc);
+    mesh(rboxEnv(0.3, 0.1, 0.55), M(0x2a2a2a), [0, 0.7, 0.2], sc);
+    mesh(rboxEnv(0.3, 0.7, 0.15), M(0xc83a3a, { roughness: 0.4 }), [0, 0.75, -0.5], sc);
+    mesh(rcyl(0.02, 0.02, 0.6, 5), M(0x888888), [0, 1.15, -0.55], sc).rotation.x = Math.PI / 2 - 0.1;
+    mesh(rcyl(0.015, 0.015, 0.6, 5), M(0x333333), [0, 1.15, -0.55], sc).rotation.z = Math.PI / 2;
   }
 }
 function applyShedLook() {
@@ -1130,7 +1130,7 @@ function applyCrew() {
     (hair.material as THREE.MeshStandardMaterial).color.setHex(c.hair); (bun.material as THREE.MeshStandardMaterial).color.setHex(c.hair);
     bun.visible = c.look === 'ama' || c.look === 'ama2'; hair.scale.set(1, c.look === 'agong' ? 0.6 : 1, 1);
     let hat: THREE.Object3D | null = null;
-    if (c.look === 'fisher') { hat = new THREE.Group(); mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.08, 12), mat(c.pal[2] ?? 0xe8e0c8), [0, 0, 0], hat); mesh(new THREE.BoxGeometry(0.16, 0.015, 0.12), mat(c.pal[0]), [0, -0.035, 0.14], hat); hat.position.set(0, 0.12, 0); }
+    if (c.look === 'fisher') { hat = new THREE.Group(); mesh(rcyl(0.16, 0.16, 0.08, 12), mat(c.pal[2] ?? 0xe8e0c8), [0, 0, 0], hat); mesh(rboxEnv(0.16, 0.015, 0.12), mat(c.pal[0]), [0, -0.035, 0.14], hat); hat.position.set(0, 0.12, 0); }
     else if (c.look === 'agong') { hat = mesh(new THREE.ConeGeometry(0.3, 0.14, 14), mat(0xd8c080), [0, 0.16, 0]); } // 斗笠
     else if (c.look === 'dajie') { hat = mesh(new THREE.TorusGeometry(0.15, 0.025, 6, 16), mat(c.pal[1]), [0, 0.06, 0]); hat.rotation.x = Math.PI / 2; } // 髮箍
     else if (c.look === 'ama2') { hat = mesh(new THREE.SphereGeometry(0.165, 10, 6, 0, Math.PI * 2, 0, 1.2), mat(c.pal[1]), [0, 0.03, 0]); } // 頭巾
@@ -1342,7 +1342,7 @@ const seatNow = () => SEATS.find(x => x.id === save.seat) ?? SEATS[0];
 const seatGround = (st: Seat) => new THREE.Vector3(-Math.sin(st.a) * st.r, 0, Math.cos(st.a) * st.r);
 let seatYaw = 0;
 const stools = SEATS.map(st => { const g = new THREE.Group(); const p = seatGround(st); g.position.copy(p);
-  mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.05, 12), mat(0x3a7ac0), [0, 0.4, 0], g); for (const [x, z] of [[0.1, 0.1], [-0.1, 0.1], [0.1, -0.1], [-0.1, -0.1]]) mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.4, 5), mat(0x2a5a90), [x, 0.2, z], g);
+  mesh(rcyl(0.17, 0.17, 0.05, 12), mat(0x3a7ac0), [0, 0.4, 0], g); for (const [x, z] of [[0.1, 0.1], [-0.1, 0.1], [0.1, -0.1], [-0.1, -0.1]]) mesh(rcyl(0.02, 0.02, 0.4, 5), mat(0x2a5a90), [x, 0.2, z], g);
   const tag = emojiSprite('🪑', 0.3); tag.position.y = 0.9; tag.visible = false; g.add(tag); g.userData.tag = tag; scene.add(g); return g; });
 function applySeat(id: string) {
   const old = seatRig.matrixWorld.clone().invert(); save.seat = id; const st = seatNow();
@@ -2216,6 +2216,8 @@ else $('btns').insertBefore($('radioBtn'), $('medBtn'));
 btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, () => rotKey = 0);
 // ----- 徛起來行路、換位 -----
 let walking = false, nearSeat: Seat | null = null; const walkPos = new THREE.Vector3(), walkKeys = new Set<string>(), joy = { x: 0, y: 0 };
+/** 廣場第一人稱頭晃（對齊死鬥 session bob） */
+let walkBobPh = 0, walkBobW = 0, walkSpd = 0, walkStrafe = 0;
 const NAG_STAND = ['剝一半就要走喔？', '蚵仔丟著就走，好浪費！', '要去哪裡？工作先做完啦'];
 function standUp() {
   if (state !== 'play' || walking) return;
@@ -2262,7 +2264,9 @@ function walkStep(dt: number) {
   const k = (c: string) => walkKeys.has(c) ? 1 : 0;
   let f = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - joy.y, r = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + joy.x;
   const l = Math.hypot(f, r); if (l > 1) { f /= l; r /= l; }
-  const sp = (plazaMode ? 2.4 : 1.7) * dt; walkPos.x += (-Math.sin(yaw) * f + Math.cos(yaw) * r) * sp; walkPos.z += (-Math.cos(yaw) * f - Math.sin(yaw) * r) * sp;
+  const moveSp = plazaMode ? 2.4 : 1.7;
+  walkSpd = l * moveSp; walkStrafe = r * moveSp;
+  const sp = moveSp * dt; walkPos.x += (-Math.sin(yaw) * f + Math.cos(yaw) * r) * sp; walkPos.z += (-Math.cos(yaw) * f - Math.sin(yaw) * r) * sp;
   const obs: [number, number, number][] = plazaMode
     ? [...plazaPileObs()]
     : [[0, 0, 1.15], [BASIN.x, BASIN.z, 0.42], [BOWL.x, BOWL.z, BOWL_R + 0.12], [2.6, 2.6, 0.75], [2.9, -2.5, 0.35], [3.1, -1.9, 0.35], [-2.9, 2.6, 0.35], [3.0, 0.5, 0.3], [-3.0, 0.2, 0.3]];
@@ -2270,7 +2274,9 @@ function walkStep(dt: number) {
   for (let it = 0; it < 3; it++) for (const [x, z, rr] of obs) { const dx = walkPos.x - x, dz = walkPos.z - z, d = Math.hypot(dx, dz); if (d < rr + 0.2 && d > 1e-4) { walkPos.x = x + dx / d * (rr + 0.2); walkPos.z = z + dz / d * (rr + 0.2); } }
   if (!plazaMode && walkPos.z < -2.55 && walkPos.x < -1.3) walkPos.z = -2.55; // 保麗龍箱
   const bound = plazaMode ? plazaWalkBound() : 3.25;
-  walkPos.x = clamp(walkPos.x, -bound, bound); walkPos.z = clamp(walkPos.z, -bound, bound); walkPos.y = 1.55 + Math.sin(performance.now() / 120) * 0.012 * Math.min(1, l);
+  walkPos.x = clamp(walkPos.x, -bound, bound); walkPos.z = clamp(walkPos.z, -bound, bound);
+  // 廣場第一人稱改由相機 bob；其餘保留輕微上下
+  walkPos.y = 1.55 + (plazaMode && !tpv ? 0 : Math.sin(performance.now() / 120) * 0.012 * Math.min(1, l));
   if (plazaMode) {
     nearSeat = null; stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
     const n = plazaNearSeat();
@@ -3034,9 +3040,24 @@ function frameBody() {
   if (plazaMode && !walking) yaw = tYaw = clamp(yaw, -yl(), yl());
   moonTick(rdt);
   shake = Math.max(0, shake - rdt);
-  if (walking) walkStep(rdt);
-  camera.rotation.set(pitch - pe * 0.08, yaw + (walking ? 0 : seatYaw), 0);
-  camera.position.copy(walking ? walkPos : SEAT); camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
+  if (walking) walkStep(rdt); else { walkSpd = walkStrafe = 0; }
+  let camPitch = pitch - pe * 0.08, camRoll = 0;
+  camera.position.copy(walking ? walkPos : SEAT);
+  // 廣場第一人稱走路：死鬥同款頭晃（上下／側移／輕 roll）
+  if (plazaMode && walking && !tpv) {
+    const walkRef = 2.4;
+    const tgt = walkSpd > 0.4 ? Math.min(0.75, walkSpd / walkRef) : 0;
+    walkBobW += (tgt - walkBobW) * (1 - Math.exp(-(tgt > walkBobW ? 14 : 10) * rdt));
+    if (walkSpd > 0.4) walkBobPh += rdt * walkSpd * (Math.PI / 0.85);
+    const w = walkBobW * walkBobW, sy = Math.sin(walkBobPh), cy = Math.cos(walkBobPh);
+    const ox = cy * 0.012 * w, oy = sy * 0.02 * w, oz = -Math.abs(sy) * 0.005 * w;
+    const rs = Math.sin(yaw), rc = Math.cos(yaw);
+    camera.position.x += rc * ox - rs * oz; camera.position.y += oy; camera.position.z += -rs * ox - rc * oz;
+    camPitch += cy * 0.005 * w;
+    camRoll = sy * 0.007 * w + Math.max(-1, Math.min(1, walkStrafe / walkRef)) * 0.018 * Math.min(1, walkBobW + 0.2);
+  } else if (!walking) { walkBobW = 0; walkBobPh = 0; }
+  camera.rotation.set(camPitch, yaw + (walking ? 0 : seatYaw), camRoll);
+  camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
   lamp.intensity = 26 + Math.sin(t * 1.3) * 1.0;
   skyDome.tick(viewCam(), t);
@@ -4299,6 +4320,35 @@ function svNormalize(s: any): SvCfg | null {
   return { id: s.id, title: String(s.title).slice(0, 40), desc: typeof s.desc === 'string' ? s.desc.slice(0, 400) : '', questions: qs, rewardMoney: Math.max(0, Math.floor(Number(s.rewardMoney) || 0)), start: Number(s.start) || 0, end: Number(s.end), done: s.done === true || svClaimed(s.id) };
 }
 let svPrompted = false;
+const SV_ALERT_MUTE_OLD = 'svAlertMute';
+const SV_ALERT_MUTE_IDS = 'svAlertMutedIds';
+function svLoadMutedIds(): number[] {
+  try {
+    const raw = JSON.parse(LS.getItem(SV_ALERT_MUTE_IDS) || '[]');
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((x: unknown) => typeof x === 'number' && Number.isInteger(x) && x > 0).slice(-80);
+  } catch { return []; }
+}
+function svSaveMutedIds(ids: number[]) {
+  try { LS.setItem(SV_ALERT_MUTE_IDS, JSON.stringify([...new Set(ids)].slice(-80))); } catch { /* 忽略 */ }
+}
+/** 舊版永久 mute → 改壓住當下 pending，避免已選過的人又被煩 */
+function svMigrateMuteFlag() {
+  try {
+    if (LS.getItem(SV_ALERT_MUTE_OLD) !== '1') return;
+    const ids = [...svLoadMutedIds(), ...svPending().map(s => s.id)];
+    svSaveMutedIds(ids);
+    LS.removeItem(SV_ALERT_MUTE_OLD);
+  } catch { /* 忽略 */ }
+}
+function svMutePendingAlerts() {
+  svSaveMutedIds([...svLoadMutedIds(), ...svPending().map(s => s.id)]);
+}
+/** 尚未被「不再提示」壓住的未填問卷（有新 id 才會再跳） */
+const svAlertable = () => {
+  const muted = new Set(svLoadMutedIds());
+  return svPending().filter(s => !muted.has(s.id));
+};
 function svRender() {
   const box = $('svEntry');
   const now = Date.now() + svSkew;
@@ -4318,28 +4368,35 @@ async function svFetch() {
   if (!r) { svList = []; svRender(); return; }
   svSkew = r.serverTime - Date.now();
   svList = r.surveys.map(svNormalize).filter((s): s is SvCfg => !!s);
+  svMigrateMuteFlag();
   svRender();
   svAlert();
 }
-/** 回主選單時提示有未填問卷（每次打開主選單最多一次） */
+/** 回主選單時提示有未填問卷（每次最多一次；「不再提示」只壓住目前這批，新問卷再提醒） */
 function svAlert() {
-  const pending = svPending();
-  if (svPrompted || !pending.length) return;
+  svMigrateMuteFlag();
+  const alertable = svAlertable();
+  if (svPrompted || !alertable.length) return;
   if (bootQuiet()) return; // 新人先完成教學再提示問卷（入口仍在主畫面）
   if (state === 'play' || tut || !$('overlay').classList.contains('show')) return;
   if (document.getElementById('giftMsg') || document.getElementById('newMsg') || document.getElementById('featMsg') || document.getElementById('svMsg') || $('sv').classList.contains('show')) return;
   svPrompted = true;
   const m = document.createElement('div'); m.id = 'svMsg'; m.className = 'giftMsg';
   m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-chat"></i> 有未填寫的問卷</b>` +
-    `<ul class="gnList">${pending.map(s => `<li><b>${esc(s.title)}</b>${s.rewardMoney ? `<br><small>完成可領 $${s.rewardMoney.toLocaleString()}</small>` : ''}</li>`).join('')}</ul>` +
-    `<div class="mbtns"><button class="gmNo">稍後</button><button class="gmYes"><i class="ic ic-chat"></i> 去填寫</button></div></div>`;
+    `<ul class="gnList">${alertable.map(s => `<li><b>${esc(s.title)}</b>${s.rewardMoney ? `<br><small>完成可領 $${s.rewardMoney.toLocaleString()}</small>` : ''}</li>`).join('')}</ul>` +
+    `<div class="mbtns"><button class="gmMute" type="button">不再提示</button><button class="gmNo" type="button">稍後</button><button class="gmYes" type="button"><i class="ic ic-chat"></i> 去填寫</button></div></div>`;
   const close = () => m.remove();
   m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
   m.addEventListener('click', e => { if (e.target === m) close(); });
+  m.querySelector('.gmMute')?.addEventListener('click', () => {
+    svMutePendingAlerts();
+    close();
+    toast('之後不會再提醒這幾份問卷（有新問卷還會提示）');
+  });
   m.querySelector('.gmYes')?.addEventListener('click', () => {
     close();
     $('overlay').scrollTop = Math.max(0, $('svEntry').offsetTop - 40);
-    const first = pending[0];
+    const first = alertable[0];
     if (first) svOpen(first.id);
   });
   document.body.appendChild(m);

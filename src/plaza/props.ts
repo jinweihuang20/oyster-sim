@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { rboxEnv, rcyl } from '../geo';
 import { PILE_SPACING, pileCenter, seatPose, PILE_COUNT, SLOTS_PER_PILE } from './layout';
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
@@ -155,19 +156,19 @@ export function makePlazaChair(
   const backMat = M(0x3480c8, { roughness: 0.55 });
 
   // 坐墊
-  const seat = add(new THREE.CylinderGeometry(0.2, 0.21, 0.05, 14), seatMat, [0, CHAIR_SEAT_Y, 0], group, true);
+  const seat = add(rcyl(0.2, 0.21, 0.05, 14), seatMat, [0, CHAIR_SEAT_Y, 0], group, true);
   // 坐墊下圈
-  add(new THREE.CylinderGeometry(0.18, 0.19, 0.03, 12), M(0x2f6aaf), [0, CHAIR_SEAT_Y - 0.04, 0], group, false);
+  add(rcyl(0.18, 0.19, 0.03, 12), M(0x2f6aaf), [0, CHAIR_SEAT_Y - 0.04, 0], group, false);
   // 四腳
   for (const [lx, lz] of [[0.12, 0.12], [-0.12, 0.12], [0.12, -0.12], [-0.12, -0.12]] as const) {
-    add(new THREE.CylinderGeometry(0.022, 0.028, CHAIR_SEAT_Y - 0.02, 6), legMat, [lx, (CHAIR_SEAT_Y - 0.02) / 2, lz], group, false);
+    add(rcyl(0.022, 0.028, CHAIR_SEAT_Y - 0.02, 6), legMat, [lx, (CHAIR_SEAT_Y - 0.02) / 2, lz], group, false);
   }
   // 腳環
   add(new THREE.TorusGeometry(0.13, 0.012, 6, 16), legMat, [0, 0.14, 0], group, false).rotation.x = Math.PI / 2;
   // 椅背（本地 +Z＝背後，角色看 -Z）
-  add(new THREE.BoxGeometry(0.34, 0.08, 0.04), backMat, [0, CHAIR_SEAT_Y + 0.22, 0.16], group, true);
-  add(new THREE.BoxGeometry(0.04, 0.28, 0.04), backMat, [-0.12, CHAIR_SEAT_Y + 0.12, 0.16], group, false);
-  add(new THREE.BoxGeometry(0.04, 0.28, 0.04), backMat, [0.12, CHAIR_SEAT_Y + 0.12, 0.16], group, false);
+  add(rboxEnv(0.34, 0.08, 0.04), backMat, [0, CHAIR_SEAT_Y + 0.22, 0.16], group, true);
+  add(rboxEnv(0.04, 0.28, 0.04), backMat, [-0.12, CHAIR_SEAT_Y + 0.12, 0.16], group, false);
+  add(rboxEnv(0.04, 0.28, 0.04), backMat, [0.12, CHAIR_SEAT_Y + 0.12, 0.16], group, false);
   void seat;
 
   // 地面高亮墊（選位提示）
@@ -233,11 +234,11 @@ export function makePlazaBigShed(
   const segs = lowDetail ? 5 : 7;
 
   for (const p of posts) {
-    add(new THREE.CylinderGeometry(0.07, 0.08, postH, segs), wood, [p.x, postH / 2, p.z], g, true);
+    add(rcyl(0.07, 0.08, postH, segs), wood, [p.x, postH / 2, p.z], g, true);
   }
   // 外框樑
   const beam = (x: number, y: number, z: number, w: number, d: number) =>
-    add(new THREE.BoxGeometry(w, 0.12, d), wood, [x, y, z], g, false);
+    add(rboxEnv(w, 0.12, d), wood, [x, y, z], g, false);
   beam(0, roofY - 0.08, -10.6, 21.4, 0.14);
   beam(0, roofY - 0.08, 10.6, 21.4, 0.14);
   beam(-10.6, roofY - 0.08, 0, 0.14, 21.4);
@@ -250,7 +251,7 @@ export function makePlazaBigShed(
   for (let i = 0; i < n; i++) {
     const x = -span / 2 + (i + 0.5) * stripW;
     const panel = add(
-      new THREE.BoxGeometry(stripW * 1.02, 0.035, span),
+      rboxEnv(stripW * 1.02, 0.035, span),
       M(rust[i % 3], { side: THREE.DoubleSide, metalness: 0.35, roughness: 0.88 }),
       [x, roofY + (i % 2) * 0.025, 0],
       g,
@@ -264,7 +265,7 @@ export function makePlazaBigShed(
     const glow = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
     for (const [x, z] of [[-5.2, -5.2], [5.2, 5.2], [-5.2, 5.2], [5.2, -5.2], [0, 0]] as const) {
       add(new THREE.SphereGeometry(0.08, 8, 6), glow, [x, roofY - 0.55, z], g, false);
-      add(new THREE.CylinderGeometry(0.008, 0.008, 0.5, 4), M(0x111111), [x, roofY - 0.25, z], g, false);
+      add(rcyl(0.008, 0.008, 0.5, 4), M(0x111111), [x, roofY - 0.25, z], g, false);
     }
   }
 

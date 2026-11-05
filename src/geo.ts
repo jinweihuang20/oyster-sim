@@ -13,6 +13,11 @@ export function rbox(w: number, h: number, d: number, segments = 2, radiusRatio 
   return toCreasedNormals(new RoundedBoxGeometry(w, h, d, segments, radius));
 }
 
+/** 場景道具：1 段圓角，大量環境物件較輕；比例同 rbox */
+export function rboxEnv(w: number, h: number, d: number, radiusRatio = 0.13): BufferGeometry {
+  return rbox(w, h, d, 1, radiusRatio);
+}
+
 /** 既有幾何套用折角平滑法線（不改頂點位置／縮放） */
 export function crease(g: BufferGeometry, angle = Math.PI / 3): BufferGeometry {
   return toCreasedNormals(g, angle);

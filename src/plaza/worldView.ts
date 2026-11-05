@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { rboxEnv, rcyl } from '../geo';
 import { makePlayerAvatar, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
@@ -246,14 +247,14 @@ export function createPlazaWorldView(
     const knife = new THREE.Group();
     knife.visible = false;
     const handle = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.012, 0.014, 0.09, 5),
-      new THREE.MeshStandardMaterial({ color: 0x7a4a20, roughness: 0.85, flatShading: true }),
+      rcyl(0.012, 0.014, 0.09, 5),
+      new THREE.MeshStandardMaterial({ color: 0x7a4a20, roughness: 0.85 }),
     );
     handle.rotation.z = Math.PI / 2;
     knife.add(handle);
     const blade = new THREE.Mesh(
-      new THREE.BoxGeometry(0.1, 0.006, 0.022),
-      new THREE.MeshStandardMaterial({ color: 0xd0d0d8, metalness: 0.7, roughness: 0.3, flatShading: true }),
+      rboxEnv(0.1, 0.006, 0.022),
+      new THREE.MeshStandardMaterial({ color: 0xd0d0d8, metalness: 0.7, roughness: 0.3 }),
     );
     blade.position.set(-0.08, 0, 0);
     knife.add(blade);

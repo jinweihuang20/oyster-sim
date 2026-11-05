@@ -744,6 +744,7 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .giftMsg .gmX{position:sticky;top:0;float:right;margin:-4px -6px 0 0;width:32px;height:32px;padding:0;background:#fff8e8;color:#2a3a4a;border:2px solid #2a3a4a;font-size:16px;line-height:1;z-index:2}
 .giftMsg .gmBox>b{padding-right:44px}
 .giftMsg .mbtns{margin-top:10px}
+.giftMsg .gmMute{background:#6a6050;color:#fff8e8;border:2px solid #2a3a4a}
 .gfRow button.busy{opacity:.6}
 
 .eqSet.full{cursor:pointer;-webkit-tap-highlight-color:transparent}

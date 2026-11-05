@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { rboxEnv, rcyl } from '../geo';
 
 /**
  * 死鬥／商店共用的武器定義。
@@ -307,57 +308,57 @@ export function buildWeaponView(id: WeaponId, ctx: WeaponViewCtx): THREE.Group {
   if (id === 'oysterGun') {
     const g = new THREE.Group();
     const wood = M(0x8a5a32), metal = M(0x6a7078, { metalness: 0.45, roughness: 0.4 }), rust = M(0x7a5a40), tape = M(0xc8b060);
-    add(new THREE.BoxGeometry(0.07, 0.11, 0.26), wood, [0, -0.05, 0.1], g, false);
-    add(new THREE.BoxGeometry(0.065, 0.15, 0.085), wood, [0, -0.13, 0.12], g, false);
-    add(new THREE.BoxGeometry(0.085, 0.09, 0.2), metal, [0, 0.01, -0.04], g, false);
-    const barrel = add(new THREE.CylinderGeometry(0.032, 0.038, 0.52, segs), rust, [0, 0.015, -0.4], g, false);
+    add(rboxEnv(0.07, 0.11, 0.26), wood, [0, -0.05, 0.1], g, false);
+    add(rboxEnv(0.065, 0.15, 0.085), wood, [0, -0.13, 0.12], g, false);
+    add(rboxEnv(0.085, 0.09, 0.2), metal, [0, 0.01, -0.04], g, false);
+    const barrel = add(rcyl(0.032, 0.038, 0.52, segs), rust, [0, 0.015, -0.4], g, false);
     barrel.rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.045, 0.045, 0.04, segs), metal, [0, 0.015, -0.66], g, false).rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.07, 0.045, 0.11, 6), M(0x3a5a3a), [0, 0.11, -0.02], g, false);
+    add(rcyl(0.045, 0.045, 0.04, segs), metal, [0, 0.015, -0.66], g, false).rotation.x = Math.PI / 2;
+    add(rcyl(0.07, 0.045, 0.11, 6), M(0x3a5a3a), [0, 0.11, -0.02], g, false);
     stickShell(g, shellGeos, shellMat, 0, [-0.018, 0.16, -0.02], 0.85);
     stickShell(g, shellGeos, shellMat, 1, [0.018, 0.16, -0.02], 0.85, [0.4, 1.2, 0.2]);
     add(new THREE.TorusGeometry(0.042, 0.011, 4, LO ? 6 : 10), tape, [0, 0.015, -0.22], g, false).rotation.y = Math.PI / 2;
-    add(new THREE.BoxGeometry(0.02, 0.04, 0.06), metal, [0, -0.05, 0.02], g, false);
+    add(rboxEnv(0.02, 0.04, 0.06), metal, [0, -0.05, 0.02], g, false);
     return tagMuzzle(g, 0.015, -0.72);
   }
 
   if (id === 'oysterAk') {
     const g = new THREE.Group();
     const wood = M(0x7a4a28), metal = M(0x4a5048, { metalness: 0.5, roughness: 0.45 }), rust = M(0x6a5038);
-    add(new THREE.BoxGeometry(0.065, 0.1, 0.34), wood, [0, -0.04, 0.12], g, false);
-    add(new THREE.BoxGeometry(0.055, 0.18, 0.07), wood, [0, -0.15, 0.16], g, false);
-    add(new THREE.BoxGeometry(0.08, 0.08, 0.28), metal, [0, 0.02, -0.06], g, false);
+    add(rboxEnv(0.065, 0.1, 0.34), wood, [0, -0.04, 0.12], g, false);
+    add(rboxEnv(0.055, 0.18, 0.07), wood, [0, -0.15, 0.16], g, false);
+    add(rboxEnv(0.08, 0.08, 0.28), metal, [0, 0.02, -0.06], g, false);
     // 彎彈匣（塞乾蚵）
-    const mag = add(new THREE.BoxGeometry(0.045, 0.2, 0.07), rust, [0, -0.14, -0.02], g, false);
+    const mag = add(rboxEnv(0.045, 0.2, 0.07), rust, [0, -0.14, -0.02], g, false);
     mag.rotation.z = 0.35;
     stickShell(g, shellGeos, shellMat, 2, [0.02, -0.12, -0.02], 0.45, [1.2, 0.3, 0.5]);
     stickShell(g, shellGeos, shellMat, 3, [-0.01, -0.18, 0.0], 0.4, [0.8, 1.5, 0.2]);
-    const barrel = add(new THREE.CylinderGeometry(0.028, 0.034, 0.62, segs), metal, [0, 0.025, -0.48], g, false);
+    const barrel = add(rcyl(0.028, 0.034, 0.62, segs), metal, [0, 0.025, -0.48], g, false);
     barrel.rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.05, 0.04, 0.1, segs), rust, [0, 0.025, -0.82], g, false).rotation.x = Math.PI / 2;
+    add(rcyl(0.05, 0.04, 0.1, segs), rust, [0, 0.025, -0.82], g, false).rotation.x = Math.PI / 2;
     // 蚵殼護木
     stickShell(g, shellGeos, shellMat, 0, [0.05, 0.06, -0.2], 0.55, [0.2, 0.5, 1.2]);
     stickShell(g, shellGeos, shellMat, 1, [-0.05, 0.05, -0.28], 0.5, [0.3, -0.4, -1]);
-    add(new THREE.BoxGeometry(0.03, 0.05, 0.08), metal, [0, 0.07, -0.12], g, false);
+    add(rboxEnv(0.03, 0.05, 0.08), metal, [0, 0.07, -0.12], g, false);
     return tagMuzzle(g, 0.025, -0.9);
   }
 
   if (id === 'oysterM4') {
     const g = new THREE.Group();
     const dark = M(0x2e3238, { metalness: 0.4, roughness: 0.5 }), teal = M(0x3a6a5a), plastic = M(0x4a5560);
-    add(new THREE.BoxGeometry(0.06, 0.09, 0.3), plastic, [0, -0.05, 0.14], g, false);
-    add(new THREE.BoxGeometry(0.05, 0.16, 0.065), plastic, [0, -0.14, 0.18], g, false);
-    add(new THREE.BoxGeometry(0.07, 0.07, 0.32), dark, [0, 0.01, -0.05], g, false);
+    add(rboxEnv(0.06, 0.09, 0.3), plastic, [0, -0.05, 0.14], g, false);
+    add(rboxEnv(0.05, 0.16, 0.065), plastic, [0, -0.14, 0.18], g, false);
+    add(rboxEnv(0.07, 0.07, 0.32), dark, [0, 0.01, -0.05], g, false);
     // 直彈匣
-    add(new THREE.BoxGeometry(0.04, 0.18, 0.06), teal, [0, -0.12, -0.02], g, false);
-    const barrel = add(new THREE.CylinderGeometry(0.022, 0.026, 0.58, segs), dark, [0, 0.015, -0.48], g, false);
+    add(rboxEnv(0.04, 0.18, 0.06), teal, [0, -0.12, -0.02], g, false);
+    const barrel = add(rcyl(0.022, 0.026, 0.58, segs), dark, [0, 0.015, -0.48], g, false);
     barrel.rotation.x = Math.PI / 2;
     // 寶特瓶護木
-    add(new THREE.CylinderGeometry(0.04, 0.04, 0.22, segs), M(0x5a9aaa, { transparent: true, opacity: 0.55, roughness: 0.2 }), [0, 0.015, -0.28], g, false).rotation.x = Math.PI / 2;
-    add(new THREE.BoxGeometry(0.035, 0.04, 0.12), dark, [0, 0.06, -0.08], g, false);
+    add(rcyl(0.04, 0.04, 0.22, segs), M(0x5a9aaa, { transparent: true, opacity: 0.55, roughness: 0.2 }), [0, 0.015, -0.28], g, false).rotation.x = Math.PI / 2;
+    add(rboxEnv(0.035, 0.04, 0.12), dark, [0, 0.06, -0.08], g, false);
     stickShell(g, shellGeos, shellMat, 4, [0.0, 0.1, 0.08], 0.55, [0.6, 0.2, 0.4]);
     // 簡易紅點（蚵珠）
-    add(new THREE.CylinderGeometry(0.018, 0.018, 0.06, 6), M(0x222222), [0, 0.08, -0.1], g, false).rotation.x = Math.PI / 2;
+    add(rcyl(0.018, 0.018, 0.06, 6), M(0x222222), [0, 0.08, -0.1], g, false).rotation.x = Math.PI / 2;
     add(new THREE.SphereGeometry(0.01, 6, 6), M(0xff4040, { emissive: 0xaa2020, emissiveIntensity: 0.6 }), [0, 0.08, -0.07], g, false);
     return tagMuzzle(g, 0.015, -0.8);
   }
@@ -365,51 +366,51 @@ export function buildWeaponView(id: WeaponId, ctx: WeaponViewCtx): THREE.Group {
   if (id === 'oysterDeagle') {
     const g = new THREE.Group();
     const metal = M(0xb0a090, { metalness: 0.7, roughness: 0.25 }), dark = M(0x2a2a2a), pearl = M(0x1a1520, { metalness: 0.3, roughness: 0.15 });
-    add(new THREE.BoxGeometry(0.055, 0.08, 0.18), metal, [0, 0.0, -0.02], g, false);
-    add(new THREE.BoxGeometry(0.05, 0.14, 0.06), dark, [0, -0.1, 0.06], g, false);
+    add(rboxEnv(0.055, 0.08, 0.18), metal, [0, 0.0, -0.02], g, false);
+    add(rboxEnv(0.05, 0.14, 0.06), dark, [0, -0.1, 0.06], g, false);
     // 黑珍珠握把飾
     add(new THREE.SphereGeometry(0.022, 8, 8), pearl, [0.03, -0.1, 0.06], g, false);
-    const barrel = add(new THREE.CylinderGeometry(0.02, 0.024, 0.28, segs), metal, [0, 0.02, -0.22], g, false);
+    const barrel = add(rcyl(0.02, 0.024, 0.28, segs), metal, [0, 0.02, -0.22], g, false);
     barrel.rotation.x = Math.PI / 2;
-    add(new THREE.BoxGeometry(0.04, 0.035, 0.08), metal, [0, 0.045, -0.08], g, false);
+    add(rboxEnv(0.04, 0.035, 0.08), metal, [0, 0.045, -0.08], g, false);
     stickShell(g, shellGeos, shellMat, 0, [0, 0.07, 0.04], 0.4, [0.5, 1, 0.3]);
-    add(new THREE.BoxGeometry(0.015, 0.03, 0.04), dark, [0, -0.02, 0.02], g, false);
+    add(rboxEnv(0.015, 0.03, 0.04), dark, [0, -0.02, 0.02], g, false);
     return tagMuzzle(g, 0.02, -0.38);
   }
 
   if (id === 'oysterSmg') {
     const g = new THREE.Group();
     const metal = M(0x5a6068, { metalness: 0.45, roughness: 0.4 }), mesh = M(0x8a7a50), dark = M(0x333338);
-    add(new THREE.BoxGeometry(0.07, 0.08, 0.22), metal, [0, 0.0, 0.02], g, false);
-    add(new THREE.BoxGeometry(0.055, 0.12, 0.06), dark, [0, -0.1, 0.08], g, false);
+    add(rboxEnv(0.07, 0.08, 0.22), metal, [0, 0.0, 0.02], g, false);
+    add(rboxEnv(0.055, 0.12, 0.06), dark, [0, -0.1, 0.08], g, false);
     // 蚵網彈鼓
-    add(new THREE.CylinderGeometry(0.09, 0.09, 0.05, LO ? 8 : 12), mesh, [0, -0.08, -0.04], g, false).rotation.x = Math.PI / 2;
+    add(rcyl(0.09, 0.09, 0.05, LO ? 8 : 12), mesh, [0, -0.08, -0.04], g, false).rotation.x = Math.PI / 2;
     stickShell(g, shellGeos, shellMat, 1, [0.05, -0.08, -0.04], 0.35, [0.2, 0.9, 0.5]);
     stickShell(g, shellGeos, shellMat, 2, [-0.04, -0.1, -0.02], 0.32, [1, 0.2, 0.8]);
-    const barrel = add(new THREE.CylinderGeometry(0.024, 0.028, 0.32, segs), metal, [0, 0.01, -0.28], g, false);
+    const barrel = add(rcyl(0.024, 0.028, 0.32, segs), metal, [0, 0.01, -0.28], g, false);
     barrel.rotation.x = Math.PI / 2;
-    add(new THREE.BoxGeometry(0.04, 0.04, 0.1), dark, [0, 0.05, -0.05], g, false);
+    add(rboxEnv(0.04, 0.04, 0.1), dark, [0, 0.05, -0.05], g, false);
     // 折疊托（短）
-    add(new THREE.BoxGeometry(0.03, 0.04, 0.12), dark, [0, 0.02, 0.16], g, false);
+    add(rboxEnv(0.03, 0.04, 0.12), dark, [0, 0.02, 0.16], g, false);
     return tagMuzzle(g, 0.01, -0.46);
   }
 
   if (id === 'oysterNova') {
     const g = new THREE.Group();
     const wood = M(0x6a4020), metal = M(0x6a7078, { metalness: 0.5, roughness: 0.35 }), rust = M(0x7a5a40);
-    add(new THREE.BoxGeometry(0.07, 0.09, 0.28), wood, [0, -0.04, 0.1], g, false);
-    add(new THREE.BoxGeometry(0.06, 0.14, 0.07), wood, [0, -0.13, 0.14], g, false);
+    add(rboxEnv(0.07, 0.09, 0.28), wood, [0, -0.04, 0.1], g, false);
+    add(rboxEnv(0.06, 0.14, 0.07), wood, [0, -0.13, 0.14], g, false);
     // 雙管
     for (const sx of [-0.028, 0.028]) {
-      const b = add(new THREE.CylinderGeometry(0.022, 0.026, 0.55, segs), metal, [sx, 0.02, -0.35], g, false);
+      const b = add(rcyl(0.022, 0.026, 0.55, segs), metal, [sx, 0.02, -0.35], g, false);
       b.rotation.x = Math.PI / 2;
     }
-    add(new THREE.BoxGeometry(0.09, 0.05, 0.12), rust, [0, 0.02, -0.08], g, false);
+    add(rboxEnv(0.09, 0.05, 0.12), rust, [0, 0.02, -0.08], g, false);
     // 管口蚵殼裝飾
     stickShell(g, shellGeos, shellMat, 0, [-0.04, 0.05, -0.62], 0.5, [0.3, 0.5, 1.4]);
     stickShell(g, shellGeos, shellMat, 3, [0.04, 0.04, -0.6], 0.48, [0.4, -0.6, -1.2]);
     stickShell(g, shellGeos, shellMat, 1, [0, 0.1, 0.0], 0.6, [0.7, 0.3, 0.2]);
-    add(new THREE.BoxGeometry(0.025, 0.04, 0.05), metal, [0, -0.04, 0.02], g, false);
+    add(rboxEnv(0.025, 0.04, 0.05), metal, [0, -0.04, 0.02], g, false);
     return tagMuzzle(g, 0.02, -0.66);
   }
 
@@ -417,17 +418,17 @@ export function buildWeaponView(id: WeaponId, ctx: WeaponViewCtx): THREE.Group {
     const g = new THREE.Group();
     const wood = M(0x6e4428), metal = M(0x5a6068, { metalness: 0.55, roughness: 0.35 }), dark = M(0x2a2a2a);
     const plastic = M(0x3a6a9a, { roughness: 0.45, transparent: true, opacity: 0.55 });
-    add(new THREE.BoxGeometry(0.06, 0.09, 0.32), wood, [0, -0.06, 0.14], g, false);
-    add(new THREE.BoxGeometry(0.055, 0.16, 0.07), wood, [0, -0.14, 0.18], g, false);
-    add(new THREE.BoxGeometry(0.07, 0.07, 0.28), metal, [0, 0.0, -0.02], g, false);
-    const barrel = add(new THREE.CylinderGeometry(0.022, 0.028, 0.95, segs), metal, [0, 0.01, -0.62], g, false);
+    add(rboxEnv(0.06, 0.09, 0.32), wood, [0, -0.06, 0.14], g, false);
+    add(rboxEnv(0.055, 0.16, 0.07), wood, [0, -0.14, 0.18], g, false);
+    add(rboxEnv(0.07, 0.07, 0.28), metal, [0, 0.0, -0.02], g, false);
+    const barrel = add(rcyl(0.022, 0.028, 0.95, segs), metal, [0, 0.01, -0.62], g, false);
     barrel.rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.034, 0.034, 0.05, segs), dark, [0, 0.01, -1.08], g, false).rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.028, 0.028, 0.18, segs), plastic, [0, 0.08, -0.12], g, false).rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 6), dark, [0, 0.08, -0.03], g, false).rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 6), dark, [0, 0.08, -0.21], g, false).rotation.x = Math.PI / 2;
+    add(rcyl(0.034, 0.034, 0.05, segs), dark, [0, 0.01, -1.08], g, false).rotation.x = Math.PI / 2;
+    add(rcyl(0.028, 0.028, 0.18, segs), plastic, [0, 0.08, -0.12], g, false).rotation.x = Math.PI / 2;
+    add(rcyl(0.032, 0.032, 0.03, 6), dark, [0, 0.08, -0.03], g, false).rotation.x = Math.PI / 2;
+    add(rcyl(0.032, 0.032, 0.03, 6), dark, [0, 0.08, -0.21], g, false).rotation.x = Math.PI / 2;
     stickShell(g, shellGeos, shellMat, 0, [0, 0.12, 0.06], 0.7, [0.5, 0.8, 0.2]);
-    add(new THREE.BoxGeometry(0.018, 0.035, 0.05), dark, [0, -0.05, 0.04], g, false);
+    add(rboxEnv(0.018, 0.035, 0.05), dark, [0, -0.05, 0.04], g, false);
     return tagMuzzle(g, 0.01, -1.14);
   }
 
