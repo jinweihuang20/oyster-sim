@@ -165,7 +165,7 @@ function loop() {
   yawT += 0.01;
   placeRig(YAW0 + Math.sin(yawT) * 0.04);
   if (w > 2 && h > 2) {
-    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.25));
     renderer.setSize(w, h, false);
     frameCamera(w / h);
   }

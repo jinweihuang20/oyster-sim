@@ -72,10 +72,21 @@ let plazaPlayAt = 0;
 let plazaForceTp = false;
 let plazaHomeHide: THREE.Object3D[] = [];
 const TEMP_CUT = 1;
+const COARSE = matchMedia('(pointer: coarse)').matches;
+/** 啟動時讀省電（mix 稍後才完整載入；antialias 只能建 renderer 時定一次） */
+const bootEco = (() => {
+  try { const raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; if (typeof raw.eco === 'boolean') return raw.eco; } catch { /* */ }
+  return COARSE;
+})();
 const canvas = $('c') as HTMLCanvasElement;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: !!SHOT });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: !bootEco,
+  powerPreference: bootEco ? 'low-power' : 'high-performance',
+  preserveDrawingBuffer: !!SHOT,
+});
+renderer.setPixelRatio(Math.min(devicePixelRatio, bootEco ? 1.25 : 2));
+renderer.shadowMap.enabled = !bootEco;
 const scene = new THREE.Scene();
 // 明亮溫暖晴天：暖日光＋柔藍天（去夢核灰／死板硬邊感）
 scene.background = new THREE.Color(0xa8d0e8);
@@ -98,7 +109,7 @@ const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // ---------- 場景：漁港邊的工寮（明亮溫暖） ----------
 const hemi = new THREE.HemisphereLight(0xfff2e4, 0x7a9a78, 1.05); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffe8c4, 1.15); sun.position.set(-3, 11, -5); scene.add(sun);
-const lamp = new THREE.PointLight(0xffe8c8, 14, 10, 1.6); lamp.position.set(0, 2.55, 0); lamp.castShadow = true; lamp.shadow.bias = -0.003; lamp.shadow.normalBias = 0.03; lamp.shadow.mapSize.set(1024, 1024); scene.add(lamp);
+const lamp = new THREE.PointLight(0xffe8c8, 14, 10, 1.6); lamp.position.set(0, 2.55, 0); lamp.castShadow = !bootEco; lamp.shadow.bias = -0.003; lamp.shadow.normalBias = 0.03; lamp.shadow.mapSize.set(bootEco ? 512 : 1024, bootEco ? 512 : 1024); scene.add(lamp);
 const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff4dc });
 const yardFloor = makeYardFloorMaps(matchMedia('(pointer: coarse)').matches ? 256 : 384);
 const ground = mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({
@@ -256,16 +267,22 @@ const leanFaces: THREE.Group[] = [];
 for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x3a9a6a : 0xe86878, s < 0 ? 0x444444 : 0xc8c8c8).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
-type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean };
-const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false };
+type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean; eco: boolean };
+const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE };
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
   const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
+/** 熱切省電：DPR／陰影；antialias 僅啟動時套用；幀率見主迴圈 */
+function applyEcoGfx() {
+  renderer.setPixelRatio(Math.min(devicePixelRatio, mix.eco ? 1.25 : 2));
+  renderer.shadowMap.enabled = !mix.eco;
+  lamp.castShadow = !mix.eco;
+}
+applyEcoGfx();
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
 const STATS_URL = 'https://game-status.gwtech.org/e';
 const statsId = (() => { try { let v = LS.getItem('oyster-stats-id'); if (!v) { v = crypto.randomUUID(); LS.setItem('oyster-stats-id', v); } return v; } catch { return 'anon-' + Math.random().toString(36).slice(2, 14); } })();
 importMove().then(r => { if (!r) escapeInApp(statsId); });
 let statsSid = '';
-const COARSE = matchMedia('(pointer: coarse)').matches;
 const statsDevice = COARSE ? 'mobile' : 'pc';
 function track(t: string, d: Record<string, unknown> = {}) {
   if (!mix.stats || SHOT) return;
@@ -2445,6 +2462,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
+{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：較不發燙，畫質略降' : '已關省電：畫質較高（重新整理後抗鋸齒才會變）', '#9be37a'); }; }
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => $('dex').classList.remove('show');
 
@@ -2481,15 +2499,39 @@ let pauseAt = 0;
 const panelOpen = () => { for (const p of Array.from(document.querySelectorAll('.panel.show'))) if ((p as HTMLElement).getClientRects().length) return true; return false; };
 const isPaused = () => state === 'play' && (document.hidden || panelOpen() || $('medList').classList.contains('show') || !!document.getElementById('npcTip')?.classList.contains('show'));
 let frameErr = 0;
+let frameSleeping = false;
+let lastDrawAt = 0;
+function scheduleFrame() {
+  if (document.hidden) { frameSleeping = true; return; }
+  frameSleeping = false;
+  requestAnimationFrame(frame);
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && frameSleeping) { clock.getDelta(); lastDrawAt = 0; scheduleFrame(); }
+});
 // 主迴圈出錯也不能停：停了計時、暫停、預警都會卡住
-function frame() { try { frameBody(); } catch (e) { if (frameErr++ < 3) console.error('frame', e); requestAnimationFrame(frame); } }
+function frame() { try { frameBody(); } catch (e) { if (frameErr++ < 3) console.error('frame', e); scheduleFrame(); } }
 function frameBody() {
-  if (isDeathmatchActive()) { clock.getDelta(); requestAnimationFrame(frame); return; }
-  if (shedAnim.length) { const t = performance.now() / 1000; for (const f of shedAnim) f(t); }
-  if (isPaused()) {
-    clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); closeUmbrella(); down = null; joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
-    skyDome.tick(viewCam(), performance.now() / 1000);
-    renderer.render(scene, viewCam()); requestAnimationFrame(frame); return;
+  if (document.hidden) {
+    clock.getDelta();
+    if (state === 'play' && !pauseAt) {
+      pauseAt = performance.now(); holding = false; stopSteal(); closeUmbrella(); down = null; joy.x = joy.y = 0;
+      $('pauseTag').classList.add('on');
+    }
+    frameSleeping = true; return;
+  }
+  const now = performance.now();
+  const paused = isPaused();
+  const idle = state !== 'play' || paused;
+  const minMs = idle ? 1000 / 15 : (mix.eco ? 1000 / 30 : 0);
+  if (minMs > 0 && now - lastDrawAt < minMs) { scheduleFrame(); return; }
+  lastDrawAt = now;
+  if (isDeathmatchActive()) { clock.getDelta(); scheduleFrame(); return; }
+  if (shedAnim.length) { const t = now / 1000; for (const f of shedAnim) f(t); }
+  if (paused) {
+    clock.getDelta(); if (!pauseAt) { pauseAt = now; holding = false; stopSteal(); closeUmbrella(); down = null; joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
+    skyDome.tick(viewCam(), now / 1000);
+    renderer.render(scene, viewCam()); scheduleFrame(); return;
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
   const rdt = Math.min(clock.getDelta(), 0.05);
@@ -2658,7 +2700,7 @@ function frameBody() {
   lamp.intensity = 26 + Math.sin(t * 1.3) * 1.0;
   skyDome.tick(viewCam(), t);
   renderer.render(scene, viewCam());
-  requestAnimationFrame(frame);
+  scheduleFrame();
 }
 // ---------- 新手教學 ----------
 initTutorial({
