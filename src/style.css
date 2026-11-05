@@ -1,22 +1,29 @@
 *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,"Noto Sans TC",sans-serif;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none}
 #c{position:fixed;inset:0;width:100%;height:100%}
-/* 主畫面：遊戲風場景背板，蓋住 3D（選單／結算時顯示） */
-#menuBack{position:fixed;inset:0;z-index:8;display:none;pointer-events:none;overflow:hidden;background:#1a120c}
-#menuBack .mbSky{position:absolute;inset:0 0 42% 0;background:linear-gradient(180deg,#5a8ab0 0%,#7aa8c4 55%,#c9b896 100%)}
-#menuBack .mbSea{position:absolute;left:0;right:0;top:48%;height:22%;background:linear-gradient(180deg,#3a6a8a 0%,#2a4a68 40%,#1e3a55 100%);
-  box-shadow:inset 0 8px 0 rgba(255,255,255,.12)}
+/* 主畫面：遊戲風場景背板，蓋住 3D（選單時顯示） */
+#menuBack{position:fixed;inset:0;z-index:8;display:none;pointer-events:none;overflow:hidden;background:#120c08}
+#menuBack .mbSky{position:absolute;inset:0 0 40% 0;background:
+  radial-gradient(ellipse 90% 55% at 70% 18%,rgba(255,220,140,.45),transparent 55%),
+  linear-gradient(180deg,#3d6f9a 0%,#6a9bb8 42%,#b8a078 78%,#d4b896 100%)}
+#menuBack .mbSky:before{content:"";position:absolute;left:8%;top:14%;width:52px;height:52px;border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,#fff3c0,#f0c040 55%,#c88820);border:3px solid #16191d;box-shadow:3px 3px 0 #16191d,0 0 24px rgba(255,200,80,.35)}
+#menuBack .mbSea{position:absolute;left:0;right:0;top:46%;height:24%;background:
+  repeating-linear-gradient(180deg,transparent 0 10px,rgba(255,255,255,.07) 10px 12px),
+  linear-gradient(180deg,#4a7fa0 0%,#2f5a78 45%,#1a384f 100%);
+  border-top:3px solid #16191d;box-shadow:inset 0 10px 0 rgba(255,255,255,.1)}
 #menuBack .mbDock{position:absolute;left:0;right:0;bottom:0;height:42%;background:
-  repeating-linear-gradient(90deg,#5a3a22 0 14px,#4a301c 14px 28px),
-  linear-gradient(180deg,#6b4528 0%,#3a2414 100%);
-  border-top:4px solid #16191d;box-shadow:0 -4px 0 #c8642a}
-#menuBack .mbShed{position:absolute;left:50%;bottom:28%;transform:translateX(-50%);width:min(70vw,340px);height:min(28vh,160px);
-  background:var(--iron,#1f5a8a) var(--corr,repeating-linear-gradient(90deg,rgba(255,255,255,.06) 0 3px,rgba(0,0,0,.08) 3px 9px,transparent 9px 14px));
-  border:3px solid #16191d;border-bottom:0;box-shadow:4px 4px 0 #16191d;
+  repeating-linear-gradient(90deg,#6a4224 0 16px,#523218 16px 18px,#4a301c 18px 34px),
+  linear-gradient(180deg,#7a5030 0%,#3a2414 100%);
+  border-top:5px solid #16191d;box-shadow:0 -5px 0 #c8642a,inset 0 8px 0 rgba(255,255,255,.06)}
+#menuBack .mbShed{position:absolute;left:50%;bottom:26%;transform:translateX(-50%);width:min(72vw,360px);height:min(30vh,170px);
+  background:var(--iron,#1f5a8a) var(--corr,repeating-linear-gradient(90deg,rgba(255,255,255,.08) 0 3px,rgba(0,0,0,.1) 3px 9px,transparent 9px 14px));
+  border:4px solid #16191d;border-bottom:0;box-shadow:5px 5px 0 #16191d,8px 8px 0 rgba(0,0,0,.25);
   clip-path:polygon(8% 100%,8% 38%,0 38%,50% 0,100% 38%,92% 38%,92% 100%)}
-#menuBack .mbShed:after{content:"剝蚵仔工寮";position:absolute;left:50%;top:48%;transform:translate(-50%,-50%) rotate(-2deg);
-  background:#b8322a;color:#efe9dc;border:2px solid #16191d;box-shadow:2px 2px 0 #16191d;padding:3px 10px;
-  font:900 13px var(--sign,system-ui);letter-spacing:.06em;white-space:nowrap}
-#menuBack .mbGrain{position:absolute;inset:0;opacity:.18;pointer-events:none;
+#menuBack .mbShed:before{content:"";position:absolute;left:12%;right:12%;top:40%;height:4px;background:#16191d;opacity:.35}
+#menuBack .mbShed:after{content:"剝蚵仔工寮";position:absolute;left:50%;top:52%;transform:translate(-50%,-50%) rotate(-2deg);
+  background:#b8322a;color:#efe9dc;border:3px solid #16191d;box-shadow:3px 3px 0 #16191d;padding:4px 12px;
+  font:900 14px var(--sign,system-ui);letter-spacing:.08em;white-space:nowrap;text-shadow:1px 1px 0 #7e1f19}
+#menuBack .mbGrain{position:absolute;inset:0;opacity:.28;pointer-events:none;mix-blend-mode:multiply;
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E")}
 body.menuOn #menuBack{display:block}
 body.menuOn #c,body.menuOn #bubbles{visibility:hidden}
@@ -976,3 +983,137 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 .resAch b{font:900 16px var(--sign);display:flex;align-items:center;gap:6px}.resAch .ic{background-color:#ffd25a}
 .resAch ul{margin:6px 0 0;padding-left:20px;font-size:14px;line-height:1.5}
 .achCard.achHi{outline:4px solid #ffd25a;outline-offset:2px}
+
+/* ===== 主畫面 Game Style 加重（不改布局結構） ===== */
+#overlay.panel{
+  background:var(--paint) var(--grain);
+  border:5px solid var(--ink);
+  border-radius:2px;
+  box-shadow:
+    8px 8px 0 var(--ink),
+    12px 12px 0 rgba(0,0,0,.28),
+    inset 0 0 0 3px var(--paint),
+    inset 0 0 0 7px var(--iron);
+}
+#overlay h1{
+  border-width:4px;
+  box-shadow:5px 5px 0 var(--ink), 0 0 0 2px var(--paint) inset;
+  letter-spacing:.1em;
+  text-shadow:2px 2px 0 var(--redD), 3px 3px 0 rgba(0,0,0,.25);
+  padding:8px 20px;
+}
+#overlay #meLine{
+  display:inline-block;
+  max-width:100%;
+  background:rgba(255,253,247,.72);
+  border:2px solid var(--ink);
+  box-shadow:2px 2px 0 var(--ink);
+  padding:6px 10px;
+  font-weight:700;
+  line-height:1.45;
+}
+#overlay #onlineSign{
+  border:3px solid var(--ink);
+  border-radius:2px;
+  background:var(--red) var(--grain);
+  color:var(--paint);
+  box-shadow:3px 3px 0 var(--ink);
+  letter-spacing:.08em;
+  font-weight:900;
+}
+#overlay #onlineSign b{color:#ffd25a;text-shadow:1px 1px 0 var(--ink)}
+#overlay #locPick .locHead{
+  border-width:4px;
+  box-shadow:4px 4px 0 var(--ink);
+  font-weight:900;
+  letter-spacing:.04em;
+}
+#overlay #locPick .loc{
+  border-width:4px;
+  box-shadow:4px 4px 0 var(--ink);
+  font-weight:800;
+}
+#overlay #locPick .loc .ln{letter-spacing:.02em;text-shadow:1px 1px 0 rgba(0,0,0,.35)}
+#overlay #locPick .loc.cur{
+  box-shadow:4px 4px 0 var(--ink), inset 0 0 0 3px var(--paint);
+  transform:rotate(-0.6deg);
+}
+#overlay #locPick .loc.locPlaza{
+  border-color:var(--ink);
+  background:linear-gradient(#2f6b4a var(--grain),#1d4030);
+  box-shadow:4px 4px 0 var(--ink);
+}
+#overlay #locPick .loc.locPlaza.cur{
+  box-shadow:4px 4px 0 var(--ink), inset 0 0 0 3px #9be37a;
+}
+#overlay .sysGrid>button,#overlay .sysGrid>a{
+  border-width:4px;
+  box-shadow:4px 4px 0 var(--ink);
+  text-shadow:1px 1px 0 rgba(0,0,0,.25);
+  letter-spacing:.03em;
+}
+#overlay .sysGrid>button:active,#overlay .sysGrid>a:active{
+  transform:translate(3px,3px);
+  box-shadow:1px 1px 0 var(--ink);
+}
+#overlay #daily{
+  border-width:4px;
+  border-style:dashed;
+  box-shadow:4px 4px 0 var(--ink);
+  font-weight:900;
+  letter-spacing:.04em;
+}
+#overlay #daily.done{box-shadow:none;transform:none}
+#overlay #start{
+  border-width:4px !important;
+  border-radius:2px !important;
+  box-shadow:5px 5px 0 var(--ink), 0 -8px 14px rgba(18,12,8,.55) !important;
+  letter-spacing:.12em;
+  text-shadow:2px 2px 0 var(--redD) !important;
+  font-weight:900 !important;
+}
+#overlay #start:active{transform:translate(3px,3px) !important;box-shadow:2px 2px 0 var(--ink) !important}
+#overlay #tempRow .tempBtn{
+  border:4px solid var(--ink) !important;
+  border-radius:2px !important;
+  box-shadow:3px 3px 0 var(--ink) !important;
+  font-weight:900 !important;
+  letter-spacing:.03em;
+  text-shadow:1px 1px 0 rgba(0,0,0,.3);
+}
+#overlay ul{
+  background:rgba(255,253,247,.55);
+  border:3px solid var(--ink);
+  box-shadow:3px 3px 0 var(--ink);
+  padding:10px 10px 10px 22px;
+  margin:10px 0 8px;
+}
+#overlay ul li{font-weight:600}
+#overlay ul li b{
+  display:inline-block;
+  background:var(--iron) var(--corr);
+  color:var(--paint);
+  border:2px solid var(--ink);
+  padding:0 6px;
+  margin-right:4px;
+  font-weight:900;
+  letter-spacing:.04em;
+}
+#overlay #nightNote{
+  display:inline-block;
+  background:#1e3a5c var(--corr);
+  color:var(--paint) !important;
+  border:3px solid var(--ink);
+  box-shadow:3px 3px 0 var(--ink);
+  padding:6px 12px;
+  font-weight:900 !important;
+  letter-spacing:.04em;
+}
+#overlay .evEntry{
+  border-width:4px;
+  box-shadow:4px 4px 0 var(--ink);
+}
+#overlay .svEntry{
+  border:4px solid var(--ink);
+  box-shadow:4px 4px 0 var(--ink);
+}
