@@ -5,11 +5,15 @@ import { applyOutfitToRig, type OutfitIds } from './equipVisual';
 
 /**
  * 裝備頁人物預覽：與廣場第三人稱同款 makePlayerAvatar。
- * 正交相機對齊舊 SVG viewBox 160×300 的部位指引（EQ_CARD ax/ay）。
- * 可見世界 Y：FIG_BOTTOM～FIG_BOTTOM+FIG_H（含帽子留白）。
+ * 正交相機對齊 viewBox 160×300 部位指引；lift 把腳抬離地板，帽頂仍在 frustum 內。
  */
-/** scale 後頭帽約 y≤1.96；frustum 略高於帽頂 */
-export const EQ_FIG = { w: 160, h: 300, bottom: -0.06, height: 2.05, scale: 1.1 } as const;
+export const EQ_FIG = {
+  w: 160, h: 300,
+  /** 世界 Y：腳底略高於 bottom，帽頂略低於 bottom+height */
+  bottom: 0.04, height: 2.16,
+  scale: 1.08,
+  lift: 0.2,
+} as const;
 
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
@@ -35,8 +39,17 @@ function frameCamera(cam: THREE.OrthographicCamera) {
   cam.updateProjectionMatrix();
 }
 
+function placeRig() {
+  if (!rig) return;
+  rig.outer.scale.setScalar(EQ_FIG.scale);
+  rig.outer.position.set(0, EQ_FIG.lift, 0);
+}
+
 function ensure() {
-  if (renderer && scene && camera && rig) return;
+  if (renderer && scene && camera && rig) {
+    placeRig();
+    return;
+  }
   scene = new THREE.Scene();
   camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 40);
   frameCamera(camera);
@@ -50,7 +63,7 @@ function ensure() {
   scene.add(fill);
   const { M, add } = makeMeshHelpers(scene, true);
   rig = makePlayerAvatar({ shirt: 0xc45c26, hair: 0x222222, pants: 0x2a2a40 }, M, add, true);
-  rig.outer.scale.setScalar(EQ_FIG.scale);
+  placeRig();
   posePlazaHangArms(rig);
   scene.add(rig.outer);
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
@@ -68,11 +81,11 @@ function loop() {
     const pr = Math.min(devicePixelRatio || 1, 2);
     renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
-    // 維持 160:300 成像比例對齊指引；多餘左右留白由 canvas 拉伸由 stage 裁
     frameCamera(camera);
   }
   yawT += 0.01;
-  // 正面朝鏡頭；極小晃動，避免部位點大幅偏移
+  // 正面朝鏡頭；極小晃動
+  placeRig();
   rig.outer.rotation.y = Math.PI + Math.sin(yawT) * 0.06;
   renderer.render(scene, camera);
   raf = requestAnimationFrame(loop);
@@ -90,6 +103,7 @@ export function syncEqPreview(host: HTMLElement, outfit: OutfitIds) {
   }
   applyOutfitToRig(rig, outfit);
   posePlazaHangArms(rig);
+  placeRig();
   if (!raf) raf = requestAnimationFrame(loop);
 }
 
@@ -97,6 +111,7 @@ export function refreshEqPreview(outfit: OutfitIds) {
   if (!rig || !hostEl?.isConnected) return;
   applyOutfitToRig(rig, outfit);
   posePlazaHangArms(rig);
+  placeRig();
 }
 
 export function stopEqPreview() {

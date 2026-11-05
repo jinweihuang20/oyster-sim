@@ -3513,11 +3513,11 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
   return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${arm(50, 34)}${arm(110, 126)}${legs[L.id] ?? legs.lg_basic}${body[B.id] ?? body.bd_basic}${face}${hd[H.id] ?? hd.hd_basic}${feet[F.id] ?? feet.ft_basic}</svg>`;
 }
 // 裝備面板 v2：場景＋木牌部位卡＋加成看板＋套裝收集
-// ax/ay 對齊 equipPreview 正交取景＋ scale 1.1（viewBox 160×300）
+// ax/ay 對齊 equipPreview（lift 0.2＋scale 1.08；腳在墊子上方、帽頂留白）
 const EQ_CARD: Record<Slot, { side: 'l' | 'r'; top: number; ax: number; ay: number }> = {
-  head: { side: 'l', top: 2, ax: 80, ay: 37 }, hand: { side: 'l', top: 36, ax: 40, ay: 175 }, feet: { side: 'l', top: 70, ax: 70, ay: 282 },
-  body: { side: 'r', top: 19, ax: 98, ay: 124 }, legs: { side: 'r', top: 53, ax: 94, ay: 211 } };
-const EQ_FW = 54.04, EQ_FT = 5, EQ_FH = 82, EQ_CH = 27, EQ_CW = 30;
+  head: { side: 'l', top: 2, ax: 80, ay: 41 }, hand: { side: 'l', top: 34, ax: 40, ay: 170 }, feet: { side: 'l', top: 66, ax: 70, ay: 270 },
+  body: { side: 'r', top: 18, ax: 98, ay: 122 }, legs: { side: 'r', top: 48, ax: 94, ay: 203 } };
+const EQ_FW = 54.04, EQ_FT = 4, EQ_FH = 75, EQ_CH = 27, EQ_CW = 30;
 const eqAx = (vx: number) => 50 + (vx - 80) / 160 * EQ_FW, eqAy = (vy: number) => EQ_FT + vy / 300 * EQ_FH;
 const SVG_SHED = `<svg class="eqShed" viewBox="0 0 300 400" preserveAspectRatio="none" aria-hidden="true"><defs><radialGradient id="eqSpot" cx="50%" cy="48%" r="45%"><stop offset="0" stop-color="#fff6d8" stop-opacity=".95"/><stop offset=".6" stop-color="#ffe9b0" stop-opacity=".35"/><stop offset="1" stop-color="#ffe9b0" stop-opacity="0"/></radialGradient><pattern id="eqMat" width="14" height="10" patternUnits="userSpaceOnUse"><rect width="14" height="10" fill="#c9a865"/><path d="M0 5h14" stroke="#a8864a" stroke-width="1.4"/><path d="M7 0v5M0 5v5M14 5v5" stroke="#b39352" stroke-width="1"/></pattern></defs>
 <rect width="300" height="400" fill="#2c4a63"/><path d="M0 0h300v54L150 30 0 54Z" fill="#5d8fb3"/>${Array.from({ length: 16 }, (_, i) => `<path d="M${i * 20} ${54 - i * 1.6 * (i < 8 ? 1 : 0) - (i >= 8 ? (15 - i) * 1.6 : 0)}V0" stroke="#3f6f92" stroke-width="2"/>`).join('')}<path d="M0 54L150 30 300 54" fill="none" stroke="#16191d" stroke-width="4"/>
