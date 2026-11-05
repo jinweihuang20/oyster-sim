@@ -11,3 +11,4 @@ export {
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion,
   setWalking, setNearSeat, clearWalkInput,
 } from './walkSeat';
+export { makeWorldLabel, type WorldLabel, type WorldLabelKind } from './worldLabel';

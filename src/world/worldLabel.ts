@@ -1,0 +1,135 @@
+import * as THREE from 'three';
+
+export type WorldLabelKind = 'name' | 'bubble';
+
+export type WorldLabel = {
+  sprite: THREE.Sprite;
+  setText: (text: string) => void;
+  setOpacity: (a: number) => void;
+  dispose: () => void;
+};
+
+function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const t = text.trim() || ' ';
+  const lines: string[] = [];
+  let line = '';
+  for (const ch of t) {
+    const trial = line + ch;
+    if (ctx.measureText(trial).width > maxW && line) {
+      lines.push(line);
+      line = ch;
+    } else line = trial;
+  }
+  if (line) lines.push(line);
+  return lines.slice(0, 4);
+}
+
+/** 頭頂名牌／對話泡泡：Canvas 貼到 Sprite，跟隨 3D，不寫 DOM */
+export function makeWorldLabel(initial: string, kind: WorldLabelKind, worldH = kind === 'name' ? 0.2 : 0.3): WorldLabel {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({
+    map: tex,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+    sizeAttenuation: true,
+  });
+  const sprite = new THREE.Sprite(mat);
+  sprite.center.set(0.5, 0);
+  sprite.renderOrder = kind === 'bubble' ? 3 : 2;
+  let text = '';
+  let opacity = 1;
+
+  const redraw = () => {
+    const dpr = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 2);
+    const fontPx = kind === 'name' ? 26 : 24;
+    const padX = kind === 'name' ? 14 : 16;
+    const padY = kind === 'name' ? 8 : 10;
+    const maxTextW = kind === 'bubble' ? 260 : 360;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = `800 ${fontPx}px "Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif`;
+    const lines = wrapLines(ctx, text, maxTextW);
+    const lineH = fontPx * 1.25;
+    const textW = Math.max(...lines.map(l => ctx.measureText(l).width), 8);
+    const w = Math.ceil(textW + padX * 2);
+    const h = Math.ceil(lines.length * lineH + padY * 2 + (kind === 'bubble' ? 8 : 0));
+    canvas.width = Math.max(2, Math.ceil(w * dpr));
+    canvas.height = Math.max(2, Math.ceil(h * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = `800 ${fontPx}px "Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    if (kind === 'name') {
+      roundRect(ctx, 0.5, 0.5, w - 1, h - 1, 10);
+      ctx.fillStyle = 'rgba(30,20,10,0.82)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,220,160,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#ffe9c0';
+    } else {
+      roundRect(ctx, 1, 1, w - 2, h - 10, 12);
+      ctx.fillStyle = '#fff8e8';
+      ctx.fill();
+      ctx.strokeStyle = '#1b1b1b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // 小三角
+      ctx.beginPath();
+      ctx.moveTo(w / 2 - 8, h - 10);
+      ctx.lineTo(w / 2, h - 2);
+      ctx.lineTo(w / 2 + 8, h - 10);
+      ctx.closePath();
+      ctx.fillStyle = '#fff8e8';
+      ctx.fill();
+      ctx.strokeStyle = '#1b1b1b';
+      ctx.stroke();
+      ctx.fillStyle = '#3a2410';
+    }
+    const y0 = padY + lineH / 2;
+    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], w / 2, y0 + i * lineH);
+    tex.needsUpdate = true;
+    const aspect = w / Math.max(1, h);
+    sprite.scale.set(worldH * aspect, worldH, 1);
+    mat.opacity = opacity;
+  };
+
+  const setText = (t: string) => {
+    const next = t || '';
+    if (next === text) return;
+    text = next;
+    redraw();
+  };
+  const setOpacity = (a: number) => {
+    const next = Math.max(0, Math.min(1, a));
+    if (Math.abs(next - opacity) < 0.01) return;
+    opacity = next;
+    mat.opacity = opacity;
+    mat.needsUpdate = true;
+  };
+  const dispose = () => {
+    mat.map?.dispose();
+    mat.dispose();
+    sprite.removeFromParent();
+  };
+
+  setText(initial || ' ');
+  return { sprite, setText, setOpacity, dispose };
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}

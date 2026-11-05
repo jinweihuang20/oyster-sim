@@ -5,6 +5,7 @@ import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type Playe
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
+import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 
 type Remote = {
@@ -14,8 +15,8 @@ type Remote = {
   connId: string;
   pid: string;
   rig: PlayerRig;
-  tag: HTMLElement;
-  bubble: HTMLElement;
+  tag: WorldLabel;
+  bubble: WorldLabel;
   bubUntil: number;
   pileId: number;
   slot: number;
@@ -176,33 +177,26 @@ export function createPlazaWorldView(
     return { shirt: SHIRTS[Math.abs(h) % SHIRTS.length], hair: HAIRS[Math.abs(h >> 3) % HAIRS.length], pants: 0x2a2a40 };
   }
 
-  // 獨立圖層，避免被 #bubbles z-index:0 或廣場 UI 蓋住
-  const tagsHost = document.createElement('div');
-  tagsHost.id = 'plazaTags';
-  tagsHost.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(tagsHost);
   void bubblesHost;
 
-  const selfBubble = document.createElement('div');
-  selfBubble.className = 'plazaChatBub';
-  selfBubble.style.display = 'none';
-  tagsHost.appendChild(selfBubble);
+  const selfBubble = makeWorldLabel(' ', 'bubble', 0.34);
+  selfBubble.sprite.visible = false;
+  scene.add(selfBubble.sprite);
   let selfBubUntil = 0;
   let selfX = 0, selfZ = 0, selfYaw = 0, selfSeated = false;
 
-  function ensureTag(nick: string) {
-    const tag = document.createElement('div');
-    tag.className = 'plazaTag';
-    tag.textContent = nick;
-    tagsHost.appendChild(tag);
+  function ensureTag(nick: string, head: THREE.Object3D) {
+    const tag = makeWorldLabel(nick, 'name', 0.22);
+    tag.sprite.position.set(0, 0.28, 0);
+    head.add(tag.sprite);
     return tag;
   }
 
-  function ensureBubble() {
-    const el = document.createElement('div');
-    el.className = 'plazaChatBub';
-    el.style.display = 'none';
-    tagsHost.appendChild(el);
+  function ensureBubble(head: THREE.Object3D) {
+    const el = makeWorldLabel(' ', 'bubble', 0.34);
+    el.sprite.position.set(0, 0.46, 0);
+    el.sprite.visible = false;
+    head.add(el.sprite);
     return el;
   }
 
@@ -593,7 +587,7 @@ export function createPlazaWorldView(
       // Joined 常帶 (0,0)；未入座時先藏，等第一次可信座標再顯示
       const awaitingPose = !p.seated && Math.hypot(x, z) < 0.2;
       r = {
-        key: pid, connId: p.connId || '', pid, rig, tag: ensureTag(p.nick || '剝蚵人'), bubble: ensureBubble(), bubUntil: 0,
+        key: pid, connId: p.connId || '', pid, rig, tag: ensureTag(p.nick || '剝蚵人', rig.head), bubble: ensureBubble(rig.head), bubUntil: 0,
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
         props, bowlNode, meatRoot, meatMeshes: [], knife, oyster,
@@ -605,7 +599,7 @@ export function createPlazaWorldView(
       r.props.visible = r.seated;
       if (r.seated) syncRemoteMeats(r);
       hangArms(r, r.seated);
-      if (awaitingPose) { rig.outer.visible = false; r.tag.style.display = 'none'; }
+      if (awaitingPose) { rig.outer.visible = false; r.tag.sprite.visible = false; }
     }
     if (p.connId) r.connId = p.connId;
     return r;
@@ -626,7 +620,7 @@ export function createPlazaWorldView(
     r.props.visible = r.seated;
     if (r.seated) syncRemoteMeats(r);
     if (p.nick && p.nick !== r.nick) { r.nick = p.nick; }
-    r.tag.textContent = r.seated ? `${r.nick} · ${r.count}` : r.nick;
+    r.tag.setText(r.seated ? `${r.nick} · ${r.count}` : r.nick);
     if (r.seated && p.pileId >= 0) {
       const pose = seatPose(p.pileId, p.slot);
       r.tx = pose.pos.x; r.tz = pose.pos.z; r.tyaw = pose.yaw;
@@ -676,13 +670,13 @@ export function createPlazaWorldView(
     r.x = r.tx; r.z = r.tz; r.yaw = r.tyaw;
     r.awaitingPose = false;
     r.rig.outer.visible = true;
-    r.tag.style.display = '';
+    r.tag.sprite.visible = true;
   }
 
   function upsert(p: PlazaPlayer, selfPid: string) { applyPose(p, selfPid); }
 
   function destroyRemote(r: Remote) {
-    root.remove(r.rig.outer); r.tag.remove(); r.bubble.remove();
+    root.remove(r.rig.outer); r.tag.dispose(); r.bubble.dispose();
     // 只刪「指向同一具模型」的 key，避免誤刪同 pid 的另一筆
     for (const [k, x] of [...remotes]) {
       if (x === r) remotes.delete(k);
@@ -718,9 +712,11 @@ export function createPlazaWorldView(
     const text = (opts.text || '').trim();
     if (!text) return;
     const until = performance.now() + 5000;
+    const short = text.length > 40 ? text.slice(0, 39) + '…' : text;
     if (opts.self) {
-      selfBubble.textContent = text.length > 40 ? text.slice(0, 39) + '…' : text;
-      selfBubble.style.display = 'block';
+      selfBubble.setText(short);
+      selfBubble.setOpacity(1);
+      selfBubble.sprite.visible = true;
       selfBubUntil = until;
       return;
     }
@@ -733,8 +729,9 @@ export function createPlazaWorldView(
       for (const x of remotes.values()) { if (x.nick === opts.nick) { r = x; break; } }
     }
     if (!r) return;
-    r.bubble.textContent = text.length > 40 ? text.slice(0, 39) + '…' : text;
-    r.bubble.style.display = 'block';
+    r.bubble.setText(short);
+    r.bubble.setOpacity(1);
+    r.bubble.sprite.visible = true;
     r.bubUntil = until;
   }
 
@@ -786,34 +783,9 @@ export function createPlazaWorldView(
     highlight(seat?.pileId ?? null, seat?.slot ?? null);
   }
 
-  const _v = new THREE.Vector3();
-  const _tagHead = new THREE.Vector3();
   const now = () => performance.now();
 
-  type PinSt = { d?: string; x?: number; y?: number };
-  const pinMap = new WeakMap<HTMLElement, PinSt>();
-  function placeHud(el: HTMLElement, x: number, z: number, yWorld: number, camera: THREE.Camera, yOff = 0) {
-    _v.set(x, yWorld, z).project(camera);
-    const sx = (_v.x * 0.5 + 0.5) * innerWidth, sy = (-_v.y * 0.5 + 0.5) * innerHeight + yOff;
-    const behind = _v.z > 1 || sx < -80 || sx > innerWidth + 80 || sy < -40 || sy > innerHeight + 40;
-    const display = behind ? 'none' : 'block';
-    let c = pinMap.get(el); if (!c) { c = {}; pinMap.set(el, c); }
-    if (c.d !== display) { c.d = display; el.style.display = display; }
-    if (display === 'none') return;
-    const rx = Math.round(sx), ry = Math.round(sy);
-    if (c.x === rx && c.y === ry) return;
-    c.x = rx; c.y = ry;
-    el.style.left = `${rx}px`;
-    el.style.top = `${ry}px`;
-  }
-
-  /** 名字／氣泡錨在頭骨上方（勿用估算身高，坐下／走路會偏到胸口或腳邊） */
-  function placeAboveHead(el: HTMLElement, r: Remote, camera: THREE.Camera, yLift: number, yOff = 0) {
-    r.rig.head.getWorldPosition(_tagHead);
-    placeHud(el, _tagHead.x, _tagHead.z, _tagHead.y + yLift, camera, yOff);
-  }
-
-  function tick(dt: number, camera: THREE.Camera) {
+  function tick(dt: number, _camera: THREE.Camera) {
     const k = Math.min(1, dt * 10);
     const t = now();
     for (const r of remotes.values()) {
@@ -851,25 +823,24 @@ export function createPlazaWorldView(
       const oz = r.z + Math.cos(r.yaw) * back;
       r.rig.outer.position.set(ox, 0, oz);
       r.rig.outer.rotation.y = r.yaw;
-      r.rig.outer.updateMatrixWorld(true);
-      placeAboveHead(r.tag, r, camera, 0.22);
-      if (r.bubUntil > t) placeAboveHead(r.bubble, r, camera, 0.38, -6);
-      else if (r.bubble.style.display !== 'none') r.bubble.style.display = 'none';
+      r.tag.sprite.visible = r.rig.outer.visible && !r.awaitingPose;
+      if (r.bubUntil > t) r.bubble.sprite.visible = r.tag.sprite.visible;
+      else if (r.bubble.sprite.visible) r.bubble.sprite.visible = false;
     }
     if (selfBubUntil > t) {
       const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
       const back = selfSeated ? -0.08 : 0;
       const ox = selfX + Math.sin(selfYaw) * back;
       const oz = selfZ + Math.cos(selfYaw) * back;
-      placeHud(selfBubble, ox, oz, headY, camera, -6);
-    } else if (selfBubble.style.display !== 'none') selfBubble.style.display = 'none';
+      selfBubble.sprite.position.set(ox, headY, oz);
+      selfBubble.sprite.visible = true;
+    } else if (selfBubble.sprite.visible) selfBubble.sprite.visible = false;
   }
 
   function dispose() {
     for (const r of [...remotes.values()]) destroyRemote(r);
     remotes.clear();
-    selfBubble.remove();
-    tagsHost.remove();
+    selfBubble.dispose();
     scene.remove(root);
     floorMaps.map.dispose();
     floorMaps.rough.dispose();

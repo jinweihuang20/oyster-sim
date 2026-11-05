@@ -11,6 +11,7 @@ import {
   initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion,
   setWalking, setNearSeat, clearWalkInput,
+  makeWorldLabel, type WorldLabel,
 } from './world';
 import {
   checkCode, REDEEM_MESSAGES, type RedeemCodeDef, applyOutfitToRig,
@@ -180,8 +181,8 @@ const meatGeo = new THREE.SphereGeometry(0.035, 8, 6); meatGeo.scale(1.4, 0.6, 1
 // ---------- 阿婆 ----------
 const skin = 0xe8bc98;
 const makeAma = (top: number, hair: number) => makeAmaMesh(top, hair, { mat, mesh, skin });
-type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: number; peek: boolean; count: number; pause: number; look: number; bubble: HTMLDivElement; bubT: number; lean: number;
-  cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; w0?: number; warned?: boolean; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; gAt?: number; tag: HTMLButtonElement; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[]; bowlM?: THREE.Object3D };
+type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: number; peek: boolean; count: number; pause: number; look: number; bubble: WorldLabel; bubT: number; lean: number;
+  cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; w0?: number; warned?: boolean; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; gAt?: number; tag: WorldLabel; tagTxt?: string; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[]; bowlM?: THREE.Object3D };
 const npcs: Npc[] = [];
 function makeNpc(d: NpcDef) {
   const a = makeAma(d.top, d.hair); const ang = Math.PI / 2 + d.a; const r = d.r ?? 1.9;
@@ -196,38 +197,31 @@ function makeNpc(d: NpcDef) {
   const bowlL = new THREE.Vector3(0.32, 0, -0.42); const bowl = a.g.localToWorld(bowlL.clone());
   const bowlM = mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, 0.05, bowl.z]);
   bowl.y = 0.08;
-  const tag = document.createElement('button'); tag.className = 'ntag'; tag.textContent = d.name; $('bubbles').appendChild(tag); tag.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); const me = npcs.find(x => x.tag === tag); if (me) npcTip(me); });
-  const bubble = document.createElement('div'); bubble.className = 'bub'; bubble.style.opacity = '0'; $('bubbles').appendChild(bubble);
+  const tag = makeWorldLabel(d.name, 'name', 0.2);
+  tag.sprite.position.set(0, 0.3, 0); a.head.add(tag.sprite);
+  const bubble = makeWorldLabel(' ', 'bubble', 0.32);
+  bubble.sprite.position.set(0, 0.48, 0); bubble.sprite.visible = false; a.head.add(bubble.sprite);
   npcs.push({ ...a, tag, name: d.name, rate: d.rate, chatty: d.chatty, peek: d.peek, count: 0, pause: 0, look: 0, bubble, bubT: 0, lean: 0, cyc: Math.random(), dur: d.rate, ev: 0, mood: 0, angry: 0, distract: 0, turnDir: 1, windup: 0, throwCd: rnd(15, 30), stuck: null, baseY: 0, oy, top, meat, bowl, bowlMeat: [], bowlM });
 }
 for (const d of NPC_DEF) makeNpc(d);
 function say(n: Npc, t: string, dur = 3.2) {
   if (ac) SFX.murmur([300, 230, 380][npcs.indexOf(n)] ?? 300);
-  n.bubble.textContent = t; n.bubble.style.opacity = '1'; n.bubT = dur;
-  const c = pinState(n.bubble); c.op = '1'; c.txt = t;
+  n.bubble.setText(t); n.bubble.setOpacity(1); n.bubble.sprite.visible = true; n.bubT = dur;
 }
-/** 世界標籤／氣泡：快取 display／座標，避免每幀強制重排 */
-type PinSt = { d?: string; x?: number; y?: number; txt?: string; op?: string };
-const pinMap = new WeakMap<HTMLElement, PinSt>();
-const pinState = (el: HTMLElement) => { let c = pinMap.get(el); if (!c) { c = {}; pinMap.set(el, c); } return c; };
-function setPin(el: HTMLElement, x: number, y: number, display: string) {
-  const c = pinState(el);
-  if (c.d !== display) { c.d = display; el.style.display = display; }
-  if (display === 'none') return;
-  const rx = Math.round(x), ry = Math.round(y);
-  if (c.x === rx && c.y === ry) return;
-  c.x = rx; c.y = ry;
-  el.style.left = `${rx}px`; el.style.top = `${ry}px`;
+const _warnRel = new THREE.Vector3(), _warnFwd = new THREE.Vector3(), _tagHit = new THREE.Vector3();
+/** 點名牌開 tip（螢幕距離，比 Sprite raycast 穩） */
+function hitNpcTag(cx: number, cy: number): Npc | null {
+  let best: Npc | null = null, bestD = 56;
+  for (const n of npcs) {
+    if (!n.tag.sprite.visible || !n.g.visible) continue;
+    n.tag.sprite.getWorldPosition(_tagHit); _tagHit.project(viewCam());
+    if (_tagHit.z > 1) continue;
+    const sx = (_tagHit.x * .5 + .5) * innerWidth, sy = (-_tagHit.y * .5 + .5) * innerHeight;
+    const d = Math.hypot(sx - cx, sy - cy);
+    if (d < bestD) { bestD = d; best = n; }
+  }
+  return best;
 }
-/** 用固定估算取代每幀 getBoundingClientRect + offsetHeight */
-let hudTopMinY = 72;
-function refreshHudTopMinY() {
-  const top = document.getElementById('top');
-  hudTopMinY = (top?.getBoundingClientRect().bottom ?? 56) + 10 + 36;
-}
-addEventListener('resize', refreshHudTopMinY);
-refreshHudTopMinY();
-const _warnRel = new THREE.Vector3(), _warnFwd = new THREE.Vector3();
 let lastNag = '';
 function nag(lines: string[]) {
   if (!npcs.length) return;
@@ -795,7 +789,7 @@ function applyCrew() {
   showLand();
   crewHats.forEach(h => h.removeFromParent()); crewHats.length = 0;
   npcs.forEach((n, i) => {
-    const c = set[i % set.length], nm = i < set.length ? c.name : evExtraName(i - set.length) ?? c.name; n.name = nm; n.tag.textContent = nm;
+    const c = set[i % set.length], nm = i < set.length ? c.name : evExtraName(i - set.length) ?? c.name; n.name = nm; n.tag.setText(nm); n.tagTxt = nm;
     const head = n.g.children.find(o => o instanceof THREE.Group && Math.abs(o.position.y - 1.02) < 0.01) as THREE.Group | undefined; if (!head) return;
     const hair = head.children[1] as THREE.Mesh, bun = head.children[2] as THREE.Mesh;
     (hair.material as THREE.MeshStandardMaterial).color.setHex(c.hair); (bun.material as THREE.MeshStandardMaterial).color.setHex(c.hair);
@@ -1746,6 +1740,10 @@ canvas.addEventListener('pointerdown', e => {
   if (state !== 'play') return; audio().resume(); if (umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
   if (moonAimOn) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (swipePhase()) { pry(e.timeStamp); if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) canvas.requestPointerLock(); return; }
+  if (!walking && !plazaMode && e.button === 0) {
+    const tipNpc = hitNpcTag(e.clientX, e.clientY);
+    if (tipNpc) { npcTip(tipNpc); return; }
+  }
   if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
   if (walking) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (e.button === 2) { throwShell(); return; }
@@ -2070,11 +2068,11 @@ const moonFx: MoonFx[] = [];
 function moonReset() {
   moonFx.length = 0; moonUsed = 0; moonAimEnd();
   const N = plazaMode ? 0 : (evRun ? Math.max(1, Math.min(50, evRun.npc)) : NPC_DEF.length); if (N > 0) evEnsure(N);
-  npcs.length = 0; ALL_NPCS.forEach((n, i) => { const use = i < N; if (n.bowlM) n.bowlM.visible = use; if (!use) { n.g.visible = false; n.tag.style.display = 'none'; n.bubble.style.display = 'none'; n.windup = 0; n.throwCd = 999; return; } npcs.push(n); n.g.position.copy(NPC_HOME[i].p); n.g.rotation.copy(NPC_HOME[i].r); n.g.scale.setScalar(1); if (!n.g.parent) scene.add(n.g); n.g.visible = true; delete n.g.userData.moon; });
+  npcs.length = 0; ALL_NPCS.forEach((n, i) => { const use = i < N; if (n.bowlM) n.bowlM.visible = use; if (!use) { n.g.visible = false; n.tag.sprite.visible = false; n.bubble.sprite.visible = false; n.windup = 0; n.throwCd = 999; return; } npcs.push(n); n.g.position.copy(NPC_HOME[i].p); n.g.rotation.copy(NPC_HOME[i].r); n.g.scale.setScalar(1); if (!n.g.parent) scene.add(n.g); n.g.visible = true; n.tag.sprite.visible = true; delete n.g.userData.moon; });
 }
 function moonGone(n: Npc) {
   const i = npcs.indexOf(n); if (i >= 0) npcs.splice(i, 1);
-  n.windup = 0; n.warned = false; n.throwCd = 999; n.distract = 0; n.look = 0; n.bubT = 0; n.grudge = 0; n.bubble.style.opacity = '0'; n.bubble.style.display = 'none'; n.tag.style.display = 'none'; n.g.userData.moon = 1;
+  n.windup = 0; n.warned = false; n.throwCd = 999; n.distract = 0; n.look = 0; n.bubT = 0; n.grudge = 0; n.bubble.setOpacity(0); n.bubble.sprite.visible = false; n.tag.sprite.visible = false; n.g.userData.moon = 1;
   if (stealNpc === n) stopSteal(); if (hint.textContent?.includes(n.name)) hint.textContent = '';
 }
 const moonAimEl = document.createElement('div'); moonAimEl.id = 'moonAim';
@@ -2192,7 +2190,7 @@ function plazaHideYard(hide: boolean) {
       if (!o || (o as any).__plazaHid) continue;
       (o as any).__plazaHid = o.visible; o.visible = false; plazaHomeHide.push(o);
     }
-    ALL_NPCS.forEach(n => { n.tag.style.display = 'none'; n.bubble.style.display = 'none'; });
+    ALL_NPCS.forEach(n => { n.tag.sprite.visible = false; n.bubble.sprite.visible = false; });
     camera.far = 90; camera.updateProjectionMatrix();
     tpCam.far = 120; tpCam.updateProjectionMatrix();
     const f = scene.fog as THREE.Fog; f.color.setHex(0xd8e4dc); f.near = 20; f.far = 64;
@@ -2532,7 +2530,7 @@ function npcShuck(n: Npc, dt: number, t: number) {
 // ---------- 主迴圈 ----------
 let baseFov = 70, narrow = false;
 function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); tpCam.aspect = camera.aspect; tpCam.updateProjectionMatrix();
-  narrow = camera.aspect < 0.8; baseFov = narrow ? 82 : 70; handRig.position.set(0, narrow ? -0.02 : 0, 0); handRig.scale.set(narrow ? 0.42 : 0.7, narrow ? 0.6 : 0.7, 0.7); refreshHudTopMinY(); }
+  narrow = camera.aspect < 0.8; baseFov = narrow ? 82 : 70; handRig.position.set(0, narrow ? -0.02 : 0, 0); handRig.scale.set(narrow ? 0.42 : 0.7, narrow ? 0.6 : 0.7, 0.7); }
 addEventListener('resize', resize); resize();
 const clock = new THREE.Clock(); const v = new THREE.Vector3();
 let chatTimer = 2;
@@ -2679,13 +2677,9 @@ function frameBody() {
     if (warnEl.textContent !== wTxt) warnEl.textContent = wTxt;
     hint.textContent = `${warnNpc.name}要丟殼過來了！快${COARSE ? '按住「雨傘」' : '按住 R 撐傘'}！`;
   } else if (warnEl.classList.contains('on')) warnEl.classList.remove('on');
-  // 先算完所有投影，再批次寫 DOM（避免讀寫交錯強制重排）
   for (const n of npcs) {
     n.look -= dt; n.bubT -= rdt;
-    if (n.bubT <= 0) {
-      const c = pinState(n.bubble);
-      if (c.op !== '0') { c.op = '0'; n.bubble.style.opacity = '0'; }
-    }
+    if (n.bubT <= 0 && n.bubble.sprite.visible) { n.bubble.setOpacity(0); n.bubble.sprite.visible = false; }
     const stand = n.angry > 0 || n.windup > 0 ? 1 : 0; n.baseY += (stand * 0.18 - n.baseY) * Math.min(1, rdt * 6); n.g.position.y = n.baseY;
     const tgtY = n.look > 0 || stand ? Math.atan2(camera.position.x - n.g.position.x, camera.position.z - n.g.position.z) - n.g.rotation.y : 0;
     const want = n.look > 0 || stand ? 1 : 0;
@@ -2693,17 +2687,10 @@ function frameBody() {
     n.head.rotation.set(n.pause > 0 ? -0.15 : 0.35 - n.lean * 0.3, 0, 0); n.body.rotation.x = n.lean * 0.15;
     const face = THREE.MathUtils.lerp(0, Math.atan2(Math.sin(tgtY + Math.PI), Math.cos(tgtY + Math.PI)), n.lean);
     n.head.rotation.y = n.distract > 0 && !stand ? n.turnDir * 1.3 : face;
-    n.head.getWorldPosition(v); v.y += 0.28; v.project(camera);
-    const vis = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
-    const sx = (v.x * .5 + .5) * innerWidth, sy = (-v.y * .5 + .5) * innerHeight;
     const g = n.grudge ?? 0;
     const tagTxt = n.name + (g >= 60 ? ' 😡' : g >= 25 ? ' 😠' : '');
-    setPin(n.tag, clamp(sx, 50, innerWidth - 50), sy - 4, vis && !tut ? 'block' : 'none');
-    {
-      const c = pinState(n.tag);
-      if (c.txt !== tagTxt) { c.txt = tagTxt; n.tag.textContent = tagTxt; }
-    }
-    setPin(n.bubble, clamp(sx, 90, innerWidth - 90), Math.max(sy - 24, hudTopMinY), vis ? 'block' : 'none');
+    if (n.tagTxt !== tagTxt) { n.tagTxt = tagTxt; n.tag.setText(tagTxt); }
+    n.tag.sprite.visible = !tut && n.g.visible && !n.g.userData.moon;
   }
   boats.forEach((b, i) => { b.position.y = -0.45 + Math.sin(t * 0.8 + i) * 0.05; b.rotation.z = Math.sin(t * 0.6 + i * 2) * 0.03; });
   for (let i = flyers.length - 1; i >= 0; i--) {
