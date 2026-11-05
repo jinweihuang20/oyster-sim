@@ -1,11 +1,11 @@
 // 玩家回饋直接發到 Discord #玩家回饋（專用 webhook，刻意嵌入前端；被濫用時換新的即可）
-const WEBHOOK = 'https://discord.com/api/webhooks/1566245944301977660/ZJfrRyCyltaNuwZgYoK_F_I27CW4nOOoOKTNHmC9yVQMeVaoAZS48pNDBM5UQ7k53zIz';
+const WEBHOOK = 'https://discord.com/api/webhooks/1568040078742397038/-fyzR55p_7doAJNMB4t9o7LZaKrXVjs8z3uQEpZLmfMqT4XLHKVrWljujtvapnvCZPPV';
 /** 蚵仔廣場聊天 → Discord 頻道（專用 webhook） */
-const WEBHOOK_PLAZA = 'https://discord.com/api/webhooks/1567923085150130289/aRUoBU4Cl42DgTG68hGeDemsB_D2EH5GVA7VVaQCybMiwagSaBx0LdQqijz7g1ykBg6F';
+const WEBHOOK_PLAZA = 'https://discord.com/api/webhooks/1568039247355715634/4GfJ8aFfydh7q0ZDGT60-FS08zRz7d2yNmQ_fYVLNVgIIU-b3wLpTQLjQw5M4zN63YDH';
 /** 蚵仔廣場進出場 → Discord 頻道（專用 webhook） */
-const WEBHOOK_PLAZA_IO = 'https://discord.com/api/webhooks/1567925062164680866/cITag35urTNA-Fb1-0Mr7y542qxDS_q5feihNrqCWbVnj4HF7m3cbVVCddPThx9Lr4Z-';
+const WEBHOOK_PLAZA_IO = 'https://discord.com/api/webhooks/1568038850272694282/XDnb94NdRUyphh97FPkSIYnVAQ0SNggj8eOdqB5mxwPRRQs68a2gFivY7b9GAbiuXDoY';
 /** 玩家上線／離線 → Discord 頻道（專用 webhook） */
-const WEBHOOK_PLAYER_IO = 'https://discord.com/api/webhooks/1567926694482935902/D3nIUNb5KdfXszACYYbM5Zpf4x3TeS_XkGm_W4ND4QXEdL3xCMr31fNiG7zKas1SI9Sk';
+const WEBHOOK_PLAYER_IO = 'https://discord.com/api/webhooks/1568040481349308446/GuVdnsVQJrVTyTzG0600AHFTftYnEMupdu9rQniJ3ke871gHUysQyUuSN1L6DTvO_ZN2';
 
 const scrub = (s: string) => s.replace(/@(everyone|here)/gi, '@\u200b$1');
 
