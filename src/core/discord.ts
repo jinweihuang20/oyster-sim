@@ -4,11 +4,19 @@ const WEBHOOK = 'https://discord.com/api/webhooks/1566245944301977660/ZJfrRyCylt
 const WEBHOOK_PLAZA = 'https://discord.com/api/webhooks/1567923085150130289/aRUoBU4Cl42DgTG68hGeDemsB_D2EH5GVA7VVaQCybMiwagSaBx0LdQqijz7g1ykBg6F';
 /** 蚵仔廣場進出場 → Discord 頻道（專用 webhook） */
 const WEBHOOK_PLAZA_IO = 'https://discord.com/api/webhooks/1567925062164680866/cITag35urTNA-Fb1-0Mr7y542qxDS_q5feihNrqCWbVnj4HF7m3cbVVCddPThx9Lr4Z-';
+/** 玩家上線／離線 → Discord 頻道（專用 webhook） */
+const WEBHOOK_PLAYER_IO = 'https://discord.com/api/webhooks/1567926694482935902/D3nIUNb5KdfXszACYYbM5Zpf4x3TeS_XkGm_W4ND4QXEdL3xCMr31fNiG7zKas1SI9Sk';
 
 const scrub = (s: string) => s.replace(/@(everyone|here)/gi, '@\u200b$1');
 
-function postWebhook(url: string, body: unknown): Promise<boolean> {
-  return fetch(url + '?wait=false', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.ok, () => false);
+function postWebhook(url: string, body: unknown, opts?: { beacon?: boolean }): Promise<boolean> {
+  const payload = JSON.stringify(body);
+  if (opts?.beacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+    try {
+      return Promise.resolve(navigator.sendBeacon(url + '?wait=false', new Blob([payload], { type: 'application/json' })));
+    } catch { /* fall through */ }
+  }
+  return fetch(url + '?wait=false', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: !!opts?.beacon }).then(r => r.ok, () => false);
 }
 
 export function postDiscordFeedback(title: string, text: string, fields: Record<string, string | number>): Promise<boolean> {
@@ -46,4 +54,19 @@ export function postDiscordPlazaPresence(
     content,
     allowed_mentions: { parse: [] as string[] },
   });
+}
+
+/** 玩家上線／離線（本機 presence；關分頁用 beacon） */
+export function postDiscordPlayerPresence(
+  nick: string,
+  kind: 'online' | 'offline',
+  opts?: { beacon?: boolean },
+): Promise<boolean> {
+  const name = scrub((nick || '剝蚵人').trim()).slice(0, 80) || '剝蚵人';
+  const content = kind === 'online' ? `🟢 **${name}** 上線了` : `⚫ **${name}** 離線了`;
+  return postWebhook(WEBHOOK_PLAYER_IO, {
+    username: '蚵寮廣播',
+    content,
+    allowed_mentions: { parse: [] as string[] },
+  }, { beacon: opts?.beacon });
 }

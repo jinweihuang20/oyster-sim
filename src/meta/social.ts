@@ -1,4 +1,5 @@
 // 全服彈幕＋全球排行榜（後端：StatsServer /s/*）。後端關機時全部安靜失敗。
+import { postDiscordPlayerPresence } from '../core/discord';
 const API = 'https://game-status.gwtech.org/s';
 type Deps = { id: string; test: boolean; nick: () => string; setNick: (v: string) => void; inTut: () => boolean; on: () => boolean; label: (kind: string, item: number) => string; title?: () => string; toast: (t: string) => void; LS: { getItem(k: string): string | null; setItem(k: string, v: string): void } };
 let D: Deps;
@@ -169,10 +170,39 @@ async function presenceTick() {
   showOnline(r);
   try { prsHook(); } catch { /* 忽略 */ }
 }
+
+let prsDcOnline = false;
+let prsDcOffTimer: ReturnType<typeof setTimeout> | null = null;
+function clearPrsDcOff() { if (prsDcOffTimer) { clearTimeout(prsDcOffTimer); prsDcOffTimer = null; } }
+function announcePlayerOnline() {
+  clearPrsDcOff();
+  if (prsDcOnline) return;
+  prsDcOnline = true;
+  void postDiscordPlayerPresence(D.nick(), 'online');
+}
+function announcePlayerOffline(immediate = false) {
+  clearPrsDcOff();
+  const go = () => {
+    prsDcOffTimer = null;
+    if (!prsDcOnline) return;
+    prsDcOnline = false;
+    void postDiscordPlayerPresence(D.nick(), 'offline', { beacon: immediate });
+  };
+  // 切一下分頁不要立刻離線；關分頁／隱藏較久才公告
+  if (immediate) go();
+  else prsDcOffTimer = setTimeout(go, 12_000);
+}
+
 export function startPresence(playing: () => boolean) {
   prsPlaying = playing;
   presenceTick(); setInterval(presenceTick, 25000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) presenceTick(); });
+  announcePlayerOnline();
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) announcePlayerOffline(false);
+    else { announcePlayerOnline(); presenceTick(); }
+  });
+  // pagehide：關分頁／App 切走較可靠
+  addEventListener('pagehide', () => announcePlayerOffline(true));
 }
 
 // 玩家號碼（伺服器發放、保證不重複）。舊版伺服器沒有 /me 時回 null。
