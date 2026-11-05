@@ -833,6 +833,10 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #medBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
+/* 電腦廣場：視角用 V，隱藏右下視角鈕 */
+@media (pointer:fine){
+  body.plazaMode #camBtn,body.plazaRoam #camBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
+}
 /* 橫向矮屏會藏 #stats，視角鈕改浮在右下以免閒逛時不見 */
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
   body.plazaRoam #camBtn.hudCam.on{display:inline-flex!important;position:fixed!important;right:calc(var(--sa-right) + 12px)!important;bottom:calc(var(--sa-bottom) + 16px)!important;left:auto!important;top:auto!important;z-index:8601!important;margin:0!important}

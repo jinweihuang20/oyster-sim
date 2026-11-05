@@ -40,6 +40,10 @@ type EvCfg = { id: number; name: string; desc: string; npc: number; dur: number;
 let evRun: EvCfg | null = null, evToken: string | null = null, evLastId: number | null = null, evBusy = false;
 /** 廣場多人：無 NPC、座位由 Hub 權威；進場先走動再坐下開剝 */
 let plazaMode = false;
+function setPlazaMode(v: boolean) {
+  plazaMode = v;
+  document.body.classList.toggle('plazaMode', v);
+}
 let plazaPayWait: Promise<number> | null = null;
 /** 廣場休閒：第一次坐下起算遊玩秒數（給結算／後端 softCap） */
 let plazaPlayAt = 0;
@@ -2003,6 +2007,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   // 廣場結算：藏廣場 UI／再次上工；等伺服器入帳前標示結算中
   if (plazaMode) {
     plazaEndCleanup();
+    clearPlazaLeaveUi();
     on('quitBtn', false); on('standBtn', false); on('throwBtn', false); on('umbBtn', false); on('stealBtn', false); on('sitBtn', false); on('giveUp', false); on('medBtn', false); on('camBtn', false);
     const menuBtn = $('resMenu');
     if (menuBtn) { menuBtn.innerHTML = `<i class="ic ic-home"></i> 回主選單`; (menuBtn as HTMLButtonElement).disabled = true; }
@@ -2160,14 +2165,21 @@ $('bmGo').onclick = () => { void (async () => {
   $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return;
   const wasPlaza = plazaMode;
   if (wasPlaza && !plazaShiftStarted()) {
-    plazaShellGen++; plazaMode = false; plazaPlayAt = 0; document.body.classList.remove('plazaRoam'); plazaHideYard(false); void closePlaza(); applySeat(save.seat ?? 'door');
-    walking = false; handRig.visible = true; on('joy', false); state = 'menu'; syncShiftUi();
-    renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; return;
+    plazaShellGen++; setPlazaMode(false); plazaPlayAt = 0; plazaHideYard(false);
+    await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door');
+    clearPlazaLeaveUi(); state = 'menu'; syncShiftUi();
+    renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+    void refreshPlazaOnlineAfterLeave();
+    return;
   }
   endReason = 'quit'; endDay();
   $('result').classList.remove('show');
-  if (wasPlaza) { await plazaPayWait?.catch(() => 0); plazaMode = false; plazaPayWait = null; plazaPlayAt = 0; document.body.classList.remove('plazaRoam'); plazaHideYard(false); void closePlaza(); applySeat(save.seat ?? 'door'); walking = false; handRig.visible = true; on('joy', false); }
-  renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+  if (wasPlaza) {
+    await plazaPayWait?.catch(() => 0); setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0; plazaHideYard(false);
+    await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door'); clearPlazaLeaveUi();
+  }
+  renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+  if (wasPlaza) void refreshPlazaOnlineAfterLeave();
   const P = lastPay; if (P.gross || P.pen) {
     const r = (ic: string, l: string, v: string, c = '') => `<div class="row"><span><i class="ic ic-${ic}"></i> ${l}</span><b${c}>${v}</b></div>`;
     $('psBody').innerHTML = r('oyster', '收入', `+$${P.gross}`) + (P.pen ? r('warn', '罰款／扣價', `-$${P.pen}`, ' style="color:#ff8a7a"') + r('coin', '淨收入', `$${P.earn}`) : '') + `<p style="font-size:14px;opacity:.85">已入帳，身上共有 $${save.money}</p>`;
@@ -2228,11 +2240,11 @@ function plazaEnterWalkPose(fromSeat = true) {
     tpv = !!save.tpv; drawCamBtn();
   }
   drawRadio();
-  tPitch = pitch = -0.2; $('diff').textContent = ''; on('standBtn', false); on('umbBtn', false); on('medBtn', false); on('stealBtn', false); on('joy', true); on('camBtn', true);
-  // 確保視角鈕在閒逛時可見（手機 camBtn 掛在 #stats 裡）
-  const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; }
+  tPitch = pitch = -0.2; $('diff').textContent = ''; on('standBtn', false); on('umbBtn', false); on('medBtn', false); on('stealBtn', false); on('joy', true); on('camBtn', COARSE);
+  // 手機：視角鈕掛在 #stats；電腦廣場用 V，不顯示鈕
+  if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
   stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
-  hint.textContent = COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V／視角鈕切換・E 坐下剝蚵';
+  hint.textContent = COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V 切換視角・E 坐下剝蚵';
 }
 function sitDown(id: string) {
   walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear(); stools.forEach(g => g.userData.tag.visible = false);
@@ -2291,13 +2303,18 @@ function syncStartUi() {
 }
 let plazaOnlineN: number | null = null;
 let plazaOnlineAt = 0;
+let plazaOnlineOk = false;
 async function refreshPlazaOnline(force = false) {
-  if (!force && performance.now() - plazaOnlineAt < 12_000) return plazaOnlineN;
-  plazaOnlineAt = performance.now();
+  if (!force && plazaOnlineOk && performance.now() - plazaOnlineAt < 12_000) return plazaOnlineN;
   try {
     const base = import.meta.env.DEV ? 'http://127.0.0.1:8787/s' : 'https://game-status.gwtech.org/s';
     const r = await fetch(`${base}/plaza`, { mode: 'cors', cache: 'no-store' }).then(x => x.ok ? x.json() : null).catch(() => null);
-    if (r && typeof r.online === 'number') plazaOnlineN = Math.max(0, r.online | 0);
+    const raw = r?.online ?? r?.Online;
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      plazaOnlineN = Math.max(0, raw | 0);
+      plazaOnlineAt = performance.now();
+      plazaOnlineOk = true;
+    }
   } catch { /* 後端沒開就算了 */ }
   return plazaOnlineN;
 }
@@ -2307,7 +2324,44 @@ function plazaCountLabel() {
     ? `目前 <b>${plazaOnlineN}</b> 人在廣場・隨便坐、無倒數`
     : '目前沒人・隨便坐、無倒數，離開再結算';
 }
-function renderLocs() { autoUnlock();
+function plazaHeadCountTxt() {
+  if (plazaOnlineN == null) return '休閒多人・不趕時間';
+  return plazaOnlineN > 0
+    ? `目前 ${plazaOnlineN} 人在內・休閒多人・不趕時間`
+    : '目前沒人・休閒多人・不趕時間';
+}
+/** 把廣場人數寫進主畫面地點卡（不重繪整排，避免打斷點選） */
+function paintPlazaOnlineUi() {
+  const el = document.getElementById('locPick');
+  if (!el || plazaOnlineN == null) return;
+  const n = plazaOnlineN;
+  const card = el.querySelector('.locPlaza .lm');
+  const ld = el.querySelector('.locPlaza .ld');
+  const head = el.querySelector('.locHead small');
+  if (card) card.textContent = `${n} 人`;
+  if (ld) ld.innerHTML = plazaCountLabel();
+  if (isPlazaPicked() && head) head.textContent = plazaHeadCountTxt();
+}
+async function syncPlazaOnlineUi(force = false) {
+  const n = await refreshPlazaOnline(force);
+  if (n != null) paintPlazaOnlineUi();
+  return n;
+}
+/** 離開廣場後：等斷線再強制重抓人數（含短延遲重試，避免幽靈連線） */
+async function refreshPlazaOnlineAfterLeave() {
+  if (plazaOnlineN != null && plazaOnlineN > 0) {
+    plazaOnlineN = Math.max(0, plazaOnlineN - 1);
+    paintPlazaOnlineUi();
+  }
+  plazaOnlineOk = false;
+  await syncPlazaOnlineUi(true);
+  for (const ms of [350, 1200]) {
+    await new Promise(r => setTimeout(r, ms));
+    if (state !== 'menu') return;
+    await syncPlazaOnlineUi(true);
+  }
+}
+function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   const el = $('locPick'); const tot = save.life.inBowl ?? 0;
   const seen = save.locSeen ?? (save.locSeen = ['home']);
   const plazaCur = isPlazaPicked();
@@ -2315,9 +2369,9 @@ function renderLocs() { autoUnlock();
   const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && save.locs!.includes(l.id);
   const anyNew = LOCS.some(isNew);
   const headTxt = plazaCur
-    ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場</b><small>${plazaOnlineN != null ? `目前 ${plazaOnlineN} 人在內・` : ''}休閒多人・不趕時間</small>`
+    ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場</b><small>${plazaHeadCountTxt()}</small>`
     : `<b><i class="ic ic-pin"></i> 上工地點：${cl!.n} ×${cl!.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small>`;
-  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}" data-loc="plaza"><span class="ln">🦪 蚵仔廣場</span><span class="lm">${plazaOnlineN != null ? `${plazaOnlineN} 人` : '休閒'}</span><small>${plazaCur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${plazaCountLabel()}</small></button>`;
+  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}" data-loc="plaza"><span class="ln">🦪 蚵仔廣場</span><span class="lm">${plazaOnlineN != null ? `${plazaOnlineN} 人` : '…'}</span><small>${plazaCur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${plazaCountLabel()}</small></button>`;
   el.innerHTML = `<div class="locHead">${headTxt}</div><div class="locRow">` + plazaCard + LOCS.map(l => {
     const own = l.need === 0 || save.locs!.includes(l.id), cur = !plazaCur && cl!.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
@@ -2334,30 +2388,16 @@ function renderLocs() { autoUnlock();
     syncStartUi();
   });
   syncStartUi();
-  void refreshPlazaOnline().then(n => {
-    if (n == null) return;
-    const card = el.querySelector('.locPlaza .lm');
-    const ld = el.querySelector('.locPlaza .ld');
-    const head = el.querySelector('.locHead small');
-    if (card) card.textContent = `${n} 人`;
-    if (ld) ld.innerHTML = plazaCountLabel();
-    if (plazaCur && head) head.textContent = `目前 ${n} 人在內・休閒多人・不趕時間`;
-  });
+  void syncPlazaOnlineUi(!!opts?.forcePlazaOnline);
 }
-renderLocs();
+renderLocs({ forcePlazaOnline: true });
 setInterval(() => {
   if (state !== 'menu' || !$('overlay')?.classList.contains('show')) return;
-  void refreshPlazaOnline(true).then(n => {
-    if (n == null) return;
-    const el = $('locPick');
-    const card = el?.querySelector('.locPlaza .lm');
-    const ld = el?.querySelector('.locPlaza .ld');
-    const head = el?.querySelector('.locHead small');
-    if (card) card.textContent = `${n} 人`;
-    if (ld) ld.innerHTML = plazaCountLabel();
-    if (isPlazaPicked() && head) head.textContent = `目前 ${n} 人在內・休閒多人・不趕時間`;
-  });
+  void syncPlazaOnlineUi(true);
 }, 20_000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state === 'menu' && $('overlay')?.classList.contains('show')) void syncPlazaOnlineUi(true);
+});
 let achFromRes = false; // 從收工畫面打開成就，關掉後回到收工畫面
 btn('rAch', () => { achFromRes = true; $('result').classList.remove('show'); achOpen(); });
 const ITEMS = [{ id: 'moon', n: '把你媽的愛送上月球', price: 5000, good: '選一位鄰居，發射飛彈鐵拳把對方送上月球，這一工都不會再出現', bad: '每一工最多用 2 個，下一工對方會回來' }];
@@ -2542,6 +2582,23 @@ function plazaEnsureFpView() {
   tpv = false;
   drawCamBtn();
 }
+/** 離開廣場時清掉座落卡／搖桿等 HUD，避免殘留到主選單或其他工寮 */
+function clearPlazaLeaveUi() {
+  nearSeat = null;
+  walking = false;
+  joy.x = joy.y = 0;
+  walkKeys.clear();
+  on('seatCard', false);
+  on('joy', false);
+  on('standBtn', false);
+  on('sitBtn', false);
+  handRig.visible = true;
+  document.body.classList.remove('plazaRoam');
+  const info = document.getElementById('seatInfo');
+  if (info) info.innerHTML = '';
+  const kb = document.getElementById('joyK');
+  if (kb) kb.style.transform = '';
+}
 function showPlazaLoading(show = true) {
   let el = document.getElementById('plazaLoad');
   if (show) {
@@ -2551,15 +2608,17 @@ function showPlazaLoading(show = true) {
       el.innerHTML = `<div class="pzLoadTitle">蚵仔廣場</div><div class="pzLoadSub">正在入場…</div><div class="pzLoadBar" aria-hidden="true"><i></i></div><button type="button" id="plazaLoadCancel">取消</button>`;
       document.body.appendChild(el);
       el.querySelector('#plazaLoadCancel')!.addEventListener('click', () => {
-        showPlazaLoading(false);
-        if (isPlazaActive()) void closePlaza(true);
-        plazaMode = false; plazaPlayAt = 0;
-        document.body.classList.remove('plazaRoam');
-        plazaHideYard(false);
-        applySeat(save.seat ?? 'door');
-        walking = false; handRig.visible = true; on('joy', false);
-        state = 'menu'; syncShiftUi();
-        renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+        void (async () => {
+          showPlazaLoading(false);
+          setPlazaMode(false); plazaPlayAt = 0;
+          plazaHideYard(false);
+          if (isPlazaActive()) await closePlaza(true).catch(() => 0);
+          applySeat(save.seat ?? 'door');
+          clearPlazaLeaveUi();
+          state = 'menu'; syncShiftUi();
+          renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+          void refreshPlazaOnlineAfterLeave();
+        })();
       });
     }
     const sub = el.querySelector('.pzLoadSub'); if (sub) sub.textContent = '正在入場…';
@@ -2630,27 +2689,31 @@ function launchPlaza() {
     track: (t, d) => track(t, d),
     onPayout: () => { /* 結算走 plazaReportEarn */ },
     onExit: () => {
-      showPlazaLoading(false);
-      plazaShellGen++;
-      if (state === 'play' && plazaMode && plazaShiftStarted()) { endReason = 'quit'; endDay(); return; }
-      plazaMode = false; plazaPlayAt = 0; document.body.classList.remove('plazaRoam'); plazaHideYard(false); void closePlaza(); applySeat(save.seat ?? 'door');
-      walking = false; handRig.visible = true; on('joy', false);
-      state = 'menu'; syncShiftUi();
-      renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+      void (async () => {
+        showPlazaLoading(false);
+        plazaShellGen++;
+        if (state === 'play' && plazaMode && plazaShiftStarted()) { endReason = 'quit'; endDay(); return; }
+        setPlazaMode(false); plazaPlayAt = 0; plazaHideYard(false);
+        await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door');
+        clearPlazaLeaveUi();
+        state = 'menu'; syncShiftUi();
+        renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+        void refreshPlazaOnlineAfterLeave();
+      })();
     },
     onEnterFail: () => {
       showPlazaLoading(false);
       plazaShellGen++;
-      plazaMode = false; plazaPlayAt = 0;
-      document.body.classList.remove('plazaRoam');
+      setPlazaMode(false); plazaPlayAt = 0;
       plazaHideYard(false);
       applySeat(save.seat ?? 'door');
-      walking = false; handRig.visible = true; on('joy', false);
+      clearPlazaLeaveUi();
       state = 'menu'; syncShiftUi();
-      renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+      renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+      void syncPlazaOnlineUi(true);
     },
     enterWalk: () => {
-      plazaMode = true; plazaPlayAt = 0; evRun = null; shiftLen = SHIFT; timeLeft = SHIFT;
+      setPlazaMode(true); plazaPlayAt = 0; evRun = null; shiftLen = SHIFT; timeLeft = SHIFT;
       plazaHideYard(true);
       state = 'play'; syncShiftUi();
       moonReset(); // 0 NPC
@@ -2659,15 +2722,15 @@ function launchPlaza() {
       tPitch = pitch = -0.18;
       plazaEnterWalkPose(false);
       drawRadio();
-      on('quitBtn', true); on('camBtn', true); on('seatCard', false);
+      on('quitBtn', true); on('camBtn', COARSE); on('seatCard', false);
       document.body.classList.add('plazaRoam');
-      { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
+      if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
       showPlazaLoading(false);
       updHud();
       toast('蚵仔廣場・休閒剝蚵，隨便坐、不趕時間', '#9be37a');
     },
     beginShift: () => {
-      plazaMode = true; evRun = null; shiftLen = SHIFT; walking = false;
+      setPlazaMode(true); evRun = null; shiftLen = SHIFT; walking = false;
       document.body.classList.remove('plazaRoam');
       on('standBtn', true); on('joy', false); on('umbBtn', true); on('medBtn', true); on('seatCard', false);
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
@@ -2688,8 +2751,8 @@ function launchPlaza() {
     goWalk: () => {
       document.body.classList.add('plazaRoam');
       plazaEnterWalkPose(true);
-      on('camBtn', true);
-      const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; }
+      on('camBtn', COARSE);
+      if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
     },
   });
 }
@@ -2707,21 +2770,23 @@ btn('resMenu', () => { void (async () => {
   if (menuBtn.disabled) return;
   menuBtn.disabled = true;
   $('result').classList.remove('show');
+  let leftPlaza = false;
   if (plazaMode) {
     menuBtn.innerHTML = `<i class="ic ic-home"></i> 結算中…`;
     await plazaPayWait?.catch(() => 0);
-    plazaMode = false; plazaPayWait = null; plazaPlayAt = 0;
-    document.body.classList.remove('plazaRoam');
+    setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0;
     plazaHideYard(false);
     plazaHideChrome(true);
-    void closePlaza();
+    await closePlaza().catch(() => 0);
     applySeat(save.seat ?? 'door');
-    walking = false; handRig.visible = true; on('joy', false);
+    clearPlazaLeaveUi();
+    leftPlaza = true;
   }
   const againBtn = $('again'); if (againBtn) againBtn.style.display = '';
   menuBtn.disabled = false;
   menuBtn.innerHTML = `<i class="ic ic-home"></i> 回主選單`;
-  renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+  renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
+  if (leftPlaza) void refreshPlazaOnlineAfterLeave();
 })(); });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
@@ -2847,7 +2912,10 @@ function frameBody() {
     if (phase === 'empty' && !(tut && (TUT[tut.i].id === 'empty' || TUT[tut.i].id === 'shell'))) { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
-    on('standBtn', !walking && (!plazaMode || plazaSeated())); on('camBtn', true); if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
+    on('standBtn', !walking && (!plazaMode || plazaSeated()));
+    // 電腦廣場隱藏視角鈕（用 V）；手機仍顯示
+    on('camBtn', !plazaMode || COARSE);
+    if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     if (plazaMode) {
       const banned = performance.now() < plazaStealBanUntil;
       const pt = walking || !plazaSeated() || banned ? null : plazaStealTarget();
@@ -3843,7 +3911,14 @@ function closeTopModal(): boolean {
 }
 installBackGuard(() => {
   if (closeTopModal()) return 'handled';
-  if (isPlazaActive() && !plazaMode) { void closePlaza(); applySeat(save.seat ?? 'door'); renderLocs(); $('overlay').classList.add('show'); return 'handled'; }
+  if (isPlazaActive() && !plazaMode) {
+    void (async () => {
+      await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door'); clearPlazaLeaveUi();
+      renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show');
+      void refreshPlazaOnlineAfterLeave();
+    })();
+    return 'handled';
+  }
   if (state === 'play') { toast('上工中按返回不會離開；要收工請按「回主選單」或等時間到', '#ffcf8a'); return 'handled'; }
   return 'confirm-exit';
 }, () => state === 'play' || isPlazaActive());

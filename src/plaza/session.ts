@@ -415,9 +415,12 @@ function buildUi() {
 #pzNet{display:none;pointer-events:none;position:absolute;top:calc(env(safe-area-inset-top) + 108px);left:50%;transform:translateX(-50%);max-width:min(86vw,360px);background:rgba(80,28,12,.92);border:2px solid #ffb08a;border-radius:12px;padding:8px 14px;font-weight:900;font-size:14px;color:#ffe0c0;text-align:center;line-height:1.35;z-index:4;box-shadow:0 4px 14px #0008}
 #pzNet.on{display:block}
 #pzNet.ok{background:rgba(20,48,28,.92);border-color:#9be37a;color:#d8ffc8}
-/* 置於 #top／#stats 下方右側，不擋上方狀態列 */
-#pzX{pointer-events:auto;position:absolute;top:calc(env(safe-area-inset-top) + 100px);right:calc(env(safe-area-inset-right) + 8px);left:auto;min-width:42px;height:42px;padding:0 12px;font-size:14px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;white-space:nowrap}
+/* 右下：避開上方狀態列、左下搖桿／聊天 */
+#pzX{pointer-events:auto;position:absolute;top:auto;bottom:calc(env(safe-area-inset-bottom) + 18px);right:calc(env(safe-area-inset-right) + 12px);left:auto;min-width:42px;height:44px;padding:0 14px;font-size:14px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:12px;font-weight:800;white-space:nowrap;box-shadow:2px 2px 0 #1b1208}
 #pzX.hide{display:none}
+@media (pointer:coarse){#pzX{bottom:calc(env(safe-area-inset-bottom) + 16px);right:calc(env(safe-area-inset-right) + 12px);min-height:48px;padding:0 16px;font-size:15px}}
+/* 橫向矮屏視角鈕也在右下，離開鈕改疊在上方 */
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#pzX{bottom:calc(env(safe-area-inset-bottom) + 68px)}}
 /* 聊天放左側，避開右下雨傘／丟殼／偷 */
 #pzChatFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 168px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
 #pzChatFab .pzBadge{display:none;position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e23b2f;color:#fff;font-size:11px;font-weight:900;line-height:18px;text-align:center;box-shadow:0 1px 0 #1b1208;pointer-events:none}
@@ -429,10 +432,11 @@ function buildUi() {
 #pzChatPeek b{color:#ffd23f;font-weight:900}
 #pzChat{display:none;pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 220px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
 #pzChat.open{display:block}
+/* 電腦：聊天鈕底部與「離開廣場」切齊；視窗／預覽叠在鈕上方 */
 @media (pointer:fine){
-  #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 88px)}
-  #pzChatPeek{bottom:calc(env(safe-area-inset-bottom) + 140px)}
-  #pzChat{bottom:calc(env(safe-area-inset-bottom) + 140px)}
+  #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 18px);height:44px}
+  #pzChatPeek{bottom:calc(env(safe-area-inset-bottom) + 70px)}
+  #pzChat{bottom:calc(env(safe-area-inset-bottom) + 70px)}
 }
 /* 電腦寬螢幕：聊天窗加寬，方便看長句 */
 @media (pointer:fine) and (min-width:900px){
@@ -451,15 +455,11 @@ function buildUi() {
 #pzRow{display:flex;gap:6px}
 #pzRow input{flex:1;min-width:0;border-radius:8px;border:2px solid #6b3a12;background:#1a1008;color:#fff6d8;padding:6px 8px;font-size:14px}
 #pzRow button{pointer-events:auto;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;padding:8px 12px}
-#pzSitPrompt{display:none;pointer-events:none;position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 150px);transform:translateX(-50%);background:rgba(20,12,6,.8);border:2px solid #9be37a;border-radius:12px;padding:8px 14px;color:#9be37a;font-weight:900;font-size:14px;text-align:center;z-index:1;max-width:min(90vw,360px)}
-#pzSitPrompt.on{display:block}
-@media (pointer:fine){#pzSitPrompt{bottom:calc(env(safe-area-inset-bottom) + 72px)}}
 @media (max-width:420px){#pzChat{width:min(72vw,240px)}#pzLog{height:52px}}
 </style>
 <button id="pzX" type="button" aria-label="離開廣場">離開廣場</button>
 <div id="pzHud">準備中…</div>
 <div id="pzNet" role="status" aria-live="polite"></div>
-<div id="pzSitPrompt"></div>
 <button id="pzChatFab" type="button" aria-label="聊天">聊天<span class="pzBadge" aria-hidden="true">0</span></button>
 <button id="pzChatPeek" type="button" aria-label="打開聊天"></button>
 <div id="pzChat">
@@ -607,23 +607,12 @@ function setNetBanner(t: string | null, ok = false) {
   el.classList.toggle('ok', ok);
 }
 
-function setSitPrompt(t: string | null) {
-  const el = ui?.querySelector('#pzSitPrompt') as HTMLElement | null;
-  if (!el) return;
-  if (!t) { el.classList.remove('on'); el.textContent = ''; return; }
-  el.textContent = t; el.classList.add('on');
-}
-
-/** 走動時更新附近空位提示 */
+/** 走動時更新附近空位（資訊只走遊戲 #seatCard，不再另顯示底部提示） */
 export function plazaUpdateNear(wx: number, wz: number) {
-  if (!active || seated) { near = null; setSitPrompt(null); view?.highlightNear(null); return null; }
+  if (!active || seated) { near = null; view?.highlightNear(null); return null; }
   const n = nearestFreeSeat(wx, wz, takenSet(true), SIT_DIST);
   near = n ? { pileId: n.pileId, slot: n.slot } : null;
   view?.highlightNear(near);
-  if (near) {
-    const touch = matchMedia('(pointer: coarse)').matches;
-    setSitPrompt(touch ? `第 ${near.pileId + 1} 堆空位　按「坐落」坐下剝蚵` : `第 ${near.pileId + 1} 堆空位　按 E 坐下剝蚵`);
-  } else setSitPrompt(null);
   return near;
 }
 
@@ -650,7 +639,7 @@ export async function plazaTrySit(): Promise<boolean> {
     const pose = seatPose(seat.pileId, seat.slot);
     deps.applySeatPose(pose.pos, pose.yaw);
     view?.highlight(seat.pileId, seat.slot);
-    seated = true; near = null; setSitPrompt(null);
+    seated = true; near = null;
     syncSeatChrome();
     if (first) { shiftStarted = true; deps.beginShift(seat.pileId, seat.slot); }
     else deps.resumeSit(seat.pileId, seat.slot);
@@ -756,7 +745,6 @@ export function tickPlaza(dt: number) {
 export function plazaHideChrome(hide = true) {
   if (!ui) return;
   ui.style.display = hide ? 'none' : '';
-  if (hide) setSitPrompt(null);
 }
 
 export async function plazaReportEarn(raw: number, oysters: number, durationSec: number): Promise<number> {
@@ -785,6 +773,5 @@ export async function closePlaza(leaveSeat = true) {
 }
 
 export function plazaEndCleanup() {
-  setSitPrompt(null);
   plazaHideChrome(true);
 }
