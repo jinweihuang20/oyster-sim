@@ -15,9 +15,10 @@ let yawT = 0;
 function ensure() {
   if (renderer && scene && camera && rig) return;
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(30, 160 / 300, 0.1, 40);
-  camera.position.set(0, 0.82, 3.15);
-  camera.lookAt(0, 0.78, 0);
+  // 全身＋帽子留白：略遠、視線略偏低，避免頭頂被裁
+  camera = new THREE.PerspectiveCamera(34, 160 / 300, 0.1, 40);
+  camera.position.set(0, 0.88, 3.65);
+  camera.lookAt(0, 0.68, 0);
   scene.add(new THREE.AmbientLight(0xfff0e0, 0.55));
   scene.add(new THREE.HemisphereLight(0xfff5e8, 0x3a5568, 0.95));
   const sun = new THREE.DirectionalLight(0xffe4c0, 1.05);
