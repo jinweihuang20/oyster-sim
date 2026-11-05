@@ -79,14 +79,17 @@ const bootEco = (() => {
   return COARSE;
 })();
 const canvas = $('c') as HTMLCanvasElement;
+// 移動端／省電：mediump、關 AA；仍用 high-performance 讓系統選對 GPU，陰影改便宜類型
 const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: !bootEco,
-  powerPreference: bootEco ? 'low-power' : 'high-performance',
+  powerPreference: 'high-performance',
+  precision: bootEco ? 'mediump' : 'highp',
   preserveDrawingBuffer: !!SHOT,
 });
-renderer.setPixelRatio(Math.min(devicePixelRatio, bootEco ? 1.25 : 2));
-renderer.shadowMap.enabled = !bootEco;
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = bootEco ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 // 明亮溫暖晴天：暖日光＋柔藍天（去夢核灰／死板硬邊感）
 scene.background = new THREE.Color(0xa8d0e8);
@@ -109,7 +112,7 @@ const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // ---------- 場景：漁港邊的工寮（明亮溫暖） ----------
 const hemi = new THREE.HemisphereLight(0xfff2e4, 0x7a9a78, 1.05); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffe8c4, 1.15); sun.position.set(-3, 11, -5); scene.add(sun);
-const lamp = new THREE.PointLight(0xffe8c8, 14, 10, 1.6); lamp.position.set(0, 2.55, 0); lamp.castShadow = !bootEco; lamp.shadow.bias = -0.003; lamp.shadow.normalBias = 0.03; lamp.shadow.mapSize.set(bootEco ? 512 : 1024, bootEco ? 512 : 1024); scene.add(lamp);
+const lamp = new THREE.PointLight(0xffe8c8, 14, 10, 1.6); lamp.position.set(0, 2.55, 0); lamp.castShadow = true; lamp.shadow.bias = -0.003; lamp.shadow.normalBias = 0.03; lamp.shadow.mapSize.set(bootEco ? 512 : 1024, bootEco ? 512 : 1024); scene.add(lamp);
 const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff4dc });
 const yardFloor = makeYardFloorMaps(matchMedia('(pointer: coarse)').matches ? 256 : 384);
 const ground = mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({
@@ -271,11 +274,16 @@ type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: nu
 const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE };
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
   const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
-/** 熱切省電：DPR／陰影；antialias 僅啟動時套用；幀率見主迴圈 */
+/** 熱切省電：陰影類型／貼圖解析度；antialias／precision 僅啟動時套用 */
 function applyEcoGfx() {
-  renderer.setPixelRatio(Math.min(devicePixelRatio, mix.eco ? 1.25 : 2));
-  renderer.shadowMap.enabled = !mix.eco;
-  lamp.castShadow = !mix.eco;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = mix.eco ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+  lamp.castShadow = true;
+  const map = mix.eco ? 512 : 1024;
+  lamp.shadow.mapSize.set(map, map);
+  lamp.shadow.map?.dispose();
+  lamp.shadow.map = null;
 }
 applyEcoGfx();
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
@@ -2462,7 +2470,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
-{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：較不發燙，畫質略降' : '已關省電：畫質較高（重新整理後抗鋸齒才會變）', '#9be37a'); }; }
+{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：陰影簡化（重新整理後 AA／精度才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒才會變）', '#9be37a'); }; }
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => $('dex').classList.remove('show');
 
@@ -2522,8 +2530,8 @@ function frameBody() {
   }
   const now = performance.now();
   const paused = isPaused();
-  const idle = state !== 'play' || paused;
-  const minMs = idle ? 1000 / 15 : (mix.eco ? 1000 / 30 : 0);
+  // 選單／暫停限約 15fps；遊玩（含省電）維持滿幀約 60fps
+  const minMs = (state !== 'play' || paused) ? 1000 / 15 : 0;
   if (minMs > 0 && now - lastDrawAt < minMs) { scheduleFrame(); return; }
   lastDrawAt = now;
   if (isDeathmatchActive()) { clock.getDelta(); scheduleFrame(); return; }
