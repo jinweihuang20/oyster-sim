@@ -1,5 +1,5 @@
 export { initUpdate } from './update';
-export { postDiscordFeedback } from './discord';
+export { postDiscordFeedback, postDiscordPlazaChat } from './discord';
 export { installBackGuard } from './backguard';
 export { rbox, rboxEnv, crease, rcyl } from './geo';
 export { importMove, escapeInApp } from './inapp';

@@ -7,6 +7,7 @@ import {
 import { plazaShedPosts } from './props';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaSnapshot, PlazaStealEvent } from './types';
+import { postDiscordPlazaChat } from '../core/discord';
 
 export type PlazaDeps = {
   id: string;
@@ -736,6 +737,8 @@ function pushChat(m: PlazaChat) {
   appendChatRow(m);
   const isSelf = Boolean(deps && (m.pid === deps.id || (!!m.connId && m.connId === client?.connectionId)));
   view?.showChat({ connId: m.connId || undefined, pid: m.pid || undefined, nick: m.nick, text: m.text, self: isSelf });
+  // 僅發言端送 Discord，避免場上每人各推一則
+  if (isSelf && m.text) void postDiscordPlazaChat(m.nick || '剝蚵人', m.text, { pileId: m.pileId });
   // 縮小中：角標＋短暫預覽（不自動展開，避免打斷剝蚵）
   if (!isSelf && !plazaChatIsOpen()) {
     chatUnread = Math.min(99, chatUnread + 1);
