@@ -279,6 +279,7 @@ const radioSt = () => ((save.radioSt ?? 0) % STATIONS.length + STATIONS.length) 
 function pickTrack(): string {
   if (isDeathmatchActive()) return 'dm';
   if (state !== 'play' || tut) return 'temple';
+  if (plazaMode || save.loc === 'plaza') return 'plaza';
   if (gearOn('radio')) return STATIONS[radioSt()].id;
   if (evRun) return 'event';
   const id = locNow().id; return hasBgmTrack(id) ? id : 'home';
@@ -2096,7 +2097,7 @@ function renderItemShop() {
 (window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };
 const go = (len: number) => {
   if (isPlazaPicked()) { launchPlaza(); return; }
-  evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay();
+  enterWorkShed(() => { evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); });
 };
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 function launchDeathmatch(mode: DmMode) {
@@ -2198,6 +2199,38 @@ function showPlazaLoading(show = true) {
   } else {
     el?.classList.remove('on');
   }
+}
+/** 進一般工寮的等待畫面（至少 1 秒） */
+let shedLoadGen = 0;
+function showShedLoading(show = true) {
+  let el = document.getElementById('shedLoad');
+  if (show) {
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'shedLoad';
+      el.innerHTML = `<div class="shedLoadTitle">蚵寮工寮</div><div class="shedLoadSub">正在進場…</div><div class="shedLoadBar" aria-hidden="true"><i></i></div>`;
+      document.body.appendChild(el);
+    }
+    const title = el.querySelector('.shedLoadTitle');
+    if (title) title.textContent = locNow().n || '蚵寮工寮';
+    const sub = el.querySelector('.shedLoadSub'); if (sub) sub.textContent = '正在進場…';
+    el.classList.add('on');
+  } else {
+    el?.classList.remove('on');
+  }
+}
+function enterWorkShed(run: () => void) {
+  if (plazaMode || isPlazaActive() || SHOT) { run(); return; }
+  showShedLoading(true);
+  ['overlay', 'result', 'dex', 'settings', 'shop'].forEach(id => $(id).classList.remove('show'));
+  const gen = ++shedLoadGen;
+  const at = performance.now();
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    try { run(); } finally {
+      const wait = Math.max(0, 1000 - (performance.now() - at));
+      setTimeout(() => { if (gen === shedLoadGen) showShedLoading(false); }, wait);
+    }
+  }));
 }
 function launchPlaza() {
   if (isDeathmatchActive() || isPlazaActive()) return;
@@ -2337,12 +2370,12 @@ function launchPlaza() {
 }
 $('start').onclick = () => {
   if (isPlazaPicked()) { launchPlaza(); return; }
-  evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay();
+  enterWorkShed(() => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); });
 };
 btn('again', () => {
-  if (evLastId != null) evAgain();
+  if (evLastId != null) { void evAgain(); return; }
   else if (plazaMode) return; // 廣場休閒：離開後回主選單，不跑再次上工
-  else startDay();
+  else enterWorkShed(() => startDay());
 });
 btn('resMenu', () => { void (async () => {
   const menuBtn = $('resMenu') as HTMLButtonElement;
@@ -2638,12 +2671,12 @@ initTutorial({
   getNpcs: () => npcs, windUp, giftAlert, svAlert, featAnnounce, newAnnounce,
 });
 
-$('oTut').onclick = () => tutStart();
+$('oTut').onclick = () => enterWorkShed(() => tutStart());
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
   label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : k === 'odd' ? `開到「${ODD[i]?.name ?? '奇物'}」` : k === 'ach' ? `達成金牌成就「${ACHS[i]?.n ?? '成就'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！`, title: () => achTitle() });
 Social.startPresence(() => state === 'play');
-$('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; syncShiftUi(); } tutStart(); };
+$('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; syncShiftUi(); } enterWorkShed(() => tutStart()); };
 (window as any).__oy = { get phase() { return phase; }, get umb() { return { held: umbHeld, t: umbT, vis: umb.visible }; }, get tut() { return tut && TUT[tut.i].id; }, get npcN() { return npcs.length; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, pitchLo(), pitchHi()); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
 // ---------- 截圖模式 ----------
 if (SHOT) setTimeout(() => {
@@ -3540,7 +3573,7 @@ if ((navigator as any).standalone) document.documentElement.classList.add('iosAp
 if (COARSE) for (const id of ['bmGo', 'bmStay', 'psOk', 'tnOk']) { const el = $(id) as HTMLButtonElement; const f = el.onclick; if (!f) continue; el.onclick = null; btn(id, () => f.call(el, new PointerEvent('click'))); }
 initEvents({
   $: (id) => $(id), persist, toast, track, esc, Social, ODD, rarOf, legendTotal, renderDex, renderLocs,
-  audio, startDay, later, endDay, achBump, AS, SHOT, SHIFT,
+  audio, startDay: () => enterWorkShed(() => startDay()), later, endDay, achBump, AS, SHOT, SHIFT,
   get save() { return save; }, get state() { return state; }, get tut() { return tut; },
   get count() { return count; }, set count(v) { count = v; },
   get timeLeft() { return timeLeft; }, get shiftLen() { return shiftLen; }, set shiftLen(v) { shiftLen = v; },
@@ -3564,13 +3597,36 @@ initAchievements({
   get nightShift() { return nightShift; },
   get achFromRes() { return achFromRes; }, set achFromRes(v) { achFromRes = v; },
 });
+function syncMenuBack() {
+  const sh = $('overlay').classList.contains('show');
+  document.body.classList.toggle('menuOn', sh);
+}
 new MutationObserver(() => {
   const sh = $('overlay').classList.contains('show');
+  syncMenuBack();
   if (!sh) setSvPrompted(false);
   if (sh && !evShown) { evFetch(); svFetch(); }
   else if (sh && evShown) svAlert();
   setEvShown(sh);
 }).observe($('overlay'), { attributes: true, attributeFilter: ['class'] });
+syncMenuBack();
 setEvShown($('overlay').classList.contains('show')); evFetch(); svFetch();
 setInterval(() => { if ($('overlay').classList.contains('show') && evCfg) evRender(); if ($('overlay').classList.contains('show') && svList.length) svRender(); }, 30_000);
 (window as any).__ev = { get run() { return evRun; }, get cfg() { return evCfg; }, get hp() { return hp; }, get npcs() { return npcs.length; }, get left() { return timeLeft; }, minDist: () => { let m = 99; for (let i = 0; i < npcs.length; i++) for (let j = i + 1; j < npcs.length; j++) m = Math.min(m, npcs[i].g.position.distanceTo(npcs[j].g.position)); return m; }, refetch: evFetch, meat: (k: number) => { for (let i = 0; i < k; i++) { count++; evMeat(); } updHud(); }, hurt: (d: number) => hurt(d, '測試') };
+
+/** 開場 loading：自頁面開啟起至少 1 秒，且等首幀畫完再淡出 */
+function dismissBoot() {
+  const el = document.getElementById('boot');
+  if (!el || el.classList.contains('out')) return;
+  const bootAt = (window as any).__bootAt ?? performance.now();
+  const wait = Math.max(0, 1000 - (performance.now() - bootAt));
+  setTimeout(() => {
+    if (!el.isConnected || el.classList.contains('out')) return;
+    el.classList.add('out');
+    el.setAttribute('aria-busy', 'false');
+    const bye = () => el.remove();
+    el.addEventListener('transitionend', bye, { once: true });
+    setTimeout(bye, 700);
+  }, wait);
+}
+requestAnimationFrame(() => requestAnimationFrame(dismissBoot));

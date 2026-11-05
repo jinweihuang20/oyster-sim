@@ -510,6 +510,12 @@ function buildUi() {
   hideChatPeek();
 }
 
+function scrollChatLogToEnd() {
+  const log = ui?.querySelector('#pzLog') as HTMLElement | null;
+  if (!log) return;
+  log.scrollTop = log.scrollHeight;
+}
+
 function setChatOpen(open: boolean) {
   const chat = ui?.querySelector('#pzChat') as HTMLElement | null;
   const fab = ui?.querySelector('#pzChatFab') as HTMLElement | null;
@@ -520,6 +526,8 @@ function setChatOpen(open: boolean) {
     chatUnread = 0;
     hideChatPeek();
     syncChatBadge();
+    // 縮小時 display:none，展開後才有正確 scrollHeight；雙 rAF 等 layout
+    requestAnimationFrame(() => requestAnimationFrame(scrollChatLogToEnd));
   }
 }
 

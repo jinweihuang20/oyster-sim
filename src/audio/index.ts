@@ -75,164 +75,183 @@ function vHorn(a: AudioContext, out: AudioNode, t: number, d: number, v: number)
   for (const f of [110, 111.3, 165.5]) { const o = a.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(t); o.stop(t + d + 0.05); }
 }
 const TRACKS: Record<string, Trk> = {
-  // 死鬥：放克律動（約 110 BPM，16 分音符格），音量壓低、低通，不蓋過腳步和音效
-  dm: { bpm: 220, make: (a, out) => {
-    const bus = a.createGain(); bus.gain.value = 0.5; const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; bus.connect(lp).connect(out);
-    const nb = a.createBuffer(1, a.sampleRate * 0.3, a.sampleRate), nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  // 死鬥：輕快律動、溫和低通（少刺耳方波／金屬感）
+  dm: { bpm: 200, make: (a, out) => {
+    const bus = a.createGain(); bus.gain.value = 0.42; const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400; bus.connect(lp).connect(out);
     const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
-    const nz = (t: number, d: number, f: number, v: number, type: BiquadFilterType = 'bandpass') => { const s = a.createBufferSource(); s.buffer = nb; const fl = a.createBiquadFilter(); fl.type = type; fl.frequency.value = f; const g = a.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); s.connect(fl).connect(g).connect(bus); s.start(t); s.stop(t + d + 0.02); };
-    const kick = (t: number, v: number) => { const o = a.createOscillator(), g = a.createGain(); o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2); o.connect(g).connect(bus); o.start(t); o.stop(t + 0.22); };
-    const bass = (t: number, m: number, d: number, v: number) => { const o = a.createOscillator(), f = a.createBiquadFilter(), g = a.createGain(); o.type = 'sawtooth'; o.frequency.value = hz(m); f.type = 'lowpass'; f.Q.value = 6; f.frequency.setValueAtTime(1400, t); f.frequency.exponentialRampToValueAtTime(260, t + d); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(f).connect(g).connect(bus); o.start(t); o.stop(t + d + 0.02); };
-    const clav = (t: number, ch: number[], v: number) => { const f = a.createBiquadFilter(), g = a.createGain(); f.type = 'bandpass'; f.Q.value = 4; f.frequency.setValueAtTime(700, t); f.frequency.exponentialRampToValueAtTime(2200, t + 0.06); f.frequency.exponentialRampToValueAtTime(900, t + 0.11); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.11); f.connect(g).connect(bus);
-      for (const m of ch) { const o = a.createOscillator(); o.type = 'square'; o.frequency.value = hz(m); o.connect(f); o.start(t); o.stop(t + 0.13); } };
-    // E 小調放克：bass 16 格（0＝休止），兩小節換和弦 Em7 → A7
-    const BL = [40, 0, 0, 52, 0, 40, 0, 43, 0, 45, 0, 40, 52, 0, 50, 0], BL2 = [45, 0, 0, 57, 0, 45, 0, 48, 0, 50, 0, 45, 57, 0, 55, 52];
-    const EM7 = [64, 67, 71, 74], A7 = [64, 67, 69, 73];
+    const kick = (t: number, v: number) => { const o = a.createOscillator(), g = a.createGain(); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18); o.connect(g).connect(bus); o.start(t); o.stop(t + 0.2); };
+    const bass = (t: number, m: number, d: number, v: number) => { const o = a.createOscillator(), f = a.createBiquadFilter(), g = a.createGain(); o.type = 'triangle'; o.frequency.value = hz(m); f.type = 'lowpass'; f.frequency.value = 480; g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(f).connect(g).connect(bus); o.start(t); o.stop(t + d + 0.02); };
+    const BL = [40, 0, 0, 47, 0, 40, 0, 43, 0, 45, 0, 40, 47, 0, 45, 0], BL2 = [45, 0, 0, 52, 0, 45, 0, 48, 0, 50, 0, 45, 52, 0, 50, 47];
     return (step, t) => {
       const i = step % 16, bar = Math.floor(step / 16) % 4, sec = bar < 2 ? 0 : 1;
-      if (i === 0 || i === 10 || (i === 7 && bar % 2)) kick(t, 0.5);
-      if (i === 4 || i === 12) nz(t, 0.14, 1800, 0.32); else if (i === 7 || i === 15 || i === 9) nz(t, 0.05, 1600, 0.06); // 鼓邊鬼音
-      if (i % 2 === 0) nz(t, 0.03, 8000, i % 4 === 2 ? 0.07 : 0.035, 'highpass');
-      const bn = (sec ? BL2 : BL)[i]; if (bn) bass(t, bn, i % 4 === 3 ? 0.08 : 0.16, i === 0 ? 0.26 : 0.18);
-      if (i === 2 || i === 6 || i === 11 || (i === 14 && bar % 2)) clav(t, sec ? A7 : EM7, 0.05);
+      if (i === 0 || i === 8) kick(t, 0.38);
+      if (i === 4 || i === 12) vHit(a, bus, t, 'highpass', 4200, 0.06, 0.06);
+      if (i % 4 === 2) vHit(a, bus, t, 'highpass', 7000, 0.025, 0.03);
+      const bn = (sec ? BL2 : BL)[i]; if (bn) bass(t, bn, 0.14, 0.16);
+      if (i === 2 || i === 10) { [64, 67, 71].forEach(n => vPluck(a, bus, hz(n), t, 0.03, 0.18, 'sine')); }
     };
   } },
-  // 主選單／教學／結算：台式電子琴（那卡西／廟口風），原本那首
-  temple: { bpm: 128, make: (a, out) => {
-    const mel = [76, 0, 79, 76, 74, 0, 72, 74, 76, 79, 81, 0, 79, 76, 74, 0, 72, 0, 74, 72, 69, 0, 67, 69, 72, 74, 76, 74, 72, 0, 0, 0,
-                 81, 0, 79, 81, 84, 0, 81, 79, 76, 79, 81, 0, 79, 0, 76, 74, 72, 74, 76, 79, 76, 74, 72, 69, 67, 0, 69, 72, 72, 0, 0, 0];
-    const chords = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50], [48, 52, 55], [45, 48, 52], [43, 47, 50], [48, 52, 55]];
-    const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; lp.connect(out);
+  // 主選單／教學／結算：輕快大調鋼琴感（柔和、無那卡西刺耳感）
+  temple: { bpm: 108, make: (a, out) => {
+    const mel = [72, 0, 74, 76, 0, 79, 76, 0, 74, 72, 0, 69, 72, 0, 0, 0, 74, 0, 76, 74, 72, 0, 69, 67, 69, 72, 74, 72, 69, 0, 0, 0,
+                 76, 0, 79, 81, 0, 79, 76, 0, 74, 72, 0, 74, 76, 0, 0, 0, 74, 0, 72, 69, 67, 0, 69, 72, 72, 0, 0, 0, 0, 0, 0, 0];
+    const chords = [[48, 52, 55], [43, 47, 50], [45, 48, 52], [41, 45, 48], [48, 52, 55], [43, 47, 50], [45, 48, 52], [48, 52, 55]];
+    const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2800; lp.connect(out);
     return (s, t, st) => { const i = s % 64, beat = i % 8, ch = chords[Math.floor(i / 8)], m = mel[i];
-      if (m) { const d = st * (mel[(i + 1) % 64] ? 0.95 : 1.9); for (const [ty, det, mul] of [['square', 0, 1], ['sawtooth', 7, 1], ['triangle', 0, 2]] as [OscillatorType, number, number][]) vTone(a, lp, ty, MN(m) * mul * Math.pow(2, det / 1200), t, d, 0.06, 0.01, 9); }
-      if (beat === 0 || beat === 4) { vPluck(a, out, MN(ch[0] - 12), t, 0.5, st * 1.6); vKick(a, out, t); }
-      if (beat === 2 || beat === 6) { ch.forEach(n => vPluck(a, lp, MN(n + 12), t, 0.05, st * 0.8, 'square')); vHit(a, out, t, 'highpass', 1500, 0.25, 0.12); }
-      vHit(a, out, t, 'highpass', 7000, beat % 2 ? 0.05 : 0.08, 0.04); };
+      if (m) { const d = st * (mel[(i + 1) % 64] ? 0.9 : 1.7); vTone(a, lp, 'triangle', MN(m), t, d, 0.055, 0.02, 4, 5); vTone(a, lp, 'sine', MN(m) * 2, t, d, 0.018, 0.02); }
+      if (beat === 0) { vPluck(a, out, MN(ch[0] - 12), t, 0.28, st * 2.2); ch.forEach(n => vPluck(a, lp, MN(n), t, 0.04, st * 1.8, 'sine')); }
+      if (beat === 4) ch.forEach(n => vPluck(a, lp, MN(n + 12), t, 0.035, st * 1.2, 'triangle'));
+      if (beat === 0 || beat === 4) vHit(a, out, t, 'highpass', 5000, 0.03, 0.04); };
   } },
-  // 自家蚵寮：慢板、木吉他分解和弦 + 口琴，居家
-  home: { bpm: 76, make: (a, out) => {
-    const ch = [[48, 55, 60, 64], [45, 52, 57, 60], [41, 48, 53, 57], [43, 50, 55, 59]]; // C Am F G
-    const mel = [72, 0, 0, 74, 76, 0, 0, 0, 72, 0, 69, 0, 72, 0, 0, 0, 69, 0, 0, 72, 74, 0, 72, 0, 67, 0, 0, 0, 0, 0, 0, 0,
-                 76, 0, 0, 79, 81, 0, 79, 0, 76, 0, 74, 0, 72, 0, 0, 0, 74, 0, 0, 76, 74, 0, 72, 0, 71, 0, 0, 74, 72, 0, 0, 0];
-    const hp = a.createBiquadFilter(); hp.type = 'bandpass'; hp.frequency.value = 1400; hp.Q.value = 0.7; hp.connect(out);
+  // 蚵仔廣場：輕快活潑、多人同樂（大調蹦跳，不刺耳）
+  plaza: { bpm: 126, make: (a, out) => {
+    const mel = [72, 0, 76, 79, 0, 81, 79, 0, 76, 74, 0, 76, 79, 0, 0, 0, 74, 0, 76, 79, 0, 81, 84, 0, 81, 79, 0, 76, 74, 0, 72, 0,
+                 76, 0, 79, 81, 0, 84, 81, 0, 79, 76, 0, 79, 81, 0, 0, 0, 79, 0, 76, 74, 0, 72, 69, 0, 72, 74, 76, 0, 72, 0, 0, 0];
+    const ch = [[48, 52, 55], [53, 57, 60], [55, 59, 62], [48, 52, 55], [50, 53, 57], [45, 48, 52], [43, 47, 50], [48, 52, 55]]; // C F G C Dm Am G C
+    const soft = a.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 3000; soft.connect(out);
+    return (s, t, st) => { const i = s % 64, b = i % 4, c = ch[Math.floor(i / 8)];
+      if (b === 0) { vPluck(a, out, MN(c[0] - 12), t, 0.28, st * 1.3); vKick(a, out, t, 0.32, 105, 42, 0.12); c.forEach(n => vPluck(a, soft, MN(n), t, 0.03, st * 1.1, 'sine')); }
+      if (b === 2) { c.forEach(n => vPluck(a, soft, MN(n + 12), t, 0.04, st * 0.85, 'triangle')); vHit(a, out, t, 'highpass', 5200, 0.045, 0.045); }
+      if (i % 8 === 6) vHit(a, out, t, 'highpass', 7500, 0.03, 0.03);
+      const m = mel[i]; if (m) { const d = st * (mel[(i + 1) % 64] ? 0.85 : 1.5); vTone(a, soft, 'triangle', MN(m), t, d, 0.05, 0.015, 4, 5.5); vTone(a, soft, 'sine', MN(m) * 2, t, d, 0.02, 0.015); }
+      if (i % 32 === 28) { [72, 76, 79].forEach((n, k) => vPluck(a, soft, MN(n + 12), t + k * 0.04, 0.04, 0.35, 'sine')); } };
+  } },
+  // 自家蚵寮：慢板暖陽、分解和弦 + 輕柔主音
+  home: { bpm: 72, make: (a, out) => {
+    const ch = [[48, 55, 60, 64], [43, 50, 55, 59], [45, 52, 57, 60], [41, 48, 53, 57]]; // C G Am F
+    const mel = [72, 0, 0, 74, 76, 0, 0, 0, 74, 0, 72, 0, 69, 0, 0, 0, 67, 0, 0, 69, 72, 0, 74, 0, 72, 0, 0, 0, 0, 0, 0, 0,
+                 76, 0, 0, 74, 72, 0, 69, 0, 72, 0, 74, 0, 76, 0, 0, 0, 74, 0, 0, 72, 69, 0, 67, 0, 69, 0, 0, 72, 72, 0, 0, 0];
+    const soft = a.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 2200; soft.connect(out);
     const arp = [0, 1, 2, 3, 2, 1, 2, 3];
     return (s, t, st) => { const i = s % 64, c = ch[Math.floor(i / 8) % 4], b = i % 8;
-      if (b === 0) vPluck(a, out, MN(c[0] - 12), t, 0.28, st * 3);
-      vPluck(a, out, MN(c[arp[b]]), t + (b % 2 ? 0.012 : 0), 0.13, st * 2.4);
-      const m = mel[i]; if (m) { let d = 1; while (d < 4 && !mel[(i + d) % 64]) d++; vTone(a, hp, 'square', MN(m), t, st * d * 0.92, 0.035, 0.05, 16, 4.5); vTone(a, hp, 'sawtooth', MN(m) * 1.003, t, st * d * 0.92, 0.02, 0.05, 16, 4.5); }
-      if (b === 4) vHit(a, out, t, 'highpass', 5000, 0.025, 0.05); };
+      if (b === 0) vPluck(a, out, MN(c[0] - 12), t, 0.22, st * 3.2);
+      vPluck(a, soft, MN(c[arp[b]]), t + (b % 2 ? 0.01 : 0), 0.1, st * 2.6, 'sine');
+      const m = mel[i]; if (m) { let d = 1; while (d < 4 && !mel[(i + d) % 64]) d++; vTone(a, soft, 'sine', MN(m), t, st * d * 0.94, 0.04, 0.06, 3, 4.5); vTone(a, soft, 'triangle', MN(m), t, st * d * 0.94, 0.015, 0.06); }
+      if (b === 4) vHit(a, out, t, 'highpass', 4500, 0.015, 0.04); };
   } },
-  // 王功漁港：中板、浪聲節奏 + 汽笛、木琴般的旋律（D 多利安）
-  wanggong: { bpm: 104, make: (a, out) => {
-    const mel = [62, 0, 65, 67, 69, 0, 67, 65, 64, 0, 62, 0, 60, 0, 62, 0, 69, 0, 72, 69, 67, 0, 65, 67, 69, 0, 0, 0, 0, 0, 0, 0];
-    const roots = [38, 38, 36, 36, 34, 34, 36, 36];
+  // 王功漁港：清爽海風、大調木琴 + 輕浪節奏（去掉汽笛走音）
+  wanggong: { bpm: 96, make: (a, out) => {
+    const mel = [67, 0, 69, 71, 72, 0, 71, 69, 67, 0, 64, 0, 67, 0, 0, 0, 72, 0, 74, 72, 71, 0, 69, 71, 72, 0, 0, 0, 0, 0, 0, 0];
+    const roots = [43, 43, 45, 45, 41, 41, 43, 43]; // G Am F G
     return (s, t, st) => { const i = s % 64, b = i % 8, r = roots[Math.floor(i / 8)];
-      if (b === 0) { vHit(a, out, t, 'lowpass', 500, 0.22, st * 6, 0.5); vPluck(a, out, MN(r), t, 0.45, st * 3); }
-      if (b === 3 || b === 6) { vHit(a, out, t, 'bandpass', 900, 0.07, st * 2, 0.6); vPluck(a, out, MN(r + 7), t, 0.2, st * 1.5); }
-      if (b === 4) vKick(a, out, t, 0.35, 100, 40, 0.25);
-      const m = mel[i % 32]; if (m && i < 56) { vPluck(a, out, MN(m + 12), t, 0.12, st * 2.2, 'sine'); vPluck(a, out, MN(m + 24), t, 0.03, st * 0.8, 'sine'); }
-      if (s % 128 === 56) vHorn(a, out, t, 1.6, 0.12); if (s % 128 === 60) vHorn(a, out, t, 0.6, 0.1); };
+      if (b === 0) { vHit(a, out, t, 'lowpass', 420, 0.12, st * 5, 0.4); vPluck(a, out, MN(r), t, 0.32, st * 2.8); }
+      if (b === 4) { vPluck(a, out, MN(r + 7), t, 0.14, st * 1.6); vHit(a, out, t, 'highpass', 3800, 0.03, 0.05); }
+      const m = mel[i % 32]; if (m && i < 56) { vPluck(a, out, MN(m + 12), t, 0.1, st * 2.0, 'sine'); vPluck(a, out, MN(m + 19), t, 0.025, st * 1.2, 'sine'); } };
   } },
-  // 東石漁人碼頭：輕快觀光風、手風琴主旋律 + 碰恰伴奏
-  dongshi: { bpm: 136, make: (a, out) => {
-    const mel = [72, 74, 76, 0, 79, 0, 76, 74, 72, 0, 74, 76, 74, 0, 0, 0, 71, 72, 74, 0, 77, 0, 74, 72, 71, 0, 72, 74, 72, 0, 0, 0,
-                 76, 77, 79, 0, 84, 0, 79, 77, 76, 0, 77, 79, 81, 0, 79, 0, 77, 76, 74, 0, 79, 0, 74, 71, 72, 0, 0, 0, 72, 0, 0, 0];
-    const ch = [[48, 52, 55], [48, 52, 55], [43, 47, 50], [43, 47, 50], [48, 52, 55], [41, 45, 48], [43, 47, 50], [48, 52, 55]];
-    const acc = a.createBiquadFilter(); acc.type = 'lowpass'; acc.frequency.value = 2400; const tg = a.createGain(); tg.gain.value = 0.8; lfo(a, 6, 0.2, tg.gain); acc.connect(tg).connect(out);
+  // 東石漁人碼頭：輕快散步曲（去掉手風琴顫音／鋸齒堆疊）
+  dongshi: { bpm: 120, make: (a, out) => {
+    const mel = [72, 0, 74, 76, 0, 79, 76, 0, 74, 72, 0, 74, 76, 0, 0, 0, 71, 0, 72, 74, 0, 76, 74, 0, 72, 71, 0, 72, 74, 0, 0, 0,
+                 76, 0, 79, 81, 0, 79, 76, 0, 74, 72, 0, 74, 76, 0, 79, 0, 76, 0, 74, 72, 0, 69, 72, 0, 72, 0, 0, 0, 0, 0, 0, 0];
+    const ch = [[48, 52, 55], [48, 52, 55], [43, 47, 50], [43, 47, 50], [45, 48, 52], [41, 45, 48], [43, 47, 50], [48, 52, 55]];
+    const soft = a.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 2600; soft.connect(out);
     return (s, t, st) => { const i = s % 64, b = i % 4, c = ch[Math.floor(i / 8)];
-      if (b === 0) { vPluck(a, out, MN(c[0] - 12), t, 0.45, st * 1.4); vKick(a, out, t, 0.5); }
-      if (b === 2) { c.forEach(n => vPluck(a, acc, MN(n + 12), t, 0.04, st * 0.9, 'sawtooth')); vHit(a, out, t, 'highpass', 6000, 0.06, 0.05); }
-      const m = mel[i]; if (m) { const d = st * (mel[(i + 1) % 64] ? 0.9 : 1.8); vTone(a, acc, 'sawtooth', MN(m), t, d, 0.045, 0.015); vTone(a, acc, 'sawtooth', MN(m) * 1.006, t, d, 0.04, 0.015); vTone(a, acc, 'square', MN(m - 12), t, d, 0.02, 0.015); } };
+      if (b === 0) { vPluck(a, out, MN(c[0] - 12), t, 0.3, st * 1.5); vKick(a, out, t, 0.28, 100, 42, 0.14); }
+      if (b === 2) { c.forEach(n => vPluck(a, soft, MN(n + 12), t, 0.035, st * 0.9, 'triangle')); vHit(a, out, t, 'highpass', 5500, 0.035, 0.04); }
+      const m = mel[i]; if (m) { const d = st * (mel[(i + 1) % 64] ? 0.88 : 1.6); vTone(a, soft, 'triangle', MN(m), t, d, 0.045, 0.02, 3, 5); vTone(a, soft, 'sine', MN(m) * 2, t, d, 0.015, 0.02); } };
   } },
-  // 布袋蚵寮大廠：快、機械工廠節拍（金屬敲擊、蒸氣聲）、趕工感
-  budai: { bpm: 152, make: (a, out) => {
-    const riff = [45, 45, 57, 45, 48, 45, 55, 45, 45, 45, 57, 45, 50, 48, 47, 43];
-    const lead = [69, 0, 72, 0, 71, 0, 69, 0, 76, 0, 74, 72, 71, 0, 0, 0];
+  // 布袋蚵寮大廠：稍快但明亮的工作節奏（去掉金屬工廠／蒸氣刺耳）
+  budai: { bpm: 132, make: (a, out) => {
+    const riff = [48, 0, 55, 48, 52, 0, 55, 48, 50, 0, 57, 50, 53, 52, 50, 48];
+    const lead = [72, 0, 74, 0, 76, 0, 74, 0, 79, 0, 76, 74, 72, 0, 0, 0];
+    const soft = a.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 2400; soft.connect(out);
     return (s, t, st) => { const i = s % 64, b = i % 4;
-      if (b === 0) vKick(a, out, t, 0.65, 120, 40, 0.15);
-      if (b === 2) { vHit(a, out, t, 'bandpass', 2400, 0.16, 0.07, 6); vPluck(a, out, 1870, t, 0.03, 0.06, 'square'); }
-      if (i % 8 === 7) vPluck(a, out, 2630, t, 0.035, 0.1, 'square');
-      vPluck(a, out, MN(riff[i % 16] - 12), t, 0.2, st * 0.7, 'sawtooth');
-      vHit(a, out, t, 'highpass', 8000, i % 2 ? 0.03 : 0.05, 0.03);
-      if (i % 32 === 30) vHit(a, out, t, 'highpass', 3000, 0.08, st * 3);
-      if (s % 128 >= 64) { const m = lead[i % 16]; if (m) vTone(a, out, 'square', MN(m), t, st * 0.9, 0.03, 0.005); } };
+      if (b === 0) vKick(a, out, t, 0.4, 110, 42, 0.12);
+      if (b === 2) vHit(a, out, t, 'highpass', 4800, 0.05, 0.05);
+      const n = riff[i % 16]; if (n) vPluck(a, soft, MN(n - 12), t, 0.14, st * 0.75, 'triangle');
+      if (i % 2 === 0) vHit(a, out, t, 'highpass', 7000, 0.018, 0.025);
+      if (s % 128 >= 64) { const m = lead[i % 16]; if (m) vTone(a, soft, 'sine', MN(m), t, st * 0.85, 0.035, 0.01, 3, 5); } };
   } },
-  // 活動場景：鑼鼓陣頭（大鼓、鈸、鑼）+ 嗩吶般的主旋律，150 BPM 熱鬧緊湊
-  event: { bpm: 150, make: (a, out) => {
-    const sn = a.createBiquadFilter(); sn.type = 'bandpass'; sn.frequency.value = 1300; sn.Q.value = 1.4; const sg = a.createGain(); sg.gain.value = 2.2; sn.connect(sg).connect(out);
-    const mel = [79, 81, 79, 76, 74, 76, 79, 0, 81, 84, 81, 79, 76, 0, 79, 0, 74, 76, 79, 76, 74, 72, 69, 0, 72, 74, 76, 74, 72, 0, 72, 0];
-    const drum = [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0];
+  // 活動場景：熱鬧但仍明亮（輕鑼＋柔主旋律，少嗩吶／重鈸）
+  event: { bpm: 128, make: (a, out) => {
+    const soft = a.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 2600; soft.connect(out);
+    const mel = [76, 0, 79, 76, 74, 0, 76, 0, 79, 81, 79, 76, 74, 0, 72, 0, 74, 76, 79, 76, 74, 72, 69, 0, 72, 74, 76, 74, 72, 0, 72, 0];
+    const drum = [1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0];
     return (s, t, st) => { const i = s % 64, b = i % 16;
-      if (drum[b]) vKick(a, out, t, b % 4 === 0 ? 0.8 : 0.45, 110, 55, 0.22);
-      if (b % 4 === 2) vHit(a, out, t, 'highpass', 4500, 0.2, st * 1.6);
-      if (b === 0 && i % 32 === 0) vGong(a, out, t, 98, 0.35, 2.2);
-      if (b === 8) vGong(a, out, t, 440, 0.12, 0.5);
-      vPluck(a, out, 1250, t, 0.04, 0.03, 'square');
-      if (s % 128 >= 16) { const m = mel[i % 32]; if (m) vTone(a, sn, 'sawtooth', MN(m), t, st * (mel[(i + 1) % 32] ? 0.92 : 1.8), 0.05, 0.01, 22, 6.5); } };
+      if (drum[b]) vKick(a, out, t, b % 4 === 0 ? 0.45 : 0.28, 100, 48, 0.16);
+      if (b % 4 === 2) vHit(a, out, t, 'highpass', 5000, 0.06, 0.08);
+      if (b === 0 && i % 32 === 0) vGong(a, out, t, 130, 0.12, 1.6);
+      if (s % 128 >= 16) { const m = mel[i % 32]; if (m) vTone(a, soft, 'triangle', MN(m), t, st * (mel[(i + 1) % 32] ? 0.9 : 1.6), 0.04, 0.015, 5, 5); } };
   } },
-  // 收音機：懷舊歌謠台（原本的收音機曲，A 小調五聲三拍子）
-  r_old: { bpm: 84, make: (a, out) => {
-    const mel = [69, 0, 72, 74, 0, 76, 74, 0, 72, 69, 0, 0, 67, 0, 69, 72, 0, 74, 69, 0, 0, 0, 0, 0,
-                 76, 0, 79, 76, 0, 74, 72, 0, 74, 76, 0, 0, 74, 0, 72, 69, 0, 67, 69, 0, 0, 0, 0, 0,
-                 72, 0, 74, 76, 0, 79, 81, 0, 79, 76, 0, 0, 74, 0, 76, 74, 0, 72, 69, 0, 72, 74, 0, 0,
+  // 收音機：懷舊歌謠台（大調溫暖、輕顫音）
+  r_old: { bpm: 80, make: (a, out) => {
+    const mel = [72, 0, 74, 76, 0, 79, 76, 0, 74, 72, 0, 0, 69, 0, 72, 74, 0, 76, 72, 0, 0, 0, 0, 0,
+                 76, 0, 79, 81, 0, 79, 76, 0, 74, 72, 0, 0, 74, 0, 76, 74, 0, 72, 69, 0, 0, 0, 0, 0,
+                 72, 0, 74, 76, 0, 79, 81, 0, 79, 76, 0, 0, 74, 0, 72, 69, 0, 67, 69, 0, 72, 74, 0, 0,
                  76, 0, 74, 72, 0, 69, 67, 0, 69, 72, 0, 0, 69, 0, 67, 64, 0, 67, 69, 0, 0, 0, 0, 0];
-    const roots = [45, 43, 41, 40, 45, 48, 43, 45];
+    const roots = [48, 45, 41, 43, 48, 45, 43, 48]; // C Am F G
     return (s, t, st) => { const i = s % 96, b = i % 6, root = roots[Math.floor(i / 12) % 8], m = mel[i];
-      if (m) { let d = 1; while (d < 4 && !mel[(i + d) % 96]) d++; vTone(a, out, 'triangle', MN(m), t, st * d * 0.95, 0.11, 0.04, 14, 5); vTone(a, out, 'sine', MN(m) * 2, t, st * d * 0.95, 0.04, 0.04, 14, 5); }
-      if (b === 0) vPluck(a, out, MN(root), t, 0.32, st * 1.8); else if (b === 2 || b === 4) { vPluck(a, out, MN(root + 12 + (b === 2 ? 3 : 7)), t, 0.09, st * 1.8); vPluck(a, out, MN(root + 19), t, 0.06, st * 1.8); } };
+      if (m) { let d = 1; while (d < 4 && !mel[(i + d) % 96]) d++; vTone(a, out, 'triangle', MN(m), t, st * d * 0.95, 0.09, 0.05, 6, 5); vTone(a, out, 'sine', MN(m) * 2, t, st * d * 0.95, 0.03, 0.05); }
+      if (b === 0) vPluck(a, out, MN(root), t, 0.24, st * 2); else if (b === 2 || b === 4) { vPluck(a, out, MN(root + 12 + (b === 2 ? 4 : 7)), t, 0.07, st * 1.6, 'sine'); } };
   } },
-  // 收音機：廣播電台（主持人講話般的高低起伏咕噥聲 + 每段開頭的台呼小鈴聲）
-  r_talk: { bpm: 120, make: (a, out) => {
-    const fm = a.createBiquadFilter(); fm.type = 'bandpass'; fm.frequency.value = 900; fm.Q.value = 2.5; fm.connect(out);
-    let pitch = 150;
-    return (s, t, st) => { const i = s % 128;
-      if (i < 6) { const j = [79, 0, 76, 0, 72, 84][i]; if (j) { vPluck(a, out, MN(j), t, 0.12, 0.7, 'sine'); vPluck(a, out, MN(j + 12), t, 0.03, 0.4, 'sine'); } return; }
-      if (i < 10 || (i % 32 > 27)) return; // 換氣停頓
-      if (Math.random() < 0.18) return;
-      pitch = Math.max(110, Math.min(220, pitch + (Math.random() - 0.5) * 40)); const d = st * (0.6 + Math.random() * 0.9);
-      const o = a.createOscillator(), g = a.createGain(); o.type = 'sawtooth'; o.frequency.setValueAtTime(pitch, t); o.frequency.linearRampToValueAtTime(pitch * (0.85 + Math.random() * 0.3), t + d);
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.09, t + 0.03); g.gain.linearRampToValueAtTime(0, t + d); o.connect(g).connect(fm); o.start(t); o.stop(t + d + 0.02);
-      fm.frequency.setValueAtTime(600 + Math.random() * 900, t); };
+  // 收音機：廣播電台（柔和台呼鈴 + 輕鬆分解和弦，去掉咕噥人聲）
+  r_talk: { bpm: 100, make: (a, out) => {
+    const soft = a.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 2000; soft.connect(out);
+    const ch = [[48, 52, 55, 60], [45, 48, 52, 57], [41, 45, 48, 53], [43, 47, 50, 55]];
+    const arp = [0, 2, 3, 2, 1, 2, 3, 1];
+    return (s, t, st) => { const i = s % 128, b = i % 8, c = ch[Math.floor(i / 32) % 4];
+      if (i < 8) { const j = [79, 0, 76, 0, 72, 0, 84, 0][i]; if (j) { vPluck(a, out, MN(j), t, 0.1, 0.55, 'sine'); vPluck(a, out, MN(j + 12), t, 0.025, 0.35, 'sine'); } return; }
+      if (b === 0) vPluck(a, out, MN(c[0] - 12), t, 0.18, st * 2.4);
+      vPluck(a, soft, MN(c[arp[b]]), t, 0.06, st * 1.8, 'sine');
+      if (i % 32 === 16) vTone(a, soft, 'sine', MN(c[3] + 12), t, st * 3, 0.03, 0.08); };
   } },
-  // 收音機：台語老歌（慢板 3/4 演歌風，寬顫音的主旋律 + 吉他）
-  r_taigi: { bpm: 66, make: (a, out) => {
-    const mel = [64, 0, 0, 69, 0, 71, 72, 0, 0, 0, 71, 69, 71, 0, 0, 72, 71, 69, 64, 0, 0, 0, 0, 0,
-                 69, 0, 0, 72, 0, 74, 76, 0, 0, 77, 76, 74, 76, 0, 0, 72, 0, 71, 69, 0, 0, 0, 0, 0];
-    const roots = [45, 45, 40, 40, 45, 41, 40, 45];
+  // 收音機：台語老歌（溫柔慢板，顫音收斂）
+  r_taigi: { bpm: 64, make: (a, out) => {
+    const mel = [67, 0, 0, 69, 0, 71, 72, 0, 0, 0, 71, 69, 71, 0, 0, 72, 71, 69, 67, 0, 0, 0, 0, 0,
+                 69, 0, 0, 72, 0, 74, 76, 0, 0, 74, 72, 71, 72, 0, 0, 69, 0, 67, 64, 0, 0, 0, 0, 0];
+    const roots = [48, 48, 43, 43, 45, 41, 43, 48];
     return (s, t, st) => { const i = s % 48, b = i % 6, r = roots[Math.floor(i / 6) % 8], m = mel[i];
-      if (m) { let d = 1; while (d < 6 && !mel[(i + d) % 48]) d++; vTone(a, out, 'triangle', MN(m), t, st * d * 0.96, 0.12, 0.06, 28, 5.5); vTone(a, out, 'square', MN(m), t, st * d * 0.96, 0.015, 0.06, 28, 5.5); }
-      if (b === 0) vPluck(a, out, MN(r - 12), t, 0.3, st * 2.5); else if (b === 2 || b === 4) [r + 3, r + 7].forEach(n => vPluck(a, out, MN(n), t, 0.07, st * 1.5)); };
+      if (m) { let d = 1; while (d < 6 && !mel[(i + d) % 48]) d++; vTone(a, out, 'triangle', MN(m), t, st * d * 0.96, 0.1, 0.07, 8, 5); vTone(a, out, 'sine', MN(m) * 2, t, st * d * 0.96, 0.03, 0.07); }
+      if (b === 0) vPluck(a, out, MN(r - 12), t, 0.24, st * 2.6); else if (b === 2 || b === 4) [r + 4, r + 7].forEach(n => vPluck(a, out, MN(n), t, 0.055, st * 1.5, 'sine')); };
   } },
 };
 export const STATIONS = [{ id: 'r_old', n: '懷舊歌謠台' }, { id: 'r_talk', n: '廣播電台' }, { id: 'r_taigi', n: '台語老歌' }];
 type Live = { key: string; g: GainNode; fn: Player; st: number; step: number; next: number; dead: number };
 let live: Live[] = [], curTrack = '', radioBus: GainNode | null = null, radioNoise: GainNode | null = null;
 function setupRadioBus(a: AudioContext) {
-  // AM 收音機味：高通 + 輕微失真 + 低通 + 沙沙聲
-  const hp = a.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 380;
-  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 1.2;
-  const ws = a.createWaveShaper(); const cv = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 128 - 1; cv[i] = Math.tanh(x * 2.2) / Math.tanh(2.2); } ws.curve = cv;
-  radioBus = a.createGain(); radioBus.gain.value = 0.9; radioBus.connect(hp).connect(ws).connect(lp).connect(musG);
-  const sb = a.createBuffer(1, a.sampleRate * 2, a.sampleRate), sd = sb.getChannelData(0); for (let i = 0; i < sd.length; i++) sd[i] = (Math.random() * 2 - 1) * (Math.random() < 0.002 ? 1 : 0.35);
-  const sn = a.createBufferSource(); sn.buffer = sb; sn.loop = true; const sf = a.createBiquadFilter(); sf.type = 'bandpass'; sf.frequency.value = 1800; sf.Q.value = 0.6;
-  radioNoise = a.createGain(); radioNoise.gain.value = 0; const sg = a.createGain(); sg.gain.value = 0.035; lfo(a, 0.23, 0.015, sg.gain);
+  // 輕收音機味：溫和高通／低通 + 極淡沙沙（少失真、少刺耳）
+  const hp = a.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 220;
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; lp.Q.value = 0.7;
+  radioBus = a.createGain(); radioBus.gain.value = 0.95; radioBus.connect(hp).connect(lp).connect(musG);
+  const sb = a.createBuffer(1, a.sampleRate * 2, a.sampleRate), sd = sb.getChannelData(0); for (let i = 0; i < sd.length; i++) sd[i] = (Math.random() * 2 - 1) * 0.25;
+  const sn = a.createBufferSource(); sn.buffer = sb; sn.loop = true; const sf = a.createBiquadFilter(); sf.type = 'bandpass'; sf.frequency.value = 1600; sf.Q.value = 0.5;
+  radioNoise = a.createGain(); radioNoise.gain.value = 0; const sg = a.createGain(); sg.gain.value = 0.012; lfo(a, 0.18, 0.006, sg.gain);
   sn.connect(sf).connect(sg).connect(radioNoise).connect(musG); sn.start();
 }
 function pickTrack(): string { return D().pickTrack(); }
+const BGM_FADE = 1.2;
 function musicTick(a: AudioContext) {
   const k = pickTrack(), now = a.currentTime;
   if (k !== curTrack) {
+    const had = !!curTrack && live.some(l => !l.dead);
     curTrack = k;
-    for (const l of live) if (!l.dead) { l.g.gain.cancelScheduledValues(now); l.g.gain.setValueAtTime(l.g.gain.value, now); l.g.gain.linearRampToValueAtTime(0, now + 0.8); l.dead = now + 0.9; }
-    const tr = TRACKS[k], g = a.createGain(), isR = k.startsWith('r_');
-    g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(1, now + 0.8); g.connect(isR ? radioBus! : musG);
-    live.push({ key: k, g, fn: tr.make(a, g), st: 60 / tr.bpm / 2, step: 0, next: now + 0.05, dead: 0 });
-    if (radioNoise) { radioNoise.gain.cancelScheduledValues(now); radioNoise.gain.setValueAtTime(radioNoise.gain.value, now); radioNoise.gain.linearRampToValueAtTime(isR ? 1 : 0, now + 0.5); }
+    // 舊曲：停止排新音符，只靠 gain 淡出（否則一直攻擊會聽不出淡出）
+    for (const l of live) if (!l.dead) {
+      l.g.gain.cancelScheduledValues(now);
+      l.g.gain.setValueAtTime(Math.max(0.0001, l.g.gain.value), now);
+      l.g.gain.linearRampToValueAtTime(0.0001, now + BGM_FADE);
+      l.dead = now + BGM_FADE + 0.05;
+    }
+    const tr = TRACKS[k];
+    if (tr) {
+      const g = a.createGain(), isR = k.startsWith('r_');
+      const inAt = had ? now + BGM_FADE * 0.45 : now;
+      g.gain.setValueAtTime(0, now);
+      g.gain.setValueAtTime(0, inAt);
+      g.gain.linearRampToValueAtTime(1, inAt + BGM_FADE * 0.75);
+      g.connect(isR ? radioBus! : musG);
+      live.push({ key: k, g, fn: tr.make(a, g), st: 60 / tr.bpm / 2, step: 0, next: inAt + 0.05, dead: 0 });
+      if (radioNoise) {
+        radioNoise.gain.cancelScheduledValues(now);
+        radioNoise.gain.setValueAtTime(Math.max(0.0001, radioNoise.gain.value), now);
+        radioNoise.gain.linearRampToValueAtTime(isR ? 1 : 0.0001, now + BGM_FADE);
+      }
+    }
   }
-  live = live.filter(l => { if (l.dead && now > l.dead) { setTimeout(() => l.g.disconnect(), 3000); return false; } return true; });
+  live = live.filter(l => { if (l.dead && now > l.dead) { setTimeout(() => { try { l.g.disconnect(); } catch { /* */ } }, 500); return false; } return true; });
   for (const l of live) {
+    if (l.dead) continue; // 淡出中不再排程新音
     if (l.next < now - 0.5) l.next = now + 0.05; // 從背景回來／卡頓後不要一次補一大堆音
-    while (l.next < now + 0.25) { if (!l.dead || l.next < l.dead) l.fn(l.step, l.next, l.st); l.next += l.st; l.step++; }
+    while (l.next < now + 0.25) { l.fn(l.step, l.next, l.st); l.next += l.st; l.step++; }
   }
 }
 function startMusic(a: AudioContext) {
