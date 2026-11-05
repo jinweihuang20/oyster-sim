@@ -3,68 +3,90 @@ import { makePlayerAvatar, posePlazaHangArms, type PlayerRig } from './dm/charac
 import { makeMeshHelpers } from './dm/mesh';
 import { applyOutfitToRig, type OutfitIds } from './equipVisual';
 
+export type EqSlot = 'head' | 'hand' | 'body' | 'legs' | 'feet';
+
 /**
- * 裝備頁人物預覽：與廣場第三人稱同款 makePlayerAvatar。
- * 正交相機對齊 viewBox 160×300 部位指引；lift 把腳抬離地板，帽頂仍在 frustum 內。
+ * 裝備頁全身預覽。
+ * 固定透視取景（角色腳≈0、帽頂≈1.85），不再用 bbox fit（易算錯只剩上半身）。
  */
-export const EQ_FIG = {
-  w: 160, h: 300,
-  /** 世界 Y：腳底略高於 bottom，帽頂略低於 bottom+height */
-  bottom: 0.04, height: 2.16,
-  scale: 1.08,
-  lift: 0.2,
-} as const;
+const YAW0 = Math.PI;
 
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
-let camera: THREE.OrthographicCamera | null = null;
+let camera: THREE.PerspectiveCamera | null = null;
 let rig: PlayerRig | null = null;
 let hostEl: HTMLElement | null = null;
 let raf = 0;
 let yawT = 0;
+const _v = new THREE.Vector3();
+const _box = new THREE.Box3();
+const _tmp = new THREE.Vector3();
 
-function frameCamera(cam: THREE.OrthographicCamera) {
-  const { bottom, height, w, h } = EQ_FIG;
-  const midY = bottom + height / 2;
-  const halfH = height / 2;
-  const halfW = halfH * (w / h);
-  cam.left = -halfW;
-  cam.right = halfW;
-  cam.top = midY + halfH;
-  cam.bottom = midY - halfH;
-  cam.near = 0.1;
-  cam.far = 40;
-  cam.position.set(0, midY, 5);
-  cam.lookAt(0, midY, 0);
-  cam.updateProjectionMatrix();
+function placeRig(yaw: number) {
+  if (!rig) return;
+  rig.outer.scale.setScalar(1);
+  rig.outer.position.set(0, 0, 0);
+  rig.outer.rotation.set(0, yaw, 0);
 }
 
-function placeRig() {
-  if (!rig) return;
-  rig.outer.scale.setScalar(EQ_FIG.scale);
-  rig.outer.position.set(0, EQ_FIG.lift, 0);
+/** 全身入鏡：畫面中人物偏下，腳靠近地墊陰影 */
+function frameCamera(aspect: number) {
+  if (!camera) return;
+  camera.fov = 30;
+  camera.aspect = Math.max(0.3, aspect);
+  // 對準略高讓人偏下靠陰影；略拉遠避免腳被裁切
+  camera.position.set(0, 1.0, 3.75);
+  camera.near = 0.05;
+  camera.far = 40;
+  camera.lookAt(0, 1.02, 0);
+  camera.updateProjectionMatrix();
+}
+
+function hatWorldCenter(out: THREE.Vector3) {
+  if (!rig) return out.set(0, 1.55, 0);
+  rig.outer.updateMatrixWorld(true);
+  if (rig.hatG.children.length) {
+    _box.setFromObject(rig.hatG);
+    if (!_box.isEmpty()) return _box.getCenter(out);
+  }
+  return rig.head.getWorldPosition(out).add(_tmp.set(0, 0.16, 0));
+}
+
+function disposePreview() {
+  if (raf) cancelAnimationFrame(raf);
+  raf = 0;
+  if (renderer) {
+    renderer.dispose();
+    renderer.domElement.remove();
+  }
+  if (rig) {
+    scene?.remove(rig.outer);
+    rig = null;
+  }
+  scene = null;
+  camera = null;
+  renderer = null;
+  hostEl = null;
 }
 
 function ensure() {
-  if (renderer && scene && camera && rig) {
-    placeRig();
-    return;
-  }
+  if (renderer && scene && camera && rig) return;
+  disposePreview();
   scene = new THREE.Scene();
-  camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 40);
-  frameCamera(camera);
-  scene.add(new THREE.AmbientLight(0xfff0e0, 0.55));
-  scene.add(new THREE.HemisphereLight(0xfff5e8, 0x3a5568, 0.95));
+  camera = new THREE.PerspectiveCamera(30, 160 / 300, 0.05, 40);
+  frameCamera(160 / 300);
+  scene.add(new THREE.AmbientLight(0xfff0e0, 0.6));
+  scene.add(new THREE.HemisphereLight(0xfff5e8, 0x3a5568, 1));
   const sun = new THREE.DirectionalLight(0xffe4c0, 1.05);
-  sun.position.set(1.6, 3.2, 2.4);
+  sun.position.set(1.8, 3.4, 2.6);
   scene.add(sun);
-  const fill = new THREE.DirectionalLight(0xb8d0e8, 0.35);
+  const fill = new THREE.DirectionalLight(0xb8d0e8, 0.4);
   fill.position.set(-2, 1.2, -1);
   scene.add(fill);
   const { M, add } = makeMeshHelpers(scene, true);
   rig = makePlayerAvatar({ shirt: 0xc45c26, hair: 0x222222, pants: 0x2a2a40 }, M, add, true);
-  placeRig();
   posePlazaHangArms(rig);
+  placeRig(YAW0);
   scene.add(rig.outer);
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
@@ -72,46 +94,111 @@ function ensure() {
   renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;pointer-events:none';
 }
 
+function worldToStagePct(world: THREE.Vector3, stage: HTMLElement, fig: HTMLElement): { x: number; y: number } | null {
+  if (!camera) return null;
+  _v.copy(world).project(camera);
+  if (!Number.isFinite(_v.x) || !Number.isFinite(_v.y)) return null;
+  const fr = fig.getBoundingClientRect();
+  const sr = stage.getBoundingClientRect();
+  if (fr.width < 2 || fr.height < 2 || sr.width < 2 || sr.height < 2) return null;
+  const px = fr.left + (_v.x + 1) * 0.5 * fr.width;
+  const py = fr.top + (1 - _v.y) * 0.5 * fr.height;
+  return {
+    x: ((px - sr.left) / sr.width) * 100,
+    y: ((py - sr.top) / sr.height) * 100,
+  };
+}
+
+function anchorWorld(slot: EqSlot, out: THREE.Vector3): THREE.Vector3 {
+  if (!rig) return out.set(0, 1, 0);
+  rig.outer.updateMatrixWorld(true);
+  switch (slot) {
+    case 'head':
+      return hatWorldCenter(out);
+    case 'body':
+      return rig.torso.getWorldPosition(out).add(_tmp.set(0, 0.06, 0));
+    case 'hand': {
+      const a = rig.lowerR.getWorldPosition(_tmp);
+      const b = rig.upperR.getWorldPosition(out);
+      return out.copy(a).add(b).multiplyScalar(0.5);
+    }
+    case 'legs': {
+      const a = rig.legL.getWorldPosition(_tmp);
+      const b = rig.legR.getWorldPosition(out);
+      return out.copy(a).add(b).multiplyScalar(0.5).add(_tmp.set(0, -0.14, 0));
+    }
+    case 'feet': {
+      const a = rig.shinL.getWorldPosition(_tmp);
+      const b = rig.shinR.getWorldPosition(out);
+      return out.copy(a).add(b).multiplyScalar(0.5).add(_tmp.set(0, -0.32, 0));
+    }
+  }
+}
+
+function updateGuideDom() {
+  if (!rig || !camera || !hostEl) return;
+  const stage = hostEl.closest('.eqStage') as HTMLElement | null;
+  if (!stage) return;
+  for (const s of ['head', 'hand', 'body', 'legs', 'feet'] as EqSlot[]) {
+    const p = worldToStagePct(anchorWorld(s, _v), stage, hostEl);
+    if (!p) continue;
+    const hit = stage.querySelector<HTMLElement>(`.eqHit[data-slot="${s}"]`);
+    if (hit) { hit.style.left = `${p.x}%`; hit.style.top = `${p.y}%`; }
+    const line = stage.querySelector(`.eqLines line[data-slot="${s}"]`);
+    const circ = stage.querySelector(`.eqLines circle[data-slot="${s}"]`);
+    if (line) {
+      line.setAttribute('x2', p.x.toFixed(2));
+      line.setAttribute('y2', p.y.toFixed(2));
+    }
+    if (circ) {
+      circ.setAttribute('cx', p.x.toFixed(2));
+      circ.setAttribute('cy', p.y.toFixed(2));
+    }
+  }
+}
+
 function loop() {
   raf = 0;
   if (!renderer || !scene || !camera || !rig || !hostEl?.isConnected) return;
   if (!document.getElementById('equip')?.classList.contains('show')) return;
   const w = hostEl.clientWidth, h = hostEl.clientHeight;
-  if (w > 0 && h > 0) {
-    const pr = Math.min(devicePixelRatio || 1, 2);
-    renderer.setPixelRatio(pr);
-    renderer.setSize(w, h, false);
-    frameCamera(camera);
-  }
   yawT += 0.01;
-  // 正面朝鏡頭；極小晃動
-  placeRig();
-  rig.outer.rotation.y = Math.PI + Math.sin(yawT) * 0.06;
+  placeRig(YAW0 + Math.sin(yawT) * 0.04);
+  if (w > 2 && h > 2) {
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    renderer.setSize(w, h, false);
+    frameCamera(w / h);
+  }
   renderer.render(scene, camera);
+  updateGuideDom();
   raf = requestAnimationFrame(loop);
 }
 
-/** 掛到裝備舞台並套上當前穿搭；可重入（renderEquip 重畫 DOM 後再掛） */
 export function syncEqPreview(host: HTMLElement, outfit: OutfitIds) {
+  // 換 DOM 節點時重建，避免舊 canvas／相機狀態殘留
+  if (hostEl && hostEl !== host) disposePreview();
   ensure();
   if (!renderer || !rig) return;
-  if (hostEl !== host) {
-    hostEl = host;
-    host.replaceChildren(renderer.domElement);
-  } else if (renderer.domElement.parentElement !== host) {
-    host.replaceChildren(renderer.domElement);
-  }
+  hostEl = host;
+  host.replaceChildren(renderer.domElement);
   applyOutfitToRig(rig, outfit);
   posePlazaHangArms(rig);
-  placeRig();
+  placeRig(YAW0);
   if (!raf) raf = requestAnimationFrame(loop);
+  requestAnimationFrame(() => {
+    if (hostEl && hostEl.clientWidth > 2) {
+      frameCamera(hostEl.clientWidth / hostEl.clientHeight);
+      updateGuideDom();
+    }
+  });
 }
 
 export function refreshEqPreview(outfit: OutfitIds) {
   if (!rig || !hostEl?.isConnected) return;
   applyOutfitToRig(rig, outfit);
   posePlazaHangArms(rig);
-  placeRig();
+  placeRig(YAW0);
+  updateGuideDom();
 }
 
 export function stopEqPreview() {

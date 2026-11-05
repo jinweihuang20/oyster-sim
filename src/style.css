@@ -678,14 +678,15 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .eqStats small{font-size:11px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.eqStats b{font:900 18px var(--sign);color:var(--redD)}
 .eqBoard .eqNone{color:var(--paint)!important;font-size:13px;margin:0;text-align:center}
 .eqStage{position:relative;width:100%;max-width:400px;margin:0 auto;aspect-ratio:3/4;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);overflow:hidden;background:#2c4a63}
-.eqShed{position:absolute;inset:0;width:100%;height:100%}
-/* 底緣停在地墊上方，避免人物腳沉進地板 */
-.eqFigW{position:absolute;left:50%;top:4%;height:75%;aspect-ratio:160/300;transform:translateX(-50%)}
-.eqFigW .eqFig{position:static;width:100%;height:100%;display:block}
-.eqLines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.eqShed{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+/* 人物在地墊／陰影之上；預覽區延伸到陰影帶，避免腳被地板 SVG 蓋住 */
+.eqFigW{position:absolute;left:50%;top:2%;bottom:12%;transform:translateX(-50%);aspect-ratio:160/300;width:auto;height:auto;max-height:86%;overflow:visible;pointer-events:none;z-index:2}
+.eqFigW .eqFig{position:absolute;inset:0;width:100%;height:100%;display:block}
+.eqLines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
 .eqLines line{stroke:#fff6d8;stroke-width:1.6;stroke-dasharray:4 3;vector-effect:non-scaling-stroke;opacity:.9}.eqLines circle{fill:#ffd25a;stroke:var(--ink);stroke-width:1;vector-effect:non-scaling-stroke}
-.panel .eqHit{position:absolute;width:44px;height:44px;min-width:0!important;min-height:0!important;margin:0!important;padding:0;transform:translate(-50%,-50%);background:transparent;border:0;box-shadow:none;border-radius:50%}
-.panel .eqCard{position:absolute;width:30%;height:27%;margin:0!important;min-width:0!important;min-height:0!important;padding:14px 4px 4px!important;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px;overflow:hidden;text-align:center;color:#2a1600;border:2px solid var(--ink);border-radius:3px;box-shadow:2px 3px 0 var(--ink);transform-origin:50% 0;
+.panel .eqHit{position:absolute;width:44px;height:44px;min-width:0!important;min-height:0!important;margin:0!important;padding:0;transform:translate(-50%,-50%);background:transparent;border:0;box-shadow:none;border-radius:50%;z-index:4}
+/* 木牌在人物之下（fig pointer-events:none，側邊仍可點） */
+.panel .eqCard{position:absolute;width:30%;height:27%;margin:0!important;min-width:0!important;min-height:0!important;padding:14px 4px 4px!important;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px;overflow:hidden;text-align:center;color:#2a1600;border:2px solid var(--ink);border-radius:3px;box-shadow:2px 3px 0 var(--ink);transform-origin:50% 0;z-index:1;
  background:repeating-linear-gradient(0deg,rgba(90,50,10,.18) 0 1px,transparent 1px 7px),linear-gradient(90deg,#d8a868,#c89452 50%,#d8a868)}
 .eqCard.l{left:2%}.eqCard.r{right:2%}
 .eqCard::before,.eqCard::after{content:"";position:absolute;top:4px;width:5px;height:5px;border-radius:50%;background:#5a5a5a;border:1px solid var(--ink)}.eqCard::before{left:4px}.eqCard::after{right:4px}
