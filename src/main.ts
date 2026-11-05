@@ -5,6 +5,7 @@ import { checkCode, REDEEM_MESSAGES } from './redeem';
 import type { RedeemCodeDef } from './redeemCodes';
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { rbox, crease, rcyl } from './geo';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
@@ -56,9 +57,9 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDraw
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 const scene = new THREE.Scene();
-// 漁港黃昏：琥珀／深藍灰，避開紫粉夢核調
-scene.background = new THREE.Color(0xb87850);
-scene.fog = new THREE.Fog(0xa07055, 12, 38);
+// 明亮溫暖晴天：暖日光＋柔藍天（去夢核灰／死板硬邊感）
+scene.background = new THREE.Color(0xa8d0e8);
+scene.fog = new THREE.Fog(0xd8e4dc, 18, 52);
 const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 50);
 camera.rotation.order = 'YXZ';
 scene.add(camera);
@@ -68,20 +69,20 @@ function viewCam() { return tpOn ? tpCam : camera; }
 const SEAT0 = new THREE.Vector3(0, 1.05, 2.0), SEAT = SEAT0.clone();
 camera.position.copy(SEAT);
 
-const mat = (c: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true, ...o });
+const mat = (c: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.78, flatShading: false, ...o });
 function mesh(g: THREE.BufferGeometry, m: THREE.Material, p?: [number, number, number], parent: THREE.Object3D = scene) {
   const x = new THREE.Mesh(g, m); if (p) x.position.set(...p); x.castShadow = true; x.receiveShadow = parent === scene; parent.add(x); return x;
 }
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
-// ---------- 場景：漁港邊的工寮（黃昏） ----------
-const hemi = new THREE.HemisphereLight(0xffd0b0, 0x2a2018, 0.58); scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xffb070, 0.55); sun.position.set(-6, 3, -12); scene.add(sun);
-const lamp = new THREE.PointLight(0xffc080, 24, 10, 1.6); lamp.position.set(0, 2.55, 0); lamp.castShadow = true; lamp.shadow.bias = -0.003; lamp.shadow.normalBias = 0.03; lamp.shadow.mapSize.set(1024, 1024); scene.add(lamp);
-const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffe0b0 });
+// ---------- 場景：漁港邊的工寮（明亮溫暖） ----------
+const hemi = new THREE.HemisphereLight(0xfff2e4, 0x7a9a78, 1.05); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffe8c4, 1.15); sun.position.set(-3, 11, -5); scene.add(sun);
+const lamp = new THREE.PointLight(0xffe8c8, 14, 10, 1.6); lamp.position.set(0, 2.55, 0); lamp.castShadow = true; lamp.shadow.bias = -0.003; lamp.shadow.normalBias = 0.03; lamp.shadow.mapSize.set(1024, 1024); scene.add(lamp);
+const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff4dc });
 const yardFloor = makeYardFloorMaps(matchMedia('(pointer: coarse)').matches ? 256 : 384);
 const ground = mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({
-  map: yardFloor.map, roughnessMap: yardFloor.rough, color: 0xc8c4bc, roughness: 0.94, metalness: 0.02,
+  map: yardFloor.map, roughnessMap: yardFloor.rough, color: 0xd8d2c4, roughness: 0.92, metalness: 0.02,
 })); ground.rotation.x = -Math.PI / 2; // 水泥地（貼皮）
 // 柱仔頂的指針時鐘（跟著裝置時間）
 const clockG = new THREE.Group(); clockG.position.set(3.5, 2.35, -3.5); scene.add(clockG); clockG.lookAt(0, 2.0, 2.0); clockG.translateZ(0.09);
@@ -94,10 +95,10 @@ mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.02, 8), mat(0x111111), [0, 0, 0.
 function updClock() { const d = new Date(), sec = d.getSeconds(), m = d.getMinutes() + sec / 60, h = (d.getHours() % 12) + m / 60; clkS.rotation.z = -sec / 60 * Math.PI * 2; clkM.rotation.z = -m / 60 * Math.PI * 2; clkH.rotation.z = -h / 12 * Math.PI * 2; }
 updClock(); setInterval(updClock, 1000);
 // 港口：碼頭、水、漁船
-mesh(new THREE.BoxGeometry(14, 0.3, 3), mat(0x7a7468), [0, -0.15, -5.8]);
-const water = mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x3a4a5c, roughness: 0.28, metalness: 0.28 }), [0, -0.5, -27]); water.rotation.x = -Math.PI / 2;
-const sky = mesh(new THREE.PlaneGeometry(90, 20), new THREE.MeshBasicMaterial({ color: 0xe09058, fog: false }), [0, 4, -40]);
-const skyHi = mesh(new THREE.PlaneGeometry(90, 12), new THREE.MeshBasicMaterial({ color: 0x5a7088, fog: false }), [0, 16, -39.9]); sky.renderOrder = -1; skyHi.renderOrder = -1;
+mesh(new THREE.BoxGeometry(14, 0.3, 3), mat(0x8a9088), [0, -0.15, -5.8]);
+const water = mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x4a98b8, roughness: 0.24, metalness: 0.18 }), [0, -0.5, -27]); water.rotation.x = -Math.PI / 2;
+const sky = mesh(new THREE.PlaneGeometry(90, 20), new THREE.MeshBasicMaterial({ color: 0xb8d8ec, fog: false }), [0, 4, -40]);
+const skyHi = mesh(new THREE.PlaneGeometry(90, 12), new THREE.MeshBasicMaterial({ color: 0x68a8dc, fog: false }), [0, 16, -39.9]); sky.renderOrder = -1; skyHi.renderOrder = -1;
 const boats: THREE.Group[] = [];
 const flagCols = [0xd03030, 0x2a5ad0, 0xf0c020, 0x30a050];
 for (let i = 0; i < 5; i++) {
@@ -159,9 +160,9 @@ const SHELL_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.45, i + 1)), HALF_GEOS 
 const shellGeo = SHELL_GEOS[0], halfGeo = HALF_GEOS[0];
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 const greyPick = () => GREYS[Math.min(4, Math.floor(Math.random() * Math.random() * 6.2))];
-const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX }); m.emissive.setHex(0x262428); return m; };
+const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX }); m.emissive.setHex(0x0a0c10); m.emissiveIntensity = 0.15; return m; };
 const shellMat = shellM(0xe8e4e0);
-mesh(new THREE.ConeGeometry(0.9, 0.55, 10), mat(0x6a7c94, { roughness: 0.95, emissive: 0x24262a }), [0, 0.27, 0]);
+mesh(new THREE.ConeGeometry(0.9, 0.55, 10), mat(0x7a8ca0, { roughness: 0.95, emissive: 0x0a1018, emissiveIntensity: 0.12 }), [0, 0.27, 0]);
 const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo, pileMat, 260); pile.castShadow = true;
 { const d = new THREE.Object3D(); for (let i = 0; i < 260; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 1.0, h = Math.max(0, 0.55 * (1 - r / 0.95)); d.position.set(Math.cos(a) * r, h + 0.03, Math.sin(a) * r); d.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); d.updateMatrix(); pile.setMatrixAt(i, d.matrix); pile.setColorAt(i, new THREE.Color(greyPick())); } }
 scene.add(pile);
@@ -189,23 +190,23 @@ const meatMat = mat(0xd8cbb0, { roughness: 0.3, metalness: 0.1 }), splatMat = ma
 const meatGeo = new THREE.SphereGeometry(0.035, 8, 6); meatGeo.scale(1.4, 0.6, 1);
 
 // ---------- 阿婆 ----------
-const skin = 0xd9a07a;
+const skin = 0xe8bc98;
 function makeAma(top: number, hair: number) {
   const g = new THREE.Group();
-  mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.3, 8), mat(0xc83a3a), [0, 0.15, 0.05], g);
-  const body = mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.55, 8), mat(top), [0, 0.6, 0], g);
-  const pants = mat(0x2a2a40); mesh(new THREE.BoxGeometry(0.42, 0.14, 0.45), pants, [0, 0.35, -0.15], g);
+  mesh(rcyl(0.17, 0.17, 0.3, 8), mat(0xd45a4a), [0, 0.15, 0.05], g);
+  const body = mesh(rcyl(0.2, 0.3, 0.55, 8), mat(top), [0, 0.6, 0], g);
+  const pants = mat(0x3a5068); mesh(rbox(0.42, 0.14, 0.45), pants, [0, 0.35, -0.15], g);
   // 坐姿小腿＋藍白拖
-  const shinG = new THREE.CylinderGeometry(0.055, 0.045, 0.3, 6), sole = mat(0xf2f2ee), strap = mat(0x2f5fb8);
-  for (const sx of [-0.1, 0.1]) { mesh(shinG, pants, [sx, 0.17, -0.34], g); mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.05, 6), mat(skin), [sx, 0.04, -0.35], g);
-    mesh(new THREE.BoxGeometry(0.09, 0.02, 0.2), sole, [sx, 0.01, -0.4], g); mesh(new THREE.BoxGeometry(0.095, 0.03, 0.035), strap, [sx, 0.035, -0.45], g); mesh(new THREE.SphereGeometry(0.035, 6, 4, 0, Math.PI * 2, 0, 1.6), mat(skin), [sx, 0.025, -0.47], g); }
+  const shinG = rcyl(0.055, 0.045, 0.3, 6), sole = mat(0xf6f2ea), strap = mat(0x3a6fc0);
+  for (const sx of [-0.1, 0.1]) { mesh(shinG, pants, [sx, 0.17, -0.34], g); mesh(rcyl(0.04, 0.04, 0.05, 6), mat(skin), [sx, 0.04, -0.35], g);
+    mesh(rbox(0.09, 0.02, 0.2), sole, [sx, 0.01, -0.4], g); mesh(rbox(0.095, 0.03, 0.035), strap, [sx, 0.035, -0.45], g); mesh(crease(new THREE.SphereGeometry(0.035, 6, 4, 0, Math.PI * 2, 0, 1.6)), mat(skin), [sx, 0.025, -0.47], g); }
   const head = new THREE.Group(); head.position.set(0, 1.02, 0); g.add(head);
-  mesh(new THREE.SphereGeometry(0.15, 10, 8), mat(skin), [0, 0, 0], head);
-  mesh(new THREE.SphereGeometry(0.155, 10, 8, 0, Math.PI * 2, 0, 1.4), mat(hair), [0, 0.02, 0.02], head);
-  mesh(new THREE.SphereGeometry(0.07, 8, 6), mat(hair), [0, 0.1, 0.13], head);
-  for (const s of [-1, 1]) mesh(new THREE.SphereGeometry(0.018, 6, 4), mat(0x111111), [s * 0.05, 0.02, -0.14], head);
-  mesh(new THREE.BoxGeometry(0.06, 0.012, 0.01), mat(0x803030), [0, -0.06, -0.145], head);
-  const arm = (s: number) => { const p = new THREE.Group(); p.position.set(s * 0.2, 0.8, -0.02); g.add(p); mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.38, 6), mat(top), [0, -0.12, -0.12], p).rotation.x = 1.1; mesh(new THREE.SphereGeometry(0.05, 6, 5), mat(skin), [0, -0.2, -0.3], p); return p; };
+  mesh(crease(new THREE.SphereGeometry(0.15, 10, 8)), mat(skin), [0, 0, 0], head);
+  mesh(crease(new THREE.SphereGeometry(0.155, 10, 8, 0, Math.PI * 2, 0, 1.4)), mat(hair), [0, 0.02, 0.02], head);
+  mesh(crease(new THREE.SphereGeometry(0.07, 8, 6)), mat(hair), [0, 0.1, 0.13], head);
+  for (const s of [-1, 1]) mesh(crease(new THREE.SphereGeometry(0.018, 6, 4)), mat(0x222222), [s * 0.05, 0.02, -0.14], head);
+  mesh(rbox(0.06, 0.012, 0.01), mat(0xa04040), [0, -0.06, -0.145], head);
+  const arm = (s: number) => { const p = new THREE.Group(); p.position.set(s * 0.2, 0.8, -0.02); g.add(p); mesh(rcyl(0.045, 0.04, 0.38, 6), mat(top), [0, -0.12, -0.12], p).rotation.x = 1.1; mesh(crease(new THREE.SphereGeometry(0.05, 6, 5)), mat(skin), [0, -0.2, -0.3], p); return p; };
   return { g, body, head, pants, armL: arm(-1), armR: arm(1) };
 }
 type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: number; peek: boolean; count: number; pause: number; look: number; bubble: HTMLDivElement; bubT: number; lean: number;
@@ -214,9 +215,9 @@ const npcs: Npc[] = [];
 // 阿婆每粒秒數 = rate × 難度倍率（易 0.75／普通 1／硬 1.3／超硬 1.6）
 const NPC_DIFF_T = [0.75, 1, 1.3, 1.6];
 const NPC_DEF = [
-  { name: '快手阿桃', rate: 4.2, chatty: 0.1, peek: false, top: 0x6a3a8a, hair: 0x999999, a: -1.9 },
-  { name: '講話阿春', rate: 7.5, chatty: 0.6, peek: false, top: 0x2a7a5a, hair: 0x333333, a: Math.PI },
-  { name: '好奇阿嬌', rate: 5.8, chatty: 0.3, peek: true, top: 0xb04050, hair: 0xcccccc, a: 1.9 },
+  { name: '快手阿桃', rate: 4.2, chatty: 0.1, peek: false, top: 0xe87840, hair: 0x8a8a8a, a: -1.9 },
+  { name: '講話阿春', rate: 7.5, chatty: 0.6, peek: false, top: 0x3a9a6a, hair: 0x444444, a: Math.PI },
+  { name: '好奇阿嬌', rate: 5.8, chatty: 0.3, peek: true, top: 0xe86878, hair: 0xc8c8c8, a: 1.9 },
 ];
 type NpcDef = { name: string; rate: number; chatty: number; peek: boolean; top: number; hair: number; a: number; r?: number };
 function makeNpc(d: NpcDef) {
@@ -274,16 +275,16 @@ function applyGloves() { const g = gearOn('glove'); handSkin.color.set(g ? 0xe8e
 function applyGlasses() { const g = gearOn('glasses'); (seamMark.material as THREE.MeshBasicMaterial).color.set(g ? 0xe8a050 : 0x7a4a1e); seamMark.scale.setScalar(g ? 1.7 : 1); seamGlow.scale.setScalar(g ? 1.6 : 1); document.getElementById('vign')?.classList.toggle('on', g && state === 'play'); }
 function makeHand(s: number) {
   const h = new THREE.Group();
-  mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.7, 8), sleeve, [0, 0, 0.32], h).rotation.x = Math.PI / 2; // 長前臂延伸到畫面角落，兩手呈 A 字
-  mesh(new THREE.BoxGeometry(0.11, 0.05, 0.13), handSkin, [0, 0, -0.1], h);
-  mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.06, 8), shirtCuff, [0, 0, 0.66], h).rotation.x = Math.PI / 2;
-  mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.035, 8), cuffMat, [0, 0, -0.03], h).rotation.x = Math.PI / 2;
-  for (let i = 0; i < 4; i++) mesh(new THREE.BoxGeometry(0.022, 0.03, 0.07), handSkin, [-0.04 + i * 0.026, -0.01, -0.19], h);
-  mesh(new THREE.BoxGeometry(0.03, 0.03, 0.07), handSkin, [s * -0.06, 0, -0.12], h).rotation.y = s * 0.6;
+  mesh(rcyl(0.05, 0.065, 0.7, 8), sleeve, [0, 0, 0.32], h).rotation.x = Math.PI / 2; // 長前臂延伸到畫面角落，兩手呈 A 字
+  mesh(rbox(0.11, 0.05, 0.13), handSkin, [0, 0, -0.1], h);
+  mesh(rcyl(0.068, 0.068, 0.06, 8), shirtCuff, [0, 0, 0.66], h).rotation.x = Math.PI / 2;
+  mesh(rcyl(0.062, 0.062, 0.035, 8), cuffMat, [0, 0, -0.03], h).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 4; i++) { const f = mesh(rbox(0.022, 0.03, 0.07), handSkin, [-0.04 + i * 0.026, -0.01, -0.19], h); f.userData.finger = true; }
+  const th = mesh(rbox(0.03, 0.03, 0.07), handSkin, [s * -0.06, 0, -0.12], h); th.rotation.y = s * 0.6; th.userData.finger = true;
   return h;
 }
 const handL = makeHand(-1), handR = makeHand(1);
-[handL, handR].forEach(h => h.children.forEach(c => { const m = c as THREE.Mesh; if (m.material === handSkin && (m.geometry as THREE.BoxGeometry).parameters?.width < 0.05) fingerMeshes.push(m); }));
+[handL, handR].forEach(h => h.children.forEach(c => { const m = c as THREE.Mesh; if (m.material === handSkin && m.userData.finger) fingerMeshes.push(m); }));
 const HL = new THREE.Vector3(-0.16, -0.24, -0.42);
 handL.position.copy(HL); handL.rotation.set(0.4, -0.5, 0.3);
 handR.position.set(0.2, -0.26, -0.45); handR.rotation.set(0.3, 0.5, -0.2);
@@ -301,7 +302,7 @@ const barnacles: THREE.Mesh[] = [];
 // 難度硬塊＝藤壺／石灰質附著：火山口形（頂端有洞）的低面數旋轉體，共用一個幾何和材質
 const BARN_GEO = (() => { const g = new THREE.LatheGeometry([[0, 0.004], [0.0035, 0.005], [0.0042, 0.016], [0.0068, 0.0175], [0.0105, 0.009], [0.0135, 0.002], [0.0142, -0.004]].map(([x, y]) => new THREE.Vector2(x, y)), 7);
   const p = g.attributes.position; let r = 3; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280; for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y > 0.006) { const k = 1 + (rn() - 0.5) * 0.35; p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * k); } } g.computeVertexNormals(); const col = new Float32Array(p.count * 3); for (let i = 0; i < p.count; i++) { const y = p.getY(i), rr = Math.hypot(p.getX(i), p.getZ(i)); const d = rr < 0.0045 ? 0.25 : y > 0.012 ? 0.8 : 1; col[i * 3] = d; col[i * 3 + 1] = d * 0.92; col[i * 3 + 2] = d * 0.85; } g.setAttribute('color', new THREE.BufferAttribute(col, 3)); return g; })();
-const BARN_MAT = mat(0x8a6a58, { vertexColors: true, roughness: 0.6, emissive: 0x24262a });
+const BARN_MAT = mat(0x9a7a64, { vertexColors: true, roughness: 0.6, emissive: 0x0a0c10, emissiveIntensity: 0.12 });
 const BARN_N = [0, 4, 8, 14], BARN_S = [0.8, 0.9, 1.15, 1.4];
 // 一群一群長：先挑幾個群中心，每群 1～4 顆大小不一、彼此擠在一起
 function placeBarn(list: THREE.Object3D[], dd: number, y = 0.045) {
@@ -321,7 +322,7 @@ const shimmer = mesh(new THREE.SphereGeometry(0.11, 12, 8), new THREE.MeshBasicM
 const pearlMesh = mesh(new THREE.SphereGeometry(0.03, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.3 }), [0, 0.05, 0], oyster);
 pearlMesh.visible = false;
 const leanFaces: THREE.Group[] = [];
-for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x2a7a5a : 0xb04050, s < 0 ? 0x333333 : 0xcccccc).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
+for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x3a9a6a : 0xe86878, s < 0 ? 0x444444 : 0xc8c8c8).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
 type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean };
@@ -626,8 +627,8 @@ type Loc = { id: string; n: string; m: number; w: number[]; thr: number; ang: nu
 const LOCS: Loc[] = [
   { id: 'home', n: '🏠 自家蚵寮', m: 1, w: DIFF_W, thr: 1, ang: 1, price: 0, need: 0, tint: null, d: '熟悉的老位子，阿婆們都很和氣' },
   { id: 'wanggong', n: '⚓ 王功漁港', m: 1.2, w: [22, 40, 28, 10], thr: 1.2, ang: 1.15, price: 800, need: 60, tint: 0x5f8fb0, d: '海風大、硬殼多一點，阿婆稍微兇' },
-  { id: 'dongshi', n: '🎡 東石漁人碼頭', m: 1.4, w: [14, 34, 36, 16], thr: 1.4, ang: 1.3, price: 2500, need: 200, tint: 0xd08a5a, d: '觀光客多、蚵仔偏硬，阿婆丟殼更勤' },
-  { id: 'budai', n: '🏭 布袋蚵寮大廠', m: 1.7, w: [8, 26, 40, 26], thr: 1.7, ang: 1.5, price: 6000, need: 500, tint: 0x8a9a7a, d: '工錢最高，但蚵仔超硬、阿婆最兇' }];
+  { id: 'dongshi', n: '🎡 東石漁人碼頭', m: 1.4, w: [14, 34, 36, 16], thr: 1.4, ang: 1.3, price: 2500, need: 200, tint: 0xe0b888, d: '觀光客多、蚵仔偏硬，阿婆丟殼更勤' },
+  { id: 'budai', n: '🏭 布袋蚵寮大廠', m: 1.7, w: [8, 26, 40, 26], thr: 1.7, ang: 1.5, price: 6000, need: 500, tint: 0x90b0c0, d: '工錢最高，但蚵仔超硬、阿婆最兇' }];
 const locNow = () => LOCS.find(l => l.id === save.loc && (l.need === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
 const locW = () => locNow().w;
 const RAR = [
@@ -874,7 +875,7 @@ function holdOyster(dd: number) {
   find = tut ? { kind: 'none', i: 0 } : rollFind(); setPhase('seam');
 }
 // 每次上工隨機換阿婆衣服顏色與花樣
-const CLOTH = [0xc94f4f, 0x3f7cc9, 0x4fa36b, 0xd98c2b, 0x8a5bc2, 0xd65f9a, 0x2f9a9a, 0xb8863b, 0x5a6fb0, 0xe0c341];
+const CLOTH = [0xe05a4a, 0x3f8ad0, 0x4fad6b, 0xe09830, 0x4a9ab8, 0xe07090, 0x2f9a9a, 0xc89040, 0x5a8fc0, 0xe0c341];
 function dressAma(n: Npc) {
   const pick = () => CLOTH[Math.floor(Math.random() * CLOTH.length)]; const base = pick(); let acc = pick(); if (acc === base) acc = 0xf4ecd8;
   const kind = Math.floor(Math.random() * 4), cv = document.createElement('canvas'); cv.width = cv.height = 64; const x = cv.getContext('2d')!;
@@ -885,7 +886,7 @@ function dressAma(n: Npc) {
   const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 1); tex.colorSpace = THREE.SRGBColorSpace;
   const m = n.body.material as THREE.MeshStandardMaterial; m.map?.dispose(); m.map = tex; m.color.set(0xffffff); m.needsUpdate = true;
   for (const a of [n.armL, n.armR]) { const sl = a.children[0] as THREE.Mesh; (sl.material as THREE.MeshStandardMaterial).color.set(base); }
-  const PANTS = [0x2a2a40, 0x3a3a3a, 0x4a3a2a, 0x223a5a, 0x5a4a6a, 0x2f4a3a]; (n.pants as THREE.MeshStandardMaterial).color.set(PANTS[Math.floor(Math.random() * PANTS.length)]);
+  const PANTS = [0x3a5068, 0x4a5a68, 0x5a4a3a, 0x2a5a78, 0x4a6a5a, 0x586070]; (n.pants as THREE.MeshStandardMaterial).color.set(PANTS[Math.floor(Math.random() * PANTS.length)]);
 }
 let nightShift = false, walkHintShown = false, saltNext = false;
 // 器具（手套、收音機）：買了可開關
@@ -901,22 +902,23 @@ function toggleRadio() { if (!save.shop.owned.includes('radio') || state !== 'pl
 const gearOn = (id: string) => save.shop.owned.includes(id) && save.gear?.[id] !== false;
 const isNight = () => { const h = new Date().getHours(); return h >= 20 || h < 5; };
 // 天色跟著玩家裝置的時間（黎明／白天／黃昏／夜晚，平滑過渡）
-// 時, 天空, 霧, 半球光, 強度, 太陽 — 海岸自然光（無紫／粉夢核）
+// 時, 天空, 霧, 半球光, 強度, 太陽 — 清爽晴天為主，黎明／黃昏略暖但不髒
 const SKY: [number, number, number, number, number, number][] = [
-  [0, 0x121820, 0x1a222c, 0x8aa0b4, 0.55, 0.12], [5, 0x1e2834, 0x243040, 0x9ab0c4, 0.55, 0.2],
-  [6.5, 0xe8a078, 0xd09070, 0xffd4b0, 0.7, 0.55], [9, 0x87b8d8, 0xa0c4d8, 0xe8f2ff, 0.85, 0.9],
-  [16, 0x8eb8d4, 0xa8c4d4, 0xf0f4fa, 0.85, 0.85], [18, 0xc87850, 0xb07048, 0xffd0b0, 0.65, 0.55],
-  [19.5, 0x2a3548, 0x303848, 0x90a8c0, 0.58, 0.22], [24, 0x121820, 0x1a222c, 0x8aa0b4, 0.55, 0.12]];
+  [0, 0x182838, 0x203040, 0xb0c4d8, 0.62, 0.16], [5, 0x283848, 0x304858, 0xc0d4e4, 0.65, 0.24],
+  [6.5, 0xf2c8a0, 0xe8b890, 0xffeed8, 0.82, 0.7], [9, 0x88c0e4, 0xc8dce8, 0xfff4ea, 1.05, 1.15],
+  [12, 0x78b4e0, 0xc0d8e8, 0xfff6ee, 1.1, 1.22], [16, 0x88bce0, 0xc8dce4, 0xfff2e8, 1.0, 1.05],
+  [18, 0xe89868, 0xd89060, 0xffe4c8, 0.75, 0.65], [19.5, 0x345068, 0x3c5870, 0xb0c4d8, 0.64, 0.26],
+  [24, 0x182838, 0x203040, 0xb0c4d8, 0.62, 0.16]];
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
 function updSky() {
   const d = new Date(), h = d.getHours() + d.getMinutes() / 60; let i = 0; while (SKY[i + 1][0] <= h) i++;
   const a = SKY[i], b = SKY[i + 1], f = (h - a[0]) / (b[0] - a[0]);
   const L = (k: number) => _c1.setHex(a[k]).lerp(_c2.setHex(b[k]), f).getHex();
-  try { showLand(); } catch { /* 尚未初始化 */ } const tn = locNow().tint; (scene.background as THREE.Color).setHex(L(1)); (scene.fog as THREE.Fog).color.setHex(L(2)); if (tn !== null) { _c2.setHex(tn); (scene.background as THREE.Color).lerp(_c2, 0.3); (scene.fog as THREE.Fog).color.lerp(_c2, 0.3); } hemi.color.setHex(L(3));
+  try { showLand(); } catch { /* 尚未初始化 */ } const tn = locNow().tint; (scene.background as THREE.Color).setHex(L(1)); (scene.fog as THREE.Fog).color.setHex(L(2)); if (tn !== null) { _c2.setHex(tn); (scene.background as THREE.Color).lerp(_c2, 0.22); (scene.fog as THREE.Fog).color.lerp(_c2, 0.22); } hemi.color.setHex(L(3));
   hemi.intensity = a[4] + (b[4] - a[4]) * f; sun.intensity = a[5] + (b[5] - a[5]) * f;
-  // 遠景天幕：地平琥珀 ↔ 上方灰藍（勿紫）
-  const skyHex = L(1); (sky.material as THREE.MeshBasicMaterial).color.setHex(skyHex).lerp(_c2.setHex(0xe8a070), 0.35);
-  (skyHi.material as THREE.MeshBasicMaterial).color.setHex(skyHex).lerp(_c2.setHex(0x5a7088), 0.55);
+  // 遠景天幕：地平暖亮 ↔ 上方晴空
+  const skyHex = L(1); (sky.material as THREE.MeshBasicMaterial).color.setHex(skyHex).lerp(_c2.setHex(0xd8eaf4), 0.4);
+  (skyHi.material as THREE.MeshBasicMaterial).color.setHex(skyHex).lerp(_c2.setHex(0x5aa8d8), 0.5);
   try { applyShedLook(); } catch { /* 尚未初始化 */ }
   const nn = document.getElementById('nightNote'); if (nn) nn.textContent = isNight() ? '🌙 現在是夜班時段：這一工收入 +20%' : '💡 晚上 8 點到早上 5 點上工是夜班，收入 +20%';
 }
@@ -952,10 +954,10 @@ const LAND: Record<string, THREE.Group> = {};
 // ---------- 各地點的蚵寮本體（裝飾用，不影響座位／碗／蚵殼山／射線目標） ----------
 type ShedStyle = { ground: number; hemi: number; hemiK: number; sun: number; sunK: number; lamp: number; lampK: number; fog: number; fogNear: number; fogFar: number };
 const SHED_STYLE: Record<string, ShedStyle> = {
-  home: { ground: 0xb8b0a4, hemi: 0xffe0c0, hemiK: 1.0, sun: 0xffb070, sunK: 1.1, lamp: 0xffc080, lampK: 22, fog: 0x8a7060, fogNear: 12, fogFar: 36 },
-  wanggong: { ground: 0xc0b8a8, hemi: 0xd8ecff, hemiK: 1.2, sun: 0xf0f6ff, sunK: 1.35, lamp: 0xeaf4ff, lampK: 14, fog: 0x8aacc4, fogNear: 13, fogFar: 42 },
-  dongshi: { ground: 0xc4a078, hemi: 0xffc898, hemiK: 1.05, sun: 0xff9a50, sunK: 1.45, lamp: 0xffb060, lampK: 18, fog: 0xc08050, fogNear: 11, fogFar: 38 },
-  budai: { ground: 0xa8b0b4, hemi: 0xe4f0ff, hemiK: 1.3, sun: 0xd8e8ff, sunK: 0.65, lamp: 0xe8f4ff, lampK: 32, fog: 0x6a7a84, fogNear: 10, fogFar: 32 },
+  home: { ground: 0xd8d2c4, hemi: 0xfff2e4, hemiK: 1.08, sun: 0xffe8c4, sunK: 1.18, lamp: 0xffe8c8, lampK: 12, fog: 0xd0e0d8, fogNear: 18, fogFar: 52 },
+  wanggong: { ground: 0xd8d4ca, hemi: 0xfff4ea, hemiK: 1.12, sun: 0xfff0d8, sunK: 1.22, lamp: 0xffeedc, lampK: 11, fog: 0xc8dce8, fogNear: 16, fogFar: 52 },
+  dongshi: { ground: 0xdcc8a8, hemi: 0xfff0e0, hemiK: 1.08, sun: 0xffe0b0, sunK: 1.18, lamp: 0xffe4bc, lampK: 12, fog: 0xe0c8a8, fogNear: 15, fogFar: 48 },
+  budai: { ground: 0xd0d6d8, hemi: 0xfff4ec, hemiK: 1.15, sun: 0xfff2e0, sunK: 0.9, lamp: 0xfff0e0, lampK: 18, fog: 0xc0d0d8, fogNear: 15, fogFar: 46 },
 };
 let shedG: THREE.Group | null = null, shedId = '';
 const shedAnim: ((t: number) => void)[] = [];
@@ -1101,7 +1103,7 @@ function applyShedLook() {
   const f = scene.fog as THREE.Fog; f.color.lerp(_c2.setHex(s.fog), 0.45); f.near = s.fogNear; f.far = s.fogFar;
 }
 
-const WATER_C: Record<string, number> = { home: 0x3a4a6a, wanggong: 0x2a4a7a, dongshi: 0x4a5a5a, budai: 0x5a7a7a };
+const WATER_C: Record<string, number> = { home: 0x3a90b8, wanggong: 0x2a7ab0, dongshi: 0x4a8898, budai: 0x4a9aaa };
 type Crew = { name: string; hair: number; look: 'ama' | 'agong' | 'dajie' | 'fisher' | 'ama2'; pal: number[] };
 const CREW: Record<string, Crew[]> = {
   home: [{ name: '快手阿桃', hair: 0x999999, look: 'ama', pal: [] }, { name: '講話阿春', hair: 0x333333, look: 'ama', pal: [] }, { name: '好奇阿嬌', hair: 0xcccccc, look: 'ama', pal: [] }],
@@ -2563,7 +2565,10 @@ function plazaHideYard(hide: boolean) {
     ALL_NPCS.forEach(n => { n.tag.style.display = 'none'; n.bubble.style.display = 'none'; });
     camera.far = 90; camera.updateProjectionMatrix();
     tpCam.far = 120; tpCam.updateProjectionMatrix();
-    const f = scene.fog as THREE.Fog; f.near = 14; f.far = 52;
+    const f = scene.fog as THREE.Fog; f.color.setHex(0xd8e4dc); f.near = 20; f.far = 64;
+    (scene.background as THREE.Color).setHex(0xa8d0e8);
+    hemi.color.setHex(0xfff2e4); hemi.intensity = 1.05;
+    sun.color.setHex(0xffe8c4); sun.intensity = 1.15;
   } else {
     for (const o of plazaHomeHide) { o.visible = !!(o as any).__plazaHid; delete (o as any).__plazaHid; }
     plazaHomeHide = [];
@@ -3680,18 +3685,18 @@ var tpReady = false;
 const pm = { head: mat(0xffffff), body: mat(0xffffff), legs: mat(0xffffff), feet: mat(0xffffff), skin: mat(skin) };
 const me3 = new THREE.Group(); me3.visible = false; scene.add(me3);
 const meTorso = new THREE.Group(); me3.add(meTorso);
-mesh(new THREE.BoxGeometry(0.36, 0.42, 0.22), pm.body, [0, 0.66, 0], meTorso);
+mesh(rbox(0.36, 0.42, 0.22), pm.body, [0, 0.66, 0], meTorso);
 const meSeatLegs = new THREE.Group(); me3.add(meSeatLegs);
-mesh(new THREE.BoxGeometry(0.34, 0.12, 0.36), pm.legs, [0, 0.42, -0.1], meSeatLegs);
-for (const sx of [-0.09, 0.09]) { mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.32, 6), pm.legs, [sx, 0.2, -0.28], meSeatLegs); mesh(new THREE.BoxGeometry(0.1, 0.05, 0.2), pm.feet, [sx, 0.03, -0.34], meSeatLegs); }
+mesh(rbox(0.34, 0.12, 0.36), pm.legs, [0, 0.42, -0.1], meSeatLegs);
+for (const sx of [-0.09, 0.09]) { mesh(rcyl(0.055, 0.045, 0.32, 6), pm.legs, [sx, 0.2, -0.28], meSeatLegs); mesh(rbox(0.1, 0.05, 0.2), pm.feet, [sx, 0.03, -0.34], meSeatLegs); }
 // 站著走路用的腿：髖關節為軸，前後擺
-const meLeg = (sx: number) => { const g = new THREE.Group(); g.position.set(sx, 0.86, 0); me3.add(g); mesh(new THREE.CylinderGeometry(0.065, 0.05, 0.8, 6), pm.legs, [0, -0.4, 0], g); mesh(new THREE.BoxGeometry(0.11, 0.06, 0.22), pm.feet, [0, -0.83, -0.05], g); g.visible = false; return g; };
+const meLeg = (sx: number) => { const g = new THREE.Group(); g.position.set(sx, 0.86, 0); me3.add(g); mesh(rcyl(0.065, 0.05, 0.8, 6), pm.legs, [0, -0.4, 0], g); mesh(rbox(0.11, 0.06, 0.22), pm.feet, [0, -0.83, -0.05], g); g.visible = false; return g; };
 const meLegL = meLeg(-0.09), meLegR = meLeg(0.09); let walkPh = 0; const lastWalk = new THREE.Vector3(); let tpWas = false; const tpLook = new THREE.Vector3();
 const meHead = new THREE.Group(); meHead.position.set(0, 1.02, 0); meTorso.add(meHead);
 mesh(new THREE.SphereGeometry(0.15, 10, 8), pm.skin, [0, 0, 0], meHead);
 mesh(new THREE.SphereGeometry(0.16, 10, 8, 0, Math.PI * 2, 0, 1.3), pm.head, [0, 0.03, 0], meHead);
 mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.02, 12), pm.head, [0, 0.06, 0], meHead);
-const meArm = (s: number) => { const p = new THREE.Group(); p.position.set(s * 0.22, 0.84, 0); meTorso.add(p); mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.36, 6), sleeve, [0, -0.12, -0.12], p).rotation.x = 1.1; mesh(new THREE.SphereGeometry(0.05, 6, 5), pm.skin, [0, -0.2, -0.3], p); return p; };
+const meArm = (s: number) => { const p = new THREE.Group(); p.position.set(s * 0.22, 0.84, 0); meTorso.add(p); mesh(rcyl(0.05, 0.045, 0.36, 6), sleeve, [0, -0.12, -0.12], p).rotation.x = 1.1; mesh(crease(new THREE.SphereGeometry(0.05, 6, 5)), pm.skin, [0, -0.2, -0.3], p); return p; };
 const meArmL = meArm(-1), meArmR = meArm(1);
 /** 廣場走動第三人稱：與死鬥／遠端同一套 makePlayerAvatar（工寮仍用 me3） */
 let plazaMe: PlayerRig | null = null;

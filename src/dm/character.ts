@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { MatFn, MeshAdd } from './weapons';
+import { rbox } from '../geo';
 
-const SKIN = 0xd9a07a;
+const SKIN = 0xe8bc98;
 
 /** 第三人稱方塊玩家（風格對齊上工 NPC） */
 export type PlayerRig = {
@@ -69,7 +70,7 @@ function bendArm(
 }
 
 /**
- * 方塊人：Box 頭身腿＋flatShading；持槍＝槍上手＋肩→肘→手對準。
+ * 方塊人：RoundedBox＋折角平滑法線；持槍＝槍上手＋肩→肘→手對準（骨架／縮放不變）。
  */
 export function makePlayerAvatar(
   look: PlayerLook,
@@ -77,28 +78,28 @@ export function makePlayerAvatar(
   add: MeshAdd,
   _LO: boolean,
 ): PlayerRig {
-  const boxy = { flatShading: true as const, roughness: 0.88 };
+  const boxy = { flatShading: false as const, roughness: 0.78 };
   const outer = new THREE.Group();
   const root = new THREE.Group(); outer.add(root);
 
   const skinM = M(SKIN, boxy);
   const shirtM = M(look.shirt, boxy);
-  const pantsM = M(look.pants ?? 0x2a2a40, boxy);
+  const pantsM = M(look.pants ?? 0x3a5068, boxy);
   const hairM = M(look.hair, boxy);
-  const shoeM = M(0x222222, boxy);
-  const soleM = M(0xf2f2ee, boxy);
+  const shoeM = M(0x333333, boxy);
+  const soleM = M(0xf6f2ea, boxy);
 
   const torso = new THREE.Group(); torso.position.set(0, 0.92, 0); root.add(torso);
-  add(new THREE.BoxGeometry(0.38, 0.48, 0.22), shirtM, [0, 0.12, 0], torso);
-  add(new THREE.BoxGeometry(0.4, 0.1, 0.24), pantsM, [0, -0.16, 0], torso);
-  add(new THREE.BoxGeometry(0.12, 0.08, 0.12), skinM, [0, 0.4, 0], torso);
+  add(rbox(0.38, 0.48, 0.22), shirtM, [0, 0.12, 0], torso);
+  add(rbox(0.4, 0.1, 0.24), pantsM, [0, -0.16, 0], torso);
+  add(rbox(0.12, 0.08, 0.12), skinM, [0, 0.4, 0], torso);
 
   const head = new THREE.Group(); head.position.set(0, 0.58, 0); torso.add(head);
-  add(new THREE.BoxGeometry(0.28, 0.28, 0.28), skinM, [0, 0, 0], head);
-  add(new THREE.BoxGeometry(0.3, 0.12, 0.3), hairM, [0, 0.1, 0.01], head);
-  add(new THREE.BoxGeometry(0.3, 0.18, 0.08), hairM, [0, 0.02, 0.12], head);
-  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.05, 0.05, 0.04), M(0x111111, boxy), [s * 0.07, 0.02, -0.14], head);
-  add(new THREE.BoxGeometry(0.1, 0.03, 0.03), M(0x803030, boxy), [0, -0.08, -0.14], head);
+  add(rbox(0.28, 0.28, 0.28), skinM, [0, 0, 0], head);
+  add(rbox(0.3, 0.12, 0.3), hairM, [0, 0.1, 0.01], head);
+  add(rbox(0.3, 0.18, 0.08), hairM, [0, 0.02, 0.12], head);
+  for (const s of [-1, 1]) add(rbox(0.05, 0.05, 0.04), M(0x111111, boxy), [s * 0.07, 0.02, -0.14], head);
+  add(rbox(0.1, 0.03, 0.03), M(0xa04040, boxy), [0, -0.08, -0.14], head);
 
   const shoulderL = new THREE.Object3D(); shoulderL.position.set(-0.22, 0.3, 0); torso.add(shoulderL);
   const shoulderR = new THREE.Object3D(); shoulderR.position.set(0.22, 0.3, 0); torso.add(shoulderR);
@@ -113,18 +114,18 @@ export function makePlayerAvatar(
   const handR = new THREE.Group();
   handR.position.set(0.03, -0.05, 0.1);
   weaponMount.add(handR);
-  add(new THREE.BoxGeometry(0.09, 0.09, 0.1), skinM, [0, 0, 0], handR);
+  add(rbox(0.09, 0.09, 0.1), skinM, [0, 0, 0], handR);
 
   const handL = new THREE.Group();
   handL.position.set(-0.02, 0.0, -0.2);
   weaponMount.add(handL);
-  add(new THREE.BoxGeometry(0.09, 0.09, 0.1), skinM, [0, 0, 0], handL);
+  add(rbox(0.09, 0.09, 0.1), skinM, [0, 0, 0], handL);
 
   const mkSeg = (len: number, mat: THREE.MeshStandardMaterial, thick: number) => {
     const g = new THREE.Group();
     g.userData.restLen = len;
     torso.add(g);
-    add(new THREE.BoxGeometry(thick, len, thick), mat, [0, 0, 0], g);
+    add(rbox(thick, len, thick), mat, [0, 0, 0], g);
     return g;
   };
   const upperR = mkSeg(0.26, shirtM, 0.1);
@@ -134,11 +135,11 @@ export function makePlayerAvatar(
 
   const makeLeg = (side: number) => {
     const thigh = new THREE.Group(); thigh.position.set(side * 0.11, 0.72, 0); root.add(thigh);
-    add(new THREE.BoxGeometry(0.14, 0.34, 0.14), pantsM, [0, -0.15, 0], thigh);
+    add(rbox(0.14, 0.34, 0.14), pantsM, [0, -0.15, 0], thigh);
     const shin = new THREE.Group(); shin.position.set(0, -0.34, 0); thigh.add(shin);
-    add(new THREE.BoxGeometry(0.13, 0.32, 0.13), pantsM, [0, -0.14, 0], shin);
-    add(new THREE.BoxGeometry(0.14, 0.08, 0.22), shoeM, [0, -0.32, -0.03], shin);
-    add(new THREE.BoxGeometry(0.145, 0.03, 0.24), soleM, [0, -0.36, -0.03], shin);
+    add(rbox(0.13, 0.32, 0.13), pantsM, [0, -0.14, 0], shin);
+    add(rbox(0.14, 0.08, 0.22), shoeM, [0, -0.32, -0.03], shin);
+    add(rbox(0.145, 0.03, 0.24), soleM, [0, -0.36, -0.03], shin);
     return { thigh, shin };
   };
   const legL = makeLeg(-1), legR = makeLeg(1);
