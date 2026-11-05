@@ -25,6 +25,13 @@ import {
 import { makeYardFloorMaps } from './plaza/props';
 import { ODD } from './oddities';
 import { installNoZoom } from './nozoom';
+import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
+import { initFeedback, openFb, fbShow } from './feedback';
+import { initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop } from './meds';
+import { initAchievements, achS, AS, ACHS, achTitle, achAdd, achBump, achShiftGot, clearAchShiftGot, achCheck, achDot, achOpen, achShift, type AchSave } from './achievements';
+import type { EvCfg, EvOdd } from './eventsTypes';
+import { initEvents, setEvShown, evMeat, evHud, evFinish, evLeft, evRender, evFetch, evFetchFrom, evStart, evAgain, evLbOpen, evCfg, evSkew, evShown } from './events';
+import { initSurvey, setSvPrompted, svFetch, svAlert, svRender, svOpen, svList, svPrompted } from './survey';
 installNoZoom();
 { const s = document.createElement('style'); s.textContent = weaponPreviewCss(); document.head.appendChild(s); }
 const LS_P = __PREVIEW__ ? 'preview:' : '';
@@ -39,8 +46,8 @@ const SHOT = params.get('shot'); // 截圖測試用
 const SHIFT = 180;
 let shiftLen = SHIFT; // 臨時工 60／120 秒
 // 活動場景：後台排定的限時活動設定（只在活動那一工有值，收工就清掉，不會沿用舊設定）
-type EvOdd = { i: number; n: number };
-type EvCfg = { id: number; name: string; desc: string; npc: number; dur: number; throwX: number; angerX: number; bonus: number; earlyBonus: number; earlyMeat: number | null; infHp: boolean; steal: 'normal' | 'steal_only' | 'no_steal'; oddDone: EvOdd[]; oddEarly: EvOdd[]; left?: number | null; start: number; end: number };
+/* EvOdd from eventsTypes */
+/* EvCfg from eventsTypes */
 let evRun: EvCfg | null = null, evToken: string | null = null, evLastId: number | null = null, evBusy = false;
 /** 廣場多人：無 NPC、座位由 Hub 權威；進場先走動再坐下開剝 */
 let plazaMode = false;
@@ -347,276 +354,22 @@ function track(t: string, d: Record<string, unknown> = {}) {
     fetch(STATS_URL, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' }, keepalive: true, mode: 'cors' }).catch(() => { });
   } catch { }
 }
-let ac: AudioContext | null = null, masterG: GainNode, ambG: GainNode, sfxG: GainNode, musG: GainNode;
-// 環境音（海浪、漁船引擎、海鷗、收音機都走 ambG）：死鬥模式中靜音，離開後照使用者設定恢復
-const ambLevel = () => (isDeathmatchActive() ? 0 : mix.amb);
-function duckAmb() { if (!ac) return; const t = ac.currentTime; ambG.gain.cancelScheduledValues(t); ambG.gain.setValueAtTime(ambG.gain.value, t); ambG.gain.linearRampToValueAtTime(ambLevel(), t + 0.4); }
-function applyMix() { if (!ac) { try { LS.setItem('oyster-mix', JSON.stringify(mix)); } catch { } return; } masterG.gain.value = mix.mute ? 0 : mix.master; ambG.gain.value = ambLevel(); sfxG.gain.value = mix.sfx; musG.gain.value = mix.music * 0.5; try { LS.setItem('oyster-mix', JSON.stringify(mix)); } catch { } }
-function noiseBuf(a: AudioContext, sec: number) { const n = a.sampleRate * sec, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }
-function lfo(a: AudioContext, rate: number, depth: number, target: AudioParam) { const o = a.createOscillator(), g = a.createGain(); o.frequency.value = rate; g.gain.value = depth; o.connect(g).connect(target); o.start(); }
-function startAmbience(a: AudioContext) {
-  const nb = noiseBuf(a, 4);
-  const loopNoise = (type: BiquadFilterType, f: number, vol: number, lrate: number, ldepth: number) => {
-    const s = a.createBufferSource(); s.buffer = nb; s.loop = true; const fl = a.createBiquadFilter(); fl.type = type; fl.frequency.value = f; const g = a.createGain(); g.gain.value = vol;
-    s.connect(fl).connect(g).connect(ambG); s.start(); if (lrate) lfo(a, lrate, ldepth, g.gain); return fl;
-  };
-  loopNoise('lowpass', 500, 0.35, 0.12, 0.25);   // 海湧
-  const wind = loopNoise('highpass', 3000, 0.03, 0.07, 0.02); lfo(a, 0.05, 800, wind.frequency); // 風
-  const eng = a.createOscillator(); eng.type = 'sawtooth'; eng.frequency.value = 42; const ef = a.createBiquadFilter(); ef.type = 'lowpass'; ef.frequency.value = 160; const eg = a.createGain(); eg.gain.value = 0.05;
-  eng.connect(ef).connect(eg).connect(ambG); eng.start(); lfo(a, 7, 0.02, eg.gain); // 遠遠的漁船引擎
-  const gull = () => { if (document.hidden) { setTimeout(gull, 4000); return; } const t = a.currentTime; for (let k = 0; k < 2 + Math.floor(Math.random() * 3); k++) { const o = a.createOscillator(), g = a.createGain(), s0 = t + k * 0.28; o.type = 'triangle';
-      o.frequency.setValueAtTime(1500, s0); o.frequency.exponentialRampToValueAtTime(900, s0 + 0.22); g.gain.setValueAtTime(0, s0); g.gain.linearRampToValueAtTime(0.04, s0 + 0.03); g.gain.linearRampToValueAtTime(0, s0 + 0.24);
-      o.connect(g).connect(ambG); o.start(s0); o.stop(s0 + 0.3); } setTimeout(gull, 5000 + Math.random() * 9000); };
-  setTimeout(gull, 2000);
-  const radio = () => { if (document.hidden) { setTimeout(radio, 4000); return; } const t = a.currentTime, s = a.createBufferSource(); s.buffer = nb; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1200; f.Q.value = 3; const g = a.createGain();
-    g.gain.value = 0; for (let k = 0; k < 12; k++) g.gain.setValueAtTime(Math.random() < 0.6 ? 0.03 : 0, t + k * 0.12); g.gain.setValueAtTime(0, t + 1.5);
-    s.connect(f).connect(g).connect(ambG); s.start(t); s.stop(t + 1.6); setTimeout(radio, 9000 + Math.random() * 12000); };
-  setTimeout(radio, 6000);
-}
-// ===== 音樂引擎：每個場景一首 BGM、收音機三個台，全部 WebAudio 即時合成 =====
-// 同一時間只排程正在播（或正在淡出）的曲子；切換時 0.8 秒交叉淡入淡出
-type Player = (i: number, t: number, st: number) => void;
-type Trk = { bpm: number; make: (a: AudioContext, out: AudioNode) => Player };
-const MN = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
-// 共用樂器
-function vTone(a: AudioContext, out: AudioNode, ty: OscillatorType, f: number, t: number, d: number, v: number, att = 0.01, vib = 0, vibR = 5.5) {
-  const o = a.createOscillator(), g = a.createGain(); o.type = ty; o.frequency.value = f;
-  if (vib) { const lv = a.createOscillator(), lg = a.createGain(); lv.frequency.value = vibR; lg.gain.value = vib; lv.connect(lg).connect(o.detune); lv.start(t); lv.stop(t + d + 0.05); }
-  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + att); g.gain.setValueAtTime(v, t + Math.max(att, d * 0.75)); g.gain.linearRampToValueAtTime(0, t + d);
-  o.connect(g).connect(out); o.start(t); o.stop(t + d + 0.05);
-}
-function vPluck(a: AudioContext, out: AudioNode, f: number, t: number, v: number, dec: number, ty: OscillatorType = 'triangle') {
-  const o = a.createOscillator(), g = a.createGain(); o.type = ty; o.frequency.value = f; g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + dec); o.connect(g).connect(out); o.start(t); o.stop(t + dec + 0.02);
-}
-let mNoise: AudioBuffer | null = null;
-function vHit(a: AudioContext, out: AudioNode, t: number, ft: BiquadFilterType, fq: number, v: number, d: number, q = 0.8) {
-  if (!mNoise) mNoise = noiseBuf(a, 1);
-  const s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain(); s.buffer = mNoise; f.type = ft; f.frequency.value = fq; f.Q.value = q;
-  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); s.connect(f).connect(g).connect(out); s.start(t, Math.random() * 0.5); s.stop(t + d + 0.02);
-}
-function vKick(a: AudioContext, out: AudioNode, t: number, v = 0.7, f0 = 140, f1 = 45, d = 0.18) {
-  const o = a.createOscillator(), g = a.createGain(); o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + d * 0.65); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(g).connect(out); o.start(t); o.stop(t + d + 0.02);
-}
-// 鑼：非整數倍泛音、長尾音
-function vGong(a: AudioContext, out: AudioNode, t: number, f: number, v: number, d: number) {
-  for (const [mul, k] of [[1, 1], [1.48, 0.6], [2.03, 0.45], [2.74, 0.3], [3.9, 0.15]]) { const o = a.createOscillator(), g = a.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f * mul * 1.02, t); o.frequency.exponentialRampToValueAtTime(f * mul, t + 0.3); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v * k, t + 0.008); g.gain.exponentialRampToValueAtTime(0.001, t + d * (1.2 - k * 0.3)); o.connect(g).connect(out); o.start(t); o.stop(t + d * 1.2); }
-}
-// 汽笛：兩支低頻鋸齒波微微走音、低通
-function vHorn(a: AudioContext, out: AudioNode, t: number, d: number, v: number) {
-  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520; const g = a.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.25); g.gain.setValueAtTime(v, t + d - 0.4); g.gain.linearRampToValueAtTime(0, t + d); lp.connect(g).connect(out);
-  for (const f of [110, 111.3, 165.5]) { const o = a.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(t); o.stop(t + d + 0.05); }
-}
-const TRACKS: Record<string, Trk> = {
-  // 死鬥：放克律動（約 110 BPM，16 分音符格），音量壓低、低通，不蓋過腳步和音效
-  dm: { bpm: 220, make: (a, out) => {
-    const bus = a.createGain(); bus.gain.value = 0.5; const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; bus.connect(lp).connect(out);
-    const nb = a.createBuffer(1, a.sampleRate * 0.3, a.sampleRate), nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
-    const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
-    const nz = (t: number, d: number, f: number, v: number, type: BiquadFilterType = 'bandpass') => { const s = a.createBufferSource(); s.buffer = nb; const fl = a.createBiquadFilter(); fl.type = type; fl.frequency.value = f; const g = a.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); s.connect(fl).connect(g).connect(bus); s.start(t); s.stop(t + d + 0.02); };
-    const kick = (t: number, v: number) => { const o = a.createOscillator(), g = a.createGain(); o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2); o.connect(g).connect(bus); o.start(t); o.stop(t + 0.22); };
-    const bass = (t: number, m: number, d: number, v: number) => { const o = a.createOscillator(), f = a.createBiquadFilter(), g = a.createGain(); o.type = 'sawtooth'; o.frequency.value = hz(m); f.type = 'lowpass'; f.Q.value = 6; f.frequency.setValueAtTime(1400, t); f.frequency.exponentialRampToValueAtTime(260, t + d); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(f).connect(g).connect(bus); o.start(t); o.stop(t + d + 0.02); };
-    const clav = (t: number, ch: number[], v: number) => { const f = a.createBiquadFilter(), g = a.createGain(); f.type = 'bandpass'; f.Q.value = 4; f.frequency.setValueAtTime(700, t); f.frequency.exponentialRampToValueAtTime(2200, t + 0.06); f.frequency.exponentialRampToValueAtTime(900, t + 0.11); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.11); f.connect(g).connect(bus);
-      for (const m of ch) { const o = a.createOscillator(); o.type = 'square'; o.frequency.value = hz(m); o.connect(f); o.start(t); o.stop(t + 0.13); } };
-    // E 小調放克：bass 16 格（0＝休止），兩小節換和弦 Em7 → A7
-    const BL = [40, 0, 0, 52, 0, 40, 0, 43, 0, 45, 0, 40, 52, 0, 50, 0], BL2 = [45, 0, 0, 57, 0, 45, 0, 48, 0, 50, 0, 45, 57, 0, 55, 52];
-    const EM7 = [64, 67, 71, 74], A7 = [64, 67, 69, 73];
-    return (step, t) => {
-      const i = step % 16, bar = Math.floor(step / 16) % 4, sec = bar < 2 ? 0 : 1;
-      if (i === 0 || i === 10 || (i === 7 && bar % 2)) kick(t, 0.5);
-      if (i === 4 || i === 12) nz(t, 0.14, 1800, 0.32); else if (i === 7 || i === 15 || i === 9) nz(t, 0.05, 1600, 0.06); // 鼓邊鬼音
-      if (i % 2 === 0) nz(t, 0.03, 8000, i % 4 === 2 ? 0.07 : 0.035, 'highpass');
-      const bn = (sec ? BL2 : BL)[i]; if (bn) bass(t, bn, i % 4 === 3 ? 0.08 : 0.16, i === 0 ? 0.26 : 0.18);
-      if (i === 2 || i === 6 || i === 11 || (i === 14 && bar % 2)) clav(t, sec ? A7 : EM7, 0.05);
-    };
-  } },
-  // 主選單／教學／結算：台式電子琴（那卡西／廟口風），原本那首
-  temple: { bpm: 128, make: (a, out) => {
-    const mel = [76, 0, 79, 76, 74, 0, 72, 74, 76, 79, 81, 0, 79, 76, 74, 0, 72, 0, 74, 72, 69, 0, 67, 69, 72, 74, 76, 74, 72, 0, 0, 0,
-                 81, 0, 79, 81, 84, 0, 81, 79, 76, 79, 81, 0, 79, 0, 76, 74, 72, 74, 76, 79, 76, 74, 72, 69, 67, 0, 69, 72, 72, 0, 0, 0];
-    const chords = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50], [48, 52, 55], [45, 48, 52], [43, 47, 50], [48, 52, 55]];
-    const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; lp.connect(out);
-    return (s, t, st) => { const i = s % 64, beat = i % 8, ch = chords[Math.floor(i / 8)], m = mel[i];
-      if (m) { const d = st * (mel[(i + 1) % 64] ? 0.95 : 1.9); for (const [ty, det, mul] of [['square', 0, 1], ['sawtooth', 7, 1], ['triangle', 0, 2]] as [OscillatorType, number, number][]) vTone(a, lp, ty, MN(m) * mul * Math.pow(2, det / 1200), t, d, 0.06, 0.01, 9); }
-      if (beat === 0 || beat === 4) { vPluck(a, out, MN(ch[0] - 12), t, 0.5, st * 1.6); vKick(a, out, t); }
-      if (beat === 2 || beat === 6) { ch.forEach(n => vPluck(a, lp, MN(n + 12), t, 0.05, st * 0.8, 'square')); vHit(a, out, t, 'highpass', 1500, 0.25, 0.12); }
-      vHit(a, out, t, 'highpass', 7000, beat % 2 ? 0.05 : 0.08, 0.04); };
-  } },
-  // 自家蚵寮：慢板、木吉他分解和弦 + 口琴，居家
-  home: { bpm: 76, make: (a, out) => {
-    const ch = [[48, 55, 60, 64], [45, 52, 57, 60], [41, 48, 53, 57], [43, 50, 55, 59]]; // C Am F G
-    const mel = [72, 0, 0, 74, 76, 0, 0, 0, 72, 0, 69, 0, 72, 0, 0, 0, 69, 0, 0, 72, 74, 0, 72, 0, 67, 0, 0, 0, 0, 0, 0, 0,
-                 76, 0, 0, 79, 81, 0, 79, 0, 76, 0, 74, 0, 72, 0, 0, 0, 74, 0, 0, 76, 74, 0, 72, 0, 71, 0, 0, 74, 72, 0, 0, 0];
-    const hp = a.createBiquadFilter(); hp.type = 'bandpass'; hp.frequency.value = 1400; hp.Q.value = 0.7; hp.connect(out);
-    const arp = [0, 1, 2, 3, 2, 1, 2, 3];
-    return (s, t, st) => { const i = s % 64, c = ch[Math.floor(i / 8) % 4], b = i % 8;
-      if (b === 0) vPluck(a, out, MN(c[0] - 12), t, 0.28, st * 3);
-      vPluck(a, out, MN(c[arp[b]]), t + (b % 2 ? 0.012 : 0), 0.13, st * 2.4);
-      const m = mel[i]; if (m) { let d = 1; while (d < 4 && !mel[(i + d) % 64]) d++; vTone(a, hp, 'square', MN(m), t, st * d * 0.92, 0.035, 0.05, 16, 4.5); vTone(a, hp, 'sawtooth', MN(m) * 1.003, t, st * d * 0.92, 0.02, 0.05, 16, 4.5); }
-      if (b === 4) vHit(a, out, t, 'highpass', 5000, 0.025, 0.05); };
-  } },
-  // 王功漁港：中板、浪聲節奏 + 汽笛、木琴般的旋律（D 多利安）
-  wanggong: { bpm: 104, make: (a, out) => {
-    const mel = [62, 0, 65, 67, 69, 0, 67, 65, 64, 0, 62, 0, 60, 0, 62, 0, 69, 0, 72, 69, 67, 0, 65, 67, 69, 0, 0, 0, 0, 0, 0, 0];
-    const roots = [38, 38, 36, 36, 34, 34, 36, 36];
-    return (s, t, st) => { const i = s % 64, b = i % 8, r = roots[Math.floor(i / 8)];
-      if (b === 0) { vHit(a, out, t, 'lowpass', 500, 0.22, st * 6, 0.5); vPluck(a, out, MN(r), t, 0.45, st * 3); }
-      if (b === 3 || b === 6) { vHit(a, out, t, 'bandpass', 900, 0.07, st * 2, 0.6); vPluck(a, out, MN(r + 7), t, 0.2, st * 1.5); }
-      if (b === 4) vKick(a, out, t, 0.35, 100, 40, 0.25);
-      const m = mel[i % 32]; if (m && i < 56) { vPluck(a, out, MN(m + 12), t, 0.12, st * 2.2, 'sine'); vPluck(a, out, MN(m + 24), t, 0.03, st * 0.8, 'sine'); }
-      if (s % 128 === 56) vHorn(a, out, t, 1.6, 0.12); if (s % 128 === 60) vHorn(a, out, t, 0.6, 0.1); };
-  } },
-  // 東石漁人碼頭：輕快觀光風、手風琴主旋律 + 碰恰伴奏
-  dongshi: { bpm: 136, make: (a, out) => {
-    const mel = [72, 74, 76, 0, 79, 0, 76, 74, 72, 0, 74, 76, 74, 0, 0, 0, 71, 72, 74, 0, 77, 0, 74, 72, 71, 0, 72, 74, 72, 0, 0, 0,
-                 76, 77, 79, 0, 84, 0, 79, 77, 76, 0, 77, 79, 81, 0, 79, 0, 77, 76, 74, 0, 79, 0, 74, 71, 72, 0, 0, 0, 72, 0, 0, 0];
-    const ch = [[48, 52, 55], [48, 52, 55], [43, 47, 50], [43, 47, 50], [48, 52, 55], [41, 45, 48], [43, 47, 50], [48, 52, 55]];
-    const acc = a.createBiquadFilter(); acc.type = 'lowpass'; acc.frequency.value = 2400; const tg = a.createGain(); tg.gain.value = 0.8; lfo(a, 6, 0.2, tg.gain); acc.connect(tg).connect(out);
-    return (s, t, st) => { const i = s % 64, b = i % 4, c = ch[Math.floor(i / 8)];
-      if (b === 0) { vPluck(a, out, MN(c[0] - 12), t, 0.45, st * 1.4); vKick(a, out, t, 0.5); }
-      if (b === 2) { c.forEach(n => vPluck(a, acc, MN(n + 12), t, 0.04, st * 0.9, 'sawtooth')); vHit(a, out, t, 'highpass', 6000, 0.06, 0.05); }
-      const m = mel[i]; if (m) { const d = st * (mel[(i + 1) % 64] ? 0.9 : 1.8); vTone(a, acc, 'sawtooth', MN(m), t, d, 0.045, 0.015); vTone(a, acc, 'sawtooth', MN(m) * 1.006, t, d, 0.04, 0.015); vTone(a, acc, 'square', MN(m - 12), t, d, 0.02, 0.015); } };
-  } },
-  // 布袋蚵寮大廠：快、機械工廠節拍（金屬敲擊、蒸氣聲）、趕工感
-  budai: { bpm: 152, make: (a, out) => {
-    const riff = [45, 45, 57, 45, 48, 45, 55, 45, 45, 45, 57, 45, 50, 48, 47, 43];
-    const lead = [69, 0, 72, 0, 71, 0, 69, 0, 76, 0, 74, 72, 71, 0, 0, 0];
-    return (s, t, st) => { const i = s % 64, b = i % 4;
-      if (b === 0) vKick(a, out, t, 0.65, 120, 40, 0.15);
-      if (b === 2) { vHit(a, out, t, 'bandpass', 2400, 0.16, 0.07, 6); vPluck(a, out, 1870, t, 0.03, 0.06, 'square'); }
-      if (i % 8 === 7) vPluck(a, out, 2630, t, 0.035, 0.1, 'square');
-      vPluck(a, out, MN(riff[i % 16] - 12), t, 0.2, st * 0.7, 'sawtooth');
-      vHit(a, out, t, 'highpass', 8000, i % 2 ? 0.03 : 0.05, 0.03);
-      if (i % 32 === 30) vHit(a, out, t, 'highpass', 3000, 0.08, st * 3);
-      if (s % 128 >= 64) { const m = lead[i % 16]; if (m) vTone(a, out, 'square', MN(m), t, st * 0.9, 0.03, 0.005); } };
-  } },
-  // 活動場景：鑼鼓陣頭（大鼓、鈸、鑼）+ 嗩吶般的主旋律，150 BPM 熱鬧緊湊
-  event: { bpm: 150, make: (a, out) => {
-    const sn = a.createBiquadFilter(); sn.type = 'bandpass'; sn.frequency.value = 1300; sn.Q.value = 1.4; const sg = a.createGain(); sg.gain.value = 2.2; sn.connect(sg).connect(out);
-    const mel = [79, 81, 79, 76, 74, 76, 79, 0, 81, 84, 81, 79, 76, 0, 79, 0, 74, 76, 79, 76, 74, 72, 69, 0, 72, 74, 76, 74, 72, 0, 72, 0];
-    const drum = [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0];
-    return (s, t, st) => { const i = s % 64, b = i % 16;
-      if (drum[b]) vKick(a, out, t, b % 4 === 0 ? 0.8 : 0.45, 110, 55, 0.22);
-      if (b % 4 === 2) vHit(a, out, t, 'highpass', 4500, 0.2, st * 1.6);
-      if (b === 0 && i % 32 === 0) vGong(a, out, t, 98, 0.35, 2.2);
-      if (b === 8) vGong(a, out, t, 440, 0.12, 0.5);
-      vPluck(a, out, 1250, t, 0.04, 0.03, 'square');
-      if (s % 128 >= 16) { const m = mel[i % 32]; if (m) vTone(a, sn, 'sawtooth', MN(m), t, st * (mel[(i + 1) % 32] ? 0.92 : 1.8), 0.05, 0.01, 22, 6.5); } };
-  } },
-  // 收音機：懷舊歌謠台（原本的收音機曲，A 小調五聲三拍子）
-  r_old: { bpm: 84, make: (a, out) => {
-    const mel = [69, 0, 72, 74, 0, 76, 74, 0, 72, 69, 0, 0, 67, 0, 69, 72, 0, 74, 69, 0, 0, 0, 0, 0,
-                 76, 0, 79, 76, 0, 74, 72, 0, 74, 76, 0, 0, 74, 0, 72, 69, 0, 67, 69, 0, 0, 0, 0, 0,
-                 72, 0, 74, 76, 0, 79, 81, 0, 79, 76, 0, 0, 74, 0, 76, 74, 0, 72, 69, 0, 72, 74, 0, 0,
-                 76, 0, 74, 72, 0, 69, 67, 0, 69, 72, 0, 0, 69, 0, 67, 64, 0, 67, 69, 0, 0, 0, 0, 0];
-    const roots = [45, 43, 41, 40, 45, 48, 43, 45];
-    return (s, t, st) => { const i = s % 96, b = i % 6, root = roots[Math.floor(i / 12) % 8], m = mel[i];
-      if (m) { let d = 1; while (d < 4 && !mel[(i + d) % 96]) d++; vTone(a, out, 'triangle', MN(m), t, st * d * 0.95, 0.11, 0.04, 14, 5); vTone(a, out, 'sine', MN(m) * 2, t, st * d * 0.95, 0.04, 0.04, 14, 5); }
-      if (b === 0) vPluck(a, out, MN(root), t, 0.32, st * 1.8); else if (b === 2 || b === 4) { vPluck(a, out, MN(root + 12 + (b === 2 ? 3 : 7)), t, 0.09, st * 1.8); vPluck(a, out, MN(root + 19), t, 0.06, st * 1.8); } };
-  } },
-  // 收音機：廣播電台（主持人講話般的高低起伏咕噥聲 + 每段開頭的台呼小鈴聲）
-  r_talk: { bpm: 120, make: (a, out) => {
-    const fm = a.createBiquadFilter(); fm.type = 'bandpass'; fm.frequency.value = 900; fm.Q.value = 2.5; fm.connect(out);
-    let pitch = 150;
-    return (s, t, st) => { const i = s % 128;
-      if (i < 6) { const j = [79, 0, 76, 0, 72, 84][i]; if (j) { vPluck(a, out, MN(j), t, 0.12, 0.7, 'sine'); vPluck(a, out, MN(j + 12), t, 0.03, 0.4, 'sine'); } return; }
-      if (i < 10 || (i % 32 > 27)) return; // 換氣停頓
-      if (Math.random() < 0.18) return;
-      pitch = Math.max(110, Math.min(220, pitch + (Math.random() - 0.5) * 40)); const d = st * (0.6 + Math.random() * 0.9);
-      const o = a.createOscillator(), g = a.createGain(); o.type = 'sawtooth'; o.frequency.setValueAtTime(pitch, t); o.frequency.linearRampToValueAtTime(pitch * (0.85 + Math.random() * 0.3), t + d);
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.09, t + 0.03); g.gain.linearRampToValueAtTime(0, t + d); o.connect(g).connect(fm); o.start(t); o.stop(t + d + 0.02);
-      fm.frequency.setValueAtTime(600 + Math.random() * 900, t); };
-  } },
-  // 收音機：台語老歌（慢板 3/4 演歌風，寬顫音的主旋律 + 吉他）
-  r_taigi: { bpm: 66, make: (a, out) => {
-    const mel = [64, 0, 0, 69, 0, 71, 72, 0, 0, 0, 71, 69, 71, 0, 0, 72, 71, 69, 64, 0, 0, 0, 0, 0,
-                 69, 0, 0, 72, 0, 74, 76, 0, 0, 77, 76, 74, 76, 0, 0, 72, 0, 71, 69, 0, 0, 0, 0, 0];
-    const roots = [45, 45, 40, 40, 45, 41, 40, 45];
-    return (s, t, st) => { const i = s % 48, b = i % 6, r = roots[Math.floor(i / 6) % 8], m = mel[i];
-      if (m) { let d = 1; while (d < 6 && !mel[(i + d) % 48]) d++; vTone(a, out, 'triangle', MN(m), t, st * d * 0.96, 0.12, 0.06, 28, 5.5); vTone(a, out, 'square', MN(m), t, st * d * 0.96, 0.015, 0.06, 28, 5.5); }
-      if (b === 0) vPluck(a, out, MN(r - 12), t, 0.3, st * 2.5); else if (b === 2 || b === 4) [r + 3, r + 7].forEach(n => vPluck(a, out, MN(n), t, 0.07, st * 1.5)); };
-  } },
-};
-const STATIONS = [{ id: 'r_old', n: '懷舊歌謠台' }, { id: 'r_talk', n: '廣播電台' }, { id: 'r_taigi', n: '台語老歌' }];
-type Live = { key: string; g: GainNode; fn: Player; st: number; step: number; next: number; dead: number };
-let live: Live[] = [], curTrack = '', radioBus: GainNode | null = null, radioNoise: GainNode | null = null;
-function setupRadioBus(a: AudioContext) {
-  // AM 收音機味：高通 + 輕微失真 + 低通 + 沙沙聲
-  const hp = a.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 380;
-  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 1.2;
-  const ws = a.createWaveShaper(); const cv = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 128 - 1; cv[i] = Math.tanh(x * 2.2) / Math.tanh(2.2); } ws.curve = cv;
-  radioBus = a.createGain(); radioBus.gain.value = 0.9; radioBus.connect(hp).connect(ws).connect(lp).connect(musG);
-  const sb = a.createBuffer(1, a.sampleRate * 2, a.sampleRate), sd = sb.getChannelData(0); for (let i = 0; i < sd.length; i++) sd[i] = (Math.random() * 2 - 1) * (Math.random() < 0.002 ? 1 : 0.35);
-  const sn = a.createBufferSource(); sn.buffer = sb; sn.loop = true; const sf = a.createBiquadFilter(); sf.type = 'bandpass'; sf.frequency.value = 1800; sf.Q.value = 0.6;
-  radioNoise = a.createGain(); radioNoise.gain.value = 0; const sg = a.createGain(); sg.gain.value = 0.035; lfo(a, 0.23, 0.015, sg.gain);
-  sn.connect(sf).connect(sg).connect(radioNoise).connect(musG); sn.start();
-}
+
 const radioSt = () => ((save.radioSt ?? 0) % STATIONS.length + STATIONS.length) % STATIONS.length;
-// 現在該播哪一首
 function pickTrack(): string {
   if (isDeathmatchActive()) return 'dm';
   if (state !== 'play' || tut) return 'temple';
   if (gearOn('radio')) return STATIONS[radioSt()].id;
   if (evRun) return 'event';
-  const id = locNow().id; return TRACKS[id] ? id : 'home';
+  const id = locNow().id; return hasBgmTrack(id) ? id : 'home';
 }
-function musicTick(a: AudioContext) {
-  const k = pickTrack(), now = a.currentTime;
-  if (k !== curTrack) {
-    curTrack = k;
-    for (const l of live) if (!l.dead) { l.g.gain.cancelScheduledValues(now); l.g.gain.setValueAtTime(l.g.gain.value, now); l.g.gain.linearRampToValueAtTime(0, now + 0.8); l.dead = now + 0.9; }
-    const tr = TRACKS[k], g = a.createGain(), isR = k.startsWith('r_');
-    g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(1, now + 0.8); g.connect(isR ? radioBus! : musG);
-    live.push({ key: k, g, fn: tr.make(a, g), st: 60 / tr.bpm / 2, step: 0, next: now + 0.05, dead: 0 });
-    if (radioNoise) { radioNoise.gain.cancelScheduledValues(now); radioNoise.gain.setValueAtTime(radioNoise.gain.value, now); radioNoise.gain.linearRampToValueAtTime(isR ? 1 : 0, now + 0.5); }
-  }
-  live = live.filter(l => { if (l.dead && now > l.dead) { setTimeout(() => l.g.disconnect(), 3000); return false; } return true; });
-  for (const l of live) {
-    if (l.next < now - 0.5) l.next = now + 0.05; // 從背景回來／卡頓後不要一次補一大堆音
-    while (l.next < now + 0.25) { if (!l.dead || l.next < l.dead) l.fn(l.step, l.next, l.st); l.next += l.st; l.step++; }
-  }
-}
-function startMusic(a: AudioContext) {
-  setupRadioBus(a); musicTick(a);
-  setInterval(() => { if (!document.hidden && a.state === 'running') musicTick(a); }, 60);
-}
-document.addEventListener('visibilitychange', () => { if (!ac) return; if (document.hidden) ac.suspend().catch(() => {}); else ac.resume().catch(() => {}); });
-function audio() {
-  if (!ac) { ac = new AudioContext(); masterG = ac.createGain(); ambG = ac.createGain(); sfxG = ac.createGain(); musG = ac.createGain(); musG.connect(masterG); ambG.connect(masterG); sfxG.connect(masterG); masterG.connect(ac.destination); applyMix(); startAmbience(ac); startMusic(ac); }
-  if (ac.state === 'suspended') ac.resume();
-  return ac;
-}
-function noise(dur: number, freq: number, vol: number, sweepTo = 0) {
-  const a = audio(), n = Math.floor(a.sampleRate * dur), b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 4);
-  const s = a.createBufferSource(); s.buffer = b; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 0.8;
-  if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, a.currentTime + dur);
-  const g = a.createGain(); g.gain.value = vol; s.connect(f).connect(g).connect(sfxG); s.start();
-}
-function tone(freq: number, dur: number, vol: number, type: OscillatorType = 'sine', delay = 0, glideTo = 0) {
-  const a = audio(), o = a.createOscillator(), g = a.createGain(), t = a.currentTime + delay;
-  o.type = type; o.frequency.setValueAtTime(freq, t); if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + dur);
-  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g).connect(sfxG); o.start(t); o.stop(t + dur + 0.05);
-}
-const SFX = {
-  creak: () => tone(rnd(140, 200), 0.18, 0.08, 'sawtooth', 0, rnd(90, 120)),
-  whoosh: () => noise(0.3, 400, 0.35, 2500),
-  plop: () => { tone(420, 0.1, 0.2, 'sine', 0, 180); tone(700, 0.06, 0.08, 'triangle', 0.04); },
-  splat: () => { noise(0.22, 300, 0.5); tone(90, 0.12, 0.15, 'sine'); },
-  aia: () => { tone(520, 0.12, 0.15, 'square', 0, 700); tone(700, 0.25, 0.15, 'square', 0.12, 380); noise(0.08, 200, 0.4); },
-  pinch: () => { noise(0.05, 3500, 0.5); tone(1200, 0.1, 0.1, 'square', 0.02, 800); },
-  jingle: (up = true) => [0, 1, 2, 3].forEach(k => tone(up ? 660 * Math.pow(1.26, k) : 400 / Math.pow(1.2, k), 0.18, 0.12, 'triangle', k * 0.09)),
-  sneak: () => { tone(300, 0.08, 0.05, 'sine'); tone(240, 0.08, 0.05, 'sine', 0.12); },
-  sting: () => { tone(220, 0.35, 0.2, 'square', 0, 110); tone(233, 0.35, 0.15, 'sawtooth', 0.02, 116); },
-  hitNpc: () => { noise(0.08, 2500, 0.5); tone(160, 0.1, 0.2, 'sine'); },
-  alert: () => { tone(880, 0.1, 0.12, 'square'); tone(660, 0.1, 0.12, 'square', 0.15); tone(880, 0.1, 0.12, 'square', 0.3); },
-  boing: () => { tone(160, 0.45, 0.3, 'sine', 0, 420); tone(320, 0.3, 0.1, 'triangle', 0.05, 640); },
-  pop: () => noise(0.05, 1500, 0.3),
-  endJingle: (good: boolean) => (good ? [523, 659, 784, 1046] : [523, 494, 440, 392]).forEach((f, k) => tone(f, 0.3, 0.14, 'triangle', k * 0.16)),
-  murmur: (pitch: number) => { const n = 3 + Math.floor(Math.random() * 4); for (let k = 0; k < n; k++) tone(pitch * rnd(0.85, 1.25), 0.07, 0.045, 'square', k * 0.09); },
-};
-const crackSound = (big = true) => { noise(0.12, 2400, big ? 0.9 : 0.4); tone(180, 0.06, 0.3, 'triangle', 0.02); };
-const ding = (rare: number) => { const base = [1318, 1568, 1760, 2093][rare]; tone(base, 1.4, 0.25); tone(base * 1.5, 1.2, 0.12, 'sine', 0.12); if (rare >= 2) tone(base * 2, 1.5, 0.1, 'sine', 0.3); };
+initAudio({
+  getMix: () => mix,
+  persistMix: () => { try { LS.setItem('oyster-mix', JSON.stringify(mix)); } catch { } },
+  pickTrack,
+  rnd,
+});
+(window as any).__mus = musDebug;
 
 // ---------- 難度、珍珠、奇物、存檔 ----------
 const DIFF = [
@@ -1148,7 +901,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   if (nightShift && !plazaMode) later(1.5, () => toast('🌙 夜班上工！這一工收入 +20%', '#b8c8ff'));
   moonReset(); npcs.forEach(dressAma); applyCrew();
   if (walking && !plazaMode) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
-  state = 'play'; syncShiftUi(); achShiftGot = []; handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
+  state = 'play'; syncShiftUi(); clearAchShiftGot(); handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   if (plazaMode && !plazaPlayAt) plazaPlayAt = performance.now();
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now();
   if (!tut) {
@@ -1553,7 +1306,6 @@ const PRY_GRACE = 0.04;
 // 視覺佮判定攏用同一个時間公式（事件 timeStamp），毋免等下一格
 const needle = (ms = performance.now()) => 0.5 - 0.5 * Math.cos(((ms - needleStart) / 1000) * Math.PI * 2 * prySp());
 (window as any).__sim = () => ({ t: SHIFT - timeLeft, c: npcs.map(n => n.count), names: npcs.map(n => n.name) });
-(window as any).__mus = () => ({ cur: curTrack, live: live.length, keys: live.map(l => l.key), ac: ac?.state ?? null });
 (window as any).__dbg = { warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }) };
 (window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
 (window as any).__pry = () => { if (phase !== 'twist') return null; const f = prySp(), per = 1000 / f, th = Math.acos(1 - 2 * PRY_C) / (Math.PI * 2) * per; const el = (performance.now() - needleStart) % per; let w = th - el; if (w < 5) w += per / 2 > th ? per - 2 * th + th * 2 - th : per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
@@ -3293,63 +3045,19 @@ function grant(d: RedeemCodeDef) {
   sub.onclick = go; inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
 }
 
-// ---------- 💊 藥品（消耗品，一工內有效）----------
-type MedKey = 'green' | 'speed' | 'slip' | 'dmg' | 'regen' | 'grudge';
-type Med = { id: string; n: string; emo: string; price: number; dur: number; m?: Partial<Record<MedKey, number>>; luck?: number; heal?: number; good: string; bad: string };
-const MEDS: Med[] = [
-  { id: 'tonic', n: '阿伯提神補酒', emo: '🍾', price: 40, dur: 60, m: { green: 1.25, slip: 1.5 }, good: '綠區 +25%', bad: '手會抖，割手率 +50%' },
-  { id: 'oil', n: '綠色風油精', emo: '🧴', price: 30, dur: 60, m: { speed: 0.75 }, luck: -1, good: '指針速度 -25%（比較穩）', bad: '薰到眼睛，幸運 -1' },
-  { id: 'patch', n: '痠痛貼布', emo: '🩹', price: 25, dur: 90, m: { dmg: 0.5, regen: 3, speed: 1.1 }, good: '受到的傷害減半、手痛恢復 3 倍', bad: '手腕貼太緊，指針速度 +10%' },
-  { id: 'soup', n: '轉運雞精', emo: '🍵', price: 80, dur: 60, m: { green: 0.85 }, luck: 2, good: '幸運 +2（比較容易開到珍珠奇物）', bad: '補過頭有點暈，綠區 -15%' },
-  { id: 'okb', n: 'OK繃', emo: '🩹', price: 15, dur: 0, heal: 25, good: '立刻補 25 點手的體力', bad: '只是包起來，沒有持續效果' },
-  { id: 'sweet', n: '古早味糖果', emo: '🍬', price: 35, dur: 0, good: '送給最生氣的阿婆，她的怒氣立刻 -40', bad: '只有一位阿婆有份' },
-  { id: 'salt', n: '粗鹽', emo: '🧂', price: 25, dur: 0, good: '下一顆蚵仔一定是易或普通', bad: '只對下一顆有效' },
-  { id: 'candy', n: '潤喉糖', emo: '🍬', price: 20, dur: 90, m: { grudge: 0.5, regen: 0.5 }, good: '跟阿婆有說有笑，怒氣增加減半', bad: '只顧講話，手痛恢復變慢一半' },
-];
-const medT: Record<string, number> = {};
-const medOn = () => MEDS.filter(m => (medT[m.id] ?? 0) > 0);
-function medM(k: MedKey) { let v = 1; for (const m of medOn()) v *= m.m?.[k] ?? 1; return v; }
-function medA(_k: 'luck') { let v = 0; for (const m of medOn()) v += m.luck ?? 0; return v; }
-let medDrawT = 0;
-function tickMeds(dt: number) { let ch = false; for (const k in medT) { const was = medT[k] > 0; medT[k] = Math.max(0, medT[k] - dt); if (was && medT[k] <= 0) { ch = true; const m = MEDS.find(x => x.id === k); if (m) toast(`${m.emo}${m.n} 效果結束了`, '#cfc3ff'); } } medDrawT -= dt; if (ch || medDrawT <= 0) { medDrawT = 1; drawMeds(); } }
-function drawMeds() {
-  const el = document.getElementById('medAct'); if (el) el.innerHTML = medOn().map(m => `<span>${m.emo}${Math.ceil(medT[m.id])}s</span>`).join('') + (saltNext ? '<span>🧂下一粒</span>' : '');
-  const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0) + ITEMS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0); const b = document.getElementById('medBtn'); if (b) { b.innerHTML = (n ? `<i class="ic ic-pill"></i> 藥品/道具 ×${n}` : '<i class="ic ic-pill"></i> 藥品/道具') + '<span class="key"> (M)</span>' + (n ? '' : '<small>去雜貨店買</small>'); b.classList.toggle('empty', !n); }
-  const L = document.getElementById('medList'); if (L && L.classList.contains('show')) renderMedList();
-}
-function useMed(id: string) {
-  const m = MEDS.find(x => x.id === id); if (!m || state !== 'play' || tut || !(save.meds[id] > 0)) return;
-  let who = '';
-  if (id === 'sweet' && evRun) { toast('活動中的阿婆都殺紅眼了，糖果沒有用', '#ff9a8a'); return; }
-  if (id === 'sweet') { const t = npcs.reduce((a, b) => ((b.grudge ?? 0) > (a.grudge ?? 0) ? b : a)); if ((t.grudge ?? 0) < 1) { toast('阿婆們現在都不生氣，糖果先留著', '#cfc3ff'); return; } t.grudge = Math.max(0, (t.grudge ?? 0) - 40); t.calm = Math.max(t.calm ?? 0, 3); grudgeUI(t); say(t, '哎唷，古早味！好啦不跟你計較', 2.6); who = `（給${t.name}）`; }
-  if (id === 'salt') { if (saltNext) { toast('粗鹽已經用了，等下一顆', '#cfc3ff'); return; } saltNext = true; }
-  save.meds[id]--; persist(); if (m.heal) { hp = Math.min(100, hp + m.heal); updHud(); } if (m.dur) medT[id] = (medT[id] ?? 0) + m.dur; track('use', { item: id }); toast(`${m.emo}使用${m.n}${who}：${m.good}；${m.bad}${m.dur ? `（${m.dur} 秒）` : ''}`, '#cfc3ff'); if (ac) SFX.pop(); drawMeds();
-}
-function renderMedList() {
-  const L = $('medList'); const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0);
-  const ownI = ITEMS.filter(m => (save.meds[m.id] ?? 0) > 0);
-  const itemHint = plazaMode
-    ? '廣場不能用飛彈鐵拳'
-    : `這一工剩 ${Math.max(0, MOON_MAX - moonUsed)} 次`;
-  L.innerHTML = '<div class="mlH"><b>藥品</b><button class="mlX" aria-label="關閉">✕</button></div>' + (own.length ? own.map((m, i) => `<button data-use="${m.id}"><span class="mlN"><span class="nm"><span class="key">${i + 1}. </span>${m.emo} ${m.n}</span><b class="ct">×${save.meds[m.id]}</b></span><small>${m.good}／${m.bad}${m.dur ? `・${m.dur} 秒` : "・立即"}${medT[m.id] > 0 ? `（剩 ${Math.ceil(medT[m.id])}s，再用會延長）` : ''}</small></button>`).join('') : '<p>身上沒有藥品，去雜貨店的「藥品」買吧</p>') + '<div class="mlH"><b>道具</b></div>' + (ownI.length ? ownI.map(m => `<button data-item="${m.id}"${plazaMode ? ' disabled' : ''}><span class="mlN"><i class="ic ic-moon"></i><span class="nm">${m.n}</span><b class="ct">×${save.meds[m.id]}</b></span><small>${plazaMode ? itemHint : `${m.good}（${itemHint}）`}</small></button>`).join('') : '<p>身上沒有道具，去雜貨店的「道具」買吧</p>');
-  L.querySelector('.mlX')?.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); L.classList.remove('show'); });
-  L.querySelectorAll('button[data-item]').forEach(b => b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); if (plazaMode) { toast('廣場不能用飛彈鐵拳', '#ffb08a'); return; } moonStart(); }));
-  L.querySelectorAll('button[data-use]').forEach(b => b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); useMed(b.getAttribute('data-use')!); renderMedList(); }));
-}
-{
-  const b = $('medBtn'), L = $('medList');
-  b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); if (document.pointerLockElement) document.exitPointerLock(); L.classList.toggle('show'); if (L.classList.contains('show')) renderMedList(); });
-  L.addEventListener('pointerdown', e => e.stopPropagation());
-  window.addEventListener('pointerdown', e => { if (!(e.target as HTMLElement).closest?.('#medList,#medBtn')) L.classList.remove('show'); });
-  drawMeds();
-}
-function renderMedShop() {
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-pill"></i> 藥品</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，效果持續幾秒，同一種再用會延長時間；收工後效果消失，沒用完的會留著。</p><table class="kt"><tr><th>藥品</th><th>好處</th><th>代價</th><th>時間</th><th>持有</th><th></th></tr>` + MEDS.map(m => `<tr><td><b>${m.emo} ${m.n}</b>${pxCd('med-' + m.id)}</td><td style="color:#9be37a">${m.good}</td><td style="color:#ff8a7a">${m.bad}</td><td>${m.dur ? `${m.dur}s` : "立即"}</td><td>${save.meds[m.id] ?? 0}</td><td><button data-mbuy="${m.id}" ${save.money < px('med-' + m.id, m.price) ? 'disabled' : ''}>${pxHtml('med-' + m.id, m.price)}</button></td></tr>`).join('') + '</table>');
-  $('shopList').querySelectorAll('button[data-mbuy]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
-    const m = MEDS.find(x => x.id === b.getAttribute('data-mbuy'))!; const pr = await payFor('med-' + m.id, m.price, m.n); if (pr == null) return;
-    save.money -= pr; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; persist(); track('buy', { item: 'med-' + m.id, price: pr }); if (ac) SFX.jingle(); renderShop(); drawMeds();
-  });
-}
+initMeds({
+  $: (id) => $(id), toast, track, persist,
+  getSave: () => save, getState: () => state, isTut: () => !!tut, hasEvRun: () => !!evRun,
+  getNpcs: () => npcs, grudgeUI, say,
+  getHp: () => hp, setHp: (v) => { hp = v; }, updHud,
+  getAc: () => ac, SFX,
+  getItems: () => ITEMS, getMoonMax: () => MOON_MAX, getMoonUsed: () => moonUsed, moonStart,
+  isPlazaMode: () => plazaMode,
+  getSaltNext: () => saltNext, setSaltNext: (v) => { saltNext = v; },
+  px, pxCd, pxHtml, payFor, renderShop,
+});
+initMedsUi();
+
 // ---------- 裝備（頭／手／衣服／褲子／鞋子）----------
 type Slot = 'head' | 'hand' | 'body' | 'legs' | 'feet';
 type Fx = { bowl?: number; keep?: number; speed?: number; pearl?: number; nag?: number; throw?: number; dmg?: number; luck?: number };
@@ -3898,40 +3606,16 @@ document.querySelectorAll<HTMLElement>('.panel').forEach(pn => {
 });
 // 上工中關掉／離開頁面：記一筆中途離開
 addEventListener('pagehide', () => { if (state === 'play' && !tut) track('abandon', { reason: 'abandon', count, opened, dur: Math.round(shiftLen - Math.max(0, timeLeft)), loc: locNow().id, dstat: dstatStr() }); });
-// 💬 意見回饋
-const FB_URL = STATS_URL.replace(/\/e$/, '/feedback');
-let fbCat = '', fbFrom = '', fbLast = 0, fbMood = 0, fbTimer = 0;
-const FB_PH: Record<string, string> = { bug: '哪裡出問題？在做什麼的時候發生的？例如：在王功漁港撬第三顆時畫面卡住…', idea: '想加什麼東西？新的刀、新漁港、新阿婆都可以講～', fun: '哪裡最好玩？哪個阿婆最好笑？', hard: '哪一段太難？撬殼、投碗還是躲殼？' };
-const MOOD_TXT = ['', '很差', '普通偏差', '還可以', '不錯', '超好玩'];
-const fbCount = () => { const n = ($('fbText') as HTMLTextAreaElement).value.length, c = $('fbCount'); c.textContent = `${n}/500`; c.className = n >= 480 ? 'full' : n >= 400 ? 'near' : ''; };
-function fbCool() { const left = Math.ceil((60_000 - (Date.now() - fbLast)) / 1000), btn = $('fbSend') as HTMLButtonElement; clearTimeout(fbTimer);
-  if (left > 0 && fbLast) { btn.disabled = true; $('fbSendTxt').textContent = `阿婆喘口氣… ${left} 秒`; fbTimer = window.setTimeout(fbCool, 1000); } else { btn.disabled = false; $('fbSendTxt').textContent = '送出'; } }
-function fbShow(done: boolean) { $('fbForm').style.display = done ? 'none' : ''; $('fbDone').classList.toggle('on', done); }
-function openFb(from: string) { fbFrom = from; $(from).classList.remove('show'); fbShow(false); $('fb').classList.add('show'); fbCount(); fbCool(); }
-const bounce = (el: Element) => { el.classList.remove('pop'); void (el as HTMLElement).offsetWidth; el.classList.add('pop'); };
-document.querySelectorAll<HTMLButtonElement>('[data-fc]').forEach(b => b.onclick = () => { fbCat = b.dataset.fc!; document.querySelectorAll<HTMLButtonElement>('[data-fc]').forEach(x => x.classList.toggle('sel', x === b)); bounce(b); ($('fbText') as HTMLTextAreaElement).placeholder = FB_PH[fbCat] ?? ''; });
-document.querySelectorAll<HTMLButtonElement>('[data-mood]').forEach(b => b.onclick = () => { const v = +b.dataset.mood!; fbMood = fbMood === v ? 0 : v; document.querySelectorAll<HTMLButtonElement>('[data-mood]').forEach(x => { x.classList.toggle('sel', +x.dataset.mood! <= fbMood); }); bounce(b); $('fbMoodTxt').textContent = fbMood ? `${fbMood}/5 ${MOOD_TXT[fbMood]}` : ''; });
-$('fbText').addEventListener('input', fbCount);
-$('setFb').onclick = () => openFb('settings'); $('rFb').onclick = () => openFb('result');
-$('fbClose').onclick = () => { $('fb').classList.remove('show'); fbShow(false); if (fbFrom) $(fbFrom).classList.add('show'); };
-$('fbBack').onclick = () => { $('fb').classList.remove('show'); fbShow(false); if (fbFrom === 'result' || state !== 'play') { if (fbFrom) $(fbFrom).classList.add('show'); } };
-$('fbSend').onclick = () => {
-  const ta = $('fbText') as HTMLTextAreaElement, text = ta.value.trim().slice(0, 500);
-  if (!fbCat) { toast('先選一個類別喔'); bounce($('fbCats')); return; }
-  if (!text) { toast('寫點什麼再送出吧'); ta.focus(); return; }
-  if (Date.now() - fbLast < 60_000) { fbCool(); return; }
-  fbLast = Date.now(); const btn = $('fbSend'); btn.classList.add('flying'); ($('fbSend') as HTMLButtonElement).disabled = true; $('fbSendTxt').textContent = '送出中…';
-  const ua = navigator.userAgent, uaS = (/(iPhone|iPad|Android|Windows|Mac OS X|Linux)/.exec(ua)?.[1] ?? '?') + ' ' + (/(Edg|Chrome|Firefox|Safari)\/[\d]+/.exec(ua)?.[0] ?? '');
-  const body = JSON.stringify({ uid: statsId, cat: fbCat, text, mood: fbMood || undefined, contact: ($('fbContact') as HTMLInputElement).value.trim().slice(0, 120), meta: { ver: __BUILD__, dev: COARSE ? 'mobile' : 'pc', screen: `${innerWidth}x${innerHeight}`, loc: locNow().id, days: save.days, ua: uaS, mood: fbMood || undefined } });
-  const catName: Record<string, string> = { bug: '🐛 Bug', idea: '💡 建議', fun: '😊 好玩', hard: '😣 太難' };
-  const pBack = fetch(FB_URL, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(r => r.ok, () => false);
-  const pDc = postDiscordFeedback(`剝蚵仔模擬器｜${catName[fbCat] ?? fbCat}`, text, { 心情: fbMood ? `${'🦪'.repeat(fbMood)} ${fbMood}/5` : '未選', 版本: __BUILD__, 裝置: `${COARSE ? 'mobile' : 'pc'} ${uaS}`, 螢幕: `${innerWidth}x${innerHeight}`, 漁港: locNow().id, 工數: save.days });
-  const minT = new Promise(r => setTimeout(r, 700));
-  Promise.all([pBack, pDc, minT]).then(([a, b]) => { btn.classList.remove('flying');
-    if (a || b) { ta.value = ''; fbCount(); fbMood = 0; document.querySelectorAll('[data-mood].sel').forEach(x => x.classList.remove('sel')); $('fbMoodTxt').textContent = ''; fbShow(true); fbCool(); }
-    else { fbLast = 0; fbCool(); toast('送出失敗，稍後再試'); } });
-};
-(window as any).__fbDone = () => fbShow(true);
+initFeedback({
+  $: (id) => $(id),
+  toast,
+  getState: () => state,
+  getLocId: () => locNow().id,
+  getDays: () => save.days,
+  statsId,
+  statsUrl: STATS_URL,
+  coarse: COARSE,
+});
 /** 關閉最上層可關視窗（ESC／手機返回共用）。主選單／結算不關。 */
 function closeTopModal(): boolean {
   if (closeWeaponPreview()) return true;
@@ -4203,458 +3887,42 @@ setInterval(featAnnounce, 1500); setTimeout(featAnnounce, 1800);
 
 if ((navigator as any).standalone) document.documentElement.classList.add('iosApp');
 
-// ---------- 活動場景 ----------
-const EV_RULE: Record<string, string> = { normal: '一般，可剝可偷', steal_only: '只能用偷的', no_steal: '不能偷' };
-let evCfg: EvCfg | null = null, evSkew = 0, evShown = false;
-function evMeat() {
-  if (!evRun || state !== 'play' || tut) return;
-  const tgt = evRun.earlyMeat;
-  if (tgt && count >= tgt && endReason !== 'early') { endReason = 'early'; toast('達成目標，提前完工！', '#ffd76a'); later(0.8, endDay); }
-}
-function evHud() {
-  const el = document.getElementById('evHud'); if (!el) return;
-  if (!evRun || state !== 'play') { el.style.display = 'none'; document.body.classList.remove('evOn'); return; }
-  document.body.classList.add('evOn');
-  const t = evRun.earlyMeat, rule = evRun.steal === 'no_steal' ? '本活動不能偷' : evRun.steal === 'steal_only' ? '本活動只能用偷的' : '';
-  el.innerHTML = `<i class="ic ic-lantern"></i>${t ? `<b>${Math.min(count, t)}/${t}</b>` : `<b>${esc(evRun.name)}</b>`}${rule ? `<small>${rule}</small>` : ''}`;
-  el.style.display = '';
-}
-const evOdds = (l: EvOdd[]) => (Array.isArray(l) ? l : []).filter(o => Number.isInteger(o?.i) && ODD[o.i] && o.n > 0).map(o => ({ i: o.i, n: Math.min(99, Math.floor(o.n)) }));
-// 收工：發活動獎勵（同一工只發一次，存檔記住 sid 防重複領）、回報成績、組收工畫面的活動區塊
-function evFinish(ev: EvCfg, done: boolean, early: boolean): string {
-  const sid = statsSid; save.evClaim ??= [];
-  const fresh = done && !save.evClaim.includes(sid);
-  const odds = done ? [...evOdds(ev.oddDone), ...(early ? evOdds(ev.oddEarly) : [])] : [];
-  if (fresh) {
-    save.evClaim.push(sid); save.evClaim = save.evClaim.slice(-30);
-    for (const o of odds) { save.odd[o.i] = (save.odd[o.i] ?? 0) + o.n; const def = ODD[o.i]; if (rarOf(def.weight) === 'legend' && !def.limited) { save.legendDry = 0; save.legendN = legendTotal(); } }
-    for (const i of new Set(odds.map(o => o.i))) Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i);
-    renderDex();
-  }
-  const score = count * 1000 + (early ? Math.max(0, Math.ceil(timeLeft)) : 0);
-  if (!SHOT) { if (evToken) Social.evResult({ eventId: ev.id, token: evToken, sid, score, meat: count, completed: done, early }); track('event_end', { item: 'ev-' + ev.id, count, earn: lastPay.earn, reason: early ? 'time' : endReason === 'quit' ? 'quit' : 'time', dur: Math.round(shiftLen - Math.max(0, timeLeft)) }); }
-  const row = (l: string, v: string, on = true) => `<div class="row${on ? '' : ' off'}"><span>${l}</span><b>${v}</b></div>`;
-  const oddRow = (l: EvOdd[]) => l.map(o => `${esc(ODD[o.i].name)} ×${o.n}`).join('、');
-  return `<div class="evRes"><h3><i class="ic ic-lantern"></i> 活動獎勵・${esc(ev.name)}</h3>` +
-    row('完工獎勵', done ? `+$${ev.bonus}` : '未完工', done) +
-    (ev.earlyMeat ? row(`提前完工額外獎勵（${ev.earlyMeat} 顆）`, early ? `+$${ev.earlyBonus}` : `${Math.min(count, ev.earlyMeat)}/${ev.earlyMeat}`, early) : '') +
-    (evOdds(ev.oddDone).length ? row('完工奇物', oddRow(evOdds(ev.oddDone)), done) : '') +
-    (ev.earlyMeat && evOdds(ev.oddEarly).length ? row('提前完工奇物', oddRow(evOdds(ev.oddEarly)), early) : '') +
-    (done && !fresh ? '<p class="evNote">這一工的獎勵已經領過了</p>' : odds.length && fresh ? '<p class="evNote">奇物已收進圖鑑</p>' : '') +
-    `<button id="resEvLb" class="evLbBtn"><i class="ic ic-rank"></i> 活動排行榜</button></div>`;
-}
-function evLeft(ms: number) { const m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60; return d ? `${d} 天 ${h} 小時` : h ? `${h} 小時 ${mm} 分` : `${mm} 分`; }
-function evRender() {
-  const box = $('evEntry'); const ev = evCfg;
-  if (!ev || Date.now() + evSkew >= ev.end) { box.style.display = 'none'; evCfg = null; return; }
-  const left = ev.end - (Date.now() + evSkew);
-  box.innerHTML = `<div class="evHd"><i class="ic ic-lantern"></i><b>活動場景</b><span class="evLeft"><i class="ic ic-timer"></i> 剩 ${evLeft(left)}</span></div>` +
-    `<div class="evName">${esc(ev.name)}</div>${ev.desc ? `<p class="evDesc">${esc(ev.desc)}</p>` : ''}` +
-    `<p class="evMeta">阿婆 ${ev.npc} 人・上工 ${Math.round(ev.dur / 60 * 10) / 10} 分鐘${ev.earlyMeat ? `・剝滿 ${ev.earlyMeat} 顆提前完工` : ''}・偷蚵仔：${EV_RULE[ev.steal] ?? EV_RULE.normal}${ev.infHp ? '・不會受傷' : ''}<br>完工 $${ev.bonus}${ev.earlyMeat ? `・提前完工再加 $${ev.earlyBonus}` : ''}</p>` +
-    `<p class="evPlays">${ev.left == null ? '不限次數' : ev.left > 0 ? `還可以玩 ${ev.left} 次` : '這個活動的次數用完了'}</p>` +
-    `<div class="evBtns"><button id="evGo"${ev.left === 0 ? ' disabled' : ''}><i class="ic ic-flag"></i> ${ev.left === 0 ? '次數用完了' : '參加活動'}</button><button id="evRank"><i class="ic ic-rank"></i> 活動排行榜</button></div>`;
-  box.style.display = '';
-  $('evGo').onclick = evStart; const eid = ev.id; $('evRank').onclick = () => evLbOpen(eid);
-}
-const evValid = (e: any): e is EvCfg => e && Number.isInteger(e.id) && typeof e.name === 'string' && Number.isFinite(e.npc) && Number.isFinite(e.dur) && e.dur > 0 && Number.isFinite(e.end);
-async function evFetch() {
-  evCfg = null; evRender(); // 抓新的之前先藏起來，失敗就不顯示（不用舊設定）
-  evFetchFrom(await Social.evActive());
-}
-function evFetchFrom(r: Awaited<ReturnType<typeof Social.evActive>>) {
-  if (!r || !evValid(r.event)) { evCfg = null; evRender(); return; }
-  evSkew = r.serverTime - Date.now(); const e: any = r.event;
-  evCfg = { ...e, throwX: Number(e.throwX) || 1, angerX: Number(e.angerX) || 1, bonus: Math.max(0, Number(e.bonus) || 0), earlyBonus: Math.max(0, Number(e.earlyBonus) || 0), earlyMeat: Number(e.earlyMeat) > 0 ? Math.floor(e.earlyMeat) : null, infHp: e.infHp === true, steal: ['steal_only', 'no_steal'].includes(e.steal) ? e.steal : 'normal', oddDone: evOdds(e.oddDone), oddEarly: evOdds(e.oddEarly), left: typeof r.left === 'number' ? Math.max(0, r.left) : null };
-  evRender();
-}
-// 參加活動：先跟伺服器拿場次 token（次數上限由伺服器判斷），拿到才開工
-async function evStart(): Promise<boolean> {
-  const ev = evCfg; if (!ev || Date.now() + evSkew >= ev.end) { evRender(); toast('活動已經結束了'); return false; }
-  if (!save.tutDone) { toast('先完成教學再來參加活動喔'); return false; }
-  if (ev.left === 0) { toast('這個活動的次數用完了'); return false; }
-  if (evBusy) return false; evBusy = true;
-  const b = document.getElementById('evGo') as HTMLButtonElement | null; if (b) b.disabled = true;
-  const r = await Social.evStart(ev.id); evBusy = false;
-  if (r.st !== 'ok') {
-    if (r.st === 'limit') { ev.left = 0; toast('這個活動的次數用完了'); evRender(); }
-    else if (r.st === 'ended') { toast('活動已經結束了'); evFetch(); }
-    else { toast('連不上活動伺服器，等一下再試'); evRender(); }
-    return false;
-  }
-  ev.left = r.left; evToken = r.token; evRun = ev; shiftLen = Math.max(10, Math.min(1800, Math.round(ev.dur))); audio(); startDay();
-  return true;
-}
-// 收工畫面「再次上工」：剛剛是活動就再開一場同一個活動；活動結束或次數用完就回主選單
-async function evAgain() {
-  if (evBusy) return;
-  const id = evLastId; const ab = $('again') as HTMLButtonElement; ab.disabled = true;
-  const r = await Social.evActive(); ab.disabled = false;
-  const toMenu = (m: string) => { if (m) toast(m); evLastId = null; $('result').classList.remove('show'); renderLocs(); $('overlay').classList.add('show'); $('overlay').scrollTop = 0; };
-  if (!r) { toast('連不上活動伺服器，等一下再試'); return; }
-  if (!evValid(r.event) || r.event.id !== id) { toMenu('活動已經結束了'); return; }
-  evFetchFrom(r);
-  if (evCfg?.left === 0) { toMenu('這個活動的次數用完了'); return; }
-  if (!(await evStart()) && !evRun) { if ($('result').classList.contains('show')) toMenu(''); }
-}
-async function evLbOpen(id: number) {
-  const body = $('evLbBody'); body.innerHTML = '<div class="lbEmpty"><span>載入中…</span></div>'; $('evLb').classList.add('show');
-  const r = await Social.evTop(id);
-  if (!r || !Array.isArray(r.rows)) { body.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; return; }
-  { const me = r.mine ?? r.rows.find((x: any) => x.me); if (me && me.rank <= 10 && !AS('top')) achBump('top'); }
-  const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${x.atitle ? `<em class="lbA">${esc(x.atitle)}</em>` : ''}<b>${esc(x.nick)}</b><small>#${esc(x.tag)}</small></span><span class="lbV">${Math.floor(x.v / 1000)} 顆${x.early ? `<small class="evE">提前 ${x.v % 1000} 秒</small>` : ''}</span></div>`;
-  body.innerHTML = (r.event ? `<p class="evDesc">${esc(r.event.name)}・共 ${r.total ?? r.rows.length} 人參加</p>` : '') +
-    (r.rows.length ? r.rows.map(row).join('') + (r.mine ? '<div class="lbGap"></div>' + row(r.mine) : '') : '<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>完成活動就會出現你的成績</small></span></div>');
-}
-$('evLbClose').onclick = () => $('evLb').classList.remove('show');
-
-// ---------- 問卷調查（宣告須在首次 svFetch 之前，避免 let TDZ） ----------
-type SvCfg = Social.SurveyCfg;
-let svList: SvCfg[] = [], svSkew = 0, svBusy = false, svOpenId: number | null = null;
-const svClaimed = (id: number) => (save.svClaim ??= []).includes(id);
-const svPending = () => svList.filter(s => !s.done && !svClaimed(s.id) && Date.now() + svSkew < s.end);
-function svValid(s: any): s is SvCfg {
-  return s && Number.isInteger(s.id) && typeof s.title === 'string' && Array.isArray(s.questions) && s.questions.length > 0 && Number.isFinite(s.end);
-}
-function svNormalize(s: any): SvCfg | null {
-  if (!svValid(s)) return null;
-  const qs: Social.SurveyQ[] = [];
-  for (const q of s.questions) {
-    if (!q || typeof q.id !== 'string' || typeof q.text !== 'string') continue;
-    const type = q.type === 'multi' || q.type === 'text' ? q.type : 'single';
-    if (type === 'text') qs.push({ id: q.id, type, text: q.text, required: q.required !== false, maxLen: Math.min(500, Math.max(1, Math.floor(Number(q.maxLen) || 200))) });
-    else {
-      const options = Array.isArray(q.options) ? q.options.filter((o: unknown) => typeof o === 'string').map((o: string) => o.slice(0, 80)) : [];
-      if (options.length < 2) continue;
-      qs.push({ id: q.id, type, text: q.text, required: q.required !== false, options });
-    }
-  }
-  if (!qs.length) return null;
-  return { id: s.id, title: String(s.title).slice(0, 40), desc: typeof s.desc === 'string' ? s.desc.slice(0, 400) : '', questions: qs, rewardMoney: Math.max(0, Math.floor(Number(s.rewardMoney) || 0)), start: Number(s.start) || 0, end: Number(s.end), done: s.done === true || svClaimed(s.id) };
-}
-let svPrompted = false;
-const SV_ALERT_MUTE_OLD = 'svAlertMute';
-const SV_ALERT_MUTE_IDS = 'svAlertMutedIds';
-function svLoadMutedIds(): number[] {
-  try {
-    const raw = JSON.parse(LS.getItem(SV_ALERT_MUTE_IDS) || '[]');
-    if (!Array.isArray(raw)) return [];
-    return raw.filter((x: unknown) => typeof x === 'number' && Number.isInteger(x) && x > 0).slice(-80);
-  } catch { return []; }
-}
-function svSaveMutedIds(ids: number[]) {
-  try { LS.setItem(SV_ALERT_MUTE_IDS, JSON.stringify([...new Set(ids)].slice(-80))); } catch { /* 忽略 */ }
-}
-/** 舊版永久 mute → 改壓住當下 pending，避免已選過的人又被煩 */
-function svMigrateMuteFlag() {
-  try {
-    if (LS.getItem(SV_ALERT_MUTE_OLD) !== '1') return;
-    const ids = [...svLoadMutedIds(), ...svPending().map(s => s.id)];
-    svSaveMutedIds(ids);
-    LS.removeItem(SV_ALERT_MUTE_OLD);
-  } catch { /* 忽略 */ }
-}
-function svMutePendingAlerts() {
-  svSaveMutedIds([...svLoadMutedIds(), ...svPending().map(s => s.id)]);
-}
-/** 尚未被「不再提示」壓住的未填問卷（有新 id 才會再跳） */
-const svAlertable = () => {
-  const muted = new Set(svLoadMutedIds());
-  return svPending().filter(s => !muted.has(s.id));
-};
-function svRender() {
-  const box = $('svEntry');
-  const now = Date.now() + svSkew;
-  svList = svList.filter(s => now < s.end);
-  const pending = svPending();
-  if (!pending.length) { box.style.display = 'none'; box.classList.remove('svNeed'); return; }
-  const soon = Math.min(...pending.map(s => s.end));
-  box.innerHTML = `<div class="svHd"><i class="ic ic-chat"></i><b>問卷調查</b><span class="svBadge">未填 ${pending.length}</span><span class="svLeft"><i class="ic ic-timer"></i> 剩 ${evLeft(soon - now)}</span></div>` +
-    `<p class="svMeta">填完送出可領現金・每人每份只能填一次</p>` +
-    `<div class="svList">${pending.map(s => `<div class="svRow"><b>${esc(s.title)}</b><span class="svMeta">$${s.rewardMoney.toLocaleString()}・${s.questions.length} 題</span><button type="button" data-sv="${s.id}">填寫</button></div>`).join('')}</div>`;
-  box.classList.add('svNeed');
-  box.style.display = '';
-}
-async function svFetch() {
-  svList = []; svRender();
-  const r = await Social.svActive();
-  if (!r) { svList = []; svRender(); return; }
-  svSkew = r.serverTime - Date.now();
-  svList = r.surveys.map(svNormalize).filter((s): s is SvCfg => !!s);
-  svMigrateMuteFlag();
-  svRender();
-  svAlert();
-}
-/** 回主選單時提示有未填問卷（每次最多一次；「不再提示」只壓住目前這批，新問卷再提醒） */
-function svAlert() {
-  svMigrateMuteFlag();
-  const alertable = svAlertable();
-  if (svPrompted || !alertable.length) return;
-  if (bootQuiet()) return; // 新人先完成教學再提示問卷（入口仍在主畫面）
-  if (state === 'play' || tut || !$('overlay').classList.contains('show')) return;
-  if (document.getElementById('giftMsg') || document.getElementById('newMsg') || document.getElementById('featMsg') || document.getElementById('svMsg') || $('sv').classList.contains('show')) return;
-  svPrompted = true;
-  const m = document.createElement('div'); m.id = 'svMsg'; m.className = 'giftMsg';
-  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-chat"></i> 有未填寫的問卷</b>` +
-    `<ul class="gnList">${alertable.map(s => `<li><b>${esc(s.title)}</b>${s.rewardMoney ? `<br><small>完成可領 $${s.rewardMoney.toLocaleString()}</small>` : ''}</li>`).join('')}</ul>` +
-    `<div class="mbtns"><button class="gmMute" type="button">不再提示</button><button class="gmNo" type="button">稍後</button><button class="gmYes" type="button"><i class="ic ic-chat"></i> 去填寫</button></div></div>`;
-  const close = () => m.remove();
-  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
-  m.addEventListener('click', e => { if (e.target === m) close(); });
-  m.querySelector('.gmMute')?.addEventListener('click', () => {
-    svMutePendingAlerts();
-    close();
-    toast('之後不會再提醒這幾份問卷（有新問卷還會提示）');
-  });
-  m.querySelector('.gmYes')?.addEventListener('click', () => {
-    close();
-    $('overlay').scrollTop = Math.max(0, $('svEntry').offsetTop - 40);
-    const first = alertable[0];
-    if (first) svOpen(first.id);
-  });
-  document.body.appendChild(m);
-}
-function svOpen(id: number) {
-  const s = svList.find(x => x.id === id);
-  if (!s || s.done || svClaimed(id)) { toast('這份問卷你填過了'); svRender(); return; }
-  document.getElementById('svMsg')?.remove();
-  svOpenId = id;
-  const body = $('svBody');
-  body.innerHTML = `<div class="svName">${esc(s.title)}</div>${s.desc ? `<p class="svDesc">${esc(s.desc)}</p>` : ''}<p class="svMeta">完成獎勵 $${s.rewardMoney.toLocaleString()}</p>` +
-    s.questions.map((q, i) => {
-      const req = q.required ? '<span class="req">必填</span>' : '';
-      if (q.type === 'text') return `<div class="svQ" data-qid="${esc(q.id)}" data-type="text"><h3>${i + 1}. ${esc(q.text)}${req}</h3><textarea maxlength="${q.maxLen ?? 200}" placeholder="寫在這裡…"></textarea><p class="svHint">最多 ${q.maxLen ?? 200} 字</p></div>`;
-      const input = q.type === 'multi' ? 'checkbox' : 'radio';
-      const opts = (q.options ?? []).map((o, oi) => `<label><input type="${input}" name="sv_${esc(q.id)}" value="${oi}"> <span>${esc(o)}</span></label>`).join('');
-      return `<div class="svQ" data-qid="${esc(q.id)}" data-type="${q.type}"><h3>${i + 1}. ${esc(q.text)}${req}</h3><div class="svOpts">${opts}</div></div>`;
-    }).join('') + '<p id="svErr" class="svErr" style="display:none"></p>';
-  $('svSubmit').style.display = '';
-  $('sv').classList.add('show');
-}
-function svCollect(s: SvCfg): { answers: Record<string, unknown> } | { error: string } {
-  const answers: Record<string, unknown> = {};
-  for (const q of s.questions) {
-    const box = Array.from(document.querySelectorAll('#svBody .svQ')).find(el => (el as HTMLElement).dataset.qid === q.id) as HTMLElement | undefined;
-    if (!box) return { error: '畫面有問題，請關閉重開' };
-    if (q.type === 'text') {
-      const t = (box.querySelector('textarea') as HTMLTextAreaElement)?.value ?? '';
-      if (q.required && !t.trim()) return { error: `請回答「${q.text}」` };
-      if (t.length > (q.maxLen ?? 200)) return { error: `「${q.text}」太長了` };
-      if (t.trim() || q.required) answers[q.id] = t;
-      continue;
-    }
-    const picked = Array.from(box.querySelectorAll('input:checked')).map(el => +(el as HTMLInputElement).value).filter(n => Number.isInteger(n));
-    if (q.type === 'single') {
-      if (!picked.length) { if (q.required) return { error: `請回答「${q.text}」` }; continue; }
-      answers[q.id] = picked[0];
-    } else {
-      if (!picked.length) { if (q.required) return { error: `請回答「${q.text}」` }; continue; }
-      answers[q.id] = picked;
-    }
-  }
-  return { answers };
-}
-async function svDoSubmit() {
-  if (svBusy || svOpenId == null) return;
-  const s = svList.find(x => x.id === svOpenId);
-  if (!s) { $('sv').classList.remove('show'); return; }
-  const errEl = document.getElementById('svErr');
-  const got = svCollect(s);
-  if ('error' in got) { if (errEl) { errEl.style.display = ''; errEl.textContent = got.error; } return; }
-  if (errEl) errEl.style.display = 'none';
-  svBusy = true; const btn = $('svSubmit') as HTMLButtonElement; btn.disabled = true;
-  const r = await Social.svSubmit(s.id, got.answers);
-  svBusy = false; btn.disabled = false;
-  if (r.st === 'ok') {
-    save.svClaim ??= []; if (!save.svClaim.includes(s.id)) save.svClaim.push(s.id);
-    save.svClaim = save.svClaim.slice(-50);
-    if (r.money > 0) save.money += r.money;
-    s.done = true; persist(); renderDaily();
-    $('sv').classList.remove('show'); svOpenId = null; svRender();
-    toast(r.money > 0 ? `問卷送出了！領到 $${r.money}` : '問卷送出了，多謝幫忙！', '#9fe0ff');
-    try { SFX.jingle(); } catch { /* */ }
-    return;
-  }
-  if (r.st === 'already') { s.done = true; save.svClaim ??= []; if (!save.svClaim.includes(s.id)) { save.svClaim.push(s.id); persist(); } $('sv').classList.remove('show'); svRender(); toast('這份問卷你填過了'); return; }
-  if (r.st === 'ended') { toast('問卷已經結束了'); $('sv').classList.remove('show'); svFetch(); return; }
-  if (r.st === 'bad') { if (errEl) { errEl.style.display = ''; errEl.textContent = r.error ?? '答案有問題，再檢查一下'; } return; }
-  toast('連不上伺服器，等一下再試');
-}
-$('svEntry').onclick = (e) => {
-  const t = (e.target as HTMLElement | null)?.closest?.('[data-sv]') as HTMLElement | null;
-  if (!t) return;
-  e.preventDefault();
-  svOpen(+t.getAttribute('data-sv')!);
-};
-$('svClose').onclick = () => { $('sv').classList.remove('show'); svOpenId = null; };
-$('svSubmit').onclick = () => { void svDoSubmit(); };
-
-new MutationObserver(() => {
-  const sh = $('overlay').classList.contains('show');
-  if (!sh) svPrompted = false;
-  if (sh && !evShown) { evFetch(); svFetch(); }
-  else if (sh && evShown) svAlert();
-  evShown = sh;
-}).observe($('overlay'), { attributes: true, attributeFilter: ['class'] });
-evShown = $('overlay').classList.contains('show'); evFetch(); svFetch();
-setInterval(() => { if ($('overlay').classList.contains('show') && evCfg) evRender(); if ($('overlay').classList.contains('show') && svList.length) svRender(); }, 30_000);
+/* events / survey extracted */
 // 手機：對話框按鈕統一走 btn()（放開觸發＋click 備援），不只靠 onclick
 if (COARSE) for (const id of ['bmGo', 'bmStay', 'psOk', 'tnOk']) { const el = $(id) as HTMLButtonElement; const f = el.onclick; if (!f) continue; el.onclick = null; btn(id, () => f.call(el, new PointerEvent('click'))); }
-// ===================== 成就系統 =====================
-// 數值盡量直接讀既有的生涯統計（save.life、圖鑑、天數…），只有原本沒記的才放在 save.ach.st
-type AchSave = { got: Record<string, number>; st: Record<string, number>; locs: string[]; seats: string[]; radio: string[]; sets: string[]; fresh: string[]; title: string; pts: number };
-type AchDef = { id: string; cat: string; n: string; d: string; t: number[]; v: () => number; hint?: string; unit?: string };
-const ACH_CATS = [{ id: 'shuck', s: '剝蚵', n: '剝蚵職人', ic: 'ic-knife' }, { id: 'steal', s: '偷蚵', n: '偷蚵高手', ic: 'ic-hand' }, { id: 'war', s: '戰爭', n: '阿婆們的戰爭', ic: 'ic-umb' }, { id: 'travel', s: '跑透透', n: '跑遍蚵寮', ic: 'ic-pin' }, { id: 'collect', s: '收藏', n: '收藏家', ic: 'ic-pearl' }, { id: 'veteran', s: '老蚵仔', n: '老蚵仔', ic: 'ic-flag' }];
-const achS = (): AchSave => (save.ach ??= { got: {}, st: {}, locs: [], seats: [], radio: [], sets: [], fresh: [], title: '', pts: 0 });
-const AS = (k: string) => achS().st[k] ?? 0;
-// 上工中把這一工的即時數字加進去，剝到就跳成就，不用等收工
-const L_ = () => { const L = save.life; if (state !== 'play' || tut) return L; return { ...L, inBowl: L.inBowl + count, opened: L.opened + opened, perfects: L.perfects + perfects, steals: L.steals + steals, caught: L.caught + caught, meatHits: L.meatHits + meatHits, blocks: L.blocks + blocks, reflects: L.reflects + reflects, shellHits: L.shellHits + shellHits }; };
-const dexPct = () => { const odd = ODD.map((o, i) => [o, i] as const).filter(([o]) => !o.limited); const tot = 4 + odd.length, have = save.dex.filter(x => x).length + odd.filter(([, i]) => save.odd[i]).length; return Math.floor(have / tot * 100); };
-const ACHS: AchDef[] = [
-  { id: 'inbowl', cat: 'shuck', n: '蚵仔入碗', d: '累積剝進碗裡的蚵仔', t: [100, 1000, 10000], v: () => L_().inBowl, unit: '顆' },
-  { id: 'opened', cat: 'shuck', n: '開殼達人', d: '累積開殼次數', t: [200, 2000, 20000], v: () => L_().opened, unit: '次' },
-  { id: 'best', cat: 'shuck', n: '一工爆量', d: '單一工最多入碗顆數', t: [20, 50, 100], v: () => Math.max(save.best, state === 'play' && !tut ? count : 0), unit: '顆' },
-  { id: 'perfect', cat: 'shuck', n: '俐落刀工', d: '累積完美／俐落開殼', t: [50, 500, 5000], v: () => L_().perfects, unit: '次' },
-  { id: 'combo', cat: 'shuck', n: '連擊不斷', d: '最長連擊', t: [10, 25, 50], v: () => L_().bestCombo, unit: '連擊' },
-  { id: 'zerowaste', cat: 'shuck', n: '一點不浪費', d: '浪費率 0% 完成一工（至少入碗 5 顆）', t: [1, 10, 50], v: () => AS('zw'), unit: '工' },
-  { id: 'nocrack', cat: 'shuck', n: '殼屑零容忍', d: '完全沒有殼屑完成一工（至少入碗 5 顆）', t: [1, 10, 50], v: () => AS('nc'), unit: '工' },
-  { id: 'steals', cat: 'steal', n: '偷蚵仔', d: '累積偷到的蚵仔', t: [50, 500, 5000], v: () => L_().steals, unit: '顆' },
-  { id: 'clean', cat: 'steal', n: '神不知鬼不覺', d: '一工偷 20 顆以上，而且一次都沒被抓到', t: [1, 5, 20], v: () => AS('cs'), unit: '工' },
-  { id: 'stealonly', cat: 'steal', n: '只准用偷的', d: '完成一場「只能用偷的」活動', t: [1], v: () => AS('so') },
-  { id: 'caught', cat: 'steal', n: '慣犯', d: '累積被抓到偷蚵', t: [10, 100, 500], v: () => L_().caught, hint: '被抓到也是一種經驗', unit: '次' },
-  { id: 'meathit', cat: 'steal', n: '肉彈攻擊', d: '用蚵仔肉丟中阿婆', t: [10, 100, 1000], v: () => L_().meatHits, unit: '次' },
-  { id: 'blocks', cat: 'war', n: '雨傘防線', d: '用雨傘擋下的殼', t: [100, 1000, 10000], v: () => L_().blocks, unit: '個' },
-  { id: 'reflect', cat: 'war', n: '完美反彈', d: '把殼完美反彈回去', t: [20, 200, 2000], v: () => L_().reflects, unit: '次' },
-  { id: 'shellhit', cat: 'war', n: '以殼還殼', d: '丟殼丟中阿婆', t: [50, 500, 5000], v: () => L_().shellHits, unit: '次' },
-  { id: 'nohit', cat: 'war', n: '毫髮無傷', d: '完成一工都沒被殼丟中（至少入碗 5 顆）', t: [1, 10, 50], v: () => AS('nh'), unit: '工' },
-  { id: 'scared', cat: 'war', n: '阿婆們怕你了', d: '連續擋下 3 次，讓阿婆們怕你', t: [1, 10, 100], v: () => AS('sc'), unit: '次' },
-  { id: 'moon', cat: 'war', n: '送上月球', d: '把鄰居送上月球', t: [1, 10, 50], v: () => AS('moon'), hint: '雜貨店有一樣很兇的道具', unit: '位' },
-  { id: 'queen', cat: 'war', n: '今日剝蚵冠軍', d: '拿下當天剝蚵冠軍', t: [1, 10, 100], v: () => save.queen, unit: '次' },
-  { id: 'peace', cat: 'war', n: '和平主義', d: '一整工都沒有丟殼', t: [1, 10, 50], v: () => AS('peace'), unit: '工' },
-  { id: 'locs', cat: 'travel', n: '跑遍蚵寮', d: '在不同地點上過工', t: [2, 3, 4], v: () => achS().locs.length, unit: '個地點' },
-  { id: 'seats', cat: 'travel', n: '換個位子坐', d: '坐過不同的座位上工', t: [2, 4, 5], v: () => achS().seats.length, unit: '個座位' },
-  { id: 'radio', cat: 'travel', n: '收音機迷', d: '聽過收音機的不同電台', t: [1, 2, 3], v: () => achS().radio.length, unit: '台' },
-  { id: 'night', cat: 'travel', n: '夜貓子', d: '上夜班', t: [1, 10, 50], v: () => AS('night'), hint: '天黑了還在剝？', unit: '工' },
-  { id: 'temp', cat: 'travel', n: '臨時工', d: '做臨時工', t: [1, 10, 50], v: () => AS('temp'), unit: '工' },
-  { id: 'dex', cat: 'collect', n: '圖鑑收集', d: '圖鑑收集進度（不含活動限定）', t: [25, 50, 100], v: dexPct, unit: '%' },
-  { id: 'white', cat: 'collect', n: '白珍珠', d: '累積找到白珍珠', t: [1, 50, 500], v: () => save.dex[0], unit: '顆' },
-  { id: 'pink', cat: 'collect', n: '粉紅珍珠', d: '累積找到粉紅珍珠', t: [1, 20, 200], v: () => save.dex[1], unit: '顆' },
-  { id: 'goldp', cat: 'collect', n: '金珍珠', d: '累積找到金珍珠', t: [1, 10, 50], v: () => save.dex[2], unit: '顆' },
-  { id: 'black', cat: 'collect', n: '黑珍珠', d: '累積找到黑珍珠', t: [1, 3, 10], v: () => save.dex[3], hint: '傳說中，找到的時候整個漁港都會轟動', unit: '顆' },
-  { id: 'legend', cat: 'collect', n: '傳說奇物', d: '開到傳說等級的奇物', t: [1, 5, 20], v: () => LEGEND_ODD.reduce((a, i) => a + (save.odd[i] ?? 0), 0), unit: '件' },
-  { id: 'sets', cat: 'collect', n: '套裝收集', d: '湊齊並穿上整套套裝', t: [1, 2, 4], v: () => achS().sets.length, unit: '套' },
-  { id: 'owned', cat: 'collect', n: '雜貨店常客', d: '擁有的雜貨店商品', t: [3, 8, 15], v: () => save.shop.owned.length, unit: '樣' },
-  { id: 'days', cat: 'veteran', n: '上工天數', d: '累積上工天數', t: [10, 100, 500], v: () => save.days, unit: '天' },
-  { id: 'streak', cat: 'veteran', n: '連續上工', d: '連續天數領每日上工費', t: [3, 5, 7], v: () => Math.max(AS('streak'), save.streakDay ?? 0), unit: '天' },
-  { id: 'daily', cat: 'veteran', n: '天天報到', d: '累積領每日上工費', t: [7, 30, 100], v: () => save.bonusN ?? 0, unit: '次' },
-  { id: 'back', cat: 'veteran', n: '歡迎回來', d: '好一陣子沒來，又回到蚵寮上工', t: [1], v: () => save.retDay ? 1 : 0, hint: '好久不見也沒關係' },
-  { id: 'ev', cat: 'veteran', n: '活動常客', d: '完成活動場次', t: [1, 10, 50], v: () => AS('ev'), unit: '場' },
-  { id: 'evearly', cat: 'veteran', n: '提前完工', d: '活動中提前完成目標', t: [1, 5, 20], v: () => AS('ee'), unit: '次' },
-  { id: 'evtop', cat: 'veteran', n: '活動前十名', d: '活動排行榜擠進前 10 名', t: [1], v: () => AS('top') },
-  { id: 'tut', cat: 'veteran', n: '學會剝蚵', d: '完成新手教學', t: [1], v: () => save.tutDone ? 1 : 0 },
-];
-const TIER_N = ['銅', '銀', '金'], TIER_PTS = [10, 25, 50], TIER_PAY = [1000, 3000, 10000], ONE_PTS = 30, ONE_PAY = 3000;
-const tierName = (a: AchDef, k: number) => a.t.length === 1 ? '達成' : TIER_N[k];
-const tierPts = (a: AchDef, k: number) => a.t.length === 1 ? ONE_PTS : TIER_PTS[k];
-const tierPay = (a: AchDef, k: number) => a.t.length === 1 ? ONE_PAY : TIER_PAY[k];
-// 稱號：點數門檻，或達成指定成就；伺服器端有同一份白名單（game-stats-server Social.cs AchTitles）
-const ACH_TITLES: { n: string; d: string; ok: () => boolean }[] = [
-  { n: '蚵寮新手', d: '成就點數 100', ok: () => achS().pts >= 100 },
-  { n: '剝蚵好手', d: '成就點數 300', ok: () => achS().pts >= 300 },
-  { n: '蚵寮老手', d: '成就點數 700', ok: () => achS().pts >= 700 },
-  { n: '王功剝蚵達人', d: '成就點數 1200', ok: () => achS().pts >= 1200 },
-  { n: '漁港傳說', d: '成就點數 2000', ok: () => achS().pts >= 2000 },
-  { n: '偷蚵之王', d: '「偷蚵仔」金牌', ok: () => (achS().got.steals ?? 0) >= 3 },
-  { n: '月球回來的人', d: '「送上月球」銅牌', ok: () => (achS().got.moon ?? 0) >= 1 },
-  { n: '傘下無敵', d: '「雨傘防線」金牌', ok: () => (achS().got.blocks ?? 0) >= 3 },
-  { n: '黑珍珠獵人', d: '「黑珍珠」銅牌', ok: () => (achS().got.black ?? 0) >= 1 },
-  { n: '走跳蚵寮', d: '「跑遍蚵寮」金牌', ok: () => (achS().got.locs ?? 0) >= 3 },
-  { n: '圖鑑博士', d: '「圖鑑收集」金牌', ok: () => (achS().got.dex ?? 0) >= 3 },
-  { n: '鐵打的蚵工', d: '「上工天數」金牌', ok: () => (achS().got.days ?? 0) >= 3 },
-  { n: '雜貨店股東', d: '「雜貨店常客」金牌', ok: () => (achS().got.owned ?? 0) >= 3 },
-  { n: '活動常客', d: '「活動常客」銀牌', ok: () => (achS().got.ev ?? 0) >= 2 },
-];
-const achTitle = () => { const t = achS().title; return t && ACH_TITLES.some(x => x.n === t && x.ok()) ? t : ''; };
-const achAdd = (list: 'locs' | 'seats' | 'radio' | 'sets', id: string) => { const a = achS()[list]; if (!a.includes(id)) a.push(id); };
-function achBump(k: string, n = 1) { const s = achS().st; s[k] = (s[k] ?? 0) + n; achCheck(); }
-// 看板式橫幅：不擋操作（pointer-events:none），排隊一個一個出
-type AchB = { h: string; id?: string };
-const achQ: AchB[] = []; let achBusy = false, achMore = 0;
-function achBanner(h: string, id?: string) { if (achQ.length + (achBusy ? 1 : 0) >= 3) { achMore++; } else achQ.push({ h, id }); if (!achBusy) achNextBanner(); }
-function achNextBanner() {
-  const el = $('achBan'); let b = achQ.shift();
-  if (!b && achMore) { b = { h: `<i class="ic ic-trophy"></i><span><small>成就達成</small><b>還有 ${achMore} 個成就</b><em>到成就頁面看看</em></span>` }; achMore = 0; }
-  if (!b) { achBusy = false; el.classList.remove('on'); return; }
-  achBusy = true; el.innerHTML = b.h; el.dataset.id = b.id ?? ''; el.classList.toggle('tap', state !== 'play'); el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
-  setTimeout(() => { el.classList.remove('on'); setTimeout(achNextBanner, 350); }, 3400);
-}
-// 上工時點橫幅不做事（不干擾操作）；其他畫面點了直接打開成就頁面到那一項
-$('achBan').addEventListener('pointerup', () => { const el = $('achBan'); if (state === 'play' || !el.classList.contains('on')) return; const a = ACHS.find(x => x.id === el.dataset.id); if (a) achTab = a.cat; achOpen(a?.id); });
-let achShiftGot: string[] = [];
-function achCheck(retro = false) {
-  const A = achS(); let gotN = 0, cash = 0;
-  for (const s of setsOn()) achAdd('sets', s.id);
-  A.st.streak = Math.max(A.st.streak ?? 0, save.streakDay ?? 0);
-  ACHS.forEach((a, idx) => {
-    const v = a.v() || 0; let k = A.got[a.id] ?? 0;
-    while (k < a.t.length && v >= a.t[k]) {
-      const pts = tierPts(a, k), pay = tierPay(a, k); A.pts += pts; save.money += pay; cash += pay; gotN++;
-      if (!A.fresh.includes(a.id)) A.fresh.push(a.id);
-      if (!retro) {
-        const gold = a.t.length > 1 && k === 2;
-        achBanner(`<i class="ic ic-trophy"></i><span><small>成就達成・${tierName(a, k)}${a.t.length > 1 ? '牌' : ''}</small><b>${esc(a.n)}</b><em>+${pts} 點・+$${pay}</em></span>`, a.id);
-        if (state !== 'menu') achShiftGot.push(`${a.n}・${tierName(a, k)}${a.t.length > 1 ? '牌' : ''}（+$${pay}）`);
-        if (gold) Social.report('ach', idx);
-        track('achievement', { item: a.id, tier: k });
-      }
-      k++;
-    }
-    A.got[a.id] = k;
-  });
-  if (gotN) { persist(); if (retro) achBanner(`<i class="ic ic-trophy"></i><span><small>依照過去的紀錄補發</small><b>${gotN} 個成就</b><em>+$${cash}</em></span>`); }
-  achDot(); if ($('ach').classList.contains('show')) achRender();
-}
-function achDot() { const b = document.getElementById('oAch'); if (b) b.classList.toggle('achNew', achS().fresh.length > 0); }
-let achTab = 'shuck';
-function achRender() {
-  const A = achS(), cur = achTitle(), next = ACH_TITLES.slice(0, 5).find(t => !t.ok());
-  const maxPts = ACHS.reduce((s, a) => s + a.t.reduce((x, _, k) => x + tierPts(a, k), 0), 0), done = ACHS.filter(a => (A.got[a.id] ?? 0) >= a.t.length).length;
-  $('achTop').innerHTML = `<div class="achSum"><div><small>成就點數</small><b>${A.pts}</b><span>／${maxPts}</span></div><div><small>全部達成</small><b>${done}</b><span>／${ACHS.length}</span></div><div class="achCur"><small>目前稱號</small><b>${cur ? esc(cur) : '未配戴'}</b></div></div>` +
-    (next ? `<div class="achNext"><span>下一個稱號「${next.n}」</span><i class="achBar"><i style="width:${Math.min(100, A.pts / parseInt(next.d.replace(/\D/g, '')) * 100)}%"></i></i></div>` : '');
-  const fresh = new Set(A.fresh);
-  $('achTabs').innerHTML = [...ACH_CATS, { id: 'title', n: '稱號', s: '稱號', ic: 'ic-crown' }].map((c: any) => { const nf = ACHS.some(a => a.cat === c.id && fresh.has(a.id)); return `<button data-t="${c.id}" class="${c.id === achTab ? 'on' : ''}${nf ? ' achNew' : ''}" role="tab" aria-selected="${c.id === achTab}"><i class="ic ${c.ic}"></i><span>${c.s}</span></button>`; }).join('') + `<b class="achCatT">${achTab === 'title' ? '稱號' : ACH_CATS.find(c => c.id === achTab)!.n}</b>`;
-  if (achTab === 'title') {
-    $('achList').innerHTML = `<p class="achTip">達成條件就能配戴，配戴的稱號會顯示在排行榜和跑馬燈的名字前面。</p>` + ACH_TITLES.map(t => { const ok = t.ok(), on = cur === t.n;
-      return `<div class="achCard ttl${ok ? ' ok' : ' lock'}${on ? ' on' : ''}"><div class="achH"><b>${ok ? '' : '<i class="ic ic-lock"></i> '}${t.n}</b>${ok ? `<button class="achEq" data-n="${t.n}">${on ? '卸下' : '配戴'}</button>` : ''}</div><p>${t.d}</p></div>`; }).join('');
-  } else {
-    $('achList').innerHTML = ACHS.filter(a => a.cat === achTab).map(a => {
-      const k = A.got[a.id] ?? 0, v = Math.max(0, Math.floor(a.v() || 0)), hid = !!a.hint && k === 0, full = k >= a.t.length, goal = a.t[Math.min(k, a.t.length - 1)];
-      const pct = full ? 100 : Math.min(100, v / goal * 100);
-      const tiers = a.t.map((th, j) => `<span class="achT t${a.t.length === 1 ? 'x' : j}${j < k ? ' got' : ''}">${tierName(a, j)}<small>${th}${a.unit === '%' ? '%' : ''}</small></span>`).join('');
-      return `<div data-a="${a.id}" class="achCard${full ? ' full' : ''}${fresh.has(a.id) ? ' new' : ''}${hid ? ' hid' : ''}"><div class="achH"><b>${hid ? '？？？' : esc(a.n)}</b><span class="achTs">${tiers}</span></div><p>${hid ? `提示：${a.hint}` : a.d}</p>` +
-        (a.t.length > 1 || !full ? `<div class="achP"><i class="achBar"><i style="width:${pct}%"></i></i><span>${hid ? '？' : full ? '全部達成' : (a.unit === '%' ? `${Math.min(v, goal)}%／${goal}%` : `${Math.min(v, goal)}／${goal}${a.unit ? ' ' + a.unit : ''}`)}</span></div>` : '') +
-        `<small class="achR">${full ? '已領取全部獎勵' : `下一階：+${tierPts(a, k)} 點・+$${tierPay(a, k)}`}</small></div>`; }).join('');
-  }
-}
-function achOpen(focus?: string) { if (document.pointerLockElement) document.exitPointerLock(); achCheck(); achRender(); $('ach').classList.add('show'); const pb = $('ach').querySelector('.pb') as HTMLElement | null; pb?.scrollTo(0, 0); if (focus) { const c = $('achList').querySelector<HTMLElement>(`[data-a="${focus}"]`); if (c && pb) { pb.scrollTo(0, c.offsetTop - 120); c.classList.add('achHi'); setTimeout(() => c.classList.remove('achHi'), 1600); } } }
-function achTabSeen() { const A = achS(); const before = A.fresh.length; A.fresh = A.fresh.filter(id => ACHS.find(a => a.id === id)?.cat !== achTab); if (A.fresh.length !== before) { persist(); achDot(); } }
-$('achTabs').addEventListener('click', e => { const b = (e.target as HTMLElement).closest('button[data-t]') as HTMLElement | null; if (!b) return; achTabSeen(); achTab = b.dataset.t!; achRender(); });
-$('achList').addEventListener('click', e => { const b = (e.target as HTMLElement).closest('.achEq') as HTMLElement | null; if (!b) return; const A = achS(), n = b.dataset.n!; A.title = A.title === n ? '' : n; persist(); achRender(); toast(A.title ? `配戴稱號「${A.title}」` : '已卸下稱號', '#ffe080'); Social.syncTitle(); });
-$('achClose').onclick = () => { achTabSeen(); $('ach').classList.remove('show'); if (achFromRes) { achFromRes = false; if (state === 'end') $('result').classList.add('show'); } };
-btn('oAch', () => achOpen());
-setInterval(() => { if (state === 'play' && !tut) achCheck(); }, 1000); // 上工中每秒檢查一次即時進度
-// 一工結束：記錄原本沒有的統計
-function achShift(o: { worked: boolean; temp: boolean; waste: number; cracked: number; steals: number; caught: number; hitsTaken: number; thrown: number; ev: EvCfg | null; evDone: boolean; evEarly: boolean; cnt: number }) {
-  const s = achS().st, inc = (k: string) => s[k] = (s[k] ?? 0) + 1;
-  if (o.cnt > 0) { achAdd('locs', locNow().id); achAdd('seats', save.seat ?? 'door'); }
-  if (o.worked) { if (o.waste === 0) inc('zw'); if (o.cracked === 0) inc('nc'); if (o.hitsTaken === 0) inc('nh'); if (o.thrown === 0 && !o.temp) inc('peace'); if (nightShift) inc('night'); if (o.temp) inc('temp'); }
-  if (o.steals >= 20 && o.caught === 0) inc('cs');
-  if (o.ev && o.evDone) { inc('ev'); if (o.evEarly) inc('ee'); if (o.ev.steal === 'steal_only') inc('so'); }
-  achCheck();
-}
-// 第一次載入（舊玩家）：依既有紀錄補發，不廣播
-{ const first = !save.ach; const A = achS();
-  if (first) { A.st.peace = Object.entries(save.titles).filter(([k]) => k.includes('和平')).reduce((x, [, v]) => x + v, 0); if (save.days > 0) achAdd('locs', 'home'); if (save.loc && save.days > 0) achAdd('locs', save.loc); if (save.seat && save.days > 0) achAdd('seats', save.seat); }
-  setTimeout(() => achCheck(first), 1500); achDot(); }
-(window as any).__achOk = 1;
-(window as any).__ach = { end: () => endDay(), get got() { return achShiftGot; }, get s() { return achS(); }, bump: achBump, check: achCheck, title: achTitle, list: ACHS.map(a => a.id) };
+initEvents({
+  $: (id) => $(id), persist, toast, track, esc, Social, ODD, rarOf, legendTotal, renderDex, renderLocs,
+  audio, startDay, later, endDay, achBump, AS, SHOT, SHIFT,
+  get save() { return save; }, get state() { return state; }, get tut() { return tut; },
+  get count() { return count; }, set count(v) { count = v; },
+  get timeLeft() { return timeLeft; }, get shiftLen() { return shiftLen; }, set shiftLen(v) { shiftLen = v; },
+  get endReason() { return endReason; }, set endReason(v) { endReason = v; },
+  get lastPay() { return lastPay; }, get statsSid() { return statsSid; },
+  get evToken() { return evToken; }, set evToken(v) { evToken = v; },
+  get evRun() { return evRun; }, set evRun(v) { evRun = v; },
+  get evLastId() { return evLastId; }, set evLastId(v) { evLastId = v; },
+  get evBusy() { return evBusy; }, set evBusy(v) { evBusy = v; },
+});
+initSurvey({
+  $: (id) => $(id), persist, toast, esc, Social, SFX, LS, renderDaily, bootQuiet: () => bootQuiet(),
+  get save() { return save; }, get state() { return state; }, get tut() { return tut; },
+});
+initAchievements({
+  $: (id) => $(id), persist, toast, track, esc, btn, Social, ODD, LEGEND_ODD, setsOn, locNow, endDay,
+  get save() { return save; }, get state() { return state; }, get tut() { return tut; },
+  get count() { return count; }, get opened() { return opened; }, get perfects() { return perfects; },
+  get steals() { return steals; }, get caught() { return caught; }, get meatHits() { return meatHits; },
+  get blocks() { return blocks; }, get reflects() { return reflects; }, get shellHits() { return shellHits; },
+  get nightShift() { return nightShift; },
+  get achFromRes() { return achFromRes; }, set achFromRes(v) { achFromRes = v; },
+});
+new MutationObserver(() => {
+  const sh = $('overlay').classList.contains('show');
+  if (!sh) setSvPrompted(false);
+  if (sh && !evShown) { evFetch(); svFetch(); }
+  else if (sh && evShown) svAlert();
+  setEvShown(sh);
+}).observe($('overlay'), { attributes: true, attributeFilter: ['class'] });
+setEvShown($('overlay').classList.contains('show')); evFetch(); svFetch();
+setInterval(() => { if ($('overlay').classList.contains('show') && evCfg) evRender(); if ($('overlay').classList.contains('show') && svList.length) svRender(); }, 30_000);
 (window as any).__ev = { get run() { return evRun; }, get cfg() { return evCfg; }, get hp() { return hp; }, get npcs() { return npcs.length; }, get left() { return timeLeft; }, minDist: () => { let m = 99; for (let i = 0; i < npcs.length; i++) for (let j = i + 1; j < npcs.length; j++) m = Math.min(m, npcs[i].g.position.distanceTo(npcs[j].g.position)); return m; }, refetch: evFetch, meat: (k: number) => { for (let i = 0; i < k; i++) { count++; evMeat(); } updHud(); }, hurt: (d: number) => hurt(d, '測試') };
