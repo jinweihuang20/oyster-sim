@@ -7,7 +7,7 @@ import {
 import { plazaShedPosts } from './props';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaSnapshot, PlazaStealEvent } from './types';
-import { postDiscordPlazaChat } from '../core/discord';
+import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 
 export type PlazaDeps = {
   id: string;
@@ -58,6 +58,8 @@ export type PlazaDeps = {
 };
 
 let active = false;
+/** 已成功進場並公告過（離場才再公告；重連／連線失敗不重複） */
+let plazaIoAnnounced = false;
 let client: PlazaClient | null = null;
 let view: PlazaWorldView | null = null;
 let ui: HTMLElement | null = null;
@@ -171,7 +173,7 @@ function zhErr(e?: string) { return plazaZhErr(e); }
 
 export function openPlaza(D: PlazaDeps) {
   if (active) return;
-  active = true; seated = false; shiftStarted = false; deps = D;
+  active = true; seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
   myPile = null; mySlot = null; snap = null; near = null; sittingBusy = false;
   D.audio();
   client = new PlazaClient();
@@ -213,6 +215,11 @@ async function boot(D: PlazaDeps) {
   setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
   D.enterWalk();
   showRoamUi();
+  if (!plazaIoAnnounced) {
+    plazaIoAnnounced = true;
+    const online = snap?.occupied ?? snap?.players?.length ?? null;
+    void postDiscordPlazaPresence(D.nick(), 'join', { online });
+  }
 }
 
 /** 把本機目前裝備推到廣場（進場／換裝／重連後） */
@@ -788,7 +795,10 @@ export async function plazaReportEarn(raw: number, oysters: number, durationSec:
 
 export async function closePlaza(leaveSeat = true) {
   if (!active) return;
-  active = false; seated = false; shiftStarted = false; netDown = false;
+  const nick = deps?.nick() ?? '剝蚵人';
+  const online = snap?.occupied ?? snap?.players?.length ?? null;
+  const announceLeave = plazaIoAnnounced;
+  active = false; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
   chatUnread = 0; hideChatPeek();
   clearReconnectTimer();
   syncPlazaPeopleHud();
@@ -798,6 +808,7 @@ export async function closePlaza(leaveSeat = true) {
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
   myPile = null; mySlot = null; snap = null; deps = null; near = null;
+  if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null });
 }
 
 export function plazaEndCleanup() {
