@@ -1,5 +1,5 @@
-import { ODD } from './oddities';
-import type { AchSave } from './achievements';
+import { ODD } from '../shop/oddities';
+import type { AchSave } from '../meta/achievements';
 
 export const SAVE_V = 3;
 export const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;

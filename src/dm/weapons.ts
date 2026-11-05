@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { rboxEnv, rcyl } from '../geo';
+import { rboxEnv, rcyl } from '../core/geo';
 
 /**
  * 死鬥／商店共用的武器定義。

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { makePlayerAvatar, posePlazaHangArms, type PlayerRig } from './dm/character';
-import { makeMeshHelpers } from './dm/mesh';
+import { makePlayerAvatar, posePlazaHangArms, type PlayerRig } from '../dm/character';
+import { makeMeshHelpers } from '../dm/mesh';
 import { applyOutfitToRig, type OutfitIds } from './equipVisual';
 
 export type EqSlot = 'head' | 'hand' | 'body' | 'legs' | 'feet';

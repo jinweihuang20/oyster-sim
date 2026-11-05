@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ODD, rollOddIndex } from "../oddities";
+import { ODD, rollOddIndex } from "../shop/oddities";
 
 /** 擊殺掉落奇物：噴出 → 落地 → 走近自動撿 */
 export type OddLoot = {

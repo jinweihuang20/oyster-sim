@@ -1,4 +1,4 @@
-import { postDiscordFeedback } from './discord';
+import { postDiscordFeedback } from '../core/discord';
 
 export type FeedbackDeps = {
   $: (id: string) => HTMLElement;

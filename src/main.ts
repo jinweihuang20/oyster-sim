@@ -1,15 +1,29 @@
-import { initUpdate } from './update';
-import { postDiscordFeedback } from './discord';
-import { installBackGuard } from './backguard';
-import { checkCode, REDEEM_MESSAGES } from './redeem';
-import type { RedeemCodeDef } from './redeemCodes';
+import {
+  initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl,
+  importMove, escapeInApp, type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY,
+  defaultSave, loadSave as loadSaveFrom, writeSave, DAILY_PAYS, todayKey, dayDiff, installNoZoom,
+} from './core';
+import {
+  createSkyDome, SHELL_GEOS, HALF_GEOS, greyPick, shellM,
+  makeAma as makeAmaMesh, GOSSIP, PEEK, NAG_GIVEUP, NAG_STAB, NAG_CRACK, NAG_SLIP,
+  SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE, NPC_DIFF_T, NPC_DEF, type NpcDef,
+} from './world';
+import {
+  checkCode, REDEEM_MESSAGES, type RedeemCodeDef, applyOutfitToRig,
+  syncEqPreview, refreshEqPreview, stopEqPreview, ODD,
+  type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS,
+  initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop,
+} from './shop';
+import {
+  Social, initAnnounce, featAnnounce, featDots, initFeedback, openFb, fbShow,
+  initAchievements, achS, AS, ACHS, achTitle, achAdd, achBump, achShiftGot, clearAchShiftGot,
+  achCheck, achDot, achOpen, achShift, type AchSave,
+  type EvCfg, type EvOdd,
+  initEvents, setEvShown, evMeat, evHud, evFinish, evLeft, evRender, evFetch, evFetchFrom,
+  evStart, evAgain, evLbOpen, evCfg, evSkew, evShown,
+  initSurvey, setSvPrompted, svFetch, svAlert, svRender, svOpen, svList, svPrompted,
+} from './meta';
 import * as THREE from 'three';
-import { rbox, rboxEnv, crease, rcyl } from './geo';
-import { createSkyDome } from './sky';
-import { applyOutfitToRig } from './equipVisual';
-import { syncEqPreview, refreshEqPreview, stopEqPreview } from './equipPreview';
-import * as Social from './social';
-import { importMove, escapeInApp } from './inapp';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
 import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type PlayerRig } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
@@ -22,20 +36,7 @@ import {
   type PlazaAimTarget, type PlazaShellEvent,
 } from './plaza';
 import { makeYardFloorMaps } from './plaza/props';
-import { ODD } from './oddities';
-import { SHELL_GEOS, HALF_GEOS, greyPick, shellM } from './shells';
-import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS } from './shopEquip';
-import { type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY, defaultSave, loadSave as loadSaveFrom, writeSave, DAILY_PAYS, todayKey, dayDiff } from './save';
-import { makeAma as makeAmaMesh, GOSSIP, PEEK, NAG_GIVEUP, NAG_STAB, NAG_CRACK, NAG_SLIP, SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE, NPC_DIFF_T, NPC_DEF, type NpcDef } from './npc';
-import { initAnnounce, featAnnounce, featDots } from './announce';
-import { installNoZoom } from './nozoom';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
-import { initFeedback, openFb, fbShow } from './feedback';
-import { initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop } from './meds';
-import { initAchievements, achS, AS, ACHS, achTitle, achAdd, achBump, achShiftGot, clearAchShiftGot, achCheck, achDot, achOpen, achShift, type AchSave } from './achievements';
-import type { EvCfg, EvOdd } from './eventsTypes';
-import { initEvents, setEvShown, evMeat, evHud, evFinish, evLeft, evRender, evFetch, evFetchFrom, evStart, evAgain, evLbOpen, evCfg, evSkew, evShown } from './events';
-import { initSurvey, setSvPrompted, svFetch, svAlert, svRender, svOpen, svList, svPrompted } from './survey';
 installNoZoom();
 { const s = document.createElement('style'); s.textContent = weaponPreviewCss(); document.head.appendChild(s); }
 const LS_P = __PREVIEW__ ? 'preview:' : '';

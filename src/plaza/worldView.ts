@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { rboxEnv, rcyl } from '../geo';
-import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../equipVisual';
+import { rboxEnv, rcyl } from '../core/geo';
+import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
 import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';

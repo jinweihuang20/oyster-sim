@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { rboxEnv, rcyl } from '../geo';
+import { rboxEnv, rcyl } from '../core/geo';
 import { PILE_SPACING, pileCenter, seatPose, PILE_COUNT, SLOTS_PER_PILE } from './layout';
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];

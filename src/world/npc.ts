@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { rbox, crease, rcyl } from './geo';
+import { rbox, crease, rcyl } from '../core/geo';
 
 export type NpcMeshDeps = {
   mat: (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => THREE.MeshStandardMaterial;

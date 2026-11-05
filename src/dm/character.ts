@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { MatFn, MeshAdd } from './weapons';
-import { rbox } from '../geo';
+import { rbox } from '../core/geo';
 
 const SKIN = 0xe8bc98;
 

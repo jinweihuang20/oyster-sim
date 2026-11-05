@@ -1,4 +1,4 @@
-import { isDeathmatchActive } from './deathmatch';
+import { isDeathmatchActive } from '../deathmatch';
 
 export type MixAudio = { master: number; amb: number; sfx: number; mute: boolean; music: number };
 

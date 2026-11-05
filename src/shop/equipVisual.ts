@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { rbox, rcyl, crease } from './geo';
-import type { PlayerRig } from './dm/character';
+import { rbox, rcyl, crease } from '../core/geo';
+import type { PlayerRig } from '../dm/character';
 
 /** 服飾視覺（與 main EQUIP id 對齊；只負責外觀） */
 export type EquipVis = {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { createSkyDome, type SkyDome } from '../sky';
-import { rboxEnv, rcyl } from '../geo';
+import { createSkyDome, type SkyDome } from '../world/sky';
+import { rboxEnv, rcyl } from '../core/geo';
 import { COVER_DEF, HALF, PILES } from './constants';
 import type { DmUmb } from './types';
 import type { MatFn, MeshAdd } from './weapons';
