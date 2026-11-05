@@ -11,7 +11,7 @@ import { applyOutfitToRig } from './equipVisual';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
-import { makePlayerAvatar, type PlayerRig } from './dm/character';
+import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type PlayerRig } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
 import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
@@ -3748,26 +3748,10 @@ function ensurePlazaMe(): PlayerRig {
     head: equipNow('head').id, hand: equipNow('hand').id,
     body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
   });
-  hangPlazaMeArms(plazaMe);
+  posePlazaHangArms(plazaMe);
   plazaMe.outer.visible = false;
   scene.add(plazaMe.outer);
   return plazaMe;
-}
-function hangPlazaMeArms(rig: PlayerRig) {
-  rig.weaponMount.visible = false;
-  rig.handL.visible = false;
-  rig.handR.visible = false;
-  const hang = (upper: THREE.Group, lower: THREE.Group, side: number) => {
-    upper.scale.set(1, 1, 1); lower.scale.set(1, 1, 1);
-    upper.position.set(side * 0.22, 0.28, 0);
-    lower.position.set(side * 0.22, 0.02, 0.02);
-    upper.rotation.set(0.12, 0, side * 0.12);
-    lower.rotation.set(0.18, 0, 0);
-    upper.quaternion.setFromEuler(upper.rotation);
-    lower.quaternion.setFromEuler(lower.rotation);
-  };
-  hang(rig.upperL, rig.lowerL, -1);
-  hang(rig.upperR, rig.lowerR, 1);
 }
 let tpv = false, cheerT = 0, ouchT = 0;
 function applyOutfit3() {
@@ -3813,13 +3797,15 @@ function camTick(dt: number) {
       pitch = tPitch = PLAZA_WALK_PITCH;
       const rig = ensurePlazaMe();
       rig.outer.visible = true;
-      hangPlazaMeArms(rig);
       rig.outer.position.set(walkPos.x, 0, walkPos.z);
       rig.outer.rotation.y = yaw;
       const swing = sw * 0.55;
       rig.legL.rotation.x = swing; rig.legR.rotation.x = -swing;
       rig.shinL.rotation.x = Math.max(0, -swing * 0.5); rig.shinR.rotation.x = Math.max(0, swing * 0.5);
       rig.root.position.y = Math.abs(Math.sin(walkPh * 2)) * 0.03 * Math.min(1, sp / 1.2);
+      // 與遠端同款擺臂（停住則自然下垂）
+      if (sp > 0.25) posePlazaWalkSwingArms(rig, swing);
+      else posePlazaHangArms(rig);
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
       const cp = new THREE.Vector3(walkPos.x - fx * 2.9, 2.2, walkPos.z - fz * 2.9);
       if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);

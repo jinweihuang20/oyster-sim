@@ -176,6 +176,92 @@ export function makePlayerAvatar(
   return rig;
 }
 
+const _hangDir = new THREE.Vector3();
+const _hangUp = new THREE.Vector3(0, 1, 0);
+
+/** 臂段沿 +Y；固定 restLen，只跟方向（廣場不持槍垂臂／擺臂用） */
+function placePlazaArmSeg(seg: THREE.Group, ax: number, ay: number, az: number, bx: number, by: number, bz: number) {
+  if (!seg) return;
+  const base = (seg.userData.restLen as number) || 0.26;
+  _hangDir.set(bx - ax, by - ay, bz - az);
+  const raw = _hangDir.length();
+  if (raw < 1e-6) {
+    seg.position.set(ax, ay - base * 0.5, az);
+    seg.quaternion.identity();
+    seg.rotation.set(0, 0, 0);
+    seg.scale.set(1, 1, 1);
+    return;
+  }
+  _hangDir.multiplyScalar(1 / raw);
+  seg.position.set(ax + _hangDir.x * base * 0.5, ay + _hangDir.y * base * 0.5, az + _hangDir.z * base * 0.5);
+  seg.quaternion.setFromUnitVectors(_hangUp, _hangDir);
+  seg.rotation.setFromQuaternion(seg.quaternion);
+  seg.scale.set(1, 1, 1);
+}
+
+function placePlazaArmChain(
+  upper: THREE.Group, lower: THREE.Group,
+  shx: number, shy: number, shz: number,
+  elx: number, ely: number, elz: number,
+  wrx: number, wry: number, wrz: number,
+) {
+  const uLen = (upper.userData.restLen as number) || 0.26;
+  const lLen = (lower.userData.restLen as number) || 0.24;
+  _hangDir.set(elx - shx, ely - shy, elz - shz);
+  if (_hangDir.lengthSq() < 1e-8) _hangDir.set(0, -1, 0); else _hangDir.normalize();
+  const e2x = shx + _hangDir.x * uLen, e2y = shy + _hangDir.y * uLen, e2z = shz + _hangDir.z * uLen;
+  placePlazaArmSeg(upper, shx, shy, shz, e2x, e2y, e2z);
+  _hangDir.set(wrx - e2x, wry - e2y, wrz - e2z);
+  if (_hangDir.lengthSq() < 1e-8) _hangDir.set(0, -1, 0); else _hangDir.normalize();
+  placePlazaArmSeg(lower, e2x, e2y, e2z, e2x + _hangDir.x * lLen, e2y + _hangDir.y * lLen, e2z + _hangDir.z * lLen);
+}
+
+/** 廣場：藏槍架，臂自然下垂（sit＝坐姿略前伸） */
+export function posePlazaHangArms(rig: PlayerRig, sit = false) {
+  rig.weaponMount.visible = false;
+  rig.handL.visible = false;
+  rig.handR.visible = false;
+  const hang = (upper: THREE.Group, lower: THREE.Group, side: number) => {
+    const shx = side * 0.22, shy = 0.30, shz = 0;
+    const uFwd = sit ? 0.42 : 0.1;
+    const lFwd = sit ? 0.55 : 0.22;
+    const out = side * (sit ? 0.06 : 0.04);
+    const elbowX = shx + out;
+    const elbowY = shy - (sit ? 0.22 : 0.24);
+    const elbowZ = shz - uFwd;
+    const wristX = elbowX + out * 0.5;
+    const wristY = elbowY - (sit ? 0.16 : 0.2);
+    const wristZ = elbowZ - (lFwd - uFwd);
+    placePlazaArmChain(upper, lower, shx, shy, shz, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
+  };
+  hang(rig.upperL, rig.lowerL, -1);
+  hang(rig.upperR, rig.lowerR, 1);
+}
+
+/** 廣場走路擺臂：與腿反向（swing>0＝左腿前→右臂前）；前＝負 Z */
+export function posePlazaWalkSwingArms(rig: PlayerRig, swing: number) {
+  rig.weaponMount.visible = false;
+  rig.handL.visible = false;
+  rig.handR.visible = false;
+  const amp = 0.32;
+  const base = 0.06;
+  const frontL = base - swing * amp;
+  const frontR = base + swing * amp;
+  const hangSwing = (upper: THREE.Group, lower: THREE.Group, side: number, front: number) => {
+    const shx = side * 0.22, shy = 0.30;
+    const out = side * 0.05;
+    const elbowX = shx + out;
+    const elbowY = shy - 0.22;
+    const elbowZ = -front;
+    const wristX = elbowX + out * 0.4;
+    const wristY = elbowY - 0.18;
+    const wristZ = -(front + 0.08);
+    placePlazaArmChain(upper, lower, shx, shy, 0, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
+  };
+  hangSwing(rig.upperL, rig.lowerL, -1, frontL);
+  hangSwing(rig.upperR, rig.lowerR, 1, frontR);
+}
+
 /** 持槍：手黏槍，臂段每幀對準（外彎肘） */
 export function syncHoldArms(rig: PlayerRig, kick = 0) {
   const k = kick;

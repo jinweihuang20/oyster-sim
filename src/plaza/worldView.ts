@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../equipVisual';
-import { makePlayerAvatar, type PlayerRig } from '../dm/character';
+import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
@@ -410,52 +410,8 @@ export function createPlazaWorldView(
     placeArmSeg(lower, e2x, e2y, e2z, e2x + _hangDir.x * lLen, e2y + _hangDir.y * lLen, e2z + _hangDir.z * lLen);
   }
 
-  /** 廣場不持槍：藏槍架；臂段從肩垂掛成鏈（否則袖與小臂會分開） */
-  function hangArms(r: Remote, sit = false) {
-    r.rig.weaponMount.visible = false;
-    r.rig.handL.visible = false;
-    r.rig.handR.visible = false;
-    const hang = (upper: THREE.Group, lower: THREE.Group, side: number) => {
-      const shx = side * 0.22, shy = 0.30, shz = 0;
-      // 角色朝 -Z；前＝負 Z
-      const uFwd = sit ? 0.42 : 0.1;
-      const lFwd = sit ? 0.55 : 0.22;
-      const out = side * (sit ? 0.06 : 0.04);
-      const elbowX = shx + out;
-      const elbowY = shy - (sit ? 0.22 : 0.24);
-      const elbowZ = shz - uFwd;
-      const wristX = elbowX + out * 0.5;
-      const wristY = elbowY - (sit ? 0.16 : 0.2);
-      const wristZ = elbowZ - (lFwd - uFwd);
-      placeArmChain(upper, lower, shx, shy, shz, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
-    };
-    hang(r.rig.upperL, r.rig.lowerL, -1);
-    hang(r.rig.upperR, r.rig.lowerR, 1);
-  }
-
-  /** 走路擺臂：與腿反向（swing>0＝左腿前→右臂前）；前＝負 Z */
-  function swingArms(r: Remote, swing: number) {
-    r.rig.weaponMount.visible = false;
-    r.rig.handL.visible = false;
-    r.rig.handR.visible = false;
-    const amp = 0.32;
-    const base = 0.06;
-    const frontL = base - swing * amp;
-    const frontR = base + swing * amp;
-    const hangSwing = (upper: THREE.Group, lower: THREE.Group, side: number, front: number) => {
-      const shx = side * 0.22, shy = 0.30;
-      const out = side * 0.05;
-      const elbowX = shx + out;
-      const elbowY = shy - 0.22;
-      const elbowZ = -front;
-      const wristX = elbowX + out * 0.4;
-      const wristY = elbowY - 0.18;
-      const wristZ = -(front + 0.08);
-      placeArmChain(upper, lower, shx, shy, 0, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
-    };
-    hangSwing(r.rig.upperL, r.rig.lowerL, -1, frontL);
-    hangSwing(r.rig.upperR, r.rig.lowerR, 1, frontR);
-  }
+  const hangArms = (r: Remote, sit = false) => posePlazaHangArms(r.rig, sit);
+  const swingArms = (r: Remote, swing: number) => posePlazaWalkSwingArms(r.rig, swing);
 
   /** makePlayerAvatar 預設 torso.y=0.92、髖=0.72；勿覆寫成 0 否則頭身壓進腳 */
   const TORSO_Y = 0.92;
