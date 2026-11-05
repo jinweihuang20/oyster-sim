@@ -679,7 +679,7 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .eqBoard .eqNone{color:var(--paint)!important;font-size:13px;margin:0;text-align:center}
 .eqStage{position:relative;width:100%;max-width:400px;margin:0 auto;aspect-ratio:3/4;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);overflow:hidden;background:#2c4a63}
 .eqShed{position:absolute;inset:0;width:100%;height:100%}
-.eqFigW{position:absolute;left:50%;top:8%;height:76%;aspect-ratio:160/300;transform:translateX(-50%)}
+.eqFigW{position:absolute;left:50%;top:5%;height:82%;aspect-ratio:160/300;transform:translateX(-50%);overflow:visible}
 .eqFigW .eqFig{position:static;width:100%;height:100%;display:block}
 .eqLines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .eqLines line{stroke:#fff6d8;stroke-width:1.6;stroke-dasharray:4 3;vector-effect:non-scaling-stroke;opacity:.9}.eqLines circle{fill:#ffd25a;stroke:var(--ink);stroke-width:1;vector-effect:non-scaling-stroke}
