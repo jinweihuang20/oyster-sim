@@ -424,7 +424,8 @@ function buildUi() {
   ui.id = 'plazaRoot';
   ui.innerHTML = `
 <style>
-#plazaRoot{position:fixed;inset:0;z-index:8500;pointer-events:none;font-family:inherit}
+/* 高於 #plazaTags(8800)、#seatCard(8900)，聊天窗不被人名／座位指示蓋住 */
+#plazaRoot{position:fixed;inset:0;z-index:9000;pointer-events:none;font-family:inherit}
 #plazaRoot *{box-sizing:border-box}
 /* 人數提示改走遊戲 #top；此層僅保留作內部狀態字串，預設隱藏以免蓋住 HUD */
 #pzHud{display:none}
@@ -476,7 +477,7 @@ function buildUi() {
 <button id="pzX" type="button" aria-label="離開廣場">離開廣場</button>
 <div id="pzHud">準備中…</div>
 <div id="pzNet" role="status" aria-live="polite"></div>
-<button id="pzChatFab" type="button" aria-label="聊天">聊天<span class="pzBadge" aria-hidden="true">0</span></button>
+<button id="pzChatFab" type="button" aria-label="聊天">聊天<span class="key"> (ENTER)</span><span class="pzBadge" aria-hidden="true">0</span></button>
 <button id="pzChatPeek" type="button" aria-label="打開聊天"></button>
 <div id="pzChat">
   <div id="pzChatHd"><span>廣場聊天</span><button id="pzChatMin" type="button" aria-label="縮小">–</button></div>
