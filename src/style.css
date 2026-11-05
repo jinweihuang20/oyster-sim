@@ -845,9 +845,41 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 #featMsg .featList{margin:10px 0 4px;padding-left:1.2em;font-size:14px;line-height:1.55;text-align:left}
 #featMsg .featList li{margin:6px 0}
 #oDmFfa,#oDmHorde{position:relative}
-#locPick .loc.locPlaza{border-color:#2f7d4a;background:linear-gradient(#2a4a32,#1a2e20)}
-#locPick .loc.locPlaza.cur{box-shadow:inset 0 0 0 2px #9be37a,2px 2px 0 #000}
-#locPick .loc.locPlaza .lm{color:#9be37a}
+/* 蚵仔廣場地點卡：歡樂多人招牌 */
+#locPick .loc.locPlaza{
+  position:relative;overflow:visible;padding-top:12px!important;
+  border:4px solid var(--ink)!important;border-radius:2px!important;
+  background:#2f6b4a var(--corr)!important;
+  box-shadow:4px 4px 0 var(--ink)!important;
+  color:#fff!important;
+}
+#locPick .loc.locPlaza .pzTag{
+  position:absolute;top:-8px;left:8px;z-index:2;
+  background:#ffd25a;color:var(--ink);border:2px solid var(--ink);
+  box-shadow:2px 2px 0 var(--ink);padding:1px 7px;font:900 11px var(--sign);
+  letter-spacing:.06em;line-height:1.2;transform:rotate(-3deg)
+}
+#locPick .loc.locPlaza .ln{font-weight:900;letter-spacing:.03em;text-shadow:1px 1px 0 rgba(0,0,0,.35)}
+#locPick .loc.locPlaza .lm{
+  display:inline-flex;align-items:center;gap:5px;align-self:flex-start;
+  margin-top:2px;padding:2px 8px;background:rgba(0,0,0,.28);border:2px solid var(--ink);
+  color:#9be37a!important;font-weight:900;font-size:13px;letter-spacing:.02em
+}
+#locPick .loc.locPlaza .pzDot{
+  display:inline-block;width:7px;height:7px;border-radius:50%;background:#9be37a;
+  box-shadow:0 0 0 2px rgba(155,227,122,.35);flex:none
+}
+#locPick .loc.locPlaza.live .pzDot{animation:pzPulse 1.2s ease-in-out infinite}
+#locPick .loc.locPlaza.live .lm{color:#b8ff8a!important;border-color:#9be37a}
+#locPick .loc.locPlaza small{color:rgba(255,253,247,.9);font-weight:700}
+#locPick .loc.locPlaza .ld{opacity:.92;color:#d8f5c8}
+#locPick .loc.locPlaza.cur{
+  background:#1f7a4a var(--grain)!important;
+  box-shadow:4px 4px 0 var(--ink), inset 0 0 0 3px #9be37a!important
+}
+#locPick .loc.locPlaza.cur .lm{background:rgba(0,0,0,.35);color:#ffe08a!important;border-color:#ffe08a}
+#locPick .loc.locPlaza:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)!important}
+@keyframes pzPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.85)}}
 /* 廣場玩家頭上名字 */
 #plazaTags{position:fixed;inset:0;pointer-events:none;z-index:8800}
 .plazaTag{position:absolute;transform:translate(-50%,-100%);pointer-events:none;background:rgba(20,12,6,.82);color:#ffe9c0;border:1.5px solid rgba(217,149,43,.85);border-radius:10px;font-size:13px;font-weight:800;padding:3px 10px;white-space:nowrap;text-shadow:0 1px 0 #000;box-shadow:2px 2px 0 rgba(0,0,0,.35)}
@@ -1038,14 +1070,7 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
   box-shadow:4px 4px 0 var(--ink), inset 0 0 0 3px var(--paint);
   transform:rotate(-0.6deg);
 }
-#overlay #locPick .loc.locPlaza{
-  border-color:var(--ink);
-  background:linear-gradient(#2f6b4a var(--grain),#1d4030);
-  box-shadow:4px 4px 0 var(--ink);
-}
-#overlay #locPick .loc.locPlaza.cur{
-  box-shadow:4px 4px 0 var(--ink), inset 0 0 0 3px #9be37a;
-}
+/* locPlaza 細節見上方 #locPick .loc.locPlaza */
 #overlay .sysGrid>button,#overlay .sysGrid>a{
   border-width:4px;
   box-shadow:4px 4px 0 var(--ink);

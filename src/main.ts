@@ -1903,10 +1903,12 @@ function paintPlazaOnlineUi() {
   const el = document.getElementById('locPick');
   if (!el || plazaOnlineN == null) return;
   const n = plazaOnlineN;
+  const btn = el.querySelector('.locPlaza');
   const card = el.querySelector('.locPlaza .lm');
   const ld = el.querySelector('.locPlaza .ld');
   const head = el.querySelector('.locHead small');
-  if (card) card.textContent = `${n} 人`;
+  if (btn) btn.classList.toggle('live', n > 0);
+  if (card) card.innerHTML = `<i class="pzDot" aria-hidden="true"></i>${n} 人在線`;
   if (ld) ld.innerHTML = plazaCountLabel();
   if (isPlazaPicked() && head) head.textContent = plazaHeadCountTxt();
 }
@@ -1939,7 +1941,9 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   const headTxt = plazaCur
     ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場</b><small>${plazaHeadCountTxt()}</small>`
     : `<b><i class="ic ic-pin"></i> 上工地點：${cl!.n} ×${cl!.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small>`;
-  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}" data-loc="plaza"><span class="ln">🦪 蚵仔廣場</span><span class="lm">${plazaOnlineN != null ? `${plazaOnlineN} 人` : '…'}</span><small>${plazaCur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${plazaCountLabel()}</small></button>`;
+  const pzN = plazaOnlineN;
+  const pzLive = pzN != null && pzN > 0;
+  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}${pzLive ? ' live' : ''}" data-loc="plaza"><span class="pzTag">多人</span><span class="ln">🦪 蚵仔廣場</span><span class="lm">${pzN != null ? `<i class="pzDot" aria-hidden="true"></i>${pzN} 人在線` : '連線中…'}</span><small>${plazaCur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${plazaCountLabel()}</small></button>`;
   el.innerHTML = `<div class="locHead">${headTxt}</div><div class="locRow">` + plazaCard + LOCS.map(l => {
     const own = l.need === 0 || save.locs!.includes(l.id), cur = !plazaCur && cl!.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
