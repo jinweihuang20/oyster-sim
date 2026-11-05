@@ -6,6 +6,7 @@ import type { RedeemCodeDef } from './redeemCodes';
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { rbox, crease, rcyl } from './geo';
+import { createSkyDome } from './sky';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
@@ -97,8 +98,8 @@ updClock(); setInterval(updClock, 1000);
 // 港口：碼頭、水、漁船
 mesh(new THREE.BoxGeometry(14, 0.3, 3), mat(0x8a9088), [0, -0.15, -5.8]);
 const water = mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x4a98b8, roughness: 0.24, metalness: 0.18 }), [0, -0.5, -27]); water.rotation.x = -Math.PI / 2;
-const sky = mesh(new THREE.PlaneGeometry(90, 20), new THREE.MeshBasicMaterial({ color: 0xb8d8ec, fog: false }), [0, 4, -40]);
-const skyHi = mesh(new THREE.PlaneGeometry(90, 12), new THREE.MeshBasicMaterial({ color: 0x68a8dc, fog: false }), [0, 16, -39.9]); sky.renderOrder = -1; skyHi.renderOrder = -1;
+const skyDome = createSkyDome({ radius: 46, lo: matchMedia('(pointer: coarse)').matches || matchMedia('(max-width: 900px)').matches });
+scene.add(skyDome.mesh);
 const boats: THREE.Group[] = [];
 const flagCols = [0xd03030, 0x2a5ad0, 0xf0c020, 0x30a050];
 for (let i = 0; i < 5; i++) {
@@ -910,15 +911,20 @@ const SKY: [number, number, number, number, number, number][] = [
   [18, 0xe89868, 0xd89060, 0xffe4c8, 0.75, 0.65], [19.5, 0x345068, 0x3c5870, 0xb0c4d8, 0.64, 0.26],
   [24, 0x182838, 0x203040, 0xb0c4d8, 0.62, 0.16]];
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
+const _skySun = new THREE.Vector3();
 function updSky() {
   const d = new Date(), h = d.getHours() + d.getMinutes() / 60; let i = 0; while (SKY[i + 1][0] <= h) i++;
   const a = SKY[i], b = SKY[i + 1], f = (h - a[0]) / (b[0] - a[0]);
   const L = (k: number) => _c1.setHex(a[k]).lerp(_c2.setHex(b[k]), f).getHex();
   try { showLand(); } catch { /* 尚未初始化 */ } const tn = locNow().tint; (scene.background as THREE.Color).setHex(L(1)); (scene.fog as THREE.Fog).color.setHex(L(2)); if (tn !== null) { _c2.setHex(tn); (scene.background as THREE.Color).lerp(_c2, 0.22); (scene.fog as THREE.Fog).color.lerp(_c2, 0.22); } hemi.color.setHex(L(3));
   hemi.intensity = a[4] + (b[4] - a[4]) * f; sun.intensity = a[5] + (b[5] - a[5]) * f;
-  // 遠景天幕：地平暖亮 ↔ 上方晴空
-  const skyHex = L(1); (sky.material as THREE.MeshBasicMaterial).color.setHex(skyHex).lerp(_c2.setHex(0xd8eaf4), 0.4);
-  (skyHi.material as THREE.MeshBasicMaterial).color.setHex(skyHex).lerp(_c2.setHex(0x5aa8d8), 0.5);
+  // 穹頂：天頂更深、地平更亮，雲量依時段；避開夢核平板色塊
+  const skyHex = L(1), night = isNight(), dawnDusk = (h >= 5 && h < 8) || (h >= 17 && h < 20);
+  const zenith = _c1.setHex(skyHex).lerp(_c2.setHex(night ? 0x0c1828 : 0x3a90c8), night ? 0.4 : 0.55).getHex();
+  const horizon = _c1.setHex(skyHex).lerp(_c2.setHex(night ? 0x1a2838 : 0xe4f0f8), 0.5).getHex();
+  skyDome.setColors(zenith, horizon, L(2));
+  skyDome.setSun(_skySun.copy(sun.position).normalize(), Math.min(1.15, sun.intensity / 1.15));
+  skyDome.setClouds(night ? 0.1 : dawnDusk ? 0.38 : 0.56);
   try { applyShedLook(); } catch { /* 尚未初始化 */ }
   const nn = document.getElementById('nightNote'); if (nn) nn.textContent = isNight() ? '🌙 現在是夜班時段：這一工收入 +20%' : '💡 晚上 8 點到早上 5 點上工是夜班，收入 +20%';
 }
@@ -2569,6 +2575,9 @@ function plazaHideYard(hide: boolean) {
     (scene.background as THREE.Color).setHex(0xa8d0e8);
     hemi.color.setHex(0xfff2e4); hemi.intensity = 1.05;
     sun.color.setHex(0xffe8c4); sun.intensity = 1.15;
+    skyDome.setColors(0x4a9ad0, 0xd4eaf6, 0xb0c8d0);
+    skyDome.setSun(_skySun.set(-0.35, 0.82, -0.45).normalize(), 1.05);
+    skyDome.setClouds(0.52);
   } else {
     for (const o of plazaHomeHide) { o.visible = !!(o as any).__plazaHid; delete (o as any).__plazaHid; }
     plazaHomeHide = [];
@@ -2877,6 +2886,7 @@ function frameBody() {
   if (shedAnim.length) { const t = performance.now() / 1000; for (const f of shedAnim) f(t); }
   if (isPaused()) {
     clock.getDelta(); if (!pauseAt) { pauseAt = performance.now(); holding = false; stopSteal(); closeUmbrella(); down = null; joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
+    skyDome.tick(viewCam(), performance.now() / 1000);
     renderer.render(scene, viewCam()); requestAnimationFrame(frame); return;
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
@@ -3029,6 +3039,7 @@ function frameBody() {
   camera.position.copy(walking ? walkPos : SEAT); camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
   lamp.intensity = 26 + Math.sin(t * 1.3) * 1.0;
+  skyDome.tick(viewCam(), t);
   renderer.render(scene, viewCam());
   requestAnimationFrame(frame);
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createSkyDome, type SkyDome } from '../sky';
 import { COVER_DEF, HALF, PILES } from './constants';
 import type { DmUmb } from './types';
 import type { MatFn, MeshAdd } from './weapons';
@@ -13,22 +14,18 @@ export type ArenaDeps = {
   regBreak: (root: THREE.Object3D, kind: 'fly' | 'solid', hp: number, halfH: number, rad: number, coverIdx?: number, mass?: number) => Breakable;
 };
 
-/** 燈光、場地、外景、圍牆、掩體、氛圍道具、蚵仔堆 */
-export function buildArena(deps: ArenaDeps) {
+/** 燈光、場地、外景、圍牆、掩體、氛圍道具、蚵仔堆；回傳天空穹頂供每幀 tick */
+export function buildArena(deps: ArenaDeps): { sky: SkyDome } {
   const { scene, LO, M, add, U, regBreak } = deps;
-  // 黃昏漁港燈光：暖琥珀／沙色，避開紫粉夢核
-  scene.add(new THREE.HemisphereLight(0xffd4b0, 0x3a2a18, LO ? 1.7 : 1.5)); scene.add(new THREE.AmbientLight(0xffe8d0, LO ? 0.55 : 0.35));
-  const sun = new THREE.DirectionalLight(0xffb070, LO ? 1.35 : 1.6);
-  // 黃昏漸層天空＋夕陽光暈（頂部灰藍、中層琥珀，無紫）
-  {
-    const sunDir = new THREE.Vector3(-12, 5, -18).normalize();
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(60, LO ? 16 : 32, LO ? 8 : 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { sd: { value: sunDir } },
-      vertexShader: 'varying vec3 v;void main(){v=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-      fragmentShader: 'uniform vec3 sd;varying vec3 v;void main(){float h=v.y;vec3 top=vec3(.20,.28,.40),mid=vec3(.82,.48,.30),hor=vec3(1.,.68,.42),low=vec3(.30,.24,.18);' +
-        'vec3 c=h>0.?mix(hor,mix(mid,top,smoothstep(.15,.7,h)),smoothstep(0.,.18,h)):mix(hor,low,smoothstep(0.,-.15,h));' +
-        'float s=max(dot(v,sd),0.);c+=vec3(1.,.72,.42)*(pow(s,8.)*.45+pow(s,200.)*1.2);gl_FragColor=vec4(c,1.);}' }));
-    sky.renderOrder = -1; sky.frustumCulled = false; scene.add(sky);
-  } sun.position.set(-12, 16, -18); sun.castShadow = !LO;
+  // 清爽晴天漁港：暖白光＋藍天白雲，避開黃昏／紫粉夢核
+  scene.add(new THREE.HemisphereLight(0xfff2e4, 0x6a8a78, LO ? 1.55 : 1.35)); scene.add(new THREE.AmbientLight(0xfff6ee, LO ? 0.45 : 0.28));
+  const sun = new THREE.DirectionalLight(0xffe8c4, LO ? 1.2 : 1.35);
+  const sky = createSkyDome({ radius: 58, lo: LO });
+  sky.setColors(0x4a9ad0, 0xd8eef8, 0xa8c0c8);
+  sky.setSun(new THREE.Vector3(-0.35, 0.78, -0.52), 1.0);
+  sky.setClouds(0.55);
+  scene.add(sky.mesh);
+  sun.position.set(-12, 16, -18); sun.castShadow = !LO;
   if (!LO) { Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, far: 60 }); sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.002; }
   scene.add(sun);
   // ---- 場地：蚵寮沙地（程序紋理＋濕沙／殼屑） ----
@@ -263,4 +260,5 @@ export function buildArena(deps: ArenaDeps) {
     for (let i = 0; i < PILE_N; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 1.0, hh = Math.max(0, 0.55 * (1 - r / 0.95)); dmy.position.set(pp.x + Math.cos(a) * r, hh + 0.03, pp.z + Math.sin(a) * r); dmy.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); dmy.updateMatrix(); im.setMatrixAt(i, dmy.matrix); im.setColorAt(i, col.setHex(U.greyPick())); }
     scene.add(im);
   });
+  return { sky };
 }

@@ -219,7 +219,7 @@ ${isTouch
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LO, powerPreference: LO ? 'low-power' : 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, LO ? 1.25 : 2));
   renderer.shadowMap.enabled = !LO;
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x6a5070); scene.fog = new THREE.Fog(0x8a6070, LO ? 16 : 20, LO ? 55 : 70);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0xa8d0e8); scene.fog = new THREE.Fog(0xc0d8e0, LO ? 16 : 20, LO ? 55 : 70);
   const FOV0 = 70;
   const cam = new THREE.PerspectiveCamera(FOV0, 1, 0.05, LO ? 80 : 100); cam.rotation.order = 'YXZ';
 
@@ -227,7 +227,7 @@ ${isTouch
   const covers = makeCoverBoxes();
   const crackSfx: CrackSfx = { crack: () => {} };
   const { breakables, regBreak, hitBreakable, propContains, stepBreakables, stepScrap, placeScar, stepScars } = createBreakables({ scene, LO, covers, sfx: crackSfx });
-  buildArena({ scene, LO, M, add, U, regBreak });
+  const { sky: arenaSky } = buildArena({ scene, LO, M, add, U, regBreak });
   const piles = createPileRuntimes(scene);
 
   const BARN_N = LO ? 3 : 8;
@@ -1317,6 +1317,7 @@ ${isTouch
     if (markT > 0) { markT -= dt; if (markT <= 0) q('dmMark').style.opacity = '0'; }
     if (hsT > 0) { hsT -= dt; if (hsT <= 0) q('dmHs').classList.remove('on'); }
     if ((hudT -= dt) <= 0) { hud(); hudT = 0.1; }
+    arenaSky.tick(cam, t / 1000);
     renderer.render(scene, cam);
   }
   loop();
