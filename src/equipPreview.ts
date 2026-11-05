@@ -49,7 +49,8 @@ function loop() {
     camera.updateProjectionMatrix();
   }
   yawT += 0.012;
-  rig.outer.rotation.y = Math.sin(yawT) * 0.38;
+  // avatar 正面朝 −Z；相機在 +Z，需轉 π 才面向鏡頭
+  rig.outer.rotation.y = Math.PI + Math.sin(yawT) * 0.38;
   renderer.render(scene, camera);
   raf = requestAnimationFrame(loop);
 }
