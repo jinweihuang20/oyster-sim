@@ -179,25 +179,31 @@ export function createPlazaWorldView(
 
   void bubblesHost;
 
-  const selfBubble = makeWorldLabel(' ', 'bubble', 0.34);
+  const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: 0.36, depthTest: false });
   selfBubble.sprite.visible = false;
-  scene.add(selfBubble.sprite);
+  root.add(selfBubble.sprite);
   let selfBubUntil = 0;
   let selfX = 0, selfZ = 0, selfYaw = 0, selfSeated = false;
+  const _tagHead = new THREE.Vector3();
 
-  function ensureTag(nick: string, head: THREE.Object3D) {
-    const tag = makeWorldLabel(nick, 'name', 0.22);
-    tag.sprite.position.set(0, 0.28, 0);
-    head.add(tag.sprite);
+  /** 掛在 root（勿掛 head）：轉頭時本地 +Y 會歪掉 */
+  function ensureTag(nick: string) {
+    const tag = makeWorldLabel(nick, 'name', { worldH: 0.24, depthTest: false });
+    tag.sprite.visible = false;
+    root.add(tag.sprite);
     return tag;
   }
 
-  function ensureBubble(head: THREE.Object3D) {
-    const el = makeWorldLabel(' ', 'bubble', 0.34);
-    el.sprite.position.set(0, 0.46, 0);
+  function ensureBubble() {
+    const el = makeWorldLabel(' ', 'bubble', { worldH: 0.36, depthTest: false });
     el.sprite.visible = false;
-    head.add(el.sprite);
+    root.add(el.sprite);
     return el;
+  }
+
+  function placeAboveHead(sprite: THREE.Sprite, head: THREE.Object3D, yLift: number) {
+    head.getWorldPosition(_tagHead);
+    sprite.position.set(_tagHead.x, _tagHead.y + yLift, _tagHead.z);
   }
 
   /** 遠端雨傘：跟本機一樣「往前開」擋殼，不是頭頂撐雨 */
@@ -587,7 +593,7 @@ export function createPlazaWorldView(
       // Joined 常帶 (0,0)；未入座時先藏，等第一次可信座標再顯示
       const awaitingPose = !p.seated && Math.hypot(x, z) < 0.2;
       r = {
-        key: pid, connId: p.connId || '', pid, rig, tag: ensureTag(p.nick || '剝蚵人', rig.head), bubble: ensureBubble(rig.head), bubUntil: 0,
+        key: pid, connId: p.connId || '', pid, rig, tag: ensureTag(p.nick || '剝蚵人'), bubble: ensureBubble(), bubUntil: 0,
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
         props, bowlNode, meatRoot, meatMeshes: [], knife, oyster,
@@ -714,7 +720,7 @@ export function createPlazaWorldView(
     const until = performance.now() + 5000;
     const short = text.length > 40 ? text.slice(0, 39) + '…' : text;
     if (opts.self) {
-      selfBubble.setText(short);
+      selfBubble.setText(short, true);
       selfBubble.setOpacity(1);
       selfBubble.sprite.visible = true;
       selfBubUntil = until;
@@ -729,7 +735,7 @@ export function createPlazaWorldView(
       for (const x of remotes.values()) { if (x.nick === opts.nick) { r = x; break; } }
     }
     if (!r) return;
-    r.bubble.setText(short);
+    r.bubble.setText(short, true);
     r.bubble.setOpacity(1);
     r.bubble.sprite.visible = true;
     r.bubUntil = until;
@@ -823,16 +829,21 @@ export function createPlazaWorldView(
       const oz = r.z + Math.cos(r.yaw) * back;
       r.rig.outer.position.set(ox, 0, oz);
       r.rig.outer.rotation.y = r.yaw;
-      r.tag.sprite.visible = r.rig.outer.visible && !r.awaitingPose;
-      if (r.bubUntil > t) r.bubble.sprite.visible = r.tag.sprite.visible;
-      else if (r.bubble.sprite.visible) r.bubble.sprite.visible = false;
+      r.rig.outer.updateMatrixWorld(true);
+      const show = r.rig.outer.visible && !r.awaitingPose;
+      r.tag.sprite.visible = show;
+      if (show) placeAboveHead(r.tag.sprite, r.rig.head, 0.22);
+      if (r.bubUntil > t && show) {
+        placeAboveHead(r.bubble.sprite, r.rig.head, 0.42);
+        r.bubble.sprite.visible = true;
+      } else if (r.bubble.sprite.visible) r.bubble.sprite.visible = false;
     }
     if (selfBubUntil > t) {
       const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
       const back = selfSeated ? -0.08 : 0;
       const ox = selfX + Math.sin(selfYaw) * back;
       const oz = selfZ + Math.cos(selfYaw) * back;
-      selfBubble.sprite.position.set(ox, headY, oz);
+      selfBubble.sprite.position.set(ox, headY + 0.12, oz);
       selfBubble.sprite.visible = true;
     } else if (selfBubble.sprite.visible) selfBubble.sprite.visible = false;
   }

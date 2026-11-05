@@ -197,16 +197,21 @@ function makeNpc(d: NpcDef) {
   const bowlL = new THREE.Vector3(0.32, 0, -0.42); const bowl = a.g.localToWorld(bowlL.clone());
   const bowlM = mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, 0.05, bowl.z]);
   bowl.y = 0.08;
-  const tag = makeWorldLabel(d.name, 'name', 0.2);
-  tag.sprite.position.set(0, 0.3, 0); a.head.add(tag.sprite);
-  const bubble = makeWorldLabel(' ', 'bubble', 0.32);
-  bubble.sprite.position.set(0, 0.48, 0); bubble.sprite.visible = false; a.head.add(bubble.sprite);
+  // 掛 scene、每幀對齊頭世界座標（勿掛 head，轉頭會把 +Y 偏移帶歪）
+  const tag = makeWorldLabel(d.name, 'name', { worldH: 0.2, depthTest: false });
+  tag.sprite.visible = false; scene.add(tag.sprite);
+  const bubble = makeWorldLabel(' ', 'bubble', { worldH: 0.32, depthTest: false });
+  bubble.sprite.visible = false; scene.add(bubble.sprite);
   npcs.push({ ...a, tag, name: d.name, rate: d.rate, chatty: d.chatty, peek: d.peek, count: 0, pause: 0, look: 0, bubble, bubT: 0, lean: 0, cyc: Math.random(), dur: d.rate, ev: 0, mood: 0, angry: 0, distract: 0, turnDir: 1, windup: 0, throwCd: rnd(15, 30), stuck: null, baseY: 0, oy, top, meat, bowl, bowlMeat: [], bowlM });
 }
 for (const d of NPC_DEF) makeNpc(d);
 function say(n: Npc, t: string, dur = 3.2) {
   if (ac) SFX.murmur([300, 230, 380][npcs.indexOf(n)] ?? 300);
-  n.bubble.setText(t); n.bubble.setOpacity(1); n.bubble.sprite.visible = true; n.bubT = dur;
+  // force：同一句／連續講話也要蓋掉舊貼圖
+  n.bubble.setText(t, true);
+  n.bubble.setOpacity(1);
+  n.bubble.sprite.visible = true;
+  n.bubT = dur;
 }
 const _warnRel = new THREE.Vector3(), _warnFwd = new THREE.Vector3(), _tagHit = new THREE.Vector3();
 /** 點名牌開 tip（螢幕距離，比 Sprite raycast 穩） */
@@ -2014,7 +2019,7 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   el.querySelectorAll<HTMLButtonElement>('[data-loc]').forEach(b => b.onclick = () => {
     save.loc = b.dataset.loc;
     persist(); renderLocs();
-    if (save.loc !== 'plaza') updSky();
+    updSky();
     syncStartUi();
   });
   syncStartUi();
@@ -2193,13 +2198,9 @@ function plazaHideYard(hide: boolean) {
     ALL_NPCS.forEach(n => { n.tag.sprite.visible = false; n.bubble.sprite.visible = false; });
     camera.far = 90; camera.updateProjectionMatrix();
     tpCam.far = 120; tpCam.updateProjectionMatrix();
-    const f = scene.fog as THREE.Fog; f.color.setHex(0xd8e4dc); f.near = 20; f.far = 64;
-    (scene.background as THREE.Color).setHex(0xa8d0e8);
-    hemi.color.setHex(0xfff2e4); hemi.intensity = 1.05;
-    sun.color.setHex(0xffe8c4); sun.intensity = 1.15;
-    skyDome.setColors(0x4a9ad0, 0xd4eaf6, 0xb0c8d0);
-    skyDome.setSun(_skySun.set(-0.35, 0.82, -0.45).normalize(), 1.05);
-    skyDome.setClouds(0.52);
+    // 依當下時間套天色（勿強制白天，否則 30s 後 updSky 會突然跳變）
+    updSky();
+    const f = scene.fog as THREE.Fog; f.near = 20; f.far = 64;
   } else {
     for (const o of plazaHomeHide) { o.visible = !!(o as any).__plazaHid; delete (o as any).__plazaHid; }
     plazaHomeHide = [];
@@ -2690,7 +2691,16 @@ function frameBody() {
     const g = n.grudge ?? 0;
     const tagTxt = n.name + (g >= 60 ? ' 😡' : g >= 25 ? ' 😠' : '');
     if (n.tagTxt !== tagTxt) { n.tagTxt = tagTxt; n.tag.setText(tagTxt); }
-    n.tag.sprite.visible = !tut && n.g.visible && !n.g.userData.moon;
+    const showTag = !tut && n.g.visible && !n.g.userData.moon;
+    n.tag.sprite.visible = showTag;
+    if (showTag) {
+      n.head.getWorldPosition(_tagHit); _tagHit.y += 0.28;
+      n.tag.sprite.position.copy(_tagHit);
+    }
+    if (n.bubble.sprite.visible) {
+      n.head.getWorldPosition(_tagHit); _tagHit.y += 0.48;
+      n.bubble.sprite.position.copy(_tagHit);
+    }
   }
   boats.forEach((b, i) => { b.position.y = -0.45 + Math.sin(t * 0.8 + i) * 0.05; b.rotation.z = Math.sin(t * 0.6 + i * 2) * 0.03; });
   for (let i = flyers.length - 1; i >= 0; i--) {

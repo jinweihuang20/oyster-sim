@@ -4,7 +4,7 @@ export type WorldLabelKind = 'name' | 'bubble';
 
 export type WorldLabel = {
   sprite: THREE.Sprite;
-  setText: (text: string) => void;
+  setText: (text: string, force?: boolean) => void;
   setOpacity: (a: number) => void;
   dispose: () => void;
 };
@@ -24,18 +24,38 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number): s
   return lines.slice(0, 4);
 }
 
+export type WorldLabelOpts = {
+  worldH?: number;
+  /** 廣場人名等需蓋過場景時關深度測試（等同舊 DOM 疊層） */
+  depthTest?: boolean;
+};
+
 /** 頭頂名牌／對話泡泡：Canvas 貼到 Sprite，跟隨 3D，不寫 DOM */
-export function makeWorldLabel(initial: string, kind: WorldLabelKind, worldH = kind === 'name' ? 0.2 : 0.3): WorldLabel {
+export function makeWorldLabel(
+  initial: string,
+  kind: WorldLabelKind,
+  worldHOrOpts: number | WorldLabelOpts = kind === 'name' ? 0.2 : 0.3,
+): WorldLabel {
+  const opts: WorldLabelOpts = typeof worldHOrOpts === 'number' ? { worldH: worldHOrOpts } : worldHOrOpts;
+  const worldH = opts.worldH ?? (kind === 'name' ? 0.2 : 0.3);
+  const depthTest = opts.depthTest !== false;
+  // 固定畫布尺寸：避免改 canvas.width 導致 WebGL 貼圖卡住舊畫面
+  const dpr = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 2);
+  const cssW = kind === 'bubble' ? 320 : 360;
+  const cssH = kind === 'bubble' ? 160 : 64;
   const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(cssW * dpr);
+  canvas.height = Math.ceil(cssH * dpr);
   const ctx = canvas.getContext('2d')!;
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
   const mat = new THREE.SpriteMaterial({
     map: tex,
     transparent: true,
-    depthTest: true,
+    depthTest,
     depthWrite: false,
     sizeAttenuation: true,
   });
@@ -46,27 +66,25 @@ export function makeWorldLabel(initial: string, kind: WorldLabelKind, worldH = k
   let opacity = 1;
 
   const redraw = () => {
-    const dpr = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 2);
     const fontPx = kind === 'name' ? 26 : 24;
     const padX = kind === 'name' ? 14 : 16;
     const padY = kind === 'name' ? 8 : 10;
-    const maxTextW = kind === 'bubble' ? 260 : 360;
+    const maxTextW = kind === 'bubble' ? 260 : 320;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.font = `800 ${fontPx}px "Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif`;
     const lines = wrapLines(ctx, text, maxTextW);
     const lineH = fontPx * 1.25;
     const textW = Math.max(...lines.map(l => ctx.measureText(l).width), 8);
-    const w = Math.ceil(textW + padX * 2);
-    const h = Math.ceil(lines.length * lineH + padY * 2 + (kind === 'bubble' ? 8 : 0));
-    canvas.width = Math.max(2, Math.ceil(w * dpr));
-    canvas.height = Math.max(2, Math.ceil(h * dpr));
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    ctx.font = `800 ${fontPx}px "Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif`;
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'center';
+    const w = Math.min(cssW, Math.ceil(textW + padX * 2));
+    const h = Math.min(cssH, Math.ceil(lines.length * lineH + padY * 2 + (kind === 'bubble' ? 8 : 0)));
+    // 畫在畫布底部中央（sprite.center 在底邊）
+    const ox = (cssW - w) / 2;
+    const oy = cssH - h;
+    ctx.clearRect(0, 0, cssW, cssH);
     if (kind === 'name') {
-      roundRect(ctx, 0.5, 0.5, w - 1, h - 1, 10);
+      roundRect(ctx, ox + 0.5, oy + 0.5, w - 1, h - 1, 10);
       ctx.fillStyle = 'rgba(30,20,10,0.82)';
       ctx.fill();
       ctx.strokeStyle = 'rgba(255,220,160,0.55)';
@@ -74,17 +92,16 @@ export function makeWorldLabel(initial: string, kind: WorldLabelKind, worldH = k
       ctx.stroke();
       ctx.fillStyle = '#ffe9c0';
     } else {
-      roundRect(ctx, 1, 1, w - 2, h - 10, 12);
+      roundRect(ctx, ox + 1, oy + 1, w - 2, h - 10, 12);
       ctx.fillStyle = '#fff8e8';
       ctx.fill();
       ctx.strokeStyle = '#1b1b1b';
       ctx.lineWidth = 2;
       ctx.stroke();
-      // 小三角
       ctx.beginPath();
-      ctx.moveTo(w / 2 - 8, h - 10);
-      ctx.lineTo(w / 2, h - 2);
-      ctx.lineTo(w / 2 + 8, h - 10);
+      ctx.moveTo(ox + w / 2 - 8, oy + h - 10);
+      ctx.lineTo(ox + w / 2, oy + h - 2);
+      ctx.lineTo(ox + w / 2 + 8, oy + h - 10);
       ctx.closePath();
       ctx.fillStyle = '#fff8e8';
       ctx.fill();
@@ -92,23 +109,33 @@ export function makeWorldLabel(initial: string, kind: WorldLabelKind, worldH = k
       ctx.stroke();
       ctx.fillStyle = '#3a2410';
     }
-    const y0 = padY + lineH / 2;
-    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], w / 2, y0 + i * lineH);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.font = `800 ${fontPx}px "Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif`;
+    const y0 = oy + padY + lineH / 2;
+    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], ox + w / 2, y0 + i * lineH);
+    // 裁切到實際文字區（flipY 下底邊對齊），避免整張空白畫布把字縮太小
+    tex.offset.set(ox / cssW, 1 - (oy + h) / cssH);
+    tex.repeat.set(w / cssW, h / cssH);
     tex.needsUpdate = true;
     const aspect = w / Math.max(1, h);
     sprite.scale.set(worldH * aspect, worldH, 1);
     mat.opacity = opacity;
+    mat.needsUpdate = true;
   };
 
-  const setText = (t: string) => {
+  const setText = (t: string, force = false) => {
     const next = t || '';
-    if (next === text) return;
+    if (!force && next === text && kind === 'name') return;
     text = next;
     redraw();
   };
   const setOpacity = (a: number) => {
     const next = Math.max(0, Math.min(1, a));
-    if (Math.abs(next - opacity) < 0.01) return;
+    if (Math.abs(next - opacity) < 0.01) {
+      mat.opacity = opacity;
+      return;
+    }
     opacity = next;
     mat.opacity = opacity;
     mat.needsUpdate = true;
@@ -119,7 +146,7 @@ export function makeWorldLabel(initial: string, kind: WorldLabelKind, worldH = k
     sprite.removeFromParent();
   };
 
-  setText(initial || ' ');
+  setText(initial || ' ', true);
   return { sprite, setText, setOpacity, dispose };
 }
 
