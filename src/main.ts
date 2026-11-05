@@ -27,6 +27,7 @@ import { SHELL_GEOS, HALF_GEOS, greyPick, shellM } from './shells';
 import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS } from './shopEquip';
 import { type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY, defaultSave, loadSave as loadSaveFrom, writeSave, DAILY_PAYS, todayKey, dayDiff } from './save';
 import { makeAma as makeAmaMesh, GOSSIP, PEEK, NAG_GIVEUP, NAG_STAB, NAG_CRACK, NAG_SLIP, SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE, NPC_DIFF_T, NPC_DEF, type NpcDef } from './npc';
+import { initAnnounce, featAnnounce, featDots } from './announce';
 import { installNoZoom } from './nozoom';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import { initFeedback, openFb, fbShow } from './feedback';
@@ -3665,59 +3666,10 @@ function newAnnounce() {
 setInterval(newAnnounce, 1500); setTimeout(newAnnounce, 2500);
 (window as any).__newShop = { now: () => newNow(), reset: () => { LS.removeItem('shopKnown'); LS.removeItem('shopAnn'); LS.removeItem('shopAnnDay'); } };
 
-/** 玩法／模式更新公告（進主畫面跳一次；之後換 id 再發） */
-const FEAT_NOTES: { id: string; title: string; lines: string[] }[] = [
-  {
-    id: 'dm-modes-weapons-2026-11b',
-    title: '死鬥大更新',
-    lines: [
-      '雜貨店新上架多把死鬥槍：蚵卡拉什、蚵殼卡賓、烏茲、沙鷹、噴子、狙擊…',
-      '「死鬥・混戰」：3 分鐘搶擊殺榜，結算依名次發錢',
-      '「死鬥・圍毆」：一關接一關，BOT 越來越多也越兇，看你能撐幾關',
-      '蚵仔堆填彈有冷卻（圓環進度），補完要換下一堆',
-    ],
-  },
-];
-const FEAT_LS = LS_P + 'featNotes';
-let featSeen: Set<string>;
-{ let raw: any = null; try { raw = JSON.parse(LS.getItem(FEAT_LS) ?? 'null'); } catch { } featSeen = new Set(Array.isArray(raw) ? raw : []); }
-const featSave = () => { try { LS.setItem(FEAT_LS, JSON.stringify([...featSeen])); } catch { } };
-const featPending = () => FEAT_NOTES.filter(n => !featSeen.has(n.id));
-function featDots() {
-  const has = featPending().length > 0;
-  for (const id of ['oDmFfa', 'oDmHorde']) {
-    const b = document.getElementById(id); if (!b) continue;
-    b.style.position = b.style.position || 'relative';
-    let d = b.querySelector('.newDot');
-    if (has && !d) b.insertAdjacentHTML('beforeend', '<span class="newDot">新</span>');
-    else if (!has && d) d.remove();
-  }
-}
-function featAnnounce() {
-  featDots();
-  if (bootQuiet()) return; // 新人勿一進場就被更新公告蓋住
-  const next = featPending()[0]; if (!next) return;
-  if (menuModalBusy()) return;
-  featSeen.add(next.id); featSave(); featDots();
-  Social.local(next.title + '：' + next.lines[0]);
-  const m = document.createElement('div'); m.id = 'featMsg'; m.className = 'giftMsg';
-  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b>${esc(next.title)}</b>
-<ul class="featList">${next.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
-<div class="mbtns"><button class="gmNo">知道了</button><button class="gmYes">去雜貨店看槍</button></div></div>`;
-  const close = () => { m.remove(); setTimeout(() => { giftAlert(); svAlert(); newAnnounce(); }, 300); };
-  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
-  m.querySelector('.gmYes')!.addEventListener('click', () => {
-    close();
-    ($('oShop') as HTMLButtonElement).click();
-    requestAnimationFrame(() => {
-      const h = Array.from($('shopList').querySelectorAll('h3')).find(el => (el.textContent ?? '').includes('槍枝'));
-      h?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  });
-  document.body.appendChild(m);
-}
-setInterval(featAnnounce, 1500); setTimeout(featAnnounce, 1800);
-(window as any).__featNotes = { pending: () => featPending().map(n => n.id), reset: () => { LS.removeItem(FEAT_LS); featSeen = new Set(); featDots(); } };
+initAnnounce({
+  LS, LS_P, $: (id) => $(id), esc, bootQuiet: () => !!bootQuiet(), menuModalBusy: () => !!menuModalBusy(), Social,
+  giftAlert, svAlert, newAnnounce,
+});
 
 (window as any).__pity = { LEGEND_PITY, LEGEND_ODD, get dry() { return save.legendDry ?? 0; }, set dry(v: number) { save.legendDry = v; }, roll: () => rollFind(), sync: () => legendSync(), give: (i: number) => { save.odd[i]++; }, odd: () => save.odd.slice() };
 
