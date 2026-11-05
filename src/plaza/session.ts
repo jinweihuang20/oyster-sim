@@ -185,6 +185,7 @@ export function openPlaza(D: PlazaDeps) {
 async function abortEnter(D: PlazaDeps, err?: string) {
   active = false; seated = false; shiftStarted = false; netDown = false;
   clearReconnectTimer();
+  syncPlazaPeopleHud();
   await client?.disconnect();
   client = null;
   view?.dispose(); view = null;
@@ -204,6 +205,7 @@ async function boot(D: PlazaDeps) {
   }
   snap = r.snap ?? null;
   if (snap) view?.syncRoster(snap, D.id);
+  applyChatHistory(r.chat);
   setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
   D.enterWalk();
   showRoamUi();
@@ -237,7 +239,7 @@ function flashNetOk(msg: string) {
   setTimeout(() => { if (!netDown) setNetBanner(null); }, 2200);
 }
 
-async function restoreAfterRejoin(s?: PlazaSnapshot) {
+async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[]) {
   if (!deps || !client) return;
   netDown = false;
   clearReconnectTimer();
@@ -248,6 +250,8 @@ async function restoreAfterRejoin(s?: PlazaSnapshot) {
     snap = normalizeSnap(s);
     view?.syncRoster(snap, deps.id);
   }
+  // 補離線期間錯過的聊天
+  applyChatHistory(chat);
   // 斷線期間座位已被清掉：若本地還坐著，試著搶回原位
   if (seated && myPile != null && mySlot != null) {
     const r = await client.claimSeat(myPile, mySlot);
@@ -279,16 +283,28 @@ function wireClient(D: PlazaDeps) {
     onRoster: (s) => {
       snap = normalizeSnap(s);
       view?.syncRoster(snap, D.id);
+      syncPlazaPeopleHud();
       if (!netDown && !seated) setHud(`${plazaHudPeople(snap)}　靠近空位坐下`);
     },
     onJoined: (p) => {
       const n = normPlayer(p);
       view?.applyPose(n, D.id);
+      if (snap) {
+        const i = snap.players.findIndex(x => x.connId === n.connId || (!!n.pid && x.pid === n.pid));
+        if (i < 0) snap.players.push(n); else snap.players[i] = { ...snap.players[i], ...n };
+        snap.occupied = snap.players.length;
+      }
+      syncPlazaPeopleHud();
       if (n.pid && n.pid !== D.id) D.toast(`${n.nick} 進來廣場了`, '#9fe0ff');
     },
     onLeft: (p) => {
       const n = normPlayer(p);
       view?.remove(n);
+      if (snap) {
+        snap.players = snap.players.filter(x => x.connId !== n.connId && !(n.pid && x.pid === n.pid));
+        snap.occupied = snap.players.length;
+      }
+      syncPlazaPeopleHud();
       if (n.pid && n.pid !== D.id) D.toast(`${n.nick} 離開廣場了`, '#ffb08a');
     },
     onSeatChanged: (p) => { view?.applyPose(normPlayer(p), D.id); },
@@ -303,15 +319,12 @@ function wireClient(D: PlazaDeps) {
       netDown = true;
       setNetBanner(`連線不穩，正在重連（第 ${attempt} 次）…`);
       if (attempt === 1) D.toast('廣場連線中斷，正在重連…', '#ffb08a');
-      // 坐下時也要看得到提示
-      const hud = ui?.querySelector('#pzHud') as HTMLElement | null;
-      if (hud) hud.classList.remove('hide');
     },
     onSocketReconnected: () => {
       if (!active) return;
       setNetBanner('連上了，正在回到廣場…');
     },
-    onRejoined: (s) => { if (active) void restoreAfterRejoin(s); },
+    onRejoined: (s, chat) => { if (active) void restoreAfterRejoin(s, chat); },
     onRejoinFail: (err, attempt) => {
       if (!active) return;
       netDown = true;
@@ -323,8 +336,6 @@ function wireClient(D: PlazaDeps) {
       netDown = true;
       setNetBanner('連線中斷，正在重連…');
       D.toast('廣場連線中斷，正在重連…', '#ffb08a');
-      const hud = ui?.querySelector('#pzHud') as HTMLElement | null;
-      if (hud) hud.classList.remove('hide');
       scheduleManualReconnect(1500);
     },
   });
@@ -399,12 +410,13 @@ function buildUi() {
 <style>
 #plazaRoot{position:fixed;inset:0;z-index:8500;pointer-events:none;font-family:inherit}
 #plazaRoot *{box-sizing:border-box}
-#pzHud{pointer-events:none;position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:50%;transform:translateX(-50%);max-width:min(78vw,340px);background:rgba(20,12,6,.72);border:2px solid #d9952b;border-radius:12px;padding:5px 10px;font-weight:800;font-size:13px;color:#ffd23f;text-align:center;line-height:1.3;z-index:1}
-#pzHud.hide{display:none}
-#pzNet{display:none;pointer-events:none;position:absolute;top:calc(env(safe-area-inset-top) + 52px);left:50%;transform:translateX(-50%);max-width:min(86vw,360px);background:rgba(80,28,12,.92);border:2px solid #ffb08a;border-radius:12px;padding:8px 14px;font-weight:900;font-size:14px;color:#ffe0c0;text-align:center;line-height:1.35;z-index:4;box-shadow:0 4px 14px #0008}
+/* 人數提示改走遊戲 #top；此層僅保留作內部狀態字串，預設隱藏以免蓋住 HUD */
+#pzHud{display:none}
+#pzNet{display:none;pointer-events:none;position:absolute;top:calc(env(safe-area-inset-top) + 108px);left:50%;transform:translateX(-50%);max-width:min(86vw,360px);background:rgba(80,28,12,.92);border:2px solid #ffb08a;border-radius:12px;padding:8px 14px;font-weight:900;font-size:14px;color:#ffe0c0;text-align:center;line-height:1.35;z-index:4;box-shadow:0 4px 14px #0008}
 #pzNet.on{display:block}
 #pzNet.ok{background:rgba(20,48,28,.92);border-color:#9be37a;color:#d8ffc8}
-#pzX{pointer-events:auto;position:absolute;top:calc(env(safe-area-inset-top) + 8px);right:calc(env(safe-area-inset-right) + 8px);min-width:42px;height:42px;padding:0 12px;font-size:14px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;white-space:nowrap}
+/* 置於 #top／#stats 下方右側，不擋上方狀態列 */
+#pzX{pointer-events:auto;position:absolute;top:calc(env(safe-area-inset-top) + 100px);right:calc(env(safe-area-inset-right) + 8px);left:auto;min-width:42px;height:42px;padding:0 12px;font-size:14px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;white-space:nowrap}
 #pzX.hide{display:none}
 /* 聊天放左側，避開右下雨傘／丟殼／偷 */
 #pzChatFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 168px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
@@ -552,18 +564,37 @@ function showRoamUi() {
   syncSeatChrome();
 }
 
-/** 走動才顯示離開／頂部提示；坐下改用遊戲內 quit／🚶，避免擋 #top */
+/** 走動才顯示離開；坐下改用遊戲內 quit／🚶。上方狀態一律用遊戲 #top／#stats */
 function syncSeatChrome() {
   const leave = ui?.querySelector('#pzX') as HTMLElement | null;
-  const hud = ui?.querySelector('#pzHud') as HTMLElement | null;
   if (leave) leave.classList.toggle('hide', seated);
-  // 斷線重連時 HUD 也要看得見
-  if (hud) hud.classList.toggle('hide', seated && !netDown);
 }
 
 function setHud(t: string) {
   const el = ui?.querySelector('#pzHud'); if (el) el.textContent = t;
   syncSeatChrome();
+  syncPlazaPeopleHud();
+}
+
+/** 廣場人數顯示在遊戲 #stats 的 #onHud（人數圖示），坐下／閒逛皆可見 */
+function syncPlazaPeopleHud() {
+  const h = document.getElementById('onHud');
+  const nEl = document.getElementById('onHudN');
+  if (!h || !nEl) return;
+  if (!active) {
+    delete h.dataset.plaza;
+    h.style.display = 'none';
+    h.removeAttribute('title');
+    h.setAttribute('aria-label', '目前線上人數');
+    return;
+  }
+  const n = snap?.players?.length ?? snap?.occupied ?? 0;
+  const cap = snap?.capacity ?? PLAZA_CAPACITY;
+  h.dataset.plaza = '1';
+  h.style.display = '';
+  nEl.textContent = String(n);
+  h.title = `廣場目前 ${n} 人（可坐 ${cap}）`;
+  h.setAttribute('aria-label', h.title);
 }
 
 /** 連線狀態條：坐下時也顯示（不跟 #pzHud 一起藏） */
@@ -658,13 +689,37 @@ function sendChat() {
   void client.chat(t, false).then(r => { if (!r.ok) deps?.toast(zhErr(r.err), '#ff8a7a'); });
 }
 
-function pushChat(m: PlazaChat) {
+function chatRowKey(m: PlazaChat) {
+  return `${m.at}|${m.pid || ''}|${m.nick}|${m.text}`;
+}
+
+function appendChatRow(m: PlazaChat) {
   const log = ui?.querySelector('#pzLog'); if (!log) return;
   const row = document.createElement('div');
+  row.dataset.ck = chatRowKey(m);
   const where = m.pileId != null ? `[堆${m.pileId + 1}] ` : '';
   row.textContent = `${where}${m.nick}：${m.text}`;
-  log.appendChild(row); log.scrollTop = log.scrollHeight;
+  log.appendChild(row);
   while (log.childElementCount > 40) log.firstChild?.remove();
+  log.scrollTop = log.scrollHeight;
+}
+
+/** 進場／重連：用伺服器近期紀錄覆寫聊天窗（補離線空窗；不彈泡泡） */
+function applyChatHistory(msgs?: PlazaChat[] | null) {
+  const log = ui?.querySelector('#pzLog'); if (!log) return;
+  if (!msgs?.length) return;
+  const normalized = msgs.map(normChat).filter(m => m.text);
+  if (!normalized.length) return;
+  log.innerHTML = '';
+  for (const m of normalized) appendChatRow(m);
+}
+
+function pushChat(m: PlazaChat) {
+  const log = ui?.querySelector('#pzLog'); if (!log) return;
+  const key = chatRowKey(m);
+  // 與歷史回放重複則略過（避免重連後又收到同則即時包）
+  if (Array.from(log.children).some(el => (el as HTMLElement).dataset.ck === key)) return;
+  appendChatRow(m);
   const isSelf = Boolean(deps && (m.pid === deps.id || (!!m.connId && m.connId === client?.connectionId)));
   view?.showChat({ connId: m.connId || undefined, pid: m.pid || undefined, nick: m.nick, text: m.text, self: isSelf });
   // 縮小中：角標＋短暫預覽（不自動展開，避免打斷剝蚵）
@@ -720,6 +775,7 @@ export async function closePlaza(leaveSeat = true) {
   active = false; seated = false; shiftStarted = false; netDown = false;
   chatUnread = 0; hideChatPeek();
   clearReconnectTimer();
+  syncPlazaPeopleHud();
   if (leaveSeat) await client?.leaveSeat();
   await client?.disconnect();
   client = null;

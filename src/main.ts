@@ -2663,6 +2663,7 @@ function launchPlaza() {
       document.body.classList.add('plazaRoam');
       { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
       showPlazaLoading(false);
+      updHud();
       toast('蚵仔廣場・休閒剝蚵，隨便坐、不趕時間', '#9be37a');
     },
     beginShift: () => {

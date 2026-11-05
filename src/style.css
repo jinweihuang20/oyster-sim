@@ -831,14 +831,12 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 #plazaLoad #plazaLoadCancel{margin-top:8px;min-height:44px;padding:8px 20px;border:2px solid #d9952b;border-radius:12px;background:#2a1810;color:#ffd23f;font-weight:800;font-size:15px}
 @keyframes pzLoadSlide{0%{transform:translateX(-100%)}100%{transform:translateX(280%)}}
 
-/* 廣場閒逛：先藏工班 HUD，坐下後再顯示；視角鈕仍可用；收音機隱藏 */
-body.plazaRoam #top,body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #medBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
-/* #stats 在手機上是 camBtn 父層：不可 display:none，否則視角鈕一起消失 */
-body.plazaRoam #stats{visibility:visible!important;pointer-events:none!important;display:block!important;position:fixed!important;left:0!important;top:0!important;right:auto!important;bottom:auto!important;width:0!important;height:0!important;overflow:visible!important;margin:0!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;transform:none!important;z-index:8600!important}
-body.plazaRoam #stats>*:not(#camBtn){display:none!important;visibility:hidden!important}
-body.plazaRoam #camBtn,body.plazaRoam #camBtn.hudCam,body.plazaRoam #stats #camBtn{visibility:visible!important;pointer-events:auto!important;position:fixed!important;right:calc(var(--sa-right) + 12px)!important;bottom:calc(var(--sa-bottom) + 18px)!important;left:auto!important;top:auto!important;z-index:8601!important;min-height:44px;min-width:44px;width:auto;height:auto;padding:8px 12px!important;margin:0!important;background:rgba(36,22,10,.9)!important;border:2px solid #d9952b!important;border-radius:12px!important;color:#ffd23f!important;font-weight:800;font-size:14px!important;display:inline-flex!important;align-items:center;justify-content:center;gap:4px}
-body.plazaRoam #camBtn svg,body.plazaRoam #camBtn.hudCam svg{width:18px;height:18px}
-@media (pointer:coarse){body.plazaRoam #camBtn,body.plazaRoam #camBtn.hudCam,body.plazaRoam #stats #camBtn{bottom:calc(var(--sa-bottom) + 16px)!important;right:calc(var(--sa-right) + 12px)!important}}
+/* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
+body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #medBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
+/* 橫向矮屏會藏 #stats，視角鈕改浮在右下以免閒逛時不見 */
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
+  body.plazaRoam #camBtn.hudCam.on{display:inline-flex!important;position:fixed!important;right:calc(var(--sa-right) + 12px)!important;bottom:calc(var(--sa-bottom) + 16px)!important;left:auto!important;top:auto!important;z-index:8601!important;margin:0!important}
+}
 /* 方向搖桿貼近底部，略留空隙 */
 body.plazaRoam #joy{z-index:8400;left:calc(var(--sa-left) + 16px)!important;bottom:calc(var(--sa-bottom) + 14px)!important}
 @media (pointer:coarse) and (orientation:landscape){body.plazaRoam #joy{bottom:calc(var(--sa-bottom) + 12px)!important;left:calc(var(--sa-left) + 12px)!important}}

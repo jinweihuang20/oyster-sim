@@ -150,11 +150,18 @@ let prsHook: () => void = () => { };
 export function onPresence(f: () => void) { prsHook = f; }
 function showOnline(r: any) {
   const el = $('onlineSign');
-  if (!r || typeof r.online !== 'number') { el.style.display = 'none'; const h = document.getElementById('onHud'); if (h) h.style.display = 'none'; return; }
+  const h = document.getElementById('onHud');
+  // 廣場進行中：#onHud 改顯示廣場人數，不要被全服線上人數蓋掉
+  const plazaOwnsHud = h?.dataset.plaza === '1';
+  if (!r || typeof r.online !== 'number') {
+    el.style.display = 'none';
+    if (h && !plazaOwnsHud) h.style.display = 'none';
+    return;
+  }
   const on = Math.max(1, r.online), sh = r.shucking | 0;
   $('onlineTxt').innerHTML = sh >= 1 ? `現在 <b>${sh}</b> 人正在剝蚵仔` : `現在 <b>${on}</b> 人在蚵寮`;
   el.style.display = '';
-  const h = document.getElementById('onHud'); if (h) { h.style.display = ''; $('onHudN').textContent = String(on); }
+  if (h && !plazaOwnsHud) { h.style.display = ''; $('onHudN').textContent = String(on); }
 }
 async function presenceTick() {
   if (document.hidden) return;

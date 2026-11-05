@@ -16,8 +16,8 @@ export type PlazaHubHandlers = {
   onReconnecting?: (attempt: number) => void;
   /** 底層 socket 重連成功（尚未重新 Join） */
   onSocketReconnected?: () => void;
-  /** 重新 Join 成功 */
-  onRejoined?: (snap?: PlazaSnapshot) => void;
+  /** 重新 Join 成功（含近期聊天紀錄） */
+  onRejoined?: (snap?: PlazaSnapshot, chat?: PlazaChat[]) => void;
   /** 重新 Join 失敗（仍會再試） */
   onRejoinFail?: (err?: string, attempt?: number) => void;
   /** 自動重連耗盡／連線徹底關閉 */
@@ -68,6 +68,18 @@ function normSteal(e: any): PlazaStealEvent {
   };
 }
 
+function normChatDto(m: any): PlazaChat {
+  const pile = m?.pileId ?? m?.PileId;
+  return {
+    connId: m?.connId ?? m?.ConnId ?? '',
+    pid: m?.pid ?? m?.Pid ?? '',
+    nick: m?.nick ?? m?.Nick ?? '?',
+    text: m?.text ?? m?.Text ?? '',
+    pileId: pile == null || pile < 0 ? null : Number(pile),
+    at: Number(m?.at ?? m?.At ?? Date.now()),
+  };
+}
+
 export class PlazaClient {
   conn: signalR.HubConnection | null = null;
   token = '';
@@ -82,7 +94,7 @@ export class PlazaClient {
 
   get connectionId() { return this.conn?.connectionId ?? ''; }
 
-  async connect(pid: string, nick: string, opts?: { keepAttempt?: boolean }): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot }> {
+  async connect(pid: string, nick: string, opts?: { keepAttempt?: boolean }): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; chat?: PlazaChat[] }> {
     this.pid = pid;
     this.nick = nick;
     this.intentionalStop = false;
@@ -138,14 +150,16 @@ export class PlazaClient {
     });
   }
 
-  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string }> {
+  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[] }> {
     if (!this.conn) return { ok: false, err: 'no_conn' };
     try {
-      const r = await this.conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot }>('Join', this.pid, this.nick);
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot; chat?: any[] }>('Join', this.pid, this.nick);
       if (!r?.ok) return { ok: false, err: r?.err || 'join_fail' };
       this.token = r.token || '';
       this.reconnectAttempt = 0;
-      return { ok: true, snap: r.snap, token: this.token };
+      const raw = (r as any).chat ?? (r as any).Chat ?? [];
+      const chat = Array.isArray(raw) ? raw.map(normChatDto) : [];
+      return { ok: true, snap: r.snap, token: this.token, chat };
     } catch (e: any) {
       return { ok: false, err: e?.message || 'join_fail' };
     }
@@ -161,7 +175,7 @@ export class PlazaClient {
         this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
         return;
       }
-      this.handlers.onRejoined?.(r.snap);
+      this.handlers.onRejoined?.(r.snap, r.chat);
     } finally {
       this.rejoining = false;
     }
@@ -171,11 +185,11 @@ export class PlazaClient {
    * 自動重連耗盡後，手動重建連線並 Join。
    * 回傳是否成功；呼叫端可輪詢重試。
    */
-  async tryManualReconnect(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot }> {
+  async tryManualReconnect(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; chat?: PlazaChat[] }> {
     if (this.intentionalStop) return { ok: false, err: 'stopped' };
     if (this.connected) {
       const r = await this.joinHub();
-      if (r.ok) { this.handlers.onRejoined?.(r.snap); return r; }
+      if (r.ok) { this.handlers.onRejoined?.(r.snap, r.chat); return r; }
       return r;
     }
     this.reconnectAttempt += 1;
@@ -183,7 +197,7 @@ export class PlazaClient {
     const pid = this.pid, nick = this.nick;
     if (!pid) return { ok: false, err: 'no_pid' };
     const r = await this.connect(pid, nick, { keepAttempt: true });
-    if (r.ok) this.handlers.onRejoined?.(r.snap);
+    if (r.ok) this.handlers.onRejoined?.(r.snap, r.chat);
     else this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
     return r;
   }
