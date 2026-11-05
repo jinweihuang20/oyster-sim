@@ -1,5 +1,5 @@
 // 全服彈幕＋全球排行榜（後端：StatsServer /s/*）。後端關機時全部安靜失敗。
-import { postDiscordPlayerPresence } from '../core/discord';
+import { postDiscordFirstPlay } from '../core/discord';
 const API = 'https://game-status.gwtech.org/s';
 type Deps = { id: string; test: boolean; nick: () => string; setNick: (v: string) => void; inTut: () => boolean; on: () => boolean; label: (kind: string, item: number) => string; title?: () => string; toast: (t: string) => void; LS: { getItem(k: string): string | null; setItem(k: string, v: string): void } };
 let D: Deps;
@@ -171,39 +171,20 @@ async function presenceTick() {
   try { prsHook(); } catch { /* 忽略 */ }
 }
 
-let prsDcOnline = false;
-let prsDcOffTimer: ReturnType<typeof setTimeout> | null = null;
-function clearPrsDcOff() { if (prsDcOffTimer) { clearTimeout(prsDcOffTimer); prsDcOffTimer = null; } }
-async function announcePlayerOnline() {
-  clearPrsDcOff();
-  if (prsDcOnline) return;
-  prsDcOnline = true;
+const FIRST_DC_KEY = 'oyster-dc-first';
+/** 第一次遊玩進場通知（days=0 且未完成教學；每裝置只送一次） */
+export async function maybeAnnounceFirstPlay(isFirst: () => boolean) {
+  try { if (D.LS.getItem(FIRST_DC_KEY)) return; } catch { return; }
+  if (!isFirst()) return;
+  try { D.LS.setItem(FIRST_DC_KEY, '1'); } catch { /* */ }
   if (!myTagCache) { try { await me(); } catch { /* */ } }
-  void postDiscordPlayerPresence(D.nick(), 'online', { tag: myTagCache });
-}
-function announcePlayerOffline(immediate = false) {
-  clearPrsDcOff();
-  const go = () => {
-    prsDcOffTimer = null;
-    if (!prsDcOnline) return;
-    prsDcOnline = false;
-    void postDiscordPlayerPresence(D.nick(), 'offline', { beacon: immediate, tag: myTagCache });
-  };
-  // 切一下分頁不要立刻離線；關分頁／隱藏較久才公告
-  if (immediate) go();
-  else prsDcOffTimer = setTimeout(go, 12_000);
+  void postDiscordFirstPlay(D.nick(), { tag: myTagCache });
 }
 
 export function startPresence(playing: () => boolean) {
   prsPlaying = playing;
   presenceTick(); setInterval(presenceTick, 25000);
-  announcePlayerOnline();
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) announcePlayerOffline(false);
-    else { announcePlayerOnline(); presenceTick(); }
-  });
-  // pagehide：關分頁／App 切走較可靠
-  addEventListener('pagehide', () => announcePlayerOffline(true));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) presenceTick(); });
 }
 
 // 玩家號碼（伺服器發放、保證不重複）。舊版伺服器沒有 /me 時回 null。

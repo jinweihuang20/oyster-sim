@@ -63,17 +63,12 @@ export function postDiscordPlazaPresence(
   });
 }
 
-/** 玩家上線／離線（本機 presence；關分頁用 beacon） */
-export function postDiscordPlayerPresence(
-  nick: string,
-  kind: 'online' | 'offline',
-  opts?: { beacon?: boolean; tag?: string | null },
-): Promise<boolean> {
+/** 第一次來蚵寮（新手進場；每裝置只送一次） */
+export function postDiscordFirstPlay(nick: string, opts?: { tag?: string | null }): Promise<boolean> {
   const name = who(nick, opts?.tag);
-  const content = kind === 'online' ? `🟢 **${name}** 上線了` : `⚫ **${name}** 離線了`;
   return postWebhook(WEBHOOK_PLAYER_IO, {
     username: '蚵寮廣播',
-    content,
+    content: `🆕 **${name}** 第一次來蚵寮上工了`,
     allowed_mentions: { parse: [] as string[] },
-  }, { beacon: opts?.beacon });
+  });
 }
