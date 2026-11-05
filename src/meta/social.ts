@@ -174,11 +174,12 @@ async function presenceTick() {
 let prsDcOnline = false;
 let prsDcOffTimer: ReturnType<typeof setTimeout> | null = null;
 function clearPrsDcOff() { if (prsDcOffTimer) { clearTimeout(prsDcOffTimer); prsDcOffTimer = null; } }
-function announcePlayerOnline() {
+async function announcePlayerOnline() {
   clearPrsDcOff();
   if (prsDcOnline) return;
   prsDcOnline = true;
-  void postDiscordPlayerPresence(D.nick(), 'online');
+  if (!myTagCache) { try { await me(); } catch { /* */ } }
+  void postDiscordPlayerPresence(D.nick(), 'online', { tag: myTagCache });
 }
 function announcePlayerOffline(immediate = false) {
   clearPrsDcOff();
@@ -186,7 +187,7 @@ function announcePlayerOffline(immediate = false) {
     prsDcOffTimer = null;
     if (!prsDcOnline) return;
     prsDcOnline = false;
-    void postDiscordPlayerPresence(D.nick(), 'offline', { beacon: immediate });
+    void postDiscordPlayerPresence(D.nick(), 'offline', { beacon: immediate, tag: myTagCache });
   };
   // 切一下分頁不要立刻離線；關分頁／隱藏較久才公告
   if (immediate) go();
@@ -207,7 +208,13 @@ export function startPresence(playing: () => boolean) {
 
 // 玩家號碼（伺服器發放、保證不重複）。舊版伺服器沒有 /me 時回 null。
 export type Me = { tag: string; changed: boolean; oldTag?: string | null };
-export async function me(): Promise<Me | null> { const r = await get(`/me?pid=${encodeURIComponent(D.id)}`); return r && typeof r.tag === 'string' && /^\d{4,5}$/.test(r.tag) ? r : null; }
+let myTagCache = '';
+export const myTag = () => myTagCache;
+export async function me(): Promise<Me | null> {
+  const r = await get(`/me?pid=${encodeURIComponent(D.id)}`);
+  if (r && typeof r.tag === 'string' && /^\d{4,5}$/.test(r.tag)) { myTagCache = r.tag; return r as Me; }
+  return null;
+}
 export function ackMe() { fetch(API + '/me/ack', { method: 'POST', body: JSON.stringify({ pid: D.id }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).catch(() => null); }
 export const myNick = () => D.nick();
 

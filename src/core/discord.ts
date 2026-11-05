@@ -9,6 +9,13 @@ const WEBHOOK_PLAYER_IO = 'https://discord.com/api/webhooks/1567926694482935902/
 
 const scrub = (s: string) => s.replace(/@(everyone|here)/gi, '@\u200b$1');
 
+/** 暱稱 + #四～五碼玩家號碼（有才附） */
+function who(nick: string, tag?: string | null) {
+  const name = scrub((nick || '剝蚵人').trim()) || '剝蚵人';
+  const id = tag && /^\d{4,5}$/.test(String(tag)) ? ` #${tag}` : '';
+  return (name + id).slice(0, 80);
+}
+
 function postWebhook(url: string, body: unknown, opts?: { beacon?: boolean }): Promise<boolean> {
   const payload = JSON.stringify(body);
   if (opts?.beacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
@@ -27,8 +34,8 @@ export function postDiscordFeedback(title: string, text: string, fields: Record<
 }
 
 /** 廣場聊天鏡射：以發言者暱稱當 webhook 顯示名（僅發言端送一次，避免每人各送一則） */
-export function postDiscordPlazaChat(nick: string, text: string, opts?: { pileId?: number | null }): Promise<boolean> {
-  const name = scrub((nick || '剝蚵人').trim()).slice(0, 80) || '剝蚵人';
+export function postDiscordPlazaChat(nick: string, text: string, opts?: { pileId?: number | null; tag?: string | null }): Promise<boolean> {
+  const name = who(nick, opts?.tag);
   const content = scrub(text).trim().slice(0, 400);
   if (!content) return Promise.resolve(false);
   const where = opts?.pileId != null && opts.pileId >= 0 ? `〔堆${opts.pileId + 1}〕 ` : '';
@@ -43,9 +50,9 @@ export function postDiscordPlazaChat(nick: string, text: string, opts?: { pileId
 export function postDiscordPlazaPresence(
   nick: string,
   kind: 'join' | 'leave',
-  opts?: { online?: number | null },
+  opts?: { online?: number | null; tag?: string | null },
 ): Promise<boolean> {
-  const name = scrub((nick || '剝蚵人').trim()).slice(0, 80) || '剝蚵人';
+  const name = who(nick, opts?.tag);
   const n = opts?.online;
   const people = n != null && n >= 0 ? `（目前約 ${n} 人）` : '';
   const content = kind === 'join' ? `🟢 **${name}** 進了蚵仔廣場${people}` : `🚪 **${name}** 離開了蚵仔廣場${people}`;
@@ -60,9 +67,9 @@ export function postDiscordPlazaPresence(
 export function postDiscordPlayerPresence(
   nick: string,
   kind: 'online' | 'offline',
-  opts?: { beacon?: boolean },
+  opts?: { beacon?: boolean; tag?: string | null },
 ): Promise<boolean> {
-  const name = scrub((nick || '剝蚵人').trim()).slice(0, 80) || '剝蚵人';
+  const name = who(nick, opts?.tag);
   const content = kind === 'online' ? `🟢 **${name}** 上線了` : `⚫ **${name}** 離線了`;
   return postWebhook(WEBHOOK_PLAYER_IO, {
     username: '蚵寮廣播',

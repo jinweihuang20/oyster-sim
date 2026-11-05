@@ -8,6 +8,7 @@ import { plazaShedPosts } from './props';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaSnapshot, PlazaStealEvent } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
+import { myTag } from '../meta/social';
 
 export type PlazaDeps = {
   id: string;
@@ -218,7 +219,7 @@ async function boot(D: PlazaDeps) {
   if (!plazaIoAnnounced) {
     plazaIoAnnounced = true;
     const online = snap?.occupied ?? snap?.players?.length ?? null;
-    void postDiscordPlazaPresence(D.nick(), 'join', { online });
+    void postDiscordPlazaPresence(D.nick(), 'join', { online, tag: myTag() });
   }
 }
 
@@ -745,7 +746,7 @@ function pushChat(m: PlazaChat) {
   const isSelf = Boolean(deps && (m.pid === deps.id || (!!m.connId && m.connId === client?.connectionId)));
   view?.showChat({ connId: m.connId || undefined, pid: m.pid || undefined, nick: m.nick, text: m.text, self: isSelf });
   // 僅發言端送 Discord，避免場上每人各推一則
-  if (isSelf && m.text) void postDiscordPlazaChat(m.nick || '剝蚵人', m.text, { pileId: m.pileId });
+  if (isSelf && m.text) void postDiscordPlazaChat(m.nick || '剝蚵人', m.text, { pileId: m.pileId, tag: myTag() });
   // 縮小中：角標＋短暫預覽（不自動展開，避免打斷剝蚵）
   if (!isSelf && !plazaChatIsOpen()) {
     chatUnread = Math.min(99, chatUnread + 1);
@@ -808,7 +809,7 @@ export async function closePlaza(leaveSeat = true) {
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
   myPile = null; mySlot = null; snap = null; deps = null; near = null;
-  if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null });
+  if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null, tag: myTag() });
 }
 
 export function plazaEndCleanup() {
