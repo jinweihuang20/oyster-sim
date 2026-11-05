@@ -7,6 +7,10 @@ import {
   createSkyDome, SHELL_GEOS, HALF_GEOS, greyPick, shellM,
   makeAma as makeAmaMesh, GOSSIP, PEEK, NAG_GIVEUP, NAG_STAB, NAG_CRACK, NAG_SLIP,
   SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE, NPC_DIFF_T, NPC_DEF, type NpcDef,
+  DIFF, DIFF_W, LOCS, SEATS, type Seat,
+  initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
+  walking, nearSeat, walkPos, walkKeys, joy, walkMotion,
+  setWalking, setNearSeat, clearWalkInput,
 } from './world';
 import {
   checkCode, REDEEM_MESSAGES, type RedeemCodeDef, applyOutfitToRig,
@@ -22,6 +26,7 @@ import {
   initEvents, setEvShown, evMeat, evHud, evFinish, evLeft, evRender, evFetch, evFetchFrom,
   evStart, evAgain, evLbOpen, evCfg, evSkew, evShown,
   initSurvey, setSvPrompted, svFetch, svAlert, svRender, svOpen, svList, svPrompted,
+  initTutorial, tut, TUT, tutMeat, tutGo, tutStart, tutEnd,
 } from './meta';
 import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
@@ -287,20 +292,6 @@ initAudio({
 (window as any).__mus = musDebug;
 
 // ---------- 難度、珍珠、奇物、存檔 ----------
-const DIFF = [
-  { n: '易', css: '#9be37a', tol: 0.45, need: 2, lo: 0.12, hi: 0.85, slip: 0.1, scale: 0.85, rough: 0 },
-  { n: '普通', css: '#f5d9a8', tol: 0.33, need: 3, lo: 0.18, hi: 0.72, slip: 0.2, scale: 1.0, rough: 2 },
-  { n: '硬', css: '#ffa860', tol: 0.24, need: 5, lo: 0.25, hi: 0.62, slip: 0.35, scale: 1.15, rough: 4 },
-  { n: '超硬', css: '#ff6a5a', tol: 0.17, need: 7, lo: 0.3, hi: 0.55, slip: 0.5, scale: 1.3, rough: 6 },
-];
-const DIFF_W = [30, 40, 22, 8];
-// 上工地點：工錢倍率越高，蚵仔越硬、阿婆越兇、丟殼越頻繁
-type Loc = { id: string; n: string; m: number; w: number[]; thr: number; ang: number; price: number; need: number; tint: number | null; d: string };
-const LOCS: Loc[] = [
-  { id: 'home', n: '🏠 自家蚵寮', m: 1, w: DIFF_W, thr: 1, ang: 1, price: 0, need: 0, tint: null, d: '熟悉的老位子，阿婆們都很和氣' },
-  { id: 'wanggong', n: '⚓ 王功漁港', m: 1.2, w: [22, 40, 28, 10], thr: 1.2, ang: 1.15, price: 800, need: 60, tint: 0x5f8fb0, d: '海風大、硬殼多一點，阿婆稍微兇' },
-  { id: 'dongshi', n: '🎡 東石漁人碼頭', m: 1.4, w: [14, 34, 36, 16], thr: 1.4, ang: 1.3, price: 2500, need: 200, tint: 0xe0b888, d: '觀光客多、蚵仔偏硬，阿婆丟殼更勤' },
-  { id: 'budai', n: '🏭 布袋蚵寮大廠', m: 1.7, w: [8, 26, 40, 26], thr: 1.7, ang: 1.5, price: 6000, need: 500, tint: 0x90b0c0, d: '工錢最高，但蚵仔超硬、阿婆最兇' }];
 const locNow = () => LOCS.find(l => l.id === save.loc && (l.need === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
 const locW = () => locNow().w;
 const RAR = [
@@ -442,7 +433,6 @@ type Phase = 'pick' | 'scoop' | 'seam' | 'twist' | 'aim' | 'empty' | 'crab' | 'b
 let state: 'menu' | 'play' | 'end' = 'menu';
 const syncShiftUi = () => document.body.classList.toggle('onShift', state === 'play');
 syncShiftUi();
-let tut: { i: number; c0: number; t0: number; b0: number; s0: number; m0: number; d0: number } | null = null; // 教學進行中
 let phase: Phase = 'busy';
 let hp = 100, stabs = 0, flinch = 0, hurtT = 0, handPain = false;
 let timeLeft = SHIFT, count = 0, bowlBonus = 0, cracked = 0, opened = 0, missed = 0, abandoned = 0, perfects = 0, dayPearls: number[] = [], dayOdd: number[] = [];
@@ -773,7 +763,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   $('nightTag').style.display = nightShift && !plazaMode ? '' : 'none';
   if (nightShift && !plazaMode) later(1.5, () => toast('🌙 夜班上工！這一工收入 +20%', '#b8c8ff'));
   moonReset(); npcs.forEach(dressAma); applyCrew();
-  if (walking && !plazaMode) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
+  if (walking && !plazaMode) { setWalking(false); on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; syncShiftUi(); clearAchShiftGot(); handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   if (plazaMode && !plazaPlayAt) plazaPlayAt = performance.now();
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now();
@@ -958,14 +948,6 @@ const BOWLS: Bowl[] = [
   { id: 'steel', n: '不銹鋼盆', price: 900, r: 0.21, bounce: 0.05, dist: 0.9, perf: 0.13, bonus: 1, h: 0.15, color: 0xd8dde4, metal: 0.9, desc: '專業級，樣樣好，就是貴' },
 ];
 // ----- 位仔（換位） -----
-type Seat = { id: string; n: string; a: number; r: number; scoop: number; bowl: number; perf: number; nag: number; throwM: number; steal: number; pro: string; con: string };
-const SEATS: Seat[] = [
-  { id: 'door', n: '門口位', a: 0, r: 2.0, scoop: 1, bowl: 1, perf: 0, nag: 1, throwM: 1, steal: 1, pro: '平衡，什麼都普通', con: '—' },
-  { id: 'pile', n: '蚵山邊', a: 0.85, r: 1.75, scoop: 0.55, bowl: 1.2, perf: 0, nag: 1, throwM: 1.25, steal: 1, pro: '撈蚵仔快 45%', con: '丟過來的殼多 +25%' },
-  { id: 'bowl', n: '碗邊位', a: -0.85, r: 2.0, scoop: 1.4, bowl: 0.7, perf: 0.04, nag: 1, throwM: 1, steal: 1, pro: '就坐在碗旁邊，順手', con: '撈蚵仔慢 40%' },
-  { id: 'gossip', n: '阿春邊仔', a: 2.5, r: 1.95, scoop: 1, bowl: 1, perf: 0, nag: 2, throwM: 1.3, steal: 1.6, pro: '阿婆聊天比較久，好偷 +60%', con: '唸你 ×2、殼仔 +30%' },
-  { id: 'corner', n: '角落', a: -0.35, r: 2.7, scoop: 1.5, bowl: 1.25, perf: 0, nag: 0.5, throwM: 0.5, steal: 1, pro: '殼比較少 -50%、比較少人唸 -50%', con: '撈蚵仔慢 50%' },
-];
 const seatNow = () => SEATS.find(x => x.id === save.seat) ?? SEATS[0];
 const seatGround = (st: Seat) => new THREE.Vector3(-Math.sin(st.a) * st.r, 0, Math.cos(st.a) * st.r);
 let seatYaw = 0;
@@ -1842,83 +1824,27 @@ if (matchMedia('(pointer:coarse)').matches) {
 else $('btns').insertBefore($('radioBtn'), $('medBtn'));
 btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, () => rotKey = 0);
 // ----- 徛起來行路、換位 -----
-let walking = false, nearSeat: Seat | null = null; const walkPos = new THREE.Vector3(), walkKeys = new Set<string>(), joy = { x: 0, y: 0 };
-/** 廣場第一人稱頭晃（對齊死鬥 session bob） */
-let walkBobPh = 0, walkBobW = 0, walkSpd = 0, walkStrafe = 0;
-const NAG_STAND = ['剝一半就要走喔？', '蚵仔丟著就走，好浪費！', '要去哪裡？工作先做完啦'];
-function standUp() {
-  if (state !== 'play' || walking) return;
-  if (plazaMode && plazaSeated()) { void plazaStandWalk(); return; }
-  if (['seam', 'twist', 'crab', 'aim', 'empty'].includes(phase)) { abandoned++; const sh = new THREE.Mesh(shellGeo, shellTopMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.6, () => scene.remove(sh)); nag(NAG_STAND); if (npcs.length && (!seatNow().nag || Math.random() > seatNow().nag)) { const n = pick(npcs); if (n) { n.look = 2.5; say(n, pick(NAG_STAND), 3); } } }
-  oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
-  walking = true; handRig.visible = false; walkPos.copy(SEAT).setY(1.55); const out = seatGround(seatNow()).setLength(0.45); walkPos.add(out);
-  tYaw = yaw = yaw + seatYaw; tPitch = pitch = -0.25; $('diff').textContent = ''; on('standBtn', false); on('joy', true); on('stealBtn', false);
-  hint.textContent = COARSE ? '用搖桿行路，走去空的藍色板凳邊仔，按「坐落」換位' : 'WASD 行路，走去空的藍色板凳邊仔，按 E 坐落換位';
-}
-/** 廣場：站起後的本地走動狀態（由 plazaStandWalk 呼叫） */
-function plazaEnterWalkPose(fromSeat = true) {
-  oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
-  setPlazaSeatPropsVisible(false);
-  walking = true; handRig.visible = false;
-  if (fromSeat) {
-    // 用座位世界座標往後站（勿用累積的相對 yaw，否則第三人稱／同步會飛掉）
-    const s = plazaMySeat();
-    if (s) {
-      const pose = seatPose(s.pileId, s.slot);
-      walkPos.set(pose.pos.x + Math.sin(pose.yaw) * 0.55, 1.55, pose.pos.z + Math.cos(pose.yaw) * 0.55);
-      tYaw = yaw = pose.yaw;
-      seatYaw = pose.yaw;
-    } else {
-      walkPos.copy(SEAT).setY(1.55);
-      walkPos.x += Math.sin(seatYaw) * 0.55; walkPos.z += Math.cos(seatYaw) * 0.55;
-      tYaw = yaw = seatYaw;
-    }
-    // 站起還原存檔的視角偏好
-    tpv = !!save.tpv; drawCamBtn();
-  }
-  drawRadio();
-  tPitch = pitch = -0.2; $('diff').textContent = ''; on('standBtn', false); on('umbBtn', false); on('medBtn', false); on('stealBtn', false); on('joy', true); on('camBtn', COARSE);
-  // 手機：視角鈕掛在 #stats；電腦廣場用 V，不顯示鈕
-  if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
-  stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
-  hint.textContent = COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V 切換視角・E 坐下剝蚵';
-}
-function sitDown(id: string) {
-  walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear(); stools.forEach(g => g.userData.tag.visible = false);
-  if (id !== save.seat) track('seat', { seat: id }); applySeat(id); persist(); handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.85; toast(`坐落${seatNow().n}`, '#9fe0ff'); SFX.pop(); later(0.3, goPick);
-}
-function walkStep(dt: number) {
-  const k = (c: string) => walkKeys.has(c) ? 1 : 0;
-  let f = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - joy.y, r = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + joy.x;
-  const l = Math.hypot(f, r); if (l > 1) { f /= l; r /= l; }
-  const moveSp = plazaMode ? 2.4 : 1.7;
-  walkSpd = l * moveSp; walkStrafe = r * moveSp;
-  const sp = moveSp * dt; walkPos.x += (-Math.sin(yaw) * f + Math.cos(yaw) * r) * sp; walkPos.z += (-Math.cos(yaw) * f - Math.sin(yaw) * r) * sp;
-  const obs: [number, number, number][] = plazaMode
-    ? [...plazaPileObs()]
-    : [[0, 0, 1.15], [BASIN.x, BASIN.z, 0.42], [BOWL.x, BOWL.z, BOWL_R + 0.12], [2.6, 2.6, 0.75], [2.9, -2.5, 0.35], [3.1, -1.9, 0.35], [-2.9, 2.6, 0.35], [3.0, 0.5, 0.3], [-3.0, 0.2, 0.3]];
-  if (!plazaMode) { npcs.forEach(n => obs.push([n.g.position.x, n.g.position.z, 0.5])); stools.forEach(g => obs.push([g.position.x, g.position.z, 0.28])); }
-  for (let it = 0; it < 3; it++) for (const [x, z, rr] of obs) { const dx = walkPos.x - x, dz = walkPos.z - z, d = Math.hypot(dx, dz); if (d < rr + 0.2 && d > 1e-4) { walkPos.x = x + dx / d * (rr + 0.2); walkPos.z = z + dz / d * (rr + 0.2); } }
-  if (!plazaMode && walkPos.z < -2.55 && walkPos.x < -1.3) walkPos.z = -2.55; // 保麗龍箱
-  const bound = plazaMode ? plazaWalkBound() : 3.25;
-  walkPos.x = clamp(walkPos.x, -bound, bound); walkPos.z = clamp(walkPos.z, -bound, bound);
-  // 廣場第一人稱改由相機 bob；其餘保留輕微上下
-  walkPos.y = 1.55 + (plazaMode && !tpv ? 0 : Math.sin(performance.now() / 120) * 0.012 * Math.min(1, l));
-  if (plazaMode) {
-    nearSeat = null; stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
-    const n = plazaNearSeat();
-    on('seatCard', !!n);
-    if (n) $('seatInfo').innerHTML = `<b>🪑 第 ${n.pileId + 1} 堆 · 座 ${n.slot + 1}</b><br><span style="color:#9be37a">空位可坐，坐下開始剝蚵</span>`;
-    return;
-  }
-  let best: Seat | null = null, bd = 0.85; SEATS.forEach((st, i) => { const d = Math.hypot(walkPos.x - stools[i].position.x, walkPos.z - stools[i].position.z); stools[i].userData.tag.visible = true; if (d < bd) { bd = d; best = st; } });
-  if (best !== nearSeat) { nearSeat = best; on('seatCard', !!best); if (best) { const st = best as Seat; $('seatInfo').innerHTML = `<b>🪑 ${st.n}</b>${st.id === seatNow().id ? '（這馬的位）' : ''}<br><span style="color:#9be37a">＋ ${st.pro}</span><br><span style="color:#ff8a7a">－ ${st.con}</span>`; } }
-}
-{ const j = $('joy'), kb = $('joyK'); let jid = -1, cx = 0, cy = 0;
-  j.addEventListener('pointerdown', e => { e.stopPropagation(); jid = e.pointerId; const r = j.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; j.setPointerCapture(e.pointerId); });
-  j.addEventListener('pointermove', e => { if (e.pointerId !== jid) return; const dx = e.clientX - cx, dy = e.clientY - cy, d = Math.min(1, Math.hypot(dx, dy) / 50), a = Math.atan2(dy, dx); joy.x = Math.cos(a) * d; joy.y = Math.sin(a) * d; kb.style.transform = `translate(${joy.x * 40}px,${joy.y * 40}px)`; });
-  const end = (e: PointerEvent) => { if (e.pointerId !== jid) return; jid = -1; joy.x = joy.y = 0; kb.style.transform = ''; };
-  j.addEventListener('pointerup', end); j.addEventListener('pointercancel', end); }
+// walking／walkPos 等狀態與 standUp／sitDown／walkStep 在 world/walkSeat
+initWalkSeat({
+  $, on, COARSE, clamp,
+  getState: () => state, getPhase: () => phase,
+  isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBound, plazaNearSeat, plazaMySeat, seatPose,
+  setPlazaSeatPropsVisible, oyster, shellGeo, shellTopMat, shellTop, handRig, SEAT, BASIN, BOWL, getBowlR: () => BOWL_R,
+  seatGround, seatNow,
+  getSeatYaw: () => seatYaw, setSeatYaw: v => { seatYaw = v; },
+  getYaw: () => yaw, setYaw: v => { yaw = v; },
+  getTYaw: () => tYaw, setTYaw: v => { tYaw = v; },
+  getPitch: () => pitch, setPitch: v => { pitch = v; },
+  getTPitch: () => tPitch, setTPitch: v => { tPitch = v; },
+  getTpv: () => tpv, setTpv: v => { tpv = v; }, saveTpv: () => !!save.tpv,
+  drawCamBtn, drawRadio, applySeat, getSaveSeat: () => save.seat, persist, track, toast, SFX, later, goPick, setPhase, stopSteal,
+  fly, worldOf, pileSpot, nag, pick, say, getNpcs: () => npcs,
+  bumpAbandoned: () => { abandoned++; },
+  setProgress: v => { progress = v; }, setCombo: v => { combo = v; }, setTension: v => { tension = v; }, setRotKey: v => { rotKey = v; },
+  hint, stools, scene,
+});
+initWalkJoy();
+
 function giveUp() {
   if (state !== 'play' || (phase !== 'seam' && phase !== 'twist')) return;
   abandoned++; setPhase('busy'); oyster.visible = false; gauge.classList.remove('hit', 'miss', 'hitHold');
@@ -2231,10 +2157,9 @@ function plazaEnsureFpView() {
 }
 /** 離開廣場時清掉座落卡／搖桿等 HUD，避免殘留到主選單或其他工寮 */
 function clearPlazaLeaveUi() {
-  nearSeat = null;
-  walking = false;
-  joy.x = joy.y = 0;
-  walkKeys.clear();
+  setNearSeat(null);
+  setWalking(false);
+  clearWalkInput();
   on('seatCard', false);
   on('joy', false);
   on('standBtn', false);
@@ -2384,7 +2309,7 @@ function launchPlaza() {
       toast('蚵仔廣場・休閒剝蚵，隨便坐、不趕時間', '#9be37a');
     },
     beginShift: () => {
-      setPlazaMode(true); evRun = null; shiftLen = SHIFT; walking = false;
+      setPlazaMode(true); evRun = null; shiftLen = SHIFT; setWalking(false);
       document.body.classList.remove('plazaRoam');
       on('standBtn', true); on('joy', false); on('umbBtn', true); on('medBtn', true); on('seatCard', false);
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
@@ -2395,7 +2320,7 @@ function launchPlaza() {
       toast('坐下了！第一人稱可左右轉約 90° 看旁邊', '#9be37a');
     },
     resumeSit: () => {
-      walking = false; nearSeat = null; on('seatCard', false); on('joy', false); joy.x = joy.y = 0; walkKeys.clear();
+      setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
       document.body.classList.remove('plazaRoam');
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
       plazaEnsureFpView();
@@ -2674,22 +2599,22 @@ function frameBody() {
   if (plazaMode && !walking) yaw = tYaw = clamp(yaw, -yl(), yl());
   moonTick(rdt);
   shake = Math.max(0, shake - rdt);
-  if (walking) walkStep(rdt); else { walkSpd = walkStrafe = 0; }
+  if (walking) walkStep(rdt); else { walkMotion.spd = walkMotion.strafe = 0; }
   let camPitch = pitch - pe * 0.08, camRoll = 0;
   camera.position.copy(walking ? walkPos : SEAT);
   // 廣場第一人稱走路：死鬥同款頭晃（上下／側移／輕 roll）
   if (plazaMode && walking && !tpv) {
     const walkRef = 2.4;
-    const tgt = walkSpd > 0.4 ? Math.min(0.75, walkSpd / walkRef) : 0;
-    walkBobW += (tgt - walkBobW) * (1 - Math.exp(-(tgt > walkBobW ? 14 : 10) * rdt));
-    if (walkSpd > 0.4) walkBobPh += rdt * walkSpd * (Math.PI / 0.85);
-    const w = walkBobW * walkBobW, sy = Math.sin(walkBobPh), cy = Math.cos(walkBobPh);
+    const tgt = walkMotion.spd > 0.4 ? Math.min(0.75, walkMotion.spd / walkRef) : 0;
+    walkMotion.bobW += (tgt - walkMotion.bobW) * (1 - Math.exp(-(tgt > walkMotion.bobW ? 14 : 10) * rdt));
+    if (walkMotion.spd > 0.4) walkMotion.bobPh += rdt * walkMotion.spd * (Math.PI / 0.85);
+    const w = walkMotion.bobW * walkMotion.bobW, sy = Math.sin(walkMotion.bobPh), cy = Math.cos(walkMotion.bobPh);
     const ox = cy * 0.012 * w, oy = sy * 0.02 * w, oz = -Math.abs(sy) * 0.005 * w;
     const rs = Math.sin(yaw), rc = Math.cos(yaw);
     camera.position.x += rc * ox - rs * oz; camera.position.y += oy; camera.position.z += -rs * ox - rc * oz;
     camPitch += cy * 0.005 * w;
-    camRoll = sy * 0.007 * w + Math.max(-1, Math.min(1, walkStrafe / walkRef)) * 0.018 * Math.min(1, walkBobW + 0.2);
-  } else if (!walking) { walkBobW = 0; walkBobPh = 0; }
+    camRoll = sy * 0.007 * w + Math.max(-1, Math.min(1, walkMotion.strafe / walkRef)) * 0.018 * Math.min(1, walkMotion.bobW + 0.2);
+  } else if (!walking) { walkMotion.bobW = 0; walkMotion.bobPh = 0; }
   camera.rotation.set(camPitch, yaw + (walking ? 0 : seatYaw), camRoll);
   camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
@@ -2699,86 +2624,20 @@ function frameBody() {
   requestAnimationFrame(frame);
 }
 // ---------- 新手教學 ----------
-type TutStep = { id: string; line: string; pc: string; mb: string; hi?: string[]; next?: string; done?: () => boolean; enter?: () => void };
-const TUT: TutStep[] = [
-  { id: 'grab', line: '來，阿姨教你！先拿一顆蚵仔起來。', pc: '點紅色臉盆裡的蚵仔（或按 Space）', mb: '點紅色臉盆裡的蚵仔，或點自己的手', done: () => phase === 'seam' },
-  { id: 'seam', line: '蚵仔殼有一條縫，要轉到對準刀尖喔。', pc: '用滾輪／A D 轉蚵仔，金色的縫對準刀尖時點一下（或按 Space）插刀', mb: '按住 ◀ ▶ 或拖動蚵仔來轉，縫對準刀尖時點一下蚵仔插刀', hi: ['rotL', 'rotR'], done: () => phase === 'twist' || phase === 'aim' },
-  { id: 'pry', line: '刀插進去了！看指針，到綠區再撬，不要太用力喔～', pc: '指針走到綠區就點滑鼠／按 Space，撬到殼打開', mb: '指針走到綠區就點一下螢幕，撬到殼打開', hi: ['gauge'], done: () => phase === 'aim' },
-  { id: 'toss', line: '蚵仔肉出來了！碗亮起來的時候，點一下碗就能丟進去。', pc: '點一下碗（或碗附近），蚵仔肉就會飛進去', mb: '點一下碗（或碗附近），蚵仔肉就會飛進去', hi: [], done: () => count > tut!.c0 },
-  { id: 'meat', line: '試試看：再開一顆，點一下阿婆，把蚵仔肉丟過去！', pc: '再開一顆蚵仔，肉出來後轉過去對準阿婆點一下（這步肉不會自己入盆）', mb: '再開一顆蚵仔，肉出來後往上拖畫面找阿婆，點一下她（這步肉不會自己入盆）', hi: [], done: () => meatHits > tut!.m0 },
-  { id: 'empty', line: '肉丟出去了，手上剩下空殼。空殼可以自己丟到殼堆，或對準阿婆丟過去；平常放著不管，過一下也會自動丟到殼堆。', pc: '這步空殼不會自動丟：點一下畫面丟到殼堆，或對準阿婆按 F／右鍵丟過去', mb: '這步空殼不會自動丟：點一下畫面丟到殼堆，或對準阿婆按「丟殼」丟過去', hi: ['throwBtn'], done: () => thrown > tut!.t0 || shellsOut > tut!.d0 },
-  { id: 'steal', line: '偷偷跟你說：阿婆轉頭聊天的時候，可以偷她碗裡的肉…', pc: '看到阿婆在聊天，對準她的碗按住 E 偷（被看到她會生氣）', mb: '看到阿婆在聊天，對準她的碗按住「偷」（被看到她會生氣）', hi: ['stealBtn'], next: '知道了 ▶', done: () => steals > tut!.s0 },
-  { id: 'shell', line: '撬出空殼，也可以丟向別人！', pc: '手上有空殼時，對準阿婆按 F 或右鍵丟過去', mb: '手上有空殼時，對準阿婆按「丟殼」丟過去', hi: ['throwBtn'], next: '知道了 ▶', done: () => thrown > tut!.t0 },
-  { id: 'umb', line: '小心！阿婆要丟殼過來了！', pc: '看到 ⚠ 趕快按住 R 打開雨傘擋', mb: '看到 ⚠ 趕快按住「雨傘」擋', hi: ['umbBtn'], next: '知道了 ▶', done: () => umbT > 0, enter: () => later(1.2, () => { if (tut && TUT[tut.i].id === 'umb') windUp(npcs[0]); }) },
-  { id: 'stand', line: '坐太久腳會麻，起來走走，找別的位子。', pc: '按 G 換位置', mb: '按「🚶 換位置」按鈕', hi: ['standBtn'], next: '知道了 ▶', done: () => walking },
-  { id: 'sit', line: '每個位子的好處都不一樣，看清楚再坐。', pc: '用 WASD 走到藍色板凳旁邊，按 E 坐下（或按下面的按鈕坐回原位）', mb: '用搖桿走到藍色板凳旁邊，按「坐落」坐下（或按下面的按鈕坐回原位）', hi: ['sitBtn'], next: '坐回去 ▶', done: () => !walking },
-  { id: 'menu', line: '賺的錢可以去雜貨店買好刀、雨傘、碗和服飾，在「裝備」換穿；開到的珍珠會記在圖鑑裡。', pc: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面還有「裝備」', mb: '上面有 🏪 雜貨店、圖鑑、⚙ 設定，開始畫面還有「裝備」', hi: ['shopBtn', 'dexBtn', 'setBtn'], next: '下一步 ▶' },
-  { id: 'daily', line: '還有，每天來上工，阿姨都發上工費給你！連續來領會越領越多。', pc: '在開始畫面按「領今日上工費」，每天一次，從 $1000 起跳，連續 7 天最多 $3000', mb: '在開始畫面按「領今日上工費」，每天一次，從 $1000 起跳，連續 7 天最多 $3000', next: '學會了！🎉' },
-];
-let tutHi: string[] = [];
-function tutMeat() { return !!tut && TUT[tut.i].id === 'meat'; }
-function tutShow() {
-  if (!tut) return; const st = TUT[tut.i];
-  tutHi.forEach(id => $(id).classList.remove('tutHi')); tutHi = st.hi ?? []; tutHi.forEach(id => $(id).classList.add('tutHi'));
-  $('tutStep').textContent = `教學 ${tut.i + 1}/${TUT.length}`; $('tutLine').textContent = '👵 ' + st.line; $('tutDo').textContent = '👉 ' + (COARSE ? st.mb : st.pc); $('tutKeys').style.display = COARSE ? 'none' : '';
-  const nb = $('tutNext'); nb.textContent = (st.next ?? '') + (COARSE ? '' : '（Enter）'); nb.style.display = st.next ? '' : 'none';
-}
-function tutGo(i: number) {
-  if (!tut) return; if (i >= TUT.length) { tutEnd(true); return; }
-  tut.i = i; tut.b0 = missed; tut.c0 = count; tut.t0 = thrown; tut.s0 = steals; tut.m0 = meatHits; tut.d0 = shellsOut; track('tutorial_step', { step: TUT[i].id, i }); TUT[i].enter?.(); tutPrep(); tutShow();
-}
-function tutStart() {
-  audio(); ['overlay', 'result', 'dex', 'settings', 'shop'].forEach(i => $(i).classList.remove('show'));
-  tut = { i: 0, c0: 0, t0: 0, b0: 0, s0: 0, m0: 0, d0: 0 }; startDay(); document.body.classList.add('tutOn'); on('tut', true); track('tutorial_start', { replay: save.tutDone ? 1 : 0 }); tutGo(0);
-}
-function tutEnd(done: boolean) {
-  if (!tut) return; const st = TUT[tut.i].id; tut = null;
-  track(done ? 'tutorial_complete' : 'tutorial_skip', { step: st });
-  save.tutDone = 1; persist();
-  tutHi.forEach(id => $(id).classList.remove('tutHi')); tutHi = []; document.body.classList.remove('tutOn'); on('tut', false);
-  if (document.pointerLockElement) document.exitPointerLock();
-  if (walking) { walking = false; on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); }
-  stopSteal(); state = 'menu'; syncShiftUi(); renderLocs(); setPhase('busy'); oyster.visible = false; closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); on('standBtn', false); on('lockHint', false);
-  if (done) toast('出師了！去剝蚵仔賺錢吧～', '#9be37a');
-  renderDaily(); $('overlay').classList.add('show');
-  // 教學結束後才補提醒（禮物／問卷／公告），避免一進遊戲就被連跳
-  setTimeout(() => { giftAlert(); svAlert(); featAnnounce(); newAnnounce(); }, 600);
-}
-setInterval(() => {
-  if (!tut || state !== 'play') return; const st = TUT[tut.i];
-  if (st.id === 'toss' && phase !== 'busy' && phase !== 'aim' && count === tut.c0 && missed > tut.b0) { toast('沒關係，再來一顆！', '#ffe080'); tutGo(0); return; }
-  if (st.done?.()) tutGo(tut.i + 1);
-}, 120);
-$('tutNext').onclick = e => { e.stopPropagation(); if (!tut) return; const st = TUT[tut.i]; if (st.id === 'sit' && walking) sitDown(save.seat ?? 'door'); tutGo(tut.i + 1); };
-$('tutStepSkip').onclick = e => { e.stopPropagation(); if (!tut || state !== 'play') return; const st = TUT[tut.i];
-  // 跳過這步：把狀態整理好，讓下一步做得到
-  if (st.id === 'empty' && phase === 'empty') discardShell();
-  if (st.id === 'sit' && walking) sitDown(save.seat ?? 'door');
-  tutGo(tut.i + 1); };
-// 每一步開始時補齊前置條件（不算錢、不算統計）
-const tutHas = { held: () => ['seam', 'twist', 'aim', 'empty', 'crab'].includes(phase) };
-function tutGive(want: 'pick' | 'seam' | 'twist' | 'aim' | 'empty') {
-  if (!tut || state !== 'play') return; if (walking && want !== 'pick') sitDown(save.seat ?? 'door'); if (walking) return;
-  const OK: Record<string, string[]> = { pick: ['pick'], seam: ['seam', 'twist', 'aim'], twist: ['twist', 'aim'], aim: ['aim'], empty: ['empty'] }; if (OK[want].includes(phase)) return;
-  if (want === 'pick') { if (phase !== 'busy') goPick(); return; }
-  if (want === 'seam') { holdOyster(0); return; }
-  if (phase !== 'seam' && phase !== 'twist') holdOyster(0);
-  seamGlow.visible = false; seamRing.visible = false;
-  if (want === 'twist') { progress = 0; crackedNow = false; setPhase('twist'); return; }
-  seamMark.visible = false; shellTop.visible = false; meatsLeft = 1; showExtra(); find = { kind: 'none', i: 0 };
-  if (want === 'aim') { meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); return; }
-  meatInHand.visible = false; emptyT = 2.2; setPhase('empty');
-}
-const TUT_NEED: Record<string, () => void> = {
-  grab: () => tutGive('pick'), seam: () => tutGive('seam'), pry: () => tutGive('twist'),
-  toss: () => tutGive('aim'), meat: () => tutGive('aim'), empty: () => tutGive('empty'),
-  steal: () => { if (walking) sitDown(save.seat ?? 'door'); }, shell: () => tutGive('empty'), umb: () => { if (walking) sitDown(save.seat ?? 'door'); },
-  stand: () => { if (walking) sitDown(save.seat ?? 'door'); }, sit: () => { if (!walking) standUp(); },
-  menu: () => { if (walking) sitDown(save.seat ?? 'door'); }, daily: () => { if (walking) sitDown(save.seat ?? 'door'); },
-};
-function tutPrep() { if (!tut) return; const id = TUT[tut.i].id; TUT_NEED[id]?.(); [0.7, 1.5, 2.5].forEach(t => later(t, () => { if (tut && TUT[tut.i].id === id && phase !== 'busy') TUT_NEED[id]?.(); })); }
-$('tutSkip').onclick = e => { e.stopPropagation(); tutEnd(false); };
-['tutNext', 'tutSkip', 'tutStepSkip'].forEach(id => $(id).addEventListener('pointerdown', e => e.stopPropagation()));
+initTutorial({
+  $, on, COARSE, audio, getSave: () => save, persist, track, toast, startDay, syncShiftUi, renderLocs, renderDaily,
+  setPhase, getPhase: () => phase, getState: () => state, setState: s => { state = s; },
+  oyster, closeUmbrella, stopSteal,
+  getWalking: () => walking, setWalking, clearWalkHud: () => { on('seatCard', false); on('joy', false); },
+  handRig, stools, sitDown, standUp, discardShell, goPick, holdOyster,
+  setProgress: v => { progress = v; }, setCrackedNow: v => { crackedNow = v; },
+  seamGlow, seamRing, seamMark, shellTop, meatInHand, meatMat,
+  setMeatsLeft: v => { meatsLeft = v; }, showExtra, setFind: v => { find = v as any; }, setEmptyT: v => { emptyT = v; },
+  later, getMissed: () => missed, getCount: () => count, getThrown: () => thrown, getSteals: () => steals,
+  getMeatHits: () => meatHits, getShellsOut: () => shellsOut, getUmbT: () => umbT,
+  getNpcs: () => npcs, windUp, giftAlert, svAlert, featAnnounce, newAnnounce,
+});
+
 $('oTut').onclick = () => tutStart();
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),

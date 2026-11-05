@@ -5,3 +5,9 @@ export {
   SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE,
   NPC_DIFF_T, NPC_DEF, type NpcDef,
 } from './npc';
+export { DIFF, DIFF_W, LOCS, SEATS, type Loc, type Seat } from './locs';
+export {
+  initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
+  walking, nearSeat, walkPos, walkKeys, joy, walkMotion,
+  setWalking, setNearSeat, clearWalkInput,
+} from './walkSeat';

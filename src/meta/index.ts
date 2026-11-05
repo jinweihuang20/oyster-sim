@@ -13,3 +13,6 @@ export {
 export {
   initSurvey, setSvPrompted, svFetch, svAlert, svRender, svOpen, svList, svPrompted,
 } from './survey';
+export {
+  initTutorial, tut, TUT, tutMeat, tutGo, tutStart, tutEnd, tutPrep, isTut, getTut,
+} from './tutorial';
