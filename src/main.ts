@@ -4,7 +4,6 @@ import { installBackGuard } from './backguard';
 import { checkCode, REDEEM_MESSAGES } from './redeem';
 import type { RedeemCodeDef } from './redeemCodes';
 import * as THREE from 'three';
-import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { rbox, rboxEnv, crease, rcyl } from './geo';
 import { createSkyDome } from './sky';
 import { applyOutfitToRig } from './equipVisual';
@@ -24,6 +23,10 @@ import {
 } from './plaza';
 import { makeYardFloorMaps } from './plaza/props';
 import { ODD } from './oddities';
+import { SHELL_GEOS, HALF_GEOS, greyPick, shellM } from './shells';
+import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS } from './shopEquip';
+import { type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY, defaultSave, loadSave as loadSaveFrom, writeSave, DAILY_PAYS, todayKey, dayDiff } from './save';
+import { makeAma as makeAmaMesh, GOSSIP, PEEK, NAG_GIVEUP, NAG_STAB, NAG_CRACK, NAG_SLIP, SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE, NPC_DIFF_T, NPC_DEF, type NpcDef } from './npc';
 import { installNoZoom } from './nozoom';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import { initFeedback, openFb, fbShow } from './feedback';
@@ -122,55 +125,8 @@ for (let i = 0; i < 5; i++) {
   boats.push(g);
 }
 
-// 中央蚵殼山
-// 蚵殼：灰色為主，偶爾帶烏（頂點色：烏斑、烏紋、烏邊）
-function shellPaint(g: THREE.BufferGeometry, seed: number) {
-  const pos = g.attributes.position, col = new Float32Array(pos.count * 3); let r = seed * 9301 + 49297;
-  const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280;
-  const blotch = new THREE.Vector3(rn() - 0.5, rn() - 0.5, rn() - 0.5).normalize(), streak = rn() * 6.28, dark = rn() < 0.45;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), v = new THREE.Vector3(x, y, z).normalize();
-    let c = 0.9 + rn() * 0.12; if (dark && v.dot(blotch) > 0.6) c *= 0.8; void x; void z; void streak;
-    col[i * 3] = c; col[i * 3 + 1] = c * 0.98; col[i * 3 + 2] = c;
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3)); return g;
-}
-// 蚵殼紋理：一張 256px 共用貼圖（生長紋、灰白斑駁、紫褐烏紋、細雜訊）＋同一張當凹凸圖，載入時畫一次，沒有每幀成本
-function shellTex() {
-  // 參考實拍：UV 的 v＝高度、u＝繞殼一圈。上方深褐橄欖污垢，側面一層層深淺交錯的破碎薄片，最底米白荷葉唇
-  const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d')!;
-  let r = 7; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280;
-  c.fillStyle = '#efe7da'; c.fillRect(0, 0, S, S);
-  // 側面層片：由上(畫布 y 小＝殼頂)往下疊，每層邊緣參差
-  for (let k = 0; k < 34; k++) { const y0 = 40 + k * 5.6, dark = k % 2 === 0 ? rn() < 0.85 : rn() < 0.25;
-    c.fillStyle = dark ? (rn() < 0.5 ? `rgb(${80 + rn() * 25 | 0},${64 + rn() * 16 | 0},${58 + rn() * 14 | 0})` : `rgb(${90 + rn() * 20 | 0},${76 + rn() * 14 | 0},${88 + rn() * 16 | 0})`) : `rgb(${196 + rn() * 34 | 0},${182 + rn() * 28 | 0},${152 + rn() * 26 | 0})`;
-    c.beginPath(); c.moveTo(0, S); for (let x = 0; x <= S; x += 4) c.lineTo(x, y0 + Math.sin(x * 0.05 + k) * 3 + (rn() - 0.5) * 5); c.lineTo(S, S); c.closePath(); c.fill();
-    c.strokeStyle = 'rgba(248,242,232,0.55)'; c.lineWidth = 0.8; c.stroke(); }
-  // 最底米白荷葉唇
-  c.fillStyle = '#f4efe6'; c.beginPath(); c.moveTo(0, S); for (let x = 0; x <= S; x += 4) c.lineTo(x, S - 26 + Math.sin(x * 0.2) * 4 + rn() * 4); c.lineTo(S, S); c.closePath(); c.fill();
-  // 頂面深色污垢
-  c.fillStyle = '#4c4636'; c.fillRect(0, 0, S, 38);
-  for (let i = 0; i < 220; i++) { c.fillStyle = `rgba(${40 + rn() * 50 | 0},${38 + rn() * 40 | 0},${30 + rn() * 30 | 0},${0.4 + rn() * 0.5})`; c.beginPath(); c.ellipse(rn() * S, rn() * 52, 2 + rn() * 10, 1 + rn() * 5, 0, 0, 7); c.fill(); }
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping; t.anisotropy = 2; return t;
-}
-const SHELL_TEX = shellTex();
-// 殼形：低面數球體壓扁，邊緣做不規則波浪，平面投影 UV 讓生長紋從殼頂展開
-const mkShell = (sy: number, seed: number) => {
-  let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(0.09, 2); g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
-  let r = seed * 7919 + 13; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280; const ph = rn() * 6.28, ph2 = rn() * 6.28, amp = 0.12 + rn() * 0.1;
-  const pos = g.attributes.position, uv = new Float32Array(pos.count * 2);
-  for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), a = Math.atan2(z, x), edge = 1 - Math.abs(y) / 0.09;
-    // 不規則塊狀輪廓：幾個低頻凸塊＋邊緣破碎
-    const k = 1 + Math.sin(a * 2 + ph) * 0.14 + Math.sin(a * 3 + ph2) * 0.08 + edge * (Math.sin(a * 7 + ph) * amp * 0.5 + (rn() - 0.5) * 0.12);
-    const yk = y > 0 ? 1 + Math.sin(a * 3 + x * 40) * 0.2 + (rn() - 0.5) * 0.3 : 0.6;
-    pos.setXYZ(i, x * k * 1.3, y * sy * yk, z * k);
-    uv[i * 2] = a / 6.283 + 0.5; uv[i * 2 + 1] = Math.min(1, Math.max(0, (y / 0.09) * 0.5 + 0.5)); }
-  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g = g.toNonIndexed(); g.computeVertexNormals(); return shellPaint(g, seed); };
-const SHELL_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.45, i + 1)), HALF_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.38, i + 11));
+// 中央蚵殼山（殼幾何／貼圖見 shells.ts）
 const shellGeo = SHELL_GEOS[0], halfGeo = HALF_GEOS[0];
-const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
-const greyPick = () => GREYS[Math.min(4, Math.floor(Math.random() * Math.random() * 6.2))];
-const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX }); m.emissive.setHex(0x0a0c10); m.emissiveIntensity = 0.15; return m; };
 const shellMat = shellM(0xe8e4e0);
 // 點擊撈蚵用：必須保留 mesh 參考（crease 後不再是 ConeGeometry，不能事後 find）
 const pileHit = mesh(crease(new THREE.ConeGeometry(0.9, 0.55, 10)), mat(0x7a8ca0, { roughness: 0.95, emissive: 0x0a1018, emissiveIntensity: 0.12 }), [0, 0.27, 0]);
@@ -202,39 +158,13 @@ const meatGeo = new THREE.SphereGeometry(0.035, 8, 6); meatGeo.scale(1.4, 0.6, 1
 
 // ---------- 阿婆 ----------
 const skin = 0xe8bc98;
-function makeAma(top: number, hair: number) {
-  const g = new THREE.Group();
-  mesh(rcyl(0.17, 0.17, 0.3, 8), mat(0xd45a4a), [0, 0.15, 0.05], g);
-  const body = mesh(rcyl(0.2, 0.3, 0.55, 8), mat(top), [0, 0.6, 0], g);
-  const pants = mat(0x3a5068); mesh(rbox(0.42, 0.14, 0.45), pants, [0, 0.35, -0.15], g);
-  // 坐姿小腿＋藍白拖
-  const shinG = rcyl(0.055, 0.045, 0.3, 6), sole = mat(0xf6f2ea), strap = mat(0x3a6fc0);
-  for (const sx of [-0.1, 0.1]) { mesh(shinG, pants, [sx, 0.17, -0.34], g); mesh(rcyl(0.04, 0.04, 0.05, 6), mat(skin), [sx, 0.04, -0.35], g);
-    mesh(rbox(0.09, 0.02, 0.2), sole, [sx, 0.01, -0.4], g); mesh(rbox(0.095, 0.03, 0.035), strap, [sx, 0.035, -0.45], g); mesh(crease(new THREE.SphereGeometry(0.035, 6, 4, 0, Math.PI * 2, 0, 1.6)), mat(skin), [sx, 0.025, -0.47], g); }
-  const head = new THREE.Group(); head.position.set(0, 1.02, 0); g.add(head);
-  mesh(crease(new THREE.SphereGeometry(0.15, 10, 8)), mat(skin), [0, 0, 0], head);
-  mesh(crease(new THREE.SphereGeometry(0.155, 10, 8, 0, Math.PI * 2, 0, 1.4)), mat(hair), [0, 0.02, 0.02], head);
-  mesh(crease(new THREE.SphereGeometry(0.07, 8, 6)), mat(hair), [0, 0.1, 0.13], head);
-  for (const s of [-1, 1]) mesh(crease(new THREE.SphereGeometry(0.018, 6, 4)), mat(0x222222), [s * 0.05, 0.02, -0.14], head);
-  mesh(rbox(0.06, 0.012, 0.01), mat(0xa04040), [0, -0.06, -0.145], head);
-  const arm = (s: number) => { const p = new THREE.Group(); p.position.set(s * 0.2, 0.8, -0.02); g.add(p); mesh(rcyl(0.045, 0.04, 0.38, 6), mat(top), [0, -0.12, -0.12], p).rotation.x = 1.1; mesh(crease(new THREE.SphereGeometry(0.05, 6, 5)), mat(skin), [0, -0.2, -0.3], p); return p; };
-  return { g, body, head, pants, armL: arm(-1), armR: arm(1) };
-}
+const makeAma = (top: number, hair: number) => makeAmaMesh(top, hair, { mat, mesh, skin });
 type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: number; peek: boolean; count: number; pause: number; look: number; bubble: HTMLDivElement; bubT: number; lean: number;
   cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; w0?: number; warned?: boolean; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; gAt?: number; tag: HTMLButtonElement; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[]; bowlM?: THREE.Object3D };
 const npcs: Npc[] = [];
-// 阿婆每粒秒數 = rate × 難度倍率（易 0.75／普通 1／硬 1.3／超硬 1.6）
-const NPC_DIFF_T = [0.75, 1, 1.3, 1.6];
-const NPC_DEF = [
-  { name: '快手阿桃', rate: 4.2, chatty: 0.1, peek: false, top: 0xe87840, hair: 0x8a8a8a, a: -1.9 },
-  { name: '講話阿春', rate: 7.5, chatty: 0.6, peek: false, top: 0x3a9a6a, hair: 0x444444, a: Math.PI },
-  { name: '好奇阿嬌', rate: 5.8, chatty: 0.3, peek: true, top: 0xe86878, hair: 0xc8c8c8, a: 1.9 },
-];
-type NpcDef = { name: string; rate: number; chatty: number; peek: boolean; top: number; hair: number; a: number; r?: number };
 function makeNpc(d: NpcDef) {
   const a = makeAma(d.top, d.hair); const ang = Math.PI / 2 + d.a; const r = d.r ?? 1.9;
   a.g.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r); a.g.lookAt(0, 0, 0); a.g.rotateY(Math.PI); scene.add(a.g);
-  // 手頂的蚵仔佮蚵刀
   const oy = new THREE.Group(); oy.position.set(0, -0.15, -0.32); a.armL.add(oy);
   mesh(halfGeo, shellM(0xe0dcd8), [0, 0, 0], oy);
   const meat = mesh(meatGeo, meatMat, [0, 0.025, 0], oy);
@@ -250,26 +180,9 @@ function makeNpc(d: NpcDef) {
   npcs.push({ ...a, tag, name: d.name, rate: d.rate, chatty: d.chatty, peek: d.peek, count: 0, pause: 0, look: 0, bubble, bubT: 0, lean: 0, cyc: Math.random(), dur: d.rate, ev: 0, mood: 0, angry: 0, distract: 0, turnDir: 1, windup: 0, throwCd: rnd(15, 30), stuck: null, baseY: 0, oy, top, meat, bowl, bowlMeat: [], bowlM });
 }
 for (const d of NPC_DEF) makeNpc(d);
-const GOSSIP = [
-  '你們知道嗎，巷尾的阿雄又換工作了', '今天的蚵仔好肥喔！', '我孫子說要讀博士，我都聽不懂', '聽說今天有人剝到黑珍珠喔', '剝快一點，等一下菜市場要收了',
-  '這次颱風沒來，蚵仔超讚', '我年輕時一天剝兩千顆呢', '你媳婦有回來嗎？', '珍珠喔～越剝越有機會啦', '蚵仔煎攤老闆說要加訂',
-  '啊～腰好痠，休息一下', '昨天電視那齣好好看', '金色的珍珠，一輩子只看過一次', '今天有幾顆硬得像石頭',
-];
-const PEEK = ['欸，你那顆是不是有東西？', '我看看～', '你剝多少了？'];
-const NAG_GIVEUP = ['這麼快就放棄喔？', '硬的才有肉啦，再試試看！', '年輕人沒耐性喔～', '那顆可以剝啦，好浪費！', '放棄？我們那時候才不敢這樣', '唉，蚵仔也是有生命的呢'];
-const NAG_STAB = ['哎唷！慢慢來啦！', '刀子很利，小心點！', '流血了啦，快按一下', '別那麼急，手比較要緊', '你這樣是要去醫院喔？'];
-const NAG_CRACK = ['殼屑都跑進肉裡了啦！', '那麼大力是要拆房子喔？', '有殼屑的蚵仔沒人要買啦', '小心扭，別用蠻力'];
-const NAG_SLIP = ['縫都沒找到，還硬插！', '先找縫啦，傻孩子', '刀子不是這樣用的'];
-const SCOLD_HIT = ['誰丟的！？', '蚵仔肉黏在我頭上啦！', '你是故意的吧！', '我頭髮剛洗的耶！'];
-const SCOLD_SHELL = ['要命喔！丟殼！', '你皮在癢喔？', '好啊，你來啊！', '跟你說，我年輕時是投手呢'];
-const SCOLD_STEAL = ['抓到了！偷蚵仔賊！', '你在幹嘛！我的蚵仔！', '還來！加倍還來！', '左鄰右舍也敢偷！'];
-const GRUDGE = ['哼，我不想跟你講話', '某人喔，手腳不乾淨', '我會記住的', '今天真倒楣，坐你旁邊'];
-const TURN_CHAT = ['欸欸，你聽我說…', '阿春，你知不知道…', '跟你說一個秘密', '那個阿雄喔…'];
-const PRAISE = ['好功夫！', '真的很準喔！', '那顆丟得真漂亮！'];
 function say(n: Npc, t: string, dur = 3.2) { if (ac) SFX.murmur([300, 230, 380][npcs.indexOf(n)] ?? 300); n.bubble.textContent = t; n.bubble.style.opacity = '1'; n.bubT = dur; }
 let lastNag = '';
 function nag(lines: string[]) {
-  // 廣場無阿婆：不能 pick(npcs)，否則 throw 會打斷 giveUp 後的 goPick
   if (!npcs.length) return;
   if (Math.random() > (evRun ? Math.max(1, seatNow().nag) : seatNow().nag) * fxAll().nag) return;
   let t = pick(lines); while (t === lastNag && lines.length > 1) t = pick(lines); lastNag = t;
@@ -405,52 +318,10 @@ const newbie = () => !tut && save.days < 3;
 // 統計：本班各難度 [開殼, 插刀失敗, 割手, 殼碎]、收工原因
 let dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], endReason = 'time';
 const dstatStr = () => dStat.flat().join(',');
-// ----- 存檔（有版本號；舊存檔會自動補欄位，壞去就用預設） -----
-const SAVE_V = 3;
-const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
-type Life = Record<typeof LIFE_KEYS[number], number>;
-type Save = { v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life; titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> }; evClaim?: string[]; svClaim?: number[]; seat?: string; bonusDay?: string; bonusN?: number; streakDay?: number; lastBonusDay?: string; lastSeen?: string; retDay?: string; tutDone?: number; locs?: string[]; loc?: string; name?: string; locSeen?: string[]; gear?: Record<string, boolean>; radioSt?: number; ach?: AchSave; redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>; namePrompted?: number; tpv?: number; legendDry?: number; legendN?: number };
-const START_MONEY = 10000; // 首次遊玩見面禮（僅無存檔的新玩家）
-function defaultSave(): Save { return { v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: START_MONEY, days: 0, queen: 0, life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {} }; }
-function loadSave(): Save {
-  const d = defaultSave(); let raw: any = null;
-  try { raw = JSON.parse(LS.getItem('oyster-sim') || 'null'); } catch { raw = null; }
-  if (!raw || typeof raw !== 'object') return d;
-  const num = (x: any, def = 0) => (typeof x === 'number' && isFinite(x) ? x : def);
-  const arr4 = (a: any) => [0, 1, 2, 3].map(i => num(Array.isArray(a) ? a[i] : 0));
-  // v1（無 v 欄位）→ v2：加 life／titles／shop
-  const out: Save = { ...d, dex: arr4(raw.dex), odd: ODD.map((_, i) => num(Array.isArray(raw.odd) ? raw.odd[i] : 0)), best: num(raw.best), money: num(raw.money), days: num(raw.days), queen: num(raw.queen) };
-  for (const k of LIFE_KEYS) out.life[k] = num(raw.life?.[k]);
-  if (raw.titles && typeof raw.titles === 'object') for (const [k0, v] of Object.entries(raw.titles)) { const k = k0 === '👑 今日蚵后' ? '👑 今日剝蚵冠軍' : k0; out.titles[k] = (out.titles[k] ?? 0) + num(v); }
-  if (raw.namePrompted) out.namePrompted = 1;
-  if (raw.tpv) out.tpv = 1;
-  if (Array.isArray(raw.evClaim)) out.evClaim = raw.evClaim.filter((x: unknown) => typeof x === 'string').slice(-30);
-  if (Array.isArray(raw.svClaim)) out.svClaim = raw.svClaim.filter((x: unknown) => typeof x === 'number' && Number.isInteger(x) && x > 0).slice(-50);
-  out.legendDry = Math.max(0, Math.floor(num(raw.legendDry))); if (typeof raw.legendN === 'number') out.legendN = raw.legendN;
-  if (raw.equip && typeof raw.equip === 'object') { out.equip = {}; for (const [k, v] of Object.entries(raw.equip)) if (typeof v === 'string') out.equip[k] = v; }
-  if (Array.isArray(raw.shop?.owned)) out.shop.owned = raw.shop.owned.filter((x: any) => typeof x === 'string');
-  if (raw.shop?.equipped && typeof raw.shop.equipped === 'object') for (const [k, v] of Object.entries(raw.shop.equipped)) if (typeof v === 'string') out.shop.equipped[k] = v;
-  if (typeof raw.seat === 'string') out.seat = raw.seat;
-  if (typeof raw.bonusDay === 'string') out.bonusDay = raw.bonusDay;
-  for (const k of ['lastBonusDay', 'lastSeen', 'retDay'] as const) if (typeof raw[k] === 'string') out[k] = raw[k];
-  out.streakDay = Math.min(7, Math.max(0, Math.floor(num(raw.streakDay))));
-  out.bonusN = num(raw.bonusN); out.tutDone = num(raw.tutDone);
-  if (raw.meds && typeof raw.meds === 'object') for (const [k, v] of Object.entries(raw.meds)) out.meds[k] = Math.max(0, Math.floor(num(v)));
-  out.locs = Array.isArray(raw.locs) ? raw.locs.filter((x: any) => typeof x === 'string') : []; if (typeof raw.loc === 'string') out.loc = raw.loc;
-  out.gear = {}; if (raw.gear && typeof raw.gear === 'object') for (const [k, v] of Object.entries(raw.gear)) out.gear[k] = !!v;
-  if (typeof raw.name === 'string' && raw.name.trim()) out.name = raw.name.slice(0, 16);
-  if (Array.isArray(raw.locSeen)) out.locSeen = raw.locSeen.filter((x: any) => typeof x === 'string');
-  if (raw.trial && typeof raw.trial.id === 'string' && num(raw.trial.left) > 0) out.trial = { id: raw.trial.id, left: num(raw.trial.left) };
-  if (raw.ach && typeof raw.ach === 'object') { const A = raw.ach, sa = (x: any) => Array.isArray(x) ? x.filter((y: any) => typeof y === 'string').slice(0, 60) : [], rec = (x: any) => { const o: Record<string, number> = {}; if (x && typeof x === 'object') for (const [k, v] of Object.entries(x)) o[k] = Math.max(0, Math.floor(num(v))); return o; };
-    out.ach = { got: rec(A.got), st: rec(A.st), locs: sa(A.locs), seats: sa(A.seats), radio: sa(A.radio), sets: sa(A.sets), fresh: sa(A.fresh), title: typeof A.title === 'string' ? A.title.slice(0, 12) : '', pts: Math.max(0, Math.floor(num(A.pts))) }; }
-  if (Array.isArray(raw.redeemed)) out.redeemed = raw.redeemed.filter((x: any) => typeof x === 'string');
-  return out;
-}
+// ----- 存檔（型別／讀寫見 save.ts） -----
+function loadSave(): Save { return loadSaveFrom(LS); }
 const save: Save = loadSave();
 // 每日上工費：用裝置本地日曆日判斷
-const DAILY_PAYS = [1000, 1200, 1500, 1800, 2200, 2600, 3000];
-const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-const dayDiff = (a: string, b: string) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5);
 // 今天領的話是連續第幾天
 const nextStreak = () => { const t = todayKey(), l = save.lastBonusDay, n = save.streakDay ?? 0; if (!l || n <= 0 || n >= 7 || dayDiff(l, t) !== 1) return 1; return n + 1; };
 const stampRow = (got: number) => `<span class="stamps">${[1, 2, 3, 4, 5, 6, 7].map(i => `<span class="stp${i <= got ? ' on' : ''}${i === 7 ? ' big' : ''}">${i <= got ? '<i class="ic ic-check"></i>' : i === 7 ? '<i class="ic ic-gift"></i>' : i}</span>`).join('')}</span>`;
@@ -494,7 +365,7 @@ function checkReturn() {
   giftMsg(true, '阿姨好想你！', [`你已經 ${days} 天沒來上工了，歡迎回來！`, `回歸禮 +$${amt}`, item, '連續上工從第 1 天重新開始', `身上有 $${save.money}`]);
 }
 let achT = 0; // 進度一變就排一次成就檢查（成就區塊載入後才會跑）
-const persist = () => { try { LS.setItem('oyster-sim', JSON.stringify(save)); } catch { /* 私密模式等 */ } if ((window as any).__achOk && !achT) achT = window.setTimeout(() => { achT = 0; achCheck(); }, 250); };
+const persist = () => { writeSave(LS, save); if ((window as any).__achOk && !achT) achT = window.setTimeout(() => { achT = 0; achCheck(); }, 250); };
 persist();
 let dry = 0;
 const itemW = (x: { w?: number; weight?: number }) => x.weight ?? x.w ?? 0;
@@ -3059,42 +2930,7 @@ initMeds({
 initMedsUi();
 
 // ---------- 裝備（頭／手／衣服／褲子／鞋子）----------
-type Slot = 'head' | 'hand' | 'body' | 'legs' | 'feet';
-type Fx = { bowl?: number; keep?: number; speed?: number; pearl?: number; nag?: number; throw?: number; dmg?: number; luck?: number };
-type Eq = { id: string; slot: Slot; n: string; price: number; eff: string; base: string; pat: string; fx: Fx };
-const SLOTS: [Slot, string][] = [['head', '頭'], ['hand', '手'], ['body', '衣服'], ['legs', '褲子'], ['feet', '鞋子']];
-const EQUIP: Eq[] = [
-  { slot: 'head', id: 'hd_basic', n: '花布頭巾', price: 0, eff: '基本款', base: '#c84a5a', pat: 'flower', fx: {} },
-  { slot: 'head', id: 'hd_hat', n: '斗笠', price: 3000, eff: '殼比較難砸到臉，被丟殼的機率 -10%', base: '#d8b46a', pat: 'plain', fx: { throw: 0.9 } },
-  { slot: 'head', id: 'hd_fisher', n: '漁夫帽', price: 9000, eff: '帽簷壓低，阿婆唸你的機率 -10%', base: '#4a6a8a', pat: 'plain', fx: { nag: 0.9 } },
-  { slot: 'head', id: 'hd_helmet', n: '工地安全帽', price: 20000, eff: '受到的傷害 -15%', base: '#ffb21a', pat: 'plain', fx: { dmg: 0.85 } },
-  { slot: 'head', id: 'hd_crown', n: '廟會金冠', price: 60000, eff: '珍珠率 +5%', base: '#e8b830', pat: 'dragon', fx: { pearl: 1.05 } },
-  { slot: 'hand', id: 'hn_basic', n: '素色袖套', price: 0, eff: '基本款', base: '#3a5a8a', pat: 'plain', fx: {} },
-  { slot: 'hand', id: 'sl_flower', n: '碎花袖套', price: 3000, eff: '每碗多拿 $1', base: '#e86a8a', pat: 'flower', fx: { bowl: 1 } },
-  { slot: 'hand', id: 'sl_rain', n: '防水雨衣袖套', price: 8000, eff: '翹殼沒中的懲罰減半（一半機率保住連擊）', base: '#ffd21a', pat: 'rain', fx: { keep: 0.5 } },
-  { slot: 'hand', id: 'sl_89', n: '89包手袖套', price: 8989, eff: '刺青太兇，阿婆主動丟殼的機率剩 ×0.2，旁邊的人會小聲議論', base: '#d9a77a', pat: 'tattoo', fx: { throw: 0.2 } },
-  { slot: 'hand', id: 'sl_camo', n: '迷彩袖套', price: 15000, eff: '比較不顯眼，阿婆唸你、干擾的機率 -30%', base: '#5a6b3a', pat: 'camo', fx: { nag: 0.7 } },
-  { slot: 'hand', id: 'sl_neon', n: '螢光運動袖套', price: 30000, eff: '翹殼指針慢 5%', base: '#39ff9a', pat: 'neon', fx: { speed: 0.95 } },
-  { slot: 'hand', id: 'sl_dragon', n: '金線刺繡龍袖套', price: 80000, eff: '珍珠率 +8%，開到珍珠手臂閃金光', base: '#8a1420', pat: 'dragon', fx: { pearl: 1.08 } },
-  { slot: 'body', id: 'bd_basic', n: '舊 T 恤', price: 0, eff: '基本款', base: '#e8e4d8', pat: 'plain', fx: {} },
-  { slot: 'body', id: 'bd_rain', n: '雨衣', price: 5000, eff: '受到的傷害 -10%', base: '#ffd21a', pat: 'rain', fx: { dmg: 0.9 } },
-  { slot: 'body', id: 'bd_vest', n: '廟會背心', price: 15000, eff: '每碗多拿 $1', base: '#c82a2a', pat: 'plain', fx: { bowl: 1 } },
-  { slot: 'body', id: 'bd_boss', n: '漁港老大夾克', price: 40000, eff: '氣場夠，被丟殼的機率 -20%', base: '#1e2a3a', pat: 'tattoo', fx: { throw: 0.8 } },
-  { slot: 'body', id: 'bd_sequin', n: '亮片表演服', price: 70000, eff: '幸運 +1（比較會開到珍珠、奇物）', base: '#b84ad8', pat: 'neon', fx: { luck: 1 } },
-  { slot: 'legs', id: 'lg_basic', n: '工作褲', price: 0, eff: '基本款', base: '#4a4a52', pat: 'plain', fx: {} },
-  { slot: 'legs', id: 'lg_rain', n: '雨褲', price: 4000, eff: '受到的傷害 -10%', base: '#ffd21a', pat: 'rain', fx: { dmg: 0.9 } },
-  { slot: 'legs', id: 'lg_flower', n: '花褲', price: 12000, eff: '每碗多拿 $1', base: '#e86a8a', pat: 'flower', fx: { bowl: 1 } },
-  { slot: 'legs', id: 'lg_camo', n: '迷彩褲', price: 25000, eff: '阿婆唸你的機率 -15%', base: '#5a6b3a', pat: 'camo', fx: { nag: 0.85 } },
-  { slot: 'feet', id: 'ft_basic', n: '藍白拖', price: 0, eff: '基本款', base: '#2a5ab0', pat: 'plain', fx: {} },
-  { slot: 'feet', id: 'ft_boots', n: '雨鞋', price: 3000, eff: '站得穩，翹殼沒中有兩成機率保住連擊', base: '#ffd21a', pat: 'plain', fx: { keep: 0.2 } },
-  { slot: 'feet', id: 'ft_work', n: '工作靴', price: 18000, eff: '翹殼指針慢 3%', base: '#6a4a2a', pat: 'plain', fx: { speed: 0.97 } },
-  { slot: 'feet', id: 'ft_gold', n: '金色拖鞋', price: 50000, eff: '珍珠率 +4%', base: '#e8b830', pat: 'plain', fx: { pearl: 1.04 } },
-];
-const SETS: { id: string; n: string; need: string[]; eff: string; fx: Fx }[] = [
-  { id: 'typhoon', n: '颱風天套', need: ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots'], eff: '被丟殼的機率再 -30%、受到的傷害再 -10%', fx: { throw: 0.7, dmg: 0.9 } },
-  { id: 'temple', n: '廟會套', need: ['hd_crown', 'bd_vest', 'sl_dragon', 'ft_gold'], eff: '珍珠率再 +5%、每碗再多 $2', fx: { pearl: 1.05, bowl: 2 } },
-  { id: 'army', n: '迷彩套', need: ['hd_helmet', 'sl_camo', 'lg_camo', 'ft_work'], eff: '阿婆唸你的機率再 -30%', fx: { nag: 0.7 } },
-];
+// Slot/EQUIP/SETS → shopEquip.ts
 const eqOwned = (id: string) => (EQUIP.find(e => e.id === id)?.price === 0) || save.shop.owned.includes(id);
 const setEquip = (slot: Slot, id: string) => { save.equip = save.equip ?? {}; save.equip[slot] = id; };
 const equipNow = (slot: Slot) => EQUIP.find(e => e.slot === slot && e.id === save.equip?.[slot] && eqOwned(e.id)) ?? EQUIP.find(e => e.slot === slot && e.price === 0)!;
