@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../geo';
+import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../equipVisual';
 import { makePlayerAvatar, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
@@ -620,6 +621,9 @@ export function createPlazaWorldView(
     if (!r) {
       const look = hashLook(pid);
       const rig = makePlayerAvatar(look, M, add, LO);
+      applyOutfitToRig(rig, normalizeOutfitIds({
+        head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
+      }));
       root.add(rig.outer);
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
       rig.outer.scale.setScalar(AVATAR_SCALE);
@@ -693,6 +697,12 @@ export function createPlazaWorldView(
       }
     }
     if (r.seated && r.awaitingPose) revealRemoteIfReady(r);
+    {
+      const next = normalizeOutfitIds({
+        head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
+      });
+      if (r.rig.outfitKey !== outfitKey(next)) applyOutfitToRig(r.rig, next);
+    }
     applyActionPose(r);
     paintOcc();
   }

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { rbox, rboxEnv, crease, rcyl } from './geo';
 import { createSkyDome } from './sky';
+import { applyOutfitToRig } from './equipVisual';
 import * as Social from './social';
 import { importMove, escapeInApp } from './inapp';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
@@ -17,7 +18,7 @@ import {
   plazaWalkBound, plazaPileObs, plazaRandomSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
-  plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen, seatPose,
+  plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen, seatPose, plazaPushOutfit,
   type PlazaAimTarget, type PlazaShellEvent,
 } from './plaza';
 import { makeYardFloorMaps } from './plaza/props';
@@ -2671,6 +2672,13 @@ function launchPlaza() {
     getLookYaw: () => (walking || tpv ? 0 : yaw),
     getPitch: () => (walking && tpv ? 0 : pitch),
     getTpv: () => tpv,
+    getOutfit: () => ({
+      head: equipNow('head').id,
+      hand: equipNow('hand').id,
+      body: equipNow('body').id,
+      legs: equipNow('legs').id,
+      feet: equipNow('feet').id,
+    }),
     getMoving: () => {
       if (!walking) return false;
       if (joy.x * joy.x + joy.y * joy.y > 0.04) return true;
@@ -3736,6 +3744,10 @@ function ensurePlazaMe(): PlayerRig {
   if (plazaMe) return plazaMe;
   const { M, add } = makeMeshHelpers(scene, matchMedia('(pointer: coarse)').matches);
   plazaMe = makePlayerAvatar({ shirt: 0xc45c26, hair: 0x222222, pants: 0x2a2a40 }, M, add, false);
+  applyOutfitToRig(plazaMe, {
+    head: equipNow('head').id, hand: equipNow('hand').id,
+    body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
+  });
   hangPlazaMeArms(plazaMe);
   plazaMe.outer.visible = false;
   scene.add(plazaMe.outer);
@@ -3760,6 +3772,14 @@ function hangPlazaMeArms(rig: PlayerRig) {
 let tpv = false, cheerT = 0, ouchT = 0;
 function applyOutfit3() {
   for (const s of ['head', 'body', 'legs', 'feet'] as const) { const e = equipNow(s), m = pm[s]; m.map?.dispose(); m.map = eqTex(e); m.map.repeat.set(1, 1); m.color.set(0xffffff); m.emissive.set(e.pat === 'neon' ? 0x3a1a50 : 0); m.needsUpdate = true; }
+  // 廣場本機第三人稱 avatar 同步服飾
+  if (plazaMe) {
+    applyOutfitToRig(plazaMe, {
+      head: equipNow('head').id, hand: equipNow('hand').id,
+      body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
+    });
+  }
+  if (isPlazaActive()) void plazaPushOutfit();
 }
 function setTpv(v: boolean) {
   tpv = v;

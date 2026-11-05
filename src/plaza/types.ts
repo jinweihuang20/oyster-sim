@@ -17,6 +17,12 @@ export type PlazaPlayer = {
   lookYaw?: number;
   /** 視角俯仰 */
   pitch?: number;
+  /** 裝備 id（與 EQUIP／equipVisual 對齊） */
+  head?: string;
+  hand?: string;
+  body?: string;
+  legs?: string;
+  feet?: string;
 };
 
 export type PlazaSnapshot = {

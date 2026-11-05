@@ -5,11 +5,21 @@ import { rbox } from '../geo';
 const SKIN = 0xe8bc98;
 
 /** 第三人稱方塊玩家（風格對齊上工 NPC） */
+export type PlayerOutfitMats = {
+  body: THREE.MeshStandardMaterial[];
+  sleeve: THREE.MeshStandardMaterial[];
+  legs: THREE.MeshStandardMaterial[];
+  feet: THREE.MeshStandardMaterial[];
+  hair: THREE.MeshStandardMaterial[];
+};
+
 export type PlayerRig = {
   outer: THREE.Group;
   root: THREE.Group;
   torso: THREE.Group;
   head: THREE.Group;
+  /** 頭飾掛點（斗笠／安全帽等） */
+  hatG: THREE.Group;
   legL: THREE.Group;
   legR: THREE.Group;
   shinL: THREE.Group;
@@ -23,6 +33,9 @@ export type PlayerRig = {
   lowerR: THREE.Group;
   handL: THREE.Group;
   handR: THREE.Group;
+  outfitMats: PlayerOutfitMats;
+  /** 目前套用的 outfit key（避免重複上貼圖） */
+  outfitKey?: string;
 };
 
 export type PlayerLook = { shirt: number; hair: number; pants?: number };
@@ -84,6 +97,7 @@ export function makePlayerAvatar(
 
   const skinM = M(SKIN, boxy);
   const shirtM = M(look.shirt, boxy);
+  const sleeveM = M(look.shirt, boxy);
   const pantsM = M(look.pants ?? 0x3a5068, boxy);
   const hairM = M(look.hair, boxy);
   const shoeM = M(0x333333, boxy);
@@ -100,6 +114,7 @@ export function makePlayerAvatar(
   add(rbox(0.3, 0.18, 0.08), hairM, [0, 0.02, 0.12], head);
   for (const s of [-1, 1]) add(rbox(0.05, 0.05, 0.04), M(0x111111, boxy), [s * 0.07, 0.02, -0.14], head);
   add(rbox(0.1, 0.03, 0.03), M(0xa04040, boxy), [0, -0.08, -0.14], head);
+  const hatG = new THREE.Group(); head.add(hatG);
 
   const shoulderL = new THREE.Object3D(); shoulderL.position.set(-0.22, 0.3, 0); torso.add(shoulderL);
   const shoulderR = new THREE.Object3D(); shoulderR.position.set(0.22, 0.3, 0); torso.add(shoulderR);
@@ -128,9 +143,9 @@ export function makePlayerAvatar(
     add(rbox(thick, len, thick), mat, [0, 0, 0], g);
     return g;
   };
-  const upperR = mkSeg(0.26, shirtM, 0.1);
+  const upperR = mkSeg(0.26, sleeveM, 0.1);
   const lowerR = mkSeg(0.24, skinM, 0.09);
-  const upperL = mkSeg(0.26, shirtM, 0.1);
+  const upperL = mkSeg(0.26, sleeveM, 0.1);
   const lowerL = mkSeg(0.24, skinM, 0.09);
 
   const makeLeg = (side: number) => {
@@ -145,10 +160,17 @@ export function makePlayerAvatar(
   const legL = makeLeg(-1), legR = makeLeg(1);
 
   const rig: PlayerRig = {
-    outer, root, torso, head,
+    outer, root, torso, head, hatG,
     legL: legL.thigh, legR: legR.thigh, shinL: legL.shin, shinR: legR.shin,
     weaponMount, shoulderL, shoulderR,
     upperL, lowerL, upperR, lowerR, handL, handR,
+    outfitMats: {
+      body: [shirtM],
+      sleeve: [sleeveM],
+      legs: [pantsM],
+      feet: [shoeM, soleM],
+      hair: [hairM],
+    },
   };
   syncHoldArms(rig, 0);
   return rig;

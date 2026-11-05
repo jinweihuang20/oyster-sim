@@ -4,7 +4,7 @@ export {
   plazaHitPile, plazaMyPileOrigin,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
   tickPlaza, plazaReportEarn, plazaEndCleanup, plazaHideChrome,
-  plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
+  plazaFocusChat, plazaCloseChat, plazaChatIsOpen, plazaPushOutfit,
   type PlazaDeps,
 } from './session';
 export type { PlazaAimTarget, PlazaShellEvent, PlazaStealEvent } from './types';

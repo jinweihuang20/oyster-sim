@@ -226,6 +226,11 @@ export class PlazaClient {
     try { await this.conn.invoke('Sync', x, z, yaw, phase, count, moving, umb, lookYaw, pitch); } catch { /* ignore */ }
   }
 
+  async setOutfit(head: string, hand: string, body: string, legs: string, feet: string) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return;
+    try { await this.conn.invoke('SetOutfit', head, hand, body, legs, feet); } catch { /* ignore */ }
+  }
+
   async setPhase(phase: string, count: number) {
     return this.sync(0, 0, 0, phase, count, false, false);
   }

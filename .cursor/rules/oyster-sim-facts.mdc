@@ -26,6 +26,7 @@ alwaysApply: true
 | `src/deathmatch.ts` | 死鬥相容入口（re-export `src/dm/`） |
 | `src/sky.ts` | 共用天空穹頂（漸層＋程序雲＋太陽光暈）；工寮／廣場／死鬥 |
 | `src/geo.ts` | `rbox`／`rboxEnv`／`rcyl`／`crease`：圓角／平滑法線，降夢核直角感 |
+| `src/equipVisual.ts` | 服飾貼圖／帽子套到 `PlayerRig`；廣場遠端與本機 `plazaMe` |
 | `src/dm/` | 死鬥：`session`；`match`（`ffa` 限時混戰／`horde` 肉鴿關卡、`teamId`／獎勵）；`piles`（蚵堆填彈冷卻＋圓環）；`weapons`／`loot`／`shop`／`weaponPreview`／`arena`… |
 | `src/style.css` / `icons.css` | UI |
 | `src/social.ts` | 排行榜（含死鬥 `dmKills`／`dmWaves`）、跑馬燈、禮物、線上人數、限時活動 API（`/s/*`） |

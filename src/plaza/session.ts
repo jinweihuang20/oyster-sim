@@ -41,6 +41,8 @@ export type PlazaDeps = {
   getPitch?: () => number;
   /** 是否第三人稱（走動時用來決定要不要鎖頭／俯仰同步） */
   getTpv?: () => boolean;
+  /** 目前五件裝備 id（進場／換裝同步） */
+  getOutfit?: () => { head: string; hand: string; body: string; legs: string; feet: string };
   /** 別人丟殼飛過（含打向自己，先播飛行動畫） */
   onShellThrow?: (e: PlazaShellEvent) => void;
   /** 殼飛到自己：結算擋／中 */
@@ -206,9 +208,17 @@ async function boot(D: PlazaDeps) {
   snap = r.snap ?? null;
   if (snap) view?.syncRoster(snap, D.id);
   applyChatHistory(r.chat);
+  void plazaPushOutfit();
   setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
   D.enterWalk();
   showRoamUi();
+}
+
+/** 把本機目前裝備推到廣場（進場／換裝／重連後） */
+export async function plazaPushOutfit() {
+  if (!client?.connected || !deps?.getOutfit) return;
+  const o = deps.getOutfit();
+  await client.setOutfit(o.head, o.hand, o.body, o.legs, o.feet);
 }
 
 function clearReconnectTimer() {
@@ -252,6 +262,7 @@ async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[]) {
   }
   // 補離線期間錯過的聊天
   applyChatHistory(chat);
+  void plazaPushOutfit();
   // 斷線期間座位已被清掉：若本地還坐著，試著搶回原位
   if (seated && myPile != null && mySlot != null) {
     const r = await client.claimSeat(myPile, mySlot);
@@ -381,6 +392,11 @@ function normPlayer(p: any): PlazaPlayer {
     umb: !!(p?.umb ?? p?.Umb),
     lookYaw: Number(p?.lookYaw ?? p?.LookYaw ?? 0),
     pitch: Number(p?.pitch ?? p?.Pitch ?? 0),
+    head: p?.head ?? p?.Head ?? 'hd_basic',
+    hand: p?.hand ?? p?.Hand ?? 'hn_basic',
+    body: p?.body ?? p?.Body ?? 'bd_basic',
+    legs: p?.legs ?? p?.Legs ?? 'lg_basic',
+    feet: p?.feet ?? p?.Feet ?? 'ft_basic',
   };
 }
 function normChat(m: any): PlazaChat {
