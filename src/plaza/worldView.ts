@@ -790,13 +790,21 @@ export function createPlazaWorldView(
   const _tagHead = new THREE.Vector3();
   const now = () => performance.now();
 
+  type PinSt = { d?: string; x?: number; y?: number };
+  const pinMap = new WeakMap<HTMLElement, PinSt>();
   function placeHud(el: HTMLElement, x: number, z: number, yWorld: number, camera: THREE.Camera, yOff = 0) {
     _v.set(x, yWorld, z).project(camera);
     const sx = (_v.x * 0.5 + 0.5) * innerWidth, sy = (-_v.y * 0.5 + 0.5) * innerHeight + yOff;
     const behind = _v.z > 1 || sx < -80 || sx > innerWidth + 80 || sy < -40 || sy > innerHeight + 40;
-    el.style.display = behind ? 'none' : 'block';
-    el.style.left = `${sx}px`;
-    el.style.top = `${sy}px`;
+    const display = behind ? 'none' : 'block';
+    let c = pinMap.get(el); if (!c) { c = {}; pinMap.set(el, c); }
+    if (c.d !== display) { c.d = display; el.style.display = display; }
+    if (display === 'none') return;
+    const rx = Math.round(sx), ry = Math.round(sy);
+    if (c.x === rx && c.y === ry) return;
+    c.x = rx; c.y = ry;
+    el.style.left = `${rx}px`;
+    el.style.top = `${ry}px`;
   }
 
   /** 名字／氣泡錨在頭骨上方（勿用估算身高，坐下／走路會偏到胸口或腳邊） */

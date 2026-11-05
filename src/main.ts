@@ -201,7 +201,33 @@ function makeNpc(d: NpcDef) {
   npcs.push({ ...a, tag, name: d.name, rate: d.rate, chatty: d.chatty, peek: d.peek, count: 0, pause: 0, look: 0, bubble, bubT: 0, lean: 0, cyc: Math.random(), dur: d.rate, ev: 0, mood: 0, angry: 0, distract: 0, turnDir: 1, windup: 0, throwCd: rnd(15, 30), stuck: null, baseY: 0, oy, top, meat, bowl, bowlMeat: [], bowlM });
 }
 for (const d of NPC_DEF) makeNpc(d);
-function say(n: Npc, t: string, dur = 3.2) { if (ac) SFX.murmur([300, 230, 380][npcs.indexOf(n)] ?? 300); n.bubble.textContent = t; n.bubble.style.opacity = '1'; n.bubT = dur; }
+function say(n: Npc, t: string, dur = 3.2) {
+  if (ac) SFX.murmur([300, 230, 380][npcs.indexOf(n)] ?? 300);
+  n.bubble.textContent = t; n.bubble.style.opacity = '1'; n.bubT = dur;
+  const c = pinState(n.bubble); c.op = '1'; c.txt = t;
+}
+/** 世界標籤／氣泡：快取 display／座標，避免每幀強制重排 */
+type PinSt = { d?: string; x?: number; y?: number; txt?: string; op?: string };
+const pinMap = new WeakMap<HTMLElement, PinSt>();
+const pinState = (el: HTMLElement) => { let c = pinMap.get(el); if (!c) { c = {}; pinMap.set(el, c); } return c; };
+function setPin(el: HTMLElement, x: number, y: number, display: string) {
+  const c = pinState(el);
+  if (c.d !== display) { c.d = display; el.style.display = display; }
+  if (display === 'none') return;
+  const rx = Math.round(x), ry = Math.round(y);
+  if (c.x === rx && c.y === ry) return;
+  c.x = rx; c.y = ry;
+  el.style.left = `${rx}px`; el.style.top = `${ry}px`;
+}
+/** 用固定估算取代每幀 getBoundingClientRect + offsetHeight */
+let hudTopMinY = 72;
+function refreshHudTopMinY() {
+  const top = document.getElementById('top');
+  hudTopMinY = (top?.getBoundingClientRect().bottom ?? 56) + 10 + 36;
+}
+addEventListener('resize', refreshHudTopMinY);
+refreshHudTopMinY();
+const _warnRel = new THREE.Vector3(), _warnFwd = new THREE.Vector3();
 let lastNag = '';
 function nag(lines: string[]) {
   if (!npcs.length) return;
@@ -804,29 +830,38 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
   ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); applySleeve(); drawMeds(); basinOy.forEach(m => scene.remove(m)); basinOy.length = 0; fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
 }
+/** HUD dirty：避免每幀寫 DOM／innerHTML 觸發強制重排 */
+const hudPrev = { hpW: '', hpPct: '', timerLab: '', timer: '', count: -1, pearls: -1, stats: '' };
 function updHud() {
-  ($('hpFill') as HTMLElement).style.width = `${hp}%`;
-  const hpEl = document.getElementById('hpPct'); if (hpEl) hpEl.textContent = String(Math.round(hp));
+  const hpW = `${hp}%`;
+  if (hudPrev.hpW !== hpW) { hudPrev.hpW = hpW; ($('hpFill') as HTMLElement).style.width = hpW; }
+  const hpPct = String(Math.round(hp));
+  if (hudPrev.hpPct !== hpPct) { hudPrev.hpPct = hpPct; const hpEl = document.getElementById('hpPct'); if (hpEl) hpEl.textContent = hpPct; }
   const timerLab = $('timer').previousElementSibling as HTMLElement | null;
-  if (plazaMode) {
-    if (timerLab) timerLab.textContent = '模式';
-    $('timer').textContent = '休閒';
-  } else {
-    if (timerLab) timerLab.textContent = '剩餘';
-    const s = Math.max(0, Math.ceil(timeLeft)); $('timer').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  }
-  $('count').innerHTML = `<i class="ic ic-oyster"></i> ${count}`; $('pearls').innerHTML = `<i class="ic ic-pearl"></i> ${dayPearls.length + dayOdd.length}`;
+  const labTxt = plazaMode ? '模式' : '剩餘';
+  if (timerLab && hudPrev.timerLab !== labTxt) { hudPrev.timerLab = labTxt; timerLab.textContent = labTxt; }
+  const timerTxt = plazaMode
+    ? '休閒'
+    : (() => { const s = Math.max(0, Math.ceil(timeLeft)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; })();
+  if (hudPrev.timer !== timerTxt) { hudPrev.timer = timerTxt; $('timer').textContent = timerTxt; }
+  if (hudPrev.count !== count) { hudPrev.count = count; $('count').innerHTML = `<i class="ic ic-oyster"></i> ${count}`; }
+  const pearlN = dayPearls.length + dayOdd.length;
+  if (hudPrev.pearls !== pearlN) { hudPrev.pearls = pearlN; $('pearls').innerHTML = `<i class="ic ic-pearl"></i> ${pearlN}`; }
   evHud();
   const wastePct = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
-  const cell = (lab: string, icon: string, val: string | number, warn = false) =>
-    `<span class="stCell${warn ? ' warn' : ''}" title="${lab}"><span class="stL">${lab}</span><span class="stI" aria-hidden="true"><i class="ic ic-${icon}"></i></span><b class="stV">${val}</b></span>`;
-  $('statsT').innerHTML =
-    cell('開殼', 'knife', opened) +
-    cell('入碗', 'bowl', count) +
-    cell('浪費', 'warn', `${wastePct}%`, wastePct >= 30) +
-    cell('殼屑', 'oyster', cracked, cracked > 0) +
-    cell('偷／被抓', 'run', `${steals}/${caught}`, caught > 0) +
-    cell('割手', 'hand', stabs, stabs > 0);
+  const statsKey = `${opened}|${count}|${wastePct}|${cracked}|${steals}|${caught}|${stabs}`;
+  if (hudPrev.stats !== statsKey) {
+    hudPrev.stats = statsKey;
+    const cell = (lab: string, icon: string, val: string | number, warn = false) =>
+      `<span class="stCell${warn ? ' warn' : ''}" title="${lab}"><span class="stL">${lab}</span><span class="stI" aria-hidden="true"><i class="ic ic-${icon}"></i></span><b class="stV">${val}</b></span>`;
+    $('statsT').innerHTML =
+      cell('開殼', 'knife', opened) +
+      cell('入碗', 'bowl', count) +
+      cell('浪費', 'warn', `${wastePct}%`, wastePct >= 30) +
+      cell('殼屑', 'oyster', cracked, cracked > 0) +
+      cell('偷／被抓', 'run', `${steals}/${caught}`, caught > 0) +
+      cell('割手', 'hand', stabs, stabs > 0);
+  }
 }
 function worldOf(o: THREE.Object3D) { return o.getWorldPosition(new THREE.Vector3()); }
 function nagFrom(n: Npc, lines: string[], dur = 3) { let t = pick(lines); if (t === lastNag && lines.length > 1) t = lines[(lines.indexOf(t) + 1) % lines.length]; lastNag = t; n.look = dur; say(n, t, dur); }
@@ -2497,7 +2532,7 @@ function npcShuck(n: Npc, dt: number, t: number) {
 // ---------- 主迴圈 ----------
 let baseFov = 70, narrow = false;
 function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); tpCam.aspect = camera.aspect; tpCam.updateProjectionMatrix();
-  narrow = camera.aspect < 0.8; baseFov = narrow ? 82 : 70; handRig.position.set(0, narrow ? -0.02 : 0, 0); handRig.scale.set(narrow ? 0.42 : 0.7, narrow ? 0.6 : 0.7, 0.7); }
+  narrow = camera.aspect < 0.8; baseFov = narrow ? 82 : 70; handRig.position.set(0, narrow ? -0.02 : 0, 0); handRig.scale.set(narrow ? 0.42 : 0.7, narrow ? 0.6 : 0.7, 0.7); refreshHudTopMinY(); }
 addEventListener('resize', resize); resize();
 const clock = new THREE.Clock(); const v = new THREE.Vector3();
 let chatTimer = 2;
@@ -2630,11 +2665,27 @@ function frameBody() {
   tickPlaza(rdt);
   // ⚠ 方向提示
   if (warnNpc && !warnNpc.warned) warnNpc = null;
-  if (warnNpc) { const rel = warnNpc.g.position.clone().sub(camera.position); const fwd = camera.getWorldDirection(new THREE.Vector3()); let a = Math.atan2(rel.x, rel.z) - Math.atan2(fwd.x, fwd.z); a = Math.atan2(Math.sin(a), Math.cos(a));
-    warnEl.classList.add('on'); warnEl.style.left = `${clamp(50 - a / 1.2 * 45, 6, 94)}%`; warnEl.style.opacity = String(0.6 + 0.4 * Math.sin(t * 14)); warnEl.textContent = a > 0.5 ? '⚠◀' : a < -0.5 ? '▶⚠' : '⚠'; hint.textContent = `${warnNpc.name}要丟殼過來了！快${COARSE ? '按住「雨傘」' : '按住 R 撐傘'}！`; }
-  else warnEl.classList.remove('on');
+  if (warnNpc) {
+    _warnRel.copy(warnNpc.g.position).sub(camera.position);
+    camera.getWorldDirection(_warnFwd);
+    let a = Math.atan2(_warnRel.x, _warnRel.z) - Math.atan2(_warnFwd.x, _warnFwd.z);
+    a = Math.atan2(Math.sin(a), Math.cos(a));
+    const wLeft = `${clamp(50 - a / 1.2 * 45, 6, 94)}%`;
+    const wOp = (0.6 + 0.4 * Math.sin(t * 14)).toFixed(2);
+    const wTxt = a > 0.5 ? '⚠◀' : a < -0.5 ? '▶⚠' : '⚠';
+    if (!warnEl.classList.contains('on')) warnEl.classList.add('on');
+    if (warnEl.style.left !== wLeft) warnEl.style.left = wLeft;
+    if (warnEl.style.opacity !== wOp) warnEl.style.opacity = wOp;
+    if (warnEl.textContent !== wTxt) warnEl.textContent = wTxt;
+    hint.textContent = `${warnNpc.name}要丟殼過來了！快${COARSE ? '按住「雨傘」' : '按住 R 撐傘'}！`;
+  } else if (warnEl.classList.contains('on')) warnEl.classList.remove('on');
+  // 先算完所有投影，再批次寫 DOM（避免讀寫交錯強制重排）
   for (const n of npcs) {
-    n.look -= dt; n.bubT -= rdt; if (n.bubT <= 0) n.bubble.style.opacity = '0';
+    n.look -= dt; n.bubT -= rdt;
+    if (n.bubT <= 0) {
+      const c = pinState(n.bubble);
+      if (c.op !== '0') { c.op = '0'; n.bubble.style.opacity = '0'; }
+    }
     const stand = n.angry > 0 || n.windup > 0 ? 1 : 0; n.baseY += (stand * 0.18 - n.baseY) * Math.min(1, rdt * 6); n.g.position.y = n.baseY;
     const tgtY = n.look > 0 || stand ? Math.atan2(camera.position.x - n.g.position.x, camera.position.z - n.g.position.z) - n.g.rotation.y : 0;
     const want = n.look > 0 || stand ? 1 : 0;
@@ -2644,9 +2695,15 @@ function frameBody() {
     n.head.rotation.y = n.distract > 0 && !stand ? n.turnDir * 1.3 : face;
     n.head.getWorldPosition(v); v.y += 0.28; v.project(camera);
     const vis = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
-    n.bubble.style.display = vis ? 'block' : 'none';
-    n.tag.style.display = vis && !tut ? 'block' : 'none'; n.tag.style.left = `${clamp((v.x * .5 + .5) * innerWidth, 50, innerWidth - 50)}px`; n.tag.style.top = `${(-v.y * .5 + .5) * innerHeight - 4}px`; { const g = n.grudge ?? 0; n.tag.textContent = n.name + (g >= 60 ? ' 😡' : g >= 25 ? ' 😠' : ''); }
-    n.bubble.style.left = `${clamp((v.x * .5 + .5) * innerWidth, 90, innerWidth - 90)}px`; n.bubble.style.top = `${Math.max((-v.y * .5 + .5) * innerHeight - 24, $('top').getBoundingClientRect().bottom + 10 + n.bubble.offsetHeight)}px`;
+    const sx = (v.x * .5 + .5) * innerWidth, sy = (-v.y * .5 + .5) * innerHeight;
+    const g = n.grudge ?? 0;
+    const tagTxt = n.name + (g >= 60 ? ' 😡' : g >= 25 ? ' 😠' : '');
+    setPin(n.tag, clamp(sx, 50, innerWidth - 50), sy - 4, vis && !tut ? 'block' : 'none');
+    {
+      const c = pinState(n.tag);
+      if (c.txt !== tagTxt) { c.txt = tagTxt; n.tag.textContent = tagTxt; }
+    }
+    setPin(n.bubble, clamp(sx, 90, innerWidth - 90), Math.max(sy - 24, hudTopMinY), vis ? 'block' : 'none');
   }
   boats.forEach((b, i) => { b.position.y = -0.45 + Math.sin(t * 0.8 + i) * 0.05; b.rotation.z = Math.sin(t * 0.6 + i * 2) * 0.03; });
   for (let i = flyers.length - 1; i >= 0; i--) {
