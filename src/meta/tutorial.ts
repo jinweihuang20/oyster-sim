@@ -59,6 +59,8 @@ export type TutorialDeps = {
   svAlert: () => void;
   featAnnounce: () => void;
   newAnnounce: () => void;
+  /** 回主畫面轉場（蓋住場景再開 overlay） */
+  returnToMainMenu: (work?: () => void | Promise<void>, opts?: { then?: () => void }) => void;
 };
 
 let D: TutorialDeps;
@@ -146,7 +148,7 @@ export function tutEnd(done: boolean) {
   document.body.classList.remove('tutOn'); D.on('tut', false);
   if (document.pointerLockElement) document.exitPointerLock();
   if (D.getWalking()) { D.setWalking(false); D.clearWalkHud(); D.handRig.visible = true; D.stools.forEach(g => g.userData.tag.visible = false); }
-  D.stopSteal(); D.setState('menu'); D.syncShiftUi(); D.renderLocs(); D.setPhase('busy');
+  D.stopSteal(); D.setPhase('busy');
   D.oyster.visible = false; D.closeUmbrella();
   D.on('umbBtn', false); D.on('medBtn', false); D.on('quitBtn', false);
   D.$('radioBtn').style.display = 'none';
@@ -154,8 +156,10 @@ export function tutEnd(done: boolean) {
   D.$('medList').classList.remove('show');
   D.on('stealBtn', false); D.on('standBtn', false); D.on('lockHint', false);
   if (done) D.toast('出師了！去剝蚵仔賺錢吧～', '#9be37a');
-  D.renderDaily(); D.$('overlay').classList.add('show');
-  setTimeout(() => { D.giftAlert(); D.svAlert(); D.featAnnounce(); D.newAnnounce(); }, 600);
+  D.renderDaily();
+  D.returnToMainMenu(undefined, {
+    then: () => { setTimeout(() => { D.giftAlert(); D.svAlert(); D.featAnnounce(); D.newAnnounce(); }, 400); },
+  });
 }
 
 function tutGive(want: 'pick' | 'seam' | 'twist' | 'aim' | 'empty') {

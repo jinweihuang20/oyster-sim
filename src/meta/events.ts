@@ -42,6 +42,7 @@ export type EventsHost = {
   set evLastId(v: number | null);
   get evBusy(): boolean;
   set evBusy(v: boolean);
+  returnToMainMenu: (work?: () => void | Promise<void>, opts?: { then?: () => void }) => void;
 };
 
 let H: EventsHost;
@@ -131,7 +132,7 @@ export async function evAgain() {
   if (H.evBusy) return;
   const id = H.evLastId; const ab = H.$('again') as HTMLButtonElement; ab.disabled = true;
   const r = await H.Social.evActive(); ab.disabled = false;
-  const toMenu = (m: string) => { if (m) H.toast(m); H.evLastId = null; H.$('result').classList.remove('show'); H.renderLocs(); H.$('overlay').classList.add('show'); H.$('overlay').scrollTop = 0; };
+  const toMenu = (m: string) => { if (m) H.toast(m); H.evLastId = null; H.$('result').classList.remove('show'); H.returnToMainMenu(); };
   if (!r) { H.toast('連不上活動伺服器，等一下再試'); return; }
   if (!evValid(r.event) || r.event.id !== id) { toMenu('活動已經結束了'); return; }
   evFetchFrom(r);

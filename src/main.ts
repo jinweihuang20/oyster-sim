@@ -1930,26 +1930,31 @@ $('bmGo').onclick = () => { void (async () => {
   $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return;
   const wasPlaza = plazaMode;
   if (wasPlaza && !plazaShiftStarted()) {
-    plazaShellGen++; setPlazaMode(false); plazaPlayAt = 0; plazaHideYard(false);
-    await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door');
-    clearPlazaLeaveUi(); state = 'menu'; syncShiftUi();
-    renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
-    void refreshPlazaOnlineAfterLeave();
+    returnToMainMenu(async () => {
+      plazaShellGen++; setPlazaMode(false); plazaPlayAt = 0; plazaHideYard(false);
+      await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door');
+      clearPlazaLeaveUi();
+      void refreshPlazaOnlineAfterLeave();
+    });
     return;
   }
   endReason = 'quit'; endDay();
   $('result').classList.remove('show');
-  if (wasPlaza) {
-    await plazaPayWait?.catch(() => 0); setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0; plazaHideYard(false);
-    await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door'); clearPlazaLeaveUi();
-  }
-  renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
-  if (wasPlaza) void refreshPlazaOnlineAfterLeave();
-  const P = lastPay; if (P.gross || P.pen) {
-    const r = (ic: string, l: string, v: string, c = '') => `<div class="row"><span><i class="ic ic-${ic}"></i> ${l}</span><b${c}>${v}</b></div>`;
-    $('psBody').innerHTML = r('oyster', '收入', `+$${P.gross}`) + (P.pen ? r('warn', '罰款／扣價', `-$${P.pen}`, ' style="color:#ff8a7a"') + r('coin', '淨收入', `$${P.earn}`) : '') + `<p style="font-size:14px;opacity:.85">已入帳，身上共有 $${save.money}</p>`;
-    $('paySum').classList.add('show');
-  }
+  const P = lastPay;
+  returnToMainMenu(async () => {
+    if (wasPlaza) {
+      await plazaPayWait?.catch(() => 0); setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0; plazaHideYard(false);
+      await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door'); clearPlazaLeaveUi();
+      void refreshPlazaOnlineAfterLeave();
+    }
+  }, {
+    then: () => {
+      if (!(P.gross || P.pen)) return;
+      const r = (ic: string, l: string, v: string, c = '') => `<div class="row"><span><i class="ic ic-${ic}"></i> ${l}</span><b${c}>${v}</b></div>`;
+      $('psBody').innerHTML = r('oyster', '收入', `+$${P.gross}`) + (P.pen ? r('warn', '罰款／扣價', `-$${P.pen}`, ' style="color:#ff8a7a"') + r('coin', '淨收入', `$${P.earn}`) : '') + `<p style="font-size:14px;opacity:.85">已入帳，身上共有 $${save.money}</p>`;
+      $('paySum').classList.add('show');
+    },
+  });
 })(); };
 $('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (plazaMode) void plazaTrySit(); else if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
@@ -2266,7 +2271,7 @@ function launchDeathmatch(mode: DmMode) {
       else scores.dmWaves = Math.max(0, info.wavesCleared);
       Social.submit(scores);
     },
-  }, () => { $('overlay').classList.add('show'); duckAmb(); }, DM_PRESETS[mode]);
+  }, () => { returnToMainMenu(() => { duckAmb(); }); }, DM_PRESETS[mode]);
   duckAmb();
 }
 $('oDmFfa').onclick = () => launchDeathmatch('ffa');
@@ -2329,17 +2334,14 @@ function showPlazaLoading(show = true) {
       el.innerHTML = `<div class="pzLoadTitle">蚵仔廣場</div><div class="pzLoadSub">正在入場…</div><div class="pzLoadBar" aria-hidden="true"><i></i></div><button type="button" id="plazaLoadCancel">取消</button>`;
       document.body.appendChild(el);
       el.querySelector('#plazaLoadCancel')!.addEventListener('click', () => {
-        void (async () => {
-          showPlazaLoading(false);
+        returnToMainMenu(async () => {
           setPlazaMode(false); plazaPlayAt = 0;
           plazaHideYard(false);
           if (isPlazaActive()) await closePlaza(true).catch(() => 0);
           applySeat(save.seat ?? 'door');
           clearPlazaLeaveUi();
-          state = 'menu'; syncShiftUi();
-          renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
           void refreshPlazaOnlineAfterLeave();
-        })();
+        });
       });
     }
     const sub = el.querySelector('.pzLoadSub'); if (sub) sub.textContent = '正在入場…';
@@ -2366,6 +2368,47 @@ function showShedLoading(show = true) {
   } else {
     el?.classList.remove('on');
   }
+}
+/** 回主畫面轉場（工寮／廣場／死鬥／教學皆走這條） */
+let menuLoadGen = 0;
+function showMenuLoading(show = true) {
+  let el = document.getElementById('menuLoad');
+  if (show) {
+    document.getElementById('plazaLoad')?.classList.remove('on');
+    document.getElementById('shedLoad')?.classList.remove('on');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'menuLoad';
+      el.innerHTML = `<div class="menuLoadTitle">剝蚵仔</div><div class="menuLoadSub">正在回主畫面…</div><div class="menuLoadBar" aria-hidden="true"><i></i></div>`;
+      document.body.appendChild(el);
+    }
+    const sub = el.querySelector('.menuLoadSub'); if (sub) sub.textContent = '正在回主畫面…';
+    el.classList.add('on');
+  } else {
+    el?.classList.remove('on');
+  }
+}
+/** 任意場景回主畫面：先秀轉場，再打開主選單（至少約 0.9 秒） */
+function returnToMainMenu(work?: () => void | Promise<void>, opts?: { then?: () => void }) {
+  const gen = ++menuLoadGen;
+  const at = performance.now();
+  showMenuLoading(true);
+  for (const id of ['result', 'backMenu']) $(id).classList.remove('show');
+  void (async () => {
+    try { await work?.(); }
+    finally {
+      state = 'menu'; syncShiftUi();
+      renderLocs({ forcePlazaOnline: true });
+      $('overlay').classList.add('show');
+      $('overlay').scrollTop = 0;
+      const wait = Math.max(0, 900 - (performance.now() - at));
+      setTimeout(() => {
+        if (gen !== menuLoadGen) return;
+        showMenuLoading(false);
+        opts?.then?.();
+      }, wait);
+    }
+  })();
 }
 function enterWorkShed(run: () => void) {
   if (plazaMode || isPlazaActive() || SHOT) { run(); return; }
@@ -2458,24 +2501,23 @@ function launchPlaza() {
         showPlazaLoading(false);
         plazaShellGen++;
         if (state === 'play' && plazaMode && plazaShiftStarted()) { endReason = 'quit'; endDay(); return; }
-        setPlazaMode(false); plazaPlayAt = 0; plazaHideYard(false);
-        await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door');
-        clearPlazaLeaveUi();
-        state = 'menu'; syncShiftUi();
-        renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
-        void refreshPlazaOnlineAfterLeave();
+        returnToMainMenu(async () => {
+          setPlazaMode(false); plazaPlayAt = 0; plazaHideYard(false);
+          await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door');
+          clearPlazaLeaveUi();
+          void refreshPlazaOnlineAfterLeave();
+        });
       })();
     },
     onEnterFail: () => {
-      showPlazaLoading(false);
       plazaShellGen++;
-      setPlazaMode(false); plazaPlayAt = 0;
-      plazaHideYard(false);
-      applySeat(save.seat ?? 'door');
-      clearPlazaLeaveUi();
-      state = 'menu'; syncShiftUi();
-      renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
-      void syncPlazaOnlineUi(true);
+      returnToMainMenu(() => {
+        setPlazaMode(false); plazaPlayAt = 0;
+        plazaHideYard(false);
+        applySeat(save.seat ?? 'door');
+        clearPlazaLeaveUi();
+        void syncPlazaOnlineUi(true);
+      });
     },
     enterWalk: () => {
       setPlazaMode(true); plazaPlayAt = 0; evRun = null; shiftLen = SHIFT; timeLeft = SHIFT;
@@ -2531,29 +2573,32 @@ btn('again', () => {
   else if (plazaMode) return; // 廣場休閒：離開後回主選單，不跑再次上工
   else enterWorkShed(() => startDay());
 });
-btn('resMenu', () => { void (async () => {
+btn('resMenu', () => {
   const menuBtn = $('resMenu') as HTMLButtonElement;
   if (menuBtn.disabled) return;
   menuBtn.disabled = true;
   $('result').classList.remove('show');
-  let leftPlaza = false;
-  if (plazaMode) {
-    menuBtn.innerHTML = `<i class="ic ic-home"></i> 結算中…`;
-    await plazaPayWait?.catch(() => 0);
-    setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0;
-    plazaHideYard(false);
-    plazaHideChrome(true);
-    await closePlaza().catch(() => 0);
-    applySeat(save.seat ?? 'door');
-    clearPlazaLeaveUi();
-    leftPlaza = true;
-  }
-  const againBtn = $('again'); if (againBtn) againBtn.style.display = '';
-  menuBtn.disabled = false;
-  menuBtn.innerHTML = `<i class="ic ic-home"></i> 回主選單`;
-  renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show'); $('overlay').scrollTop = 0;
-  if (leftPlaza) void refreshPlazaOnlineAfterLeave();
-})(); });
+  const fromPlaza = plazaMode;
+  if (fromPlaza) menuBtn.innerHTML = `<i class="ic ic-home"></i> 結算中…`;
+  returnToMainMenu(async () => {
+    if (fromPlaza) {
+      await plazaPayWait?.catch(() => 0);
+      setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0;
+      plazaHideYard(false);
+      plazaHideChrome(true);
+      await closePlaza().catch(() => 0);
+      applySeat(save.seat ?? 'door');
+      clearPlazaLeaveUi();
+      void refreshPlazaOnlineAfterLeave();
+    }
+  }, {
+    then: () => {
+      const againBtn = $('again'); if (againBtn) againBtn.style.display = '';
+      menuBtn.disabled = false;
+      menuBtn.innerHTML = `<i class="ic ic-home"></i> 回主選單`;
+    },
+  });
+});
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
 $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
@@ -2869,6 +2914,7 @@ initTutorial({
   later, getMissed: () => missed, getCount: () => count, getThrown: () => thrown, getSteals: () => steals,
   getMeatHits: () => meatHits, getShellsOut: () => shellsOut, getUmbT: () => umbT,
   getNpcs: () => npcs, windUp, giftAlert, svAlert, featAnnounce, newAnnounce,
+  returnToMainMenu,
 });
 
 $('oTut').onclick = () => { const run = () => enterWorkShed(() => tutStart()); if (!save.tutDone) ensureNameThen(run); else run(); };
@@ -3589,11 +3635,10 @@ function closeTopModal(): boolean {
 installBackGuard(() => {
   if (closeTopModal()) return 'handled';
   if (isPlazaActive() && !plazaMode) {
-    void (async () => {
+    returnToMainMenu(async () => {
       await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door'); clearPlazaLeaveUi();
-      renderLocs({ forcePlazaOnline: true }); $('overlay').classList.add('show');
       void refreshPlazaOnlineAfterLeave();
-    })();
+    });
     return 'handled';
   }
   if (state === 'play') { toast('上工中按返回不會離開；要收工請按「回主選單」或等時間到', '#ffcf8a'); return 'handled'; }
@@ -3788,6 +3833,7 @@ if (COARSE) for (const id of ['bmGo', 'bmStay', 'psOk', 'tnOk']) { const el = $(
 initEvents({
   $: (id) => $(id), persist, toast, track, esc, Social, ODD, rarOf, legendTotal, renderDex, renderLocs,
   audio, startDay: () => enterWorkShed(() => startDay()), later, endDay, achBump, AS, SHOT, SHIFT,
+  returnToMainMenu,
   get save() { return save; }, get state() { return state; }, get tut() { return tut; },
   get count() { return count; }, set count(v) { count = v; },
   get timeLeft() { return timeLeft; }, get shiftLen() { return shiftLen; }, set shiftLen(v) { shiftLen = v; },

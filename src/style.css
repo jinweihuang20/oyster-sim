@@ -889,13 +889,13 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 .plazaTag{position:absolute;transform:translate(-50%,-100%);pointer-events:none;background:rgba(20,12,6,.82);color:#ffe9c0;border:1.5px solid rgba(217,149,43,.85);border-radius:10px;font-size:13px;font-weight:800;padding:3px 10px;white-space:nowrap;text-shadow:0 1px 0 #000;box-shadow:2px 2px 0 rgba(0,0,0,.35)}
 .plazaChatBub{position:absolute;transform:translate(-50%,-100%);pointer-events:none;max-width:min(42vw,220px);background:rgba(255,246,216,.95);color:#2a1600;border:2px solid #d9952b;border-radius:12px 12px 12px 4px;font-size:13px;font-weight:800;padding:5px 10px;line-height:1.25;text-align:center;box-shadow:2px 2px 0 rgba(0,0,0,.28);word-break:break-word}
 
-/* 進廣場／工寮載入遮罩 */
-#plazaLoad,#shedLoad{position:fixed;inset:0;z-index:12000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;background:linear-gradient(165deg,#1a1008 0%,#2a1810 45%,#1e140c 100%);color:#ffe9c0;pointer-events:auto}
-#plazaLoad.on,#shedLoad.on{display:flex}
-#plazaLoad .pzLoadTitle,#shedLoad .shedLoadTitle{font-size:22px;font-weight:900;letter-spacing:1px;color:#ffd23f}
-#plazaLoad .pzLoadSub,#shedLoad .shedLoadSub{font-size:14px;opacity:.85}
-#plazaLoad .pzLoadBar,#shedLoad .shedLoadBar{width:min(56vw,220px);height:10px;border:2px solid #d9952b;border-radius:8px;overflow:hidden;background:#1a1008}
-#plazaLoad .pzLoadBar>i,#shedLoad .shedLoadBar>i{display:block;height:100%;width:40%;background:linear-gradient(90deg,#d9952b,#ffe08a,#d9952b);background-size:200% 100%;animation:pzLoadSlide 1.1s linear infinite}
+/* 進廣場／工寮／回主畫面 轉場遮罩 */
+#plazaLoad,#shedLoad,#menuLoad{position:fixed;inset:0;z-index:12000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;background:linear-gradient(165deg,#1a1008 0%,#2a1810 45%,#1e140c 100%);color:#ffe9c0;pointer-events:auto}
+#plazaLoad.on,#shedLoad.on,#menuLoad.on{display:flex}
+#plazaLoad .pzLoadTitle,#shedLoad .shedLoadTitle,#menuLoad .menuLoadTitle{font-size:22px;font-weight:900;letter-spacing:1px;color:#ffd23f}
+#plazaLoad .pzLoadSub,#shedLoad .shedLoadSub,#menuLoad .menuLoadSub{font-size:14px;opacity:.85}
+#plazaLoad .pzLoadBar,#shedLoad .shedLoadBar,#menuLoad .menuLoadBar{width:min(56vw,220px);height:10px;border:2px solid #d9952b;border-radius:8px;overflow:hidden;background:#1a1008}
+#plazaLoad .pzLoadBar>i,#shedLoad .shedLoadBar>i,#menuLoad .menuLoadBar>i{display:block;height:100%;width:40%;background:linear-gradient(90deg,#d9952b,#ffe08a,#d9952b);background-size:200% 100%;animation:pzLoadSlide 1.1s linear infinite}
 #plazaLoad #plazaLoadCancel{margin-top:8px;min-height:44px;padding:8px 20px;border:2px solid #d9952b;border-radius:12px;background:#2a1810;color:#ffd23f;font-weight:800;font-size:15px}
 @keyframes pzLoadSlide{0%{transform:translateX(-100%)}100%{transform:translateX(280%)}}
 
