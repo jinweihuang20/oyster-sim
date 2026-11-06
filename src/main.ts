@@ -923,11 +923,11 @@ function landY(p: THREE.Vector3) { if (Math.hypot(p.x - BOWL.x, p.z - BOWL.z) < 
 function updBlood(dt: number) {
   for (let i = drops.length - 1; i >= 0; i--) { const d = drops[i]; d.v.y -= 9 * dt; d.m.position.addScaledVector(d.v, dt); const y = landY(d.m.position);
     if (d.m.position.y <= y) {
-      const sc = Math.min(4, Math.max(0.8, d.m.scale.x));
+      const sc = Math.min(2.2, Math.max(0.7, d.m.scale.x));
       scene.remove(d.m); drops.splice(i, 1);
       const c = new THREE.Mesh(decalGeo, new THREE.MeshBasicMaterial({ color: 0xb01020, transparent: true, opacity: 0.85, depthWrite: false }));
       c.rotation.x = -Math.PI / 2; c.position.set(d.m.position.x, y + 0.003, d.m.position.z);
-      c.scale.setScalar(rnd(0.018, 0.04) * sc); scene.add(c); decals.push({ m: c, t: 16 + sc * 2 });
+      c.scale.setScalar(rnd(0.015, 0.032) * sc); scene.add(c); decals.push({ m: c, t: 14 + sc });
     }
   }
   for (let i = decals.length - 1; i >= 0; i--) { const d = decals[i]; d.t -= dt; (d.m.material as THREE.MeshBasicMaterial).opacity = Math.min(0.85, d.t / 5); if (d.t <= 0) { scene.remove(d.m); decals.splice(i, 1); } }
@@ -1613,29 +1613,20 @@ function reportPlazaShellHit() {
   const p = plazaSelfBleedPos();
   void plazaShellHit({ x: p.x, y: p.y, z: p.z });
 }
-/** 廣場遠端可見：被砸噴血加劇（顆數／體積／飛散） */
+/** 廣場遠端可見：略大於一般 bleed，方便遠看；仍受 mix.gore 控制 */
 function plazaBleedBurst(at: THREE.Vector3) {
   if (!mix.gore) return;
-  const n = 42;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < 22; i++) {
     const m = new THREE.Mesh(dropGeo, dropMat);
-    m.position.copy(at).add(new THREE.Vector3(rnd(-0.06, 0.06), rnd(-0.04, 0.08), rnd(-0.06, 0.06)));
-    m.scale.setScalar(rnd(1.4, 3.2));
+    m.position.copy(at).add(new THREE.Vector3(rnd(-0.03, 0.03), rnd(-0.02, 0.04), rnd(-0.03, 0.03)));
+    m.scale.setScalar(rnd(0.85, 1.9));
     scene.add(m);
-    const sp = rnd(1.6, 3.4);
+    const sp = rnd(0.7, 1.5);
     const a = rnd(0, Math.PI * 2);
     drops.push({
       m,
-      v: new THREE.Vector3(Math.cos(a) * sp * rnd(0.5, 1.2), rnd(1.4, 3.6), Math.sin(a) * sp * rnd(0.5, 1.2)),
+      v: new THREE.Vector3(Math.cos(a) * sp * rnd(0.4, 0.9), rnd(0.9, 2.2), Math.sin(a) * sp * rnd(0.4, 0.9)),
     });
-  }
-  // 頭上再噴一簇較大血滴
-  for (let i = 0; i < 10; i++) {
-    const m = new THREE.Mesh(dropGeo, dropMat);
-    m.position.copy(at);
-    m.scale.setScalar(rnd(2.4, 4.2));
-    scene.add(m);
-    drops.push({ m, v: new THREE.Vector3(rnd(-1.8, 1.8), rnd(2.2, 4.5), rnd(-1.8, 1.8)) });
   }
 }
 /** 廣場任何人被殼砸中：全場（含本人）噴血 */
