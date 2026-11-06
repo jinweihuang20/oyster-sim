@@ -174,7 +174,8 @@ const basinOy: THREE.Mesh[] = [];
 const basinShells = new THREE.InstancedMesh(shellGeo, pileMat, 1); basinShells.visible = false;
 const seatRig = new THREE.Group(); scene.add(seatRig); seatRig.add(basinMesh, basinShells);
 markBowlDrawOrder(basinMesh);
-const BOWL0 = new THREE.Vector3(0.55, 0.12, 0.88), BOWL = BOWL0.clone(); let BOWL_R = 0.17;
+// 裝肉碗貼臉盆右側：間距約兩顆蚵殼短邊（短邊≈0.1）
+const BOWL0 = new THREE.Vector3(0.35, 0.12, 1.22), BOWL = BOWL0.clone(); let BOWL_R = 0.17;
 const bowlG = new THREE.Group(); seatRig.add(bowlG); const BOWL_L = BOWL0.clone();
 const _liftPos = new THREE.Vector3(), _liftQ = new THREE.Quaternion(), _liftS = new THREE.Vector3(), _liftM = new THREE.Matrix4();
 function buildBowl(b: { r: number; h: number; color: number; metal?: number }) {

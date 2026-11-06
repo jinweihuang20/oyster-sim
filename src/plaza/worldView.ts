@@ -312,11 +312,13 @@ export function createPlazaWorldView(
     // 座椅離堆心 ~1.38；盆／碗再往 -Z（堆心）靠並抬高，像擱在蚵山上
     const basinMat = M(0xc84030, { side: THREE.DoubleSide, roughness: 0.55, flatShading: true });
     const basin = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.16, 0.11, 12, 1, true), basinMat);
-    basin.position.set(-0.3, 0.2, -0.58);
+    // 臉盆左、裝肉碗右；兩盆間距 ≈ 兩顆蚵殼短邊
+    const basinX = -0.28, basinZ = -0.58;
+    basin.position.set(basinX, 0.2, basinZ);
     props.add(basin);
     const basinFl = new THREE.Mesh(new THREE.CircleGeometry(0.16, 12), M(0xa03028, { roughness: 0.65, flatShading: true }));
     basinFl.rotation.x = -Math.PI / 2;
-    basinFl.position.set(-0.3, 0.145, -0.58);
+    basinFl.position.set(basinX, 0.145, basinZ);
     props.add(basinFl);
     // 盆裡幾顆殼示意
     for (let i = 0; i < 5; i++) {
@@ -326,7 +328,7 @@ export function createPlazaWorldView(
         M(0xc8c2c0, { roughness: 0.8, flatShading: true }),
       );
       oy.scale.set(1.2, 0.55, 1);
-      oy.position.set(-0.3 + Math.cos(a) * rr, 0.2, -0.58 + Math.sin(a) * rr);
+      oy.position.set(basinX + Math.cos(a) * rr, 0.2, basinZ + Math.sin(a) * rr);
       props.add(oy);
     }
     const bowlNode = new THREE.Group();
@@ -337,10 +339,11 @@ export function createPlazaWorldView(
     const fl = new THREE.Mesh(new THREE.CircleGeometry(0.1, 12), M(0x3a6a98, { roughness: 0.5, flatShading: true }));
     fl.rotation.x = -Math.PI / 2;
     bowlNode.add(fl);
-    bowlNode.position.set(0.34, 0.22, -0.74);
+    const meatX = basinX + 0.2 + 0.2 + 0.13; // 盆緣 + 兩短邊 + 肉碗半徑
+    bowlNode.position.set(meatX, 0.22, basinZ);
     props.add(bowlNode);
     const meatRoot = new THREE.Group();
-    meatRoot.position.set(0.34, 0.3, -0.74);
+    meatRoot.position.set(meatX, 0.3, basinZ);
     props.add(meatRoot);
     markTop(props);
     return { props, bowlNode, meatRoot };
