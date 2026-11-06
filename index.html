@@ -78,6 +78,15 @@ html,body{margin:0;height:100%;background:#1a120c}
  <label class="row"><span class="rl">省電模式（降畫質）</span><input id="v_eco" type="checkbox"></label>
  <div class="setSec">幫助</div>
  <div class="setGrid"><button id="tutReplay"><i class="ic ic-tut"></i> 重看教學</button><button id="hgReplay"><i class="ic ic-pin"></i> 主畫面導覽</button></div>
+ <div class="setSec">雲端存檔</div>
+ <p class="setHint" id="cloudHint">多裝置同一個進度：較新的會蓋過較舊的。換手機／瀏覽器先在這台產生連結碼，另一台輸入即可。</p>
+ <div class="row"><span class="rl">同步狀態</span><code id="cloudStat">…</code></div>
+ <div class="setGrid">
+  <button id="cloudSyncNow" type="button"><i class="ic ic-again"></i> 立即同步</button>
+  <button id="cloudLink" type="button"><i class="ic ic-copy"></i> 產生連結碼</button>
+  <button id="cloudClaim" type="button"><i class="ic ic-gift"></i> 輸入連結碼</button>
+ </div>
+ <p class="setHint" id="cloudCode" style="display:none"></p>
  <div class="setSec">社群</div>
  <div class="setGrid"><button id="setRedeem"><i class="ic ic-gift"></i> 兌換碼</button><button id="setFb"><i class="ic ic-chat"></i> 意見回饋</button><a id="discordSet" href="https://discord.gg/45EZEXyGG4" target="_blank" rel="noopener" class="dcBtn"><i class="ic ic-discord"></i> 加入 Discord</a></div>
  <hr class="setDiv">

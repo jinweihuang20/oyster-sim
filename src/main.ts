@@ -2,6 +2,7 @@ import {
   initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl,
   importMove, escapeInApp, type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY,
   defaultSave, loadSave as loadSaveFrom, writeSave, DAILY_PAYS, todayKey, dayDiff, installNoZoom,
+  cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink, installCloudLifecycle, onCloudStatus,
 } from './core';
 import {
   createSkyDome, SHELL_GEOS, HALF_GEOS, greyPick, shellM,
@@ -329,7 +330,14 @@ applyEcoGfx();
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
 const STATS_URL = 'https://game-status.gwtech.org/e';
 const statsId = (() => { try { let v = LS.getItem('oyster-stats-id'); if (!v) { v = crypto.randomUUID(); LS.setItem('oyster-stats-id', v); } return v; } catch { return 'anon-' + Math.random().toString(36).slice(2, 14); } })();
-importMove().then(r => { if (!r) escapeInApp(statsId); });
+cloudInit(statsId, LS);
+importMove().then(async moved => {
+  if (moved) return;
+  const pulled = await cloudBoot();
+  if (pulled) return;
+  escapeInApp(statsId);
+});
+installCloudLifecycle();
 let statsSid = '';
 const statsDevice = COARSE ? 'mobile' : 'pc';
 function track(t: string, d: Record<string, unknown> = {}) {
@@ -351,7 +359,7 @@ function pickTrack(): string {
 }
 initAudio({
   getMix: () => mix,
-  persistMix: () => { try { LS.setItem('oyster-mix', JSON.stringify(mix)); } catch { } },
+  persistMix: () => { try { LS.setItem('oyster-mix', JSON.stringify(mix)); cloudTouch(); } catch { } },
   pickTrack,
   rnd,
 });
@@ -424,7 +432,11 @@ function checkReturn() {
   giftMsg(true, '阿姨好想你！', [`你已經 ${days} 天沒來上工了，歡迎回來！`, `回歸禮 +$${amt}`, item, '連續上工從第 1 天重新開始', `身上有 $${save.money}`]);
 }
 let achT = 0; // 進度一變就排一次成就檢查（成就區塊載入後才會跑）
-const persist = () => { writeSave(LS, save); if ((window as any).__achOk && !achT) achT = window.setTimeout(() => { achT = 0; achCheck(); }, 250); };
+const persist = () => {
+  writeSave(LS, save);
+  cloudTouch();
+  if ((window as any).__achOk && !achT) achT = window.setTimeout(() => { achT = 0; achCheck(); }, 250);
+};
 persist();
 let dry = 0;
 const itemW = (x: { w?: number; weight?: number }) => x.weight ?? x.w ?? 0;
@@ -2786,6 +2798,29 @@ $('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visib
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
 setTimeout(checkReturn, 600);
 $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖鑑、生涯紀錄、設定都會清掉，無法復原。')) { LS.removeItem('oyster-sim'); LS.removeItem('oyster-mix'); location.reload(); } };
+{
+  const lab: Record<string, string> = { idle: '待命', syncing: '同步中…', ok: '已同步', err: '同步失敗', offline: '離線' };
+  onCloudStatus((s, err) => { $('cloudStat').textContent = err ? `${lab[s] ?? s}（${err}）` : (lab[s] ?? s); });
+  $('cloudSyncNow').onclick = async () => {
+    const reloading = await cloudFlush();
+    if (!reloading) toast($('cloudStat').textContent?.startsWith('已同步') ? '已同步到雲端' : '同步未完成，請稍後再試', '#9ad0ff');
+  };
+  $('cloudLink').onclick = async () => {
+    const r = await cloudMakeLink();
+    const box = $('cloudCode');
+    if (!r.ok) { toast(r.err, '#ffb08a'); box.style.display = 'none'; return; }
+    box.style.display = '';
+    box.textContent = `連結碼：${r.code}（約 ${Math.round(r.ttlMs / 60000)} 分鐘內有效，另一台在「輸入連結碼」貼上）`;
+    try { await navigator.clipboard?.writeText(r.code); toast(`已複製連結碼 ${r.code}`); } catch { toast(`連結碼：${r.code}`); }
+  };
+  $('cloudClaim').onclick = async () => {
+    const code = prompt('輸入另一台產生的 6 碼連結碼（會覆蓋本機進度）');
+    if (!code) return;
+    if (!confirm('確定用雲端存檔覆蓋這台裝置的進度？')) return;
+    const r = await cloudClaimLink(code);
+    if (!r.ok) toast(r.err, '#ffb08a');
+  };
+}
 $('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); openShopPx(); renderShop(); $('shop').classList.add('show'); };
 $('shopBtn2').onclick = () => { openShopPx(); renderShop(); $('shop').classList.add('show'); };
 $('shopClose').onclick = () => { $('shop').classList.remove('show'); if (sleeveTry) { sleeveTry = null; applySleeve(); } };

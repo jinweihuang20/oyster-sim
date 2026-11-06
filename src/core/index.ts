@@ -4,6 +4,10 @@ export { installBackGuard } from './backguard';
 export { rbox, rboxEnv, crease, rcyl } from './geo';
 export { importMove, escapeInApp } from './inapp';
 export {
+  cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink,
+  installCloudLifecycle, onCloudStatus, cloudStatus,
+} from './cloudSync';
+export {
   type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY, defaultSave, loadSave, writeSave,
   DAILY_PAYS, todayKey, dayDiff,
 } from './save';
