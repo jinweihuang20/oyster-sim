@@ -37,9 +37,9 @@ import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaPileObs, plazaRandomSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin,
-  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
+  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen, seatPose, plazaPushOutfit,
-  type PlazaAimTarget, type PlazaShellEvent,
+  type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent,
 } from './plaza';
 import { makeYardFloorMaps } from './plaza/props';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
@@ -1312,13 +1312,36 @@ function openOyster() {
   else later(0.2, () => setPhase('aim'));
   updHud();
 }
+/** 奇物展示世代：點螢幕可跳過阿婆湊近觀看 */
+let oddShowGen = 0, oddShowI = -1;
+function oddShowActive() { return oddShowI >= 0 && oddShowI !== 3 && pearlShow > 0; }
+function skipOddShow() {
+  if (!oddShowActive()) return false;
+  const i = oddShowI;
+  oddShowGen++;
+  oddShowI = -1;
+  pearlShow = 0;
+  slowmo = 0;
+  label.classList.remove('on');
+  leanFaces.forEach(f => { f.visible = false; });
+  if (i >= 0) oddMeshes[i].visible = false;
+  if (state === 'play' && phase === 'busy') setPhase('aim');
+  return true;
+}
 function revealOdd(i: number) { react3('cheer');
   const o = ODD[i]; dayOdd.push(i); save.odd[i]++; const wasPity = pityHit; pityHit = false; if (rarOf(o.weight) === 'legend' && !o.limited) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(o.weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.weight), ...(wasPity ? { pity: 1 } : {}), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
+  const gen = ++oddShowGen;
+  oddShowI = i === 3 ? -1 : i;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
   label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.color; label.classList.add('on');
   npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
-  if (i === 3) { later(0.6, () => { flinch = 1; SFX.pinch(); bleed(8); hurt(4, '夾！'); crabShakes = 0; strokeDir = 0; strokeLen = 0; setPhase('crab'); }); }
-  else later(2.2, () => { oddMeshes[i].visible = false; setPhase('aim'); });
+  if (i === 3) { later(0.6, () => { if (gen !== oddShowGen) return; flinch = 1; SFX.pinch(); bleed(8); hurt(4, '夾！'); crabShakes = 0; strokeDir = 0; strokeLen = 0; setPhase('crab'); }); }
+  else later(2.2, () => {
+    if (gen !== oddShowGen) return;
+    oddShowI = -1;
+    oddMeshes[i].visible = false;
+    setPhase('aim');
+  });
 }
 function crabOff() {
   const c = oddMeshes[3]; c.visible = false; const m = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), mat(0xd04a2a)); m.scale.y = 0.5;
@@ -1548,6 +1571,7 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
       const splat = document.getElementById('splat');
       if (splat) { splat.style.opacity = '1'; later(0.9, () => { splat.style.opacity = '0'; }); }
       hurt(8, `${e.fromNick || '別人'} 丟中你了！`); hitInHand();
+      reportPlazaShellHit();
     }
     updHud();
   } catch (err) { console.error('plaza inbound', err); }
@@ -1560,6 +1584,7 @@ function resolvePlazaReflectHit(e: PlazaShellEvent) {
     const splat = document.getElementById('splat');
     if (splat) { splat.style.opacity = '1'; later(0.9, () => { splat.style.opacity = '0'; }); }
     hurt(8, `${e.fromNick || '別人'} 把殼反彈回來砸中你了！`); hitInHand();
+    reportPlazaShellHit();
     updHud();
   } catch (err) { console.error('plaza reflect hit', err); }
 }
@@ -1567,6 +1592,26 @@ function resolvePlazaReflectHit(e: PlazaShellEvent) {
 function resolvePlazaBlocked(e: PlazaShellEvent) {
   if (!plazaMode || state !== 'play' || !isPlazaActive()) return;
   toast(`${e.fromNick || '別人'} 擋住了你的殼！`, '#ffcf8a');
+}
+/** 本機被砸頭部世界座標（給全場噴血對齊） */
+function plazaSelfBleedPos() {
+  const p = new THREE.Vector3();
+  if (tpv) {
+    if (walking && plazaMe) { plazaMe.head.getWorldPosition(p); p.y += 0.08; return p; }
+    meHead.getWorldPosition(p); p.y += 0.08; return p;
+  }
+  p.copy(camera.position); p.y -= 0.02; return p;
+}
+function reportPlazaShellHit() {
+  const p = plazaSelfBleedPos();
+  void plazaShellHit({ x: p.x, y: p.y, z: p.z });
+}
+/** 廣場任何人被殼砸中：全場（含本人）噴血 */
+function resolvePlazaShellHitFx(e: PlazaShellHitEvent) {
+  if (!plazaMode || !isPlazaActive()) return;
+  if (![e.x, e.y, e.z].every(Number.isFinite)) return;
+  bleed(18, new THREE.Vector3(e.x, e.y, e.z), false);
+  try { SFX.hitNpc(); } catch { /* */ }
 }
 let plazaStealTgt: PlazaAimTarget | null = null;
 function startPlazaSteal() {
@@ -1837,6 +1882,8 @@ const swipePhase = () => phase === 'twist' || phase === 'crab';
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   if (state !== 'play') return; audio().resume(); if (umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
+  // 奇物展示：點一下跳過阿婆湊近觀看
+  if (skipOddShow()) return;
   if (moonAimOn) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (swipePhase()) { pry(e.timeStamp); if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) canvas.requestPointerLock(); return; }
   if (!walking && !plazaMode && e.button === 0) {
@@ -2495,6 +2542,7 @@ function launchPlaza() {
       later(0.4, () => { if (gen !== plazaShellGen) return; resolvePlazaReflectHit(e); });
     },
     onShellBlocked: (e) => { resolvePlazaBlocked(e); },
+    onShellHit: (e) => { resolvePlazaShellHitFx(e); },
     onStealResult: (e) => {
       const me = plazaConnId();
       if (!me) return;

@@ -1,5 +1,5 @@
 import * as signalR from '@microsoft/signalr';
-import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaStealEvent } from './types';
+import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent } from './types';
 
 export type PlazaHubHandlers = {
   onRoster?: (snap: PlazaSnapshot) => void;
@@ -15,6 +15,8 @@ export type PlazaHubHandlers = {
   onShellReflectHit?: (e: PlazaShellEvent) => void;
   /** 自己丟的殼被對方雨傘擋住（非完美反彈） */
   onShellBlocked?: (e: PlazaShellEvent) => void;
+  /** 有人被殼砸中：全場噴血 */
+  onShellHit?: (e: PlazaShellHitEvent) => void;
   onStealResult?: (e: PlazaStealEvent) => void;
   /** 連線中斷，開始自動重連 */
   onReconnecting?: (attempt: number) => void;
@@ -57,6 +59,16 @@ function normShell(e: any): PlazaShellEvent {
     toX: fin(e?.toX ?? e?.ToX),
     toY: fin(e?.toY ?? e?.ToY),
     toZ: fin(e?.toZ ?? e?.ToZ),
+  };
+}
+
+function normShellHit(e: any): PlazaShellHitEvent {
+  return {
+    connId: String(e?.connId ?? e?.ConnId ?? ''),
+    nick: String(e?.nick ?? e?.Nick ?? '?'),
+    x: fin(e?.x ?? e?.X),
+    y: fin(e?.y ?? e?.Y),
+    z: fin(e?.z ?? e?.Z),
   };
 }
 
@@ -154,6 +166,9 @@ export class PlazaClient {
     });
     conn.on('ShellBlocked', (e: any) => {
       try { this.handlers.onShellBlocked?.(normShell(e)); } catch (err) { console.error('ShellBlocked', err); }
+    });
+    conn.on('ShellHit', (e: any) => {
+      try { this.handlers.onShellHit?.(normShellHit(e)); } catch (err) { console.error('ShellHit', err); }
     });
     conn.on('StealResult', (e: any) => {
       try { this.handlers.onStealResult?.(normSteal(e)); } catch (err) { console.error('StealResult', err); }
@@ -274,6 +289,14 @@ export class PlazaClient {
     try {
       return await this.conn.invoke<{ ok: boolean; err?: string }>('ShellBlocked', originalThrowerConnId);
     } catch (e: any) { return { ok: false as const, err: e?.message || 'block_fail' }; }
+  }
+
+  /** 被殼砸中：廣播噴血點 */
+  async shellHit(x: number, y: number, z: number) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn' };
+    try {
+      return await this.conn.invoke<{ ok: boolean; err?: string }>('ShellHit', x, y, z);
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'hit_fail' }; }
   }
 
   async stealFrom(targetConnId: string, caught = false) {

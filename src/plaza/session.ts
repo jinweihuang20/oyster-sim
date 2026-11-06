@@ -6,7 +6,7 @@ import {
 } from './layout';
 import { plazaShedPosts } from './props';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
-import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaSnapshot, PlazaStealEvent } from './types';
+import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 import { myTag } from '../meta/social';
 
@@ -53,6 +53,8 @@ export type PlazaDeps = {
   onShellReflectHit?: (e: PlazaShellEvent) => void;
   /** 自己丟的殼被對方雨傘擋住（非完美反彈） */
   onShellBlocked?: (e: PlazaShellEvent) => void;
+  /** 有人被殼砸中：全場噴血 */
+  onShellHit?: (e: PlazaShellHitEvent) => void;
   /** 偷肉結果（含自己被偷） */
   onStealResult?: (e: PlazaStealEvent) => void;
   track: (t: string, d?: Record<string, unknown>) => void;
@@ -149,6 +151,12 @@ export async function plazaShellReflect(
 export async function plazaShellBlocked(originalThrowerConnId: string) {
   if (!client?.connected) return { ok: false as const, err: 'no_conn' };
   return client.shellBlocked(originalThrowerConnId);
+}
+
+/** 被殼砸中：廣播噴血點給廣場所有人 */
+export async function plazaShellHit(at: { x: number; y: number; z: number }) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn' };
+  return client.shellHit(at.x, at.y, at.z);
 }
 
 /** 遠端丟殼甩臂 */
@@ -355,6 +363,7 @@ function wireClient(D: PlazaDeps) {
     onShellInbound: (e) => { try { D.onShellInbound?.(e); } catch (err) { console.error('onShellInbound', err); } },
     onShellReflectHit: (e) => { try { D.onShellReflectHit?.(e); } catch (err) { console.error('onShellReflectHit', err); } },
     onShellBlocked: (e) => { try { D.onShellBlocked?.(e); } catch (err) { console.error('onShellBlocked', err); } },
+    onShellHit: (e) => { try { D.onShellHit?.(e); } catch (err) { console.error('onShellHit', err); } },
     onStealResult: (e) => { try { D.onStealResult?.(e); } catch (err) { console.error('onStealResult', err); } },
     onReconnecting: (attempt) => {
       if (!active) return;

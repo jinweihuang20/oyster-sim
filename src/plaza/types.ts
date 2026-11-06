@@ -50,6 +50,13 @@ export type PlazaShellEvent = {
   toX: number; toY: number; toZ: number;
 };
 
+/** 廣場被殼砸中噴血 */
+export type PlazaShellHitEvent = {
+  connId: string;
+  nick: string;
+  x: number; y: number; z: number;
+};
+
 export type PlazaStealEvent = {
   fromConnId: string;
   fromNick: string;
