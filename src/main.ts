@@ -1842,9 +1842,9 @@ window.addEventListener('pointermove', e => {
     lastMoveT = now;
     if (document.pointerLockElement === canvas) {
       const k = 0.0022 * mix.sens;
-      // 第三人稱水平轉視角與第一人稱相反（鏡頭在角色後方）
-      const xS = (mix.invX ? -1 : 1) * (tpv ? -1 : 1);
-      yaw = tYaw = clamp(tYaw - e.movementX * k * xS, -yl(), yl());
+      // 桌面 Pointer Lock：水平與觸控拖曳相反（滑鼠右＝往右看）
+      const xS = mix.invX ? -1 : 1;
+      yaw = tYaw = clamp(tYaw + e.movementX * k * xS, -yl(), yl());
       if (plazaTpWalkLockPitch()) pitch = tPitch = PLAZA_WALK_PITCH;
       else pitch = tPitch = clamp(tPitch - e.movementY * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
       camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld();
@@ -1857,8 +1857,9 @@ window.addEventListener('pointermove', e => {
   if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; if (Math.abs(dx) > 8) down.drag = true; return; }
   if (!down.drag && Math.hypot(dx, dy) > 14) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
   if (down.drag) {
+    // 手機／觸控拖曳：維持 FPS（指右＝往右看）；勿與桌面滑鼠共用同一符號
     const k = 0.006 * mix.sens;
-    const xS = (mix.invX ? -1 : 1) * (tpv ? -1 : 1);
+    const xS = mix.invX ? -1 : 1;
     tYaw = clamp(down.yaw - dx * k * xS, -yl(), yl());
     tPitch = plazaTpWalkLockPitch() ? PLAZA_WALK_PITCH : clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
   }
