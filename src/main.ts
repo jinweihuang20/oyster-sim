@@ -922,7 +922,14 @@ function bleed(n: number, at?: THREE.Vector3, me = true) {
 function landY(p: THREE.Vector3) { if (Math.hypot(p.x - BOWL.x, p.z - BOWL.z) < BOWL_R + 0.03) return BOWL.y + 0.06; if (Math.hypot(p.x - BASIN.x, p.z - BASIN.z) < 0.3) return 0.15; if (Math.hypot(p.x, p.z) < 0.9) return 0.15 * (1 - Math.hypot(p.x, p.z) / 0.9) + 0.01; return 0.005; }
 function updBlood(dt: number) {
   for (let i = drops.length - 1; i >= 0; i--) { const d = drops[i]; d.v.y -= 9 * dt; d.m.position.addScaledVector(d.v, dt); const y = landY(d.m.position);
-    if (d.m.position.y <= y) { scene.remove(d.m); drops.splice(i, 1); const c = new THREE.Mesh(decalGeo, new THREE.MeshBasicMaterial({ color: 0xb01020, transparent: true, opacity: 0.85, depthWrite: false })); c.rotation.x = -Math.PI / 2; c.position.set(d.m.position.x, y + 0.003, d.m.position.z); c.scale.setScalar(rnd(0.015, 0.035)); scene.add(c); decals.push({ m: c, t: 14 }); } }
+    if (d.m.position.y <= y) {
+      const sc = Math.min(4, Math.max(0.8, d.m.scale.x));
+      scene.remove(d.m); drops.splice(i, 1);
+      const c = new THREE.Mesh(decalGeo, new THREE.MeshBasicMaterial({ color: 0xb01020, transparent: true, opacity: 0.85, depthWrite: false }));
+      c.rotation.x = -Math.PI / 2; c.position.set(d.m.position.x, y + 0.003, d.m.position.z);
+      c.scale.setScalar(rnd(0.018, 0.04) * sc); scene.add(c); decals.push({ m: c, t: 16 + sc * 2 });
+    }
+  }
   for (let i = decals.length - 1; i >= 0; i--) { const d = decals[i]; d.t -= dt; (d.m.material as THREE.MeshBasicMaterial).opacity = Math.min(0.85, d.t / 5); if (d.t <= 0) { scene.remove(d.m); decals.splice(i, 1); } }
   if (woundT > 0) { woundT -= dt; (wound.material as THREE.MeshBasicMaterial).opacity = Math.min(1, woundT / 3); if (woundT <= 0) wound.visible = false; }
 }
@@ -1606,11 +1613,36 @@ function reportPlazaShellHit() {
   const p = plazaSelfBleedPos();
   void plazaShellHit({ x: p.x, y: p.y, z: p.z });
 }
+/** 廣場遠端可見：被砸噴血加劇（顆數／體積／飛散） */
+function plazaBleedBurst(at: THREE.Vector3) {
+  if (!mix.gore) return;
+  const n = 42;
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(dropGeo, dropMat);
+    m.position.copy(at).add(new THREE.Vector3(rnd(-0.06, 0.06), rnd(-0.04, 0.08), rnd(-0.06, 0.06)));
+    m.scale.setScalar(rnd(1.4, 3.2));
+    scene.add(m);
+    const sp = rnd(1.6, 3.4);
+    const a = rnd(0, Math.PI * 2);
+    drops.push({
+      m,
+      v: new THREE.Vector3(Math.cos(a) * sp * rnd(0.5, 1.2), rnd(1.4, 3.6), Math.sin(a) * sp * rnd(0.5, 1.2)),
+    });
+  }
+  // 頭上再噴一簇較大血滴
+  for (let i = 0; i < 10; i++) {
+    const m = new THREE.Mesh(dropGeo, dropMat);
+    m.position.copy(at);
+    m.scale.setScalar(rnd(2.4, 4.2));
+    scene.add(m);
+    drops.push({ m, v: new THREE.Vector3(rnd(-1.8, 1.8), rnd(2.2, 4.5), rnd(-1.8, 1.8)) });
+  }
+}
 /** 廣場任何人被殼砸中：全場（含本人）噴血 */
 function resolvePlazaShellHitFx(e: PlazaShellHitEvent) {
   if (!plazaMode || !isPlazaActive()) return;
   if (![e.x, e.y, e.z].every(Number.isFinite)) return;
-  bleed(18, new THREE.Vector3(e.x, e.y, e.z), false);
+  plazaBleedBurst(new THREE.Vector3(e.x, e.y, e.z));
   try { SFX.hitNpc(); } catch { /* */ }
 }
 let plazaStealTgt: PlazaAimTarget | null = null;
@@ -1903,9 +1935,9 @@ window.addEventListener('pointermove', e => {
     lastMoveT = now;
     if (document.pointerLockElement === canvas) {
       const k = 0.0022 * mix.sens;
-      // 桌面 Pointer Lock：水平與觸控拖曳相反（滑鼠右＝往右看）
+      // 桌面 Pointer Lock：yaw 減＝往右看（與死鬥／觸控 FPS 同向）；反轉左右再開 invX
       const xS = mix.invX ? -1 : 1;
-      yaw = tYaw = clamp(tYaw + e.movementX * k * xS, -yl(), yl());
+      yaw = tYaw = clamp(tYaw - e.movementX * k * xS, -yl(), yl());
       if (plazaTpWalkLockPitch()) pitch = tPitch = PLAZA_WALK_PITCH;
       else pitch = tPitch = clamp(tPitch - e.movementY * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
       camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld();
