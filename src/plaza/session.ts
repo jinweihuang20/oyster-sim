@@ -7,6 +7,7 @@ import {
 import { plazaShedPosts } from './props';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent } from './types';
+import { plazaDisplayName } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 import { myTag } from '../meta/social';
 
@@ -345,7 +346,7 @@ function wireClient(D: PlazaDeps) {
         snap.occupied = snap.players.length;
       }
       syncPlazaPeopleHud();
-      if (n.pid && n.pid !== D.id) D.toast(`${n.nick} 進來廣場了`, '#9fe0ff');
+      if (n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 進來廣場了`, '#9fe0ff');
     },
     onLeft: (p) => {
       const n = normPlayer(p);
@@ -355,7 +356,7 @@ function wireClient(D: PlazaDeps) {
         snap.occupied = snap.players.length;
       }
       syncPlazaPeopleHud();
-      if (n.pid && n.pid !== D.id) D.toast(`${n.nick} 離開廣場了`, '#ffb08a');
+      if (n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 離開廣場了`, '#ffb08a');
     },
     onSeatChanged: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onPose: (p) => { view?.applyPose(normPlayer(p), D.id); },
@@ -421,6 +422,7 @@ function normPlayer(p: any): PlazaPlayer {
     connId: p?.connId ?? p?.ConnId ?? '',
     pid: p?.pid ?? p?.Pid ?? '',
     nick: p?.nick ?? p?.Nick ?? '剝蚵人',
+    tag: String(p?.tag ?? p?.Tag ?? '').replace(/^#/, '') || undefined,
     pileId: p?.pileId ?? p?.PileId ?? -1,
     slot: p?.slot ?? p?.Slot ?? -1,
     phase: p?.phase ?? p?.Phase ?? 'idle',
@@ -446,6 +448,7 @@ function normChat(m: any): PlazaChat {
     connId: m?.connId ?? m?.ConnId ?? '',
     pid: m?.pid ?? m?.Pid ?? '',
     nick: m?.nick ?? m?.Nick ?? '?',
+    tag: String(m?.tag ?? m?.Tag ?? '').replace(/^#/, '') || undefined,
     text: m?.text ?? m?.Text ?? '',
     pileId: m?.pileId ?? m?.PileId ?? null,
     at: m?.at ?? m?.At ?? Date.now(),
@@ -754,7 +757,7 @@ function appendChatRow(m: PlazaChat) {
   const row = document.createElement('div');
   row.dataset.ck = chatRowKey(m);
   const where = m.pileId != null ? `[堆${m.pileId + 1}] ` : '';
-  row.textContent = `${where}${m.nick}：${m.text}`;
+  row.textContent = `${where}${plazaDisplayName(m.nick, m.tag)}：${m.text}`;
   log.appendChild(row);
   while (log.childElementCount > 40) log.firstChild?.remove();
   log.scrollTop = log.scrollHeight;
@@ -784,7 +787,7 @@ function pushChat(m: PlazaChat) {
   if (!isSelf && !plazaChatIsOpen()) {
     chatUnread = Math.min(99, chatUnread + 1);
     syncChatBadge();
-    showChatPeek(m.nick || '誰', m.text || '');
+    showChatPeek(plazaDisplayName(m.nick, m.tag) || '誰', m.text || '');
   }
 }
 

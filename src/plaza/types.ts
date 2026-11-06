@@ -2,6 +2,8 @@ export type PlazaPlayer = {
   connId: string;
   pid: string;
   nick: string;
+  /** 社群短號碼，顯示用「暱稱 #1234」 */
+  tag?: string;
   pileId: number;
   slot: number;
   phase: string;
@@ -37,10 +39,18 @@ export type PlazaChat = {
   connId?: string;
   pid?: string;
   nick: string;
+  tag?: string;
   text: string;
   pileId: number | null;
   at: number;
 };
+
+/** 暱稱＋#號碼，避免重名難辨 */
+export function plazaDisplayName(nick?: string | null, tag?: string | null) {
+  const n = (nick || '剝蚵人').trim() || '剝蚵人';
+  const t = (tag || '').trim().replace(/^#/, '');
+  return t ? `${n} #${t}` : n;
+}
 
 export type PlazaShellEvent = {
   fromConnId: string;

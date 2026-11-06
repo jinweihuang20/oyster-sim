@@ -7,6 +7,7 @@ import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, pileCenter, seatPose, seatKey, 
 import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
+import { plazaDisplayName } from './types';
 
 type Remote = {
   /** Map key＝pid（同一人只留一具模型，重連換 connId 不複製） */
@@ -23,6 +24,8 @@ type Remote = {
   phase: string;
   count: number;
   nick: string;
+  /** 社群 #號碼 */
+  numTag: string;
   seated: boolean;
   moving: boolean;
   umb: boolean;
@@ -159,7 +162,7 @@ export function createPlazaWorldView(
       const b = bowlWorld(r, new THREE.Vector3());
       out.push({
         connId: r.connId || r.key,
-        nick: r.nick,
+        nick: plazaDisplayName(r.nick, r.numTag),
         pileId: r.pileId,
         phase: r.phase || '',
         x: r.x, z: r.z, yaw: r.yaw,
@@ -614,8 +617,10 @@ export function createPlazaWorldView(
       // Joined 常帶 (0,0)；未入座時先藏，等第一次可信座標再顯示
       const awaitingPose = !p.seated && Math.hypot(x, z) < 0.2;
       r = {
-        key: pid, connId: p.connId || '', pid, rig, tag: ensureTag(p.nick || '剝蚵人'), bubble: ensureBubble(), bubUntil: 0,
-        pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick,
+        key: pid, connId: p.connId || '', pid, rig,
+        tag: ensureTag(plazaDisplayName(p.nick, p.tag)), bubble: ensureBubble(), bubUntil: 0,
+        pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick || '剝蚵人',
+        numTag: (p.tag || '').replace(/^#/, ''),
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
         props, bowlNode, meatRoot, meatMeshes: [], knife, oyster,
         tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0, throwT: 0,
@@ -646,8 +651,12 @@ export function createPlazaWorldView(
     if (r.umb) layoutRemoteUmb(r.umbMesh, r.seated);
     r.props.visible = r.seated;
     if (r.seated) syncRemoteMeats(r);
-    if (p.nick && p.nick !== r.nick) { r.nick = p.nick; }
-    r.tag.setText(r.seated ? `${r.nick} · ${r.count}` : r.nick);
+    if (p.nick && p.nick !== r.nick) r.nick = p.nick;
+    if (p.tag) r.numTag = String(p.tag).replace(/^#/, '');
+    {
+      const label = plazaDisplayName(r.nick, r.numTag);
+      r.tag.setText(r.seated ? `${label} · ${r.count}` : label);
+    }
     if (r.seated && p.pileId >= 0) {
       const pose = seatPose(p.pileId, p.slot);
       r.tx = pose.pos.x; r.tz = pose.pos.z; r.tyaw = pose.yaw;
