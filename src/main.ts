@@ -516,13 +516,48 @@ const HINTS: Record<Phase, string> = {
   busy: '',
 };
 const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
+/** 丟殼／偷蚵準心：工寮與廣場都顯示；瞄上目標時加 hot */
+function updReticle() {
+  const el = $('reticle');
+  if (state !== 'play') { on('reticle', false); el.classList.remove('hot'); return; }
+  const canThrow = phase === 'empty' || phase === 'seam';
+  let stealReady = false, stealHot = false;
+  if (!walking) {
+    if (plazaMode) {
+      const banned = performance.now() < plazaStealBanUntil;
+      if (plazaSeated() && !banned) {
+        const pt = plazaStealTgt ?? plazaStealTarget();
+        stealReady = !!plazaStealTgt || !!pt;
+        stealHot = !!plazaStealTgt || (!!pt && !plazaWatchingMe(pt));
+      }
+    } else if (evRun?.steal !== 'no_steal') {
+      const tgt = stealNpc ?? stealTarget();
+      stealReady = !!stealNpc || !!tgt;
+      stealHot = !!stealNpc || (!!tgt && freeToSteal(tgt));
+    }
+  }
+  const locked = document.pointerLockElement === canvas && phase !== 'busy';
+  const show = canThrow || stealReady || phase === 'pick' || locked;
+  on('reticle', show);
+  let throwHot = false;
+  if (canThrow) {
+    if (plazaMode) throwHot = !!plazaThrowTarget();
+    else {
+      for (const n of npcs) {
+        const p = worldOf(n.head).project(viewCam());
+        if (p.z < 1 && Math.abs(p.x) < 0.25 && Math.abs(p.y) < 0.45) { throwHot = true; break; }
+      }
+    }
+  }
+  el.classList.toggle('hot', show && (throwHot || stealHot));
+}
 function setPhase(p: Phase) {
   if (p !== 'seam') { seamRing.visible = false; sweet = false; }
   phase = p; holding = false; hold = 0; fill.style.marginLeft = '0'; zone.style.left = ''; zone.style.width = ''; if (p === 'twist') { needleStart = performance.now(); combo = 0; pryHits = 0; } gauge.classList.remove('on', 'aim', 'tw'); setInZ('');
   tapAim = p === 'aim'; if (tapAim) tossT0 = performance.now(); bowlRing.visible = tapAim;
   if (tapAim && !tut && state === 'play' && !LS.getItem('meatTip')) { LS.setItem('meatTip', '1'); later(0.1, () => toast(matchMedia('(pointer: coarse)').matches ? '往上拖畫面找阿婆，點她可以把肉丟過去（不算錢）' : '轉過去用滑鼠點阿婆，可以把肉丟過去（不算錢）', '#ffd76a')); }
   if (p === 'aim' && !tapAim) gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
-  on('reticle', (p === 'aim' && !tapAim) || p === 'empty' || p === 'pick' || (document.pointerLockElement === canvas && p !== 'busy')); on('giveUp', (p === 'seam' || p === 'twist') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
+  updReticle(); on('giveUp', (p === 'seam' || p === 'twist') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
   on('rotL', p === 'seam'); on('rotR', p === 'seam'); on('throwBtn', (p === 'seam' || p === 'empty') && state === 'play');
   if (p !== 'busy') hint.textContent = tapAim ? TAP_HINT : HINTS[p];
   const d = DIFF[diff];
@@ -1284,11 +1319,12 @@ function crabOff() {
 }
 // ----- 3. 點碗丟肉 -----
 function aimPoint() {
-  const dir = camera.getWorldDirection(new THREE.Vector3());
-  const t = dir.y < -0.05 ? (BOWL.y - camera.position.y) / dir.y : 6;
-  const p = camera.position.clone().addScaledVector(dir, t);
-  const off = p.sub(camera.position).setY(0); if (off.length() > 3) off.setLength(3);
-  return camera.position.clone().add(off).setY(BOWL.y);
+  const cam = viewCam();
+  const dir = cam.getWorldDirection(new THREE.Vector3());
+  const t = dir.y < -0.05 ? (BOWL.y - cam.position.y) / dir.y : 6;
+  const p = cam.position.clone().addScaledVector(dir, t);
+  const off = p.sub(cam.position).setY(0); if (off.length() > 3) off.setLength(3);
+  return cam.position.clone().add(off).setY(BOWL.y);
 }
 const bowlRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.05, 28), new THREE.MeshBasicMaterial({ color: 0xf2b705, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
 bowlRing.rotation.x = -Math.PI / 2; bowlRing.visible = false; scene.add(bowlRing);
@@ -1377,9 +1413,10 @@ function grudgeUI(n: Npc) {
 }
 function plazaThrowTarget(): PlazaAimTarget | null {
   let best: PlazaAimTarget | null = null, bestScore = 1e9;
+  const cam = viewCam();
   for (const t of plazaAimTargets()) {
     if (!t?.connId || !t.head || ![t.head.x, t.head.y, t.head.z].every(Number.isFinite)) continue;
-    const p = new THREE.Vector3(t.head.x, t.head.y, t.head.z).project(camera);
+    const p = new THREE.Vector3(t.head.x, t.head.y, t.head.z).project(cam);
     if (p.z >= 1 || !Number.isFinite(p.x + p.y)) continue;
     const s = Math.abs(p.x) * 1.2 + Math.abs(p.y);
     if (Math.abs(p.x) < 0.32 && Math.abs(p.y) < 0.5 && s < bestScore) { best = t; bestScore = s; }
@@ -1410,9 +1447,10 @@ function plazaStealCanTarget(t: PlazaAimTarget): string | null {
 }
 function plazaStealTarget(): PlazaAimTarget | null {
   if (performance.now() < plazaStealBanUntil) return null;
+  const cam = viewCam();
   for (const t of plazaAimTargets()) {
     if (plazaStealCanTarget(t)) continue;
-    const p = new THREE.Vector3(t.bowl.x, t.bowl.y, t.bowl.z).project(camera);
+    const p = new THREE.Vector3(t.bowl.x, t.bowl.y, t.bowl.z).project(cam);
     if (p.z < 1 && Math.abs(p.x) < 0.32 && Math.abs(p.y) < 0.4) return t;
   }
   return null;
@@ -1551,9 +1589,10 @@ function throwShell() {
     return;
   }
   let target: Npc | undefined;
-  for (const n of npcs) { const p = worldOf(n.head).project(camera); if (p.z < 1 && Math.abs(p.x) < 0.25 && Math.abs(p.y) < 0.45) target = n; }
+  const cam = viewCam();
+  for (const n of npcs) { const p = worldOf(n.head).project(cam); if (p.z < 1 && Math.abs(p.x) < 0.25 && Math.abs(p.y) < 0.45) target = n; }
   if (target) { const t = target; fly(sh, from, () => worldOf(t.head), 0.5, 0.3, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟中${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 35); npcHurt(t); updHud(); }); }
-  else { let stray: Npc | undefined; for (const n of npcs) { const p = worldOf(n.head).project(camera); if (p.z < 1 && Math.abs(p.x) < 0.7 && Math.abs(p.y) < 0.8 && Math.random() < 0.4) stray = n; }
+  else { let stray: Npc | undefined; for (const n of npcs) { const p = worldOf(n.head).project(cam); if (p.z < 1 && Math.abs(p.x) < 0.7 && Math.abs(p.y) < 0.8 && Math.random() < 0.4) stray = n; }
     if (stray) { const t = stray; fly(sh, from, () => worldOf(t.head), 0.55, 0.35, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟歪打中${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 30); npcHurt(t); updHud(); }); }
     else { const a = aimPoint(); a.y = 0.02; fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh))); } }
   setPhase('busy'); later(0.6, goPick);
@@ -1596,7 +1635,7 @@ function closeUmbrella() { umbTired = false; if (!umbHeld && umbT <= 0) return; 
 let umbLen = 0.9;
 const umbAge = () => umbLen - umbT;
 // ----- 4. 偷蚵仔 -----
-function stealTarget() { for (const n of npcs) { const p = n.bowl.clone().project(camera); if (p.z < 1 && Math.abs(p.x) < 0.3 && Math.abs(p.y) < 0.35) return n; } return null; }
+function stealTarget() { const cam = viewCam(); for (const n of npcs) { const p = n.bowl.clone().project(cam); if (p.z < 1 && Math.abs(p.x) < 0.3 && Math.abs(p.y) < 0.35) return n; } return null; }
 function startSteal() {
   if (plazaMode) { startPlazaSteal(); return; }
   if (state !== 'play' || umbHeld || evRun?.steal === 'no_steal') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n);
@@ -2653,6 +2692,7 @@ function frameBody() {
     if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！${COARSE ? '按住「偷」' : '按住 E'}偷她的肉` : `${tgt.name}在看，不要偷…`;
     if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
     }
+    updReticle();
     if (!plazaMode) {
     chatTimer -= dt * seatNow().nag; if (chatTimer <= 0) { chatTimer = 3 + Math.random() * 4; const n = pick(npcs);
       if (n && n.bubT <= 0 && n.windup <= 0) { if (n.mood > 0) say(n, pick(GRUDGE)); else if (Math.random() < 0.5) { n.distract = rnd(3, 5.5) * seatNow().steal; n.turnDir = Math.random() < 0.5 ? -1 : 1; say(n, pick(TURN_CHAT), n.distract); } else { say(n, pick(GOSSIP)); if (Math.random() < n.chatty) n.pause = 2.5; } } }
