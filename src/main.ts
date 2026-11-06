@@ -1448,9 +1448,14 @@ function plazaFlyShell(e: PlazaShellEvent, onArrive?: () => void) {
   if (flyers.length > 40) return; // 連丟時節流，避免手機 WebGL 爆掉
   const sh = new THREE.Mesh(halfGeo, shellBotMat);
   const from = new THREE.Vector3(e.fromX, e.fromY, e.fromZ);
-  const to = new THREE.Vector3(e.toX, e.toY, e.toZ);
+  const me = plazaConnId();
+  // 打向自己＋第一人稱：跟工寮阿婆丟殼一樣追鏡頭，才看得到殼飛過來
+  const atMeFp = !!(me && e.toConnId === me) && !tpv;
+  const to: THREE.Vector3 | (() => THREE.Vector3) = atMeFp
+    ? () => camera.position.clone().add(new THREE.Vector3(0, -0.05, 0))
+    : new THREE.Vector3(e.toX, e.toY, e.toZ);
   try { SFX.whoosh(); } catch { /* */ }
-  fly(sh, from, to, 0.55, 0.35, () => { try { scene.remove(sh); onArrive?.(); } catch { /* */ } });
+  fly(sh, from, to, 0.55, atMeFp ? 0.4 : 0.35, () => { try { scene.remove(sh); onArrive?.(); } catch { /* */ } });
 }
 function resolvePlazaInbound(e: PlazaShellEvent) {
   if (!plazaMode || state !== 'play' || !isPlazaActive()) return;
@@ -1696,7 +1701,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
       if (b) b.disabled = false;
     });
   }
-  $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); later(1.2, namePrompt); if (ac) SFX.endJingle(queen && !handPain && !plazaMode);
+  $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); if (ac) SFX.endJingle(queen && !handPain && !plazaMode);
 }
 function revealPearl(r: number) { react3('cheer');
   sleeveGold(); dayPearls.push(r); save.dex[r]++; if (r === 3) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
@@ -2164,7 +2169,8 @@ function renderItemShop() {
 (window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };
 const go = (len: number) => {
   if (isPlazaPicked()) { launchPlaza(); return; }
-  enterWorkShed(() => { evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); });
+  const begin = () => enterWorkShed(() => { evRun = null; shiftLen = len; audio(); if (!save.tutDone) tutStart(); else startDay(); });
+  if (!save.tutDone) ensureNameThen(begin); else begin();
 };
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 function launchDeathmatch(mode: DmMode) {
@@ -2433,7 +2439,8 @@ function launchPlaza() {
 }
 $('start').onclick = () => {
   if (isPlazaPicked()) { launchPlaza(); return; }
-  enterWorkShed(() => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); });
+  const begin = () => enterWorkShed(() => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); });
+  if (!save.tutDone) ensureNameThen(begin); else begin();
 };
 btn('again', () => {
   if (evLastId != null) { void evAgain(); return; }
@@ -2779,13 +2786,13 @@ initTutorial({
   getNpcs: () => npcs, windUp, giftAlert, svAlert, featAnnounce, newAnnounce,
 });
 
-$('oTut').onclick = () => enterWorkShed(() => tutStart());
+$('oTut').onclick = () => { const run = () => enterWorkShed(() => tutStart()); if (!save.tutDone) ensureNameThen(run); else run(); };
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
   label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : k === 'odd' ? `開到「${ODD[i]?.name ?? '奇物'}」` : k === 'ach' ? `達成金牌成就「${ACHS[i]?.n ?? '成就'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！`, title: () => achTitle() });
 Social.startPresence(() => state === 'play');
 void Social.maybeAnnounceFirstPlay(() => !save.tutDone && (save.days ?? 0) < 1 && !SHOT);
-$('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; syncShiftUi(); } enterWorkShed(() => tutStart()); };
+$('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; syncShiftUi(); } const run = () => enterWorkShed(() => tutStart()); if (!save.tutDone) ensureNameThen(run); else run(); };
 (window as any).__oy = { get phase() { return phase; }, get umb() { return { held: umbHeld, t: umbT, vis: umb.visible }; }, get tut() { return tut && TUT[tut.i].id; }, get npcN() { return npcs.length; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, pitchLo(), pitchHi()); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
 // ---------- 截圖模式 ----------
 if (SHOT) setTimeout(() => {
@@ -3141,13 +3148,26 @@ async function shareOutfit() {
   const nav = navigator as any;
   if (COARSE && nav.canShare?.({ files: [file] })) { try { await nav.share({ files: [file], title: '剝蚵仔模擬器', text: '看看我的剝蚵穿搭 https://jinweihuang20.github.io/oyster-sim/' }); } catch { } }
 }
-// 第一次收工後提醒取名字（只出現一次）
-function namePrompt() {
-  if ($('paySum').classList.contains('show')) { nameWait = true; return; }
-  if (save.namePrompted || save.name || tut) return; save.namePrompted = 1; persist(); ($('naIn') as HTMLInputElement).value = ''; $('nameAsk').classList.add('show');
+// 第一次教學開始前取名字（只出現一次）；關面板後再進工寮／教學
+let nameAfter: (() => void) | null = null;
+function nameDismiss() {
+  $('nameAsk').classList.remove('show');
+  const f = nameAfter; nameAfter = null; f?.();
 }
-$('naOk').onclick = () => { const i = $('myName') as HTMLInputElement; i.value = ($('naIn') as HTMLInputElement).value; i.dispatchEvent(new Event('change')); $('nameAsk').classList.remove('show'); };
-$('naSkip').onclick = () => $('nameAsk').classList.remove('show'); $('naClose').onclick = () => $('nameAsk').classList.remove('show');
+function namePrompt(after?: () => void) {
+  if ($('paySum').classList.contains('show')) { nameWait = true; return; }
+  if (save.namePrompted || save.name || tut) { after?.(); return; }
+  nameAfter = after ?? null;
+  save.namePrompted = 1; persist();
+  ($('naIn') as HTMLInputElement).value = '';
+  $('nameAsk').classList.add('show');
+}
+function ensureNameThen(next: () => void) {
+  if (save.namePrompted || save.name) { next(); return; }
+  namePrompt(next);
+}
+$('naOk').onclick = () => { const i = $('myName') as HTMLInputElement; i.value = ($('naIn') as HTMLInputElement).value; i.dispatchEvent(new Event('change')); nameDismiss(); };
+$('naSkip').onclick = () => nameDismiss(); $('naClose').onclick = () => nameDismiss();
 { const i = $('naIn'); for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'keydown']) i.addEventListener(ev, e => e.stopPropagation()); }
 migrateEquip(); persist(); applySleeve();
 // 禮物信箱：伺服器沒開或還沒有這個路由時安靜失敗
