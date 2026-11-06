@@ -752,12 +752,19 @@ function chatRowKey(m: PlazaChat) {
   return `${m.at}|${m.pid || ''}|${m.nick}|${m.text}`;
 }
 
+function chatTagOf(m: PlazaChat) {
+  if (m.tag) return m.tag;
+  if (!m.pid || !snap) return '';
+  const p = snap.players.find(x => x.pid === m.pid);
+  return p?.tag || '';
+}
+
 function appendChatRow(m: PlazaChat) {
   const log = ui?.querySelector('#pzLog'); if (!log) return;
   const row = document.createElement('div');
   row.dataset.ck = chatRowKey(m);
   const where = m.pileId != null ? `[堆${m.pileId + 1}] ` : '';
-  row.textContent = `${where}${plazaDisplayName(m.nick, m.tag)}：${m.text}`;
+  row.textContent = `${where}${plazaDisplayName(m.nick, chatTagOf(m))}：${m.text}`;
   log.appendChild(row);
   while (log.childElementCount > 40) log.firstChild?.remove();
   log.scrollTop = log.scrollHeight;
