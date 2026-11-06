@@ -516,10 +516,10 @@ const HINTS: Record<Phase, string> = {
   busy: '',
 };
 const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
-/** 丟殼／偷蚵準心：工寮與廣場都顯示；瞄上目標時加 hot */
+/** 丟殼／偷蚵準心：工寮與廣場都顯示；可偷時換成手掌＋「偷!」 */
 function updReticle() {
   const el = $('reticle');
-  if (state !== 'play') { on('reticle', false); el.classList.remove('hot'); return; }
+  if (state !== 'play') { on('reticle', false); el.classList.remove('hot', 'steal'); return; }
   const canThrow = phase === 'empty' || phase === 'seam';
   let stealReady = false, stealHot = false;
   if (!walking) {
@@ -540,7 +540,7 @@ function updReticle() {
   const show = canThrow || stealReady || phase === 'pick' || locked;
   on('reticle', show);
   let throwHot = false;
-  if (canThrow) {
+  if (canThrow && !stealReady) {
     if (plazaMode) throwHot = !!plazaThrowTarget();
     else {
       for (const n of npcs) {
@@ -549,7 +549,8 @@ function updReticle() {
       }
     }
   }
-  el.classList.toggle('hot', show && (throwHot || stealHot));
+  el.classList.toggle('steal', show && stealReady);
+  el.classList.toggle('hot', show && (stealReady ? stealHot : throwHot));
 }
 function setPhase(p: Phase) {
   if (p !== 'seam') { seamRing.visible = false; sweet = false; }
@@ -1508,13 +1509,26 @@ function plazaStealCanTarget(t: PlazaAimTarget): string | null {
   if (performance.now() < cd) return '同一個目標要隔一下再偷';
   return null;
 }
+/** 準心是否對準碗：用碗世界半徑投影到 NDC，避免固定大框提早命中 */
+const _stealBowl = new THREE.Vector3();
+const _stealEdge = new THREE.Vector3();
+const _stealRight = new THREE.Vector3();
+function bowlOnReticle(bx: number, by: number, bz: number, bowlR = 0.14, slack = 1.2) {
+  const cam = viewCam();
+  cam.updateMatrixWorld();
+  _stealBowl.set(bx, by, bz).project(cam);
+  if (!(_stealBowl.z < 1) || !Number.isFinite(_stealBowl.x + _stealBowl.y)) return false;
+  const cx = _stealBowl.x, cy = _stealBowl.y;
+  _stealRight.set(1, 0, 0).applyQuaternion(cam.quaternion);
+  _stealEdge.set(bx, by, bz).addScaledVector(_stealRight, bowlR).project(cam);
+  const r = Math.max(0.03, Math.hypot(_stealEdge.x - cx, _stealEdge.y - cy) * slack);
+  return Math.hypot(cx, cy) <= r;
+}
 function plazaStealTarget(): PlazaAimTarget | null {
   if (performance.now() < plazaStealBanUntil) return null;
-  const cam = viewCam();
   for (const t of plazaAimTargets()) {
     if (plazaStealCanTarget(t)) continue;
-    const p = new THREE.Vector3(t.bowl.x, t.bowl.y, t.bowl.z).project(cam);
-    if (p.z < 1 && Math.abs(p.x) < 0.32 && Math.abs(p.y) < 0.4) return t;
+    if (bowlOnReticle(t.bowl.x, t.bowl.y, t.bowl.z)) return t;
   }
   return null;
 }
@@ -1648,12 +1662,10 @@ function startPlazaSteal() {
   }
   // 準星上有人但不符規則：提示原因
   for (const t of plazaAimTargets()) {
-    const p = new THREE.Vector3(t.bowl.x, t.bowl.y, t.bowl.z).project(camera);
-    if (p.z < 1 && Math.abs(p.x) < 0.32 && Math.abs(p.y) < 0.4) {
-      const why = plazaStealCanTarget(t);
-      if (why) { toast(why, '#ffb08a'); return; }
-      break;
-    }
+    if (!bowlOnReticle(t.bowl.x, t.bowl.y, t.bowl.z)) continue;
+    const why = plazaStealCanTarget(t);
+    if (why) { toast(why, '#ffb08a'); return; }
+    break;
   }
   const t = plazaStealTarget(); if (!t) return;
   plazaStealTgt = t; stealT = 0; SFX.sneak();
@@ -1756,7 +1768,12 @@ function closeUmbrella() { umbTired = false; if (!umbHeld && umbT <= 0) return; 
 let umbLen = 0.9;
 const umbAge = () => umbLen - umbT;
 // ----- 4. 偷蚵仔 -----
-function stealTarget() { const cam = viewCam(); for (const n of npcs) { const p = n.bowl.clone().project(cam); if (p.z < 1 && Math.abs(p.x) < 0.3 && Math.abs(p.y) < 0.35) return n; } return null; }
+function stealTarget() {
+  for (const n of npcs) {
+    if (bowlOnReticle(n.bowl.x, n.bowl.y, n.bowl.z, 0.16)) return n;
+  }
+  return null;
+}
 function startSteal() {
   if (plazaMode) { startPlazaSteal(); return; }
   if (state !== 'play' || umbHeld || evRun?.steal === 'no_steal') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n);

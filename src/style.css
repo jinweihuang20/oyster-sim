@@ -73,6 +73,13 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 #reticle.on{display:block}
 #reticle.hot{border-color:#ff9a6a;box-shadow:0 0 0 1px rgba(0,0,0,.4),0 0 10px rgba(255,106,64,.55)}
 #reticle.hot:before,#reticle.hot:after{background:#ff9a6a}
+#reticle .retPalm,#reticle .retStealLab{display:none}
+#reticle.steal{width:52px;height:52px;margin:-26px;border:none;border-radius:0;box-shadow:none;background:transparent}
+#reticle.steal:before,#reticle.steal:after{content:none;display:none}
+#reticle.steal .retPalm{display:block;font-size:34px;line-height:52px;text-align:center;filter:drop-shadow(0 1px 2px #000a)}
+#reticle.steal .retStealLab{display:block;position:absolute;left:50%;top:-2px;transform:translate(-50%,-100%);font-size:14px;font-weight:900;letter-spacing:.04em;color:#ffe36a;text-shadow:0 1px 3px #000,0 0 8px #0009;white-space:nowrap}
+#reticle.steal.hot .retStealLab{color:#9be37a}
+#reticle.steal:not(.hot) .retStealLab{color:#ff9a8a}
 #gauge.aim{border-color:#9fe0ff}#gauge.aim #zone{background:rgba(120,220,255,.7)}
 #toast{position:absolute;top:40%;width:100%;text-align:center;font-size:30px;font-weight:900;color:#ffe080;opacity:0;transition:opacity .25s;text-shadow:0 2px 6px #000}
 #toast.on{opacity:1}
