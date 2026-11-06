@@ -123,7 +123,8 @@ export function createPlazaWorldView(
 
   for (let i = 0; i < PILE_COUNT; i++) {
     const c = pileCenter(i);
-    const pile = makeYardLikePile(opts.shellGeo, opts.shellMat, i, LO ? 70 : 110);
+    // 工寮單堆約 260；廣場 16 堆略降，仍要比舊 70/110 密很多
+    const pile = makeYardLikePile(opts.shellGeo, opts.shellMat, i, LO ? 140 : 210);
     pile.position.copy(c);
     root.add(pile);
     pileGroups.push(pile);

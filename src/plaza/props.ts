@@ -101,7 +101,7 @@ export function makeYardLikePile(
   shellGeo: THREE.BufferGeometry,
   shellMat: THREE.Material,
   pileId: number,
-  count = 110,
+  count = 210,
 ): THREE.Group {
   const g = new THREE.Group();
   g.userData.pileId = pileId;
@@ -117,10 +117,13 @@ export function makeYardLikePile(
   let r = (pileId + 1) * 9973;
   const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280;
   for (let i = 0; i < count; i++) {
-    const a = rn() * 6.28, rad = Math.sqrt(rn()) * 1.0;
-    const h = Math.max(0, 0.55 * (1 - rad / 0.95));
+    const a = rn() * 6.28;
+    // 略偏外圈＋縮小有效半徑，堆面更密實（勿用過稀的均勻圓盤）
+    const rad = Math.pow(rn(), 0.42) * 0.98;
+    const h = Math.max(0, 0.58 * (1 - rad / 0.92));
     d.position.set(Math.cos(a) * rad, h + 0.03, Math.sin(a) * rad);
     d.rotation.set(rn() * 3, rn() * 3, rn() * 3);
+    d.scale.setScalar(0.92 + rn() * 0.22);
     d.updateMatrix();
     pile.setMatrixAt(i, d.matrix);
     col.setHex(GREYS[Math.min(4, Math.floor(rn() * rn() * 6.2))]);

@@ -66,20 +66,22 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 .stCell.warn .stV{color:#ffb08a}
 #onHud,#giftHud{display:inline-flex;align-items:center;gap:4px;align-self:center}
 #onHud{font-size:13px;margin-right:2px}
-#reticle{position:absolute;left:50%;top:50%;width:28px;height:28px;margin:-14px;border:2px solid rgba(255,230,160,.85);border-radius:50%;display:none;box-shadow:0 0 0 1px rgba(0,0,0,.35);pointer-events:none;z-index:12}
+#reticle{position:absolute;left:50%;top:50%;width:28px;height:28px;margin:-14px;border:2px solid rgba(255,230,160,.85);border-radius:50%;display:none;box-shadow:0 0 0 1px rgba(0,0,0,.35);pointer-events:none;z-index:40;overflow:visible}
 #reticle:before,#reticle:after{content:"";position:absolute;background:#ffe6a0;box-shadow:0 0 2px #0008}
 #reticle:before{left:50%;top:3px;bottom:3px;width:2px;margin-left:-1px}
 #reticle:after{top:50%;left:3px;right:3px;height:2px;margin-top:-1px}
 #reticle.on{display:block}
 #reticle.hot{border-color:#ff9a6a;box-shadow:0 0 0 1px rgba(0,0,0,.4),0 0 10px rgba(255,106,64,.55)}
 #reticle.hot:before,#reticle.hot:after{background:#ff9a6a}
-#reticle .retPalm,#reticle .retStealLab{display:none}
-#reticle.steal{width:52px;height:52px;margin:-26px;border:none;border-radius:0;box-shadow:none;background:transparent}
-#reticle.steal:before,#reticle.steal:after{content:none;display:none}
-#reticle.steal .retPalm{display:block;font-size:34px;line-height:52px;text-align:center;filter:drop-shadow(0 1px 2px #000a)}
-#reticle.steal .retStealLab{display:block;position:absolute;left:50%;top:-2px;transform:translate(-50%,-100%);font-size:14px;font-weight:900;letter-spacing:.04em;color:#ffe36a;text-shadow:0 1px 3px #000,0 0 8px #0009;white-space:nowrap}
-#reticle.steal.hot .retStealLab{color:#9be37a}
-#reticle.steal:not(.hot) .retStealLab{color:#ff9a8a}
+#reticle .retPalm,#reticle .retStealLab{display:none!important}
+/* 可偷：手掌＋「偷!」（pseudo 備援，避免子節點被蓋掉） */
+#reticle.steal.on{display:flex!important;align-items:center;justify-content:center;width:56px;height:56px;margin:-28px;border:none!important;border-radius:0;box-shadow:none!important;background:transparent;z-index:55}
+#reticle.steal:before,#reticle.steal:after{content:none!important;display:none!important;width:0!important;height:0!important;background:none!important}
+#reticle.steal .retPalm{display:flex!important;align-items:center;justify-content:center;width:44px;height:44px;filter:drop-shadow(0 1px 3px #000c)}
+#reticle.steal .retPalm .ic{width:40px;height:40px;color:#ffe36a}
+#reticle.steal .retStealLab{display:block!important;position:absolute;left:50%;top:0;transform:translate(-50%,-110%);font-size:15px;font-weight:900;letter-spacing:.06em;color:#ffe36a;text-shadow:0 1px 3px #000,0 0 10px #000a;white-space:nowrap;line-height:1}
+#reticle.steal.hot .retPalm .ic,#reticle.steal.hot .retStealLab{color:#9be37a}
+#reticle.steal:not(.hot) .retPalm .ic,#reticle.steal:not(.hot) .retStealLab{color:#ff9a8a}
 #gauge.aim{border-color:#9fe0ff}#gauge.aim #zone{background:rgba(120,220,255,.7)}
 #toast{position:absolute;top:40%;width:100%;text-align:center;font-size:30px;font-weight:900;color:#ffe080;opacity:0;transition:opacity .25s;text-shadow:0 2px 6px #000}
 #toast.on{opacity:1}

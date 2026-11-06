@@ -170,8 +170,8 @@ function markBowlDrawOrder(root: THREE.Object3D) {
 const basinMesh = mesh(new THREE.CylinderGeometry(0.33, 0.26, 0.18, 16, 1, true), mat(0xc84030, { side: THREE.DoubleSide }), [-0.35, 0.1, 1.28]);
 const BASIN0 = new THREE.Vector3(-0.35, 0.1, 1.28), BASIN = BASIN0.clone();
 const basinOy: THREE.Mesh[] = [];
-const basinShells = new THREE.InstancedMesh(shellGeo, pileMat, 25); basinShells.renderOrder = 2;
-{ const d = new THREE.Object3D(); for (let i = 0; i < 25; i++) { const a = Math.random() * 6.28, r = Math.random() * 0.24; d.position.set(-0.35 + Math.cos(a) * r, 0.12 + Math.random() * 0.05, 1.28 + Math.sin(a) * r); d.rotation.set(Math.random(), Math.random() * 3, Math.random()); d.updateMatrix(); basinShells.setMatrixAt(i, d.matrix); basinShells.setColorAt(i, new THREE.Color(greyPick())); } basinShells.instanceMatrix.needsUpdate = true; if (basinShells.instanceColor) basinShells.instanceColor.needsUpdate = true; }
+// 裝飾殼易與可撿蚵仔混淆（拿了還留在盆裡），改隱藏；可撿的是 basinOy
+const basinShells = new THREE.InstancedMesh(shellGeo, pileMat, 1); basinShells.visible = false;
 const seatRig = new THREE.Group(); scene.add(seatRig); seatRig.add(basinMesh, basinShells);
 markBowlDrawOrder(basinMesh);
 const BOWL0 = new THREE.Vector3(0.55, 0.12, 0.88), BOWL = BOWL0.clone(); let BOWL_R = 0.17;
@@ -530,7 +530,7 @@ const HINTS: Record<Phase, string> = {
   busy: '',
 };
 const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
-/** 丟殼／偷蚵準心：工寮與廣場都顯示；可偷時換成手掌＋「偷!」 */
+/** 丟殼／偷蚵準心：工寮與廣場同一套——瞄到碗→手掌「偷!」，可下手時 hot */
 function updReticle() {
   const el = $('reticle');
   if (state !== 'play') { on('reticle', false); el.classList.remove('hot', 'steal'); return; }
@@ -538,11 +538,11 @@ function updReticle() {
   let stealReady = false, stealHot = false;
   if (!walking) {
     if (plazaMode) {
-      const banned = performance.now() < plazaStealBanUntil;
-      if (plazaSeated() && !banned) {
-        const pt = plazaStealTgt ?? plazaStealTarget();
-        stealReady = !!plazaStealTgt || !!pt;
-        stealHot = !!plazaStealTgt || (!!pt && !plazaWatchingMe(pt));
+      if (plazaSeated() && performance.now() >= plazaStealBanUntil) {
+        const pt = plazaStealTgt ?? plazaStealAimTarget();
+        // 同工寮：只要瞄到碗就換手掌；hot＝沒被看＋規則允許
+        stealReady = !!pt;
+        stealHot = !!plazaStealTgt || (!!pt && !plazaWatchingMe(pt) && !plazaStealCanTarget(pt));
       }
     } else if (evRun?.steal !== 'no_steal') {
       const tgt = stealNpc ?? stealTarget();
@@ -551,7 +551,7 @@ function updReticle() {
     }
   }
   const locked = document.pointerLockElement === canvas && phase !== 'busy';
-  const show = canThrow || stealReady || phase === 'pick' || locked;
+  const show = stealReady || canThrow || phase === 'pick' || locked;
   on('reticle', show);
   let throwHot = false;
   if (canThrow && !stealReady) {
@@ -563,8 +563,10 @@ function updReticle() {
       }
     }
   }
-  el.classList.toggle('steal', show && stealReady);
-  el.classList.toggle('hot', show && (stealReady ? stealHot : throwHot));
+  el.classList.toggle('steal', !!stealReady);
+  el.classList.toggle('hot', !!stealReady ? stealHot : (show && throwHot));
+  const lab = el.querySelector('.retStealLab');
+  if (lab) lab.textContent = stealReady ? '偷!' : '';
 }
 function setPhase(p: Phase) {
   if (p !== 'seam') { seamRing.visible = false; sweet = false; }
@@ -979,9 +981,17 @@ function makeBasinOyster(dd: number) {
   const bl: THREE.Mesh[] = []; for (let i = 0; i < BARN_N[dd]; i++) { const b = new THREE.Mesh(BARN_GEO, BARN_MAT); m.add(b); bl.push(b); } placeBarn(bl, dd, 0.04);
   return m;
 }
-function basinSlot(i: number) { const a = i * 2.4, r = 0.06 + (i % 4) * 0.05; return new THREE.Vector3(BASIN.x + Math.cos(a) * r, 0.14 + Math.floor(i / 6) * 0.04, BASIN.z + Math.sin(a) * r); }
+const basinCap = () => plazaMode ? 15 : 8;
+function basinSlot(i: number) {
+  const a = i * 2.4, r = 0.06 + (i % 4) * 0.05;
+  // 跟著抬高後的 BASIN.y，避免蚵仔沉在盆底／堆裡看起來「拿了還在」
+  return new THREE.Vector3(BASIN.x + Math.cos(a) * r, BASIN.y + Math.floor(i / 6) * 0.035, BASIN.z + Math.sin(a) * r);
+}
 function fillBasin(animate: boolean) {
-  for (let i = 0; i < 8; i++) { const m = makeBasinOyster(wpick((newbie() ? [50, 50, 0, 0] : locW()).map(w => ({ w })))); const slot = basinSlot(i); m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2)); basinOy.push(m);
+  const n = basinCap();
+  for (let i = 0; i < n; i++) {
+    const m = makeBasinOyster(wpick((newbie() ? [50, 50, 0, 0] : locW()).map(w => ({ w }))));
+    const slot = basinSlot(i); m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2)); basinOy.push(m);
     if (animate) {
       let p0: THREE.Vector3;
       if (plazaMode) {
@@ -991,7 +1001,8 @@ function fillBasin(animate: boolean) {
           : BASIN.clone().add(new THREE.Vector3(rnd(-0.25, 0.25), 0.35, rnd(-0.25, 0.25)));
       } else p0 = pileSpot();
       fly(m, p0, slot, 0.4 + i * 0.05, 0.4, () => m.position.copy(slot));
-    } else { m.position.copy(slot); scene.add(m); } }
+    } else { m.position.copy(slot); scene.add(m); }
+  }
 }
 function hitsOyster(cx: number, cy: number) { camera.updateMatrixWorld(); viewCam().updateMatrixWorld(); ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), viewCam()); return ray.intersectObject(oyster, true).length > 0; }
 function pickAt(cx: number, cy: number) {
@@ -1019,7 +1030,7 @@ function grab(m: THREE.Mesh) {
   basinOy.splice(basinOy.indexOf(m), 1); setPhase('busy'); reach = 0.35; tone(500, 0.05, 0.08, 'triangle'); noise(0.05, 1200, 0.2);
   fly(m, m.position.clone(), () => worldOf(oyster), 0.3, 0.05, () => { scene.remove(m); noise(0.04, 2500, 0.25); holdOyster(m.userData.diff); });
 }
-function scoop() { if (basinOy.length >= 8) return; setPhase('scoop'); scoopT = scoopDur = 1.5 * seatNow().scoop; noise(0.6, 900, 0.3); noise(0.6, 1600, 0.2); }
+function scoop() { if (basinOy.length >= basinCap()) return; setPhase('scoop'); scoopT = scoopDur = 1.5 * seatNow().scoop; noise(0.6, 900, 0.3); noise(0.6, 1600, 0.2); }
 let reach = 0, scoopT = 0, scoopDur = 1.5;
 // ----- 1. 找縫 -----
 const scr = (o: THREE.Object3D) => { const p = worldOf(o).project(camera); return new THREE.Vector2(p.x * innerWidth, p.y * innerHeight); };
@@ -1140,6 +1151,8 @@ function liftSeatPropsOntoPile() {
     basinShells.instanceMatrix.needsUpdate = true;
   }
   BASIN.copy(seatRig.localToWorld(new THREE.Vector3(BASIN0.x, basLocal.y + 0.1, BASIN0.z)));
+  // 盆已抬高：可撿蚵仔跟著重排，才會跟手拿起消失
+  basinOy.forEach((m, i) => { if (m.visible) m.position.copy(basinSlot(i)); });
 }
 function applyBowl() {
   const b = bowlNow(), S = seatNow(); BOWL_R = b.r * (newbie() ? 1.2 : 1); const pw = (b.perf + S.perf) * (newbie() ? 1.4 : 1); PERF0 = IDEAL - pw / 2; PERF1 = IDEAL + pw / 2;
@@ -1555,11 +1568,11 @@ function plazaStealCanTarget(t: PlazaAimTarget): string | null {
   if (performance.now() < cd) return '同一個目標要隔一下再偷';
   return null;
 }
-/** 準心是否對準碗：用碗投影半徑（夾限），比舊固定大框緊、又不至於廣場點不到 */
+/** 準心是否對準碗（工寮／廣場共用同一套投影判定） */
 const _stealBowl = new THREE.Vector3();
 const _stealEdge = new THREE.Vector3();
 const _stealRight = new THREE.Vector3();
-function bowlOnReticle(bx: number, by: number, bz: number, bowlR = 0.15, slack = 1.55) {
+function bowlOnReticle(bx: number, by: number, bz: number, bowlR = 0.16, slack = 1.65) {
   // 判定多在 camTick 之前：先把 FP 鏡頭對齊本幀 yaw/pitch
   if (!tpOn) {
     camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0);
@@ -1573,19 +1586,25 @@ function bowlOnReticle(bx: number, by: number, bz: number, bowlR = 0.15, slack =
   _stealRight.set(1, 0, 0).applyQuaternion(cam.quaternion);
   _stealEdge.set(bx, by, bz).addScaledVector(_stealRight, bowlR).project(cam);
   let r = Math.hypot(_stealEdge.x - cx, _stealEdge.y - cy) * slack;
-  // 廣場坐下第三人稱鏡頭鎖堆心：略放大可點範圍；FP 仍比舊 0.32 框緊
-  const minR = plazaMode && tpOn ? 0.1 : 0.075;
-  const maxR = plazaMode && tpOn ? 0.22 : 0.15;
+  // 第三人稱略放寬；其餘與工寮一致
+  const minR = tpOn ? 0.1 : 0.08;
+  const maxR = tpOn ? 0.22 : 0.16;
   r = Math.min(maxR, Math.max(minR, r));
   return Math.hypot(cx, cy) <= r;
 }
-function plazaStealTarget(): PlazaAimTarget | null {
+/** 準心瞄到誰的碗（同工寮 stealTarget：不先擋規則，按偷時再檢查） */
+function plazaStealAimTarget(): PlazaAimTarget | null {
   if (performance.now() < plazaStealBanUntil) return null;
   for (const t of plazaAimTargets()) {
-    if (plazaStealCanTarget(t)) continue;
     if (bowlOnReticle(t.bowl.x, t.bowl.y, t.bowl.z)) return t;
   }
   return null;
+}
+/** 可開偷的目標：瞄中＋通過規則 */
+function plazaStealTarget(): PlazaAimTarget | null {
+  const t = plazaStealAimTarget();
+  if (!t || plazaStealCanTarget(t)) return null;
+  return t;
 }
 /** 對方是否大致看著自己（盯著就不能偷） */
 function plazaWatchingMe(t: PlazaAimTarget) {
@@ -1715,14 +1734,12 @@ function startPlazaSteal() {
     toast(`偷被抓太多次，還要再等 ${Math.ceil((plazaStealBanUntil - performance.now()) / 1000)} 秒`, '#ffb08a');
     return;
   }
-  // 準星上有人但不符規則：提示原因
-  for (const t of plazaAimTargets()) {
-    if (!bowlOnReticle(t.bowl.x, t.bowl.y, t.bowl.z)) continue;
-    const why = plazaStealCanTarget(t);
-    if (why) { toast(why, '#ffb08a'); return; }
-    break;
-  }
-  const t = plazaStealTarget(); if (!t) return;
+  // 同工寮：先對準碗；規則不符只 toast，被看著＝當場抓包
+  const aimed = plazaStealAimTarget();
+  if (!aimed) return;
+  const why = plazaStealCanTarget(aimed);
+  if (why) { toast(why, '#ffb08a'); return; }
+  const t = aimed;
   plazaStealTgt = t; stealT = 0; SFX.sneak();
   if (plazaWatchingMe(t)) {
     plazaStealTgt = null; stealT = 0;
@@ -2918,22 +2935,26 @@ function frameBody() {
     if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     if (plazaMode) {
       const banned = performance.now() < plazaStealBanUntil;
-      const pt = walking || !plazaSeated() || banned ? null : plazaStealTarget();
-      on('stealBtn', !!pt || !!plazaStealTgt || (!walking && plazaSeated() && !banned));
+      // 同工寮：按鈕只在瞄到碗／讀條中出現
+      const aim = walking || !plazaSeated() || banned ? null : plazaStealAimTarget();
+      on('stealBtn', !!aim || !!plazaStealTgt);
       if (banned && !walking && plazaSeated() && phase !== 'busy') {
         hint.textContent = `偷被抓太多次，${Math.ceil((plazaStealBanUntil - performance.now()) / 1000)} 秒後才能再偷`;
-      } else if (pt && !plazaStealTgt && phase !== 'busy') {
-        hint.textContent = plazaWatchingMe(pt)
-          ? `${pt.nick} 在看你，先別偷…`
-          : `${pt.nick} 沒注意！${COARSE ? '按住「偷」' : '按住 E'}偷肉（同堆）`;
+      } else if (aim && !plazaStealTgt && phase !== 'busy') {
+        // 提示句式對齊工寮（在看／可偷）
+        const why = plazaStealCanTarget(aim);
+        hint.textContent = plazaWatchingMe(aim)
+          ? `${aim.nick}在看，不要偷…`
+          : why
+            ? `${aim.nick}：${why}`
+            : `${aim.nick}沒注意！${COARSE ? '按住「偷」' : '按住 E'}偷他的肉`;
       }
       if (plazaStealTgt) {
-        // 讀條中：用即時碗座標＋略寬判定，避免微抖就取消
         const live = plazaAimTargets().find(t => t.connId === plazaStealTgt!.connId);
         const bx = live?.bowl.x ?? plazaStealTgt.bowl.x;
         const by = live?.bowl.y ?? plazaStealTgt.bowl.y;
         const bz = live?.bowl.z ?? plazaStealTgt.bowl.z;
-        const stillAim = bowlOnReticle(bx, by, bz, 0.18, 2.1);
+        const stillAim = bowlOnReticle(bx, by, bz, 0.18, 2.0);
         const why = live ? plazaStealCanTarget(live) : '對方離開了';
         const watch = plazaWatchingMe(live ?? plazaStealTgt);
         if (!stillAim || watch || why) {
