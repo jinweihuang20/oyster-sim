@@ -506,6 +506,15 @@ export function createPlazaWorldView(
         placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.2, 0.22, -0.12, 0.18, 0.12, -0.28);
         placeHold(r, 0.18, 0.12, -0.28, -0.1, 0.16, -0.44, true);
         r.headWorkX = -0.05;
+      } else if (ph === 'throwaim') {
+        // 準星瞄到人：左手高舉拿殼，全場可見要丟
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.32, 0, -0.24, 0.5, -0.16, -0.18, 0.64, -0.3);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.16, 0.14, -0.08, 0.14, 0.06, -0.2);
+        r.knife.visible = false;
+        r.oyster.visible = true;
+        r.oyster.position.set(-0.18, 0.6, -0.32);
+        r.oyster.rotation.set(0.45, -0.25, 0.35);
+        r.headWorkX = -0.16;
       } else if (ph === 'empty') {
         // 空手殼：右手持殼要丟
         placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.2, 0.22, -0.1, -0.18, 0.1, -0.22);

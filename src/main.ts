@@ -2501,6 +2501,8 @@ function launchPlaza() {
     shellMat: pileMat,
     applySeatPose: (pos, yaw) => applyPlazaSeatPose(pos, yaw),
     getPhase: () => phase,
+    // 可丟殼且準星瞄到人：同步 throwAim，遠端播左手舉殼
+    getSyncPhase: () => ((phase === 'empty' || phase === 'seam') && plazaThrowTarget() ? 'throwAim' : phase),
     getCount: () => count,
     getWalkXZ: () => (walking ? { x: walkPos.x, z: walkPos.z } : { x: SEAT.x, z: SEAT.z }),
     getYaw: () => (walking ? yaw : seatYaw),

@@ -31,6 +31,8 @@ export type PlazaDeps = {
   goWalk: () => void;
   applySeatPose: (pos: THREE.Vector3, yaw: number) => void;
   getPhase: () => string;
+  /** 同步用相位（可含 throwAim 等表現態；預設同 getPhase） */
+  getSyncPhase?: () => string;
   getCount: () => number;
   getWalkXZ: () => { x: number; z: number };
   getYaw: () => number;
@@ -798,7 +800,7 @@ export function tickPlaza(dt: number) {
   if (phaseTimer >= 0.1) {
     phaseTimer = 0;
     const yaw = deps.getYaw();
-    const phase = seated ? deps.getPhase() : 'walk';
+    const phase = seated ? (deps.getSyncPhase?.() ?? deps.getPhase()) : 'walk';
     const moving = !seated && deps.getMoving();
     // 第三人稱走動：鎖 look，避免遠端上下點頭；第一人稱／坐下照常同步頭
     const lockLook = !seated && (deps.getTpv?.() ?? false);
