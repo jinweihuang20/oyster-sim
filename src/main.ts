@@ -554,7 +554,7 @@ function updReticle() {
 function setPhase(p: Phase) {
   if (p !== 'seam') { seamRing.visible = false; sweet = false; }
   phase = p; holding = false; hold = 0; fill.style.marginLeft = '0'; zone.style.left = ''; zone.style.width = ''; if (p === 'twist') { needleStart = performance.now(); combo = 0; pryHits = 0; } gauge.classList.remove('on', 'aim', 'tw'); setInZ('');
-  tapAim = p === 'aim'; if (tapAim) tossT0 = performance.now(); bowlRing.visible = tapAim;
+  tapAim = p === 'aim'; if (tapAim) tossT0 = performance.now(); bowlRing.visible = tapAim; syncBasinRing();
   if (tapAim && !tut && state === 'play' && !LS.getItem('meatTip')) { LS.setItem('meatTip', '1'); later(0.1, () => toast(matchMedia('(pointer: coarse)').matches ? '往上拖畫面找阿婆，點她可以把肉丟過去（不算錢）' : '轉過去用滑鼠點阿婆，可以把肉丟過去（不算錢）', '#ffd76a')); }
   if (p === 'aim' && !tapAim) gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
   updReticle(); on('giveUp', (p === 'seam' || p === 'twist') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
@@ -1073,7 +1073,7 @@ function setPlazaSeatPropsVisible(v: boolean) {
   for (const m of basinOy) m.visible = v;
   for (const m of bowlMeat) m.visible = v;
   for (const m of splats) m.visible = v;
-  if (!v) bowlRing.visible = false;
+  if (!v) { bowlRing.visible = false; basinRing.visible = false; }
 }
 const bowlNow = () => BOWLS.find(b => b.id === save.shop.equipped.bowl) ?? BOWLS[0];
 function applyBowl() {
@@ -1328,6 +1328,27 @@ function aimPoint() {
 }
 const bowlRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.05, 28), new THREE.MeshBasicMaterial({ color: 0xf2b705, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
 bowlRing.rotation.x = -Math.PI / 2; bowlRing.visible = false; scene.add(bowlRing);
+/** 空手拿蚵：紅臉盆（有蚵）／蚵堆（臉盆空）脈衝圈，同丟肉碗亮圈 */
+const basinRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.05, 28), new THREE.MeshBasicMaterial({ color: 0xf2b705, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+basinRing.rotation.x = -Math.PI / 2; basinRing.visible = false; scene.add(basinRing);
+function syncBasinRing() {
+  const show = state === 'play' && phase === 'pick' && !walking && seatRig.visible;
+  if (!show) { basinRing.visible = false; return; }
+  basinRing.visible = true;
+  const k = 1 + 0.12 * Math.sin(performance.now() / 120);
+  if (basinOy.length) {
+    basinRing.position.set(BASIN.x, 0.2, BASIN.z);
+    basinRing.scale.setScalar(0.36 * k);
+  } else if (plazaMode) {
+    const o = plazaMyPileOrigin();
+    if (!o) { basinRing.visible = false; return; }
+    basinRing.position.set(o.x, 0.55, o.z);
+    basinRing.scale.setScalar(0.95 * k);
+  } else {
+    basinRing.position.set(0, 0.55, 0);
+    basinRing.scale.setScalar(0.95 * k);
+  }
+}
 const fx: { m: THREE.Mesh; v: THREE.Vector3; t: number }[] = [];
 const fxGeo = new THREE.SphereGeometry(0.012, 5, 4);
 function burst(at: THREE.Vector3, n: number, color: number, up: number) {
@@ -1336,6 +1357,7 @@ function burst(at: THREE.Vector3, n: number, color: number, up: number) {
 function tickFx(dt: number) {
   for (let i = fx.length - 1; i >= 0; i--) { const f = fx[i]; f.t -= dt; f.v.y -= 4 * dt; f.m.position.addScaledVector(f.v, dt); (f.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, f.t / 0.6); if (f.t <= 0) { scene.remove(f.m); fx.splice(i, 1); } }
   if (bowlRing.visible) { const k = 1 + 0.12 * Math.sin(performance.now() / 120); bowlRing.position.set(BOWL.x, BOWL.y + 0.02, BOWL.z); bowlRing.scale.setScalar(BOWL_R * k); }
+  syncBasinRing();
 }
 function nearBowl(x: number, y: number) {
   const p = BOWL.clone().project(viewCam()); if (p.z > 1) return false;
