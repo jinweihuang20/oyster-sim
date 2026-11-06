@@ -917,8 +917,7 @@ function updHud() {
   const pearlN = dayPearls.length + dayOdd.length;
   if (hudPrev.pearls !== pearlN) { hudPrev.pearls = pearlN; $('pearls').innerHTML = `<i class="ic ic-pearl"></i> ${pearlN}`; }
   evHud();
-  const wastePct = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
-  const statsKey = `${opened}|${count}|${wastePct}|${cracked}|${steals}|${caught}|${stabs}`;
+  const statsKey = `${opened}|${count}|${cracked}|${steals}|${caught}`;
   if (hudPrev.stats !== statsKey) {
     hudPrev.stats = statsKey;
     const cell = (lab: string, icon: string, val: string | number, warn = false) =>
@@ -926,10 +925,8 @@ function updHud() {
     $('statsT').innerHTML =
       cell('開殼', 'knife', opened) +
       cell('入碗', 'bowl', count) +
-      cell('浪費', 'warn', `${wastePct}%`, wastePct >= 30) +
       cell('殼屑', 'oyster', cracked, cracked > 0) +
-      cell('偷／被抓', 'run', `${steals}/${caught}`, caught > 0) +
-      cell('割手', 'hand', stabs, stabs > 0);
+      cell('偷／被抓', 'run', `${steals}/${caught}`, caught > 0);
   }
 }
 function worldOf(o: THREE.Object3D) { return o.getWorldPosition(new THREE.Vector3()); }
