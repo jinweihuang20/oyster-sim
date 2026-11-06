@@ -81,7 +81,9 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 #hpWrap{display:inline-flex;flex-direction:column;align-items:center;gap:1px}#hpBar{width:60px;height:8px;background:rgba(0,0,0,.5);border-radius:4px;overflow:hidden;display:inline-block;vertical-align:middle}
 #hpFill{display:block;height:100%;width:100%;background:#e8735a;transition:width .3s}
 #hpPct{display:none}
-#hurt{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(150,10,10,.75) 100%);transition:opacity .15s}
+/* 被擊中紅暈：與死鬥 #dmEdge 同款邊框閃爍 */
+#hurt{position:fixed;inset:0;z-index:45;pointer-events:none;opacity:0;box-shadow:inset 0 0 90px 20px rgba(220,0,0,.75);background:radial-gradient(ellipse at center,transparent 52%,rgba(180,0,0,.35) 100%);transition:opacity .35s}
+#hurt.on{opacity:1;transition:none}
 
 #btns{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:11.5em}
 #btns button{pointer-events:auto;display:none;font-size:14px;padding:8px 12px;background:rgba(120,60,40,.85);color:#fff;box-sizing:border-box;text-align:center}

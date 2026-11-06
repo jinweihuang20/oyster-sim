@@ -37,7 +37,7 @@ import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaPileObs, plazaRandomSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin,
-  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
+  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen, seatPose, plazaPushOutfit,
   type PlazaAimTarget, type PlazaShellEvent,
 } from './plaza';
@@ -485,7 +485,7 @@ let state: 'menu' | 'play' | 'end' = 'menu';
 const syncShiftUi = () => document.body.classList.toggle('onShift', state === 'play');
 syncShiftUi();
 let phase: Phase = 'busy';
-let hp = 100, stabs = 0, flinch = 0, hurtT = 0, handPain = false;
+let hp = 100, stabs = 0, flinch = 0, handPain = false;
 let timeLeft = SHIFT, count = 0, bowlBonus = 0, cracked = 0, opened = 0, missed = 0, abandoned = 0, perfects = 0, dayPearls: number[] = [], dayOdd: number[] = [];
 let reflects = 0, wasteShells = 0, thrown = 0, lost = 0, blockStreak = 0;
 let steals = 0, caught = 0, penalty = 0, meatHits = 0, shellHits = 0, blocks = 0, hitsTaken = 0, crackedNow = false;
@@ -926,12 +926,20 @@ function updBlood(dt: number) {
   for (let i = decals.length - 1; i >= 0; i--) { const d = decals[i]; d.t -= dt; (d.m.material as THREE.MeshBasicMaterial).opacity = Math.min(0.85, d.t / 5); if (d.t <= 0) { scene.remove(d.m); decals.splice(i, 1); } }
   if (woundT > 0) { woundT -= dt; (wound.material as THREE.MeshBasicMaterial).opacity = Math.min(1, woundT / 3); if (woundT <= 0) wound.visible = false; }
 }
+/** 畫面邊框紅暈（死鬥 #dmEdge 同款：閃一下再淡出） */
+function flashHurt() {
+  const e = $('hurt') as HTMLElement;
+  e.classList.remove('on');
+  void e.offsetWidth;
+  e.classList.add('on');
+  requestAnimationFrame(() => requestAnimationFrame(() => e.classList.remove('on')));
+}
 function hurt(dmg: number, txt: string) {
   react3('ouch');
   if (tut || evRun?.infHp) dmg = 0;
   dmg *= medM('dmg') * fxAll().dmg;
   hp = Math.max(0, hp - dmg);
-  shake = 0.3; hurtT = 0.9; SFX.aia(); toast(txt, '#ff9a8a'); updHud();
+  shake = 0.3; flashHurt(); SFX.aia(); toast(txt, '#ff9a8a'); updHud();
   // 廣場休閒：被丟到別強制收工（玩家常回報成「閃退」）
   if (hp <= 0 && state === 'play') {
     if (plazaMode) { hp = 1; return; }
@@ -1534,6 +1542,7 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
       if (e.fromConnId) void plazaShellReflect(e.fromConnId, from, back);
     } else if (covered) {
       blocks++; blockStreak++; SFX.boing(); toast(`擋住 ${e.fromNick || '別人'} 的殼！`, '#9be37a');
+      if (e.fromConnId) void plazaShellBlocked(e.fromConnId);
     } else {
       blockStreak = 0; hitsTaken++;
       const splat = document.getElementById('splat');
@@ -1553,6 +1562,11 @@ function resolvePlazaReflectHit(e: PlazaShellEvent) {
     hurt(8, `${e.fromNick || '別人'} 把殼反彈回來砸中你了！`); hitInHand();
     updHud();
   } catch (err) { console.error('plaza reflect hit', err); }
+}
+/** 自己丟的殼被對方雨傘擋住（非完美反彈，只提示） */
+function resolvePlazaBlocked(e: PlazaShellEvent) {
+  if (!plazaMode || state !== 'play' || !isPlazaActive()) return;
+  toast(`${e.fromNick || '別人'} 擋住了你的殼！`, '#ffcf8a');
 }
 let plazaStealTgt: PlazaAimTarget | null = null;
 function startPlazaSteal() {
@@ -2480,6 +2494,7 @@ function launchPlaza() {
       const gen = plazaShellGen;
       later(0.4, () => { if (gen !== plazaShellGen) return; resolvePlazaReflectHit(e); });
     },
+    onShellBlocked: (e) => { resolvePlazaBlocked(e); },
     onStealResult: (e) => {
       const me = plazaConnId();
       if (!me) return;
@@ -2715,7 +2730,7 @@ function frameBody() {
   const rdt = Math.min(clock.getDelta(), 0.05);
   slowmo = Math.max(0, slowmo - rdt); const dt = rdt * (slowmo > 0.4 ? 0.3 : 1), t = clock.elapsedTime;
   for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= rdt; if (timers[i].t <= 0) { const f = timers[i].f; timers.splice(i, 1); f(); } }
-  hurtT = Math.max(0, hurtT - rdt); flinch = Math.max(0, flinch - rdt); ($('hurt') as HTMLElement).style.opacity = String(Math.min(0.55, hurtT * 0.6));
+  flinch = Math.max(0, flinch - rdt);
   toastT -= rdt; if (toastT <= 0) toastEl.classList.remove('on');
   tension = Math.max(0, tension - rdt * 1.6);
   if (umbHeld) { umbT = Math.max(0, umbT - rdt); if (umbT <= 0) { umbHeld = false; umbTired = true; $('umbBtn').classList.remove('held'); toast('手痠了，放開再重新撐傘', '#ffcf8a'); } } else umbT = 0; $('umbBtn').classList.toggle('cd', umbTired); { const b = $('umbBtn'), c = $('umbCd'); if (umbHeld) { const f = umbT / Math.max(0.1, umbLen); b.style.setProperty('--p', `${(f * 100).toFixed(1)}%`); c.textContent = `${umbT.toFixed(1)}s`; b.classList.toggle('low', umbT < 1.2); } else { c.textContent = ''; b.classList.remove('low'); } }

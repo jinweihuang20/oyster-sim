@@ -13,6 +13,8 @@ export type PlazaHubHandlers = {
   onShellInbound?: (e: PlazaShellEvent) => void;
   /** 自己丟的殼被對方完美反彈打回來 */
   onShellReflectHit?: (e: PlazaShellEvent) => void;
+  /** 自己丟的殼被對方雨傘擋住（非完美反彈） */
+  onShellBlocked?: (e: PlazaShellEvent) => void;
   onStealResult?: (e: PlazaStealEvent) => void;
   /** 連線中斷，開始自動重連 */
   onReconnecting?: (attempt: number) => void;
@@ -150,6 +152,9 @@ export class PlazaClient {
     conn.on('ShellReflectHit', (e: any) => {
       try { this.handlers.onShellReflectHit?.(normShell(e)); } catch (err) { console.error('ShellReflectHit', err); }
     });
+    conn.on('ShellBlocked', (e: any) => {
+      try { this.handlers.onShellBlocked?.(normShell(e)); } catch (err) { console.error('ShellBlocked', err); }
+    });
     conn.on('StealResult', (e: any) => {
       try { this.handlers.onStealResult?.(normSteal(e)); } catch (err) { console.error('StealResult', err); }
     });
@@ -261,6 +266,14 @@ export class PlazaClient {
     try {
       return await this.conn.invoke<{ ok: boolean; err?: string }>('ShellReflect', originalThrowerConnId, fromX, fromY, fromZ, toX, toY, toZ);
     } catch (e: any) { return { ok: false as const, err: e?.message || 'throw_fail' }; }
+  }
+
+  /** 一般擋下：通知原丟殼者 */
+  async shellBlocked(originalThrowerConnId: string) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn' };
+    try {
+      return await this.conn.invoke<{ ok: boolean; err?: string }>('ShellBlocked', originalThrowerConnId);
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'block_fail' }; }
   }
 
   async stealFrom(targetConnId: string, caught = false) {
