@@ -9,6 +9,7 @@ import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worl
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent } from './types';
 import { plazaDisplayName } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
+import { plazaSoftCapClient } from '../core/economy';
 import { myTag } from '../meta/social';
 
 export type PlazaDeps = {
@@ -452,6 +453,7 @@ function normChat(m: any): PlazaChat {
     text: m?.text ?? m?.Text ?? '',
     pileId: m?.pileId ?? m?.PileId ?? null,
     at: m?.at ?? m?.At ?? Date.now(),
+    via: String(m?.via ?? m?.Via ?? '') || undefined,
   };
 }
 
@@ -788,8 +790,9 @@ function pushChat(m: PlazaChat) {
   appendChatRow(m);
   const isSelf = Boolean(deps && (m.pid === deps.id || (!!m.connId && m.connId === client?.connectionId)));
   view?.showChat({ connId: m.connId || undefined, pid: m.pid || undefined, nick: m.nick, text: m.text, self: isSelf });
-  // 僅發言端送 Discord，避免場上每人各推一則
-  if (isSelf && m.text) void postDiscordPlazaChat(m.nick || '剝蚵人', m.text, { pileId: m.pileId, tag: myTag() });
+  // 僅發言端送 Discord；來自 Discord 的勿回貼（訊息已在頻道裡），避免迴圈
+  if (isSelf && m.text && m.via !== 'discord')
+    void postDiscordPlazaChat(m.nick || '剝蚵人', m.text, { pileId: m.pileId, tag: myTag() });
   // 縮小中：角標＋短暫預覽（不自動展開，避免打斷剝蚵）
   if (!isSelf && !plazaChatIsOpen()) {
     chatUnread = Math.min(99, chatUnread + 1);
@@ -831,7 +834,7 @@ export async function plazaReportEarn(raw: number, oysters: number, durationSec:
   const r = await client.reportEarn(Math.floor(raw), oysters, durationSec);
   if (!r.ok) {
     deps.toast(zhErr(r.err) + '（暫用本機結算）', '#ffb08a');
-    return Math.max(0, Math.min(10_000, Math.floor(raw)));
+    return Math.max(0, Math.min(plazaSoftCapClient(oysters, durationSec), Math.floor(raw)));
   }
   deps.track('plaza_reward', { amount: r.payout, via: 'plaza' });
   return r.payout;

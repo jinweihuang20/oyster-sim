@@ -43,6 +43,8 @@ export type PlazaChat = {
   text: string;
   pileId: number | null;
   at: number;
+  /** discord／admin：來自伺服器代發，勿再回貼 Discord */
+  via?: string;
 };
 
 /** 暱稱＋#號碼，避免重名難辨 */

@@ -11,4 +11,7 @@ export {
   type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY, defaultSave, loadSave, writeSave,
   DAILY_PAYS, todayKey, dayDiff,
 } from './save';
+export {
+  eco, ECO_DEFAULTS, fetchEconomy, applyEconomy, syncEconomyTables, plazaSoftCapClient, type EconomyCfg,
+} from './economy';
 export { installNoZoom } from './nozoom';

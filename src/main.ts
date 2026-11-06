@@ -1,7 +1,8 @@
 import {
   initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl,
   importMove, escapeInApp, type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY,
-  defaultSave, loadSave as loadSaveFrom, writeSave, DAILY_PAYS, todayKey, dayDiff, installNoZoom,
+  defaultSave, loadSave as loadSaveFrom, writeSave, todayKey, dayDiff, installNoZoom,
+  eco, fetchEconomy, syncEconomyTables,
   cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink, installCloudLifecycle, onCloudStatus,
 } from './core';
 import {
@@ -73,7 +74,7 @@ let plazaPlayAt = 0;
 /** 廣場坐下暫時開第三人稱（不寫入存檔偏好） */
 let plazaForceTp = false;
 let plazaHomeHide: THREE.Object3D[] = [];
-const TEMP_CUT = 1;
+/** 臨時工扣薪：見 eco.tempCut（後台可改） */
 const COARSE = matchMedia('(pointer: coarse)').matches;
 /** 啟動時讀省電（mix 稍後才完整載入；antialias 只能建 renderer 時定一次） */
 const bootEco = (() => {
@@ -376,10 +377,10 @@ const RAR = [
 ];
 const dexN = () => save.dex.filter(x => x).length + save.odd.filter(x => x).length;
 const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'uncommon' : 'common';
-// 入碗工錢依難度：易／普通／硬／超硬；殼屑 = 70%（至少 $1）
-const DPAY = [6, 8, 12, 18], DSHORT = ['易', '普', '硬', '超硬'];
+// 入碗工錢／俐落加給：預設見 eco（後台「賺錢設定」可改）
+const DSHORT = ['易', '普', '硬', '超硬'];
 let meatPay = 0, dCnt = [0, 0, 0, 0];
-const OYSTER_PRICE = 8, CRACK_PRICE = 2, PERFECT_PAY = 2;
+void fetchEconomy().then(ok => { if (ok) { syncEconomyTables(LOCS, RAR); renderDaily(); } });
 // 新手保護：生涯收工未滿 3 班 → 只出易／普通、綠區 +30%、割手率 -40%
 const newbie = () => !tut && save.days < 3;
 // 統計：本班各難度 [開殼, 插刀失敗, 割手, 殼碎]、收工原因
@@ -397,7 +398,7 @@ function renderDaily() {
   const done = save.bonusDay === todayKey();
   b.classList.toggle('done', done);
   if (done) { const n = save.streakDay ?? 1; b.innerHTML = `<span class="dTop"><i class="ic ic-check"></i> 連續第 ${n} 天・今天領過了</span>${stampRow(n)}<small>明天再來・身上有 $${save.money}</small>`; }
-  else { const n = nextStreak(); b.innerHTML = `<span class="dTop"><i class="ic ic-coin"></i> 領今日上工費 $${DAILY_PAYS[n - 1]}・連續第 ${n} 天</span>${stampRow(n - 1)}<small>${n === 7 ? '第 7 天另外送一件小東西！' : `再 ${7 - n} 天拿第 7 天大獎`}</small>`; }
+  else { const n = nextStreak(); b.innerHTML = `<span class="dTop"><i class="ic ic-coin"></i> 領今日上工費 $${eco.dailyPays[n - 1]}・連續第 ${n} 天</span>${stampRow(n - 1)}<small>${n === 7 ? '第 7 天另外送一件小東西！' : `再 ${7 - n} 天拿第 7 天大獎`}</small>`; }
 }
 function dailyItem(): string {
   if (Math.random() < 0.5 || !MEDS.length) { save.dex[0]++; return '白珍珠 1 顆'; }
@@ -405,7 +406,7 @@ function dailyItem(): string {
 }
 function claimDaily(ev?: Event) {
   if (save.bonusDay === todayKey()) { renderDaily(); return; }
-  const n = nextStreak(), amt = DAILY_PAYS[n - 1];
+  const n = nextStreak(), amt = eco.dailyPays[n - 1];
   save.bonusDay = save.lastBonusDay = todayKey(); save.streakDay = n; save.bonusN = (save.bonusN ?? 0) + 1; save.money += amt;
   const item = n === 7 ? dailyItem() : '';
   persist(); renderDex();
@@ -422,7 +423,7 @@ function checkReturn() {
   if (!last) { persist(); return; }
   const days = dayDiff(last, t);
   if (days < 7 || (save.retDay && dayDiff(save.retDay, t) < 7)) { persist(); return; }
-  const big = days >= 30, amt = big ? 30000 : 10000;
+  const big = days >= 30, amt = big ? eco.return30 : eco.return7;
   save.money += amt; save.retDay = t; save.streakDay = 0; save.lastBonusDay = undefined;
   let item: string;
   if (big) { const rs = ODD.map((o, i) => ({ o, i })).filter(x => rarOf(x.o.weight) === 'rare'); const p = rs[Math.floor(Math.random() * rs.length)] ?? { o: ODD[0], i: 0 }; save.odd[p.i]++; item = `稀有奇物：${p.o.name}`; }
@@ -882,7 +883,7 @@ updSky(); showLand(); applyCrew(); setInterval(updSky, 30000);
 function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   nightShift = isNight(); updSky();
   $('nightTag').style.display = nightShift && !plazaMode ? '' : 'none';
-  if (nightShift && !plazaMode) later(1.5, () => toast('🌙 夜班上工！這一工收入 +20%', '#b8c8ff'));
+  if (nightShift && !plazaMode) later(1.5, () => toast(`🌙 夜班上工！這一工收入 +${Math.round(eco.nightMult * 100)}%`, '#b8c8ff'));
   moonReset(); npcs.forEach(dressAma); applyCrew();
   if (walking && !plazaMode) { setWalking(false); on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; syncShiftUi(); clearAchShiftGot(); handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
@@ -1488,7 +1489,7 @@ function toss(tapped: boolean) {
   const land = new THREE.Vector3(BOWL.x + rnd(-0.06, 0.06), BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015, BOWL.z + rnd(-0.06, 0.06));
   SFX.whoosh(); if (quick) { perfects++; $('gtag').textContent = ''; }
   fly(m, from, land, 0.45, 0.3, () => {
-    count++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(DPAY[md] * 0.7)) : DPAY[md]) - (shiftLen < SHIFT ? TEMP_CUT : 0)) + (quick ? 1 : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    count++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(eco.dpay[md] * eco.crumbRate)) : eco.dpay[md]) - (shiftLen < SHIFT ? eco.tempCut : 0)) + (quick ? eco.quickBonus : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
     burst(land.clone().setY(BOWL.y + 0.02), 8, 0xbfe4f2, 1);
     if (!wasCracked) burst(land.clone().setY(BOWL.y + 0.05), 6, 0xffd23a, 1.4);
     if (quick) { tone(980, 0.06, 0.18, 'triangle', 0, 520); tone(1568, 0.08, 0.1, 'sine', 0.05); } else SFX.plop();
@@ -1560,13 +1561,9 @@ function plazaThrowTarget(): PlazaAimTarget | null {
   }
   return best;
 }
-/** 廣場偷肉平衡：讀條／罰金／禁偷／同堆／碗少保護 */
+/** 廣場偷肉：讀條／同堆冷卻寫死；罰金／禁偷／碗少門檻見 eco */
 const PLAZA_STEAL_DUR = 1.8;
-const PLAZA_STEAL_PEN = 30;
-const PLAZA_STEAL_BAN_N = 3;
-const PLAZA_STEAL_BAN_MS = 45000;
 const PLAZA_STEAL_PAIR_MS = 4000;
-const PLAZA_STEAL_MIN_COUNT = 4;
 const PLAZA_BUSY_PHASE = /^(seam|twist|pry|crab|scoop)$/i;
 let plazaStealBanUntil = 0;
 let plazaStealCatches = 0;
@@ -1575,7 +1572,7 @@ const plazaStealPairCd = new Map<string, number>();
 function plazaStealCanTarget(t: PlazaAimTarget): string | null {
   const mine = plazaMySeat();
   if (!mine || t.pileId !== mine.pileId) return '只能偷同一堆的人';
-  if (t.count < PLAZA_STEAL_MIN_COUNT) return '對方碗裡太少，先別偷';
+  if (t.count < eco.plazaStealMinCount) return '對方碗裡太少，先別偷';
   if (t.umb) return '對方撐著傘，偷不到';
   if (PLAZA_BUSY_PHASE.test(t.phase || '')) return '對方正在撬殼，下手不了';
   const cd = plazaStealPairCd.get(t.connId) ?? 0;
@@ -1630,14 +1627,15 @@ function plazaWatchingMe(t: PlazaAimTarget) {
 }
 function plazaOnStealCaught(nick: string) {
   caught++;
-  penalty += PLAZA_STEAL_PEN;
+  penalty += eco.plazaStealPen;
   plazaStealCatches++;
-  if (plazaStealCatches >= PLAZA_STEAL_BAN_N) {
-    plazaStealBanUntil = performance.now() + PLAZA_STEAL_BAN_MS;
+  if (plazaStealCatches >= eco.plazaStealBanN) {
+    plazaStealBanUntil = performance.now() + eco.plazaStealBanMs;
     plazaStealCatches = 0;
-    toast(`${nick} 抓到你！罰 $${PLAZA_STEAL_PEN}・偷太多次先禁 45 秒`, '#ff8a7a');
+    const sec = Math.round(eco.plazaStealBanMs / 1000);
+    toast(`${nick} 抓到你！罰 $${eco.plazaStealPen}・偷太多次先禁 ${sec} 秒`, '#ff8a7a');
   } else {
-    toast(`${nick} 抓到你偷了！罰 $${PLAZA_STEAL_PEN}`, '#ff8a7a');
+    toast(`${nick} 抓到你偷了！罰 $${eco.plazaStealPen}`, '#ff8a7a');
   }
   shake = 0.2; SFX.sting(); updHud();
 }
@@ -1764,7 +1762,7 @@ function startPlazaSteal() {
 function stopPlazaSteal() { plazaStealTgt = null; stealT = 0; on('prog', phase === 'twist' || phase === 'crab' || phase === 'scoop'); }
 async function finishPlazaSteal(t: PlazaAimTarget) {
   stopPlazaSteal();
-  if (t.count < PLAZA_STEAL_MIN_COUNT) { toast('對方碗裡太少，先別偷', '#ffb08a'); return; }
+  if (t.count < eco.plazaStealMinCount) { toast('對方碗裡太少，先別偷', '#ffb08a'); return; }
   const r = await plazaStealFrom(t.connId, false);
   if (!r.ok || !r.steal) { toast(plazaZhErr(r.err), '#ffb08a'); return; }
   if (r.steal.caught) {
@@ -1772,7 +1770,7 @@ async function finishPlazaSteal(t: PlazaAimTarget) {
     return;
   }
   count = r.steal.fromCount;
-  meatPay += DPAY[1]; steals++; evMeat();
+  meatPay += eco.dpay[eco.yardStealDiff] ?? eco.dpay[1]; steals++; evMeat();
   plazaStealPairCd.set(t.connId, performance.now() + PLAZA_STEAL_PAIR_MS);
   const m = new THREE.Mesh(meatGeo, meatMat);
   const from = new THREE.Vector3(t.bowl.x, t.bowl.y, t.bowl.z);
@@ -1869,12 +1867,12 @@ function stopSteal() {
   stealNpc = null; stealT = 0; on('prog', phase === 'twist' || phase === 'crab' || phase === 'scoop');
 }
 function caughtBy(n: Npc) {
-  caught++; stopSteal(); penalty += 5;
-  n.distract = 0; n.pause = 0; addGrudge(n, 20); anger(n, SCOLD_STEAL, 0.5); toast('被抓到了！罰 $5', '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
+  caught++; stopSteal(); penalty += eco.yardStealFine;
+  n.distract = 0; n.pause = 0; addGrudge(n, 20); anger(n, SCOLD_STEAL, 0.5); toast(`被抓到了！罰 $${eco.yardStealFine}`, '#ff8a7a'); shake = 0.2; SFX.sting(); updHud();
 }
 function stealOne(n: Npc) {
   if (n.count <= 0) { toast('碗裡沒肉了'); stopSteal(); return; }
-  n.count--; count++; evMeat(); meatPay += DPAY[1]; steals++; addGrudge(n, 12); const m = new THREE.Mesh(meatGeo, meatMat);
+  n.count--; count++; evMeat(); meatPay += eco.dpay[eco.yardStealDiff] ?? eco.dpay[1]; steals++; addGrudge(n, 12); const m = new THREE.Mesh(meatGeo, meatMat);
   const lm = n.bowlMeat.pop(); if (lm) scene.remove(lm);
   fly(m, n.bowl.clone(), BOWL.clone().add(new THREE.Vector3(rnd(-0.08, 0.08), 0.06, rnd(-0.08, 0.08))), 0.5, 0.3, () => bowlMeat.push(m));
   SFX.sneak(); toast('偷到一顆！', '#c9a0ff'); updHud();
@@ -1887,15 +1885,15 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   if (tut) { tutEnd(false); return; }
   if (state === 'end') return; state = 'end'; if (plazaMode) plazaShellGen++; syncShiftUi(); setTimeout(giftAlert, 1500); setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
   const all = [{ name: `你（${esc(myName())}）`, count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
-  const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= 5, queen = all[0].me && !temp && worked, PAY = OYSTER_PRICE - (temp ? TEMP_CUT : 0);
+  const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= eco.workedMinCount, queen = all[0].me && !temp && worked;
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
   const titles: string[] = []; let bonus = 0;
   if (!plazaMode) {
-    if (thrown === 0 && !temp && worked) { titles.push(`🕊 和平${esc(myName())}（+$50）`); bonus = 50; }
+    if (thrown === 0 && !temp && worked) { titles.push(`🕊 和平${esc(myName())}（+$${eco.peaceBonus}）`); bonus = eco.peaceBonus; }
     if (worked && shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
     if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
   }
-  const LC = locNow(), base0 = meatPay + perfects * PERFECT_PAY + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * 0.2) : 0;
+  const LC = locNow(), base0 = meatPay + perfects * eco.perfectPay + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * eco.nightMult) : 0;
   const ev = evRun, evDone = !!ev && endReason !== 'quit' && !handPain, evEarly = evDone && endReason === 'early', evCash = ev && evDone ? Math.max(0, ev.bonus) + (evEarly ? Math.max(0, ev.earlyBonus) : 0) : 0;
   const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty) + evCash; lastPay = { gross: base0 + locBonus + nightBonus + bonus + evCash, pen: penalty, earn };
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
@@ -1931,13 +1929,16 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     track('day', { loc: locNow().id, item: 't' + shiftLen, count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, maxAnger: Math.round(dayMaxGrudge), double: dayMulti2, triple: dayMulti3, dur: durSec, dex: dexN(), seat: seatLabel, reason: handPain ? 'hand' : endReason, dstat: dstatStr() });
   }
   $('resTitle').textContent = plazaMode ? (handPain ? '🩹 手痛收工' : '廣場休息一下～') : ev ? (evEarly ? `${ev.name}・提前完工！` : evDone ? `${ev.name}・完工` : `${ev.name}・提早收工`) : handPain ? '🩹 手痛收工' : queen ? '👑 今日剝蚵冠軍！' : '收工了～';
+  const nightPct = Math.round(eco.nightMult * 100);
+  const crumbPct = Math.round(eco.crumbRate * 100);
+  const dpayHint = eco.dpay.map((p, i) => `${DSHORT[i]}$${p}`).join('・');
   const plazaEarnHtml = `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）` +
-    `${perfects ? `<br>完美／俐落 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}` +
+    `${perfects ? `<br>完美／俐落 ${perfects} 次 × $${eco.perfectPay}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}` +
     `<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}` +
-    `${penalty ? `<br>罰款／扣價 -$${penalty}` : ''}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}` +
+    `${penalty ? `<br>罰款／扣價 -$${penalty}` : ''}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +${nightPct}%：+$${nightBonus}` : ''}` +
     `<br><b style="font-size:20px">這趟收入 $${earn}</b>（待伺服器確認）</p>` +
     `<p style="font-size:13px;opacity:.8">玩了約 ${Math.floor(durSec / 60)} 分 ${durSec % 60} 秒</p>`;
-  const yardEarnHtml = `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 易$6・普$8・硬$12・超硬$18，殼屑 ${cracked} 顆只算 70%${temp ? `，臨時工抽成 -$${TEMP_CUT}／顆` : ''}</small>${perfects ? `<br>完美／俐落 ${perfects} 次 × $${PERFECT_PAY}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +20%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
+  const yardEarnHtml = `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 ${dpayHint}，殼屑 ${cracked} 顆只算 ${crumbPct}%${temp ? `，臨時工抽成 -$${eco.tempCut}／顆` : ''}</small>${perfects ? `<br>完美／俐落 ${perfects} 次 × $${eco.perfectPay}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +${nightPct}%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
     `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>`;
   $('resBody').innerHTML = evHtml + (plazaMode ? '' : all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 顆入碗</b></div>`).join('')) +
     `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美／俐落 ${perfects}・放棄 ${abandoned}・割手 ${stabs}` +
