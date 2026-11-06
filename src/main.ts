@@ -1641,12 +1641,14 @@ function plazaStealTarget(): PlazaAimTarget | null {
   if (!t || plazaStealCanTarget(t)) return null;
   return t;
 }
-/** 對方是否大致看著自己（盯著就不能偷） */
+/** 對方是否大致看著自己（盯著就不能偷）；阿婆對齊工寮：沒轉頭聊天就視為盯著 */
 function plazaWatchingMe(t: PlazaAimTarget) {
+  if (t.isNpc) return Math.abs(t.lookYaw ?? 0) < 0.55;
   const me = camera.position;
   const dx = me.x - t.x, dz = me.z - t.z;
   const len = Math.hypot(dx, dz) || 1;
-  const fx = -Math.sin(t.yaw), fz = -Math.cos(t.yaw);
+  const yaw = t.yaw + (t.lookYaw ?? 0);
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   return (fx * dx + fz * dz) / len > 0.25;
 }
 function plazaOnStealCaught(nick: string) {

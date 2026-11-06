@@ -25,6 +25,8 @@ export type PlazaPlayer = {
   body?: string;
   legs?: string;
   feet?: string;
+  /** 伺服器阿婆（每堆 2 人），同步同真人 */
+  isNpc?: boolean;
 };
 
 export type PlazaSnapshot = {
@@ -88,9 +90,12 @@ export type PlazaAimTarget = {
   x: number;
   z: number;
   yaw: number;
+  /** 坐下轉頭；阿婆聊天時會偏，用來判定是否被盯著 */
+  lookYaw?: number;
   seated: boolean;
   count: number;
   umb: boolean;
+  isNpc?: boolean;
   head: { x: number; y: number; z: number };
   bowl: { x: number; y: number; z: number };
 };

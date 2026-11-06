@@ -3,7 +3,7 @@ import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
 import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
-import { PILE_COUNT, SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
+import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
@@ -50,10 +50,17 @@ type Remote = {
   headWorkX: number;
   /** 剛進場、座標尚不可信：先藏模型，避免從原點高速滑行 */
   awaitingPose: boolean;
+  isNpc?: boolean;
 };
 
 const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
 const HAIRS = [0x222222, 0x555555, 0x888888, 0x3a2a1a, 0xdddddd];
+/** 阿婆配色（對齊工寮 NPC_DEF） */
+const AMA_LOOKS = [
+  { shirt: 0xe87840, hair: 0x8a8a8a },
+  { shirt: 0x3a9a6a, hair: 0x444444 },
+  { shirt: 0xe86878, hair: 0xc8c8c8 },
+];
 
 /**
  * 與死鬥 NPC 同一套 makePlayerAvatar，比例 1:1（不再縮放）。
@@ -132,7 +139,7 @@ export function createPlazaWorldView(
     root.add(pile);
     pileGroups.push(pile);
 
-    for (let s = 0; s < SLOTS_PER_PILE; s++) {
+    for (let s = 0; s < SLOTS_PER_PILE + NPC_SLOTS_PER_PILE; s++) {
       const pose = seatPose(i, s);
       const { group, pad } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
       root.add(group);
@@ -176,9 +183,11 @@ export function createPlazaWorldView(
         pileId: r.pileId,
         phase: r.phase || '',
         x: r.x, z: r.z, yaw: r.yaw,
+        lookYaw: r.lookYaw,
         seated: true,
         count: r.count,
         umb: r.umb,
+        isNpc: r.isNpc,
         head: { x: h.x, y: h.y, z: h.z },
         bowl: { x: b.x, y: b.y, z: b.z },
       });
@@ -186,8 +195,12 @@ export function createPlazaWorldView(
     return out;
   }
 
-  function hashLook(pid: string) {
+  function hashLook(pid: string, isNpc = false) {
     let h = 0; for (let i = 0; i < pid.length; i++) h = (h * 31 + pid.charCodeAt(i)) | 0;
+    if (isNpc) {
+      const a = AMA_LOOKS[Math.abs(h) % AMA_LOOKS.length];
+      return { shirt: a.shirt, hair: a.hair, pants: 0x3a5068 };
+    }
     return { shirt: SHIRTS[Math.abs(h) % SHIRTS.length], hair: HAIRS[Math.abs(h >> 3) % HAIRS.length], pants: 0x2a2a40 };
   }
 
@@ -609,11 +622,14 @@ export function createPlazaWorldView(
       }
     }
     if (!r) {
-      const look = hashLook(pid);
+      const isNpc = !!(p.isNpc || pid.startsWith('npc-'));
+      const look = hashLook(pid, isNpc);
       const rig = makePlayerAvatar(look, M, add, LO);
-      applyOutfitToRig(rig, normalizeOutfitIds({
-        head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
-      }));
+      if (!isNpc) {
+        applyOutfitToRig(rig, normalizeOutfitIds({
+          head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
+        }));
+      }
       root.add(rig.outer);
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
       rig.outer.scale.setScalar(AVATAR_SCALE);
@@ -628,14 +644,15 @@ export function createPlazaWorldView(
       const awaitingPose = !p.seated && Math.hypot(x, z) < 0.2;
       r = {
         key: pid, connId: p.connId || '', pid, rig,
-        tag: ensureTag(plazaDisplayName(p.nick, p.tag)), bubble: ensureBubble(), bubUntil: 0,
-        pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick || '剝蚵人',
-        numTag: (p.tag || '').replace(/^#/, ''),
+        tag: ensureTag(isNpc ? (p.nick || '阿婆') : plazaDisplayName(p.nick, p.tag)), bubble: ensureBubble(), bubUntil: 0,
+        pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick || (isNpc ? '阿婆' : '剝蚵人'),
+        numTag: isNpc ? '' : (p.tag || '').replace(/^#/, ''),
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
         props, bowlNode, meatRoot, meatMeshes: [], knife, oyster,
         tx: x, tz: z, tyaw: yaw, x, z, yaw, bob: 0, throwT: 0,
         tLookYaw: 0, lookYaw: 0, tPitch: 0, pitch: 0, headWorkX: 0,
         awaitingPose,
+        isNpc,
       };
       remotes.set(pid, r);
       r.props.visible = r.seated;
@@ -662,9 +679,10 @@ export function createPlazaWorldView(
     r.props.visible = r.seated;
     if (r.seated) syncRemoteMeats(r);
     if (p.nick && p.nick !== r.nick) r.nick = p.nick;
-    if (p.tag) r.numTag = String(p.tag).replace(/^#/, '');
+    if (p.isNpc != null) r.isNpc = !!p.isNpc;
+    if (!r.isNpc && p.tag) r.numTag = String(p.tag).replace(/^#/, '');
     {
-      const label = plazaDisplayName(r.nick, r.numTag);
+      const label = r.isNpc ? r.nick : plazaDisplayName(r.nick, r.numTag);
       r.tag.setText(r.seated ? `${label} · ${r.count}` : label);
     }
     if (r.seated && p.pileId >= 0) {
@@ -693,7 +711,7 @@ export function createPlazaWorldView(
       }
     }
     if (r.seated && r.awaitingPose) revealRemoteIfReady(r);
-    {
+    if (!r.isNpc) {
       const next = normalizeOutfitIds({
         head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
       });

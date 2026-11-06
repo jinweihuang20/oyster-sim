@@ -2,10 +2,14 @@ import * as THREE from 'three';
 
 export const PILE_COUNT = 16;
 export const SLOTS_PER_PILE = 4;
+/** 每堆額外阿婆座位（slot = SLOTS_PER_PILE + npcSlot） */
+export const NPC_SLOTS_PER_PILE = 2;
 export const PLAZA_CAPACITY = PILE_COUNT * SLOTS_PER_PILE;
 export const PILE_SPACING = 5.2;
 /** 椅子離堆心距離（貼近蚵堆；身體靠 hangArms／後仰避免埋進堆裡） */
 export const SEAT_RADIUS = 1.38;
+/** 阿婆椅略外移，夾在玩家座位之間 */
+export const NPC_SEAT_RADIUS = 1.52;
 /** 廣場走動邊界（約蓋住 4×4 堆） */
 export const WALK_BOUND = 11.5;
 export const SIT_DIST = 1.15;
@@ -24,14 +28,18 @@ export const PLAZA_LAMP_XZ: readonly [number, number][] = [
   [PILE_SPACING, PILE_SPACING],
 ];
 
-/** 一堆四座：朝堆心 */
+/** 一堆座位：0–3 玩家、4–5 阿婆；皆朝堆心 */
 export function seatPose(pileId: number, slot: number) {
   const center = pileCenter(pileId);
-  const a = slot * (Math.PI / 2) + Math.PI / 4;
+  const npc = slot >= SLOTS_PER_PILE;
+  const a = npc
+    ? (Math.max(0, slot - SLOTS_PER_PILE) % NPC_SLOTS_PER_PILE) * Math.PI
+    : slot * (Math.PI / 2) + Math.PI / 4;
+  const radius = npc ? NPC_SEAT_RADIUS : SEAT_RADIUS;
   const pos = new THREE.Vector3(
-    center.x + Math.sin(a) * SEAT_RADIUS,
+    center.x + Math.sin(a) * radius,
     0,
-    center.z + Math.cos(a) * SEAT_RADIUS,
+    center.z + Math.cos(a) * radius,
   );
   // 相機／角色預設看向 -Z；yaw 使 -Z 對準堆心（atan2 用「位置相對堆心」）
   const yaw = Math.atan2(pos.x - center.x, pos.z - center.z);

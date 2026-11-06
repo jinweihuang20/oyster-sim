@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
-import { PILE_SPACING, PLAZA_LAMP_XZ, pileCenter, seatPose, PILE_COUNT, SLOTS_PER_PILE } from './layout';
+import { PILE_SPACING, PLAZA_LAMP_XZ, pileCenter, seatPose, PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE } from './layout';
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 
@@ -195,7 +195,7 @@ function shedPostClear(x: number, z: number, pad = 0.28) {
   for (let i = 0; i < PILE_COUNT; i++) {
     const c = pileCenter(i);
     if (Math.hypot(x - c.x, z - c.z) < 1.05 + pad) return false;
-    for (let s = 0; s < SLOTS_PER_PILE; s++) {
+    for (let s = 0; s < SLOTS_PER_PILE + NPC_SLOTS_PER_PILE; s++) {
       const seat = seatPose(i, s).pos;
       if (Math.hypot(x - seat.x, z - seat.z) < 0.4 + pad) return false;
     }

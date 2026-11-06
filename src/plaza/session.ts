@@ -199,6 +199,7 @@ const ERR_ZH: Record<string, string> = {
   pair_cd: '同一個目標要隔一下再偷',
   victim_cap: '對方這分鐘被偷太多次了',
   steal_ban: '偷被抓太多次，先冷靜一下',
+  watching: '阿婆正看著你，偷不到',
 };
 
 export function plazaZhErr(e?: string) { return (e && ERR_ZH[e]) || e || '失敗了'; }
@@ -398,10 +399,11 @@ function wireClient(D: PlazaDeps) {
 
 function normalizeSnap(s: any): PlazaSnapshot {
   const players: PlazaPlayer[] = (s?.players ?? s?.Players ?? []).map(normPlayer);
-  // occupied = 在場總人數（含自己／走動）；舊後端若仍回「入座數」則改以 players.length 為準
+  // occupied = 真人在場人數（不含阿婆）；優先用後端 Occupied
   const rawOcc = s?.occupied ?? s?.Occupied;
-  const occupied = players.length > 0 ? players.length
-    : (typeof rawOcc === 'number' ? rawOcc : 0);
+  const humanN = players.filter((p) => !p.isNpc).length;
+  const occupied = typeof rawOcc === 'number' ? rawOcc
+    : (humanN > 0 ? humanN : players.length);
   return {
     players,
     pileCount: s?.pileCount ?? s?.PileCount ?? PILE_COUNT,
@@ -411,19 +413,22 @@ function normalizeSnap(s: any): PlazaSnapshot {
   };
 }
 
-/** HUD：目前在場幾人 */
+/** HUD：目前在場幾人（不含阿婆） */
 function plazaHudPeople(s?: PlazaSnapshot | null) {
-  const n = s?.players?.length ?? s?.occupied ?? 0;
+  const humans = s?.players?.filter((p) => !p.isNpc) ?? [];
+  const n = humans.length > 0 ? humans.length : (s?.occupied ?? 0);
   const cap = s?.capacity ?? PLAZA_CAPACITY;
   return `廣場休閒・目前 ${n} 人（可坐 ${cap}）`;
 }
 function normPlayer(p: any): PlazaPlayer {
   const seated = !!(p?.seated ?? p?.Seated ?? ((p?.pileId ?? p?.PileId ?? -1) >= 0));
+  const pid = p?.pid ?? p?.Pid ?? '';
+  const isNpc = !!(p?.isNpc ?? p?.IsNpc) || String(pid).startsWith('npc-');
   return {
     connId: p?.connId ?? p?.ConnId ?? '',
-    pid: p?.pid ?? p?.Pid ?? '',
-    nick: p?.nick ?? p?.Nick ?? '剝蚵人',
-    tag: String(p?.tag ?? p?.Tag ?? '').replace(/^#/, '') || undefined,
+    pid,
+    nick: p?.nick ?? p?.Nick ?? (isNpc ? '阿婆' : '剝蚵人'),
+    tag: isNpc ? undefined : (String(p?.tag ?? p?.Tag ?? '').replace(/^#/, '') || undefined),
     pileId: p?.pileId ?? p?.PileId ?? -1,
     slot: p?.slot ?? p?.Slot ?? -1,
     phase: p?.phase ?? p?.Phase ?? 'idle',
@@ -442,6 +447,7 @@ function normPlayer(p: any): PlazaPlayer {
     body: p?.body ?? p?.Body ?? 'bd_basic',
     legs: p?.legs ?? p?.Legs ?? 'lg_basic',
     feet: p?.feet ?? p?.Feet ?? 'ft_basic',
+    isNpc,
   };
 }
 function normChat(m: any): PlazaChat {
