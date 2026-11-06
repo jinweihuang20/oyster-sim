@@ -49,6 +49,8 @@ export type PlazaDeps = {
   onShellThrow?: (e: PlazaShellEvent) => void;
   /** 殼飛到自己：結算擋／中 */
   onShellInbound?: (e: PlazaShellEvent) => void;
+  /** 自己丟的殼被對方完美反彈打回來 */
+  onShellReflectHit?: (e: PlazaShellEvent) => void;
   /** 偷肉結果（含自己被偷） */
   onStealResult?: (e: PlazaStealEvent) => void;
   track: (t: string, d?: Record<string, unknown>) => void;
@@ -129,6 +131,16 @@ export async function plazaShellFx(
 ) {
   if (!client?.connected) return { ok: false as const, err: 'no_conn' };
   return client.shellFx(from.x, from.y, from.z, to.x, to.y, to.z);
+}
+
+/** 完美反彈：殼飛回原丟殼者並造成傷害 */
+export async function plazaShellReflect(
+  originalThrowerConnId: string,
+  from: { x: number; y: number; z: number },
+  to: { x: number; y: number; z: number },
+) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn' };
+  return client.shellReflect(originalThrowerConnId, from.x, from.y, from.z, to.x, to.y, to.z);
 }
 
 /** 遠端丟殼甩臂 */
@@ -333,6 +345,7 @@ function wireClient(D: PlazaDeps) {
     onChat: (m) => pushChat(normChat(m)),
     onShellThrow: (e) => { try { D.onShellThrow?.(e); } catch (err) { console.error('onShellThrow', err); } },
     onShellInbound: (e) => { try { D.onShellInbound?.(e); } catch (err) { console.error('onShellInbound', err); } },
+    onShellReflectHit: (e) => { try { D.onShellReflectHit?.(e); } catch (err) { console.error('onShellReflectHit', err); } },
     onStealResult: (e) => { try { D.onStealResult?.(e); } catch (err) { console.error('onStealResult', err); } },
     onReconnecting: (attempt) => {
       if (!active) return;

@@ -37,7 +37,7 @@ import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaPileObs, plazaRandomSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin,
-  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
+  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen, seatPose, plazaPushOutfit,
   type PlazaAimTarget, type PlazaShellEvent,
 } from './plaza';
@@ -1524,11 +1524,14 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
     const U = umbNow(), up = umbT > 0 && umbAge() >= U.open, covered = up && Math.random() < U.cover;
     if (up && !covered) toast('傘縫裡鑽進來了！', '#ff9a8a');
     if (covered && umbAge() - U.open < U.perf) {
-      reflects++; blockStreak++; SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
+      reflects++; blockStreak++; umbHit3(new THREE.Vector3(e.toX, e.toY, e.toZ)); SFX.boing(); tone(1800, 0.08, 0.15, 'square');
+      toast(`完美反彈！砸回 ${e.fromNick || '別人'}！✨`, '#ffe36a'); shake = 0.08;
+      const from = { x: e.toX, y: e.toY, z: e.toZ };
+      const back = { x: e.fromX, y: e.fromY, z: e.fromZ };
       const sh = new THREE.Mesh(halfGeo, shellBotMat);
-      const from = new THREE.Vector3(e.toX, e.toY, e.toZ);
-      const back = new THREE.Vector3(e.fromX, e.fromY, e.fromZ);
-      fly(sh, from, back, 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); });
+      fly(sh, new THREE.Vector3(from.x, from.y, from.z), new THREE.Vector3(back.x, back.y, back.z), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); });
+      // 通知原丟殼者：被反彈砸中（工寮反彈打中阿婆同概念）
+      if (e.fromConnId) void plazaShellReflect(e.fromConnId, from, back);
     } else if (covered) {
       blocks++; blockStreak++; SFX.boing(); toast(`擋住 ${e.fromNick || '別人'} 的殼！`, '#9be37a');
     } else {
@@ -1539,6 +1542,17 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
     }
     updHud();
   } catch (err) { console.error('plaza inbound', err); }
+}
+/** 自己丟的殼被對方完美反彈打回來（無法再擋，等同工寮反彈打中阿婆） */
+function resolvePlazaReflectHit(e: PlazaShellEvent) {
+  if (!plazaMode || state !== 'play' || !isPlazaActive()) return;
+  try {
+    blockStreak = 0; hitsTaken++;
+    const splat = document.getElementById('splat');
+    if (splat) { splat.style.opacity = '1'; later(0.9, () => { splat.style.opacity = '0'; }); }
+    hurt(8, `${e.fromNick || '別人'} 把殼反彈回來砸中你了！`); hitInHand();
+    updHud();
+  } catch (err) { console.error('plaza reflect hit', err); }
 }
 let plazaStealTgt: PlazaAimTarget | null = null;
 function startPlazaSteal() {
@@ -1828,7 +1842,9 @@ window.addEventListener('pointermove', e => {
     lastMoveT = now;
     if (document.pointerLockElement === canvas) {
       const k = 0.0022 * mix.sens;
-      yaw = tYaw = clamp(tYaw - e.movementX * k * (mix.invX ? -1 : 1), -yl(), yl());
+      // 第三人稱水平轉視角與第一人稱相反（鏡頭在角色後方）
+      const xS = (mix.invX ? -1 : 1) * (tpv ? -1 : 1);
+      yaw = tYaw = clamp(tYaw - e.movementX * k * xS, -yl(), yl());
       if (plazaTpWalkLockPitch()) pitch = tPitch = PLAZA_WALK_PITCH;
       else pitch = tPitch = clamp(tPitch - e.movementY * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
       camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld();
@@ -1842,7 +1858,8 @@ window.addEventListener('pointermove', e => {
   if (!down.drag && Math.hypot(dx, dy) > 14) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
   if (down.drag) {
     const k = 0.006 * mix.sens;
-    tYaw = clamp(down.yaw - dx * k * (mix.invX ? -1 : 1), -yl(), yl());
+    const xS = (mix.invX ? -1 : 1) * (tpv ? -1 : 1);
+    tYaw = clamp(down.yaw - dx * k * xS, -yl(), yl());
     tPitch = plazaTpWalkLockPitch() ? PLAZA_WALK_PITCH : clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
   }
 });
@@ -2413,6 +2430,11 @@ function launchPlaza() {
       // 飛行動畫約 0.55s 後結算；世代號避免離開廣場後還結算
       const gen = plazaShellGen;
       later(0.55, () => { if (gen !== plazaShellGen) return; resolvePlazaInbound(e); });
+    },
+    onShellReflectHit: (e) => {
+      // 反彈飛回約 0.4s；視覺走 ShellThrow，這裡結算傷害＋提示
+      const gen = plazaShellGen;
+      later(0.4, () => { if (gen !== plazaShellGen) return; resolvePlazaReflectHit(e); });
     },
     onStealResult: (e) => {
       const me = plazaConnId();
