@@ -152,20 +152,31 @@ const shellGeo = SHELL_GEOS[0], halfGeo = HALF_GEOS[0];
 const shellMat = shellM(0xe8e4e0);
 // 點擊撈蚵用：必須保留 mesh 參考（crease 後不再是 ConeGeometry，不能事後 find）
 const pileHit = mesh(crease(new THREE.ConeGeometry(0.9, 0.55, 10)), mat(0x7a8ca0, { roughness: 0.95, emissive: 0x0a1018, emissiveIntensity: 0.12 }), [0, 0.27, 0]);
-const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo, pileMat, 260); pile.castShadow = true;
+const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo, pileMat, 260); pile.castShadow = true; pile.renderOrder = 0;
 { const d = new THREE.Object3D(); for (let i = 0; i < 260; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 1.0, h = Math.max(0, 0.55 * (1 - r / 0.95)); d.position.set(Math.cos(a) * r, h + 0.03, Math.sin(a) * r); d.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); d.updateMatrix(); pile.setMatrixAt(i, d.matrix); pile.setColorAt(i, new THREE.Color(greyPick())); } }
 scene.add(pile);
 const pileSpot = () => { const a = Math.random() * 6.28, r = rnd(0.2, 0.7); return new THREE.Vector3(Math.cos(a) * r, 0.5 * (1 - r) + 0.05, Math.sin(a) * r); };
+/** 蚵堆表面高度（與 InstancedMesh 堆形一致）＋墊高，讓碗像放在堆上 */
+function pileSurfY(wx: number, wz: number, ox = 0, oz = 0) {
+  const rad = Math.hypot(wx - ox, wz - oz);
+  const crest = Math.max(0, 0.55 * (1 - rad / 0.95)) + 0.03;
+  return Math.max(0.16, crest + 0.06);
+}
+function markBowlDrawOrder(root: THREE.Object3D) {
+  root.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.renderOrder = 2; if (m.material) { const mats = Array.isArray(m.material) ? m.material : [m.material]; for (const mat of mats) { const mm = mat as THREE.Material & { depthTest?: boolean }; mm.depthTest = true; } } } });
+}
 
-// 玩家前面：生蚵臉盆、裝肉的碗（點碗丟肉）
-const basinMesh = mesh(new THREE.CylinderGeometry(0.33, 0.26, 0.18, 16, 1, true), mat(0xc84030, { side: THREE.DoubleSide }), [-0.35, 0.1, 1.45]);
-const BASIN0 = new THREE.Vector3(-0.35, 0.1, 1.45), BASIN = BASIN0.clone();
+// 玩家前面：生蚵臉盆、裝肉的碗（點碗丟肉）；略靠近堆心，之後再依堆面抬高
+const basinMesh = mesh(new THREE.CylinderGeometry(0.33, 0.26, 0.18, 16, 1, true), mat(0xc84030, { side: THREE.DoubleSide }), [-0.35, 0.1, 1.28]);
+const BASIN0 = new THREE.Vector3(-0.35, 0.1, 1.28), BASIN = BASIN0.clone();
 const basinOy: THREE.Mesh[] = [];
-const basinShells = new THREE.InstancedMesh(shellGeo, pileMat, 1);
-{ const d = new THREE.Object3D(); for (let i = 0; i < 25; i++) { const a = Math.random() * 6.28, r = Math.random() * 0.24; d.position.set(-0.35 + Math.cos(a) * r, 0.12 + Math.random() * 0.05, 1.45 + Math.sin(a) * r); d.rotation.set(Math.random(), Math.random() * 3, Math.random()); d.updateMatrix(); basinShells.setMatrixAt(i, d.matrix); basinShells.setColorAt(i, new THREE.Color(greyPick())); } }
+const basinShells = new THREE.InstancedMesh(shellGeo, pileMat, 25); basinShells.renderOrder = 2;
+{ const d = new THREE.Object3D(); for (let i = 0; i < 25; i++) { const a = Math.random() * 6.28, r = Math.random() * 0.24; d.position.set(-0.35 + Math.cos(a) * r, 0.12 + Math.random() * 0.05, 1.28 + Math.sin(a) * r); d.rotation.set(Math.random(), Math.random() * 3, Math.random()); d.updateMatrix(); basinShells.setMatrixAt(i, d.matrix); basinShells.setColorAt(i, new THREE.Color(greyPick())); } basinShells.instanceMatrix.needsUpdate = true; if (basinShells.instanceColor) basinShells.instanceColor.needsUpdate = true; }
 const seatRig = new THREE.Group(); scene.add(seatRig); seatRig.add(basinMesh, basinShells);
-const BOWL0 = new THREE.Vector3(0.55, 0.12, 1.0), BOWL = BOWL0.clone(); let BOWL_R = 0.17;
+markBowlDrawOrder(basinMesh);
+const BOWL0 = new THREE.Vector3(0.55, 0.12, 0.88), BOWL = BOWL0.clone(); let BOWL_R = 0.17;
 const bowlG = new THREE.Group(); seatRig.add(bowlG); const BOWL_L = BOWL0.clone();
+const _liftPos = new THREE.Vector3(), _liftQ = new THREE.Quaternion(), _liftS = new THREE.Vector3(), _liftM = new THREE.Matrix4();
 function buildBowl(b: { r: number; h: number; color: number; metal?: number }) {
   bowlG.clear(); const bot = b.r * 0.72;
   const wall = new THREE.Mesh(new THREE.CylinderGeometry(b.r + 0.03, bot, b.h, 22, 1, true), new THREE.MeshStandardMaterial({ color: b.color, side: THREE.DoubleSide, roughness: b.metal ? 0.25 : 0.45, metalness: b.metal ?? 0 }));
@@ -173,6 +184,7 @@ function buildBowl(b: { r: number; h: number; color: number; metal?: number }) {
   const rim = new THREE.Mesh(new THREE.TorusGeometry(b.r + 0.03, 0.012, 6, 24), wall.material); rim.rotation.x = Math.PI / 2; rim.position.y = b.h; bowlG.add(rim);
   const fl = new THREE.Mesh(new THREE.CircleGeometry(bot, 18), new THREE.MeshStandardMaterial({ color: new THREE.Color(b.color).multiplyScalar(0.75), metalness: b.metal ?? 0, roughness: 0.5 })); fl.rotation.x = -Math.PI / 2; fl.position.y = 0.005; bowlG.add(fl);
   bowlG.position.set(BOWL_L.x, 0, BOWL_L.z); BOWL.y = Math.max(0.08, b.h - 0.02);
+  markBowlDrawOrder(bowlG);
 }
 const bowlMeat: THREE.Mesh[] = [], splats: THREE.Mesh[] = [];
 const meatMat = mat(0xd8cbb0, { roughness: 0.3, metalness: 0.1 }), splatMat = mat(0x8a8680, { roughness: 0.6 });
@@ -195,8 +207,10 @@ function makeNpc(d: NpcDef) {
   mesh(rboxEnv(0.03, 0.03, 0.09), mat(0x7a4a20), [0, 0, 0], kn);
   mesh(rboxEnv(0.02, 0.006, 0.09), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [0, 0, -0.09], kn);
   const bowlL = new THREE.Vector3(0.32, 0, -0.42); const bowl = a.g.localToWorld(bowlL.clone());
-  const bowlM = mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, 0.05, bowl.z]);
-  bowl.y = 0.08;
+  const npcBowlY = pileSurfY(bowl.x, bowl.z);
+  const bowlM = mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, npcBowlY, bowl.z]);
+  markBowlDrawOrder(bowlM);
+  bowl.y = npcBowlY + 0.05;
   // 掛 scene、每幀對齊頭世界座標（勿掛 head，轉頭會把 +Y 偏移帶歪）
   const tag = makeWorldLabel(d.name, 'name', { worldH: 0.2, depthTest: false });
   tag.sprite.visible = false; scene.add(tag.sprite);
@@ -1095,10 +1109,42 @@ function setPlazaSeatPropsVisible(v: boolean) {
   if (!v) { bowlRing.visible = false; basinRing.visible = false; }
 }
 const bowlNow = () => BOWLS.find(b => b.id === save.shop.equipped.bowl) ?? BOWLS[0];
+/** 臉盆／肉碗貼蚵堆表面，避免被殼遮住 */
+function liftSeatPropsOntoPile() {
+  let ox = 0, oz = 0;
+  if (plazaMode) {
+    const o = plazaMyPileOrigin();
+    if (o) { ox = o.x; oz = o.z; }
+  }
+  seatRig.updateMatrixWorld(true);
+  const b = bowlNow();
+  const bowlW = seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, 0, BOWL_L.z));
+  const bowlWant = pileSurfY(bowlW.x, bowlW.z, ox, oz);
+  const bowlLocal = seatRig.worldToLocal(new THREE.Vector3(bowlW.x, bowlWant, bowlW.z));
+  bowlG.position.set(BOWL_L.x, bowlLocal.y, BOWL_L.z);
+  BOWL.copy(seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, bowlLocal.y + Math.max(0.08, b.h - 0.02), BOWL_L.z)));
+
+  const basW = seatRig.localToWorld(new THREE.Vector3(BASIN0.x, 0, BASIN0.z));
+  const basWant = pileSurfY(basW.x, basW.z, ox, oz);
+  const basLocal = seatRig.worldToLocal(new THREE.Vector3(basW.x, basWant, basW.z));
+  const dy = basLocal.y - basinMesh.position.y;
+  basinMesh.position.set(BASIN0.x, basLocal.y, BASIN0.z);
+  if (Math.abs(dy) > 1e-5) {
+    for (let i = 0; i < basinShells.count; i++) {
+      basinShells.getMatrixAt(i, _liftM);
+      _liftM.decompose(_liftPos, _liftQ, _liftS);
+      _liftPos.y += dy;
+      _liftM.compose(_liftPos, _liftQ, _liftS);
+      basinShells.setMatrixAt(i, _liftM);
+    }
+    basinShells.instanceMatrix.needsUpdate = true;
+  }
+  BASIN.copy(seatRig.localToWorld(new THREE.Vector3(BASIN0.x, basLocal.y + 0.1, BASIN0.z)));
+}
 function applyBowl() {
   const b = bowlNow(), S = seatNow(); BOWL_R = b.r * (newbie() ? 1.2 : 1); const pw = (b.perf + S.perf) * (newbie() ? 1.4 : 1); PERF0 = IDEAL - pw / 2; PERF1 = IDEAL + pw / 2;
   BOWL_L.set(SEAT0.x + (BOWL0.x - SEAT0.x) * b.dist * S.bowl, BOWL0.y, SEAT0.z + (BOWL0.z - SEAT0.z) * b.dist * S.bowl); buildBowl(b);
-  seatRig.updateMatrixWorld(true); const w = seatRig.localToWorld(BOWL_L.clone()); BOWL.x = w.x; BOWL.z = w.z;
+  liftSeatPropsOntoPile();
 }
 const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
 const pryW = () => Math.min(0.6, Math.min(1.6, 1 + 0.15 * pryHits) * PRY[diff].w * knifeNow().green * medM('green') * (newbie() ? 1.3 : 1));
@@ -1509,11 +1555,16 @@ function plazaStealCanTarget(t: PlazaAimTarget): string | null {
   if (performance.now() < cd) return '同一個目標要隔一下再偷';
   return null;
 }
-/** 準心是否對準碗：用碗世界半徑投影到 NDC，避免固定大框提早命中 */
+/** 準心是否對準碗：用碗投影半徑（夾限），比舊固定大框緊、又不至於廣場點不到 */
 const _stealBowl = new THREE.Vector3();
 const _stealEdge = new THREE.Vector3();
 const _stealRight = new THREE.Vector3();
-function bowlOnReticle(bx: number, by: number, bz: number, bowlR = 0.14, slack = 1.2) {
+function bowlOnReticle(bx: number, by: number, bz: number, bowlR = 0.15, slack = 1.55) {
+  // 判定多在 camTick 之前：先把 FP 鏡頭對齊本幀 yaw/pitch
+  if (!tpOn) {
+    camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0);
+    camera.updateMatrixWorld();
+  }
   const cam = viewCam();
   cam.updateMatrixWorld();
   _stealBowl.set(bx, by, bz).project(cam);
@@ -1521,7 +1572,11 @@ function bowlOnReticle(bx: number, by: number, bz: number, bowlR = 0.14, slack =
   const cx = _stealBowl.x, cy = _stealBowl.y;
   _stealRight.set(1, 0, 0).applyQuaternion(cam.quaternion);
   _stealEdge.set(bx, by, bz).addScaledVector(_stealRight, bowlR).project(cam);
-  const r = Math.max(0.03, Math.hypot(_stealEdge.x - cx, _stealEdge.y - cy) * slack);
+  let r = Math.hypot(_stealEdge.x - cx, _stealEdge.y - cy) * slack;
+  // 廣場坐下第三人稱鏡頭鎖堆心：略放大可點範圍；FP 仍比舊 0.32 框緊
+  const minR = plazaMode && tpOn ? 0.1 : 0.075;
+  const maxR = plazaMode && tpOn ? 0.22 : 0.15;
+  r = Math.min(maxR, Math.max(minR, r));
   return Math.hypot(cx, cy) <= r;
 }
 function plazaStealTarget(): PlazaAimTarget | null {
@@ -2864,8 +2919,7 @@ function frameBody() {
     if (plazaMode) {
       const banned = performance.now() < plazaStealBanUntil;
       const pt = walking || !plazaSeated() || banned ? null : plazaStealTarget();
-      on('stealBtn', !!pt || (!walking && plazaSeated() && !banned));
-      if (!pt) stopPlazaSteal();
+      on('stealBtn', !!pt || !!plazaStealTgt || (!walking && plazaSeated() && !banned));
       if (banned && !walking && plazaSeated() && phase !== 'busy') {
         hint.textContent = `偷被抓太多次，${Math.ceil((plazaStealBanUntil - performance.now()) / 1000)} 秒後才能再偷`;
       } else if (pt && !plazaStealTgt && phase !== 'busy') {
@@ -2874,13 +2928,22 @@ function frameBody() {
           : `${pt.nick} 沒注意！${COARSE ? '按住「偷」' : '按住 E'}偷肉（同堆）`;
       }
       if (plazaStealTgt) {
-        if (plazaWatchingMe(plazaStealTgt) || plazaStealCanTarget(plazaStealTgt)) {
-          const t = plazaStealTgt; const why = plazaStealCanTarget(t); stopPlazaSteal();
-          if (plazaWatchingMe(t)) {
+        // 讀條中：用即時碗座標＋略寬判定，避免微抖就取消
+        const live = plazaAimTargets().find(t => t.connId === plazaStealTgt!.connId);
+        const bx = live?.bowl.x ?? plazaStealTgt.bowl.x;
+        const by = live?.bowl.y ?? plazaStealTgt.bowl.y;
+        const bz = live?.bowl.z ?? plazaStealTgt.bowl.z;
+        const stillAim = bowlOnReticle(bx, by, bz, 0.18, 2.1);
+        const why = live ? plazaStealCanTarget(live) : '對方離開了';
+        const watch = plazaWatchingMe(live ?? plazaStealTgt);
+        if (!stillAim || watch || why) {
+          const t = plazaStealTgt; stopPlazaSteal();
+          if (watch) {
             plazaOnStealCaught(t.nick);
             void plazaStealFrom(t.connId, true);
           } else if (why) toast(why, '#ffb08a');
         } else {
+          if (live) plazaStealTgt = live;
           stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / PLAZA_STEAL_DUR * 100}%`;
           if (stealT >= PLAZA_STEAL_DUR) { const t = plazaStealTgt; stealT = 0; void finishPlazaSteal(t); }
         }

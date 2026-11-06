@@ -298,17 +298,24 @@ export function createPlazaWorldView(
   remoteMeatGeo.scale(1.35, 0.55, 1);
   const remoteMeatMat = M(0xd8cbb0, { roughness: 0.35, flatShading: true });
 
-  /** 坐下面前：紅臉盆＋裝肉碗（本地相對 outer，面向 -Z） */
+  /** 坐下面前：紅臉盆＋裝肉碗（貼蚵堆坡面，renderOrder 高於殼堆） */
   function makeRemoteProps(): { props: THREE.Group; bowlNode: THREE.Object3D; meatRoot: THREE.Group } {
     const props = new THREE.Group();
     props.visible = false;
+    const markTop = (o: THREE.Object3D) => {
+      o.traverse(x => {
+        const m = x as THREE.Mesh;
+        if (m.isMesh) m.renderOrder = 2;
+      });
+    };
+    // 座椅離堆心 ~1.38；盆／碗再往 -Z（堆心）靠並抬高，像擱在蚵山上
     const basinMat = M(0xc84030, { side: THREE.DoubleSide, roughness: 0.55, flatShading: true });
     const basin = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.16, 0.11, 12, 1, true), basinMat);
-    basin.position.set(-0.3, 0.1, -0.52);
+    basin.position.set(-0.3, 0.2, -0.58);
     props.add(basin);
     const basinFl = new THREE.Mesh(new THREE.CircleGeometry(0.16, 12), M(0xa03028, { roughness: 0.65, flatShading: true }));
     basinFl.rotation.x = -Math.PI / 2;
-    basinFl.position.set(-0.3, 0.045, -0.52);
+    basinFl.position.set(-0.3, 0.145, -0.58);
     props.add(basinFl);
     // 盆裡幾顆殼示意
     for (let i = 0; i < 5; i++) {
@@ -318,7 +325,7 @@ export function createPlazaWorldView(
         M(0xc8c2c0, { roughness: 0.8, flatShading: true }),
       );
       oy.scale.set(1.2, 0.55, 1);
-      oy.position.set(-0.3 + Math.cos(a) * rr, 0.1, -0.52 + Math.sin(a) * rr);
+      oy.position.set(-0.3 + Math.cos(a) * rr, 0.2, -0.58 + Math.sin(a) * rr);
       props.add(oy);
     }
     const bowlNode = new THREE.Group();
@@ -329,11 +336,12 @@ export function createPlazaWorldView(
     const fl = new THREE.Mesh(new THREE.CircleGeometry(0.1, 12), M(0x3a6a98, { roughness: 0.5, flatShading: true }));
     fl.rotation.x = -Math.PI / 2;
     bowlNode.add(fl);
-    bowlNode.position.set(0.34, 0.06, -0.68);
+    bowlNode.position.set(0.34, 0.22, -0.74);
     props.add(bowlNode);
     const meatRoot = new THREE.Group();
-    meatRoot.position.set(0.34, 0.12, -0.68);
+    meatRoot.position.set(0.34, 0.3, -0.74);
     props.add(meatRoot);
+    markTop(props);
     return { props, bowlNode, meatRoot };
   }
 

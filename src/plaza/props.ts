@@ -109,6 +109,7 @@ export function makeYardLikePile(
   const mat = (shellMat as THREE.Material).clone();
   const pile = new THREE.InstancedMesh(shellGeo, mat, count);
   pile.castShadow = true;
+  pile.renderOrder = 0;
   pile.userData.pileId = pileId;
   pile.userData.sharedGeo = true;
   const d = new THREE.Object3D();
