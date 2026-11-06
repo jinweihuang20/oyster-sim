@@ -85,16 +85,10 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 #gauge.aim{border-color:#9fe0ff}#gauge.aim #zone{background:rgba(120,220,255,.7)}
 #toast{position:absolute;top:40%;width:100%;text-align:center;font-size:30px;font-weight:900;color:#ffe080;opacity:0;transition:opacity .25s;text-shadow:0 2px 6px #000;pointer-events:none;z-index:6;padding:0 12px;box-sizing:border-box}
 #toast.on{opacity:1}
-/* 廣場：提示在 HUD（#top／#stats）下方；手機把 #hint 再往下，避免互擋 */
-body.plazaMode #toast{top:calc(var(--sa-top,0px) + 118px);font-size:22px;font-weight:900;letter-spacing:.02em;text-shadow:0 1px 4px #000c,0 0 10px #0008;line-height:1.35}
-@media (pointer:coarse){
-  body.plazaMode #toast{top:calc(var(--sa-top,0px) + 102px);font-size:17px}
-  body.plazaMode #hint{top:calc(var(--sa-top,0px) + 138px)!important}
-}
-@media (max-width:600px){
-  body.plazaMode #toast{top:calc(var(--sa-top,0px) + 102px);font-size:16px;padding:0 10px}
-  body.plazaMode #hint{top:calc(var(--sa-top,0px) + 136px)!important}
-}
+/* 廣場：提示頂距由 --plaza-toast-top（placeFeed）決定，貼在 HUD／跑馬燈下方 */
+body.plazaMode #toast{top:var(--plaza-toast-top,calc(var(--sa-top,0px) + 118px));font-size:22px;font-weight:900;letter-spacing:.02em;text-shadow:0 1px 4px #000c,0 0 10px #0008;line-height:1.35}
+@media (pointer:coarse){body.plazaMode #toast{font-size:17px}}
+@media (max-width:600px){body.plazaMode #toast{font-size:16px;padding:0 10px}}
 
 
 #hpWrap{display:inline-flex;flex-direction:column;align-items:center;gap:1px}#hpBar{width:60px;height:8px;background:rgba(0,0,0,.5);border-radius:4px;overflow:hidden;display:inline-block;vertical-align:middle}

@@ -16,8 +16,8 @@ let last = 0, busy = false, polls = 0;
 const queue: string[] = [];
 let cur: HTMLElement | null = null;
 function endCur() { const el = $('feed'); cur = null; el.classList.remove('on'); $('fdTrack').innerHTML = ''; placeFeed(); busy = false; setTimeout(showNext, 600); }
-// 跑馬燈放在 HUD 上方統計（#top、#stats）的下緣之下，絕不蓋住
-function placeFeed() {
+// 跑馬燈放在 HUD（#top、#stats）下緣之下；並把廣場 #toast 頂距寫成 CSS 變數，避免與跑馬燈交疊
+export function placeFeed() {
   const f = document.getElementById('feed'); if (!f) return;
   let b = 0;
   for (const id of ['top', 'stats']) {
@@ -26,11 +26,30 @@ function placeFeed() {
     if (r.height > 0 && r.width > 0 && r.top < innerHeight * 0.4 && getComputedStyle(e).visibility !== 'hidden' && (e.textContent || '').trim()) b = Math.max(b, r.bottom);
   }
   f.style.top = b > 0 ? Math.round(b + 6) + 'px' : 'var(--sa-top)';
+  // 廣場提示：有跑馬燈時貼在其下，否則貼在 HUD 下
+  let toastTop = b > 0 ? Math.round(b + 8) : 56;
+  if (f.classList.contains('on')) {
+    const fr = f.getBoundingClientRect();
+    if (fr.height > 0) toastTop = Math.round(fr.bottom + 6);
+    else toastTop = Math.round((b > 0 ? b + 6 : 46) + 36);
+  }
+  document.documentElement.style.setProperty('--plaza-toast-top', `${toastTop}px`);
+
   const h = document.getElementById('hint'); if (!h) return;
   h.style.removeProperty('top'); h.style.removeProperty('bottom');
-  if (!f.classList.contains('on')) return;
-  const fr = f.getBoundingClientRect(), hr = h.getBoundingClientRect();
-  if (fr.height > 0 && hr.height > 0 && hr.top < fr.bottom + 2 && hr.bottom > fr.top - 2) { h.style.setProperty('top', Math.round(fr.bottom + 4) + 'px', 'important'); h.style.setProperty('bottom', 'auto', 'important'); }
+  const plaza = document.body.classList.contains('plazaMode');
+  // 上半部提示（手機 #hint／廣場）要讓過跑馬燈與 toast
+  let clearY = 0;
+  if (f.classList.contains('on')) {
+    const fr = f.getBoundingClientRect();
+    if (fr.height > 0) clearY = Math.max(clearY, Math.round(fr.bottom + 4));
+  }
+  if (plaza) clearY = Math.max(clearY, toastTop + 26);
+  if (!clearY) return;
+  const hr = h.getBoundingClientRect();
+  const hintOnTop = hr.top < innerHeight * 0.45;
+  if (hintOnTop && hr.height > 0 && hr.top < clearY + 2)
+    { h.style.setProperty('top', `${clearY}px`, 'important'); h.style.setProperty('bottom', 'auto', 'important'); }
 }
 function showNext() {
   const el = $('feed'); placeFeed();
