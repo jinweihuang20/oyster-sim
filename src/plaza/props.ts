@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
-import { PILE_SPACING, pileCenter, seatPose, PILE_COUNT, SLOTS_PER_PILE } from './layout';
+import { PILE_SPACING, PLAZA_LAMP_XZ, pileCenter, seatPose, PILE_COUNT, SLOTS_PER_PILE } from './layout';
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 
@@ -264,11 +264,11 @@ export function makePlazaBigShed(
     panel.rotation.z = 0.05;
   }
 
-  // 幾顆吊燈（不擋視線）
-  if (!lowDetail) {
+  // 吊燈外觀：四堆一盞（與 PLAZA_LAMP_XZ／實際 PointLight 對齊）
+  {
     const glow = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
-    for (const [x, z] of [[-5.2, -5.2], [5.2, 5.2], [-5.2, 5.2], [5.2, -5.2], [0, 0]] as const) {
-      add(new THREE.SphereGeometry(0.08, 8, 6), glow, [x, roofY - 0.55, z], g, false);
+    for (const [x, z] of PLAZA_LAMP_XZ) {
+      add(new THREE.SphereGeometry(lowDetail ? 0.07 : 0.09, lowDetail ? 6 : 8, lowDetail ? 5 : 6), glow, [x, roofY - 0.55, z], g, false);
       add(rcyl(0.008, 0.008, 0.5, 4), M(0x111111), [x, roofY - 0.25, z], g, false);
     }
   }

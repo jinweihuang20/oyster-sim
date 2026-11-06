@@ -16,6 +16,14 @@ export function pileCenter(pileId: number, out = new THREE.Vector3()) {
   return out.set((c - 1.5) * PILE_SPACING, 0, (r - 1.5) * PILE_SPACING);
 }
 
+/** 四堆一盞：每個 2×2 區塊中心（與 PILE_SPACING 對齊） */
+export const PLAZA_LAMP_XZ: readonly [number, number][] = [
+  [-PILE_SPACING, -PILE_SPACING],
+  [PILE_SPACING, -PILE_SPACING],
+  [-PILE_SPACING, PILE_SPACING],
+  [PILE_SPACING, PILE_SPACING],
+];
+
 /** 一堆四座：朝堆心 */
 export function seatPose(pileId: number, slot: number) {
   const center = pileCenter(pileId);

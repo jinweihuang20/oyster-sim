@@ -3124,7 +3124,10 @@ function frameBody() {
   camera.rotation.set(camPitch, yaw + (walking ? 0 : seatYaw), camRoll);
   camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
-  lamp.intensity = 26 + Math.sin(t * 1.3) * 1.0;
+  // 廣場改靠四象限吊燈照明；中央主燈改弱補光，避免只亮中間
+  lamp.intensity = plazaMode
+    ? 4.2 + Math.sin(t * 1.3) * 0.35
+    : 26 + Math.sin(t * 1.3) * 1.0;
   skyDome.tick(viewCam(), t);
   renderer.render(scene, viewCam());
   scheduleFrame();
