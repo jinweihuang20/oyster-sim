@@ -380,7 +380,6 @@ const rarOf = (w: number) => w <= 2 ? 'legend' : w <= 10 ? 'rare' : w <= 20 ? 'u
 // 入碗工錢／俐落加給：預設見 eco（後台「賺錢設定」可改）
 const DSHORT = ['易', '普', '硬', '超硬'];
 let meatPay = 0, dCnt = [0, 0, 0, 0];
-void fetchEconomy().then(ok => { if (ok) { syncEconomyTables(LOCS, RAR); renderDaily(); } });
 // 新手保護：生涯收工未滿 3 班 → 只出易／普通、綠區 +30%、割手率 -40%
 const newbie = () => !tut && save.days < 3;
 // 統計：本班各難度 [開殼, 插刀失敗, 割手, 殼碎]、收工原因
@@ -667,7 +666,32 @@ function updSky() {
   skyDome.setSun(_skySun.copy(sun.position).normalize(), Math.min(1.15, sun.intensity / 1.15));
   skyDome.setClouds(night ? 0.1 : dawnDusk ? 0.38 : 0.56);
   try { applyShedLook(); } catch { /* 尚未初始化 */ }
-  const nn = document.getElementById('nightNote'); if (nn) nn.textContent = isNight() ? '🌙 現在是夜班時段：這一工收入 +20%' : '💡 晚上 8 點到早上 5 點上工是夜班，收入 +20%';
+  refreshEconomyLabels();
+}
+
+/** 夜班％／俐落加給等文案（不重畫整塊地點卡） */
+function refreshEconomyLabels() {
+  const pct = Math.round(eco.nightMult * 100);
+  const nn = document.getElementById('nightNote');
+  if (nn) {
+    nn.innerHTML = isNight()
+      ? `<i class="ic ic-moon"></i> 🌙 現在是夜班時段：這一工收入 +${pct}%`
+      : `<i class="ic ic-moon"></i> 夜班加成 +${pct}%（晚上 8 點到早上 5 點上工）`;
+  }
+  const nv = document.querySelector('#nightTag .hudV');
+  if (nv) nv.innerHTML = `<i class="ic ic-moon"></i>+${pct}%`;
+  const tossTip = document.getElementById('tipToss');
+  if (tossTip) tossTip.innerHTML = `<b>丟肉</b>：殼打開後碗會亮起來，點一下碗（或碗附近）蚵仔肉就飛進去，不會丟歪；0.8 秒內點有「俐落」+$${eco.quickBonus}，2 秒沒點也會自己進碗`;
+  HINTS.aim = `肉在刀尖上！點一下碗（或碗附近）丟進去，0.8 秒內點有「俐落」+$${eco.quickBonus}，2 秒沒點會自己進碗`;
+}
+
+/** 後台經濟設定套用後，重刷開場 UI（地點倍率／上工費／圖鑑售價／夜班文案） */
+function refreshEconomyUi() {
+  syncEconomyTables(LOCS, RAR);
+  refreshEconomyLabels();
+  try { renderDaily(); } catch { /* */ }
+  try { renderLocs(); } catch { /* */ }
+  try { renderDex(); } catch { /* */ }
 }
 
 // ---------- 各漁港：遠景地標 + 不同的鄰座 ----------
@@ -2306,6 +2330,7 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   void syncPlazaOnlineUi(!!opts?.forcePlazaOnline);
 }
 renderLocs({ forcePlazaOnline: true });
+void fetchEconomy().then(ok => { if (ok) refreshEconomyUi(); });
 setInterval(() => {
   if (state !== 'menu' || !$('overlay')?.classList.contains('show')) return;
   void syncPlazaOnlineUi(true);
