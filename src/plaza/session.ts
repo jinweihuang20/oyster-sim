@@ -200,6 +200,13 @@ export function plazaGrillNearest(cx: number, cy: number, cam: THREE.Camera) {
 export function plazaGrillHit(raycaster: THREE.Raycaster) {
   return view?.grill.hit(raycaster) ?? null;
 }
+/** 本機樂觀更新（防連掀／連拿搶點） */
+export function plazaGrillUpsertLocal(o: PlazaGrillOyster) {
+  view?.grill.upsert(o);
+}
+export function plazaGrillRemoveLocal(id: string) {
+  view?.grill.remove(id);
+}
 
 const ERR_ZH: Record<string, string> = {
   taken: '這個位子有人了',

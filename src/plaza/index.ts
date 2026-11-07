@@ -3,7 +3,7 @@ export {
   plazaWalkBound, plazaPileObs, plazaRandomSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk,
   plazaHitPile, plazaMyPileOrigin,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
-  plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillHit,
+  plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillHit, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   tickPlaza, plazaReportEarn, plazaEndCleanup, plazaHideChrome,
   plazaFocusChat, plazaCloseChat, plazaChatIsOpen, plazaPushOutfit,
   type PlazaDeps,

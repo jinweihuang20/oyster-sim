@@ -40,7 +40,7 @@ import {
   plazaWalkBound, plazaPileObs, plazaRandomSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
-  plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest,
+  plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen, seatPose, plazaPushOutfit,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
@@ -639,7 +639,7 @@ const HINTS: Record<Phase, string> = {
   empty: COARSE ? '空殼：按「丟殼」對準阿婆丟過去，或者等一下自動丟掉' : '空殼：F／右鍵對準阿婆丟過去，或者等一下自動丟掉',
   crab: COARSE ? '螃蟹夾手了！快狂點螢幕把牠甩掉！' : '螃蟹夾手了！快連點（滑鼠／Space）把牠甩掉！',
   busy: '',
-  grillPlace: COARSE ? '連點烤網一直放；盆空再撈。烤開後空手點去搶掀／搶拿' : '連點烤網（或 Space）一直放；盆空再撈。烤開後空手去搶掀／搶拿',
+  grillPlace: COARSE ? '點烤網放上這顆；放完再從臉盆拿下一顆。烤開後空手搶掀／搶拿' : '點烤網（或 Space）放上這顆；放完再拿下一顆。烤開後空手搶掀／搶拿',
   grillCook: '等烤網上的蚵仔開口…',
   grillFlip: '點烤開的蚵仔掀上殼（比手速）',
   grillTake: '點掀好的蚵仔，連下殼把肉端走（比手速）',
@@ -735,28 +735,9 @@ function holdOyster(dd: number) {
   void d;
 }
 
-/** 防連點重複送出 */
+/** 防連點：放／掀／拿同一時間只送一次 */
 let grillPlaceBusy = false;
-/** 放上烤網後若盆裡還有，立刻接下顆繼續放（真實連放） */
-function grillContinuePlace() {
-  if (state !== 'play' || walking || !plazaOnGrill()) { goPick(); return; }
-  if (!basinOy.length) {
-    oysterToHand();
-    oyster.visible = false;
-    goPick();
-    hint.textContent = '臉盆空了！撈一把再連放；或點烤開的搶掀／搶拿';
-    return;
-  }
-  const next = basinOy[0];
-  basinOy.splice(0, 1);
-  scene.remove(next);
-  basinOy.forEach((m, i) => { if (m.visible) m.position.copy(basinSlot(i)); });
-  // 略過飛入動畫，直接上手繼續放
-  holdOyster(typeof next.userData.diff === 'number' ? next.userData.diff : 1);
-  hint.textContent = basinOy.length
-    ? `繼續點烤網連放（盆裡還有 ${basinOy.length}）`
-    : '這顆放完盆就空了；烤開的可空手去搶';
-}
+let grillRaceBusy = false;
 function grillPlaceOnNet(cx?: number, cy?: number) {
   if (phase !== 'grillPlace' || state !== 'play' || grillPlaceBusy) return;
   grillPlaceBusy = true;
@@ -783,42 +764,62 @@ function grillPlaceOnNet(cx?: number, cy?: number) {
       oysterToHand();
       oyster.visible = false;
       SFX.whoosh();
-      // 連放：盆裡有就接下顆，不必每次回 pick
-      grillContinuePlace();
+      toast('放上了，再從臉盆拿一顆', '#ffd76a');
+      // 放完要再去拿，不自動接下顆
+      setPhase('busy');
+      later(0.25, goPick);
     } finally {
       grillPlaceBusy = false;
     }
   })();
 }
-/** 搶掀／搶拿烤網上已開／已掀的蚵 */
+/** 搶掀／搶拿（一次只處理一顆，避免連掀／連拿） */
 async function grillRaceAt(cx: number, cy: number) {
-  if (!plazaOnGrill() || state !== 'play' || walking) return false;
-  if (phase === 'grillPlace' || phase === 'scoop' || phase === 'aim' || phase === 'seam' || phase === 'twist') return false;
+  if (!plazaOnGrill() || state !== 'play' || walking || grillRaceBusy) return false;
+  if (phase === 'grillPlace' || phase === 'scoop' || phase === 'aim' || phase === 'seam' || phase === 'twist' || phase === 'grillTake') return false;
   const o = plazaGrillNearest(cx, cy, viewCam());
   if (!o) return false;
   if (o.state === 'open') {
+    grillRaceBusy = true;
     setPhase('grillFlip');
-    const r = await plazaGrillFlip(o.id);
-    if (!r.ok) {
-      toast(plazaZhErr(r.err) || '掀不到', '#ff8a7a');
-      if (state === 'play') goPick();
+    // 樂觀更新：立刻變已掀，避免連點再掀下一顆／同一顆
+    plazaGrillUpsertLocal({ ...o, state: 'flipped' });
+    try {
+      const r = await plazaGrillFlip(o.id);
+      if (!r.ok) {
+        plazaGrillUpsertLocal(o); // 還原
+        toast(plazaZhErr(r.err) || '掀不到', '#ff8a7a');
+        if (state === 'play') { setPhase('busy'); later(0.2, goPick); }
+        return true;
+      }
+      if (r.oyster) plazaGrillUpsertLocal(r.oyster);
+      SFX.creak();
+      toast('掀掉上殼！再點一次拿肉', '#9be37a');
+      // 短冷卻後才可再點（拿肉或掀別顆）
+      setPhase('busy');
+      later(0.45, () => { if (state === 'play') goPick(); });
       return true;
+    } finally {
+      later(0.5, () => { grillRaceBusy = false; });
     }
-    SFX.creak();
-    toast('掀掉上殼！快點拿肉', '#9be37a');
-    if (state === 'play' && (phase === 'grillFlip' || phase === 'busy')) goPick();
-    return true;
   }
   if (o.state === 'flipped') {
+    grillRaceBusy = true;
     setPhase('grillTake');
-    const r = await plazaGrillTake(o.id);
-    if (!r.ok) {
-      toast(plazaZhErr(r.err) || '被別人搶走了', '#ff8a7a');
-      if (state === 'play') goPick();
+    plazaGrillRemoveLocal(o.id); // 樂觀拿掉，防連拿
+    try {
+      const r = await plazaGrillTake(o.id);
+      if (!r.ok) {
+        plazaGrillUpsertLocal(o); // 還原
+        toast(plazaZhErr(r.err) || '被別人搶走了', '#ff8a7a');
+        if (state === 'play') { setPhase('busy'); later(0.2, goPick); }
+        return true;
+      }
+      applyGrillTakeWin(r.count);
       return true;
+    } finally {
+      later(0.55, () => { grillRaceBusy = false; });
     }
-    applyGrillTakeWin(r.count);
-    return true;
   }
   return false;
 }
