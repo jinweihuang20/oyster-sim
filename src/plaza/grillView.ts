@@ -5,7 +5,10 @@ import { pileCenter } from './layout';
 import { GRILL_GRATE_Y } from './props';
 import type { PlazaGrillOyster } from './types';
 
-const OPEN_MAX = (40 * Math.PI) / 180;
+/** 可掀：只微微開縫（仍看得出上殼在），勿開到像已掀掉 */
+const OPEN_READY = (18 * Math.PI) / 180;
+/** 烹烤過程最大掀角＝可掀角 */
+const OPEN_MAX = OPEN_READY;
 const HINGE_Z = 0.055;
 
 type GrillMesh = {
@@ -92,19 +95,21 @@ export function createGrillView(parent: THREE.Object3D) {
   function applyOpen(g: GrillMesh, now: number) {
     const o = g.data;
     if (o.state === 'flipped') {
-      g.hinge.rotation.x = -OPEN_MAX;
+      // 已掀：上殼移走，只留下殼＋肉
+      g.hinge.rotation.x = 0;
       g.top.visible = false;
       return;
     }
     if (o.state === 'open') {
-      g.hinge.rotation.x = -OPEN_MAX;
+      // 可掀：上殼仍在，只開一小縫（與「已掀掉」明顯不同）
+      g.hinge.rotation.x = -OPEN_READY;
       g.top.visible = true;
       return;
     }
-    // cooking：依 OpenAt 插值
+    // cooking：縫慢慢開到可掀角
     const dur = Math.max(1, o.openAt - o.placedAt);
     const t = Math.min(1, Math.max(0, (now - o.placedAt) / dur));
-    g.hinge.rotation.x = -t * OPEN_MAX;
+    g.hinge.rotation.x = -t * OPEN_READY;
     g.top.visible = true;
   }
 

@@ -531,7 +531,7 @@ const BASIN0_GRILL = new THREE.Vector3(-0.58, 0.08, 1.72);
 const BOWL0_GRILL = new THREE.Vector3(0.58, 0.1, 1.66);
 const GRILL_OY0 = new THREE.Vector3(0, GRILL_GRATE_Y + 0.04, 0.55);
 const GRILL_HINGE_Z = 0.055;
-const GRILL_OPEN_MAX = (40 * Math.PI) / 180;
+const GRILL_OPEN_MAX = (18 * Math.PI) / 180; // 與共烤可掀縫對齊，勿開到像已掀
 const _grillHit = new THREE.Vector3();
 const _grillPlane = new THREE.Plane();
 const plazaOnGrill = () => {
