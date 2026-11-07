@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
+import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
 import { PILE_SPACING, PLAZA_LAMP_XZ, pileCenter, seatPose, PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, pileHasNpc } from './layout';
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
@@ -164,7 +165,6 @@ export function makePlazaGrill(
   const segs = lowDetail ? 6 : 10;
   const wood = new THREE.MeshStandardMaterial({ color: 0x5a4a32, roughness: 0.9 });
   const steel = new THREE.MeshStandardMaterial({ color: 0x4a4a4e, metalness: 0.45, roughness: 0.55 });
-  const coal = new THREE.MeshStandardMaterial({ color: 0x1a120e, roughness: 1 });
   const brick = new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.88 });
   const gy = GRILL_GRATE_Y;
 
@@ -181,14 +181,20 @@ export function makePlazaGrill(
   // 矮磚台（壓低：頂面約在烤網下）
   add(rboxEnv(1.55, 0.18, 1.55), brick, [0, 0.09, 0], true);
   add(rboxEnv(1.4, 0.08, 1.4), steel, [0, 0.2, 0], false);
-  // 炭層＋火光塊
-  add(rboxEnv(1.05, 0.05, 1.05), coal, [0, gy - 0.08, 0], false);
-  const glow = new THREE.MeshBasicMaterial({ color: 0xff6a28 });
-  const nGlow = lowDetail ? 5 : 9;
-  for (let i = 0; i < nGlow; i++) {
-    const a = (i / nGlow) * Math.PI * 2;
-    add(rboxEnv(0.09, 0.03, 0.09), glow, [Math.cos(a) * 0.3, gy - 0.05, Math.sin(a) * 0.3], false);
-  }
+  // 炭火＋煙（烤網下；點光由 fireFx 跳動）
+  const fire: CharcoalFireFx = makeCharcoalFire({
+    width: 1.0,
+    depth: 1.0,
+    lowDetail,
+    withLight: !lowDetail,
+    lightIntensity: 3.8,
+    lightDistance: 4.8,
+    smoke: lowDetail ? 0.55 : 1,
+    seed: 1100 + pileId * 97,
+  });
+  fire.group.position.set(0, gy - 0.07, 0);
+  g.add(fire.group);
+  g.userData.fireFx = fire;
   // 烤網
   const grate = new THREE.MeshStandardMaterial({ color: 0x6a6a70, metalness: 0.55, roughness: 0.4 });
   for (let i = 0; i < 9; i++) {
@@ -244,12 +250,6 @@ export function makePlazaGrill(
   hit.userData.pileId = pileId;
   g.add(hit);
 
-  if (!lowDetail) {
-    const pl = new THREE.PointLight(0xff7a30, 3.8, 4.8, 1.6);
-    pl.position.set(0, gy + 0.45, 0);
-    pl.castShadow = false;
-    g.add(pl);
-  }
   return g;
 }
 

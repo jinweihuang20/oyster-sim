@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
+import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
 
 type MatFn = (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial;
 type AddFn = (
@@ -61,10 +62,16 @@ export function makePlazaAmbiance(
   M: MatFn,
   add: AddFn,
   lowDetail = false,
-): { group: THREE.Group; lights: THREE.PointLight[]; obstacles: [number, number, number][] } {
+): {
+  group: THREE.Group;
+  lights: THREE.PointLight[];
+  obstacles: [number, number, number][];
+  tick: (tSec: number, dt: number) => void;
+} {
   const root = new THREE.Group();
   root.name = 'plazaAmbiance';
   const lights: THREE.PointLight[] = [];
+  const fires: CharcoalFireFx[] = [];
   const segs = lowDetail ? 5 : 8;
 
   for (const site of PLAZA_STALL_SITES) {
@@ -74,8 +81,8 @@ export function makePlazaAmbiance(
     g.rotation.y = Math.atan2(site.x, site.z);
     root.add(g);
     switch (site.kind) {
-      case 'bbq': buildBbqStand(g, M, add, segs, lowDetail, lights); break;
-      case 'bbqSit': buildBbqSit(g, M, add, segs, lowDetail, lights); break;
+      case 'bbq': buildBbqStand(g, M, add, segs, lowDetail, lights, fires); break;
+      case 'bbqSit': buildBbqSit(g, M, add, segs, lowDetail, lights, fires); break;
       case 'drink': buildDrink(g, M, add, segs); break;
       case 'snack': buildSnack(g, M, add, segs, lowDetail); break;
       case 'fruit': buildFruit(g, M, add, segs); break;
@@ -88,7 +95,12 @@ export function makePlazaAmbiance(
 
   root.add(makePlazaHarbor(M, add, segs, lowDetail));
 
-  return { group: root, lights, obstacles: plazaStallObstacles() };
+  return {
+    group: root,
+    lights,
+    obstacles: plazaStallObstacles(),
+    tick: (tSec, dt) => { for (const f of fires) f.tick(tSec, dt); },
+  };
 }
 
 /** 北側棚外：碼頭＋漁船（工寮船會在入場時藏起，改用這組正確位置） */
@@ -143,6 +155,7 @@ function buildBbqStand(
   segs: number,
   lowDetail: boolean,
   lights: THREE.PointLight[],
+  fires: CharcoalFireFx[],
 ) {
   const wood = M(0x5a4a32, { roughness: 0.9 });
   const steel = M(0x4a4a4e, { metalness: 0.45, roughness: 0.55 });
@@ -155,12 +168,20 @@ function buildBbqStand(
   roof.rotation.x = -0.08;
   add(rboxEnv(1.35, 0.72, 0.55), steel, [0, 0.36, 0.05], g, true);
   add(rboxEnv(1.28, 0.04, 0.48), M(0x2a2a2c, { metalness: 0.3, roughness: 0.7 }), [0, 0.74, 0.05], g, false);
-  const coal = M(0x1a120e, { roughness: 1 });
-  const glow = new THREE.MeshBasicMaterial({ color: 0xff6a28 });
-  add(rboxEnv(1.05, 0.06, 0.34), coal, [0, 0.78, 0.05], g, false);
-  for (let i = 0; i < (lowDetail ? 4 : 7); i++) {
-    add(rboxEnv(0.1, 0.04, 0.22), glow, [-0.4 + i * 0.13, 0.82, 0.05], g, false);
-  }
+  const fire = makeCharcoalFire({
+    width: 1.0,
+    depth: 0.32,
+    lowDetail,
+    withLight: !lowDetail,
+    lightIntensity: 5.2,
+    lightDistance: 6.2,
+    smoke: lowDetail ? 0.7 : 1.15,
+    seed: 2201,
+  });
+  fire.group.position.set(0, 0.78, 0.05);
+  g.add(fire.group);
+  fires.push(fire);
+  if (fire.light) lights.push(fire.light);
   const grate = M(0x6a6a70, { metalness: 0.55, roughness: 0.45 });
   for (let i = 0; i < 6; i++) add(rboxEnv(1.1, 0.015, 0.02), grate, [0, 0.86, -0.12 + i * 0.06], g, false);
   const meat = M(0x8a3a22, { roughness: 0.7 });
@@ -172,13 +193,6 @@ function buildBbqStand(
     add(rcyl(0.14, 0.13, 0.28, segs), M(0xd04040, { roughness: 0.55 }), [sx, 0.14, -1.15], g, false);
   }
   add(rcyl(0.14, 0.14, 0.55, segs), M(0xd8d0c0, { metalness: 0.2, roughness: 0.5 }), [0.95, 0.28, 0.35], g, true);
-  if (!lowDetail) {
-    const pl = new THREE.PointLight(0xff7a30, 5.5, 6.5, 1.6);
-    pl.position.set(0, 1.15, 0.1);
-    pl.castShadow = false;
-    g.add(pl);
-    lights.push(pl);
-  }
 }
 
 /** 坐式烤肉：地爐＋矮桌＋地墊／矮凳圍坐（非立式高台） */
@@ -189,6 +203,7 @@ function buildBbqSit(
   segs: number,
   lowDetail: boolean,
   lights: THREE.PointLight[],
+  fires: CharcoalFireFx[],
 ) {
   const wood = M(0x6a5238, { roughness: 0.88 });
   const matCol = M(0xc8b070, { roughness: 0.85 });
@@ -197,12 +212,20 @@ function buildBbqSit(
   // 中央矮炭爐
   const steel = M(0x3a3a3e, { metalness: 0.4, roughness: 0.55 });
   add(rcyl(0.42, 0.38, 0.28, segs), steel, [0, 0.2, 0], g, true);
-  add(rcyl(0.36, 0.36, 0.05, segs), M(0x1a120e, { roughness: 1 }), [0, 0.36, 0], g, false);
-  const glow = new THREE.MeshBasicMaterial({ color: 0xff6020 });
-  for (let i = 0; i < (lowDetail ? 5 : 8); i++) {
-    const a = (i / 8) * Math.PI * 2;
-    add(rboxEnv(0.08, 0.04, 0.08), glow, [Math.cos(a) * 0.18, 0.4, Math.sin(a) * 0.18], g, false);
-  }
+  const fire = makeCharcoalFire({
+    width: 0.62,
+    depth: 0.62,
+    lowDetail,
+    withLight: !lowDetail,
+    lightIntensity: 4.0,
+    lightDistance: 5.2,
+    smoke: lowDetail ? 0.65 : 1.05,
+    seed: 3302,
+  });
+  fire.group.position.set(0, 0.36, 0);
+  g.add(fire.group);
+  fires.push(fire);
+  if (fire.light) lights.push(fire.light);
   // 矮烤網架
   add(rboxEnv(0.7, 0.02, 0.7), M(0x6a6a70, { metalness: 0.5 }), [0, 0.48, 0], g, false);
   const meat = M(0x8a3a22);
@@ -229,13 +252,6 @@ function buildBbqSit(
     add(rcyl(0.035, 0.04, 1.55, segs), wood, [sx, 0.78, 1.15], g, true);
   }
   add(rboxEnv(2.5, 0.03, 2.5), tarp, [0, 1.55, 0], g, false);
-  if (!lowDetail) {
-    const pl = new THREE.PointLight(0xff6a28, 4.2, 5.5, 1.7);
-    pl.position.set(0, 0.85, 0);
-    pl.castShadow = false;
-    g.add(pl);
-    lights.push(pl);
-  }
 }
 
 function buildDrink(g: THREE.Group, M: MatFn, add: AddFn, segs: number) {

@@ -7,6 +7,7 @@ import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
 import { makePlazaAmbiance } from './ambiance';
 import { createGrillView, type PlazaGrillView } from './grillView';
+import type { CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 import { plazaDisplayName } from './types';
@@ -169,6 +170,7 @@ export function createPlazaWorldView(
   floor.receiveShadow = !LO;
   root.add(floor);
 
+  const fireFx: CharcoalFireFx[] = [];
   for (let i = 0; i < PILE_COUNT; i++) {
     const c = pileCenter(i);
     // 南排烤蚵台；其餘沿用工寮蚵山（InstancedMesh）
@@ -178,6 +180,8 @@ export function createPlazaWorldView(
     pile.position.copy(c);
     root.add(pile);
     pileGroups.push(pile);
+    const fx = pile.userData.fireFx as CharcoalFireFx | undefined;
+    if (fx) fireFx.push(fx);
 
     const seatN = SLOTS_PER_PILE + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
     for (let s = 0; s < seatN; s++) {
@@ -738,6 +742,8 @@ export function createPlazaWorldView(
         placeHold(r, 0.2, 0.12, -0.22, 0, 0, 0, false);
         r.headWorkX = 0.04;
       }
+      // 烤位不拿剝蚵刀（含 pick／aim／empty）
+      if (pileIsGrill(r.pileId)) r.knife.visible = false;
     } else {
       poseStand(r);
       hideHold(r);
@@ -1069,12 +1075,17 @@ export function createPlazaWorldView(
       selfBubble.sprite.visible = true;
     } else if (selfBubble.sprite.visible) selfBubble.sprite.visible = false;
     grill.tick(t);
+    const tSec = t * 0.001;
+    for (const f of fireFx) f.tick(tSec, dt);
+    ambiance.tick(tSec, dt);
   }
 
   function dispose() {
     for (const r of [...remotes.values()]) destroyRemote(r);
     remotes.clear();
     grill.dispose();
+    for (const f of fireFx) f.dispose();
+    fireFx.length = 0;
     for (const pl of plazaLights) { root.remove(pl); pl.dispose(); }
     plazaLights.length = 0;
     selfBubble.dispose();
@@ -1085,6 +1096,7 @@ export function createPlazaWorldView(
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       if (m.geometry && !m.userData.sharedGeo && m.geometry !== opts.shellGeo) m.geometry.dispose();
+      if (m.userData.sharedMat) return;
       const mat = m.material as THREE.Material | THREE.Material[];
       if (Array.isArray(mat)) mat.forEach(x => { if (x !== opts.shellMat) x.dispose(); });
       else if (mat && mat !== opts.shellMat) mat.dispose();

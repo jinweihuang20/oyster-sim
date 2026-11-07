@@ -639,23 +639,24 @@ const HINTS: Record<Phase, string> = {
   empty: COARSE ? '空殼：按「丟殼」對準阿婆丟過去，或者等一下自動丟掉' : '空殼：F／右鍵對準阿婆丟過去，或者等一下自動丟掉',
   crab: COARSE ? '螃蟹夾手了！快狂點螢幕把牠甩掉！' : '螃蟹夾手了！快連點（滑鼠／Space）把牠甩掉！',
   busy: '',
-  grillPlace: COARSE ? '點烤網放上這顆；放完再從臉盆拿下一顆。烤開後空手搶掀／搶拿' : '點烤網（或 Space）放上這顆；放完再拿下一顆。烤開後空手搶掀／搶拿',
+  grillPlace: COARSE ? '點烤網放上這顆（不拿刀）；放完再拿下一顆。空手才能掀殼／拿肉' : '點烤網放上這顆（不拿刀）；放完再拿下一顆。空手才能掀殼／拿肉',
   grillCook: '等烤網上的蚵仔開口…',
-  grillFlip: '點烤開的蚵仔掀上殼（比手速）',
-  grillTake: '點掀好的蚵仔，連下殼把肉端走（比手速）',
+  grillFlip: '點烤開的蚵仔掀上殼（比手速；手上有東西不行）',
+  grillTake: '點掀好的蚵仔拿肉（比手速；手上有東西不行）',
 };
 const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
 /** 丟殼／偷蚵準心：工寮與廣場同一套——瞄到碗→手掌「偷!」，可下手時 hot */
 function updReticle() {
   const el = $('reticle');
   if (state !== 'play') { on('reticle', false); el.classList.remove('hot', 'steal'); return; }
+  // 烤位也延續丟殼（空殼）／準心；撬縫只在工寮／剝蚵堆
   const canThrow = phase === 'empty' || phase === 'seam';
   let stealReady = false, stealHot = false;
   if (!walking) {
     if (plazaMode) {
       if (plazaSeated() && performance.now() >= plazaStealBanUntil) {
         const pt = plazaStealTgt ?? plazaStealAimTarget();
-        // 同工寮：只要瞄到碗就換手掌；hot＝沒被看＋規則允許
+        // 同工寮：只要瞄到碗就換手掌；hot＝沒被看＋規則允許（烤位同樣可偷）
         stealReady = !!pt;
         stealHot = !!plazaStealTgt || (!!pt && !plazaWatchingMe(pt) && !plazaStealCanTarget(pt));
       }
@@ -689,10 +690,12 @@ function setPhase(p: Phase) {
   tapAim = p === 'aim'; if (tapAim) tossT0 = performance.now(); bowlRing.visible = tapAim; syncBasinRing();
   if (tapAim && !tut && state === 'play' && !LS.getItem('meatTip')) { LS.setItem('meatTip', '1'); later(0.1, () => toast(matchMedia('(pointer: coarse)').matches ? '往上拖畫面找阿婆，點她可以把肉丟過去（不算錢）' : '轉過去用滑鼠點阿婆，可以把肉丟過去（不算錢）', '#ffd76a')); }
   if (p === 'aim' && !tapAim) gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
-  const grill = isGrillPhase(p);
   updReticle(); on('giveUp', (p === 'seam' || p === 'twist' || p === 'grillPlace') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
-  on('rotL', p === 'seam'); on('rotR', p === 'seam'); on('throwBtn', (p === 'seam' || p === 'empty') && state === 'play');
-  knife.visible = !grill;
+  on('rotL', p === 'seam'); on('rotR', p === 'seam');
+  // 烤位延續丟殼（空殼 phase）；剝蚵刀烤位一律不拿
+  on('throwBtn', (p === 'seam' || p === 'empty') && state === 'play');
+  knife.visible = !plazaOnGrill();
+  if (plazaOnGrill()) knifeK = 0;
   if (p !== 'busy') hint.textContent = tapAim ? TAP_HINT : HINTS[p];
   const d = DIFF[diff];
   if (p === 'aim') { const TW = tut ? 0.12 : 0; zone.style.left = `${(PERF0 - TW) * 100}%`; zone.style.width = `${(PERF1 - PERF0 + 2 * TW) * 100}%`; $('diff').textContent = crackedNow ? '⚠ 有殼屑' : ''; }
@@ -709,10 +712,12 @@ function goPick() {
   if (evRun?.steal === 'steal_only') { oyster.visible = false; setPhase('busy'); hint.textContent = '本活動只能用偷的：趁阿婆轉頭聊天，偷她碗裡的肉'; return; }
   oysterToHand();
   oyster.visible = false; setPhase('pick');
+  // 烤位：臉盆空了自動補滿，不必再去蚵籃／蚵堆撈
+  if (plazaOnGrill() && !basinOy.length) fillBasin(false);
   if (!basinOy.length) {
-    hint.textContent = plazaOnGrill()
-      ? (basinOy.length ? '點蚵仔放上烤網；烤開的搶掀／搶拿' : '臉盆空了！點烤台旁生蚵籃撈一把；烤開的搶掀／搶拿')
-      : plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把';
+    hint.textContent = plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把';
+  } else if (plazaOnGrill()) {
+    hint.textContent = '點臉盆內的蚵仔放上烤網；烤開的搶掀／搶拿';
   }
 }
 function holdOyster(dd: number) {
@@ -773,12 +778,22 @@ function grillPlaceOnNet(cx?: number, cy?: number) {
     }
   })();
 }
-/** 搶掀／搶拿（一次只處理一顆，避免連掀／連拿） */
+/** 手上有蚵／肉／空殼等就不准掀殼、拿肉 */
+function grillHandsBusy() {
+  if (oyster.visible) return true;
+  return phase === 'grillPlace' || phase === 'aim' || phase === 'empty'
+    || phase === 'grillTake' || phase === 'grillFlip' || phase === 'scoop'
+    || phase === 'seam' || phase === 'twist' || phase === 'crab';
+}
+/** 搶掀／搶拿（一次只處理一顆；手上有東西不可） */
 async function grillRaceAt(cx: number, cy: number) {
   if (!plazaOnGrill() || state !== 'play' || walking || grillRaceBusy) return false;
-  if (phase === 'grillPlace' || phase === 'scoop' || phase === 'aim' || phase === 'seam' || phase === 'twist' || phase === 'grillTake') return false;
   const o = plazaGrillNearest(cx, cy, viewCam());
   if (!o) return false;
+  if (grillHandsBusy()) {
+    toast('手上還拿著東西，先放完／丟完再掀殼或拿肉', '#ffb08a');
+    return true;
+  }
   if (o.state === 'open') {
     grillRaceBusy = true;
     setPhase('grillFlip');
@@ -1339,15 +1354,20 @@ function pickAt(cx: number, cy: number) {
     if (best) { grab(best); return; }
   }
   if (plazaMode) {
-    // 臉盆空了：點自己面前蚵堆（或畫面）就撈
+    // 烤位空盆直接補滿；其餘座位：點自己面前蚵堆撈
     if (!basinOy.length) {
+      if (plazaOnGrill()) {
+        fillBasin(false);
+        hint.textContent = '點臉盆內的蚵仔放上烤網；烤開的搶掀／搶拿';
+        return;
+      }
       const hitId = plazaHitPile(ray);
       const mine = plazaMySeat()?.pileId;
       if (hitId == null || mine == null || hitId === mine) { scoop(); return; }
       toast('請點自己面前這一堆蚵仔', '#ffb08a'); return;
     }
   } else if (ray.intersectObject(pileHit, false).length || ray.intersectObject(pile, false).length) { scoop(); return; }
-  hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : (plazaOnGrill() ? '臉盆空了！點面前烤台旁的生蚵籃撈一把' : plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！點中間的蚵殼山撈一把');
+  hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : (plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！點中間的蚵殼山撈一把');
 }
 function grab(m: THREE.Mesh) {
   basinOy.splice(basinOy.indexOf(m), 1); setPhase('busy'); reach = 0.35; tone(500, 0.05, 0.08, 'triangle'); noise(0.05, 1200, 0.2);
@@ -3461,7 +3481,8 @@ function frameBody() {
   reach = Math.max(0, reach - rdt); const rk = Math.sin(Math.min(1, reach / 0.35) * Math.PI); handL.position.z -= rk * 0.18; handL.position.y -= rk * 0.12;
   if (phase === 'scoop') { const sk = Math.sin(t * 6); handL.position.z -= 0.2 + sk * 0.05; handR.position.z = -0.6 + sk * 0.05; handL.position.y += 0.05; } else handR.position.z = -0.45;
   // 找縫／撬殼：右手把刀尖帶到左手蚵仔的殼縫上（平滑靠近）
-  { const want = (phase === 'seam' || phase === 'twist') && oyster.visible ? 1 : 0; knifeK += (want - knifeK) * Math.min(1, rdt * 8);
+  { const want = !plazaOnGrill() && (phase === 'seam' || phase === 'twist') && oyster.visible ? 1 : 0; knifeK += (want - knifeK) * Math.min(1, rdt * 8);
+    if (plazaOnGrill()) { knife.visible = false; knifeK = 0; }
     if (knifeK > 0.01) { handRig.updateMatrixWorld(true); const tip = knife.localToWorld(_kt.set(-0.15, 0, 0)), goal = handL.localToWorld(_kg.copy(oyster.position).add(_ko));
       handRig.worldToLocal(tip); handRig.worldToLocal(goal); handR.position.addScaledVector(goal.sub(tip), knifeK); } }
   const ch = holding && phase === 'aim' ? Math.min(1, hold) : 0;
