@@ -55,11 +55,45 @@ type Remote = {
 
 const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
 const HAIRS = [0x222222, 0x555555, 0x888888, 0x3a2a1a, 0xdddddd];
-/** 阿婆配色（對齊工寮 NPC_DEF） */
-const AMA_LOOKS = [
-  { shirt: 0xe87840, hair: 0x8a8a8a },
-  { shirt: 0x3a9a6a, hair: 0x444444 },
-  { shirt: 0xe86878, hair: 0xc8c8c8 },
+/** 廣場阿婆農婦裝：依 pid 抽一套，頭巾／斗笠／漁夫帽混搭 */
+type AmaFarmLook = {
+  shirt: number;
+  hair: number;
+  pants: number;
+  /** 頭巾／斗笠染色（斗笠偏草黃） */
+  headTint: number;
+  head: 'hd_basic' | 'hd_hat' | 'hd_fisher';
+  hand: 'sl_flower' | 'hn_basic' | 'sl_rain';
+  legs: 'lg_basic' | 'lg_flower';
+  feet: 'ft_basic' | 'ft_boots';
+  apron: boolean;
+  bun: boolean;
+};
+const AMA_LOOKS: AmaFarmLook[] = [
+  // 橘衫＋紅花頭巾＋圍裙＋藍白拖
+  { shirt: 0xe87840, hair: 0x8a8a8a, pants: 0x3a5068, headTint: 0xc84a5a, head: 'hd_basic', hand: 'sl_flower', legs: 'lg_basic', feet: 'ft_basic', apron: true, bun: true },
+  // 綠衫＋斗笠＋花褲＋雨鞋
+  { shirt: 0x3a9a6a, hair: 0x444444, pants: 0x2a3848, headTint: 0xd8b46a, head: 'hd_hat', hand: 'sl_flower', legs: 'lg_flower', feet: 'ft_boots', apron: true, bun: true },
+  // 粉衫＋藍花頭巾、白髮、無圍裙
+  { shirt: 0xe86878, hair: 0xc8c8c8, pants: 0x4a4a52, headTint: 0x5a7ab0, head: 'hd_basic', hand: 'hn_basic', legs: 'lg_basic', feet: 'ft_basic', apron: false, bun: true },
+  // 茄紫衫＋斗笠＋素袖＋工作褲
+  { shirt: 0x8a4a7a, hair: 0x666666, pants: 0x3a4050, headTint: 0xc9a56a, head: 'hd_hat', hand: 'hn_basic', legs: 'lg_basic', feet: 'ft_basic', apron: true, bun: false },
+  // 芥黃衫＋漁夫帽＋碎花袖
+  { shirt: 0xc9a24a, hair: 0x555555, pants: 0x4a5540, headTint: 0x4a6a8a, head: 'hd_fisher', hand: 'sl_flower', legs: 'lg_basic', feet: 'ft_boots', apron: false, bun: true },
+  // 青色衫＋黃頭巾＋花褲
+  { shirt: 0x2a8a8a, hair: 0xaaaaaa, pants: 0x3a5068, headTint: 0xe0b040, head: 'hd_basic', hand: 'sl_flower', legs: 'lg_flower', feet: 'ft_basic', apron: true, bun: true },
+  // 酒紅衫＋斗笠＋雨衣袖＋雨鞋（像剛從外面進來）
+  { shirt: 0xa04050, hair: 0x777777, pants: 0x2a2a38, headTint: 0xb89550, head: 'hd_hat', hand: 'sl_rain', legs: 'lg_basic', feet: 'ft_boots', apron: true, bun: true },
+  // 天藍衫＋粉頭巾、無髻、拖鞋
+  { shirt: 0x4a8aba, hair: 0x3a2a1a, pants: 0x5a4a3a, headTint: 0xe86a8a, head: 'hd_basic', hand: 'hn_basic', legs: 'lg_flower', feet: 'ft_basic', apron: false, bun: false },
+  // 橄欖綠＋斗笠＋花褲、無圍裙
+  { shirt: 0x6a7a3a, hair: 0xbbbbbb, pants: 0x3a3a48, headTint: 0xe0c078, head: 'hd_hat', hand: 'sl_flower', legs: 'lg_flower', feet: 'ft_basic', apron: false, bun: true },
+  // 藕粉衫＋花頭巾＋圍裙＋雨鞋
+  { shirt: 0xd89090, hair: 0x999999, pants: 0x4a5568, headTint: 0xc86a5a, head: 'hd_basic', hand: 'sl_flower', legs: 'lg_basic', feet: 'ft_boots', apron: true, bun: true },
+  // 深灰藍＋漁夫帽＋素袖工作褲
+  { shirt: 0x4a5a6a, hair: 0xdddddd, pants: 0x2a3040, headTint: 0x3a5a7a, head: 'hd_fisher', hand: 'hn_basic', legs: 'lg_basic', feet: 'ft_basic', apron: true, bun: true },
+  // 橙紅衫＋斗笠＋碎花袖＋藍白拖
+  { shirt: 0xd06030, hair: 0x6a6a6a, pants: 0x3a4860, headTint: 0xd0a860, head: 'hd_hat', hand: 'sl_flower', legs: 'lg_basic', feet: 'ft_basic', apron: true, bun: true },
 ];
 
 /**
@@ -197,13 +231,106 @@ export function createPlazaWorldView(
     return out;
   }
 
-  function hashLook(pid: string, isNpc = false) {
+  function hashPid(pid: string) {
     let h = 0; for (let i = 0; i < pid.length; i++) h = (h * 31 + pid.charCodeAt(i)) | 0;
+    return h;
+  }
+  function hashLook(pid: string, isNpc = false) {
+    const h = hashPid(pid);
     if (isNpc) {
       const a = AMA_LOOKS[Math.abs(h) % AMA_LOOKS.length];
-      return { shirt: a.shirt, hair: a.hair, pants: 0x3a5068 };
+      return { shirt: a.shirt, hair: a.hair, pants: a.pants };
     }
     return { shirt: SHIRTS[Math.abs(h) % SHIRTS.length], hair: HAIRS[Math.abs(h >> 3) % HAIRS.length], pants: 0x2a2a40 };
+  }
+
+  /** 依變體套農婦裝：頭巾／斗笠／漁夫帽、袖口、褲、鞋、圍裙皆可不同 */
+  function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook) {
+    applyOutfitToRig(rig, {
+      head: ama.head,
+      hand: ama.hand,
+      body: 'bd_basic',
+      legs: ama.legs,
+      feet: ama.feet,
+    });
+    const mats = rig.outfitMats;
+    if (!mats) return;
+    for (const m of mats.body) {
+      m.map = null;
+      m.color.setHex(ama.shirt);
+      m.emissive.setHex(0);
+      m.needsUpdate = true;
+    }
+    for (const m of mats.hair) {
+      m.map = null;
+      m.color.setHex(ama.hair);
+      m.emissive.setHex(0);
+      m.needsUpdate = true;
+    }
+    // 素色工作褲才蓋色；花褲保留碎花貼圖
+    if (ama.legs === 'lg_basic') {
+      for (const m of mats.legs) {
+        m.map = null;
+        m.color.setHex(ama.pants);
+        m.emissive.setHex(0);
+        m.needsUpdate = true;
+      }
+    }
+    if (ama.feet === 'ft_basic') {
+      // 藍白拖：鞋面藍、鞋底米白
+      if (mats.feet[0]) {
+        mats.feet[0].map = null;
+        mats.feet[0].color.setHex(0x2a5ab0);
+        mats.feet[0].needsUpdate = true;
+      }
+      if (mats.feet[1]) {
+        mats.feet[1].map = null;
+        mats.feet[1].color.setHex(0xf6f2ea);
+        mats.feet[1].needsUpdate = true;
+      }
+    }
+    if (rig.hatG) {
+      const tint = new THREE.Color(ama.headTint);
+      rig.hatG.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
+        if (mesh.isMesh && mat?.color) mat.color.copy(tint);
+      });
+      // 只有花布頭巾打側結；斗笠／漁夫帽不加
+      if (ama.head === 'hd_basic' && !rig.hatG.userData.amaKnot) {
+        const knotM = new THREE.MeshStandardMaterial({ color: ama.headTint, roughness: 0.8 });
+        const knot = new THREE.Mesh(rboxEnv(0.08, 0.06, 0.1), knotM);
+        knot.position.set(0.14, 0.12, 0.02);
+        knot.rotation.z = 0.4;
+        rig.hatG.add(knot);
+        rig.hatG.userData.amaKnot = 1;
+      }
+    }
+    if (ama.apron && !rig.torso.userData.amaApron) {
+      const apronM = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.92 });
+      const strapM = new THREE.MeshStandardMaterial({ color: 0xe4ddd0, roughness: 0.9 });
+      const apron = new THREE.Mesh(rboxEnv(0.26, 0.34, 0.03), apronM);
+      apron.position.set(0, 0.02, -0.13);
+      rig.torso.add(apron);
+      for (const s of [-1, 1] as const) {
+        const strap = new THREE.Mesh(rboxEnv(0.028, 0.2, 0.02), strapM);
+        strap.position.set(s * 0.09, 0.28, -0.1);
+        strap.rotation.z = s * 0.18;
+        rig.torso.add(strap);
+      }
+      const pocket = new THREE.Mesh(rboxEnv(0.1, 0.08, 0.02), strapM);
+      pocket.position.set(0.06, -0.06, -0.145);
+      rig.torso.add(pocket);
+      rig.torso.userData.amaApron = 1;
+    }
+    if (ama.bun && !rig.head.userData.amaBun) {
+      const bunM = new THREE.MeshStandardMaterial({ color: ama.hair, roughness: 0.85 });
+      const bun = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), bunM);
+      // 斗笠下髮髻略往後，避免穿模
+      bun.position.set(0, ama.head === 'hd_hat' ? 0.06 : 0.12, ama.head === 'hd_hat' ? 0.14 : 0.12);
+      rig.head.add(bun);
+      rig.head.userData.amaBun = 1;
+    }
   }
 
   void bubblesHost;
@@ -631,7 +758,9 @@ export function createPlazaWorldView(
       const isNpc = !!(p.isNpc || pid.startsWith('npc-'));
       const look = hashLook(pid, isNpc);
       const rig = makePlayerAvatar(look, M, add, LO);
-      if (!isNpc) {
+      if (isNpc) {
+        dressPlazaAma(rig, AMA_LOOKS[Math.abs(hashPid(pid)) % AMA_LOOKS.length]);
+      } else {
         applyOutfitToRig(rig, normalizeOutfitIds({
           head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
         }));
