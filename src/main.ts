@@ -6,7 +6,7 @@ import {
   cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink, installCloudLifecycle, onCloudStatus,
 } from './core';
 import {
-  createSkyDome, SHELL_GEOS, HALF_GEOS, greyPick, shellM,
+  createSkyDome, SHELL_GEOS, HALF_GEOS, greyPick, shellM, basinShellM, BASIN_SHELL_COLS,
   makeAma as makeAmaMesh, GOSSIP, PEEK, NAG_GIVEUP, NAG_STAB, NAG_CRACK, NAG_SLIP,
   SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE, NPC_DIFF_T, NPC_DEF, type NpcDef,
   DIFF, DIFF_W, LOCS, SEATS, type Seat,
@@ -131,15 +131,16 @@ const clkH = hand(0.14, 0.022, 0x1a1a1a, 0.02), clkM = hand(0.2, 0.014, 0x1a1a1a
 mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.02, 8), mat(0x111111), [0, 0, 0.035], clockG).rotation.x = Math.PI / 2;
 function updClock() { const d = new Date(), sec = d.getSeconds(), m = d.getMinutes() + sec / 60, h = (d.getHours() % 12) + m / 60; clkS.rotation.z = -sec / 60 * Math.PI * 2; clkM.rotation.z = -m / 60 * Math.PI * 2; clkH.rotation.z = -h / 12 * Math.PI * 2; }
 updClock(); setInterval(updClock, 1000);
-// 港口：碼頭、水、漁船
-mesh(rboxEnv(14, 0.3, 3), mat(0x8a9088), [0, -0.15, -5.8]);
+// 港口：碼頭、水、漁船（工寮用；進廣場會藏起，改用廣場北側碼頭船）
+const harborDock = mesh(rboxEnv(14, 0.3, 3), mat(0x8a9088), [0, -0.15, -5.8]);
 const water = mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x4a98b8, roughness: 0.24, metalness: 0.18 }), [0, -0.5, -27]); water.rotation.x = -Math.PI / 2;
 const skyDome = createSkyDome({ radius: 46, lo: matchMedia('(pointer: coarse)').matches || matchMedia('(max-width: 900px)').matches });
 scene.add(skyDome.mesh);
 const boats: THREE.Group[] = [];
 const flagCols = [0xd03030, 0x2a5ad0, 0xf0c020, 0x30a050];
 for (let i = 0; i < 5; i++) {
-  const g = new THREE.Group(); g.position.set(-8 + i * 4 + rnd(-0.5, 0.5), -0.45, -9 - (i % 2) * 2.5); g.rotation.y = rnd(-0.3, 0.3); scene.add(g);
+  // 船在碼頭外側水上（勿壓到工寮地／廣場走道）
+  const g = new THREE.Group(); g.position.set(-8 + i * 4 + rnd(-0.5, 0.5), -0.45, -11.2 - (i % 2) * 2.4); g.rotation.y = rnd(-0.3, 0.3); scene.add(g);
   const hull = mesh(rboxEnv(3.2, 0.7, 1.1), mat([0xe8e8e0, 0x2a6ab0, 0xd8d0b0][i % 3]), [0, 0.35, 0], g);
   mesh(rboxEnv(3.25, 0.12, 1.15), mat(0xb03030), [0, 0.05, 0], g); void hull;
   mesh(rboxEnv(1.0, 0.6, 0.8), mat(0xf0f0e8), [0.6, 1.0, 0], g);
@@ -1016,7 +1017,11 @@ function hurt(dmg: number, txt: string) {
 // ----- 0. 提蚵仔／撈蚵仔 -----
 const ray = new THREE.Raycaster();
 function makeBasinOyster(dd: number) {
-  const m = new THREE.Mesh(SHELL_GEOS[Math.floor(Math.random() * 6)], shellM([0xffffff, 0xeeeae8, 0xdcd6d4, 0xc8c2c0][dd])); m.scale.setScalar(DIFF[dd].scale * 0.95); m.userData.diff = dd; m.castShadow = true;
+  const m = new THREE.Mesh(SHELL_GEOS[Math.floor(Math.random() * 6)], basinShellM(BASIN_SHELL_COLS[dd] ?? BASIN_SHELL_COLS[0]));
+  m.scale.setScalar(DIFF[dd].scale * 0.95);
+  m.userData.diff = dd;
+  m.castShadow = true;
+  m.renderOrder = 2; // 蓋過殼堆，避免埋進堆裡難認
   const bl: THREE.Mesh[] = []; for (let i = 0; i < BARN_N[dd]; i++) { const b = new THREE.Mesh(BARN_GEO, BARN_MAT); m.add(b); bl.push(b); } placeBarn(bl, dd, 0.04);
   return m;
 }
@@ -1044,16 +1049,56 @@ function fillBasin(animate: boolean) {
   }
 }
 function hitsOyster(cx: number, cy: number) { camera.updateMatrixWorld(); viewCam().updateMatrixWorld(); ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), viewCam()); return ray.intersectObject(oyster, true).length > 0; }
+const _pickScr = new THREE.Vector3();
+/** 螢幕上距點擊最近的臉盆蚵（maxPx 內）；用世界座標投影，第三人稱／抬盆也準 */
+function nearestBasinOyster(cx: number, cy: number, maxPx: number) {
+  const cam = viewCam();
+  let best: THREE.Mesh | null = null, bestD = maxPx;
+  for (const m of basinOy) {
+    if (!m.visible) continue;
+    m.getWorldPosition(_pickScr).project(cam);
+    if (!(_pickScr.z < 1) || !Number.isFinite(_pickScr.x + _pickScr.y)) continue;
+    const d = Math.hypot((_pickScr.x + 1) / 2 * innerWidth - cx, (1 - _pickScr.y) / 2 * innerHeight - cy);
+    if (d < bestD) { bestD = d; best = m; }
+  }
+  return best;
+}
+/** 點在紅臉盆／亮圈附近（比對單顆蚵寬鬆，對齊 nearBowl 手感） */
+function nearBasin(cx: number, cy: number) {
+  const cam = viewCam();
+  const p = BASIN.clone().project(cam);
+  if (!(p.z < 1) || !Number.isFinite(p.x + p.y)) return false;
+  const bx = (p.x + 1) / 2 * innerWidth, by = (1 - p.y) / 2 * innerHeight;
+  const loose = COARSE || tpOn;
+  const r = Math.max(loose ? 170 : 140, Math.min(innerWidth, innerHeight) * (loose ? 0.28 : 0.22));
+  return Math.hypot(bx - cx, by - cy) < r;
+}
 function pickAt(cx: number, cy: number) {
   if (phase !== 'pick' || state !== 'play') return;
-  camera.updateMatrixWorld();
-  ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), viewCam());
+  // 與偷肉／丟碗一樣：先對齊本幀鏡頭，避免點選落空
+  if (!tpOn) {
+    camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0);
+    camera.updateMatrixWorld();
+  }
+  const cam = viewCam();
+  cam.updateMatrixWorld();
+  ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), cam);
   const hit = ray.intersectObjects(basinOy, true)[0];
   if (hit) { let o: THREE.Object3D = hit.object; while (!basinOy.includes(o as THREE.Mesh)) o = o.parent!; grab(o as THREE.Mesh); return; }
-  // 點著家己的手／手骨（或附近）：揀螢幕上上近的蚵仔
-  let best: THREE.Mesh | null = null, bd = Math.max(110, innerWidth * 0.12);
-  for (const m of basinOy) { const p = m.position.clone().project(viewCam()); if (p.z > 1) continue; const d = Math.hypot((p.x + 1) / 2 * innerWidth - cx, (1 - p.y) / 2 * innerHeight - cy); if (d < bd) { bd = d; best = m; } }
+  // 點到臉盆本體 → 拿最近一顆
+  if (basinOy.length && ray.intersectObject(basinMesh, true).length) {
+    const near = nearestBasinOyster(cx, cy, 1e9);
+    if (near) { grab(near); return; }
+  }
+  const loose = COARSE || tpOn;
+  const pickR = Math.max(loose ? 160 : 120, Math.min(innerWidth, innerHeight) * (loose ? 0.26 : 0.18));
+  let best = nearestBasinOyster(cx, cy, pickR);
   if (best) { grab(best); return; }
+  // 點在臉盆亮圈附近也算拿蚵（玩家常點盆不點殼）
+  if (basinOy.length && nearBasin(cx, cy)) {
+    best = nearestBasinOyster(cx, cy, 1e9);
+    if (best) { grab(best); return; }
+  }
   if (plazaMode) {
     // 臉盆空了：點自己面前蚵堆（或畫面）就撈
     if (!basinOy.length) {
@@ -2084,7 +2129,9 @@ window.addEventListener('pointermove', e => {
   const dx = e.clientX - down.x, dy = e.clientY - down.y;
   if (swipePhase() && !moonAimOn) return;
   if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; if (Math.abs(dx) > 8) down.drag = true; return; }
-  if (!down.drag && Math.hypot(dx, dy) > 14) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
+  // 拿蚵階段手機微滑易被當成轉視角而點不到；門檻放寬
+  const dragSlop = phase === 'pick' && e.pointerType !== 'mouse' ? 40 : 14;
+  if (!down.drag && Math.hypot(dx, dy) > dragSlop) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
   if (down.drag) {
     // 手機／觸控拖曳：維持 FPS（指右＝往右看）；勿與桌面滑鼠共用同一符號
     const k = 0.006 * mix.sens;
@@ -2094,7 +2141,31 @@ window.addEventListener('pointermove', e => {
   }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); void h; }
-const up = (e: PointerEvent) => { if (moonAimOn && down && down.id === e.pointerId) { const d = down; down = null; if (!d.drag) moonTapAt(e.clientX, e.clientY); return; } if (down && down.id === e.pointerId && walking) { down = null; return; } if (down && down.id === e.pointerId) { if (!down.drag) { if (phase === 'seam') tryInsert(); else if (phase === 'empty' && tut && TUT[tut.i].id === 'empty') discardShell(); else if (phase === 'pick') { if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2); else pickAt(e.clientX, e.clientY); } else if (phase === 'aim' && tapAim) { const lk = document.pointerLockElement === canvas; const tx = lk ? innerWidth / 2 : e.clientX, ty = lk ? innerHeight / 2 : e.clientY, tn = tut && !tutMeat() ? null : npcAtScr(tx, ty); if (tn) throwMeatAt(tn); else if (tutMeat()) hint.textContent = '點一下阿婆，把肉丟過去'; else if (nearBowl(tx, ty)) toss(true); else hint.textContent = '點碗或碗附近就能丟進去'; } else release(); } else release(); down = null; } };
+const up = (e: PointerEvent) => {
+  if (moonAimOn && down && down.id === e.pointerId) { const d = down; down = null; if (!d.drag) moonTapAt(e.clientX, e.clientY); return; }
+  if (down && down.id === e.pointerId && walking) { down = null; return; }
+  if (!(down && down.id === e.pointerId)) return;
+  const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+  // 拿蚵：輕微滑動仍當點選（否則「常點不到」）
+  const asTap = !down.drag || (phase === 'pick' && e.pointerType !== 'mouse' && moved < 48);
+  if (asTap) {
+    if (phase === 'seam') tryInsert();
+    else if (phase === 'empty' && tut && TUT[tut.i].id === 'empty') discardShell();
+    else if (phase === 'pick') {
+      if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2);
+      else pickAt(e.clientX, e.clientY);
+    } else if (phase === 'aim' && tapAim) {
+      const lk = document.pointerLockElement === canvas;
+      const tx = lk ? innerWidth / 2 : e.clientX, ty = lk ? innerHeight / 2 : e.clientY;
+      const tn = tut && !tutMeat() ? null : npcAtScr(tx, ty);
+      if (tn) throwMeatAt(tn);
+      else if (tutMeat()) hint.textContent = '點一下阿婆，把肉丟過去';
+      else if (nearBowl(tx, ty)) toss(true);
+      else hint.textContent = '點碗或碗附近就能丟進去';
+    } else release();
+  } else release();
+  down = null;
+};
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
@@ -2510,8 +2581,8 @@ function plazaHideYard(hide: boolean) {
   if (hide) {
     plazaHomeHide = [];
     const baseCone = typeof pileHit !== 'undefined' ? pileHit : null;
-    // 工寮木柱／厝頂／時鐘也藏：否則會穿在廣場蚵堆與椅子上擋視線
-    for (const o of [pile, ground, baseCone, shedG, clockG, ...stools, ...ALL_NPCS.map(n => n.g)]) {
+    // 工寮木柱／厝頂／時鐘／碼頭漁船也藏：否則穿廣場走道；廣場改用北側碼頭船
+    for (const o of [pile, ground, baseCone, shedG, clockG, harborDock, ...boats, ...stools, ...ALL_NPCS.map(n => n.g)]) {
       if (!o || (o as any).__plazaHid) continue;
       (o as any).__plazaHid = o.visible; o.visible = false; plazaHomeHide.push(o);
     }

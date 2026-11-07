@@ -50,3 +50,12 @@ export const HALF_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.38, i + 11));
 export const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 export const greyPick = () => GREYS[Math.min(4, Math.floor(Math.random() * Math.random() * 6.2))];
 export const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX }); m.emissive.setHex(0x0a0c10); m.emissiveIntensity = 0.15; return m; };
+/** 臉盆生蚵：比殼堆略濕亮、偏暖乳白，跟乾灰殼堆一眼可分 */
+export const basinShellM = (c: number) => {
+  const m = mat(c, { vertexColors: true, roughness: 0.36, metalness: 0.06, map: SHELL_TEX });
+  m.emissive.setHex(0x142028);
+  m.emissiveIntensity = 0.2;
+  return m;
+};
+/** 盆內難度色（偏暖濕潤，勿用殼堆 GREYS） */
+export const BASIN_SHELL_COLS = [0xf7f2e4, 0xebe4d2, 0xd8d0bc, 0xc4bcaa] as const;

@@ -5,6 +5,7 @@ import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type Playe
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
+import { makePlazaAmbiance } from './ambiance';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 import { plazaDisplayName } from './types';
@@ -185,8 +186,12 @@ export function createPlazaWorldView(
   // 廣場大棚（鏽鐵皮＋外圈木柱，避開堆／椅；工寮原棚進場仍隱藏）
   root.add(makePlazaBigShed(M, add, LO).group);
 
+  // 外圈夜市攤／烤肉區（氣氛；碰撞見 plazaStallObstacles）
+  const ambiance = makePlazaAmbiance(M, add, LO);
+  root.add(ambiance.group);
+
   // 四堆一盞實際點光（對齊吊燈外觀；不投影以免 4 燈吃效能）
-  const plazaLights: THREE.PointLight[] = [];
+  const plazaLights: THREE.PointLight[] = [...ambiance.lights];
   for (const [x, z] of PLAZA_LAMP_XZ) {
     const pl = new THREE.PointLight(0xffe2b8, LO ? 6.5 : 9, LO ? 11.5 : 13.5, 1.4);
     pl.position.set(x, 2.55, z);

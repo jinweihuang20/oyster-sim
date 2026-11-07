@@ -5,6 +5,7 @@ import {
   seatPose, seatKey, nearestFreeSeat, pileObstacles, pileCenter, randomWalkSpawn, type PlazaSeatRef,
 } from './layout';
 import { plazaShedPosts } from './props';
+import { plazaStallObstacles } from './ambiance';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent } from './types';
 import { plazaDisplayName } from './types';
@@ -98,12 +99,13 @@ export function plazaWalkBound() { return WALK_BOUND; }
 export function plazaPileObs(): [number, number, number][] {
   const out = pileObstacles();
   for (const p of plazaShedPosts()) out.push([p.x, p.z, 0.22]);
+  for (const o of plazaStallObstacles()) out.push(o);
   return out;
 }
-/** 入場隨機站位（避開蚵堆／棚柱，面向中心） */
+/** 入場隨機站位（避開蚵堆／棚柱／攤位，面向中心） */
 export function plazaRandomSpawn() {
   const posts: [number, number, number][] = plazaShedPosts().map(p => [p.x, p.z, 0.22]);
-  return randomWalkSpawn(posts);
+  return randomWalkSpawn([...posts, ...plazaStallObstacles()]);
 }
 export function plazaNearSeat() { return near; }
 /** 點擊射線打到哪一堆（給補蚵用） */

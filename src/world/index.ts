@@ -1,5 +1,5 @@
 export { createSkyDome } from './sky';
-export { SHELL_GEOS, HALF_GEOS, greyPick, shellM } from './shells';
+export { SHELL_GEOS, HALF_GEOS, greyPick, shellM, basinShellM, BASIN_SHELL_COLS } from './shells';
 export {
   makeAma, GOSSIP, PEEK, NAG_GIVEUP, NAG_STAB, NAG_CRACK, NAG_SLIP,
   SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE,
