@@ -741,8 +741,11 @@ function goPick() {
   if (evRun?.steal === 'steal_only') { oyster.visible = false; setPhase('busy'); hint.textContent = '本活動只能用偷的：趁阿婆轉頭聊天，偷她碗裡的肉'; return; }
   oysterToHand();
   oyster.visible = false; setPhase('pick');
-  // 烤位：臉盆空了自動補滿，不必再去蚵籃／蚵堆撈
-  if (plazaOnGrill() && !basinOy.length) fillBasin(false);
+  // 烤位：臉盆空了自動補滿；先對齊盆座標再補，蚵才會在盆裡
+  if (plazaOnGrill() && !basinOy.length) {
+    liftSeatPropsOntoPile();
+    fillBasin(false);
+  }
   if (!basinOy.length) {
     hint.textContent = plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把';
   } else if (plazaOnGrill()) {
@@ -1386,6 +1389,7 @@ function pickAt(cx: number, cy: number) {
     // 烤位空盆直接補滿；其餘座位：點自己面前蚵堆撈
     if (!basinOy.length) {
       if (plazaOnGrill()) {
+        liftSeatPropsOntoPile();
         fillBasin(false);
         hint.textContent = '點臉盆內的蚵仔放上烤網；烤開的搶掀／搶拿';
         return;
@@ -1504,17 +1508,21 @@ function liftSeatPropsOntoPile() {
   const homeB = basinHome();
   seatRig.updateMatrixWorld(true);
   const b = bowlNow();
+  // 烤位：要的是「盆／碗底」貼地，不是圓柱中心貼地（否則盆底埋進地面、蚵像灑在地上）
   const bowlW = seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, 0, BOWL_L.z));
-  const bowlWant = onGrill ? 0.04 : pileSurfY(bowlW.x, bowlW.z, ox, oz);
-  const bowlLocal = seatRig.worldToLocal(new THREE.Vector3(bowlW.x, bowlWant, bowlW.z));
+  const bowlFloorWant = onGrill ? 0.02 : pileSurfY(bowlW.x, bowlW.z, ox, oz);
+  const bowlLocal = seatRig.worldToLocal(new THREE.Vector3(bowlW.x, bowlFloorWant, bowlW.z));
   bowlG.position.set(BOWL_L.x, bowlLocal.y, BOWL_L.z);
   BOWL.copy(seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, bowlLocal.y + Math.max(0.08, b.h - 0.02), BOWL_L.z)));
 
   const basW = seatRig.localToWorld(new THREE.Vector3(homeB.x, 0, homeB.z));
-  const basWant = onGrill ? 0.04 : pileSurfY(basW.x, basW.z, ox, oz);
-  const basLocal = seatRig.worldToLocal(new THREE.Vector3(basW.x, basWant, basW.z));
+  const basFloorWant = onGrill ? 0.02 : pileSurfY(basW.x, basW.z, ox, oz);
+  // 圓柱中心＝盆底 + 半高
+  const basCenterWant = onGrill ? basFloorWant + BASIN_H / 2 : basFloorWant;
+  const basLocal = seatRig.worldToLocal(new THREE.Vector3(basW.x, basCenterWant, basW.z));
   const dy = basLocal.y - basinMesh.position.y;
   basinMesh.position.set(homeB.x, basLocal.y, homeB.z);
+  basinMesh.updateMatrixWorld(true);
   if (Math.abs(dy) > 1e-5) {
     for (let i = 0; i < basinShells.count; i++) {
       basinShells.getMatrixAt(i, _liftM);
@@ -1525,9 +1533,8 @@ function liftSeatPropsOntoPile() {
     }
     basinShells.instanceMatrix.needsUpdate = true;
   }
-  // BASIN＝盆內蚵層高度（相對圓柱中心 BASIN_OY_Y），不是盆緣上
-  BASIN.copy(seatRig.localToWorld(new THREE.Vector3(homeB.x, basLocal.y + BASIN_OY_Y, homeB.z)));
-  // 盆已抬高：可撿蚵仔跟著重排，才會跟手拿起消失
+  // 蚵仔座標跟臉盆 mesh 走，避免烤位／換座後對不準
+  BASIN.copy(basinMesh.localToWorld(new THREE.Vector3(0, BASIN_OY_Y, 0)));
   basinOy.forEach((m, i) => { if (m.visible) m.position.copy(basinSlot(i)); });
 }
 function applyBowl() {

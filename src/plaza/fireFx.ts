@@ -20,6 +20,14 @@ export type CharcoalFireOpts = {
   lightDistance?: number;
   /** 煙柱強度 0＝無 */
   smoke?: number;
+  /** 火舌（烤位可關，只留燒紅木炭） */
+  flames?: boolean;
+  /** 飛揚火星 */
+  sparks?: boolean;
+  /** 木炭塊數量（未指定則依 lowDetail） */
+  chunks?: number;
+  /** 燒紅炭比例 0～1 */
+  hotRatio?: number;
   /** 亂數種子（同台穩定） */
   seed?: number;
 };
@@ -37,22 +45,24 @@ type Smoke = {
   bx: number;
   bz: number;
 };
+type HotChunk = {
+  mesh: THREE.Mesh;
+  glow: THREE.Mesh | null;
+  mat: THREE.MeshStandardMaterial;
+  glowMat: THREE.MeshBasicMaterial | null;
+  baseY: number;
+  phase: number;
+};
 
-/** 共用幾何／材質（多台烤爐共用，dispose 只卸實例） */
+/** 共用幾何／冷炭材質（多台烤爐共用） */
 const flameGeo = new THREE.ConeGeometry(0.045, 0.14, 5, 1, true);
 flameGeo.translate(0, 0.07, 0);
 const emberGeo = new THREE.SphereGeometry(0.018, 4, 3);
 const smokeGeo = new THREE.SphereGeometry(0.07, 6, 5);
 const coalChunkGeo = rboxEnv(0.1, 0.05, 0.08);
+const coalGlowGeo = new THREE.SphereGeometry(0.04, 5, 4);
 
 const coalMat = new THREE.MeshStandardMaterial({ color: 0x1a120e, roughness: 1, metalness: 0 });
-const coalHotMat = new THREE.MeshStandardMaterial({
-  color: 0x2a1810,
-  roughness: 0.95,
-  metalness: 0.05,
-  emissive: 0xff4a12,
-  emissiveIntensity: 0.55,
-});
 const flameMat = new THREE.MeshBasicMaterial({
   color: 0xff6a22,
   transparent: true,
@@ -88,62 +98,96 @@ function rng(seed: number) {
   };
 }
 
+function makeHotCoalMat() {
+  return new THREE.MeshStandardMaterial({
+    color: 0x2a1410,
+    roughness: 0.92,
+    metalness: 0.08,
+    emissive: 0xff3a10,
+    emissiveIntensity: 0.85,
+  });
+}
+
 /**
- * 炭火＋煙：不規則炭塊、跳動火舌、飄煙、可選點光。
+ * 炭火／燒紅木炭：不規則炭塊、可選火舌／煙／點光。
  * 供共烤台／夜市烤肉攤共用。
  */
 export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
   const w = opts.width ?? 0.9;
   const d = opts.depth ?? 0.9;
   const lo = !!opts.lowDetail;
-  const smokeN = Math.max(0, Math.round((opts.smoke ?? 1) * (lo ? 5 : 10)));
+  const wantFlames = opts.flames !== false;
+  const wantSparks = opts.sparks ?? (!lo && wantFlames);
+  const smokeN = Math.max(0, Math.round((opts.smoke ?? (wantFlames ? 1 : 0)) * (lo ? 5 : 10)));
+  const nChunk = opts.chunks ?? (lo ? 7 : 14);
+  const hotRatio = opts.hotRatio ?? 0.45;
   const rn = rng(opts.seed ?? 42);
 
   const group = new THREE.Group();
   group.name = 'charcoalFire';
 
   // 底炭層
-  const bed = new THREE.Mesh(rboxEnv(w, 0.04, d), coalMat);
+  const bed = new THREE.Mesh(rboxEnv(w, 0.045, d), coalMat);
   bed.position.y = 0;
   bed.userData.sharedMat = true;
   group.add(bed);
 
-  // 不規則炭塊（部分帶餘燼 emissive）
-  const nChunk = lo ? 7 : 14;
-  const hotChunks: { mesh: THREE.Mesh; baseY: number; phase: number }[] = [];
+  // 不規則炭塊（燒紅者各自材質，可獨立脈動）
+  const hotChunks: HotChunk[] = [];
   for (let i = 0; i < nChunk; i++) {
-    const hot = rn() < 0.45;
-    const m = new THREE.Mesh(coalChunkGeo, hot ? coalHotMat : coalMat);
+    const hot = rn() < hotRatio;
+    const mat = hot ? makeHotCoalMat() : coalMat;
+    const m = new THREE.Mesh(coalChunkGeo, mat);
     m.userData.sharedGeo = true;
-    m.userData.sharedMat = true;
-    m.position.set((rn() - 0.5) * w * 0.82, 0.02 + rn() * 0.02, (rn() - 0.5) * d * 0.82);
+    m.userData.sharedMat = !hot;
+    m.position.set((rn() - 0.5) * w * 0.84, 0.018 + rn() * 0.028, (rn() - 0.5) * d * 0.84);
     m.rotation.set(rn() * 1.2, rn() * 6.28, rn() * 1.2);
-    const s = 0.7 + rn() * 1.1;
-    const sy = 0.55 + rn() * 0.7;
-    m.scale.set(s * (0.7 + rn() * 0.6), sy, s * (0.7 + rn() * 0.5));
+    const s = 0.65 + rn() * 1.15;
+    const sy = 0.5 + rn() * 0.75;
+    m.scale.set(s * (0.7 + rn() * 0.65), sy, s * (0.7 + rn() * 0.55));
     group.add(m);
-    if (hot) hotChunks.push({ mesh: m, baseY: sy, phase: rn() * 6.28 });
+
+    let glow: THREE.Mesh | null = null;
+    let glowMat: THREE.MeshBasicMaterial | null = null;
+    if (hot) {
+      glowMat = new THREE.MeshBasicMaterial({
+        color: 0xff4a18,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false,
+      });
+      glow = new THREE.Mesh(coalGlowGeo, glowMat);
+      glow.userData.sharedGeo = true;
+      glow.position.copy(m.position);
+      glow.position.y += 0.02;
+      glow.scale.setScalar(0.55 + rn() * 0.55);
+      glow.renderOrder = 2;
+      group.add(glow);
+      hotChunks.push({ mesh: m, glow, mat: mat as THREE.MeshStandardMaterial, glowMat, baseY: sy, phase: rn() * 6.28 });
+    }
   }
 
-  // 火舌
+  // 火舌（可關）
   const flames: Flame[] = [];
-  const nFlame = lo ? 4 : 7;
-  for (let i = 0; i < nFlame; i++) {
-    const tip = i % 2 === 0;
-    const mesh = new THREE.Mesh(flameGeo, tip ? flameTipMat : flameMat);
-    mesh.userData.sharedGeo = true;
-    mesh.userData.sharedMat = true;
-    mesh.renderOrder = 2;
-    const bx = (rn() - 0.5) * w * 0.55;
-    const bz = (rn() - 0.5) * d * 0.55;
-    mesh.position.set(bx, 0.02, bz);
-    group.add(mesh);
-    flames.push({ mesh, bx, bz, phase: rn() * 6.28, h: 0.7 + rn() * 0.7, s: 0.55 + rn() * 0.55 });
+  if (wantFlames) {
+    const nFlame = lo ? 4 : 7;
+    for (let i = 0; i < nFlame; i++) {
+      const tip = i % 2 === 0;
+      const mesh = new THREE.Mesh(flameGeo, tip ? flameTipMat : flameMat);
+      mesh.userData.sharedGeo = true;
+      mesh.userData.sharedMat = true;
+      mesh.renderOrder = 2;
+      const bx = (rn() - 0.5) * w * 0.55;
+      const bz = (rn() - 0.5) * d * 0.55;
+      mesh.position.set(bx, 0.02, bz);
+      group.add(mesh);
+      flames.push({ mesh, bx, bz, phase: rn() * 6.28, h: 0.7 + rn() * 0.7, s: 0.55 + rn() * 0.55 });
+    }
   }
 
   // 炭火星
   const embers: Ember[] = [];
-  if (!lo) {
+  if (wantSparks) {
     for (let i = 0; i < 6; i++) {
       const mesh = new THREE.Mesh(emberGeo, emberMat);
       mesh.userData.sharedGeo = true;
@@ -181,8 +225,9 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
   let light: THREE.PointLight | null = null;
   const baseI = opts.lightIntensity ?? 3.6;
   if (opts.withLight !== false && !lo) {
-    light = new THREE.PointLight(0xff7a30, baseI, opts.lightDistance ?? 4.5, 1.65);
-    light.position.set(0, 0.42, 0);
+    // 無火時偏暗紅炭光；有火時偏橙
+    light = new THREE.PointLight(wantFlames ? 0xff7a30 : 0xff5520, baseI, opts.lightDistance ?? 4.5, 1.65);
+    light.position.set(0, wantFlames ? 0.42 : 0.22, 0);
     light.castShadow = false;
     group.add(light);
   }
@@ -207,9 +252,25 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
     const flicker = 0.82 + 0.18 * Math.sin(tSec * 11.3) + 0.08 * Math.sin(tSec * 23.7 + 1.2);
     const flicker2 = 0.75 + 0.25 * Math.sin(tSec * 17.1 + 0.7);
 
-    coalHotMat.emissiveIntensity = 0.35 + 0.35 * flicker;
     for (const c of hotChunks) {
-      c.mesh.scale.y = c.baseY * (0.88 + 0.22 * (0.5 + 0.5 * Math.sin(tSec * 9 + c.phase)));
+      const pulse = 0.55 + 0.45 * Math.sin(tSec * (5.5 + c.phase * 0.4) + c.phase);
+      const pulse2 = 0.5 + 0.5 * Math.sin(tSec * 13.2 + c.phase * 1.7);
+      c.mat.emissiveIntensity = 0.45 + 0.75 * pulse * pulse2;
+      // 燒紅色在橙紅間微抖
+      const r = 1;
+      const g = 0.18 + 0.12 * pulse;
+      const bCol = 0.04 + 0.03 * pulse2;
+      c.mat.emissive.setRGB(r, g, bCol);
+      c.mesh.scale.y = c.baseY * (0.9 + 0.12 * pulse);
+      if (c.glow && c.glowMat) {
+        c.glow.position.x = c.mesh.position.x;
+        c.glow.position.z = c.mesh.position.z;
+        c.glow.position.y = c.mesh.position.y + 0.015 + pulse * 0.01;
+        const gs = (0.5 + pulse * 0.55) * (0.7 + c.baseY * 0.35);
+        c.glow.scale.setScalar(gs);
+        c.glowMat.opacity = 0.22 + 0.38 * pulse * pulse2;
+        c.glowMat.color.setRGB(1, 0.22 + 0.2 * pulse, 0.06);
+      }
     }
 
     for (const f of flames) {
@@ -220,7 +281,6 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
       f.mesh.scale.set(f.s * (0.75 + wave * 0.35), f.h * (0.65 + wave * 0.7), f.s * (0.75 + wave * 0.3));
       f.mesh.rotation.z = lean;
       f.mesh.rotation.x = Math.sin(tSec * 3.1 + f.phase) * 0.15;
-      // 材質共用：只動形狀，不改 opacity
     }
 
     for (const e of embers) {
@@ -231,7 +291,6 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
         0.05 + rise,
         e.bz + Math.cos(tSec * 3.2 + e.phase) * 0.03,
       );
-      // 用縮放模擬淡出（emberMat 共用）
       e.mesh.scale.setScalar(Math.max(0.05, (1 - u) * 1.15));
       e.mesh.visible = u < 0.92;
     }
@@ -252,11 +311,10 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
 
     if (light) {
       light.intensity = baseI * (0.72 + 0.38 * flicker * flicker2);
-      light.position.y = 0.38 + 0.06 * flicker;
+      light.position.y = (wantFlames ? 0.38 : 0.2) + 0.05 * flicker;
     }
   }
 
-  // 煙初始錯開
   for (const s of smokes) {
     s.age = rn() * s.life;
     s.mesh.visible = true;
@@ -265,8 +323,11 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
   function dispose() {
     group.removeFromParent();
     for (const s of smokes) (s.mesh.material as THREE.Material).dispose();
+    for (const c of hotChunks) {
+      c.mat.dispose();
+      c.glowMat?.dispose();
+    }
     if (light) { light.dispose(); light = null; }
-    // 共用 geo／mat 不在此 dispose
   }
 
   return { group, light, tick, dispose };
