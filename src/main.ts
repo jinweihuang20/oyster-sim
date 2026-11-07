@@ -171,7 +171,21 @@ function markBowlDrawOrder(root: THREE.Object3D) {
 }
 
 // 玩家前面：生蚵臉盆、裝肉的碗（點碗丟肉）；略靠近堆心，之後再依堆面抬高
-const basinMesh = mesh(new THREE.CylinderGeometry(0.33, 0.26, 0.18, 16, 1, true), mat(0xc84030, { side: THREE.DoubleSide }), [-0.35, 0.1, 1.28]);
+const BASIN_H = 0.18;
+const BASIN_R_TOP = 0.33;
+const BASIN_R_BOT = 0.26;
+/** 可撿蚵相對臉盆中心的高度：貼近盆底內側（勿用正值漂出盆緣） */
+const BASIN_OY_Y = -BASIN_H / 2 + 0.048;
+const basinMesh = mesh(new THREE.CylinderGeometry(BASIN_R_TOP, BASIN_R_BOT, BASIN_H, 16, 1, true), mat(0xc84030, { side: THREE.DoubleSide, roughness: 0.55 }), [-0.35, 0.1, 1.28]);
+{
+  // 臉盆底部（開管圓柱否則從上看穿空）
+  const fl = new THREE.Mesh(
+    new THREE.CylinderGeometry(BASIN_R_BOT * 0.98, BASIN_R_BOT * 0.98, 0.014, 16),
+    mat(0xa03028, { side: THREE.DoubleSide, roughness: 0.7 }),
+  );
+  fl.position.y = -BASIN_H / 2 + 0.007;
+  basinMesh.add(fl);
+}
 const BASIN0 = new THREE.Vector3(-0.35, 0.1, 1.28), BASIN = BASIN0.clone();
 const basinOy: THREE.Mesh[] = [];
 // 裝飾殼易與可撿蚵仔混淆（拿了還留在盆裡），改隱藏；可撿的是 basinOy
@@ -187,7 +201,13 @@ function buildBowl(b: { r: number; h: number; color: number; metal?: number }) {
   const wall = new THREE.Mesh(new THREE.CylinderGeometry(b.r + 0.03, bot, b.h, 22, 1, true), new THREE.MeshStandardMaterial({ color: b.color, side: THREE.DoubleSide, roughness: b.metal ? 0.25 : 0.45, metalness: b.metal ?? 0 }));
   wall.position.y = b.h / 2; bowlG.add(wall);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(b.r + 0.03, 0.012, 6, 24), wall.material); rim.rotation.x = Math.PI / 2; rim.position.y = b.h; bowlG.add(rim);
-  const fl = new THREE.Mesh(new THREE.CircleGeometry(bot, 18), new THREE.MeshStandardMaterial({ color: new THREE.Color(b.color).multiplyScalar(0.75), metalness: b.metal ?? 0, roughness: 0.5 })); fl.rotation.x = -Math.PI / 2; fl.position.y = 0.005; bowlG.add(fl);
+  // 實心底（薄圓柱，避免只剩一層圓片看不見／穿幫）
+  const fl = new THREE.Mesh(
+    new THREE.CylinderGeometry(bot * 0.98, bot * 0.98, 0.014, 18),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(b.color).multiplyScalar(0.72), metalness: b.metal ?? 0, roughness: 0.55, side: THREE.DoubleSide }),
+  );
+  fl.position.y = 0.007;
+  bowlG.add(fl);
   bowlG.position.set(BOWL_L.x, 0, BOWL_L.z); BOWL.y = Math.max(0.08, b.h - 0.02);
   markBowlDrawOrder(bowlG);
 }
@@ -213,7 +233,16 @@ function makeNpc(d: NpcDef) {
   mesh(rboxEnv(0.02, 0.006, 0.09), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [0, 0, -0.09], kn);
   const bowlL = new THREE.Vector3(0.32, 0, -0.42); const bowl = a.g.localToWorld(bowlL.clone());
   const npcBowlY = pileSurfY(bowl.x, bowl.z);
-  const bowlM = mesh(new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, npcBowlY, bowl.z]);
+  const npcBowlH = 0.1;
+  const bowlM = mesh(new THREE.CylinderGeometry(0.13, 0.09, npcBowlH, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, npcBowlY + npcBowlH / 2, bowl.z]);
+  {
+    const fl = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.088, 0.088, 0.012, 14),
+      mat(0xb8b8b8, { side: THREE.DoubleSide, roughness: 0.55 }),
+    );
+    fl.position.y = -npcBowlH / 2 + 0.006;
+    bowlM.add(fl);
+  }
   markBowlDrawOrder(bowlM);
   bowl.y = npcBowlY + 0.05;
   // 掛 scene、每幀對齊頭世界座標（勿掛 head，轉頭會把 +Y 偏移帶歪）
@@ -1281,9 +1310,9 @@ function makeBasinOyster(dd: number) {
 }
 const basinCap = () => plazaMode ? 15 : 8;
 function basinSlot(i: number) {
-  const a = i * 2.4, r = 0.06 + (i % 4) * 0.05;
-  // 跟著抬高後的 BASIN.y，避免蚵仔沉在盆底／堆裡看起來「拿了還在」
-  return new THREE.Vector3(BASIN.x + Math.cos(a) * r, BASIN.y + Math.floor(i / 6) * 0.035, BASIN.z + Math.sin(a) * r);
+  // 半徑壓在盆底內，避免堆出盆外
+  const a = i * 2.4, r = 0.045 + (i % 4) * 0.038;
+  return new THREE.Vector3(BASIN.x + Math.cos(a) * r, BASIN.y + Math.floor(i / 6) * 0.032, BASIN.z + Math.sin(a) * r);
 }
 function fillBasin(animate: boolean) {
   const n = basinCap();
@@ -1496,7 +1525,8 @@ function liftSeatPropsOntoPile() {
     }
     basinShells.instanceMatrix.needsUpdate = true;
   }
-  BASIN.copy(seatRig.localToWorld(new THREE.Vector3(homeB.x, basLocal.y + 0.1, homeB.z)));
+  // BASIN＝盆內蚵層高度（相對圓柱中心 BASIN_OY_Y），不是盆緣上
+  BASIN.copy(seatRig.localToWorld(new THREE.Vector3(homeB.x, basLocal.y + BASIN_OY_Y, homeB.z)));
   // 盆已抬高：可撿蚵仔跟著重排，才會跟手拿起消失
   basinOy.forEach((m, i) => { if (m.visible) m.position.copy(basinSlot(i)); });
 }
@@ -1785,7 +1815,7 @@ function syncBasinRing() {
   basinRing.visible = true;
   const k = 1 + 0.12 * Math.sin(performance.now() / 120);
   if (basinOy.length) {
-    basinRing.position.set(BASIN.x, 0.2, BASIN.z);
+    basinRing.position.set(BASIN.x, Math.max(0.12, BASIN.y - 0.02), BASIN.z);
     basinRing.scale.setScalar(0.36 * k);
   } else if (plazaMode) {
     const o = plazaMyPileOrigin();
