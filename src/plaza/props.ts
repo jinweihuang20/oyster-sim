@@ -181,7 +181,7 @@ export function makePlazaGrill(
   // 矮磚台（壓低：頂面約在烤網下）
   add(rboxEnv(1.55, 0.18, 1.55), brick, [0, 0.09, 0], true);
   add(rboxEnv(1.4, 0.08, 1.4), steel, [0, 0.2, 0], false);
-  // 烤位：不要火舌／煙，改多木炭＋燒紅脈動
+  // 烤位：多木炭燒紅；壓在烤網下、脈動放慢
   const fire: CharcoalFireFx = makeCharcoalFire({
     width: 1.05,
     depth: 1.05,
@@ -189,14 +189,17 @@ export function makePlazaGrill(
     flames: false,
     sparks: false,
     smoke: 0,
+    flat: true,
+    pulseSpeed: 0.32,
     chunks: lowDetail ? 26 : 42,
     hotRatio: 0.72,
     withLight: !lowDetail,
-    lightIntensity: 2.6,
-    lightDistance: 4.2,
+    lightIntensity: 2.4,
+    lightDistance: 4.0,
     seed: 1100 + pileId * 97,
   });
-  fire.group.position.set(0, gy - 0.07, 0);
+  // 炭床頂約低於烤網 6～8cm，避免冒出網面
+  fire.group.position.set(0, gy - 0.13, 0);
   g.add(fire.group);
   g.userData.fireFx = fire;
   // 烤網
