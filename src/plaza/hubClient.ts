@@ -9,6 +9,8 @@ export type PlazaHubHandlers = {
   onPose?: (p: PlazaPlayer) => void;
   onPhase?: (p: PlazaPlayer) => void;
   onChat?: (m: PlazaChat) => void;
+  /** 阿婆頭上氣泡（不進聊天窗） */
+  onNpcSay?: (m: PlazaChat) => void;
   onShellThrow?: (e: PlazaShellEvent) => void;
   onShellInbound?: (e: PlazaShellEvent) => void;
   /** 自己丟的殼被對方完美反彈打回來 */
@@ -155,6 +157,9 @@ export class PlazaClient {
     conn.on('Pose', (p: PlazaPlayer) => this.handlers.onPose?.(p));
     conn.on('Phase', (p: PlazaPlayer) => this.handlers.onPhase?.(p));
     conn.on('Chat', (m: PlazaChat) => this.handlers.onChat?.(m));
+    conn.on('NpcSay', (m: any) => {
+      try { this.handlers.onNpcSay?.(normChatDto(m)); } catch (err) { console.error('NpcSay', err); }
+    });
     conn.on('ShellThrow', (e: any) => {
       try { this.handlers.onShellThrow?.(normShell(e)); } catch (err) { console.error('ShellThrow', err); }
     });

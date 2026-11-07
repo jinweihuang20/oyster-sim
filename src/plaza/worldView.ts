@@ -3,7 +3,7 @@ import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
 import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
-import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, type PlazaSeatRef } from './layout';
+import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
@@ -139,7 +139,8 @@ export function createPlazaWorldView(
     root.add(pile);
     pileGroups.push(pile);
 
-    for (let s = 0; s < SLOTS_PER_PILE + NPC_SLOTS_PER_PILE; s++) {
+    const seatN = SLOTS_PER_PILE + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
+    for (let s = 0; s < seatN; s++) {
       const pose = seatPose(i, s);
       const { group, pad } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
       root.add(group);
@@ -183,7 +184,8 @@ export function createPlazaWorldView(
         pileId: r.pileId,
         phase: r.phase || '',
         x: r.x, z: r.z, yaw: r.yaw,
-        lookYaw: r.lookYaw,
+        // 偷肉「在看」用同步目標角，勿用插值中的 lookYaw（會跟伺服器 distract 脫節）
+        lookYaw: r.tLookYaw,
         seated: true,
         count: r.count,
         umb: r.umb,
@@ -214,8 +216,12 @@ export function createPlazaWorldView(
   const _tagHead = new THREE.Vector3();
 
   /** 掛在 root（勿掛 head）：轉頭時本地 +Y 會歪掉 */
-  function ensureTag(nick: string) {
-    const tag = makeWorldLabel(nick, 'name', { worldH: 0.24, depthTest: false });
+  function ensureTag(nick: string, isNpc = false) {
+    const tag = makeWorldLabel(nick, 'name', {
+      worldH: 0.24,
+      depthTest: false,
+      nameTone: isNpc ? 'npc' : 'player',
+    });
     tag.sprite.visible = false;
     root.add(tag.sprite);
     return tag;
@@ -644,7 +650,7 @@ export function createPlazaWorldView(
       const awaitingPose = !p.seated && Math.hypot(x, z) < 0.2;
       r = {
         key: pid, connId: p.connId || '', pid, rig,
-        tag: ensureTag(isNpc ? (p.nick || '阿婆') : plazaDisplayName(p.nick, p.tag)), bubble: ensureBubble(), bubUntil: 0,
+        tag: ensureTag(isNpc ? (p.nick || '阿婆') : plazaDisplayName(p.nick, p.tag), isNpc), bubble: ensureBubble(), bubUntil: 0,
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick || (isNpc ? '阿婆' : '剝蚵人'),
         numTag: isNpc ? '' : (p.tag || '').replace(/^#/, ''),
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,

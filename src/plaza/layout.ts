@@ -2,8 +2,11 @@ import * as THREE from 'three';
 
 export const PILE_COUNT = 16;
 export const SLOTS_PER_PILE = 4;
-/** 每堆額外阿婆座位（slot = SLOTS_PER_PILE + npcSlot） */
+/** 每堆額外阿婆座位（slot = SLOTS_PER_PILE + npcSlot）；僅 NpcPileIds 有 */
 export const NPC_SLOTS_PER_PILE = 2;
+/** 先只在這 5 堆放阿婆（與後端 PlazaWorld.NpcPileIds 對齊） */
+export const NPC_PILE_IDS: readonly number[] = [1, 4, 7, 10, 13];
+export const pileHasNpc = (pileId: number) => NPC_PILE_IDS.includes(pileId);
 export const PLAZA_CAPACITY = PILE_COUNT * SLOTS_PER_PILE;
 export const PILE_SPACING = 5.2;
 /** 椅子離堆心距離（貼近蚵堆；身體靠 hangArms／後仰避免埋進堆裡） */

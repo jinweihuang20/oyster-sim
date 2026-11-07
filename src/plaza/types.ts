@@ -90,7 +90,7 @@ export type PlazaAimTarget = {
   x: number;
   z: number;
   yaw: number;
-  /** 坐下轉頭；阿婆聊天時會偏，用來判定是否被盯著 */
+  /** 坐下轉頭（同步目標角）；偏開時自己的碗離開視野才可被偷 */
   lookYaw?: number;
   seated: boolean;
   count: number;

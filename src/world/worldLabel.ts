@@ -24,10 +24,15 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number): s
   return lines.slice(0, 4);
 }
 
+/** 名牌底色：真人偏暖褐；阿婆偏青灰，廣場一眼可辨 */
+export type WorldLabelNameTone = 'player' | 'npc';
+
 export type WorldLabelOpts = {
   worldH?: number;
   /** 廣場人名等需蓋過場景時關深度測試（等同舊 DOM 疊層） */
   depthTest?: boolean;
+  /** 僅 kind=name：真人／阿婆底色 */
+  nameTone?: WorldLabelNameTone;
 };
 
 /** 頭頂名牌／對話泡泡：Canvas 貼到 Sprite，跟隨 3D，不寫 DOM */
@@ -39,6 +44,7 @@ export function makeWorldLabel(
   const opts: WorldLabelOpts = typeof worldHOrOpts === 'number' ? { worldH: worldHOrOpts } : worldHOrOpts;
   const worldH = opts.worldH ?? (kind === 'name' ? 0.2 : 0.3);
   const depthTest = opts.depthTest !== false;
+  const nameTone: WorldLabelNameTone = opts.nameTone === 'npc' ? 'npc' : 'player';
   // 固定畫布尺寸：避免改 canvas.width 導致 WebGL 貼圖卡住舊畫面
   const dpr = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 2);
   const cssW = kind === 'bubble' ? 320 : 360;
@@ -85,12 +91,21 @@ export function makeWorldLabel(
     ctx.clearRect(0, 0, cssW, cssH);
     if (kind === 'name') {
       roundRect(ctx, ox + 0.5, oy + 0.5, w - 1, h - 1, 10);
-      ctx.fillStyle = 'rgba(30,20,10,0.82)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,220,160,0.55)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.fillStyle = '#ffe9c0';
+      if (nameTone === 'npc') {
+        ctx.fillStyle = 'rgba(16,44,48,0.88)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(140,210,200,0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#c8f0e6';
+      } else {
+        ctx.fillStyle = 'rgba(30,20,10,0.82)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,220,160,0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#ffe9c0';
+      }
     } else {
       roundRect(ctx, ox + 1, oy + 1, w - 2, h - 10, 12);
       ctx.fillStyle = '#fff8e8';

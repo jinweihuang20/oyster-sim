@@ -1641,15 +1641,27 @@ function plazaStealTarget(): PlazaAimTarget | null {
   if (!t || plazaStealCanTarget(t)) return null;
   return t;
 }
-/** 對方是否大致看著自己（盯著就不能偷）；阿婆對齊工寮：沒轉頭聊天就視為盯著 */
-function plazaWatchingMe(t: PlazaAimTarget) {
-  if (t.isNpc) return Math.abs(t.lookYaw ?? 0) < 0.55;
-  const me = camera.position;
-  const dx = me.x - t.x, dz = me.z - t.z;
+/** 對方水平視線對目標點的 cos（>0.7 ≈ ±45° 內）。 */
+function plazaGazeCos(t: PlazaAimTarget, tx: number, tz: number) {
+  const ox = Number.isFinite(t.head?.x) ? t.head.x : t.x;
+  const oz = Number.isFinite(t.head?.z) ? t.head.z : t.z;
+  const dx = tx - ox, dz = tz - oz;
   const len = Math.hypot(dx, dz) || 1;
-  const yaw = t.yaw + (t.lookYaw ?? 0);
-  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-  return (fx * dx + fz * dz) / len > 0.25;
+  const gaze = t.yaw + (t.lookYaw ?? 0);
+  const fx = -Math.sin(gaze), fz = -Math.cos(gaze);
+  return (fx * dx + fz * dz) / len;
+}
+/**
+ * 不可偷／會被抓：
+ * 1) 對方視野裡還有自己裝蚵的碗 → 別人偷不到
+ * 2) 對方正看著你 → 你（被看的）不能偷對方
+ * 對方視野沒碗、也沒看你 → 可偷
+ */
+function plazaWatchingMe(t: PlazaAimTarget) {
+  // 自己的碗還在視野（±45°；distract lookYaw≥0.85 時會離開）
+  if (t.count >= 1 && Number.isFinite(t.bowl.x + t.bowl.z) && plazaGazeCos(t, t.bowl.x, t.bowl.z) > 0.7) return true;
+  // 正看著我（座位），被看的不能偷
+  return plazaGazeCos(t, SEAT.x, SEAT.z) > 0.7;
 }
 function plazaOnStealCaught(nick: string) {
   caught++;

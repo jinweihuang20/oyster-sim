@@ -251,7 +251,7 @@ async function boot(D: PlazaDeps) {
   showRoamUi();
   if (!plazaIoAnnounced) {
     plazaIoAnnounced = true;
-    const online = snap?.occupied ?? snap?.players?.length ?? null;
+    const online = snap?.occupied ?? snap?.players?.filter((p) => !p.isNpc).length ?? null;
     void postDiscordPlazaPresence(D.nick(), 'join', { online, tag: myTag() });
   }
 }
@@ -345,25 +345,31 @@ function wireClient(D: PlazaDeps) {
       if (snap) {
         const i = snap.players.findIndex(x => x.connId === n.connId || (!!n.pid && x.pid === n.pid));
         if (i < 0) snap.players.push(n); else snap.players[i] = { ...snap.players[i], ...n };
-        snap.occupied = snap.players.length;
+        snap.occupied = snap.players.filter((x) => !x.isNpc).length;
       }
       syncPlazaPeopleHud();
-      if (n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 進來廣場了`, '#9fe0ff');
+      if (!n.isNpc && n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 進來廣場了`, '#9fe0ff');
     },
     onLeft: (p) => {
       const n = normPlayer(p);
       view?.remove(n);
       if (snap) {
         snap.players = snap.players.filter(x => x.connId !== n.connId && !(n.pid && x.pid === n.pid));
-        snap.occupied = snap.players.length;
+        snap.occupied = snap.players.filter((x) => !x.isNpc).length;
       }
       syncPlazaPeopleHud();
-      if (n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 離開廣場了`, '#ffb08a');
+      if (!n.isNpc && n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 離開廣場了`, '#ffb08a');
     },
     onSeatChanged: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onPose: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onPhase: (p) => { view?.applyPose(normPlayer(p), D.id); },
     onChat: (m) => pushChat(normChat(m)),
+    // 阿婆氣泡：比照工寮 say，只顯示頭上字、不進聊天窗／角標／Discord
+    onNpcSay: (m) => {
+      const n = normChat(m);
+      if (!n.text) return;
+      view?.showChat({ connId: n.connId || undefined, pid: n.pid || undefined, nick: n.nick, text: n.text });
+    },
     onShellThrow: (e) => { try { D.onShellThrow?.(e); } catch (err) { console.error('onShellThrow', err); } },
     onShellInbound: (e) => { try { D.onShellInbound?.(e); } catch (err) { console.error('onShellInbound', err); } },
     onShellReflectHit: (e) => { try { D.onShellReflectHit?.(e); } catch (err) { console.error('onShellReflectHit', err); } },
@@ -666,7 +672,9 @@ function syncPlazaPeopleHud() {
     h.setAttribute('aria-label', '目前線上人數');
     return;
   }
-  const n = snap?.players?.length ?? snap?.occupied ?? 0;
+  const n = snap
+    ? (typeof snap.occupied === 'number' ? snap.occupied : snap.players.filter((p) => !p.isNpc).length)
+    : 0;
   const cap = snap?.capacity ?? PLAZA_CAPACITY;
   h.dataset.plaza = '1';
   h.style.display = '';
@@ -782,13 +790,18 @@ function appendChatRow(m: PlazaChat) {
 function applyChatHistory(msgs?: PlazaChat[] | null) {
   const log = ui?.querySelector('#pzLog'); if (!log) return;
   if (!msgs?.length) return;
-  const normalized = msgs.map(normChat).filter(m => m.text);
+  const normalized = msgs.map(normChat).filter(m => m.text && m.via !== 'npc' && !(m.pid && m.pid.startsWith('npc-')));
   if (!normalized.length) return;
   log.innerHTML = '';
   for (const m of normalized) appendChatRow(m);
 }
 
 function pushChat(m: PlazaChat) {
+  // 阿婆若誤走 Chat：只出氣泡，不進聊天窗
+  if (m.via === 'npc' || (m.pid && m.pid.startsWith('npc-'))) {
+    if (m.text) view?.showChat({ connId: m.connId || undefined, pid: m.pid || undefined, nick: m.nick, text: m.text });
+    return;
+  }
   const log = ui?.querySelector('#pzLog'); if (!log) return;
   const key = chatRowKey(m);
   // 與歷史回放重複則略過（避免重連後又收到同則即時包）
@@ -849,7 +862,7 @@ export async function plazaReportEarn(raw: number, oysters: number, durationSec:
 export async function closePlaza(leaveSeat = true) {
   if (!active) return;
   const nick = deps?.nick() ?? '剝蚵人';
-  const online = snap?.occupied ?? snap?.players?.length ?? null;
+  const online = snap?.occupied ?? snap?.players?.filter((p) => !p.isNpc).length ?? null;
   const announceLeave = plazaIoAnnounced;
   active = false; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
   chatUnread = 0; hideChatPeek();
