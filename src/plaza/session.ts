@@ -7,7 +7,7 @@ import {
 import { plazaShedPosts } from './props';
 import { plazaStallObstacles } from './ambiance';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
-import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent } from './types';
+import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent } from './types';
 import { plazaDisplayName } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 import { plazaSoftCapClient } from '../core/economy';
@@ -62,6 +62,10 @@ export type PlazaDeps = {
   onShellHit?: (e: PlazaShellHitEvent) => void;
   /** 偷肉結果（含自己被偷） */
   onStealResult?: (e: PlazaStealEvent) => void;
+  /** 共烤蚵同步 */
+  onGrillUpsert?: (o: PlazaGrillOyster) => void;
+  onGrillRemove?: (id: string, byConnId: string, byNick: string) => void;
+  onGrillTaken?: (e: PlazaGrillTakenEvent) => void;
   track: (t: string, d?: Record<string, unknown>) => void;
   onPayout: (clamped: number, meta: { oysters: number; dur: number; raw: number }) => void;
   onExit: () => void;
@@ -175,6 +179,28 @@ export async function plazaStealFrom(targetConnId: string, caught = false) {
   return client.stealFrom(targetConnId, caught);
 }
 
+/** 共烤：放生蚵上烤網（lx/lz 相對堆心） */
+export async function plazaGrillPlace(lx: number, lz: number, diff: number) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn', oyster: undefined };
+  return client.grillPlace(lx, lz, diff);
+}
+export async function plazaGrillFlip(oysterId: string) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn', oyster: undefined };
+  return client.grillFlip(oysterId);
+}
+export async function plazaGrillTake(oysterId: string) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn', oyster: undefined, count: 0 };
+  return client.grillTake(oysterId);
+}
+/** 點擊／最近可搶的共烤蚵（同堆 open／flipped） */
+export function plazaGrillNearest(cx: number, cy: number, cam: THREE.Camera) {
+  if (myPile == null || !view) return null;
+  return view.grill.nearestAtPile(myPile, cam, cx, cy);
+}
+export function plazaGrillHit(raycaster: THREE.Raycaster) {
+  return view?.grill.hit(raycaster) ?? null;
+}
+
 const ERR_ZH: Record<string, string> = {
   taken: '這個位子有人了',
   full: '廣場滿了，等有人離開再來',
@@ -202,6 +228,14 @@ const ERR_ZH: Record<string, string> = {
   victim_cap: '對方這分鐘被偷太多次了',
   steal_ban: '偷被抓太多次，先冷靜一下',
   watching: '阿婆正看著你，偷不到',
+  grill_full: '烤網滿了，先等別人拿走',
+  off_grill: '要點在烤網上',
+  not_grill: '這裡不是烤蚵位',
+  not_ready: '還沒烤開',
+  already_flipped: '上殼掀掉了',
+  need_flip: '先掀上殼再拿',
+  gone: '被別人搶走了',
+  wrong_pile: '只能動自己這堆烤網上的',
 };
 
 export function plazaZhErr(e?: string) { return (e && ERR_ZH[e]) || e || '失敗了'; }
@@ -246,6 +280,7 @@ async function boot(D: PlazaDeps) {
   }
   snap = r.snap ?? null;
   if (snap) view?.syncRoster(snap, D.id);
+  if (r.grills) view?.grill.syncAll(r.grills);
   applyChatHistory(r.chat);
   void plazaPushOutfit();
   setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
@@ -293,7 +328,7 @@ function flashNetOk(msg: string) {
   setTimeout(() => { if (!netDown) setNetBanner(null); }, 2200);
 }
 
-async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[]) {
+async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?: PlazaGrillOyster[]) {
   if (!deps || !client) return;
   netDown = false;
   clearReconnectTimer();
@@ -304,6 +339,7 @@ async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[]) {
     snap = normalizeSnap(s);
     view?.syncRoster(snap, deps.id);
   }
+  if (grills) view?.grill.syncAll(grills);
   // 補離線期間錯過的聊天
   applyChatHistory(chat);
   void plazaPushOutfit();
@@ -378,6 +414,21 @@ function wireClient(D: PlazaDeps) {
     onShellBlocked: (e) => { try { D.onShellBlocked?.(e); } catch (err) { console.error('onShellBlocked', err); } },
     onShellHit: (e) => { try { D.onShellHit?.(e); } catch (err) { console.error('onShellHit', err); } },
     onStealResult: (e) => { try { D.onStealResult?.(e); } catch (err) { console.error('onStealResult', err); } },
+    onGrillUpsert: (o) => {
+      const prev = view?.grill.get(o.id)?.state;
+      view?.grill.upsert(o);
+      if (o.state === 'open' && prev !== 'open' && myPile === o.pileId)
+        D.toast('有蚵烤開了！搶掀上殼', '#ffd76a');
+      try { D.onGrillUpsert?.(o); } catch (err) { console.error('onGrillUpsert', err); }
+    },
+    onGrillRemove: (id, byConnId, byNick) => {
+      view?.grill.remove(id);
+      try { D.onGrillRemove?.(id, byConnId, byNick); } catch (err) { console.error('onGrillRemove', err); }
+    },
+    onGrillTaken: (e) => {
+      view?.grill.remove(e.oyster.id);
+      try { D.onGrillTaken?.(e); } catch (err) { console.error('onGrillTaken', err); }
+    },
     onReconnecting: (attempt) => {
       if (!active) return;
       netDown = true;
@@ -388,7 +439,7 @@ function wireClient(D: PlazaDeps) {
       if (!active) return;
       setNetBanner('連上了，正在回到廣場…');
     },
-    onRejoined: (s, chat) => { if (active) void restoreAfterRejoin(s, chat); },
+    onRejoined: (s, chat, grills) => { if (active) void restoreAfterRejoin(s, chat, grills); },
     onRejoinFail: (err, attempt) => {
       if (!active) return;
       netDown = true;

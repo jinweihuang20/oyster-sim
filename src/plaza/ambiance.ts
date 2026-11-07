@@ -259,14 +259,14 @@ function buildSnack(g: THREE.Group, M: MatFn, add: AddFn, segs: number, lowDetai
   const wood = M(0x5a4a32, { roughness: 0.9 });
   const steel = M(0x5a5a60, { metalness: 0.4, roughness: 0.5 });
   add(rcyl(0.03, 0.03, 1.85, 4), wood, [0, 0.95, 0], g, true);
-  const umb = add(
+  // Cone 預設尖端朝 +Y＝陽傘頂；勿翻轉（翻了會變漏斗）
+  add(
     new THREE.ConeGeometry(0.85, 0.22, lowDetail ? 6 : 10),
     M(0xe8a020, { side: THREE.DoubleSide, roughness: 0.7 }),
     [0, 1.95, 0],
     g,
     false,
   );
-  umb.rotation.x = Math.PI;
   add(rboxEnv(0.95, 0.65, 0.55), wood, [0, 0.33, 0.1], g, true);
   add(rcyl(0.22, 0.2, 0.12, segs), steel, [0, 0.72, 0.1], g, false);
   add(rcyl(0.18, 0.18, 0.04, segs), M(0xd89020, { roughness: 0.4, emissive: 0x3a2008, emissiveIntensity: 0.25 }), [0, 0.78, 0.1], g, false);

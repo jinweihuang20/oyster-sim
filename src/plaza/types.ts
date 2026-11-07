@@ -81,6 +81,27 @@ export type PlazaStealEvent = {
   caught: boolean;
 };
 
+/** 共烤蚵：cooking→open→flipped；taken 後從場上移除 */
+export type PlazaGrillOyster = {
+  id: string;
+  pileId: number;
+  lx: number;
+  lz: number;
+  state: 'cooking' | 'open' | 'flipped' | 'taken' | string;
+  placedAt: number;
+  openAt: number;
+  ownerConnId: string;
+  ownerNick: string;
+  diff: number;
+};
+
+export type PlazaGrillTakenEvent = {
+  oyster: PlazaGrillOyster;
+  byConnId: string;
+  byNick: string;
+  count: number;
+};
+
 /** 給丟殼／偷肉瞄準用 */
 export type PlazaAimTarget = {
   connId: string;

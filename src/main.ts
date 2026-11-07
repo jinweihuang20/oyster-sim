@@ -38,12 +38,13 @@ import { makeMeshHelpers } from './dm/mesh';
 import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaPileObs, plazaRandomSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
-  plazaHitPile, plazaMyPileOrigin,
+  plazaHitPile, plazaMyPileOrigin, pileIsGrill,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
+  plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen, seatPose, plazaPushOutfit,
-  type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent,
+  type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
-import { makeYardFloorMaps } from './plaza/props';
+import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 installNoZoom();
 { const s = document.createElement('style'); s.textContent = weaponPreviewCss(); document.head.appendChild(s); }
@@ -285,6 +286,8 @@ const oyster = new THREE.Group(); handL.add(oyster); oyster.position.set(0.02, 0
 const shellBotMat = shellM(0xe0dcd8), shellTopMat = shellM(0xf0ecea);
 const shellBot = mesh(halfGeo, shellBotMat, [0, -0.01, 0], oyster);
 const meatInHand = mesh(meatGeo, meatMat, [0, 0.015, 0], oyster);
+/** 烤蚵鉸鏈：上殼一邊連接下殼，繞此軸掀開 */
+const grillHinge = new THREE.Group(); oyster.add(grillHinge);
 const shellTop = mesh(halfGeo, shellTopMat, [0, 0.025, 0], oyster);
 const barnacles: THREE.Mesh[] = [];
 // 難度硬塊＝藤壺／石灰質附著：火山口形（頂端有洞）的低面數旋轉體，共用一個幾何和材質
@@ -508,7 +511,8 @@ umb.position.set(0, 0, -0.75);
 
 // ---------- 遊戲狀態 ----------
 let tapAim = false, tossT0 = 0; const TAP_HINT = '肉在刀尖上！點一下碗（或碗附近）丟進去，越快越俐落';
-type Phase = 'pick' | 'scoop' | 'seam' | 'twist' | 'aim' | 'empty' | 'crab' | 'busy';
+type Phase = 'pick' | 'scoop' | 'seam' | 'twist' | 'aim' | 'empty' | 'crab' | 'busy'
+  | 'grillPlace' | 'grillCook' | 'grillFlip' | 'grillTake';
 let state: 'menu' | 'play' | 'end' = 'menu';
 const syncShiftUi = () => document.body.classList.toggle('onShift', state === 'play');
 syncShiftUi();
@@ -520,6 +524,95 @@ let steals = 0, caught = 0, penalty = 0, meatHits = 0, shellHits = 0, blocks = 0
 let holding = false, hold = 0, diff = 1, slowmo = 0, shake = 0, pearlShow = 0;
 let rot = 0, seamA = 0, lastTick = 0, progress = 0, tension = 0, strokeDir = 0, strokeLen = 0, strokePeak = 0, crabShakes = 0, lastKeyT = 0, lastKey = '';
 let find: ReturnType<typeof rollFind> = { kind: 'none', i: 0 };
+/** 烤蚵：放上烤網後等待開口 */
+let grillCookT = 0, grillCookDur = 3.5;
+/** 烤位臉盆／肉碗：往座位側外移，勿與矮爐重疊 */
+const BASIN0_GRILL = new THREE.Vector3(-0.58, 0.08, 1.72);
+const BOWL0_GRILL = new THREE.Vector3(0.58, 0.1, 1.66);
+const GRILL_OY0 = new THREE.Vector3(0, GRILL_GRATE_Y + 0.04, 0.55);
+const GRILL_HINGE_Z = 0.055;
+const GRILL_OPEN_MAX = (40 * Math.PI) / 180;
+const _grillHit = new THREE.Vector3();
+const _grillPlane = new THREE.Plane();
+const plazaOnGrill = () => {
+  const s = plazaMySeat();
+  return !!(plazaMode && s && pileIsGrill(s.pileId));
+};
+const isGrillPhase = (p = phase) => p === 'grillPlace' || p === 'grillCook' || p === 'grillFlip' || p === 'grillTake';
+function basinHome() { return plazaOnGrill() ? BASIN0_GRILL : BASIN0; }
+function bowlHome() { return plazaOnGrill() ? BOWL0_GRILL : BOWL0; }
+function oysterToHand() {
+  grillDetachHinge();
+  if (oyster.parent !== handL) { oyster.parent?.remove(oyster); handL.add(oyster); }
+  oyster.position.set(0.02, 0.05, -0.16);
+  oyster.rotation.set(0, 0, 0);
+  oyster.scale.setScalar(1);
+}
+/** 上殼掛回 oyster（非鉸鏈） */
+function grillDetachHinge() {
+  grillHinge.rotation.set(0, 0, 0);
+  if (shellTop.parent === grillHinge) {
+    oyster.add(shellTop);
+    shellTop.position.set(0, 0.025, 0);
+    shellTop.rotation.set(0, 0, 0);
+  }
+  if (seamMark.parent === grillHinge) {
+    oyster.add(seamMark);
+    oyster.add(seamGlow);
+    oyster.add(seamRing);
+  }
+}
+/** 開烤：上殼改掛鉸鏈，一邊相連慢慢掀 */
+function grillAttachHinge() {
+  grillHinge.position.set(0, 0.012, GRILL_HINGE_Z);
+  grillHinge.rotation.set(0, 0, 0);
+  if (shellTop.parent !== grillHinge) {
+    grillHinge.add(shellTop);
+    shellTop.position.set(0, 0.012, -GRILL_HINGE_Z);
+    shellTop.rotation.set(0, 0, 0);
+  }
+  // 縫標記跟著上殼邊緣
+  if (seamMark.parent !== grillHinge) {
+    grillHinge.add(seamMark);
+    grillHinge.add(seamGlow);
+    grillHinge.add(seamRing);
+  }
+  seamMark.position.set(0, 0.02, -GRILL_HINGE_Z * 0.3);
+  seamGlow.position.copy(seamMark.position);
+  seamRing.position.set(seamMark.position.x, 0.025, seamMark.position.z);
+}
+function oysterToGrill(cx?: number, cy?: number) {
+  grillDetachHinge();
+  if (oyster.parent !== seatRig) { oyster.parent?.remove(oyster); seatRig.add(oyster); }
+  seatRig.updateMatrixWorld(true);
+  const origin = plazaMyPileOrigin();
+  let lx = GRILL_OY0.x, ly = GRILL_GRATE_Y + 0.04, lz = GRILL_OY0.z;
+  if (origin) {
+    const pileL = seatRig.worldToLocal(origin.clone());
+    lx = pileL.x;
+    lz = pileL.z;
+    ly = pileL.y + GRILL_GRATE_Y + 0.04;
+    if (cx != null && cy != null && Number.isFinite(cx + cy)) {
+      const cam = viewCam();
+      cam.updateMatrixWorld();
+      ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), cam);
+      _grillPlane.set(new THREE.Vector3(0, 1, 0), -(origin.y + GRILL_GRATE_Y));
+      if (ray.ray.intersectPlane(_grillPlane, _grillHit)) {
+        seatRig.worldToLocal(_grillHit);
+        const dx = _grillHit.x - pileL.x, dz = _grillHit.z - pileL.z;
+        const d = Math.hypot(dx, dz);
+        const r = Math.min(d, GRILL_NET_R);
+        const k = d > 1e-5 ? r / d : 0;
+        lx = pileL.x + dx * k;
+        lz = pileL.z + dz * k;
+        ly = pileL.y + GRILL_GRATE_Y + 0.04;
+      }
+    }
+  }
+  oyster.position.set(lx, ly, lz);
+  oyster.rotation.set(0.05, rnd(-0.15, 0.15), 0);
+  oyster.scale.setScalar(1.15);
+}
 let umbT = 0, stealT = 0, stealNpc: Npc | null = null, rotKey = 0, emptyT = 0;
 let yaw = 0, pitch = -0.85, tYaw = 0, tPitch = -0.85;
 const timers: { t: number; f: () => void }[] = [];
@@ -546,6 +639,10 @@ const HINTS: Record<Phase, string> = {
   empty: COARSE ? '空殼：按「丟殼」對準阿婆丟過去，或者等一下自動丟掉' : '空殼：F／右鍵對準阿婆丟過去，或者等一下自動丟掉',
   crab: COARSE ? '螃蟹夾手了！快狂點螢幕把牠甩掉！' : '螃蟹夾手了！快連點（滑鼠／Space）把牠甩掉！',
   busy: '',
+  grillPlace: COARSE ? '連點烤網一直放；盆空再撈。烤開後空手點去搶掀／搶拿' : '連點烤網（或 Space）一直放；盆空再撈。烤開後空手去搶掀／搶拿',
+  grillCook: '等烤網上的蚵仔開口…',
+  grillFlip: '點烤開的蚵仔掀上殼（比手速）',
+  grillTake: '點掀好的蚵仔，連下殼把肉端走（比手速）',
 };
 const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
 /** 丟殼／偷蚵準心：工寮與廣場同一套——瞄到碗→手掌「偷!」，可下手時 hot */
@@ -592,30 +689,171 @@ function setPhase(p: Phase) {
   tapAim = p === 'aim'; if (tapAim) tossT0 = performance.now(); bowlRing.visible = tapAim; syncBasinRing();
   if (tapAim && !tut && state === 'play' && !LS.getItem('meatTip')) { LS.setItem('meatTip', '1'); later(0.1, () => toast(matchMedia('(pointer: coarse)').matches ? '往上拖畫面找阿婆，點她可以把肉丟過去（不算錢）' : '轉過去用滑鼠點阿婆，可以把肉丟過去（不算錢）', '#ffd76a')); }
   if (p === 'aim' && !tapAim) gauge.classList.add('aim'); if (p === 'twist') gauge.classList.add('tw', 'on');
-  updReticle(); on('giveUp', (p === 'seam' || p === 'twist') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
+  const grill = isGrillPhase(p);
+  updReticle(); on('giveUp', (p === 'seam' || p === 'twist' || p === 'grillPlace') && state === 'play'); on('prog', p === 'twist' || p === 'crab');
   on('rotL', p === 'seam'); on('rotR', p === 'seam'); on('throwBtn', (p === 'seam' || p === 'empty') && state === 'play');
+  knife.visible = !grill;
   if (p !== 'busy') hint.textContent = tapAim ? TAP_HINT : HINTS[p];
   const d = DIFF[diff];
   if (p === 'aim') { const TW = tut ? 0.12 : 0; zone.style.left = `${(PERF0 - TW) * 100}%`; zone.style.width = `${(PERF1 - PERF0 + 2 * TW) * 100}%`; $('diff').textContent = crackedNow ? '⚠ 有殼屑' : ''; }
   if (p === 'twist') { zone.style.left = `${d.lo * 100}%`; zone.style.width = `${(d.hi - d.lo) * 100}%`; progress = 0; strokeDir = 0; strokeLen = 0; strokePeak = 0; }
+  if (p === 'grillPlace') $('diff').textContent = '共烤';
+  else if (!isGrillPhase(p) && p !== 'aim') { /* keep */ }
+  if (!isGrillPhase(p) && p !== 'busy') grillDetachHinge();
   if (p === 'seam' || p === 'twist') updDiff();
-  else if (p !== 'aim') $('diff').textContent = '';
+  else if (p !== 'aim' && p !== 'grillCook') $('diff').textContent = '';
 }
 function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・要撬 ${pryNeed()} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
-function goPick() { if (state !== 'play' || walking) return; if (evRun?.steal === 'steal_only') { oyster.visible = false; setPhase('busy'); hint.textContent = '本活動只能用偷的：趁阿婆轉頭聊天，偷她碗裡的肉'; return; } oyster.visible = false; setPhase('pick'); if (!basinOy.length) hint.textContent = plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把'; }
+function goPick() {
+  if (state !== 'play' || walking) return;
+  if (evRun?.steal === 'steal_only') { oyster.visible = false; setPhase('busy'); hint.textContent = '本活動只能用偷的：趁阿婆轉頭聊天，偷她碗裡的肉'; return; }
+  oysterToHand();
+  oyster.visible = false; setPhase('pick');
+  if (!basinOy.length) {
+    hint.textContent = plazaOnGrill()
+      ? (basinOy.length ? '點蚵仔放上烤網；烤開的搶掀／搶拿' : '臉盆空了！點烤台旁生蚵籃撈一把；烤開的搶掀／搶拿')
+      : plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把';
+  }
+}
 function holdOyster(dd: number) {
   if (state !== 'play' || walking) return;
   if (saltNext && !tut) { saltNext = false; if (dd > 1) dd = Math.random() < 0.5 ? 0 : 1; toast('🧂 粗鹽搓過，這顆比較好開', '#cfc3ff'); drawMeds(); }
   diff = tut ? 0 : dd; const d = DIFF[diff];
+  oysterToHand();
   oyster.visible = true; oyster.rotation.set(0, 0, 0); rot = rnd(0, 6.28); crackedNow = false;
   seamA = rnd(0, 6.28); const r = 0.115; seamMark.position.set(Math.cos(seamA) * r, 0.012, Math.sin(seamA) * r); seamMark.rotation.y = -seamA + Math.PI / 2; seamGlow.position.copy(seamMark.position); seamGlow.rotation.copy(seamMark.rotation); seamRing.position.set(seamMark.position.x, 0.02, seamMark.position.z); sweet = false;
-  seamMark.visible = seamGlow.visible = true;
+  seamMark.scale.set(1, 1, 1);
+  const grill = plazaOnGrill();
+  seamMark.visible = seamGlow.visible = !grill;
   shellTop.visible = true; shellTop.position.set(0, 0.025, 0); shellTop.rotation.set(0, 0, 0); meatInHand.visible = true; meatInHand.material = meatMat; pearlMesh.visible = false; oddMeshes.forEach(m => m.visible = false);
   { const base = [0xffffff, 0xeeeae8, 0xdcd6d4, 0xc8c2c0][diff]; shellTopMat.color.setHex(base); shellBotMat.color.setHex(base).multiplyScalar(0.92); const gi = Math.floor(Math.random() * 6); shellTop.geometry = HALF_GEOS[gi]; shellBot.geometry = HALF_GEOS[(gi + 3) % 6]; }
   placeBarn(barnacles, diff, 0.032);
   meatsLeft = 1; showExtra();
-  find = tut ? { kind: 'none', i: 0 } : rollFind(); setPhase('seam');
+  find = tut ? { kind: 'none', i: 0 } : rollFind();
+  if (grill) setPhase('grillPlace');
+  else setPhase('seam');
+  void d;
 }
+
+/** 防連點重複送出 */
+let grillPlaceBusy = false;
+/** 放上烤網後若盆裡還有，立刻接下顆繼續放（真實連放） */
+function grillContinuePlace() {
+  if (state !== 'play' || walking || !plazaOnGrill()) { goPick(); return; }
+  if (!basinOy.length) {
+    oysterToHand();
+    oyster.visible = false;
+    goPick();
+    hint.textContent = '臉盆空了！撈一把再連放；或點烤開的搶掀／搶拿';
+    return;
+  }
+  const next = basinOy[0];
+  basinOy.splice(0, 1);
+  scene.remove(next);
+  basinOy.forEach((m, i) => { if (m.visible) m.position.copy(basinSlot(i)); });
+  // 略過飛入動畫，直接上手繼續放
+  holdOyster(typeof next.userData.diff === 'number' ? next.userData.diff : 1);
+  hint.textContent = basinOy.length
+    ? `繼續點烤網連放（盆裡還有 ${basinOy.length}）`
+    : '這顆放完盆就空了；烤開的可空手去搶';
+}
+function grillPlaceOnNet(cx?: number, cy?: number) {
+  if (phase !== 'grillPlace' || state !== 'play' || grillPlaceBusy) return;
+  grillPlaceBusy = true;
+  void (async () => {
+    try {
+      const origin = plazaMyPileOrigin();
+      if (!origin) { toast('請先坐烤位', '#ff8a7a'); return; }
+      seatRig.updateMatrixWorld(true);
+      let lx = 0, lz = 0;
+      if (cx != null && cy != null && Number.isFinite(cx + cy)) {
+        const cam = viewCam();
+        cam.updateMatrixWorld();
+        ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), cam);
+        _grillPlane.set(new THREE.Vector3(0, 1, 0), -(origin.y + GRILL_GRATE_Y));
+        if (ray.ray.intersectPlane(_grillPlane, _grillHit)) {
+          lx = _grillHit.x - origin.x;
+          lz = _grillHit.z - origin.z;
+          const d = Math.hypot(lx, lz);
+          if (d > GRILL_NET_R && d > 1e-5) { lx *= GRILL_NET_R / d; lz *= GRILL_NET_R / d; }
+        }
+      }
+      const r = await plazaGrillPlace(lx, lz, diff);
+      if (!r.ok) { toast(plazaZhErr(r.err) || '放不上烤網', '#ff8a7a'); return; }
+      oysterToHand();
+      oyster.visible = false;
+      SFX.whoosh();
+      // 連放：盆裡有就接下顆，不必每次回 pick
+      grillContinuePlace();
+    } finally {
+      grillPlaceBusy = false;
+    }
+  })();
+}
+/** 搶掀／搶拿烤網上已開／已掀的蚵 */
+async function grillRaceAt(cx: number, cy: number) {
+  if (!plazaOnGrill() || state !== 'play' || walking) return false;
+  if (phase === 'grillPlace' || phase === 'scoop' || phase === 'aim' || phase === 'seam' || phase === 'twist') return false;
+  const o = plazaGrillNearest(cx, cy, viewCam());
+  if (!o) return false;
+  if (o.state === 'open') {
+    setPhase('grillFlip');
+    const r = await plazaGrillFlip(o.id);
+    if (!r.ok) {
+      toast(plazaZhErr(r.err) || '掀不到', '#ff8a7a');
+      if (state === 'play') goPick();
+      return true;
+    }
+    SFX.creak();
+    toast('掀掉上殼！快點拿肉', '#9be37a');
+    if (state === 'play' && (phase === 'grillFlip' || phase === 'busy')) goPick();
+    return true;
+  }
+  if (o.state === 'flipped') {
+    setPhase('grillTake');
+    const r = await plazaGrillTake(o.id);
+    if (!r.ok) {
+      toast(plazaZhErr(r.err) || '被別人搶走了', '#ff8a7a');
+      if (state === 'play') goPick();
+      return true;
+    }
+    applyGrillTakeWin(r.count);
+    return true;
+  }
+  return false;
+}
+function applyGrillTakeWin(serverCount?: number) {
+  oysterToHand();
+  oyster.visible = true;
+  shellTop.visible = false;
+  seamMark.visible = false;
+  seamGlow.visible = false;
+  meatInHand.visible = true;
+  meatInHand.material = meatMat;
+  { const l = luckNow(), r = Math.random(); meatsLeft = tut ? 1 : r < 0.02 + 0.0025 * l ? 3 : r < 0.10 + 0.0075 * l ? 2 : 1; showExtra();
+    if (meatsLeft > 1) { if (meatsLeft === 3) dayMulti3++; else dayMulti2++; later(0.25, () => toast(meatsLeft === 3 ? '三仁！' : '雙仁！', '#ffd76a')); } }
+  crackSound(); shake = 0.18; opened++; dStat[diff][0]++;
+  if (typeof serverCount === 'number') count = serverCount;
+  else count++;
+  toast('搶到了！丟進碗裡', '#9be37a');
+  setPhase('busy');
+  later(0.12, () => setPhase('aim'));
+  updHud();
+}
+function onPlazaGrillTaken(e: PlazaGrillTakenEvent) {
+  const me = plazaConnId();
+  if (e.byConnId && me && e.byConnId === me) {
+    // 自己的 GrillTake 回傳已處理；廣播僅補同步
+    return;
+  }
+  if (plazaOnGrill() && e.byNick) toast(`${e.byNick} 搶走一顆烤蚵`, '#ffb08a');
+}
+function grillAct(cx?: number, cy?: number) {
+  const x = cx ?? innerWidth / 2, y = cy ?? innerHeight / 2;
+  if (phase === 'grillPlace') { grillPlaceOnNet(x, y); return; }
+  void grillRaceAt(x, y);
+}
+
 // 每次上工隨機換阿婆衣服顏色與花樣
 const CLOTH = [0xe05a4a, 0x3f8ad0, 0x4fad6b, 0xe09830, 0x4a9ab8, 0xe07090, 0x2f9a9a, 0xc89040, 0x5a8fc0, 0xe0c341];
 function dressAma(n: Npc) {
@@ -1108,7 +1346,7 @@ function pickAt(cx: number, cy: number) {
       toast('請點自己面前這一堆蚵仔', '#ffb08a'); return;
     }
   } else if (ray.intersectObject(pileHit, false).length || ray.intersectObject(pile, false).length) { scoop(); return; }
-  hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : (plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！點中間的蚵殼山撈一把');
+  hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : (plazaOnGrill() ? '臉盆空了！點面前烤台旁的生蚵籃撈一把' : plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！點中間的蚵殼山撈一把');
 }
 function grab(m: THREE.Mesh) {
   basinOy.splice(basinOy.indexOf(m), 1); setPhase('busy'); reach = 0.35; tone(500, 0.05, 0.08, 'triangle'); noise(0.05, 1200, 0.2);
@@ -1192,7 +1430,8 @@ function applyPlazaSeatPose(pos: THREE.Vector3, yaw: number) {
   seatRig.updateMatrixWorld(true);
   const M = seatRig.matrixWorld.clone().multiply(old);
   [...basinOy, ...bowlMeat].forEach(m => m.position.applyMatrix4(M));
-  SEAT.copy(seatRig.localToWorld(SEAT0.clone())); BASIN.copy(seatRig.localToWorld(BASIN0.clone())); applyBowl();
+  const bh = basinHome();
+  SEAT.copy(seatRig.localToWorld(SEAT0.clone())); BASIN.copy(seatRig.localToWorld(bh.clone())); applyBowl();
   setPlazaSeatPropsVisible(true);
 }
 /** 廣場走動時藏臉盆／肉碗（否則會留在剛離開的椅子旁） */
@@ -1204,26 +1443,28 @@ function setPlazaSeatPropsVisible(v: boolean) {
   if (!v) { bowlRing.visible = false; basinRing.visible = false; }
 }
 const bowlNow = () => BOWLS.find(b => b.id === save.shop.equipped.bowl) ?? BOWLS[0];
-/** 臉盆／肉碗貼蚵堆表面，避免被殼遮住 */
+/** 臉盆／肉碗貼蚵堆表面，避免被殼遮住；烤位改貼地並外移，勿與爐干涉 */
 function liftSeatPropsOntoPile() {
   let ox = 0, oz = 0;
+  const onGrill = plazaOnGrill();
   if (plazaMode) {
     const o = plazaMyPileOrigin();
     if (o) { ox = o.x; oz = o.z; }
   }
+  const homeB = basinHome();
   seatRig.updateMatrixWorld(true);
   const b = bowlNow();
   const bowlW = seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, 0, BOWL_L.z));
-  const bowlWant = pileSurfY(bowlW.x, bowlW.z, ox, oz);
+  const bowlWant = onGrill ? 0.04 : pileSurfY(bowlW.x, bowlW.z, ox, oz);
   const bowlLocal = seatRig.worldToLocal(new THREE.Vector3(bowlW.x, bowlWant, bowlW.z));
   bowlG.position.set(BOWL_L.x, bowlLocal.y, BOWL_L.z);
   BOWL.copy(seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, bowlLocal.y + Math.max(0.08, b.h - 0.02), BOWL_L.z)));
 
-  const basW = seatRig.localToWorld(new THREE.Vector3(BASIN0.x, 0, BASIN0.z));
-  const basWant = pileSurfY(basW.x, basW.z, ox, oz);
+  const basW = seatRig.localToWorld(new THREE.Vector3(homeB.x, 0, homeB.z));
+  const basWant = onGrill ? 0.04 : pileSurfY(basW.x, basW.z, ox, oz);
   const basLocal = seatRig.worldToLocal(new THREE.Vector3(basW.x, basWant, basW.z));
   const dy = basLocal.y - basinMesh.position.y;
-  basinMesh.position.set(BASIN0.x, basLocal.y, BASIN0.z);
+  basinMesh.position.set(homeB.x, basLocal.y, homeB.z);
   if (Math.abs(dy) > 1e-5) {
     for (let i = 0; i < basinShells.count; i++) {
       basinShells.getMatrixAt(i, _liftM);
@@ -1234,13 +1475,14 @@ function liftSeatPropsOntoPile() {
     }
     basinShells.instanceMatrix.needsUpdate = true;
   }
-  BASIN.copy(seatRig.localToWorld(new THREE.Vector3(BASIN0.x, basLocal.y + 0.1, BASIN0.z)));
+  BASIN.copy(seatRig.localToWorld(new THREE.Vector3(homeB.x, basLocal.y + 0.1, homeB.z)));
   // 盆已抬高：可撿蚵仔跟著重排，才會跟手拿起消失
   basinOy.forEach((m, i) => { if (m.visible) m.position.copy(basinSlot(i)); });
 }
 function applyBowl() {
   const b = bowlNow(), S = seatNow(); BOWL_R = b.r * (newbie() ? 1.2 : 1); const pw = (b.perf + S.perf) * (newbie() ? 1.4 : 1); PERF0 = IDEAL - pw / 2; PERF1 = IDEAL + pw / 2;
-  BOWL_L.set(SEAT0.x + (BOWL0.x - SEAT0.x) * b.dist * S.bowl, BOWL0.y, SEAT0.z + (BOWL0.z - SEAT0.z) * b.dist * S.bowl); buildBowl(b);
+  const home = bowlHome();
+  BOWL_L.set(SEAT0.x + (home.x - SEAT0.x) * b.dist * S.bowl, home.y, SEAT0.z + (home.z - SEAT0.z) * b.dist * S.bowl); buildBowl(b);
   liftSeatPropsOntoPile();
 }
 const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
@@ -1633,7 +1875,7 @@ function plazaThrowTarget(): PlazaAimTarget | null {
 /** 廣場偷肉：讀條／同堆冷卻寫死；罰金／禁偷／碗少門檻見 eco */
 const PLAZA_STEAL_DUR = 1.8;
 const PLAZA_STEAL_PAIR_MS = 4000;
-const PLAZA_BUSY_PHASE = /^(seam|twist|pry|crab|scoop)$/i;
+const PLAZA_BUSY_PHASE = /^(seam|twist|pry|crab|scoop|grillplace|grillcook|grillflip|grilltake)$/i;
 let plazaStealBanUntil = 0;
 let plazaStealCatches = 0;
 const plazaStealPairCd = new Map<string, number>();
@@ -2149,7 +2391,18 @@ const up = (e: PointerEvent) => {
   // 拿蚵：輕微滑動仍當點選（否則「常點不到」）
   const asTap = !down.drag || (phase === 'pick' && e.pointerType !== 'mouse' && moved < 48);
   if (asTap) {
-    if (phase === 'seam') tryInsert();
+    if (isGrillPhase() || (plazaOnGrill() && (phase === 'pick' || phase === 'empty' || phase === 'busy'))) {
+      const lk = document.pointerLockElement === canvas;
+      const tx = lk ? innerWidth / 2 : e.clientX, ty = lk ? innerHeight / 2 : e.clientY;
+      if (phase === 'grillPlace') grillAct(tx, ty);
+      else void grillRaceAt(tx, ty).then(hit => {
+        if (!hit && phase === 'pick') {
+          if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2);
+          else pickAt(e.clientX, e.clientY);
+        }
+      });
+    }
+    else if (phase === 'seam') tryInsert();
     else if (phase === 'empty' && tut && TUT[tut.i].id === 'empty') discardShell();
     else if (phase === 'pick') {
       if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2);
@@ -2196,7 +2449,7 @@ window.addEventListener('keydown', e => {
   }
   if (e.code === 'KeyG') { standUp(); return; }
   if (e.code === 'Space' && !e.repeat && umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
-  if (e.code === 'Space' && !e.repeat) { if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) { if (!tutMeat()) toss(true); } else if (phase === 'aim') { holding = true; hold = 0; } }
+  if (e.code === 'Space' && !e.repeat) { if (phase === 'grillPlace') grillAct(); else if (plazaOnGrill() && (phase === 'pick' || phase === 'empty' || phase === 'busy')) void grillRaceAt(innerWidth / 2, innerHeight / 2); else if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (isGrillPhase()) grillAct(); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) { if (!tutMeat()) toss(true); } else if (phase === 'aim') { holding = true; hold = 0; } }
   if (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
     const l = e.code === 'KeyA' || e.code === 'ArrowLeft';
     if (phase === 'seam') rotKey = l ? -1 : 1; else if (!e.repeat && swipePhase()) keyTwist(l ? 'L' : 'R');
@@ -2299,9 +2552,9 @@ initWalkSeat({
 initWalkJoy();
 
 function giveUp() {
-  if (state !== 'play' || (phase !== 'seam' && phase !== 'twist')) return;
-  abandoned++; setPhase('busy'); oyster.visible = false; gauge.classList.remove('hit', 'miss', 'hitHold');
-  later(0.05, () => { progress = 0; combo = 0; crackedNow = false; tension = 0; shellTop.rotation.z = 0; rotKey = 0; });
+  if (state !== 'play' || (phase !== 'seam' && phase !== 'twist' && phase !== 'grillPlace')) return;
+  abandoned++; oysterToHand(); setPhase('busy'); oyster.visible = false; gauge.classList.remove('hit', 'miss', 'hitHold');
+  later(0.05, () => { progress = 0; combo = 0; crackedNow = false; tension = 0; shellTop.rotation.z = 0; shellTop.rotation.x = 0; rotKey = 0; grillCookT = 0; });
   const sh = new THREE.Mesh(shellGeo, shellTopMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.6, () => scene.remove(sh));
   // 先排 goPick，避免 nag／特效出錯卡在 busy 拿不到下一顆
   later(0.6, goPick);
@@ -2785,6 +3038,7 @@ function launchPlaza() {
     },
     onShellBlocked: (e) => { resolvePlazaBlocked(e); },
     onShellHit: (e) => { resolvePlazaShellHitFx(e); },
+    onGrillTaken: (e) => { try { onPlazaGrillTaken(e); } catch (err) { console.error(err); } },
     onStealResult: (e) => {
       const me = plazaConnId();
       if (!me) return;

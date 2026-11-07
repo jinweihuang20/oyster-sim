@@ -1,5 +1,5 @@
 import * as signalR from '@microsoft/signalr';
-import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent } from './types';
+import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent } from './types';
 
 export type PlazaHubHandlers = {
   onRoster?: (snap: PlazaSnapshot) => void;
@@ -20,12 +20,16 @@ export type PlazaHubHandlers = {
   /** 有人被殼砸中：全場噴血 */
   onShellHit?: (e: PlazaShellHitEvent) => void;
   onStealResult?: (e: PlazaStealEvent) => void;
+  /** 共烤蚵狀態更新（放上／烤開／掀殼） */
+  onGrillUpsert?: (o: PlazaGrillOyster) => void;
+  onGrillRemove?: (id: string, byConnId: string, byNick: string) => void;
+  onGrillTaken?: (e: PlazaGrillTakenEvent) => void;
   /** 連線中斷，開始自動重連 */
   onReconnecting?: (attempt: number) => void;
   /** 底層 socket 重連成功（尚未重新 Join） */
   onSocketReconnected?: () => void;
-  /** 重新 Join 成功（含近期聊天紀錄） */
-  onRejoined?: (snap?: PlazaSnapshot, chat?: PlazaChat[]) => void;
+  /** 重新 Join 成功（含近期聊天／共烤狀態） */
+  onRejoined?: (snap?: PlazaSnapshot, chat?: PlazaChat[], grills?: PlazaGrillOyster[]) => void;
   /** 重新 Join 失敗（仍會再試） */
   onRejoinFail?: (err?: string, attempt?: number) => void;
   /** 自動重連耗盡／連線徹底關閉 */
@@ -86,6 +90,21 @@ function normSteal(e: any): PlazaStealEvent {
   };
 }
 
+export function normGrillOyster(e: any): PlazaGrillOyster {
+  return {
+    id: String(e?.id ?? e?.Id ?? ''),
+    pileId: Number(e?.pileId ?? e?.PileId ?? -1),
+    lx: fin(e?.lx ?? e?.Lx),
+    lz: fin(e?.lz ?? e?.Lz),
+    state: String(e?.state ?? e?.State ?? 'cooking').toLowerCase(),
+    placedAt: Number(e?.placedAt ?? e?.PlacedAt ?? Date.now()),
+    openAt: Number(e?.openAt ?? e?.OpenAt ?? Date.now()),
+    ownerConnId: String(e?.ownerConnId ?? e?.OwnerConnId ?? ''),
+    ownerNick: String(e?.ownerNick ?? e?.OwnerNick ?? ''),
+    diff: Math.max(0, Math.min(3, Number(e?.diff ?? e?.Diff ?? 1) | 0)),
+  };
+}
+
 function normChatDto(m: any): PlazaChat {
   const pile = m?.pileId ?? m?.PileId;
   return {
@@ -112,7 +131,7 @@ export class PlazaClient {
 
   get connectionId() { return this.conn?.connectionId ?? ''; }
 
-  async connect(pid: string, nick: string, opts?: { keepAttempt?: boolean }): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; chat?: PlazaChat[] }> {
+  async connect(pid: string, nick: string, opts?: { keepAttempt?: boolean }): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; chat?: PlazaChat[]; grills?: PlazaGrillOyster[] }> {
     this.pid = pid;
     this.nick = nick;
     this.intentionalStop = false;
@@ -178,18 +197,42 @@ export class PlazaClient {
     conn.on('StealResult', (e: any) => {
       try { this.handlers.onStealResult?.(normSteal(e)); } catch (err) { console.error('StealResult', err); }
     });
+    conn.on('GrillUpsert', (e: any) => {
+      try { this.handlers.onGrillUpsert?.(normGrillOyster(e)); } catch (err) { console.error('GrillUpsert', err); }
+    });
+    conn.on('GrillRemove', (e: any) => {
+      try {
+        const id = String(e?.id ?? e?.Id ?? '');
+        const byConnId = String(e?.byConnId ?? e?.ByConnId ?? '');
+        const byNick = String(e?.byNick ?? e?.ByNick ?? '');
+        this.handlers.onGrillRemove?.(id, byConnId, byNick);
+      } catch (err) { console.error('GrillRemove', err); }
+    });
+    conn.on('GrillTaken', (e: any) => {
+      try {
+        const oyster = normGrillOyster(e?.oyster ?? e?.Oyster ?? e);
+        this.handlers.onGrillTaken?.({
+          oyster,
+          byConnId: String(e?.byConnId ?? e?.ByConnId ?? ''),
+          byNick: String(e?.byNick ?? e?.ByNick ?? ''),
+          count: Number(e?.count ?? e?.Count ?? 0),
+        });
+      } catch (err) { console.error('GrillTaken', err); }
+    });
   }
 
-  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[] }> {
+  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[]; grills?: PlazaGrillOyster[] }> {
     if (!this.conn) return { ok: false, err: 'no_conn' };
     try {
-      const r = await this.conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot; chat?: any[] }>('Join', this.pid, this.nick);
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot; chat?: any[]; grills?: any[] }>('Join', this.pid, this.nick);
       if (!r?.ok) return { ok: false, err: r?.err || 'join_fail' };
       this.token = r.token || '';
       this.reconnectAttempt = 0;
       const raw = (r as any).chat ?? (r as any).Chat ?? [];
       const chat = Array.isArray(raw) ? raw.map(normChatDto) : [];
-      return { ok: true, snap: r.snap, token: this.token, chat };
+      const rawG = (r as any).grills ?? (r as any).Grills ?? [];
+      const grills = Array.isArray(rawG) ? rawG.map(normGrillOyster) : [];
+      return { ok: true, snap: r.snap, token: this.token, chat, grills };
     } catch (e: any) {
       return { ok: false, err: e?.message || 'join_fail' };
     }
@@ -205,7 +248,7 @@ export class PlazaClient {
         this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
         return;
       }
-      this.handlers.onRejoined?.(r.snap, r.chat);
+      this.handlers.onRejoined?.(r.snap, r.chat, r.grills);
     } finally {
       this.rejoining = false;
     }
@@ -219,7 +262,7 @@ export class PlazaClient {
     if (this.intentionalStop) return { ok: false, err: 'stopped' };
     if (this.connected) {
       const r = await this.joinHub();
-      if (r.ok) { this.handlers.onRejoined?.(r.snap, r.chat); return r; }
+      if (r.ok) { this.handlers.onRejoined?.(r.snap, r.chat, r.grills); return r; }
       return r;
     }
     this.reconnectAttempt += 1;
@@ -227,7 +270,7 @@ export class PlazaClient {
     const pid = this.pid, nick = this.nick;
     if (!pid) return { ok: false, err: 'no_pid' };
     const r = await this.connect(pid, nick, { keepAttempt: true });
-    if (r.ok) this.handlers.onRejoined?.(r.snap, r.chat);
+    if (r.ok) this.handlers.onRejoined?.(r.snap, r.chat, (r as any).grills);
     else this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
     return r;
   }
@@ -325,6 +368,30 @@ export class PlazaClient {
       const r = await this.conn.invoke<{ ok: boolean; payout?: number; err?: string }>('ReportEarn', this.token, earn, oysters, durationSec);
       return { ok: !!r?.ok, payout: r?.payout ?? 0, err: r?.err };
     } catch (e: any) { return { ok: false as const, payout: 0, err: e?.message || 'pay_fail' }; }
+  }
+
+  async grillPlace(lx: number, lz: number, diff: number) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn', oyster: undefined as PlazaGrillOyster | undefined };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; oyster?: any }>('GrillPlace', lx, lz, diff);
+      return { ok: !!r?.ok, err: r?.err, oyster: r?.oyster ? normGrillOyster(r.oyster) : undefined };
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'grill_fail', oyster: undefined }; }
+  }
+
+  async grillFlip(oysterId: string) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn', oyster: undefined as PlazaGrillOyster | undefined };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; oyster?: any }>('GrillFlip', oysterId);
+      return { ok: !!r?.ok, err: r?.err, oyster: r?.oyster ? normGrillOyster(r.oyster) : undefined };
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'flip_fail', oyster: undefined }; }
+  }
+
+  async grillTake(oysterId: string) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn', oyster: undefined as PlazaGrillOyster | undefined, count: 0 };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; oyster?: any; count?: number }>('GrillTake', oysterId);
+      return { ok: !!r?.ok, err: r?.err, oyster: r?.oyster ? normGrillOyster(r.oyster) : undefined, count: r?.count ?? 0 };
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'take_fail', oyster: undefined, count: 0 }; }
   }
 
   async disconnect() {

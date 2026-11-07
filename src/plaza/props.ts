@@ -143,6 +143,116 @@ export function makeYardLikePile(
   return g;
 }
 
+/** 烤網高度（世界 y；底座已壓低，避免擋臉盆／肉碗） */
+export const GRILL_GRATE_Y = 0.32;
+/** 烤網可用半徑（點放蚵／碰撞） */
+export const GRILL_NET_R = 0.62;
+
+/**
+ * 廣場烤蚵台：共烤炭爐＋烤網；旁側生蚵籃供撈盆（點擊碰撞仍帶 pileId）。
+ */
+export function makePlazaGrill(
+  shellGeo: THREE.BufferGeometry,
+  shellMat: THREE.Material,
+  pileId: number,
+  lowDetail = false,
+): THREE.Group {
+  const g = new THREE.Group();
+  g.name = `grill-${pileId}`;
+  g.userData.pileId = pileId;
+  g.userData.grill = true;
+  const segs = lowDetail ? 6 : 10;
+  const wood = new THREE.MeshStandardMaterial({ color: 0x5a4a32, roughness: 0.9 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0x4a4a4e, metalness: 0.45, roughness: 0.55 });
+  const coal = new THREE.MeshStandardMaterial({ color: 0x1a120e, roughness: 1 });
+  const brick = new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.88 });
+  const gy = GRILL_GRATE_Y;
+
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], cast = true) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(...pos);
+    m.castShadow = cast;
+    m.receiveShadow = true;
+    m.userData.pileId = pileId;
+    g.add(m);
+    return m;
+  };
+
+  // 矮磚台（壓低：頂面約在烤網下）
+  add(rboxEnv(1.55, 0.18, 1.55), brick, [0, 0.09, 0], true);
+  add(rboxEnv(1.4, 0.08, 1.4), steel, [0, 0.2, 0], false);
+  // 炭層＋火光塊
+  add(rboxEnv(1.05, 0.05, 1.05), coal, [0, gy - 0.08, 0], false);
+  const glow = new THREE.MeshBasicMaterial({ color: 0xff6a28 });
+  const nGlow = lowDetail ? 5 : 9;
+  for (let i = 0; i < nGlow; i++) {
+    const a = (i / nGlow) * Math.PI * 2;
+    add(rboxEnv(0.09, 0.03, 0.09), glow, [Math.cos(a) * 0.3, gy - 0.05, Math.sin(a) * 0.3], false);
+  }
+  // 烤網
+  const grate = new THREE.MeshStandardMaterial({ color: 0x6a6a70, metalness: 0.55, roughness: 0.4 });
+  for (let i = 0; i < 9; i++) {
+    add(rboxEnv(1.2, 0.012, 0.022), grate, [0, gy, -0.48 + i * 0.12], false);
+    add(rboxEnv(0.022, 0.012, 1.2), grate, [-0.48 + i * 0.12, gy + 0.004, 0], false);
+  }
+  // 邊框
+  add(rboxEnv(1.28, 0.03, 0.05), steel, [0, gy + 0.02, -0.62], false);
+  add(rboxEnv(1.28, 0.03, 0.05), steel, [0, gy + 0.02, 0.62], false);
+  add(rboxEnv(0.05, 0.03, 1.28), steel, [-0.62, gy + 0.02, 0], false);
+  add(rboxEnv(0.05, 0.03, 1.28), steel, [0.62, gy + 0.02, 0], false);
+
+  // 旁側生蚵籃（撈蚵來源；略外移避免擋座位臉盆）
+  const basket = new THREE.Group();
+  basket.position.set(1.15, 0, 0.2);
+  basket.userData.pileId = pileId;
+  g.add(basket);
+  const baskMesh = new THREE.Mesh(rcyl(0.28, 0.25, 0.22, segs), wood);
+  baskMesh.position.y = 0.14;
+  baskMesh.userData.pileId = pileId;
+  basket.add(baskMesh);
+  const mat = (shellMat as THREE.Material).clone();
+  const nShell = lowDetail ? 28 : 48;
+  const pile = new THREE.InstancedMesh(shellGeo, mat, nShell);
+  pile.userData.pileId = pileId;
+  pile.userData.sharedGeo = true;
+  pile.castShadow = true;
+  const d = new THREE.Object3D();
+  const col = new THREE.Color();
+  let r = (pileId + 7) * 7919;
+  const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < nShell; i++) {
+    const a = rn() * 6.28;
+    const rad = Math.pow(rn(), 0.5) * 0.26;
+    d.position.set(Math.cos(a) * rad, 0.2 + Math.max(0, 0.16 * (1 - rad / 0.26)), Math.sin(a) * rad);
+    d.rotation.set(rn() * 3, rn() * 3, rn() * 3);
+    d.scale.setScalar(0.85 + rn() * 0.25);
+    d.updateMatrix();
+    pile.setMatrixAt(i, d.matrix);
+    col.setHex(GREYS[Math.min(4, Math.floor(rn() * rn() * 6.2))]);
+    pile.setColorAt(i, col);
+  }
+  pile.instanceMatrix.needsUpdate = true;
+  if (pile.instanceColor) pile.instanceColor.needsUpdate = true;
+  basket.add(pile);
+
+  // 點擊碰撞（烤網＋蚵籃）
+  const hit = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.05, 1.05, 0.55, 12),
+    new THREE.MeshBasicMaterial({ visible: false }),
+  );
+  hit.position.y = 0.28;
+  hit.userData.pileId = pileId;
+  g.add(hit);
+
+  if (!lowDetail) {
+    const pl = new THREE.PointLight(0xff7a30, 3.8, 4.8, 1.6);
+    pl.position.set(0, gy + 0.45, 0);
+    pl.castShadow = false;
+    g.add(pl);
+  }
+  return g;
+}
+
 /** 塑膠圓凳＋椅背：坐面高度約 0.42，對齊遠端坐下髖部 */
 export const CHAIR_SEAT_Y = 0.42;
 

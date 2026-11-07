@@ -3,9 +3,10 @@ import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
 import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
-import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, type PlazaSeatRef } from './layout';
-import { makeYardLikePile, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
+import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, type PlazaSeatRef } from './layout';
+import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
 import { makePlazaAmbiance } from './ambiance';
+import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 import { plazaDisplayName } from './types';
@@ -122,6 +123,8 @@ export type PlazaWorldView = {
   highlight: (pileId: number | null, slot: number | null) => void;
   highlightNear: (seat: PlazaSeatRef | null) => void;
   hitPile: (raycaster: THREE.Raycaster) => number | null;
+  /** 共烤網上蚵仔 */
+  grill: PlazaGrillView;
   /** 坐下遠端玩家的瞄準點（丟殼／偷肉） */
   aimTargets: () => PlazaAimTarget[];
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
@@ -168,8 +171,10 @@ export function createPlazaWorldView(
 
   for (let i = 0; i < PILE_COUNT; i++) {
     const c = pileCenter(i);
-    // 工寮單堆約 260；廣場 16 堆略降，仍要比舊 70/110 密很多
-    const pile = makeYardLikePile(opts.shellGeo, opts.shellMat, i, LO ? 140 : 210);
+    // 南排烤蚵台；其餘沿用工寮蚵山（InstancedMesh）
+    const pile = pileIsGrill(i)
+      ? makePlazaGrill(opts.shellGeo, opts.shellMat, i, LO)
+      : makeYardLikePile(opts.shellGeo, opts.shellMat, i, LO ? 140 : 210);
     pile.position.copy(c);
     root.add(pile);
     pileGroups.push(pile);
@@ -189,6 +194,9 @@ export function createPlazaWorldView(
   // 外圈夜市攤／烤肉區（氣氛；碰撞見 plazaStallObstacles）
   const ambiance = makePlazaAmbiance(M, add, LO);
   root.add(ambiance.group);
+
+  // 南排共烤：伺服器同步的烤網上蚵仔
+  const grill = createGrillView(root);
 
   // 四堆一盞實際點光（對齊吊燈外觀；不投影以免 4 燈吃效能）
   const plazaLights: THREE.PointLight[] = [...ambiance.lights];
@@ -676,6 +684,22 @@ export function createPlazaWorldView(
         placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.14, 0.18, -0.2, 0.0, 0.12, -0.36);
         placeHold(r, 0.0, 0.12, -0.36, -0.08, 0.14, -0.38, true);
         r.headWorkX = 0.1;
+      } else if (ph === 'grillplace' || ph === 'grillflip' || ph === 'grilltake') {
+        // 烤蚵：伸手往烤網放／掀／取
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.12, 0.18, -0.32, -0.06, 0.12, -0.48);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.12, 0.18, -0.28, 0.06, 0.12, -0.44);
+        placeHold(r, 0.0, 0.1, -0.46, -0.06, 0.12, -0.48, ph !== 'grilltake');
+        r.knife.visible = false;
+        r.headWorkX = 0.14;
+      } else if (ph === 'grillcook') {
+        // 等烤開：蚵在烤網上，雙手擱桌邊
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.28, 0, -0.2, 0.14, -0.18, -0.18, 0.08, -0.28);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.28, 0, 0.2, 0.14, -0.18, 0.18, 0.08, -0.28);
+        r.knife.visible = false;
+        r.oyster.visible = true;
+        r.oyster.position.set(0, 0.02, -0.55);
+        r.oyster.rotation.set(0.15, 0.2, 0);
+        r.headWorkX = 0.18;
       } else if (ph === 'aim' || ph === 'toss') {
         // 左手托肉／蚵往前，右手刀收一點
         placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.16, 0.22, -0.28, -0.1, 0.16, -0.44);
@@ -1044,11 +1068,13 @@ export function createPlazaWorldView(
       selfBubble.sprite.position.set(ox, headY + 0.12, oz);
       selfBubble.sprite.visible = true;
     } else if (selfBubble.sprite.visible) selfBubble.sprite.visible = false;
+    grill.tick(t);
   }
 
   function dispose() {
     for (const r of [...remotes.values()]) destroyRemote(r);
     remotes.clear();
+    grill.dispose();
     for (const pl of plazaLights) { root.remove(pl); pl.dispose(); }
     plazaLights.length = 0;
     selfBubble.dispose();
@@ -1065,7 +1091,7 @@ export function createPlazaWorldView(
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, aimTargets, showChat, setSelfPose, playThrowFx, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, aimTargets, showChat, setSelfPose, playThrowFx, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {
