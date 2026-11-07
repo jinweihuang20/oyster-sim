@@ -1558,8 +1558,10 @@ function liftSeatPropsOntoPile() {
   BOWL.copy(seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, bowlLocal.y + Math.max(0.08, b.h - 0.02), BOWL_L.z)));
 
   const basW = seatRig.localToWorld(new THREE.Vector3(homeB.x, 0, homeB.z));
-  // 一般蚵堆：盆底貼「腳印範圍最高堆面」再略抬，勿用中心高度（會半埋進坡）
-  const basFloorWant = onGrill ? 0.02 : pileSurfYMax(basW.x, basW.z, BASIN_R_TOP * 0.95, ox, oz) + 0.02;
+  // 一般蚵堆：只取盆底附近堆面（勿用整圈外緣 max，坡上會把左盆抬太高）
+  const basFloorWant = onGrill
+    ? 0.02
+    : pileSurfYMax(basW.x, basW.z, BASIN_R_BOT * 0.55, ox, oz) - 0.05;
   const basCenterWant = basFloorWant + BASIN_H / 2;
   const basLocal = seatRig.worldToLocal(new THREE.Vector3(basW.x, basCenterWant, basW.z));
   const dy = basLocal.y - basinMesh.position.y;
