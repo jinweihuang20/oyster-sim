@@ -1550,9 +1550,11 @@ function liftSeatPropsOntoPile() {
   const homeB = basinHome();
   seatRig.updateMatrixWorld(true);
   const b = bowlNow();
-  // 烤位：要的是「盆／碗底」貼地，不是圓柱中心貼地（否則盆底埋進地面、蚵像灑在地上）
+  // 烤位：碗底貼地；一般蚵堆：取碗底附近堆面並略降（整圈 max 會抬太高）
   const bowlW = seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, 0, BOWL_L.z));
-  const bowlFloorWant = onGrill ? 0.02 : pileSurfYMax(bowlW.x, bowlW.z, Math.max(0.2, b.r + 0.05), ox, oz);
+  const bowlFloorWant = onGrill
+    ? 0.02
+    : pileSurfYMax(bowlW.x, bowlW.z, Math.max(0.12, b.r * 0.55), ox, oz) - 0.06;
   const bowlLocal = seatRig.worldToLocal(new THREE.Vector3(bowlW.x, bowlFloorWant, bowlW.z));
   bowlG.position.set(BOWL_L.x, bowlLocal.y, BOWL_L.z);
   BOWL.copy(seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, bowlLocal.y + Math.max(0.08, b.h - 0.02), BOWL_L.z)));
@@ -2202,9 +2204,13 @@ async function finishPlazaSteal(t: PlazaAimTarget) {
   SFX.sneak(); toast(`偷到 ${t.nick} 一顆！`, '#c9a0ff'); updHud();
 }
 // ----- 6. 擲殼仔 -----
+/** 對人丟殼才算 thrown（和平主義）；丟地上／殼堆不算 */
+function noteHostileThrow() {
+  thrown++;
+  if (phase === 'seam') { abandoned++; wasteShells++; }
+}
 function throwShell() {
   if (state !== 'play' || (phase !== 'empty' && phase !== 'seam')) return;
-  thrown++; if (phase === 'seam') { abandoned++; wasteShells++; }
   const from = worldOf(oyster); oyster.visible = false;
   const sh = new THREE.Mesh(halfGeo, shellBotMat); SFX.whoosh();
   if (plazaMode) {
@@ -2213,10 +2219,13 @@ function throwShell() {
       if (!finite3(from)) { scene.remove(sh); setPhase('busy'); later(0.6, goPick); return; }
       const pt = plazaThrowTarget();
       if (pt?.connId && pt.head && Number.isFinite(pt.head.x) && Number.isFinite(pt.head.y) && Number.isFinite(pt.head.z)) {
+        noteHostileThrow();
         const to = new THREE.Vector3(pt.head.x, pt.head.y, pt.head.z);
         fly(sh, from, to, 0.5, 0.3, () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); } catch { /* */ } });
         void plazaThrowAt(pt.connId, from, to);
       } else {
+        // 沒瞄人：當丟地上／殼堆，不破和平
+        if (phase === 'seam') { abandoned++; wasteShells++; }
         const a = aimPoint(); a.y = 0.02;
         if (!finite3(a)) a.set(from.x, 0.02, from.z - 1);
         fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh)));
@@ -2232,10 +2241,16 @@ function throwShell() {
   let target: Npc | undefined;
   const cam = viewCam();
   for (const n of npcs) { const p = worldOf(n.head).project(cam); if (p.z < 1 && Math.abs(p.x) < 0.25 && Math.abs(p.y) < 0.45) target = n; }
-  if (target) { const t = target; fly(sh, from, () => worldOf(t.head), 0.5, 0.3, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟中${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 35); npcHurt(t); updHud(); }); }
-  else { let stray: Npc | undefined; for (const n of npcs) { const p = worldOf(n.head).project(cam); if (p.z < 1 && Math.abs(p.x) < 0.7 && Math.abs(p.y) < 0.8 && Math.random() < 0.4) stray = n; }
-    if (stray) { const t = stray; fly(sh, from, () => worldOf(t.head), 0.55, 0.35, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟歪打中${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 30); npcHurt(t); updHud(); }); }
-    else { const a = aimPoint(); a.y = 0.02; fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh))); } }
+  if (target) {
+    noteHostileThrow();
+    const t = target;
+    fly(sh, from, () => worldOf(t.head), 0.5, 0.3, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟中${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 35); npcHurt(t); updHud(); });
+  } else {
+    // 沒準星瞄人：丟地上，不再隨機「丟歪打中」（會冤枉破和平）
+    if (phase === 'seam') { abandoned++; wasteShells++; }
+    const a = aimPoint(); a.y = 0.02;
+    fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh)));
+  }
   setPhase('busy'); later(0.6, goPick);
 }
 // ----- 7. 阿婆擲殼仔 + 雨傘 -----
@@ -2447,7 +2462,8 @@ canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
   if (walking) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (e.button === 2) { throwShell(); return; }
-  down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && hitsOyster(e.clientX, e.clientY), lx: e.clientX, lt: performance.now() };
+  // 坐下：預設先當轉視角（跟走動一樣跟手）；點蚵／點網靠 pointerup 小位移仍算點
+  down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && hitsOyster(e.clientX, e.clientY), lx: e.clientX, lt: performance.now() };
 });
 let lastMoveT = performance.now();
 window.addEventListener('pointermove', e => {
@@ -2470,15 +2486,21 @@ window.addEventListener('pointermove', e => {
   const dx = e.clientX - down.x, dy = e.clientY - down.y;
   if (swipePhase() && !moonAimOn) return;
   if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; if (Math.abs(dx) > 8) down.drag = true; return; }
-  // 拿蚵階段手機微滑易被當成轉視角而點不到；門檻放寬
-  const dragSlop = phase === 'pick' && e.pointerType !== 'mouse' ? 40 : 14;
-  if (!down.drag && Math.hypot(dx, dy) > dragSlop) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
-  if (down.drag) {
+  // 拿蚵觸控：微滑才升格「認真拖」，其餘坐下已 drag 立刻轉頭
+  const dragSlop = phase === 'pick' && e.pointerType !== 'mouse' ? 16 : 0;
+  if (dragSlop > 0 && !down.drag && Math.hypot(dx, dy) > dragSlop) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
+  if (phase === 'pick' && e.pointerType !== 'mouse' && Math.hypot(dx, dy) <= dragSlop) {
+    // 仍在點選死區：先別轉頭，避免點蚵被帶走
+  } else if (down.drag) {
     // 手機／觸控拖曳：維持 FPS（指右＝往右看）；勿與桌面滑鼠共用同一符號
     const k = 0.006 * mix.sens;
     const xS = mix.invX ? -1 : 1;
     tYaw = clamp(down.yaw - dx * k * xS, -yl(), yl());
     tPitch = plazaTpWalkLockPitch() ? PLAZA_WALK_PITCH : clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
+    // 坐下／拖曳立刻上鏡頭（與 Pointer Lock 同手感，不等到下幀）
+    yaw = tYaw; pitch = tPitch;
+    camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0);
+    camera.updateMatrixWorld();
   }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); void h; }
@@ -2487,8 +2509,9 @@ const up = (e: PointerEvent) => {
   if (down && down.id === e.pointerId && walking) { down = null; return; }
   if (!(down && down.id === e.pointerId)) return;
   const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
-  // 拿蚵：輕微滑動仍當點選（否則「常點不到」）
-  const asTap = !down.drag || (phase === 'pick' && e.pointerType !== 'mouse' && moved < 48);
+  // 坐下已預設 drag：小位移仍當點選（拿蚵觸控門檻較寬）
+  const tapKeep = phase === 'pick' && e.pointerType !== 'mouse' ? 48 : 14;
+  const asTap = moved < tapKeep;
   if (asTap) {
     if (isGrillPhase() || (plazaOnGrill() && (phase === 'pick' || phase === 'empty' || phase === 'busy'))) {
       const lk = document.pointerLockElement === canvas;

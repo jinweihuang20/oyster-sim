@@ -132,9 +132,9 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
   const group = new THREE.Group();
   group.name = 'charcoalFire';
 
-  // 底炭層（flat：更薄，留給烤網空隙）
-  const bed = new THREE.Mesh(rboxEnv(w, flat ? 0.028 : 0.045, d), coalMat);
-  bed.position.y = flat ? -0.01 : 0;
+  // 底炭層（flat：薄層，鋼盤與烤網之間）
+  const bed = new THREE.Mesh(rboxEnv(w, flat ? 0.022 : 0.045, d), coalMat);
+  bed.position.y = 0;
   bed.userData.sharedMat = true;
   group.add(bed);
 
@@ -146,12 +146,12 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
     const m = new THREE.Mesh(coalChunkGeo, mat);
     m.userData.sharedGeo = true;
     m.userData.sharedMat = !hot;
-    // flat：炭貼近床面、壓低高度，勿頂出烤網
-    const cy = flat ? (0.002 + rn() * 0.01) : (0.018 + rn() * 0.028);
+    // flat：炭貼床面、高度壓在烤網下（約 0.06～0.07 淨空）
+    const cy = flat ? (0.008 + rn() * 0.012) : (0.018 + rn() * 0.028);
     m.position.set((rn() - 0.5) * w * 0.84, cy, (rn() - 0.5) * d * 0.84);
-    m.rotation.set(rn() * (flat ? 0.5 : 1.2), rn() * 6.28, rn() * (flat ? 0.5 : 1.2));
-    const s = flat ? (0.55 + rn() * 0.7) : (0.65 + rn() * 1.15);
-    const sy = flat ? (0.28 + rn() * 0.28) : (0.5 + rn() * 0.75);
+    m.rotation.set(rn() * (flat ? 0.4 : 1.2), rn() * 6.28, rn() * (flat ? 0.4 : 1.2));
+    const s = flat ? (0.6 + rn() * 0.75) : (0.65 + rn() * 1.15);
+    const sy = flat ? (0.32 + rn() * 0.28) : (0.5 + rn() * 0.75);
     m.scale.set(s * (0.7 + rn() * 0.65), sy, s * (0.7 + rn() * 0.55));
     group.add(m);
 
@@ -161,14 +161,14 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
       glowMat = new THREE.MeshBasicMaterial({
         color: 0xff4a18,
         transparent: true,
-        opacity: flat ? 0.28 : 0.4,
+        opacity: flat ? 0.35 : 0.4,
         depthWrite: false,
       });
       glow = new THREE.Mesh(coalGlowGeo, glowMat);
       glow.userData.sharedGeo = true;
       glow.position.copy(m.position);
-      glow.position.y += flat ? 0.006 : 0.02;
-      glow.scale.setScalar((flat ? 0.28 : 0.55) + rn() * (flat ? 0.28 : 0.55));
+      glow.position.y += flat ? 0.008 : 0.02;
+      glow.scale.setScalar((flat ? 0.35 : 0.55) + rn() * (flat ? 0.3 : 0.55));
       glow.renderOrder = 2;
       group.add(glow);
       hotChunks.push({ mesh: m, glow, mat: mat as THREE.MeshStandardMaterial, glowMat, baseY: sy, phase: rn() * 6.28 });
