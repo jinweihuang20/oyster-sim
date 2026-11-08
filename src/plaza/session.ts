@@ -207,6 +207,7 @@ export async function plazaStealFrom(targetConnId: string, caught = false) {
 
 /** 共烤：放生蚵上烤網（lx/lz 相對堆心） */
 export async function plazaGrillPlace(lx: number, lz: number, diff: number) {
+  if (myPile != null && view?.grill.tooClose(myPile, lx, lz)) return { ok: false as const, err: 'grill_overlap', oyster: undefined };
   if (!client?.connected) {
     // 離線單機烤：本機建一顆，烤熟／掀殼由烤網畫面自己推進
     if (myPile == null) return { ok: false as const, err: 'no_seat', oyster: undefined };

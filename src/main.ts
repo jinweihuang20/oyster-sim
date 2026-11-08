@@ -823,7 +823,7 @@ function grillPlaceOnNet(cx?: number, cy?: number) {
       const origin = plazaMyPileOrigin();
       if (!origin) { toast('請先坐烤位', '#ff8a7a'); return; }
       seatRig.updateMatrixWorld(true);
-      let lx = 0, lz = 0;
+      let lx = 0, lz = 0, onNet = false;
       if (cx != null && cy != null && Number.isFinite(cx + cy)) {
         const cam = viewCam();
         cam.updateMatrixWorld();
@@ -833,11 +833,12 @@ function grillPlaceOnNet(cx?: number, cy?: number) {
           lx = _grillHit.x - origin.x;
           lz = _grillHit.z - origin.z;
           const d = Math.hypot(lx, lz);
-          if (d > GRILL_NET_R && d > 1e-5) { lx *= GRILL_NET_R / d; lz *= GRILL_NET_R / d; }
+          if (d <= GRILL_NET_R * 1.08) { onNet = true; if (d > GRILL_NET_R && d > 1e-5) { lx *= GRILL_NET_R / d; lz *= GRILL_NET_R / d; } }
         }
       }
+      if (!onNet) { toast('點烤網上想放的位置', '#ffd76a'); return; }
       const r = await plazaGrillPlace(lx, lz, diff);
-      if (!r.ok) { toast(plazaZhErr(r.err) || '放不上烤網', '#ff8a7a'); return; }
+      if (!r.ok) { toast(r.err === 'grill_overlap' ? '這裡太擠了，換個空位放' : (plazaZhErr(r.err) || '放不上烤網'), '#ff8a7a'); return; }
       if (r.oyster) plazaGrillUpsertLocal(r.oyster);
       oysterToHand();
       oyster.visible = false;
@@ -951,7 +952,7 @@ function onPlazaGrillTaken(e: PlazaGrillTakenEvent) {
 }
 function grillAct(cx?: number, cy?: number) {
   const x = cx ?? innerWidth / 2, y = cy ?? innerHeight / 2;
-  if (phase === 'grillPlace') { grillPlaceOnNet(x, y); return; }
+  if (phase === 'grillPlace') { grillPlaceOnNet(cx, cy); return; }
   void grillRaceAt(x, y);
 }
 
@@ -2622,7 +2623,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyG') { standUp(); return; }
   if (e.code === 'Space' && plazaMode && walking) { if (!e.repeat) plazaJump(); return; }
   if (e.code === 'Space' && !e.repeat && umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
-  if (e.code === 'Space' && !e.repeat) { if (phase === 'grillPlace') grillAct(); else if (plazaOnGrill() && (phase === 'pick' || phase === 'empty' || phase === 'busy')) void grillRaceAt(innerWidth / 2, innerHeight / 2); else if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (isGrillPhase()) grillAct(); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) { if (!tutMeat()) toss(true); } else if (phase === 'aim') { holding = true; hold = 0; } }
+  if (e.code === 'Space' && !e.repeat) { if (phase === 'grillPlace') toast('點烤網上想放的位置', '#ffd76a'); else if (plazaOnGrill() && (phase === 'pick' || phase === 'empty' || phase === 'busy')) void grillRaceAt(innerWidth / 2, innerHeight / 2); else if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (isGrillPhase()) grillAct(); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) { if (!tutMeat()) toss(true); } else if (phase === 'aim') { holding = true; hold = 0; } }
   if (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
     const l = e.code === 'KeyA' || e.code === 'ArrowLeft';
     if (phase === 'seam') rotKey = l ? -1 : 1; else if (!e.repeat && swipePhase()) keyTwist(l ? 'L' : 'R');

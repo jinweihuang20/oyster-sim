@@ -200,13 +200,15 @@ export function createGrillView(parent: THREE.Object3D) {
   }
 
   function get(id: string) { return byId.get(id)?.data ?? null; }
+  /** 放置位置是否與同堆其他蚵仔太近（避免重疊） */
+  function tooClose(pileId: number, lx: number, lz: number, minD = 0.17) { for (const g of byId.values()) { const d = g.data; if (d.pileId === pileId && Math.hypot(d.lx - lx, d.lz - lz) < minD) return true; } return false; }
 
   function dispose() {
     for (const id of [...byId.keys()]) remove(id);
     parent.remove(root);
   }
 
-  return { upsert, remove, syncAll, tick, hit, nearestAtPile, get, dispose, root };
+  return { upsert, remove, syncAll, tick, hit, nearestAtPile, get, tooClose, dispose, root };
 }
 
 export type PlazaGrillView = ReturnType<typeof createGrillView>;
