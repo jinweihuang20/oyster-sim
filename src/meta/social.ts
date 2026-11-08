@@ -1,5 +1,5 @@
 // 全服彈幕＋全球排行榜（後端：StatsServer /s/*）。後端關機時全部安靜失敗。
-import { postDiscordFirstPlay } from '../core/discord';
+import { postDiscordFirstPlay, postDiscordRename } from '../core/discord';
 const API = 'https://game-status.gwtech.org/s';
 type Deps = { id: string; test: boolean; nick: () => string; setNick: (v: string) => void; inTut: () => boolean; on: () => boolean; label: (kind: string, item: number) => string; title?: () => string; toast: (t: string) => void; LS: { getItem(k: string): string | null; setItem(k: string, v: string): void } };
 let D: Deps;
@@ -268,4 +268,10 @@ export async function svSubmit(surveyId: number, answers: Record<string, unknown
     if (r.status === 400) return { st: 'bad', error: typeof j?.error === 'string' ? j.error : undefined };
     return { st: 'net' };
   } catch { return { st: 'net' }; } finally { clearTimeout(t); }
+}
+
+/** 改名視窗完成改名後通知 Discord */
+export async function announceRename(oldNick: string) {
+  if (!myTagCache) { try { await me(); } catch { /* */ } }
+  void postDiscordRename(oldNick, D.nick(), { tag: myTagCache });
 }

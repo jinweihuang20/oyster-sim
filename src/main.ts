@@ -3729,7 +3729,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['nameAsk', 'naClose'], ['gift', 'giftClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -4049,18 +4049,21 @@ function nameDismiss() {
 }
 function namePrompt(after?: () => void) {
   if ($('paySum').classList.contains('show')) { nameWait = true; return; }
-  if (save.namePrompted || save.name || tut) { after?.(); return; }
+  if (save.name || tut) { after?.(); return; }
   nameAfter = after ?? null;
   save.namePrompted = 1; persist();
   ($('naIn') as HTMLInputElement).value = '';
   $('nameAsk').classList.add('show');
 }
 function ensureNameThen(next: () => void) {
-  if (save.namePrompted || save.name) { next(); return; }
+  if (save.name) { next(); return; }
   namePrompt(next);
 }
-$('naOk').onclick = () => { const i = $('myName') as HTMLInputElement; i.value = ($('naIn') as HTMLInputElement).value; i.dispatchEvent(new Event('change')); nameDismiss(); };
-$('naSkip').onclick = () => nameDismiss(); $('naClose').onclick = () => nameDismiss();
+$('naOk').onclick = () => { if (cleanName(($('naIn') as HTMLInputElement).value) === '剝蚵人') { toast('請取一個自己的名字', '#f2b705'); ($('naIn') as HTMLInputElement).focus(); return; } const oldNick = myName(); const i = $('myName') as HTMLInputElement; i.value = ($('naIn') as HTMLInputElement).value; i.dispatchEvent(new Event('change')); if (myName() !== oldNick) try { void Social.announceRename(oldNick); } catch { /* */ } nameDismiss(); };
+$('naSkip').style.display = 'none'; $('naSkip').onclick = () => { }; $('naClose').onclick = () => { };
+($('naIn') as HTMLInputElement).addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); ($('naOk') as HTMLButtonElement).click(); } });
+// 老玩家名字還是預設「剝蚵人」就要求改名
+if (save.tutDone && !save.name) setTimeout(() => namePrompt(), 600);
 { const i = $('naIn'); for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'keydown']) i.addEventListener(ev, e => e.stopPropagation()); }
 migrateEquip(); persist(); applySleeve();
 // 禮物信箱：伺服器沒開或還沒有這個路由時安靜失敗

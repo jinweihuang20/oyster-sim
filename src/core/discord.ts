@@ -72,3 +72,12 @@ export function postDiscordFirstPlay(nick: string, opts?: { tag?: string | null 
     allowed_mentions: { parse: [] as string[] },
   });
 }
+
+export function postDiscordRename(oldNick: string, newNick: string, opts?: { tag?: string | null }): Promise<boolean> {
+  const from = who(oldNick), to = who(newNick, opts?.tag);
+  return postWebhook(WEBHOOK_PLAYER_IO, {
+    username: '蚵寮廣播',
+    content: `**${from}** 改名為 **${to}**`,
+    allowed_mentions: { parse: [] as string[] },
+  });
+}
