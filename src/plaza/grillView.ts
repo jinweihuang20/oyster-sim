@@ -17,6 +17,8 @@ type GrillMesh = {
   top: THREE.Mesh;
   hint: WorldLabel;
   data: PlazaGrillOyster;
+  /** performance.now 期限：用剩餘秒對齊，避開本機／伺服器時鐘偏差 */
+  localOpenAt: number;
 };
 
 function hintText(state: string) {
@@ -44,8 +46,18 @@ export function createGrillView(parent: THREE.Object3D) {
       g.hint.sprite.visible = false;
       return;
     }
-    g.hint.setText(txt);
+    g.hint.setText(txt, true);
     g.hint.sprite.visible = true;
+  }
+
+  /** 依伺服器 openAt 剩餘時間對齊本機 performance 時鐘 */
+  function armLocalOpen(g: GrillMesh, o: PlazaGrillOyster) {
+    if (o.state !== 'cooking') {
+      g.localOpenAt = 0;
+      return;
+    }
+    const remain = Math.max(0, o.openAt - Date.now());
+    g.localOpenAt = performance.now() + remain;
   }
 
   function upsert(o: PlazaGrillOyster) {
@@ -73,21 +85,32 @@ export function createGrillView(parent: THREE.Object3D) {
       top.position.set(0, 0.012, -HINGE_Z);
       top.userData.grillOysterId = o.id;
       hinge.add(top);
-      const hint = makeWorldLabel('', 'bubble', { worldH: 0.22, depthTest: false });
-      hint.sprite.position.set(0, 0.28, 0);
+      const hint = makeWorldLabel('', 'bubble', { worldH: 0.28, depthTest: false });
+      hint.sprite.position.set(0, 0.34, 0);
       hint.sprite.center.set(0.5, 0);
       hint.sprite.visible = false;
+      hint.sprite.renderOrder = 10;
       hint.sprite.userData.grillOysterId = o.id;
       grp.add(hint.sprite);
       root.add(grp);
-      g = { root: grp, hinge, top, hint, data: o };
+      g = { root: grp, hinge, top, hint, data: o, localOpenAt: 0 };
       byId.set(o.id, g);
     } else {
+      // 本機樂觀已掀／已拿時，勿被遲到的 cooking／open 廣播蓋掉
+      const cur = g.data.state;
+      if ((cur === 'flipped' || cur === 'taken') && (o.state === 'cooking' || o.state === 'open')) {
+        return;
+      }
       g.data = o;
       const c = pileCenter(o.pileId);
       g.root.position.set(c.x + o.lx, GRILL_GRATE_Y + 0.04, c.z + o.lz);
     }
-    g.top.visible = o.state !== 'flipped';
+    armLocalOpen(g, o);
+    // 進場時若已過期，立刻當 open（不必等漏掉的廣播）
+    if (o.state === 'cooking' && performance.now() >= g.localOpenAt) {
+      g.data = { ...o, state: 'open' };
+    }
+    g.top.visible = g.data.state !== 'flipped';
     syncHint(g);
     applyOpen(g, performance.now());
   }
@@ -106,9 +129,10 @@ export function createGrillView(parent: THREE.Object3D) {
       g.top.visible = true;
       return;
     }
-    // cooking：縫慢慢開到可掀角
+    // cooking：用 localOpenAt 剩餘比例開縫（勿拿 performance.now 減 Unix ms）
     const dur = Math.max(1, o.openAt - o.placedAt);
-    const t = Math.min(1, Math.max(0, (now - o.placedAt) / dur));
+    const remain = Math.max(0, g.localOpenAt - now);
+    const t = Math.min(1, Math.max(0, 1 - remain / dur));
     g.hinge.rotation.x = -t * OPEN_READY;
     g.top.visible = true;
   }
@@ -129,10 +153,15 @@ export function createGrillView(parent: THREE.Object3D) {
 
   function tick(now = performance.now()) {
     for (const g of byId.values()) {
+      // 漏收伺服器 open 廣播時，本機到期仍升成可掀並顯示提示
+      if (g.data.state === 'cooking' && g.localOpenAt > 0 && now >= g.localOpenAt) {
+        g.data = { ...g.data, state: 'open' };
+        syncHint(g);
+      }
       applyOpen(g, now);
       // 可互動提示輕微上下晃，較好發現
       if (g.hint.sprite.visible) {
-        g.hint.sprite.position.y = 0.28 + Math.sin(now * 0.006) * 0.04;
+        g.hint.sprite.position.y = 0.34 + Math.sin(now * 0.006) * 0.05;
       }
     }
   }

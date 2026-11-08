@@ -591,6 +591,11 @@ body.tutOn #feed{display:none!important}
 .dcRow{display:flex;gap:8px;justify-content:center;align-items:stretch;margin-top:8px;flex-wrap:nowrap}
 .dcRow>.rdBtn,.dcRow>.dcBtn{padding:8px 12px;font-size:14px;min-height:40px;white-space:nowrap}
 .dcRow>.rdBtn{background-color:var(--iron2);color:#fff}
+/* Buy Me a Coffee 官方按鈕（主選單／設定） */
+.bmcBtn{display:flex;justify-content:center;align-items:center;margin:6px auto 2px;padding:0;border:0;box-shadow:none;background:transparent;line-height:0;text-decoration:none;width:fit-content;max-width:100%}
+.bmcBtn img{display:block;height:48px;width:auto;max-width:min(217px,92vw)}
+#settings .bmcBtn{margin:10px 6px 4px}
+@media (max-width:500px){.bmcBtn img{height:42px}}
 /* 系統按鈕：招牌方格（手機少滑動） */
 .sysGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:8px;margin:10px 0;justify-content:stretch}
 .sysGrid>button,.sysGrid>a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;margin:0!important;min-width:0!important;min-height:64px;padding:8px 4px!important;font-size:14px;font-weight:800;line-height:1.1;border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink);text-decoration:none;white-space:nowrap}
@@ -1162,3 +1167,253 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
   border:4px solid var(--ink);
   box-shadow:4px 4px 0 var(--ink);
 }
+
+/* 主畫面容器加高：開始剝蚵按鈕不捲動就完整露出 */
+#overlay.panel:not(.sheet){top:calc(var(--sa-top) + 12px)!important;bottom:calc(var(--sa-bottom) + 12px)!important;max-height:calc(100dvh - var(--sa-top) - var(--sa-bottom) - 24px)!important}
+#overlay #start{bottom:0}
+
+
+/* 開始剝蚵／進入廣場：呼吸光暈＋掃光提示 */
+#overlay #start{overflow:hidden;animation:startPulse 1.6s ease-in-out infinite}
+#overlay #start:after{content:'';position:absolute;top:0;bottom:0;left:-40%;width:30%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent);transform:skewX(-18deg);animation:startShine 2.4s ease-in-out infinite;pointer-events:none}
+@keyframes startPulse{0%,100%{filter:brightness(1);box-shadow:0 -10px 16px rgba(36,22,10,.95),0 0 0 0 rgba(255,210,90,.0)}50%{filter:brightness(1.12);box-shadow:0 -10px 16px rgba(36,22,10,.95),0 0 0 6px rgba(255,210,90,.55)}}
+@keyframes startShine{0%,55%{left:-40%}100%{left:130%}}
+#overlay #start.plazaGo{background:linear-gradient(#3fa9d8,#1d6f9e)!important;border-color:#bfe8ff!important;color:#fff}
+@media (prefers-reduced-motion:reduce){#overlay #start,#overlay #start:after{animation:none}}
+
+
+/* 主畫面金額：右上角招牌小牌 */
+#menuMoney{position:sticky;top:-14px;z-index:3;display:flex;align-items:center;gap:6px;width:fit-content;margin:-6px 0 4px auto;padding:4px 12px;background:#1d2a33;color:#ffd76a;border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink);font-weight:900;font-size:18px;letter-spacing:.5px}
+#menuMoney .ic{font-size:18px}
+
+
+/* 雜貨店金額：標題列右側，切分頁與捲動都看得到 */
+#shop h2.shopH{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-right:44px}
+#shopMoney{display:flex;align-items:center;gap:6px;padding:3px 10px;background:#1d2a33;color:#ffd76a;border:3px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 var(--ink);font-weight:900;font-size:16px;white-space:nowrap}
+
+
+#shop h2.shopH{flex-wrap:nowrap;padding-right:56px}
+#shop h2.shopH>span:first-child{white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#shopMoney{flex:0 0 auto;margin-left:auto;font-size:14px;padding:2px 8px;border-width:2px;box-shadow:2px 2px 0 var(--ink)}
+#shopMoney .ic{font-size:14px}
+@media (max-width:400px){#shop h2.shopH{font-size:18px}}
+
+
+/* ===== 主畫面頂部重排：資訊列＋招牌橫匾 ===== */
+#menuTop{position:sticky;top:-14px;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-6px -4px 10px;padding:6px 4px;background:var(--paint) var(--grain)}
+#overlay #meLine{display:flex!important;align-items:center;gap:6px;margin:0!important;padding:4px 10px!important;max-width:58%;background:#1d2a33!important;color:#fff6d8!important;border:2px solid var(--ink)!important;border-radius:2px!important;box-shadow:2px 2px 0 var(--ink)!important;font-size:15px!important;font-weight:800;line-height:1.2!important;white-space:nowrap;overflow:hidden}
+#overlay #meLine #nameEdit{overflow:hidden;text-overflow:ellipsis;border:0!important;text-decoration:none!important;color:inherit}
+#overlay #meLine .ic{flex:0 0 auto;font-size:15px}
+#menuMoney{position:static!important;margin:0!important;font-size:16px!important;padding:4px 10px!important;border-width:2px!important;box-shadow:2px 2px 0 var(--ink)!important}
+#titleSign{margin:4px auto 12px;text-align:center}
+#overlay #titleSign h1{display:inline-block;margin:0!important;padding:8px 26px!important;transform:none!important;background:linear-gradient(#7a4a26,#5a3418)!important;color:#ffe6a8!important;border:2px solid #2a1608!important;border-radius:6px!important;box-shadow:inset 0 0 0 3px #a5713f,inset 0 0 0 5px #2a1608,0 4px 0 #2a1608,0 8px 16px rgba(0,0,0,.35)!important;font-size:clamp(28px,8vw,40px)!important;letter-spacing:.14em!important;text-shadow:0 2px 0 #2a1608,0 0 12px rgba(255,200,90,.45)!important}
+#titleSign .titleSub{margin-top:8px;font-size:13px;font-weight:700;letter-spacing:.2em;color:var(--ink);opacity:.7}
+
+/* ===== 主畫面減重：邊框變細、陰影柔和 ===== */
+#overlay .sysGrid>button,#overlay .sysGrid>a{border-width:1.5px!important;border-radius:6px!important;box-shadow:0 2px 4px rgba(0,0,0,.18)!important}
+#overlay .sysGrid>button:active,#overlay .sysGrid>a:active{box-shadow:0 1px 2px rgba(0,0,0,.2)!important;transform:translateY(1px)}
+#overlay #locPick>*,#overlay #locPick button,#overlay #locPick [class*="loc"]{border-width:1.5px!important;box-shadow:0 2px 5px rgba(0,0,0,.18)!important;border-radius:6px!important}
+#overlay #meLine,#overlay #menuMoney{border-width:1.5px!important;border-radius:6px!important;box-shadow:0 1px 3px rgba(0,0,0,.2)!important}
+#overlay #start{border-width:1.5px!important;border-radius:10px!important}
+#overlay.panel{border-width:3px!important;box-shadow:0 6px 18px rgba(0,0,0,.35),inset 0 0 0 2px var(--paint),inset 0 0 0 4px var(--iron)!important}
+#overlay #titleSign h1{box-shadow:inset 0 0 0 2px #a5713f,inset 0 0 0 3px #2a1608,0 3px 8px rgba(0,0,0,.28)!important}
+
+/* 每日簽到 */
+#menuTop .calBtn{position:relative;margin:0 6px 0 auto;width:36px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid var(--ink);border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.2);background:#1d2a33;color:#ffd76a;touch-action:manipulation}
+#menuTop .calBtn .ic{font-size:18px}
+#menuTop .calBtn .calDot{display:none;position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#e2382c;border:1.5px solid var(--paint)}
+#menuTop .calBtn.due .calDot{display:block}
+#menuTop{justify-content:flex-start}#menuTop #meLine{margin-right:auto}#menuTop .calBtn{margin-left:0}
+.dailyMsg .dcBox{position:relative;max-width:380px;width:100%;max-height:100%;overflow:auto;background:var(--paint) var(--grain);color:var(--ink);border:1.5px solid var(--ink);border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.35);padding:12px 14px 16px;text-align:center}
+.dcTitle{display:flex;align-items:center;justify-content:center;gap:6px;margin:2px 30px 12px;padding:6px 10px;background:#3b2a1c;color:#ffd76a;border:1.5px solid #1a120b;border-radius:6px;font-weight:900;font-size:18px;letter-spacing:.08em}
+.dcGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.dcCell{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;background:#fff8e8;border:1.5px solid #8a7a5c;border-radius:6px;font-size:12px}
+.dcCell .ic{font-size:20px;color:#b8862a}.dcCell b{font-size:14px}.dcCell small{font-size:10px;opacity:.8}
+.dcCell.big{grid-column:span 2;background:linear-gradient(#fff1c2,#f3d27a);border-color:#b8862a}.dcCell.big .ic{font-size:26px}
+.dcCell.got{opacity:.45;filter:grayscale(.6)}.dcCell.got .ic{color:#2f7a3a}
+.dcCell.now{border-color:#e0a21a;box-shadow:0 0 0 2px rgba(255,200,60,.5),0 0 12px rgba(255,190,40,.7);animation:dcGlow 1.6s ease-in-out infinite}
+@keyframes dcGlow{50%{box-shadow:0 0 0 2px rgba(255,200,60,.25),0 0 4px rgba(255,190,40,.3)}}
+.dcNote{font-size:12px;margin:10px 0 8px;opacity:.85}
+.dcGo{width:100%;min-height:50px;font-size:19px;background:var(--red);color:var(--paint);border:1.5px solid var(--redD);border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.25);touch-action:manipulation}
+.dcGo:disabled{background:#8a8378;border-color:#6a645a;box-shadow:none}
+.dcCoin{position:fixed;z-index:10000;pointer-events:none;font-size:22px;color:#ffd76a}
+#menuMoney.bump{animation:mmBump .35s ease-out}@keyframes mmBump{40%{transform:scale(1.15)}}
+@media (prefers-reduced-motion:reduce){.dcCell.now,#menuMoney.bump{animation:none}}
+
+/* ===== 糖果鍵（全站遊戲風 3D 按鈕）=====
+   排除：死鬥 #dmRoot、廣場 #plazaRoot、遊戲中 HUD/觸控（#hud #btns #btnsL .mb #rotL #rotR #camBtn #joy）、Discord .dcBtn、BMC .bmcBtn、導覽 #hg
+   角色：data-key=primary 綠／預設 港口藍／danger 紅／x 紅方鍵／disabled 灰（data-key 由 main.ts 依按鈕文字自動標記） */
+:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.eqHit,.eqCard)){
+  --k:#3d7fb8;--kd:#215582;--kb:#1b4466;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--k) 70%,#fff) 0%,var(--k) 55%,color-mix(in srgb,var(--k) 85%,#000) 100%)!important;
+  color:#fff!important;border:1.5px solid var(--kb)!important;border-radius:8px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 3px 0 var(--kd),0 4px 8px rgba(0,0,0,.18)!important;
+  text-shadow:0 1px 0 rgba(0,0,0,.35),0 0 1px rgba(0,0,0,.5)!important;font-weight:900;
+  transform:none;transition:transform .08s cubic-bezier(.3,1.6,.5,1),box-shadow .08s!important;
+}
+:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.eqHit,.eqCard)):active:not(:disabled){
+  transform:translateY(3px)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 var(--kd),0 1px 3px rgba(0,0,0,.15)!important;
+}
+body button#start,body button#again,body button.dcGo,body button[data-key="primary"]{--k:#3fae4a;--kd:#23752c;--kb:#1d5f25}
+body button[data-key="danger"]{--k:#d2463a;--kd:#8e2a22;--kb:#76221b}
+body button[data-key="x"],body .panel .px,body .gmX{--k:#d2463a;--kd:#8e2a22;--kb:#76221b;border-radius:6px!important}
+body [role="tablist"] button:not(.on):not([aria-selected="true"]),body #shopTabs button:not(.on):not(.cur){--k:#9fb6c8;--kd:#6d8699;--kb:#5a7184}
+body button:disabled,body button.done{--k:#9a968e;--kd:#6e6a63;--kb:#5e5a54}
+body button#start.plazaGo{--k:#2f7fc0;--kd:#1c5585;--kb:#174870}
+
+/* ===== 米白紙卡（取代藍色漸層預設鍵）===== */
+:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.eqHit,.eqCard,.loc,#start,#again,.dcGo,[data-key],:disabled)){
+  --kd:#cdbb94;
+  background:#f6efdf!important;color:#3b2a1a!important;border:1.5px solid #d6c49c!important;border-radius:10px!important;
+  box-shadow:inset 0 1px 0 #fffaf0,0 3px 0 #cdbb94,0 4px 8px rgba(60,40,10,.12)!important;text-shadow:none!important;
+}
+/* 蚵仔廣場卡：夜晚港邊燈串 */
+body button.loc.locPlaza{
+  background:
+    radial-gradient(circle at 12% 14%,#ffd36a 0 2px,transparent 3px),radial-gradient(circle at 32% 20%,#ff9a6a 0 2px,transparent 3px),
+    radial-gradient(circle at 52% 14%,#ffe08a 0 2px,transparent 3px),radial-gradient(circle at 72% 20%,#9ad7ff 0 2px,transparent 3px),
+    radial-gradient(circle at 92% 14%,#ffd36a 0 2px,transparent 3px),
+    radial-gradient(ellipse 120% 40% at 50% 0%,rgba(255,200,110,.28),transparent 70%),
+    repeating-linear-gradient(90deg,rgba(255,255,255,.05) 0 1px,transparent 1px 18px),
+    linear-gradient(180deg,#1f2c45 0%,#2c3d5c 55%,#5a4632 56%,#4a3826 100%)!important;
+  color:#fff3d6!important;border:1.5px solid #6b5536!important;
+}
+
+/* ===== 頂列統一高度：名字靠左，日曆小方鍵貼金額 ===== */
+#menuTop{display:flex!important;align-items:center!important;gap:8px!important}
+#menuTop #meLine{margin-right:auto!important}
+#menuTop #meLine,#menuTop #menuMoney,#menuTop #calBtn{height:36px!important;min-height:36px!important;box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;margin-top:0!important;margin-bottom:0!important;border-radius:9px!important}
+#menuTop #calBtn{width:36px!important;min-width:36px!important;padding:0!important;justify-content:center!important;flex:0 0 36px!important;position:relative}
+#menuTop #calBtn .ic{width:18px!important;height:18px!important}
+#menuTop #menuMoney{padding:0 12px!important}
+
+/* ===== 遊戲名：透明低調 ===== */
+#titleSign{background:none!important;border:0!important;box-shadow:none!important;padding:6px 0 2px!important;margin:10px auto 6px!important;text-align:center!important}
+#titleSign::before,#titleSign::after{display:none!important}
+#titleSign h1{background:none!important;color:#3b2a1a!important;-webkit-text-fill-color:#3b2a1a!important;text-shadow:0 1px 0 rgba(255,255,255,.6)!important;font-size:clamp(26px,8vw,34px)!important;letter-spacing:.18em!important;font-weight:900!important;margin:0!important;border:0!important;box-shadow:none!important;padding:0!important}
+#titleSign .titleSub{display:flex!important;align-items:center!important;justify-content:center!important;gap:10px!important;color:#8a7350!important;font-size:12px!important;letter-spacing:.2em!important;margin-top:6px!important;background:none!important}
+#titleSign .titleSub::before,#titleSign .titleSub::after{content:"";width:36px;height:1px;background:linear-gradient(90deg,transparent,#b8995e)}
+#titleSign .titleSub::after{background:linear-gradient(90deg,#b8995e,transparent)}
+#titleSign h1{color:#1f2a36!important;-webkit-text-fill-color:#1f2a36!important}
+#titleSign .titleSub{color:#6b7480!important}
+#titleSign .titleSub::before{background:linear-gradient(90deg,transparent,#9aa3ad)!important}
+#titleSign .titleSub::after{background:linear-gradient(90deg,#9aa3ad,transparent)!important}
+
+/* ===== 全站容器減重：細框＋柔和陰影（死鬥 HUD 除外）===== */
+:is(.panel,.achCard,.achCatT,.achSum>div,.bub,.eqBoard,.eqList,.eqSecT,.eqSet,.eqStage,.eqStamp,.evEntry,.svEntry,.rdGot,.resAch,.hgB,#achBan,#hgCall,#lbTabs,#locPick .locHead,#moonAim .maTip,#sv .svQ,#stats,#top,#gauge,#gtag,.panel input[type=text],.panel input[type=email],.panel textarea,.panel .px):not(#dmRoot *){
+  border-width:1.5px!important;border-radius:10px;
+  box-shadow:0 2px 10px rgba(20,30,45,.12),0 1px 2px rgba(20,30,45,.08)!important;
+}
+.panel:not(#dmRoot *){border-radius:14px!important;box-shadow:0 8px 30px rgba(10,20,35,.22),0 2px 6px rgba(10,20,35,.10)!important}
+.bub:after{box-shadow:none!important}
+.panel .eqDock button:not(#dmRoot *){border-width:1.5px!important;box-shadow:0 2px 6px rgba(20,30,45,.12)!important}
+
+/* ===== 工寮地點卡：米白紙卡 ===== */
+body #locPick button.loc:not(.locPlaza){
+  background:#f6efdf!important;color:#2a3440!important;border:1.5px solid #d6c49c!important;border-radius:10px!important;
+  box-shadow:0 2px 8px rgba(60,40,10,.10)!important;text-shadow:none!important;
+}
+body #locPick button.loc:not(.locPlaza) *{color:inherit;text-shadow:none!important}
+body #locPick button.loc.cur:not(.locPlaza){
+  background:#fff8e6!important;border-color:#c9a24a!important;
+  box-shadow:0 0 0 2px rgba(201,162,74,.25),0 2px 8px rgba(60,40,10,.12)!important;
+}
+body #locPick button.loc:not(.locPlaza):disabled,body #locPick button.loc.lock:not(.locPlaza){background:#ebe6dc!important;color:#8a8f96!important;border-color:#d8d2c6!important}
+
+/* ===== 移除主標題，只留副標 ===== */
+#titleSign h1{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;margin:0!important}
+#titleSign{margin:8px auto 10px!important;padding:0!important}
+#titleSign .titleSub{margin-top:0!important}
+
+/* ===== 上工地點區塊 ===== */
+#locPick{background:rgba(255,255,255,.35)!important;border:1px solid rgba(40,50,60,.10)!important;border-radius:12px!important;box-shadow:none!important;padding:10px!important}
+#locPick .locHead{background:none!important;border:0!important;box-shadow:none!important;color:#2a3440!important;padding:0 2px 8px!important;margin:0!important;text-shadow:none!important}
+#locPick .locHead *{color:inherit!important;text-shadow:none!important}
+#locPick .locHead b{font-size:15px!important;display:flex;align-items:center;gap:6px}
+#locPick .locHead small{display:block;color:#7a828c!important;font-size:12px!important;font-weight:500!important;margin-top:3px}
+#locPick .locHead .ic{background-color:#2a3440}
+
+/* ===== 剝蚵中按鈕：深色毛玻璃 ===== */
+#btns button,#btnsL button,#btnsCorner button,.mb,#camBtn{
+  background:rgba(22,28,36,.55)!important;color:#f2f4f7!important;
+  -webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);
+  border:1px solid rgba(255,255,255,.22)!important;
+  box-shadow:0 4px 14px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.10)!important;
+  text-shadow:0 1px 2px rgba(0,0,0,.4)!important;font-weight:700;
+}
+#btns button:active,#btnsL button:active,#btnsCorner button:active,.mb:active,#camBtn:active{background:rgba(22,28,36,.72)!important;transform:scale(.96)}
+#btns button .ic,#btnsCorner button .ic,.mb .ic{background-color:#f2f4f7}
+#umbBtn{background:rgba(150,62,58,.62)!important;border-color:rgba(255,190,180,.35)!important}
+
+/* ===== 剝蚵中頂列：深色毛玻璃 ===== */
+#top{background:rgba(22,28,36,.55)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.18)!important;border-radius:14px!important;box-shadow:0 4px 14px rgba(0,0,0,.22)!important;color:#f2f4f7!important}
+#top button,#top a{background:rgba(255,255,255,.10)!important;color:#f2f4f7!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:10px!important;box-shadow:none!important;text-shadow:none!important;transform:none}
+#top button:active{background:rgba(255,255,255,.22)!important}
+#top button .ic,#top a .ic{background-color:#f2f4f7}
+
+/* ===== 說明區：臨時工／玩法清單／夜班 ===== */
+#overlay #tempRow button{background:#fbeee2!important;color:#b0522a!important;border:1.5px solid #e8b893!important;border-radius:10px!important;box-shadow:0 2px 6px rgba(120,60,20,.10)!important;text-shadow:none!important;font-weight:800}
+#overlay #tempRow button .ic{background-color:#b0522a}
+#overlay #tempRow button:active{transform:translateY(1px)!important;background:#f6e2d0!important}
+#overlay ul{background:rgba(255,255,255,.55)!important;border:1px solid rgba(40,50,60,.10)!important;border-radius:12px!important;box-shadow:0 2px 10px rgba(20,30,45,.06)!important;padding:12px 14px 12px 28px!important;color:#2a3440!important;line-height:1.7}
+#overlay ul li{margin:4px 0}
+#overlay ul li b{background:#e6eef6!important;color:#2a5a86!important;border:0!important;box-shadow:none!important;border-radius:6px!important;padding:1px 8px!important;margin-right:2px;text-shadow:none!important;font-weight:800}
+#overlay #nightNote{background:rgba(31,42,58,.08)!important;color:#2a3440!important;border:1px solid rgba(31,42,58,.12)!important;border-radius:10px!important;box-shadow:none!important;text-shadow:none!important}
+#overlay #nightNote .ic{background-color:#4a5a70}
+
+/* ===== 地點卡：選取／未選取對比 ===== */
+body #locPick button.loc:not(.cur){opacity:.62;filter:saturate(.6)}
+body #locPick button.loc.cur{opacity:1;filter:none;position:relative;
+  border:2.5px solid #2a5a86!important;
+  box-shadow:0 0 0 3px rgba(42,90,134,.22),0 6px 16px rgba(20,40,70,.22)!important}
+body #locPick button.loc.cur:not(.locPlaza){background:#fffaf0!important}
+body #locPick button.loc.cur::after{content:"✓";position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:#2a5a86;color:#fff;font:900 13px/22px system-ui;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
+
+/* ===== 取代鐵皮招牌：淺色乾淨標題列 ===== */
+.ph,.panel.sheet>.ph{background:rgba(250,247,240,.92)!important;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#1f2a36!important;border:0!important;border-bottom:1px solid rgba(31,42,54,.10)!important;box-shadow:none!important;text-shadow:none!important}
+.ph *,.panel.sheet>.ph *{text-shadow:none!important}
+.ph h2,.ph h3,.ph b{color:#1f2a36!important;letter-spacing:.06em;font-weight:800}
+.ph .ic{background-color:#1f2a36}
+.ph .px,.panel .px{background:rgba(31,42,54,.08)!important;color:#3a4652!important;border:0!important;border-radius:50%!important;box-shadow:none!important;text-shadow:none!important}
+.ph .px .ic,.panel .px .ic{background-color:#3a4652}
+.ph .px:active,.panel .px:active{background:rgba(31,42,54,.16)!important}
+.panel h3,.achCatT,.eqSecT{background:none!important;color:#2a3440!important;border:0!important;border-left:3px solid #2a5a86!important;border-radius:0!important;box-shadow:none!important;text-shadow:none!important;padding:2px 0 2px 10px!important}
+.achSum>div,.resAch,#achBan{background:rgba(255,255,255,.6)!important;color:#2a3440!important;border:1px solid rgba(31,42,54,.10)!important;border-radius:12px!important;box-shadow:0 2px 10px rgba(20,30,45,.06)!important;text-shadow:none!important}
+.achSum>div *,.resAch *,#achBan *{text-shadow:none!important}
+#achTabs button.on{background:#2a5a86!important;color:#fff!important;border-color:#2a5a86!important;box-shadow:none!important}
+
+#shopMoney,#shopMoney *,.ph #shopMoney b,#shopMoneyV{color:#f5c84b!important;-webkit-text-fill-color:#f5c84b!important}
+#shopMoney .ic{background-color:#f5c84b!important}
+
+/* ===== 藥品卡片列表 ===== */
+.medIntro{font-size:12px;color:#6b7480;margin:2px 0 10px}
+.medGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.medCard{display:grid;grid-template-columns:1fr auto;grid-template-areas:"top buy" "good buy" "bad buy";column-gap:10px;row-gap:3px;align-items:center;background:rgba(255,255,255,.6);border:1px solid rgba(31,42,54,.10);border-radius:12px;padding:10px 12px;box-shadow:0 2px 8px rgba(20,30,45,.06);color:#2a3440}
+.medTop{grid-area:top;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
+.medName{font-size:15px;white-space:nowrap}
+.medMeta{font-size:12px;color:#7a828c;white-space:nowrap;margin-left:auto}
+.medGood{grid-area:good;font-size:13px;color:#2f8a3a;line-height:1.4}
+.medBad{grid-area:bad;font-size:13px;color:#c0503f;line-height:1.4}
+.medGood::before{content:"＋ ";font-weight:900}.medBad::before{content:"－ ";font-weight:900}
+.medCard .medBuy{grid-area:buy;white-space:nowrap;min-width:72px;padding:8px 12px!important}
+
+/* ===== 雜貨店表格改卡片 ===== */
+#shopList table.kt,#shopList table.kt tbody{display:block;width:100%;border:0!important;background:none!important;box-shadow:none!important}
+#shopList table.kt tr.ktHead{display:none}
+#shopList table.kt tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;background:rgba(255,255,255,.6);border:1px solid rgba(31,42,54,.10);border-radius:12px;padding:10px 12px;margin:0 0 10px;box-shadow:0 2px 8px rgba(20,30,45,.06);color:#2a3440}
+#shopList table.kt td{display:block;border:0!important;padding:0!important;background:none!important;text-align:left;white-space:nowrap}
+#shopList table.kt td:first-child{flex:1 1 100%;white-space:normal;line-height:1.45}
+#shopList table.kt td:first-child b{font-size:15px}
+#shopList table.kt td:first-child small{color:#6b7480}
+#shopList table.kt td[data-label]:not(:first-child):not(:last-child){font-size:12px;background:rgba(31,42,54,.06)!important;border-radius:999px;padding:3px 9px!important}
+#shopList table.kt td[data-label]:not(:first-child):not(:last-child)::before{content:attr(data-label) " ";color:#7a828c}
+#shopList table.kt td[data-label]:not(:first-child):not(:last-child) br{display:none}
+#shopList table.kt td:last-child{margin-left:auto}
+#shopList table.kt td:last-child button{white-space:nowrap;min-width:72px}
+#shopList table.kt td:last-child br{display:none}
+#shopList table.kt td:last-child{display:flex;gap:6px;align-items:center}
+#shopList table.kt td small[style*="9be37a"]{color:#2f8a3a!important;display:block}
+#shopList table.kt td small[style*="ff8a7a"]{color:#c0503f!important;display:block}
+#shopList table.kt b[style*="9be37a"]{color:#2f8a3a!important}
+#shopList table.kt b[style*="ff8a7a"]{color:#c0503f!important}

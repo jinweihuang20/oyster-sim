@@ -438,12 +438,40 @@ const save: Save = loadSave();
 const nextStreak = () => { const t = todayKey(), l = save.lastBonusDay, n = save.streakDay ?? 0; if (!l || n <= 0 || n >= 7 || dayDiff(l, t) !== 1) return 1; return n + 1; };
 const stampRow = (got: number) => `<span class="stamps">${[1, 2, 3, 4, 5, 6, 7].map(i => `<span class="stp${i <= got ? ' on' : ''}${i === 7 ? ' big' : ''}">${i <= got ? '<i class="ic ic-check"></i>' : i === 7 ? '<i class="ic ic-gift"></i>' : i}</span>`).join('')}</span>`;
 function renderDaily() {
-  const b = $('daily');
   const done = save.bonusDay === todayKey();
-  b.classList.toggle('done', done);
-  if (done) { const n = save.streakDay ?? 1; b.innerHTML = `<span class="dTop"><i class="ic ic-check"></i> 連續第 ${n} 天・今天領過了</span>${stampRow(n)}<small>明天再來・身上有 $${save.money}</small>`; }
-  else { const n = nextStreak(); b.innerHTML = `<span class="dTop"><i class="ic ic-coin"></i> 領今日上工費 $${eco.dailyPays[n - 1]}・連續第 ${n} 天</span>${stampRow(n - 1)}<small>${n === 7 ? '第 7 天另外送一件小東西！' : `再 ${7 - n} 天拿第 7 天大獎`}</small>`; }
+  document.getElementById('calBtn')?.classList.toggle('due', !done);
+  const box = document.getElementById('dailyMsg'); if (!box) return;
+  const got = done ? (save.streakDay ?? 1) : nextStreak() - 1, today = done ? got : got + 1;
+  box.querySelector('.dcGrid')!.innerHTML = [1, 2, 3, 4, 5, 6, 7].map(i => `<div class="dcCell${i <= got ? ' got' : ''}${i === today && !done ? ' now' : ''}${i === 7 ? ' big' : ''}"><span class="dcD">第 ${i} 天</span><i class="ic ${i <= got ? 'ic-check' : i === 7 ? 'ic-gift' : 'ic-coin'}"></i><b>$${(eco.dailyPays[i - 1] ?? 0).toLocaleString('zh-TW')}</b>${i === 7 ? '<small>另送小禮物</small>' : ''}</div>`).join('');
+  const btn = box.querySelector<HTMLButtonElement>('.dcGo')!; btn.disabled = done; btn.textContent = done ? '今天領過了' : '領取';
+  box.querySelector('.dcNote')!.textContent = done ? `已連續上工 ${got} 天，明天再來` : today === 7 ? '今天是第 7 天大獎！' : `再 ${7 - today} 天拿第 7 天大獎・斷一天會從第 1 天重來`;
 }
+function openDaily() {
+  if (document.getElementById('dailyMsg')) return;
+  const d = document.createElement('div'); d.id = 'dailyMsg'; d.className = 'giftMsg dailyMsg';
+  d.innerHTML = '<div class="gmBox dcBox"><button class="gmX" aria-label="關閉">✕</button><div class="dcTitle"><i class="ic ic-cal"></i> 每日上工簽到</div><div class="dcGrid"></div><p class="dcNote"></p><button class="dcGo">領取</button></div>';
+  const close = () => d.remove();
+  d.querySelector('.gmX')!.addEventListener('click', close);
+  d.addEventListener('click', e => { if (e.target === d) close(); });
+  d.querySelector('.dcGo')!.addEventListener('click', e => claimDaily(e));
+  document.body.appendChild(d); renderDaily();
+}
+function coinFlyTo(from: DOMRect) {
+  const t = document.getElementById('menuMoney')?.getBoundingClientRect(); if (!t) return;
+  const x0 = from.left + from.width / 2, y0 = from.top + from.height / 2, x1 = t.left + t.width / 2, y1 = t.top + t.height / 2;
+  for (let k = 0; k < 8; k++) {
+    const c = document.createElement('i'); c.className = 'ic ic-coin dcCoin'; c.style.left = x0 + 'px'; c.style.top = y0 + 'px'; document.body.appendChild(c);
+    const dx = (Math.random() - .5) * 80, dy = (Math.random() - .5) * 50;
+    c.animate([{ transform: 'translate(-50%,-50%)', opacity: 1 }, { transform: `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`, opacity: 1, offset: .3 }, { transform: `translate(calc(-50% + ${x1 - x0}px),calc(-50% + ${y1 - y0}px)) scale(.6)`, opacity: .3 }], { duration: 750, delay: k * 50, easing: 'ease-in', fill: 'forwards' }).onfinish = () => c.remove();
+  }
+  setTimeout(() => { const mm = document.getElementById('menuMoney'); mm?.classList.remove('bump'); void mm?.offsetWidth; mm?.classList.add('bump'); }, 800);
+}
+let dailyAutoDay = '';
+setInterval(() => {
+  const t = todayKey(); if (save.bonusDay === t || dailyAutoDay === t) return;
+  if (document.body.classList.contains('tutOn') || document.getElementById('hg') || document.getElementById('dailyMsg') || menuModalBusy()) return;
+  dailyAutoDay = t; openDaily();
+}, 1200);
 function dailyItem(): string {
   if (Math.random() < 0.5 || !MEDS.length) { save.dex[0]++; return '白珍珠 1 顆'; }
   const m = MEDS[Math.floor(Math.random() * MEDS.length)]; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; return `${m.n} 1 個`;
@@ -456,7 +484,7 @@ function claimDaily(ev?: Event) {
   persist(); renderDex();
   track('daily_bonus', { amount: amt, streak: n, money: save.money });
   try { audio(); for (let k = 0; k < 3; k++) tone(1200 + k * 250, 0.15, 0.09, 'square', k * 0.07, 1800 + k * 250); } catch { /* 無音訊 */ }
-  const r = $('daily').getBoundingClientRect();
+  const r = (document.querySelector('#dailyMsg .dcGo') ?? $('calBtn')).getBoundingClientRect(); coinFlyTo(r);
   const plus = document.createElement('div'); plus.className = 'coinplus'; plus.textContent = `+$${amt}`; plus.style.left = `${r.left + r.width / 2}px`; plus.style.top = `${r.top}px`; document.body.appendChild(plus); setTimeout(() => plus.remove(), 1500);
   ev?.stopPropagation(); renderDaily();
   if (item) giftMsg(true, '連續上工 7 天！', [`上工費 +$${amt}`, `阿姨另外送你：${item}`, `身上有 $${save.money}`]);
@@ -778,7 +806,8 @@ function holdOyster(dd: number) {
   { const base = [0xffffff, 0xeeeae8, 0xdcd6d4, 0xc8c2c0][diff]; shellTopMat.color.setHex(base); shellBotMat.color.setHex(base).multiplyScalar(0.92); const gi = Math.floor(Math.random() * 6); shellTop.geometry = HALF_GEOS[gi]; shellBot.geometry = HALF_GEOS[(gi + 3) % 6]; }
   placeBarn(barnacles, diff, 0.032);
   meatsLeft = 1; showExtra();
-  find = tut ? { kind: 'none', i: 0 } : rollFind();
+  // 烤位：開獎改在搶到肉時（同剝殼桌）；拿起待烤時不抽，以免白耗保底
+  find = (tut || grill) ? { kind: 'none', i: 0 } : rollFind();
   if (grill) setPhase('grillPlace');
   else setPhase('seam');
   void d;
@@ -810,6 +839,7 @@ function grillPlaceOnNet(cx?: number, cy?: number) {
       }
       const r = await plazaGrillPlace(lx, lz, diff);
       if (!r.ok) { toast(plazaZhErr(r.err) || '放不上烤網', '#ff8a7a'); return; }
+      if (r.oyster) plazaGrillUpsertLocal(r.oyster);
       oysterToHand();
       oyster.visible = false;
       SFX.whoosh();
@@ -874,7 +904,7 @@ async function grillRaceAt(cx: number, cy: number) {
         if (state === 'play') { setPhase('busy'); later(0.2, goPick); }
         return true;
       }
-      applyGrillTakeWin(r.count);
+      applyGrillTakeWin(r.count, o.diff);
       return true;
     } finally {
       later(0.55, () => { grillRaceBusy = false; });
@@ -882,7 +912,7 @@ async function grillRaceAt(cx: number, cy: number) {
   }
   return false;
 }
-function applyGrillTakeWin(serverCount?: number) {
+function applyGrillTakeWin(serverCount?: number, takenDiff?: number) {
   oysterToHand();
   oyster.visible = true;
   shellTop.visible = false;
@@ -890,14 +920,26 @@ function applyGrillTakeWin(serverCount?: number) {
   seamGlow.visible = false;
   meatInHand.visible = true;
   meatInHand.material = meatMat;
+  pearlMesh.visible = false;
+  oddMeshes.forEach(m => m.visible = false);
   { const l = luckNow(), r = Math.random(); meatsLeft = tut ? 1 : r < 0.02 + 0.0025 * l ? 3 : r < 0.10 + 0.0075 * l ? 2 : 1; showExtra();
     if (meatsLeft > 1) { if (meatsLeft === 3) dayMulti3++; else dayMulti2++; later(0.25, () => toast(meatsLeft === 3 ? '三仁！' : '雙仁！', '#ffd76a')); } }
-  crackSound(); shake = 0.18; opened++; dStat[diff][0]++;
+  const md = Math.max(0, Math.min(3, takenDiff ?? diff));
+  crackSound(); shake = 0.18; opened++; dStat[md][0]++;
   if (typeof serverCount === 'number') count = serverCount;
   else count++;
+  // 比照剝殼桌：搶到肉可開珍珠／奇物（含傳說保底）
+  find = tut ? { kind: 'none', i: 0 } : rollFind();
   toast('搶到了！丟進碗裡', '#9be37a');
   setPhase('busy');
-  later(0.12, () => setPhase('aim'));
+  if (find.kind === 'pearl') {
+    revealPearl(find.i);
+    later(2.5, () => { pearlMesh.visible = false; if (state === 'play') setPhase('aim'); });
+  } else if (find.kind === 'odd') {
+    revealOdd(find.i);
+  } else {
+    later(0.12, () => { if (state === 'play') setPhase('aim'); });
+  }
   updHud();
 }
 function onPlazaGrillTaken(e: PlazaGrillTakenEvent) {
@@ -1663,7 +1705,7 @@ function renderShop() {
   if (!save.shop.owned.includes('basic')) save.shop.owned.push('basic');
   ensureStarterWeapons();
   const cur = knifeNow().id;
-  $('shopList').innerHTML = `<p>錢：<b>$${save.money}</b></p><h3><i class="ic ic-knife"></i> 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>找縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
+  $('shopList').innerHTML = `<h3><i class="ic ic-knife"></i> 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>找縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
     const own = save.shop.owned.includes(k.id);
     const tr = save.trial?.id === k.id, btn = tr ? `${k.id === cur ? '<b>使用中</b><br>' : `<button data-eq="${k.id}">換</button><br>`}<button data-buy="${k.id}" ${save.money < px(k.id, k.price) ? 'disabled' : ''}>${pxHtml(k.id, k.price, '買斷 ')}</button>` : k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < px(k.id, k.price) ? 'disabled' : ''}>${pxHtml(k.id, k.price)}</button>`;
     return `<tr><td><b>${k.n}</b>${save.trial?.id === k.id ? ` <span class="trialTag">試用剩 ${save.trial.left} 班</span>` : ''}<br><small>${k.desc}</small>${pxCd(k.id)}</td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
@@ -2689,10 +2731,10 @@ function syncStartUi() {
   const start = $('start');
   const temp = $('tempRow');
   if (isPlazaPicked()) {
-    start.innerHTML = '進入廣場';
+    start.innerHTML = '進入廣場'; start.classList.add('plazaGo');
     if (temp) temp.style.display = 'none';
   } else {
-    start.innerHTML = '開始剝蚵';
+    start.innerHTML = '開始剝蚵'; start.classList.remove('plazaGo');
     if (temp) temp.style.display = 'flex';
   }
 }
@@ -3282,7 +3324,7 @@ btn('resMenu', () => {
 });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
-$('daily').onclick = claimDaily; renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
+$('calBtn').onclick = () => openDaily(); renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
 setTimeout(checkReturn, 600);
 $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖鑑、生涯紀錄、設定都會清掉，無法復原。')) { LS.removeItem('oyster-sim'); LS.removeItem('oyster-mix'); location.reload(); } };
@@ -4302,7 +4344,7 @@ function shopTabs2(groups: HTMLElement[], bar: HTMLElement) { groups.forEach((g,
 function cleanName(v: string) { return [...v.replace(/[\u0000-\u001f\u007f<>&"'`]/g, '').trim()].slice(0, 8).join('').trim() || '剝蚵人'; }
 function myName() { return save.name ? cleanName(save.name) : '剝蚵人'; }
 function esc(v: string) { return v.replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';'); }
-function drawName() { const n = myName(); const m = document.getElementById('meLine'); if (m) { m.textContent = ''; m.append('夜晚的巷口，「'); const b = document.createElement('span'); b.id = 'nameEdit'; b.setAttribute('role', 'button'); b.tabIndex = 0; b.title = '點一下改名字'; b.textContent = n; const g = document.createElement('i'); g.textContent = ' ✎'; b.append(g); b.onkeydown = e => { if (e.key === 'Enter') b.click(); }; b.onclick = () => { ($('setBtn') as HTMLButtonElement).click(); setTimeout(() => ($('myName') as HTMLInputElement).focus(), 50); }; m.append(b, '」和鄰居阿婆們坐在小板凳上，圍在一起剝蚵仔。'); } const i = document.getElementById('myName') as HTMLInputElement | null; if (i && document.activeElement !== i) i.value = save.name ? n : ''; }
+function drawName() { const n = myName(); const m = document.getElementById('meLine'); if (m) { m.textContent = ''; const u = document.createElement('i'); u.className = 'ic ic-user'; m.append(u); const b = document.createElement('span'); b.id = 'nameEdit'; b.setAttribute('role', 'button'); b.tabIndex = 0; b.title = '點一下改名字'; b.textContent = n; const g = document.createElement('i'); g.textContent = ' ✎'; b.append(g); b.onkeydown = e => { if (e.key === 'Enter') b.click(); }; b.onclick = () => { ($('setBtn') as HTMLButtonElement).click(); setTimeout(() => ($('myName') as HTMLInputElement).focus(), 50); }; m.append(b); } const i = document.getElementById('myName') as HTMLInputElement | null; if (i && document.activeElement !== i) i.value = save.name ? n : ''; }
 { const i = $('myName') as HTMLInputElement; const commit = () => { const v = cleanName(i.value); save.name = v === '剝蚵人' ? undefined : v; i.value = save.name ? v : ''; persist(); drawName(); };
   i.addEventListener('change', commit); i.addEventListener('blur', commit); i.addEventListener('input', () => { const v = cleanName(i.value); save.name = v === '剝蚵人' ? undefined : v; persist(); }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
   for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend']) i.addEventListener(ev, e => e.stopPropagation()); drawName(); }
@@ -4367,7 +4409,7 @@ installBackGuard(() => {
 
 // ── 主畫面導覽（新玩家第一次看到主畫面時；阿婆逐一介紹按鈕）──
 const HG: [string, string][] = [
-  ['daily', '每天先來這裡領上工費，有錢才好買工具喔。'],
+  ['calBtn', '每天先點這個日曆簽到領上工費，有錢才好買工具喔。'],
   ['start', '準備好了就按這裡開始剝蚵。'],
   ['oShop', '雜貨店可以買刀子、手套跟各種好用的東西。'],
   ['oDex', '剝到的珍珠和稀奇東西，都會記在圖鑑裡。'],
@@ -4610,3 +4652,29 @@ function dismissBoot() {
   }, wait);
 }
 requestAnimationFrame(() => requestAnimationFrame(dismissBoot));
+
+// 主畫面顯示目前金額
+{ let last = -1; const tick = () => { const v = save.money ?? 0; if (v !== last) { last = v; for (const id of ['menuMoneyV', 'shopMoneyV']) { const e = document.getElementById(id); if (e) e.textContent = '$' + v.toLocaleString('zh-TW'); } } }; tick(); setInterval(tick, 400); }
+
+
+// ── 糖果鍵按鈕：依文字標記角色（CSS 見 style.css 末段「糖果鍵」）──
+{
+  const P = /^(開始|再來|領取|購買|買|確定|兌換|進入)/, D = /^(放棄|刪除|重置|重設|清除|登出)/;
+  const tag = (root: ParentNode) => root.querySelectorAll<HTMLButtonElement>('button').forEach(b => {
+    const t = (b.textContent ?? '').trim(), k = b.classList.contains('px') || b.classList.contains('gmX') || t === '✕' ? 'x' : D.test(t) ? 'danger' : P.test(t) ? 'primary' : '';
+    if ((b.dataset.key ?? '') !== k) { if (k) b.dataset.key = k; else delete b.dataset.key; }
+  });
+  let q = 0; tag(document);
+  new MutationObserver(() => { if (!q) q = requestAnimationFrame(() => { q = 0; tag(document); }); }).observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
+// 雜貨店表格 → 卡片：把表頭文字標到每格 data-label（CSS 依此排成卡片）
+{
+  const lab = () => document.querySelectorAll<HTMLTableElement>('#shopList table.kt').forEach(t => {
+    const hs = [...(t.rows[0]?.querySelectorAll('th') ?? [])].map(h => h.textContent?.trim() ?? '');
+    if (hs.length) t.rows[0].classList.add('ktHead');
+    [...t.rows].forEach(r => [...r.cells].forEach((c, i) => { if (c.tagName === 'TD' && hs[i] && !c.dataset.label) c.dataset.label = hs[i]; }));
+  });
+  const sl = document.getElementById('shopList');
+  if (sl) { new MutationObserver(lab).observe(sl, { childList: true, subtree: true }); lab(); }
+}
