@@ -2603,6 +2603,7 @@ window.addEventListener('keydown', e => {
   }
   if (state !== 'play') return; audio().resume();
   if (walking) {
+    if (e.code === 'Space' && plazaMode) { e.preventDefault(); if (!e.repeat) plazaJump(); return; }
     walkKeys.add(e.code);
     if (e.code === 'KeyE') {
       if (plazaMode) void plazaTrySit();

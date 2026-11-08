@@ -137,7 +137,7 @@ export function plazaEnterWalkPose(fromSeat = true) {
   D.on('standBtn', false); D.on('umbBtn', false); D.on('medBtn', false); D.on('stealBtn', false); D.on('joy', true); D.on('camBtn', D.COARSE);
   if (D.COARSE) { const cam = D.$('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
   D.stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
-  D.hint.textContent = D.COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V 切換視角・E 坐下剝蚵';
+  D.hint.textContent = D.COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V 切換視角・空白鍵跳躍・E 坐下剝蚵';
 }
 
 export function sitDown(id: string) {
