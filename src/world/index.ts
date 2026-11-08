@@ -8,7 +8,7 @@ export {
 export { DIFF, DIFF_W, LOCS, SEATS, type Loc, type Seat } from './locs';
 export {
   initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
-  walking, nearSeat, walkPos, walkKeys, joy, walkMotion,
+  walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
   setWalking, setNearSeat, clearWalkInput,
 } from './walkSeat';
 export { makeWorldLabel, type WorldLabel, type WorldLabelKind } from './worldLabel';

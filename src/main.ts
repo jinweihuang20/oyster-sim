@@ -11,7 +11,7 @@ import {
   SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE, NPC_DIFF_T, NPC_DEF, type NpcDef,
   DIFF, DIFF_W, LOCS, SEATS, type Seat,
   initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
-  walking, nearSeat, walkPos, walkKeys, joy, walkMotion,
+  walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
   setWalking, setNearSeat, clearWalkInput,
   makeWorldLabel, type WorldLabel,
 } from './world';
@@ -33,7 +33,7 @@ import {
 } from './meta';
 import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
-import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type PlayerRig } from './dm/character';
+import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, applyPlazaBodyPose as applyBodyPose, type PlayerRig } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
 import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
@@ -2473,7 +2473,7 @@ function renderDex() {
 renderDex();
 
 // ---------- 操作 ----------
-let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; rotMode: boolean; lx: number; lt: number } | null = null;
+let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; lx: number; lt: number } | null = null;
 /** 廣場坐下：第三人稱不轉頭；第一人稱左右 ±90°；工寮仍用 YAW */
 const PLAZA_SIT_YAW = Math.PI / 2;
 const yl = () => {
@@ -2485,7 +2485,7 @@ const pitchLo = () => P0;
 const pitchHi = () => plazaMode && !walking ? 0.55 : P1;
 /** 廣場第三人稱走動：鎖上下視角（鏡頭固定俯仰，也不改 pitch 以免同步到遠端） */
 const plazaTpWalkLockPitch = () => plazaMode && walking && tpv;
-const PLAZA_WALK_PITCH = -0.2;
+const PLAZA_WALK_PITCH = -0.2; let tpPitch = 0.41; let walkMovingT = 0; const tpPitchFree = () => performance.now() - walkMovingT > 200;
 const YAW = 1.25, P0 = -1.05, P1 = 0.15;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const swipePhase = () => phase === 'twist' || phase === 'crab';
@@ -2494,17 +2494,17 @@ canvas.addEventListener('pointerdown', e => {
   if (state !== 'play') return; audio().resume(); if (umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
   // 奇物展示：點一下跳過阿婆湊近觀看
   if (skipOddShow()) return;
-  if (moonAimOn) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
+  if (moonAimOn) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (swipePhase()) { pry(e.timeStamp); if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) canvas.requestPointerLock(); return; }
   if (!walking && !plazaMode && e.button === 0) {
     const tipNpc = hitNpcTag(e.clientX, e.clientY);
     if (tipNpc) { npcTip(tipNpc); return; }
   }
   if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
-  if (walking) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
+  if (walking) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (e.button === 2) { throwShell(); return; }
   // 坐下：預設先當轉視角（跟走動一樣跟手）；點蚵／點網靠 pointerup 小位移仍算點
-  down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && hitsOyster(e.clientX, e.clientY), lx: e.clientX, lt: performance.now() };
+  down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && hitsOyster(e.clientX, e.clientY), lx: e.clientX, lt: performance.now() };
 });
 let lastMoveT = performance.now();
 window.addEventListener('pointermove', e => {
@@ -2517,7 +2517,7 @@ window.addEventListener('pointermove', e => {
       // 桌面 Pointer Lock：yaw 減＝往右看（與死鬥／觸控 FPS 同向）；反轉左右再開 invX
       const xS = mix.invX ? -1 : 1;
       yaw = tYaw = clamp(tYaw - e.movementX * k * xS, -yl(), yl());
-      if (plazaTpWalkLockPitch()) pitch = tPitch = PLAZA_WALK_PITCH;
+      if (plazaTpWalkLockPitch()) { pitch = tPitch = PLAZA_WALK_PITCH; if (tpPitchFree()) tpPitch = clamp(tpPitch + e.movementY * k * 0.8, 0.05, 1.1); }
       else pitch = tPitch = clamp(tPitch - e.movementY * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
       camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld();
     }
@@ -2537,7 +2537,8 @@ window.addEventListener('pointermove', e => {
     const k = 0.006 * mix.sens;
     const xS = mix.invX ? -1 : 1;
     tYaw = clamp(down.yaw - dx * k * xS, -yl(), yl());
-    tPitch = plazaTpWalkLockPitch() ? PLAZA_WALK_PITCH : clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
+    if (plazaTpWalkLockPitch() && tpPitchFree()) tpPitch = clamp((down.tp ?? tpPitch) + dy * k * 0.8, 0.05, 1.1);
+tPitch = plazaTpWalkLockPitch() ? PLAZA_WALK_PITCH : clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
     // 坐下／拖曳立刻上鏡頭（與 Pointer Lock 同手感，不等到下幀）
     yaw = tYaw; pitch = tPitch;
     camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0);
@@ -2583,6 +2584,12 @@ const up = (e: PointerEvent) => {
   down = null;
 };
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+let tpDist = 3.6; const clampTp = (v: number) => Math.min(6.5, Math.max(1.8, v));
+canvas.addEventListener('wheel', e => { if (plazaMode && walking) { tpDist = clampTp(tpDist + e.deltaY * 0.003); e.preventDefault(); } }, { passive: false });
+{ let pd = 0; const dist = (ts: TouchList) => Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY);
+  canvas.addEventListener('touchstart', e => { if (e.targetTouches.length === 2 && e.touches.length === 2) pd = dist(e.targetTouches); }, { passive: true });
+  canvas.addEventListener('touchmove', e => { if (pd > 0 && e.targetTouches.length === 2 && e.touches.length === 2 && plazaMode && walking) { const nd = dist(e.targetTouches); tpDist = clampTp(tpDist * pd / nd); pd = nd; } }, { passive: true });
+  canvas.addEventListener('touchend', e => { if (e.targetTouches.length < 2) pd = 0; }, { passive: true }); }
 canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
   if (e.code === 'Escape' || e.key === 'Escape') {
@@ -2604,6 +2611,7 @@ window.addEventListener('keydown', e => {
   if (state !== 'play') return; audio().resume();
   if (walking) {
     if (e.code === 'Space' && plazaMode) { e.preventDefault(); if (!e.repeat) plazaJump(); return; }
+    if ((e.code === 'KeyC' || e.code === 'KeyZ') && plazaMode) { if (!e.repeat) plazaPose(e.code === 'KeyC' ? 'crouch' : 'lie'); return; }
     walkKeys.add(e.code);
     if (e.code === 'KeyE') {
       if (plazaMode) void plazaTrySit();
@@ -3163,7 +3171,7 @@ function launchPlaza() {
     applySeatPose: (pos, yaw) => applyPlazaSeatPose(pos, yaw),
     getPhase: () => phase,
     // 可丟殼且準星瞄到人：同步 throwAim，遠端播左手舉殼
-    getSyncPhase: () => jumpY > 0 ? 'jump' : ((phase === 'empty' || phase === 'seam') && plazaThrowTarget() ? 'throwAim' : phase),
+    getSyncPhase: () => jumpY > 0 ? 'jump' : bodyPose && walking ? bodyPose : ((phase === 'empty' || phase === 'seam') && plazaThrowTarget() ? 'throwAim' : phase),
     getCount: () => count,
     getWalkXZ: () => (walking ? { x: walkPos.x, z: walkPos.z } : { x: SEAT.x, z: SEAT.z }),
     getYaw: () => (walking ? yaw : seatYaw),
@@ -3641,10 +3649,11 @@ function frameBody() {
   if (plazaMode && !walking) yaw = tYaw = clamp(yaw, -yl(), yl());
   moonTick(rdt);
   shake = Math.max(0, shake - rdt);
-  if (walking) walkStep(rdt); else { walkMotion.spd = walkMotion.strafe = 0; }
+  if (walking && bodyPose !== 'lie') walkStep(rdt); else if (walking) { walkMotion.spd = walkMotion.strafe = 0; } else { walkMotion.spd = walkMotion.strafe = 0; }
   let camPitch = pitch - pe * 0.08, camRoll = 0;
   camera.position.copy(walking ? walkPos : SEAT);
   if (jumpY > 0) camera.position.y += jumpY;
+  if (poseK > 0.001) camera.position.y -= poseK * (bodyPose === 'lie' || lastPose === 'lie' ? 1.2 : 0.55);
   // 廣場第一人稱走路：死鬥同款頭晃（上下／側移／輕 roll）
   if (plazaMode && walking && !tpv) {
     const walkRef = 2.4;
@@ -4264,7 +4273,7 @@ function camTick(dt: number) {
   const kk = enter ? 1 : 1 - Math.exp(-5 * dt);
   meSeatLegs.visible = !walking; meLegL.visible = meLegR.visible = walking && !plazaMode;
   if (walking) {
-    const sp = Math.hypot(walkPos.x - lastWalk.x, walkPos.z - lastWalk.z) / Math.max(dt, 1e-3); lastWalk.copy(walkPos);
+    const sp = Math.hypot(walkPos.x - lastWalk.x, walkPos.z - lastWalk.z) / Math.max(dt, 1e-3); lastWalk.copy(walkPos); walkMovingT = sp > 0.3 ? performance.now() : walkMovingT;
     walkPh += Math.min(sp, 3) * dt * 5; const sw = Math.min(1, sp / 1.2) * Math.sin(walkPh);
     handRig.visible = false;
     if (plazaMode) {
@@ -4273,7 +4282,9 @@ function camTick(dt: number) {
       const rig = ensurePlazaMe();
       rig.outer.visible = true;
       rig.outer.position.set(walkPos.x, jumpY, walkPos.z);
+      rig.outer.rotation.order = 'YXZ';
       rig.outer.rotation.y = yaw;
+      rig.outer.rotation.x = 0;
       if (jumpY > 0) { const ja = -2.4 * Math.sin((1 - jumpT / JUMP_DUR) * Math.PI); rig.shoulderL.rotation.x = ja; const sr = (rig as any).shoulderR; if (sr) sr.rotation.x = ja; }
       const swing = sw * 0.55;
       rig.legL.rotation.x = swing; rig.legR.rotation.x = -swing;
@@ -4282,8 +4293,10 @@ function camTick(dt: number) {
       // 與遠端同款擺臂（停住則自然下垂）
       if (sp > 0.25) posePlazaWalkSwingArms(rig, swing);
       else posePlazaHangArms(rig);
+      applyBodyPose(rig, lastPose, poseK);
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-      const cp = new THREE.Vector3(walkPos.x - fx * 2.9, 2.2 + jumpY * 0.35, walkPos.z - fz * 2.9);
+      const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = tpDist * Math.cos(el);
+const cp = new THREE.Vector3(walkPos.x - fx * hd, 1.4 + tpDist * Math.sin(el) + jumpY * 0.35 - poseK * (lastPose === 'lie' ? 0.7 : 0.35), walkPos.z - fz * hd);
       if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
       { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, 1.0, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
       tpCam.updateMatrixWorld(); return;
@@ -4734,16 +4747,32 @@ setInterval(() => {
 // ── 廣場跳躍（走動時才可跳；用 phase "jump" 同步給其他玩家）──
 const JUMP_DUR = 0.6, JUMP_H = 0.8;
 let jumpY = 0, jumpT = 0;
-function plazaJump() { if (!plazaMode || !walking || jumpT > 0) return; jumpT = JUMP_DUR; }
+function plazaJump() { if (!plazaMode || !walking || jumpT > 0 || bodyPose === 'lie') return; if (bodyPose) setBodyPose(''); jumpT = JUMP_DUR; }
+// ── 廣場蹲／躺（走動時才可用；用 phase "crouch"／"lie" 同步）──
+let bodyPose: '' | 'crouch' | 'lie' = '';
+let lastPose: 'crouch' | 'lie' = 'crouch';
+let poseK = 0; // 0 站 → 1 完全蹲／躺（平滑過渡）
+function setBodyPose(p: '' | 'crouch' | 'lie') {
+  bodyPose = p; if (p) lastPose = p;
+  walkTune.mul = p === 'crouch' ? 0.5 : 1;
+  document.getElementById('crouchBtn')?.classList.toggle('act', p === 'crouch');
+  document.getElementById('lieBtn')?.classList.toggle('act', p === 'lie');
+}
+function plazaPose(p: 'crouch' | 'lie') { if (!plazaMode || !walking || jumpT > 0) return; setBodyPose(bodyPose === p ? '' : p); }
 {
   const jb = document.getElementById('jumpBtn');
   if (jb) jb.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); plazaJump(); });
+  for (const [id, p] of [['crouchBtn', 'crouch'], ['lieBtn', 'lie']] as const) document.getElementById(id)?.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); plazaPose(p); });
   let last = performance.now();
   const step = () => {
     const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (jumpT > 0) { jumpT = Math.max(0, jumpT - dt); const u = 1 - jumpT / JUMP_DUR; jumpY = jumpT > 0 ? 4 * JUMP_H * u * (1 - u) : 0; }
-    if (!plazaMode || !walking) { jumpT = 0; jumpY = 0; }
-    on('jumpBtn', plazaMode && walking && state === 'play');
+    if (!plazaMode || !walking) { jumpT = 0; jumpY = 0; if (bodyPose) setBodyPose(''); }
+    // 躺著時一動（方向鍵／搖桿）就起來
+    if (bodyPose === 'lie') { let mv = Math.abs(joy.x) > 0.15 || Math.abs(joy.y) > 0.15; for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) mv = true; if (mv) setBodyPose(''); }
+    poseK += ((bodyPose ? 1 : 0) - poseK) * Math.min(1, dt * 10);
+    const pz = plazaMode && walking && state === 'play';
+    on('jumpBtn', pz); on('crouchBtn', pz); on('lieBtn', pz); if (pz && COARSE) { const jb = document.getElementById('jumpBtn')!.getBoundingClientRect(); let b = innerHeight - jb.top + 8; for (const id of ['crouchBtn', 'lieBtn']) { const el = document.getElementById(id)!; const s = el.style; s.setProperty('position', 'fixed', 'important'); s.setProperty('right', (innerWidth - jb.right) + 'px', 'important'); s.setProperty('left', 'auto', 'important'); s.setProperty('top', 'auto', 'important'); s.setProperty('width', jb.width + 'px', 'important'); s.setProperty('height', jb.height + 'px', 'important'); s.setProperty('bottom', b + 'px', 'important'); s.setProperty('z-index', '30', 'important'); b += jb.height + 8; } }
     requestAnimationFrame(step);
   };
   requestAnimationFrame(step);

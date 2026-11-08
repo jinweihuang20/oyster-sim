@@ -329,3 +329,22 @@ export function posePlazaStallKeeper(rig: PlayerRig, t: number, ph: number) {
   } else placePlazaArmChain(rig.upperR, rig.lowerR, ...R);
   rig.head.rotation.y = Math.sin(t * 0.4 + ph) * 0.3;
 }
+/** 廣場蹲／躺姿勢：k 0..1 平滑；在擺臂之後呼叫（outer.rotation.order 需為 YXZ） */
+export function applyPlazaBodyPose(rig: PlayerRig, pose: string, k: number) {
+  if (k <= 0.001) return;
+  const r: any = rig;
+  if (pose === 'lie') {
+    rig.outer.rotation.x = Math.PI / 2 * k;
+    rig.outer.position.y += 0.16 * k;
+    rig.legL.rotation.x *= 1 - k; rig.legR.rotation.x *= 1 - k;
+    r.shinL && (r.shinL.rotation.x *= 1 - k); r.shinR && (r.shinR.rotation.x *= 1 - k);
+    rig.shoulderL.rotation.x = rig.shoulderL.rotation.x * (1 - k) - 2.6 * k;
+    r.shoulderR && (r.shoulderR.rotation.x = r.shoulderR.rotation.x * (1 - k) - 2.6 * k);
+  } else {
+    rig.outer.position.y -= 0.4 * k; (rig as any).torso && ((rig as any).torso.rotation.x = 0.3 * k);
+    rig.legL.rotation.x = rig.legL.rotation.x * (1 - k) + 1.55 * k;
+    rig.legR.rotation.x = rig.legR.rotation.x * (1 - k) + 1.55 * k;
+    r.shinL && (r.shinL.rotation.x = r.shinL.rotation.x * (1 - k) - 2.3 * k);
+    r.shinR && (r.shinR.rotation.x = r.shinR.rotation.x * (1 - k) - 2.3 * k);
+  }
+}

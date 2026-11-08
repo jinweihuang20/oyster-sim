@@ -928,7 +928,7 @@ export function tickPlaza(dt: number) {
     phaseTimer = 0;
     const yaw = deps.getYaw();
     const sp = deps.getSyncPhase?.();
-    const phase = seated ? (sp ?? deps.getPhase()) : (sp === 'jump' ? 'jump' : 'walk');
+    const phase = seated ? (sp ?? deps.getPhase()) : (sp === 'jump' || sp === 'crouch' || sp === 'lie' ? sp : 'walk');
     const moving = !seated && deps.getMoving();
     // 第三人稱走動：鎖 look，避免遠端上下點頭；第一人稱／坐下照常同步頭
     const lockLook = !seated && (deps.getTpv?.() ?? false);

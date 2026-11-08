@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
-import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaStallKeeper, type PlayerRig } from '../dm/character';
+import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaStallKeeper, applyPlazaBodyPose, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
@@ -1094,7 +1094,10 @@ export function createPlazaWorldView(
       if ((r.phase || '') === 'jump' && !r.seated) { if (!rj.jt) rj.jt = performance.now(); }
       if (rj.jt) { const u = (performance.now() - rj.jt) / 600; if (u >= 1) { if ((r.phase || '') !== 'jump') rj.jt = 0; } else { jy = 3.2 * u * (1 - u); { const a = -2.4 * Math.sin(u * Math.PI); r.rig.shoulderL.rotation.x = a; (r.rig as any).shoulderR && ((r.rig as any).shoulderR.rotation.x = a); } } }
       r.rig.outer.position.set(ox, jy, oz);
+      r.rig.outer.rotation.order = 'YXZ';
       r.rig.outer.rotation.y = r.yaw;
+      r.rig.outer.rotation.x = 0;
+      { const ph = r.seated ? '' : (r.phase || ''); const want = ph === 'crouch' || ph === 'lie' ? 1 : 0; if (want) rj.pz = ph; rj.pk = (rj.pk ?? 0) + (want - (rj.pk ?? 0)) * 0.18; if (rj.pk > 0.001 && rj.pz) applyPlazaBodyPose(r.rig, rj.pz, rj.pk); }
       r.rig.outer.updateMatrixWorld(true);
       const show = r.rig.outer.visible && !r.awaitingPose;
       r.tag.sprite.visible = show;

@@ -80,6 +80,8 @@ export const walkKeys = new Set<string>();
 export const joy = { x: 0, y: 0 };
 /** 廣場第一人稱頭晃／移動量（frame 可寫入） */
 export const walkMotion = { bobPh: 0, bobW: 0, spd: 0, strafe: 0 };
+/** 廣場蹲下等姿勢的移動倍率 */
+export const walkTune = { mul: 1 };
 
 const NAG_STAND = ['剝一半就要走喔？', '蚵仔丟著就走，好浪費！', '要去哪裡？工作先做完啦'];
 
@@ -137,7 +139,7 @@ export function plazaEnterWalkPose(fromSeat = true) {
   D.on('standBtn', false); D.on('umbBtn', false); D.on('medBtn', false); D.on('stealBtn', false); D.on('joy', true); D.on('camBtn', D.COARSE);
   if (D.COARSE) { const cam = D.$('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
   D.stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
-  D.hint.textContent = D.COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V 切換視角・空白鍵跳躍・E 坐下剝蚵';
+  D.hint.textContent = D.COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V 切換視角・空白鍵跳躍・C 蹲下・Z 躺下・E 坐下剝蚵';
 }
 
 export function sitDown(id: string) {
@@ -153,7 +155,7 @@ export function walkStep(dt: number) {
   const k = (c: string) => walkKeys.has(c) ? 1 : 0;
   let f = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - joy.y, r = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + joy.x;
   const l = Math.hypot(f, r); if (l > 1) { f /= l; r /= l; }
-  const moveSp = D.isPlazaMode() ? 2.4 : 1.7;
+  const moveSp = (D.isPlazaMode() ? 2.4 : 1.7) * walkTune.mul;
   walkMotion.spd = l * moveSp; walkMotion.strafe = r * moveSp;
   const yaw = D.getYaw();
   const sp = moveSp * dt; walkPos.x += (-Math.sin(yaw) * f + Math.cos(yaw) * r) * sp; walkPos.z += (-Math.cos(yaw) * f - Math.sin(yaw) * r) * sp;
