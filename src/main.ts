@@ -2516,7 +2516,7 @@ window.addEventListener('pointermove', e => {
       const k = 0.0022 * mix.sens;
       // 桌面 Pointer Lock：yaw 減＝往右看（與死鬥／觸控 FPS 同向）；反轉左右再開 invX
       const xS = mix.invX ? -1 : 1;
-      yaw = tYaw = clamp(tYaw - e.movementX * k * xS, -yl(), yl());
+      if (!(plazaMode && walking && bodyPose === 'lie')) yaw = tYaw = clamp(tYaw - e.movementX * k * xS, -yl(), yl());
       if (plazaTpWalkLockPitch()) { pitch = tPitch = PLAZA_WALK_PITCH; if (tpPitchFree()) tpPitch = clamp(tpPitch + e.movementY * k * 0.8, 0.05, 1.1); }
       else pitch = tPitch = clamp(tPitch - e.movementY * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
       camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld();
@@ -2536,7 +2536,7 @@ window.addEventListener('pointermove', e => {
     // 手機／觸控拖曳：維持 FPS（指右＝往右看）；勿與桌面滑鼠共用同一符號
     const k = 0.006 * mix.sens;
     const xS = mix.invX ? -1 : 1;
-    tYaw = clamp(down.yaw - dx * k * xS, -yl(), yl());
+    if (!(plazaMode && walking && bodyPose === 'lie')) tYaw = clamp(down.yaw - dx * k * xS, -yl(), yl());
     if (plazaTpWalkLockPitch() && tpPitchFree()) tpPitch = clamp((down.tp ?? tpPitch) + dy * k * 0.8, 0.05, 1.1);
 tPitch = plazaTpWalkLockPitch() ? PLAZA_WALK_PITCH : clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
     // 坐下／拖曳立刻上鏡頭（與 Pointer Lock 同手感，不等到下幀）
@@ -3654,6 +3654,7 @@ function frameBody() {
   camera.position.copy(walking ? walkPos : SEAT);
   if (jumpY > 0) camera.position.y += jumpY;
   if (poseK > 0.001) camera.position.y -= poseK * (bodyPose === 'lie' || lastPose === 'lie' ? 1.2 : 0.55);
+if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitch = camPitch * (1 - poseK) + 1.35 * poseK;
   // 廣場第一人稱走路：死鬥同款頭晃（上下／側移／輕 roll）
   if (plazaMode && walking && !tpv) {
     const walkRef = 2.4;

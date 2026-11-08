@@ -341,9 +341,9 @@ export function applyPlazaBodyPose(rig: PlayerRig, pose: string, k: number) {
     rig.shoulderL.rotation.x = rig.shoulderL.rotation.x * (1 - k) - 2.6 * k;
     r.shoulderR && (r.shoulderR.rotation.x = r.shoulderR.rotation.x * (1 - k) - 2.6 * k);
   } else {
-    rig.outer.position.y -= 0.4 * k; (rig as any).torso && ((rig as any).torso.rotation.x = 0.3 * k);
-    rig.legL.rotation.x = rig.legL.rotation.x * (1 - k) + 1.55 * k;
-    rig.legR.rotation.x = rig.legR.rotation.x * (1 - k) + 1.55 * k;
+    rig.outer.position.y -= 0.4 * k; (rig as any).torso && ((rig as any).torso.rotation.x = -0.35 * k);
+    rig.legL.rotation.x = rig.legL.rotation.x * (1 - 0.4 * k) + 1.55 * k;
+    rig.legR.rotation.x = rig.legR.rotation.x * (1 - 0.4 * k) + 1.55 * k;
     r.shinL && (r.shinL.rotation.x = r.shinL.rotation.x * (1 - k) - 2.3 * k);
     r.shinR && (r.shinR.rotation.x = r.shinR.rotation.x * (1 - k) - 2.3 * k);
   }
