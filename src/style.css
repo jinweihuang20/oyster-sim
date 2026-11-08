@@ -1344,6 +1344,9 @@ body #locPick button.loc:not(.locPlaza):disabled,body #locPick button.loc.lock:n
 #btns button:active,#btnsL button:active,#btnsCorner button:active,.mb:active,#camBtn:active{background:rgba(22,28,36,.72)!important;transform:scale(.96)}
 #btns button .ic,#btnsCorner button .ic,.mb .ic{background-color:#f2f4f7}
 #umbBtn{background:rgba(150,62,58,.62)!important;border-color:rgba(255,190,180,.35)!important}
+/* 撐傘倒數條：要寫在毛玻璃底色之後，不然會被蓋掉 */
+#umbBtn.held{background:linear-gradient(90deg,rgba(46,158,79,.78) var(--p,100%),rgba(22,28,36,.55) var(--p,100%))!important;border-color:rgba(185,255,176,.45)!important}
+#umbBtn.held.low{background:linear-gradient(90deg,rgba(224,57,43,.8) var(--p,100%),rgba(22,28,36,.55) var(--p,100%))!important}
 
 /* ===== 剝蚵中頂列：深色毛玻璃 ===== */
 #top{background:rgba(22,28,36,.55)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.18)!important;border-radius:14px!important;box-shadow:0 4px 14px rgba(0,0,0,.22)!important;color:#f2f4f7!important}
