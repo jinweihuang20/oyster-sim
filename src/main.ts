@@ -4671,9 +4671,9 @@ requestAnimationFrame(() => requestAnimationFrame(dismissBoot));
 // 雜貨店表格 → 卡片：把表頭文字標到每格 data-label（CSS 依此排成卡片）
 {
   const lab = () => document.querySelectorAll<HTMLTableElement>('#shopList table.kt').forEach(t => {
-    const hs = [...(t.rows[0]?.querySelectorAll('th') ?? [])].map(h => h.textContent?.trim() ?? '');
+    const hs = Array.from(t.rows[0]?.querySelectorAll('th') ?? []).map(h => h.textContent?.trim() ?? '');
     if (hs.length) t.rows[0].classList.add('ktHead');
-    [...t.rows].forEach(r => [...r.cells].forEach((c, i) => { if (c.tagName === 'TD' && hs[i] && !c.dataset.label) c.dataset.label = hs[i]; }));
+    Array.from(t.rows).forEach(r => Array.from(r.cells).forEach((c, i) => { if (c.tagName === 'TD' && hs[i] && !c.dataset.label) c.dataset.label = hs[i]; }));
   });
   const sl = document.getElementById('shopList');
   if (sl) { new MutationObserver(lab).observe(sl, { childList: true, subtree: true }); lab(); }
