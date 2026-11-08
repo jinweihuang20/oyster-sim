@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
-import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, type PlayerRig } from '../dm/character';
+import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaStallKeeper, type PlayerRig } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
-import { makePlazaAmbiance } from './ambiance';
+import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import type { CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
@@ -199,6 +199,27 @@ export function createPlazaWorldView(
   const ambiance = makePlazaAmbiance(M, add, LO);
   root.add(ambiance.group);
 
+  // 攤位老闆（純客戶端，不經伺服器）：站在攤台後方、面向廣場中心
+  const stallKeepers: { rig: PlayerRig; ph: number; lines: string[]; bub: WorldLabel | null; next: number; until: number; li: number }[] = [];
+  const KEEPER_LINES: Record<string, string[]> = {
+    bbq: ['烤肉喔！剛烤好的！', '香腸一支三十，兩支五十五！', '來喔來喔，烤玉米也有！', '要辣的跟我說喔～'],
+    'drink-s': ['冰涼的青草茶喔！', '剝蚵剝到口渴了吧？來一杯！', '冬瓜茶、楊桃汁，現倒現喝！', '大杯的才三十喔！'],
+    seafood: ['現撈的喔！新鮮的！', '蚵仔煎、蚵仔湯，好吃又便宜！', '今天的蝦子很大隻喔！', '來看看，不買沒關係！'],
+  };
+  PLAZA_STALL_SITES.filter((s) => KEEPER_LINES[s.id]).forEach((site, idx) => {
+    const look = AMA_LOOKS[(idx * 3 + 1) % AMA_LOOKS.length];
+    const rig = makePlayerAvatar({ shirt: look.shirt, hair: look.hair, pants: look.pants }, M, add, LO);
+    dressPlazaAma(rig, look);
+    posePlazaHangArms(rig, false);
+    const out = Math.atan2(site.x, site.z);
+    const back = site.kind === 'bbqSit' ? 1.05 : site.kind === 'cart' ? 0.6 : 0.68;
+    rig.outer.position.set(site.x + Math.sin(out) * back, 0, site.z + Math.cos(out) * back);
+    rig.outer.rotation.y = out;
+    rig.outer.scale.setScalar(AVATAR_SCALE);
+    root.add(rig.outer);
+    stallKeepers.push({ rig, ph: idx * 1.7, lines: KEEPER_LINES[site.id], bub: null, next: 3 + idx * 4, until: 0, li: idx });
+  });
+
   // 南排共烤：伺服器同步的烤網上蚵仔
   const grill = createGrillView(root);
 
@@ -371,8 +392,22 @@ export function createPlazaWorldView(
     return tag;
   }
 
-  function ensureBubble() {
-    const el = makeWorldLabel(' ', 'bubble', { worldH: 0.36, depthTest: false });
+  function tickKeeperBubble(k: (typeof stallKeepers)[number], tSec: number) {
+    if (tSec >= k.next) {
+      if (!k.bub) k.bub = ensureBubble(true);
+      k.bub.setText(k.lines[k.li++ % k.lines.length], true);
+      k.bub.setOpacity(1);
+      k.until = tSec + 3.5;
+      k.next = tSec + 9 + Math.random() * 6;
+    }
+    if (!k.bub) return;
+    const on = tSec < k.until;
+    k.bub.sprite.visible = on;
+    if (on) { const p = k.rig.outer.position; k.bub.sprite.position.set(p.x, 1.95, p.z); }
+  }
+
+  function ensureBubble(isNpc = false) {
+    const el = makeWorldLabel(' ', 'bubble', { worldH: 0.36, depthTest: false, nameTone: isNpc ? 'npc' : 'player' });
     el.sprite.visible = false;
     root.add(el.sprite);
     return el;
@@ -814,7 +849,7 @@ export function createPlazaWorldView(
       const awaitingPose = !p.seated && Math.hypot(x, z) < 0.2;
       r = {
         key: pid, connId: p.connId || '', pid, rig,
-        tag: ensureTag(isNpc ? (p.nick || '阿婆') : plazaDisplayName(p.nick, p.tag), isNpc), bubble: ensureBubble(), bubUntil: 0,
+        tag: ensureTag(isNpc ? (p.nick || '阿婆') : plazaDisplayName(p.nick, p.tag), isNpc), bubble: ensureBubble(isNpc), bubUntil: 0,
         pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick || (isNpc ? '阿婆' : '剝蚵人'),
         numTag: isNpc ? '' : (p.tag || '').replace(/^#/, ''),
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
@@ -1078,6 +1113,7 @@ export function createPlazaWorldView(
     const tSec = t * 0.001;
     for (const f of fireFx) f.tick(tSec, dt);
     ambiance.tick(tSec, dt);
+    for (const k of stallKeepers) { k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15; posePlazaStallKeeper(k.rig, tSec, k.ph); tickKeeperBubble(k, tSec); }
   }
 
   function dispose() {

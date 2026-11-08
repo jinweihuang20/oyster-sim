@@ -199,7 +199,7 @@ function placePlazaArmSeg(seg: THREE.Group, ax: number, ay: number, az: number, 
   seg.scale.set(1, 1, 1);
 }
 
-function placePlazaArmChain(
+export function placePlazaArmChain(
   upper: THREE.Group, lower: THREE.Group,
   shx: number, shy: number, shz: number,
   elx: number, ely: number, elz: number,
@@ -299,4 +299,33 @@ export function poseUmbArms(rig: PlayerRig) {
 
 export function poseAimArms(rig: PlayerRig, kick = 0) {
   syncHoldArms(rig, kick);
+}
+
+/** 攤位老闆：在攤台上忙（雙手前伸小幅畫圈），偶爾舉右手招呼客人 */
+export function posePlazaStallKeeper(rig: PlayerRig, t: number, ph: number) {
+  rig.weaponMount.visible = false;
+  rig.handL.visible = false;
+  rig.handR.visible = false;
+  const cyc = (t + ph) % 12;
+  const wave = cyc > 9 ? Math.sin(((cyc - 9) / 3) * Math.PI) : 0; // 0..1..0
+  const work = (side: number, k: number) => {
+    const shx = side * 0.22, shy = 0.3;
+    const a = t * 2.2 + ph + k;
+    const elbowX = shx + side * 0.08, elbowY = shy - 0.2, elbowZ = -0.16;
+    const wristX = side * 0.12 + Math.cos(a) * 0.05;
+    const wristY = shy - 0.24 + Math.sin(a * 1.3) * 0.03;
+    const wristZ = -0.36 + Math.sin(a) * 0.04;
+    return [shx, shy, 0, elbowX, elbowY, elbowZ, wristX, wristY, wristZ] as const;
+  };
+  const L = work(-1, 0);
+  placePlazaArmChain(rig.upperL, rig.lowerL, ...L);
+  const R = work(1, Math.PI);
+  if (wave > 0) {
+    const sw = Math.sin(t * 9) * 0.06 * wave;
+    const lift = (v: number, to: number) => v + (to - v) * wave;
+    placePlazaArmChain(rig.upperR, rig.lowerR, R[0], R[1], R[2],
+      lift(R[3], 0.34), lift(R[4], 0.36), lift(R[5], -0.08),
+      lift(R[6], 0.32 + sw), lift(R[7], 0.62), lift(R[8], -0.12));
+  } else placePlazaArmChain(rig.upperR, rig.lowerR, ...R);
+  rig.head.rotation.y = Math.sin(t * 0.4 + ph) * 0.3;
 }

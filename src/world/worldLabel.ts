@@ -24,14 +24,14 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number): s
   return lines.slice(0, 4);
 }
 
-/** 名牌底色：真人偏暖褐；阿婆偏青灰，廣場一眼可辨 */
+/** 名牌：真人白底藍邊＋人像；NPC 半透明灰、無邊框 */
 export type WorldLabelNameTone = 'player' | 'npc';
 
 export type WorldLabelOpts = {
   worldH?: number;
   /** 廣場人名等需蓋過場景時關深度測試（等同舊 DOM 疊層） */
   depthTest?: boolean;
-  /** 僅 kind=name：真人／阿婆底色 */
+  /** 真人／NPC 樣式（名牌與泡泡皆用） */
   nameTone?: WorldLabelNameTone;
 };
 
@@ -83,7 +83,8 @@ export function makeWorldLabel(
     const lines = wrapLines(ctx, text, maxTextW);
     const lineH = fontPx * 1.25;
     const textW = Math.max(...lines.map(l => ctx.measureText(l).width), 8);
-    const w = Math.min(cssW, Math.ceil(textW + padX * 2));
+    const iconW = kind === 'name' && nameTone === 'player' ? 26 : 0;
+    const w = Math.min(cssW, Math.ceil(textW + iconW + padX * 2));
     const h = Math.min(cssH, Math.ceil(lines.length * lineH + padY * 2 + (kind === 'bubble' ? 8 : 0)));
     // 畫在畫布底部中央（sprite.center 在底邊）
     const ox = (cssW - w) / 2;
@@ -92,43 +93,52 @@ export function makeWorldLabel(
     if (kind === 'name') {
       roundRect(ctx, ox + 0.5, oy + 0.5, w - 1, h - 1, 10);
       if (nameTone === 'npc') {
-        ctx.fillStyle = 'rgba(16,44,48,0.88)';
+        // NPC：半透明灰底、灰字、無邊框（退到背景）
+        ctx.fillStyle = 'rgba(70,76,84,0.5)';
         ctx.fill();
-        ctx.strokeStyle = 'rgba(140,210,200,0.55)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.fillStyle = '#c8f0e6';
+        ctx.fillStyle = '#d4d9de';
       } else {
-        ctx.fillStyle = 'rgba(30,20,10,0.82)';
+        // 真人：實底白名牌＋藍細邊＋人像線條圖示
+        ctx.fillStyle = 'rgba(255,255,255,0.96)';
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255,220,160,0.55)';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#2a5a86';
+        ctx.lineWidth = 2.5;
         ctx.stroke();
-        ctx.fillStyle = '#ffe9c0';
+        const ix = ox + padX + 10, iy = oy + h / 2;
+        ctx.strokeStyle = '#2a5a86';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.arc(ix, iy - 5, 4.5, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(ix, iy + 10, 8.5, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+        ctx.fillStyle = '#1f2a35';
       }
     } else {
       roundRect(ctx, ox + 1, oy + 1, w - 2, h - 10, 12);
-      ctx.fillStyle = '#fff8e8';
+      const npcB = nameTone === 'npc';
+      const bFill = npcB ? 'rgba(62,68,76,0.82)' : '#ffffff';
+      const bLine = npcB ? 'rgba(62,68,76,0.82)' : '#2a5a86';
+      ctx.fillStyle = bFill;
       ctx.fill();
-      ctx.strokeStyle = '#1b1b1b';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = bLine;
+      ctx.lineWidth = npcB ? 1 : 2.5;
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(ox + w / 2 - 8, oy + h - 10);
       ctx.lineTo(ox + w / 2, oy + h - 2);
       ctx.lineTo(ox + w / 2 + 8, oy + h - 10);
       ctx.closePath();
-      ctx.fillStyle = '#fff8e8';
+      ctx.fillStyle = bFill;
       ctx.fill();
-      ctx.strokeStyle = '#1b1b1b';
+      ctx.strokeStyle = bLine;
       ctx.stroke();
-      ctx.fillStyle = '#3a2410';
+      ctx.fillStyle = npcB ? '#e4e8ec' : '#1f2a35';
     }
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
     ctx.font = `800 ${fontPx}px "Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif`;
     const y0 = oy + padY + lineH / 2;
-    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], ox + w / 2, y0 + i * lineH);
+    const tx = ox + iconW / 2 + w / 2;
+    if (kind === 'name' && nameTone === 'npc') ctx.font = `600 ${fontPx}px "Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif`;
+    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], tx, y0 + i * lineH);
     // 裁切到實際文字區（flipY 下底邊對齊），避免整張空白畫布把字縮太小
     tex.offset.set(ox / cssW, 1 - (oy + h) / cssH);
     tex.repeat.set(w / cssW, h / cssH);

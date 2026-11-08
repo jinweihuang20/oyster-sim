@@ -281,8 +281,14 @@ async function boot(D: PlazaDeps) {
   const r = await client!.connect(D.id, D.nick());
   if (!active || !client) return; // 入場中被取消
   if (!r.ok) {
-    D.toast(`廣場連不上：${zhErr(r.err)}`, '#ff8a7a');
-    await abortEnter(D, r.err);
+    // 連不上也照樣進廣場：先離線逛，背景持續重連
+    netDown = true;
+    D.toast('廣場暫時連不上，先離線逛，連上會自動同步', '#ffb08a');
+    setHud('離線中　連上後就能坐下');
+    D.enterWalk();
+    showRoamUi();
+    setNetBanner('連線失敗，正在重連…');
+    scheduleManualReconnect(3000);
     return;
   }
   snap = r.snap ?? null;

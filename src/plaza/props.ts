@@ -192,7 +192,7 @@ export function makePlazaGrill(
     lowDetail,
     flames: false,
     sparks: false,
-    smoke: 0,
+    smoke: 0.6,
     flat: true,
     pulseSpeed: 0.32,
     chunks: lowDetail ? 26 : 42,
