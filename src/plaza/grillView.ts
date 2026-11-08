@@ -51,16 +51,21 @@ export function createGrillView(parent: THREE.Object3D) {
   }
 
   /** 依伺服器 openAt 剩餘時間對齊本機 performance 時鐘 */
-  function armLocalOpen(g: GrillMesh, o: PlazaGrillOyster) {
+  function armLocalOpen(g: GrillMesh, o: PlazaGrillOyster, fresh: boolean) {
     if (o.state !== 'cooking') {
       g.localOpenAt = 0;
       return;
     }
-    const remain = Math.max(0, o.openAt - Date.now());
+    // 已在倒數就不重算（重複廣播不可讓時間跳）
+    if (g.localOpenAt > 0) return;
+    const dur = Math.max(0, o.openAt - o.placedAt);
+    // 剛放上（即時事件）：直接用烤製時長倒數，不拿手機時鐘比伺服器時間（時鐘偏差會讓它秒開）
+    // 進場同步舊蚵：才用時鐘估剩餘，但不超過烤製時長
+    const remain = fresh ? dur : Math.min(dur, Math.max(0, o.openAt - Date.now()));
     g.localOpenAt = performance.now() + remain;
   }
 
-  function upsert(o: PlazaGrillOyster) {
+  function upsert(o: PlazaGrillOyster, fresh = true) {
     if (o.state === 'taken') { remove(o.id); return; }
     let g = byId.get(o.id);
     if (!g) {
@@ -105,7 +110,7 @@ export function createGrillView(parent: THREE.Object3D) {
       const c = pileCenter(o.pileId);
       g.root.position.set(c.x + o.lx, GRILL_GRATE_Y + 0.04, c.z + o.lz);
     }
-    armLocalOpen(g, o);
+    armLocalOpen(g, o, fresh);
     // 進場時若已過期，立刻當 open（不必等漏掉的廣播）
     if (o.state === 'cooking' && performance.now() >= g.localOpenAt) {
       g.data = { ...o, state: 'open' };
@@ -148,7 +153,7 @@ export function createGrillView(parent: THREE.Object3D) {
   function syncAll(list: PlazaGrillOyster[]) {
     const keep = new Set(list.map(o => o.id));
     for (const id of [...byId.keys()]) if (!keep.has(id)) remove(id);
-    for (const o of list) upsert(o);
+    for (const o of list) upsert(o, false);
   }
 
   function tick(now = performance.now()) {
