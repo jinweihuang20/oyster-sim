@@ -1435,3 +1435,8 @@ body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
 #rotTip .rtHand{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.78);border:1.5px solid rgba(255,255,255,.95);box-shadow:0 3px 10px rgba(0,0,0,.25);animation:rtSwipe 1.6s ease-in-out infinite}
 #rotTip .rtTxt{padding:5px 11px;border-radius:999px;background:rgba(22,28,36,.6);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:13px;white-space:nowrap}
 @keyframes rtSwipe{0%,100%{transform:translateX(-34px) scale(.92)}50%{transform:translateX(34px) scale(1)}}
+
+/* 分頁選中狀態統一：未選淡灰、選中實心藍（雜貨店、排行榜） */
+body #shopTabs button,body #lbTabs button,body #lbView button{background:#eef0f2!important;background-image:none!important;color:#5b6570!important;border:1.5px solid #d5dadf!important;box-shadow:none!important;opacity:1!important;font-weight:500}
+body #shopTabs button.on,body #lbTabs button.on,body #lbView button.on{background:#2a5a86!important;color:#fff!important;border-color:#2a5a86!important;font-weight:700;box-shadow:0 2px 6px rgba(42,90,134,.35)!important}
+body #shopTabs button.hasNew:not(.on){box-shadow:inset 0 0 0 2px #ff5a3a!important}
