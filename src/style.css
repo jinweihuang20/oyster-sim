@@ -1472,3 +1472,6 @@ body #shopTabs button.hasNew:not(.on){box-shadow:inset 0 0 0 2px #ff5a3a!importa
 #moonAim .maT{background:none!important;border:0!important;box-shadow:none!important;animation:none!important;filter:none!important;color:#e0302a!important;padding:0!important}#moonAim .maT svg{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.25)}#moonAim .maT span{margin-top:4px}
 
 #medList.show{z-index:80!important}
+
+#seatCard.mini{top:auto;bottom:calc(var(--sa-bottom) + 210px);max-width:none;display:none;flex-direction:column;align-items:center;gap:6px;padding:8px 10px 10px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(20,24,30,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:12px;color:rgba(255,255,255,.8);white-space:nowrap}
+#seatCard.mini.on{display:flex}#seatCard.mini #sitBtn{margin:0;min-height:40px;padding:0 16px;border-radius:999px;background:#2a5a86;color:#fff;border:0;box-shadow:none}

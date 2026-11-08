@@ -178,7 +178,8 @@ export function walkStep(dt: number) {
     nearSeat = null; D.stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
     const n = D.plazaNearSeat();
     D.on('seatCard', !!n);
-    if (n) D.$('seatInfo').innerHTML = `<b>🪑 第 ${n.pileId + 1} 堆 · 座 ${n.slot + 1}</b><br><span style="color:#9be37a">空位可坐，坐下開始剝蚵</span>`;
+    D.$('seatCard').classList.add('mini');
+    if (n) D.$('seatInfo').textContent = `第 ${n.pileId + 1} 堆・座 ${n.slot + 1}`;
     return;
   }
   let best: Seat | null = null, bd = 0.85;
@@ -188,7 +189,7 @@ export function walkStep(dt: number) {
     if (d < bd) { bd = d; best = st; }
   });
   if (best !== nearSeat) {
-    nearSeat = best; D.on('seatCard', !!best);
+    nearSeat = best; D.on('seatCard', !!best); D.$('seatCard').classList.remove('mini');
     if (best) {
       const st = best as Seat;
       D.$('seatInfo').innerHTML = `<b>🪑 ${st.n}</b>${st.id === D.seatNow().id ? '（這馬的位）' : ''}<br><span style="color:#9be37a">＋ ${st.pro}</span><br><span style="color:#ff8a7a">－ ${st.con}</span>`;
