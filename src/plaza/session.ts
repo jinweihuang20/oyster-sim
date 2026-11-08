@@ -60,6 +60,7 @@ export type PlazaDeps = {
   onShellBlocked?: (e: PlazaShellEvent) => void;
   /** 有人被殼砸中：全場噴血 */
   onShellHit?: (e: PlazaShellHitEvent) => void;
+  onNpcMoon?: (e: any) => void;
   /** 偷肉結果（含自己被偷） */
   onStealResult?: (e: PlazaStealEvent) => void;
   /** 共烤蚵同步 */
@@ -161,6 +162,31 @@ export async function plazaShellReflect(
 export async function plazaShellBlocked(originalThrowerConnId: string) {
   if (!client?.connected) return { ok: false as const, err: 'no_conn' };
   return client.shellBlocked(originalThrowerConnId);
+}
+
+/** 飛彈鐵拳炸阿婆（伺服器先到先算） */
+/** 離線測試用本機阿婆（只在連不到伺服器時出現，其他人看不到） */
+const LOCAL_AMA = 'local-ama';
+let localAmaOn = false, localAmaMoonUntil = 0;
+function localAmaPlayer(phase: string) {
+  return normPlayer({ connId: LOCAL_AMA, pid: 'npc-local', isNpc: true, nick: '阿婆', pileId: 1, slot: SLOTS_PER_PILE, seated: true, phase });
+}
+setInterval(() => {
+  const want = !!(active && netDown && view);
+  if (want && !localAmaOn) { localAmaOn = true; localAmaMoonUntil = 0; view!.upsert(localAmaPlayer('pick'), '\0'); }
+  else if (!want && localAmaOn) { localAmaOn = false; try { view?.remove(localAmaPlayer('pick')); } catch { /* ignore */ } }
+  else if (localAmaOn && localAmaMoonUntil && Date.now() > localAmaMoonUntil) { localAmaMoonUntil = 0; view!.setPhase(localAmaPlayer('pick')); }
+}, 500);
+export async function plazaMoonNpc(connId: string, from: { x: number; y: number; z: number }) {
+  if (connId === LOCAL_AMA) {
+    if (!localAmaOn || localAmaMoonUntil) return { ok: false as const, err: 'gone' };
+    localAmaMoonUntil = Date.now() + 30_000; view?.setPhase(localAmaPlayer('moon')); view?.moonLaunch(connId, 700, from.x, from.z);
+    void from; return { ok: true as const };
+  }
+  if (!client?.connected) return { ok: false as const, err: 'no_conn' };
+  const r = await client.moonNpc(connId, from.x, from.y, from.z);
+  if (r.ok) view?.moonLaunch(connId, 700, from.x, from.z);
+  return r;
 }
 
 /** 被殼砸中：廣播噴血點給廣場所有人 */
@@ -431,6 +457,7 @@ function wireClient(D: PlazaDeps) {
     onShellInbound: (e) => { try { D.onShellInbound?.(e); } catch (err) { console.error('onShellInbound', err); } },
     onShellReflectHit: (e) => { try { D.onShellReflectHit?.(e); } catch (err) { console.error('onShellReflectHit', err); } },
     onShellBlocked: (e) => { try { D.onShellBlocked?.(e); } catch (err) { console.error('onShellBlocked', err); } },
+    onNpcMoon: (e) => { try { view?.moonLaunch(e.connId, 700, e.fromX, e.fromZ); D.onNpcMoon?.(e); } catch (err) { console.error('onNpcMoon', err); } },
     onShellHit: (e) => { try { D.onShellHit?.(e); } catch (err) { console.error('onShellHit', err); } },
     onStealResult: (e) => { try { D.onStealResult?.(e); } catch (err) { console.error('onStealResult', err); } },
     onGrillUpsert: (o) => {

@@ -921,7 +921,7 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 @keyframes pzLoadSlide{0%{transform:translateX(-100%)}100%{transform:translateX(280%)}}
 
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
-body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #medBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
+body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
 /* 電腦廣場：視角用 V，隱藏右下視角鈕 */
 @media (pointer:fine){
   body.plazaMode #camBtn,body.plazaRoam #camBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
@@ -1464,3 +1464,9 @@ body #shopTabs button.hasNew:not(.on){box-shadow:inset 0 0 0 2px #ff5a3a!importa
 #crouchBtn .key,#lieBtn .key{display:none}
 @media (pointer:fine){#crouchBtn.on,#lieBtn.on{display:none!important}}
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#crouchBtn.on{bottom:calc(var(--sa-bottom, 0px) + 188px)!important}#lieBtn.on{bottom:calc(var(--sa-bottom, 0px) + 244px)!important}}
+
+#moonAim .maEnd{display:none}#moonAim.pz .maX{display:none}#moonAim.pz .maEnd{display:block;pointer-events:auto;position:absolute;left:0;right:0;top:calc(var(--sa-top) + 168px);margin:0 auto;width:max-content;padding:9px 22px;font-size:16px;font-weight:700;color:#fff;background:rgba(20,26,34,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.35);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+
+
+
+#moonAim .maT{background:none!important;border:0!important;box-shadow:none!important;animation:none!important;filter:none!important;color:#e0302a!important;padding:0!important}#moonAim .maT svg{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.35);border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.25)}#moonAim .maT span{margin-top:4px}

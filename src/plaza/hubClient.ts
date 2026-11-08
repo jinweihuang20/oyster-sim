@@ -19,6 +19,7 @@ export type PlazaHubHandlers = {
   onShellBlocked?: (e: PlazaShellEvent) => void;
   /** 有人被殼砸中：全場噴血 */
   onShellHit?: (e: PlazaShellHitEvent) => void;
+  onNpcMoon?: (e: any) => void;
   onStealResult?: (e: PlazaStealEvent) => void;
   /** 共烤蚵狀態更新（放上／烤開／掀殼） */
   onGrillUpsert?: (o: PlazaGrillOyster) => void;
@@ -191,6 +192,7 @@ export class PlazaClient {
     conn.on('ShellBlocked', (e: any) => {
       try { this.handlers.onShellBlocked?.(normShell(e)); } catch (err) { console.error('ShellBlocked', err); }
     });
+    conn.on('NpcMoon', (e: any) => { try { this.handlers.onNpcMoon?.(e); } catch (err) { console.error('NpcMoon', err); } });
     conn.on('ShellHit', (e: any) => {
       try { this.handlers.onShellHit?.(normShellHit(e)); } catch (err) { console.error('ShellHit', err); }
     });
@@ -340,6 +342,11 @@ export class PlazaClient {
   }
 
   /** 被殼砸中：廣播噴血點 */
+  async moonNpc(connId: string, x: number, y: number, z: number) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn' };
+    try { return await this.conn.invoke<{ ok: boolean; err?: string }>('MoonNpc', connId, x, y, z); } catch (e: any) { return { ok: false as const, err: e?.message || 'moon_fail' }; }
+  }
+
   async shellHit(x: number, y: number, z: number) {
     if (!this.conn) return { ok: false as const, err: 'no_conn' };
     try {

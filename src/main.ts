@@ -39,7 +39,7 @@ import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaPileObs, plazaRandomSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill,
-  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
+  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen, seatPose, plazaPushOutfit,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
@@ -2903,17 +2903,76 @@ moonAimEl.querySelectorAll('.maX').forEach(b => b.addEventListener('pointerdown'
 moonAimEl.querySelector('.maX')!.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonAimEnd(); });
 function moonStart() {
   if (state !== 'play' || tut || !(save.meds.moon > 0)) return;
-  if (plazaMode) { toast('廣場不能用飛彈鐵拳', '#ffb08a'); return; }
+  if (plazaMode) { plazaMoonStart(); return; }
   if (moonUsed >= MOON_MAX) { toast(`這一工已經送 ${MOON_MAX} 位上月球了，下一工再用`, '#ffb08a'); return; }
   if (!npcs.length) { toast('旁邊已經沒有人了', '#ffb08a'); return; }
   $('medList').classList.remove('show'); if (document.pointerLockElement) document.exitPointerLock();
-  moonAimOn = true; moonAimEl.classList.add('on'); moonAimEl.querySelectorAll('.maT').forEach(b => b.remove());
+  moonAimOn = true; moonAimEl.classList.add('on', 'pz'); ensureMoonEnd(); moonAimEl.querySelectorAll('.maT').forEach(b => b.remove());
   for (const n of npcs) { const b = document.createElement('button'); b.className = 'maT'; b.innerHTML = `<svg viewBox="0 0 40 40" width="56" height="56" fill="none" stroke="currentColor" stroke-width="3"><circle cx="20" cy="20" r="13"/><circle cx="20" cy="20" r="3"/><path d="M20 1v10M20 29v10M1 20h10M29 20h10"/></svg><span>${esc(n.name)}</span>`; (b as any)._n = n;
     b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonFire(n); }); moonAimEl.appendChild(b); }
   moonAimPos();
 }
 function moonTapAt(x: number, y: number) { let best: Npc | null = null, bd = 70; moonAimEl.querySelectorAll<HTMLElement>('.maT').forEach(b => { const r = b.getBoundingClientRect(); const d = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y); if (d < bd) { bd = d; best = (b as any)._n; } }); if (best) moonFire(best); }
-function moonAimEnd() { moonAimOn = false; moonAimEl.classList.remove('on'); }
+let plazaAimOn = false;
+function ensureMoonEnd() { if (!moonAimEl.querySelector('.maEnd')) { const eb = document.createElement('button'); eb.className = 'maEnd'; eb.textContent = '結束瞄準'; eb.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); }); eb.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonAimEnd(); }); moonAimEl.appendChild(eb); } }
+function plazaMoonStart() {
+  $('medList').classList.remove('show'); if (document.pointerLockElement) document.exitPointerLock();
+  plazaAimOn = true; moonAimEl.classList.add('on', 'pz'); ensureMoonEnd(); moonAimEl.querySelectorAll('.maT').forEach(b => b.remove());
+  plazaAimTick();
+}
+function plazaAimTick() {
+  if (!plazaAimOn) return;
+  if (!plazaMode || state !== 'play' || !(save.meds.moon > 0)) { moonAimEnd(); return; }
+  const cam = viewCam(); const seen = new Set<string>();
+  for (const t of plazaAimTargets()) {
+    if (!t.isNpc || t.phase === 'moon') continue;
+    const p = new THREE.Vector3(t.head.x, t.head.y + 0.25, t.head.z).project(cam);
+    if (!(p.z < 1 && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.95)) continue;
+    seen.add(t.connId);
+    let b = moonAimEl.querySelector<HTMLElement>(`.maT[data-c="${t.connId}"]`);
+    if (!b) {
+      b = document.createElement('button'); b.className = 'maT'; b.dataset.c = t.connId; for (const [k, v] of [['margin', '-24px 0 0 -40px'], ['padding', '0'], ['color', '#e0302a'], ['backdrop-filter', 'none'], ['-webkit-backdrop-filter', 'none'], ['animation', 'none'], ['filter', 'none'], ['display', 'flex'], ['align-items', 'center'], ['justify-content', 'center'], ['outline', 'none']]) b.style.setProperty(k, v, 'important');
+      b.innerHTML = '<svg viewBox="0 0 40 40" width="56" height="56" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="20" cy="20" r="13"/><path d="M20 3v8M20 29v8M3 20h8M29 20h8"/></svg>';
+      b.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
+      b.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); const tt = (b as any)._t; if (tt) plazaMoonFire(tt); });
+      moonAimEl.appendChild(b);
+    }
+    (b as any)._t = t; b.style.left = `${(p.x * .5 + .5) * innerWidth}px`; b.style.top = `${(-p.y * .5 + .5) * innerHeight}px`;
+  }
+  moonAimEl.querySelectorAll<HTMLElement>('.maT').forEach(b => { if (!seen.has(b.dataset.c || '')) b.remove(); });
+  const tip = moonAimEl.querySelector<HTMLElement>('.maTip'); if (tip) tip.textContent = seen.size ? '點阿婆身上的準心發射' : '視野裡沒有阿婆，走走看';
+}async function plazaMoonFire(t: { connId: string; nick: string; head: { x: number; y: number; z: number } }) {
+  if (!plazaAimOn || !(save.meds.moon > 0)) return;
+  moonAimEnd();
+  const p0 = viewCam().localToWorld(new THREE.Vector3(0.18, -0.18, -0.45));
+  const r = await plazaMoonNpc(t.connId, { x: p0.x, y: p0.y, z: p0.z });
+  if (!r.ok) { toast(r.err === 'gone' ? '阿婆已經飛走了' : plazaZhErr(r.err), '#ffb08a'); return; }
+  save.meds.moon--; persist(); achBump('moon'); drawMeds(); track('item_use', { item: 'moonpunch' });
+  if (ac) { SFX.whoosh(); tone(220, 0.5, 0.15, 'sawtooth', 0.05, 900); }
+  toast(`把你媽的愛送上月球！目標：${t.nick}`, '#ffd25a');
+  plazaMissileFx(p0, new THREE.Vector3(t.head.x, t.head.y, t.head.z));
+}
+function plazaMissileFx(p0: THREE.Vector3, p1: THREE.Vector3) {
+  const mis = new THREE.Group();
+  mesh(new THREE.SphereGeometry(0.07, 10, 8), mat(0xe8b896), [0, 0, -0.08], mis).scale.set(1, 0.85, 1.1);
+  mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.22, 10), mat(0xc83a2a, { metalness: 0.4 }), [0, 0, 0.08], mis).rotation.x = Math.PI / 2;
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.22, 8), new THREE.MeshBasicMaterial({ color: 0xffa020, transparent: true, opacity: 0.9, fog: false })); flame.rotation.x = -Math.PI / 2; flame.position.z = 0.3; mis.add(flame);
+  scene.add(mis); mis.position.copy(p0);
+  let t = 0, smokeT = 0; const dur = 0.7;
+  moonFx.push(dt => {
+    t += dt; const k = Math.min(1, t / dur);
+    const pos = new THREE.Vector3().lerpVectors(p0, p1, k); pos.y += Math.sin(k * Math.PI) * 0.25; mis.lookAt(pos.clone().multiplyScalar(2).sub(mis.position)); mis.position.copy(pos);
+    flame.scale.set(1, 0.7 + Math.random() * 0.6, 1);
+    if ((smokeT -= dt) <= 0) { smokeT = 0.04; const s = new THREE.Mesh(smokeGeo, new THREE.MeshBasicMaterial({ color: 0x9a9a9a, transparent: true, opacity: 0.7 })); s.position.copy(flame.getWorldPosition(new THREE.Vector3())); scene.add(s); let st = 0; moonFx.push(d => { st += d; s.scale.setScalar(1 + st * 2.2); (s.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.7 - st); if (st >= 0.7) { scene.remove(s); return false; } return true; }); }
+    if (k < 1) return true;
+    scene.remove(mis);
+    if (ac) { noise(0.6, 900, 0.7, 80); tone(70, 0.5, 0.4, 'sine', 0, 35); }
+    const ex = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffd040, transparent: true, opacity: 1, fog: false })); ex.position.copy(p1); scene.add(ex);
+    let et = 0; moonFx.push(d => { et += d; ex.scale.setScalar(1 + et * 9); (ex.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - et / 0.45); if (et >= 0.45) { scene.remove(ex); return false; } return true; });
+    return false;
+  });
+}
+function moonAimEnd() { moonAimOn = false; plazaAimOn = false; moonAimEl.classList.remove('pz'); moonAimEl.querySelectorAll('.maT').forEach(b => b.remove()); moonAimEl.classList.remove('on'); }
 function moonAimPos() {
   const cam = viewCam(); moonAimEl.querySelectorAll<HTMLElement>('.maT').forEach(b => { const n = (b as any)._n as Npc; const p = worldOf(n.head).project(cam); if (p.z > 1) { p.x = -Math.sign(p.x || 1); p.y = -0.6; }
     b.style.display = ''; b.style.left = `${clamp((p.x * .5 + .5) * innerWidth, 36, innerWidth - 36)}px`; b.style.top = `${clamp((-p.y * .5 + .5) * innerHeight, 90, innerHeight - 60)}px`; });
@@ -2921,6 +2980,7 @@ function moonAimPos() {
 const starTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d')!; const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, '#fff'); g.addColorStop(0.25, '#fff6b0'); g.addColorStop(1, 'rgba(255,240,150,0)'); x.fillStyle = g; x.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r = i % 2 ? 9 : 32; x.lineTo(32 + Math.cos(a) * r, 32 + Math.sin(a) * r); } x.fill(); return new THREE.CanvasTexture(c); })();
 const smokeGeo = new THREE.SphereGeometry(0.05, 6, 5);
 function moonFire(n: Npc) {
+  if ((n as any)._pz) { plazaMoonFire((n as any)._pz); return; }
   if (!moonAimOn || !npcs.includes(n) || !(save.meds.moon > 0)) return;
   moonAimEnd(); save.meds.moon--; moonUsed++; persist(); achBump('moon'); drawMeds(); track('item_use', { item: 'moonpunch' });
   moonGone(n); punchT = 0.5; if (ac) { SFX.whoosh(); tone(220, 0.5, 0.15, 'sawtooth', 0.05, 900); }
@@ -2967,7 +3027,7 @@ function moonHit(n: Npc) {
 function moonTick(dt: number) {
   for (let i = moonFx.length - 1; i >= 0; i--) if (!moonFx[i](dt)) moonFx.splice(i, 1);
   if (punchT > 0) { punchT = Math.max(0, punchT - dt); const k = Math.sin((1 - punchT / 0.5) * Math.PI); handR.position.z -= k * 0.35; handR.position.y += k * 0.08; handR.position.x -= k * 0.06; }
-  if (moonAimOn) { if (state !== 'play') moonAimEnd(); else moonAimPos(); }
+  if (moonAimOn) { if (state !== 'play') moonAimEnd(); else moonAimPos(); } plazaAimTick();
 }
 function renderItemShop() {
   const it = ITEMS[0]; const own = save.meds[it.id] ?? 0;
@@ -3214,6 +3274,7 @@ function launchPlaza() {
     },
     onShellBlocked: (e) => { resolvePlazaBlocked(e); },
     onShellHit: (e) => { resolvePlazaShellHitFx(e); },
+    onNpcMoon: (e: any) => { plazaMissileFx(new THREE.Vector3(e.fromX, e.fromY, e.fromZ), new THREE.Vector3(e.toX, e.toY, e.toZ)); if (e.by) toast(`${e.by} 把阿婆送上月球了`, '#ffd25a'); },
     onGrillTaken: (e) => { try { onPlazaGrillTaken(e); } catch (err) { console.error(err); } },
     onStealResult: (e) => {
       const me = plazaConnId();
@@ -4773,7 +4834,7 @@ function plazaPose(p: 'crouch' | 'lie') { if (!plazaMode || !walking || jumpT > 
     if (bodyPose === 'lie') { let mv = Math.abs(joy.x) > 0.15 || Math.abs(joy.y) > 0.15; for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) mv = true; if (mv) setBodyPose(''); }
     poseK += ((bodyPose ? 1 : 0) - poseK) * Math.min(1, dt * 10);
     const pz = plazaMode && walking && state === 'play';
-    on('jumpBtn', pz); on('crouchBtn', pz); on('lieBtn', pz); if (pz && COARSE) { const jb = document.getElementById('jumpBtn')!.getBoundingClientRect(); let b = innerHeight - jb.top + 8; for (const id of ['crouchBtn', 'lieBtn']) { const el = document.getElementById(id)!; const s = el.style; s.setProperty('position', 'fixed', 'important'); s.setProperty('right', (innerWidth - jb.right) + 'px', 'important'); s.setProperty('left', 'auto', 'important'); s.setProperty('top', 'auto', 'important'); s.setProperty('width', jb.width + 'px', 'important'); s.setProperty('height', jb.height + 'px', 'important'); s.setProperty('bottom', b + 'px', 'important'); s.setProperty('z-index', '30', 'important'); b += jb.height + 8; } }
+    on('jumpBtn', pz); if (pz && state === 'play') on('medBtn', true); on('crouchBtn', pz); on('lieBtn', pz); if (pz && COARSE) { const jb = document.getElementById('jumpBtn')!.getBoundingClientRect(); let b = innerHeight - jb.top + 8; for (const id of (state === 'play' ? ['crouchBtn', 'lieBtn', 'medBtn'] : ['crouchBtn', 'lieBtn'])) { const el = document.getElementById(id)!; const s = el.style; s.setProperty('position', 'fixed', 'important'); s.setProperty('right', (innerWidth - jb.right) + 'px', 'important'); s.setProperty('left', 'auto', 'important'); s.setProperty('top', 'auto', 'important'); s.setProperty('width', jb.width + 'px', 'important'); s.setProperty('height', jb.height + 'px', 'important'); s.setProperty('bottom', b + 'px', 'important'); s.setProperty('z-index', '30', 'important'); b += jb.height + 8; } (window as any).__mbFix = 1; } else if ((window as any).__mbFix) { (window as any).__mbFix = 0; const s = document.getElementById('medBtn')!.style; for (const k of ['position', 'right', 'left', 'top', 'width', 'height', 'bottom', 'z-index']) s.removeProperty(k); }
     requestAnimationFrame(step);
   };
   requestAnimationFrame(step);

@@ -128,6 +128,7 @@ export type PlazaWorldView = {
   grill: PlazaGrillView;
   /** 坐下遠端玩家的瞄準點（丟殼／偷肉） */
   aimTargets: () => PlazaAimTarget[];
+  moonLaunch: (connId: string, delayMs?: number, fromX?: number, fromZ?: number) => void;
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) => void;
   setSelfPose: (x: number, z: number, yaw: number, seated: boolean) => void;
@@ -247,7 +248,7 @@ export function createPlazaWorldView(
   function aimTargets(): PlazaAimTarget[] {
     const out: PlazaAimTarget[] = [];
     for (const r of remotes.values()) {
-      if (!r.seated || r.pileId < 0) continue;
+      if (!r.seated || r.pileId < 0 || (r.phase || '') === 'moon') continue;
       const h = headWorld(r, new THREE.Vector3());
       const b = bowlWorld(r, new THREE.Vector3());
       out.push({
@@ -269,7 +270,11 @@ export function createPlazaWorldView(
     return out;
   }
 
-  function hashPid(pid: string) {
+  function moonLaunch(connId: string, delayMs = 0, fromX?: number, fromZ?: number) {
+  for (const r of remotes.values()) if ((r.connId || r.key) === connId) { const o = r.rig.outer.position; (r as any).mt = performance.now() + delayMs; (r as any).mz = fromX == null || fromZ == null ? Math.random() * 6.28 : Math.atan2(o.x - fromX, o.z - fromZ); }
+}
+
+function hashPid(pid: string) {
     let h = 0; for (let i = 0; i < pid.length; i++) h = (h * 31 + pid.charCodeAt(i)) | 0;
     return h;
   }
@@ -1098,8 +1103,13 @@ export function createPlazaWorldView(
       r.rig.outer.rotation.y = r.yaw;
       r.rig.outer.rotation.x = 0;
       { const ph = r.seated ? '' : (r.phase || ''); const want = ph === 'crouch' || ph === 'lie' ? 1 : 0; if (want) rj.pz = ph; rj.pk = (rj.pk ?? 0) + (want - (rj.pk ?? 0)) * 0.18; if (rj.pk > 0.001 && rj.pz && !r.moving) { r.rig.legL.rotation.x = r.rig.legR.rotation.x = 0; r.rig.shinL.rotation.x = r.rig.shinR.rotation.x = 0; } if (rj.pk > 0.001 && rj.pz) applyPlazaBodyPose(r.rig, rj.pz, rj.pk); }
+      { const now = performance.now(); const mu = rj.mt ? (now - rj.mt) / 1800 : -1; const inMoon = (r.phase || '') === 'moon'; r.rig.outer.rotation.z = 0;
+        if (mu >= 0 && mu < 1) { r.rig.outer.position.x += Math.sin(rj.mz) * 6 * mu; r.rig.outer.position.z += Math.cos(rj.mz) * 6 * mu; r.rig.outer.position.y += 18 * mu * mu + 4 * mu; r.rig.outer.rotation.x = mu * 14; r.rig.outer.rotation.z = mu * 9; r.rig.outer.visible = true; rj.mh = true; }
+        else if (inMoon && !(mu < 0 && rj.mt && now < rj.mt)) { r.rig.outer.visible = false; rj.mh = true; }
+        else if (rj.mh && !inMoon) { r.rig.outer.visible = true; rj.mh = false; rj.mt = 0; }
+        else if (mu >= 1 && !inMoon) { rj.mt = 0; rj.mh = false; r.rig.outer.visible = true; } }
       r.rig.outer.updateMatrixWorld(true);
-      const show = r.rig.outer.visible && !r.awaitingPose;
+      const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       r.tag.sprite.visible = show;
       if (show) placeAboveHead(r.tag.sprite, r.rig.head, 0.22);
       if (r.bubUntil > t && show) {
@@ -1145,7 +1155,7 @@ export function createPlazaWorldView(
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, aimTargets, showChat, setSelfPose, playThrowFx, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, aimTargets, moonLaunch, showChat, setSelfPose, playThrowFx, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {
