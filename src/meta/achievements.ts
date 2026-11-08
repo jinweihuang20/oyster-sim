@@ -60,6 +60,7 @@ export const ACHS: AchDef[] = [
   { id: 'nohit', cat: 'war', n: '毫髮無傷', d: '完成一工都沒被殼丟中（至少入碗 5 顆）', t: [1, 10, 50], v: () => AS('nh'), unit: '工' },
   { id: 'scared', cat: 'war', n: '阿婆們怕你了', d: '連續擋下 3 次，讓阿婆們怕你', t: [1, 10, 100], v: () => AS('sc'), unit: '次' },
   { id: 'moon', cat: 'war', n: '送上月球', d: '把鄰居送上月球', t: [1, 10, 50], v: () => AS('moon'), hint: '雜貨店有一樣很兇的道具', unit: '位' },
+  { id: 'pzmoon', cat: 'war', n: '廣場飛彈手', d: '在廣場用飛彈炸飛阿婆', t: [200, 500, 1000], v: () => AS('pzmoon'), hint: '廣場的阿婆也炸得到', unit: '次' },
   { id: 'queen', cat: 'war', n: '今日剝蚵冠軍', d: '拿下當天剝蚵冠軍', t: [1, 10, 100], v: () => H.save.queen, unit: '次' },
   { id: 'peace', cat: 'war', n: '和平主義', d: '一整工都沒對人丟殼（丟地上／自動丟掉不算）', t: [1, 10, 50], v: () => AS('peace'), unit: '工' },
   { id: 'locs', cat: 'travel', n: '跑遍蚵寮', d: '在不同地點上過工', t: [2, 3, 4], v: () => achS().locs.length, unit: '個地點' },
@@ -103,6 +104,7 @@ const ACH_TITLES: { n: string; d: string; ok: () => boolean }[] = [
   { n: '圖鑑博士', d: '「圖鑑收集」金牌', ok: () => (achS().got.dex ?? 0) >= 3 },
   { n: '鐵打的蚵工', d: '「上工天數」金牌', ok: () => (achS().got.days ?? 0) >= 3 },
   { n: '雜貨店股東', d: '「雜貨店常客」金牌', ok: () => (achS().got.owned ?? 0) >= 3 },
+  { n: '廣場炸彈客', d: '「廣場飛彈手」金牌', ok: () => (achS().got.pzmoon ?? 0) >= 3 },
   { n: '活動常客', d: '「活動常客」銀牌', ok: () => (achS().got.ev ?? 0) >= 2 },
 ];
 export const achTitle = () => { const t = achS().title; return t && ACH_TITLES.some(x => x.n === t && x.ok()) ? t : ''; };

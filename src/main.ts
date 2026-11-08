@@ -2948,7 +2948,7 @@ function plazaAimTick() {
   const p0 = viewCam().localToWorld(new THREE.Vector3(0.18, -0.18, -0.45));
   const r = await plazaMoonNpc(t.connId, { x: p0.x, y: p0.y, z: p0.z });
   if (!r.ok) { toast(r.err === 'gone' ? '阿婆已經飛走了' : plazaZhErr(r.err), '#ffb08a'); return; }
-  save.meds.moon--; persist(); achBump('moon'); drawMeds(); track('item_use', { item: 'moonpunch' });
+  save.meds.moon--; achS().st.pzmoon = (achS().st.pzmoon ?? 0) + 1; persist(); achBump('moon'); drawMeds(); track('item_use', { item: 'moonpunch' });
   if (ac) { SFX.whoosh(); tone(220, 0.5, 0.15, 'sawtooth', 0.05, 900); }
   toast(`把你媽的愛送上月球！目標：${t.nick}`, '#ffd25a');
   plazaMissileFx(p0, new THREE.Vector3(t.head.x, t.head.y, t.head.z));
