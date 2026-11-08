@@ -1417,3 +1417,6 @@ body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
 #shopList table.kt td small[style*="ff8a7a"]{color:#c0503f!important;display:block}
 #shopList table.kt b[style*="9be37a"]{color:#2f8a3a!important}
 #shopList table.kt b[style*="ff8a7a"]{color:#c0503f!important}
+
+/* 成就提示：不透明 */
+#achBan{background:#fbf7ee!important;opacity:1!important;-webkit-backdrop-filter:none;backdrop-filter:none;border:1px solid #e2d3a8!important;box-shadow:0 8px 24px rgba(10,20,35,.28),0 2px 6px rgba(10,20,35,.12)!important;color:#1f2a36!important}
