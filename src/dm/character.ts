@@ -331,9 +331,9 @@ export function posePlazaStallKeeper(rig: PlayerRig, t: number, ph: number) {
 }
 /** 廣場蹲／躺姿勢：k 0..1 平滑；在擺臂之後呼叫（outer.rotation.order 需為 YXZ） */
 export function applyPlazaBodyPose(rig: PlayerRig, pose: string, k: number) {
-  if (k <= 0.001) return;
+  if (k <= 0.001) { (rig as any).torso && Math.abs((rig as any).torso.rotation.x) < 0.4 && pose === 'crouch' && ((rig as any).torso.rotation.x = 0); return; }
   const r: any = rig;
-  if (pose === 'lie') {
+  if (pose === 'lie') { (rig as any).torso && ((rig as any).torso.rotation.x = 0);
     rig.outer.rotation.x = Math.PI / 2 * k;
     rig.outer.position.y += 0.16 * k;
     rig.legL.rotation.x *= 1 - k; rig.legR.rotation.x *= 1 - k;
