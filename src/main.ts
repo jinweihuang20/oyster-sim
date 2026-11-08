@@ -4359,6 +4359,7 @@ function camTick(dt: number) {
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
       const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = tpDist * Math.cos(el);
 const cp = new THREE.Vector3(walkPos.x - fx * hd, 1.4 + tpDist * Math.sin(el) + jumpY * 0.35 - poseK * (lastPose === 'lie' ? 0.7 : 0.35), walkPos.z - fz * hd);
+      { const CAP = 2.7, R = 10.9, hy = 1.4; if (cp.y > CAP) { const k = (CAP - hy) / (cp.y - hy); const ix = walkPos.x + (cp.x - walkPos.x) * k, iz = walkPos.z + (cp.z - walkPos.z) * k; if (Math.abs(ix) < R && Math.abs(iz) < R) { cp.x = ix; cp.z = iz; cp.y = CAP; } } }
       if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
       { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, 1.0, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
       tpCam.updateMatrixWorld(); return;
