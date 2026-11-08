@@ -33,6 +33,8 @@ export type WorldLabelOpts = {
   depthTest?: boolean;
   /** 真人／NPC 樣式（名牌與泡泡皆用） */
   nameTone?: WorldLabelNameTone;
+  /** 泡泡依文字自訂底色／邊框／字色 */
+  bubbleTint?: (text: string) => { fill: string; line: string; text: string } | null;
 };
 
 /** 頭頂名牌／對話泡泡：Canvas 貼到 Sprite，跟隨 3D，不寫 DOM */
@@ -114,12 +116,13 @@ export function makeWorldLabel(
     } else {
       roundRect(ctx, ox + 1, oy + 1, w - 2, h - 10, 12);
       const npcB = nameTone === 'npc';
-      const bFill = npcB ? 'rgba(62,68,76,0.82)' : '#ffffff';
-      const bLine = npcB ? 'rgba(62,68,76,0.82)' : '#2a5a86';
+      const tint = opts.bubbleTint?.(text) ?? null;
+      const bFill = tint ? tint.fill : npcB ? 'rgba(62,68,76,0.82)' : '#ffffff';
+      const bLine = tint ? tint.line : npcB ? 'rgba(62,68,76,0.82)' : '#2a5a86';
       ctx.fillStyle = bFill;
       ctx.fill();
       ctx.strokeStyle = bLine;
-      ctx.lineWidth = npcB ? 1 : 2.5;
+      ctx.lineWidth = tint || npcB ? 1 : 2.5;
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(ox + w / 2 - 8, oy + h - 10);
@@ -130,7 +133,7 @@ export function makeWorldLabel(
       ctx.fill();
       ctx.strokeStyle = bLine;
       ctx.stroke();
-      ctx.fillStyle = npcB ? '#e4e8ec' : '#1f2a35';
+      ctx.fillStyle = tint ? tint.text : npcB ? '#e4e8ec' : '#1f2a35';
     }
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';

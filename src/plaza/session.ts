@@ -181,15 +181,21 @@ export async function plazaStealFrom(targetConnId: string, caught = false) {
 
 /** 共烤：放生蚵上烤網（lx/lz 相對堆心） */
 export async function plazaGrillPlace(lx: number, lz: number, diff: number) {
-  if (!client?.connected) return { ok: false as const, err: 'no_conn', oyster: undefined };
+  if (!client?.connected) {
+    // 離線單機烤：本機建一顆，烤熟／掀殼由烤網畫面自己推進
+    if (myPile == null) return { ok: false as const, err: 'no_seat', oyster: undefined };
+    const now = Date.now(), d = Math.max(0, Math.min(3, diff | 0));
+    const oyster: PlazaGrillOyster = { id: 'off' + Math.random().toString(36).slice(2, 10), pileId: myPile, lx, lz, state: 'cooking', placedAt: now, openAt: now + 20000 + d * 800, ownerConnId: '', ownerNick: deps?.nick() ?? '', diff: d };
+    return { ok: true as const, err: undefined, oyster };
+  }
   return client.grillPlace(lx, lz, diff);
 }
 export async function plazaGrillFlip(oysterId: string) {
-  if (!client?.connected) return { ok: false as const, err: 'no_conn', oyster: undefined };
+  if (!client?.connected) return { ok: true as const, err: undefined, oyster: undefined }; // 離線：本機已樂觀翻面
   return client.grillFlip(oysterId);
 }
 export async function plazaGrillTake(oysterId: string) {
-  if (!client?.connected) return { ok: false as const, err: 'no_conn', oyster: undefined, count: 0 };
+  if (!client?.connected) return { ok: true as const, err: undefined, oyster: undefined, count: (deps?.getCount() ?? 0) + 1 }; // 離線單機烤
   return client.grillTake(oysterId);
 }
 /** 點擊／最近可搶的共烤蚵（同堆 open／flipped） */
@@ -284,7 +290,7 @@ async function boot(D: PlazaDeps) {
     // 連不上也照樣進廣場：先離線逛，背景持續重連
     netDown = true;
     D.toast('廣場暫時連不上，先離線逛，連上會自動同步', '#ffb08a');
-    setHud('離線中　連上後就能坐下');
+    setHud('離線中　可以先坐下自己剝、自己烤');
     D.enterWalk();
     showRoamUi();
     setNetBanner('連線失敗，正在重連…');
@@ -775,9 +781,10 @@ export async function plazaTrySit(): Promise<boolean> {
   if (!seat) { deps.toast('靠近空的藍色板凳再坐', '#ffb08a'); return false; }
   sittingBusy = true;
   try {
-    if (!client?.connected) { deps.toast('還沒連上廣場', '#ff8a7a'); return false; }
     const first = !shiftStarted;
-    const r = first || myPile == null
+    // 離線：先在本機坐下（單機剝蚵／烤肉），重連後 restoreAfterRejoin 會向伺服器補登記座位
+    const r = !client?.connected ? { ok: true as const, err: undefined, snap: undefined }
+      : first || myPile == null
       ? await client.claimSeat(seat.pileId, seat.slot)
       : await client.changeSeat(seat.pileId, seat.slot);
     if (!r.ok) {
@@ -786,7 +793,7 @@ export async function plazaTrySit(): Promise<boolean> {
       return false;
     }
     if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
-    if ((r as any).token) client.token = (r as any).token;
+    if ((r as any).token && client) client.token = (r as any).token;
     myPile = seat.pileId; mySlot = seat.slot;
     const pose = seatPose(seat.pileId, seat.slot);
     deps.applySeatPose(pose.pos, pose.yaw);
@@ -886,12 +893,34 @@ function pushChat(m: PlazaChat) {
   }
 }
 
+/** 手機坐著時：聊天鈕移到「藥品／道具」正上方，聊天窗／預覽跟著往上 */
+let fabB = '';
+function placeChatFab() {
+  if (!ui) return;
+  let b = '';
+  if (seated && matchMedia('(pointer:coarse)').matches) {
+    const med = document.getElementById('medBtn');
+    const r = med?.getBoundingClientRect();
+    if (r && r.height > 0) b = `${Math.round(innerHeight - r.top + 8)}px`;
+  }
+  if (b === fabB) return;
+  fabB = b;
+  const fab = ui.querySelector('#pzChatFab') as HTMLElement | null;
+  const peek = ui.querySelector('#pzChatPeek') as HTMLElement | null;
+  const chat = ui.querySelector('#pzChat') as HTMLElement | null;
+  const up = b ? `calc(${b} + 52px)` : '';
+  if (fab) fab.style.bottom = b;
+  if (peek) peek.style.bottom = up;
+  if (chat) chat.style.bottom = up;
+}
+
 export function tickPlaza(dt: number) {
   if (!active || !deps) return;
   const p = deps.getWalkXZ();
   view?.setSelfPose(p.x, p.z, deps.getYaw(), seated);
   tickPlazaTags(view, deps.camera(), dt);
   if (!seated) plazaUpdateNear(p.x, p.z);
+  placeChatFab();
   if (!client?.connected) return;
   phaseTimer += dt;
   // ~10Hz 同步位置＋動作

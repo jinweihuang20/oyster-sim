@@ -90,8 +90,8 @@ export function createGrillView(parent: THREE.Object3D) {
       top.position.set(0, 0.012, -HINGE_Z);
       top.userData.grillOysterId = o.id;
       hinge.add(top);
-      const hint = makeWorldLabel('', 'bubble', { worldH: 0.28, depthTest: false });
-      hint.sprite.position.set(0, 0.34, 0);
+      const hint = makeWorldLabel('', 'bubble', { worldH: 0.15, depthTest: false, bubbleTint: s => s.startsWith('掀殼') ? { fill: 'rgba(196,112,40,0.62)', line: 'rgba(255,255,255,0.7)', text: '#ffffff' } : s.startsWith('拿肉') ? { fill: 'rgba(52,138,84,0.62)', line: 'rgba(255,255,255,0.7)', text: '#ffffff' } : null });
+      hint.sprite.position.set(0, 0.2, 0);
       hint.sprite.center.set(0.5, 0);
       hint.sprite.visible = false;
       hint.sprite.renderOrder = 10;
@@ -166,7 +166,7 @@ export function createGrillView(parent: THREE.Object3D) {
       applyOpen(g, now);
       // 可互動提示輕微上下晃，較好發現
       if (g.hint.sprite.visible) {
-        g.hint.sprite.position.y = 0.34 + Math.sin(now * 0.006) * 0.05;
+        g.hint.sprite.position.y = 0.2 + Math.sin(now * 0.006) * 0.025;
       }
     }
   }

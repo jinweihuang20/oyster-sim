@@ -875,7 +875,7 @@ async function grillRaceAt(cx: number, cy: number) {
     try {
       const r = await plazaGrillFlip(o.id);
       if (!r.ok) {
-        plazaGrillUpsertLocal(o); // 還原
+        if (r.err !== 'gone') plazaGrillUpsertLocal(o); // 還原；伺服器已沒有這顆就不要放回去，免得留下拿不走的殘影
         toast(plazaZhErr(r.err) || '掀不到', '#ff8a7a');
         if (state === 'play') { setPhase('busy'); later(0.2, goPick); }
         return true;
@@ -898,7 +898,7 @@ async function grillRaceAt(cx: number, cy: number) {
     try {
       const r = await plazaGrillTake(o.id);
       if (!r.ok) {
-        plazaGrillUpsertLocal(o); // 還原
+        if (r.err !== 'gone') plazaGrillUpsertLocal(o); // 還原；伺服器已沒有這顆就不要放回去，免得留下拿不走的殘影
         toast(plazaZhErr(r.err) || '被別人搶走了', '#ff8a7a');
         if (state === 'play') { setPhase('busy'); later(0.2, goPick); }
         return true;
