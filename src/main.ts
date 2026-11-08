@@ -357,8 +357,8 @@ const leanFaces: THREE.Group[] = [];
 for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x3a9a6a : 0xe86878, s < 0 ? 0x444444 : 0xc8c8c8).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
-type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean; eco: boolean };
-const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE };
+type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean; eco: boolean; rotTip: boolean };
+const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE, rotTip: true };
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
   const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
 /** 熱切省電：陰影類型／貼圖解析度；antialias／precision 僅啟動時套用 */
@@ -2526,7 +2526,7 @@ window.addEventListener('pointermove', e => {
   if (!down || down.id !== e.pointerId) return;
   const dx = e.clientX - down.x, dy = e.clientY - down.y;
   if (swipePhase() && !moonAimOn) return;
-  if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; if (Math.abs(dx) > 8) down.drag = true; return; }
+  if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; rotTipTouch(); if (Math.abs(dx) > 8) { down.drag = true; rotTipDragged(); } return; }
   // 拿蚵觸控：微滑才升格「認真拖」，其餘坐下已 drag 立刻轉頭
   const dragSlop = phase === 'pick' && e.pointerType !== 'mouse' ? 16 : 0;
   if (dragSlop > 0 && !down.drag && Math.hypot(dx, dy) > dragSlop) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
@@ -3381,7 +3381,8 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const mv = $('v_music') as HTMLInputElement; mv.value = String(mix.music); mv.oninput = () => { mix.music = +mv.value; applyMix(); }; }
 { const g = $('v_stats') as HTMLInputElement; g.checked = mix.stats; g.onchange = () => { mix.stats = g.checked; applyMix(); }; }
 { const g = $('v_feed') as HTMLInputElement; g.checked = mix.feed; g.onchange = () => { mix.feed = g.checked; applyMix(); }; }
-{ const g = $('v_gore') as HTMLInputElement; g.checked = mix.gore; g.onchange = () => { mix.gore = g.checked; applyMix(); }; }
+{ const g = $('v_rotTip') as HTMLInputElement; g.checked = mix.rotTip; g.onchange = () => { mix.rotTip = g.checked; applyMix(); }; }
+  { const g = $('v_gore') as HTMLInputElement; g.checked = mix.gore; g.onchange = () => { mix.gore = g.checked; applyMix(); }; }
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
@@ -3471,7 +3472,7 @@ function frameBody() {
     if (!tut && !plazaMode) { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
     hp = Math.min(100, hp + dt / 6 * medM('regen')); tickMeds(dt);
     if (phase === 'seam') {
-      rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
+      rotTipTick(rdt); if (rotKey) rotTipTouch(); rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
       const e = Math.abs(seamErr()), d = DIFF[diff], close = clamp(1 - e / (tolNow() * 3), 0, 1);
       (seamGlow.material as THREE.MeshBasicMaterial).opacity = gearOn('glasses') ? Math.min(1, 0.5 + 0.06 * Math.sin(performance.now() * 0.0042) + clamp(1 - e / (tolNow() * 5), 0, 1) * 0.5) : 0.24 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.4;
       { const inZ = e < tolNow(), gl = gearOn('glasses') ? 1.6 : 1, gm = seamGlow.material as THREE.MeshBasicMaterial;
@@ -4694,3 +4695,21 @@ function calTipCheck() {
   t.querySelector<HTMLButtonElement>('.calTipX')!.onclick = e => { e.stopPropagation(); calTipOff(); };
   t.onclick = () => { calTipOff(); openDaily(); };
 }
+// ── 手機提示：按住蚵仔左右拖可以轉動 ──
+const ROT_TIP_KEY = 'rotTipDragN';
+let rotTipN = (() => { try { return +(localStorage.getItem(ROT_TIP_KEY) ?? 0) || 0; } catch { return 0; } })();
+let rotTipIdle = 0, rotTipUsed = false, rotTipCounted = false, rotTipWasSeam = false;
+const _rtv = new THREE.Vector3();
+function rotTipEl() { let t = document.getElementById('rotTip'); if (!t) { t = document.createElement('div'); t.id = 'rotTip'; t.innerHTML = '<span class="rtHand"></span><span class="rtTxt">按住蚵仔左右拖，可以轉動</span>'; document.body.appendChild(t); } return t; }
+function rotTipHide() { document.getElementById('rotTip')?.classList.remove('on'); }
+function rotTipTouch() { rotTipUsed = true; rotTipHide(); }
+function rotTipDragged() { if (rotTipCounted) return; rotTipCounted = true; rotTipN++; try { localStorage.setItem(ROT_TIP_KEY, String(rotTipN)); } catch { } }
+function rotTipTick(dt: number) {
+  if (!rotTipWasSeam) { rotTipIdle = 0; rotTipUsed = false; rotTipCounted = false; }
+  rotTipWasSeam = true;
+  if (!COARSE || rotTipUsed || (!tut && !mix.rotTip)) return;
+  rotTipIdle += dt; if (!tut && rotTipIdle < 3) return;
+  const t = rotTipEl(); oyster.getWorldPosition(_rtv).project(viewCam());
+  t.style.left = `${(_rtv.x + 1) / 2 * innerWidth}px`; t.style.top = `${(1 - _rtv.y) / 2 * innerHeight}px`; t.classList.add('on');
+}
+setInterval(() => { if (phase !== 'seam') { rotTipWasSeam = false; rotTipHide(); } }, 200);

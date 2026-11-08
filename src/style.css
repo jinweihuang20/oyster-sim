@@ -1428,3 +1428,10 @@ body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
 #calTip::before{content:"";position:absolute;top:-7px;right:var(--ax,14px);width:12px;height:12px;background:#fbf7ee;border-left:1.5px solid #e2d3a8;border-top:1.5px solid #e2d3a8;transform:rotate(45deg)}
 #calTip .calTipX{all:unset;flex:none;width:22px;height:22px;border-radius:50%;background:#e9e6df;color:#6b7480;font-size:12px;display:grid;place-items:center;cursor:pointer}
 @keyframes calTipIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+/* 手機：拖曳轉蚵提示 */
+#rotTip{position:fixed;z-index:40;pointer-events:none;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:10px;opacity:0;transition:opacity .35s}
+#rotTip.on{opacity:1}
+#rotTip .rtHand{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.78);border:1.5px solid rgba(255,255,255,.95);box-shadow:0 3px 10px rgba(0,0,0,.25);animation:rtSwipe 1.6s ease-in-out infinite}
+#rotTip .rtTxt{padding:5px 11px;border-radius:999px;background:rgba(22,28,36,.6);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:13px;white-space:nowrap}
+@keyframes rtSwipe{0%,100%{transform:translateX(-34px) scale(.92)}50%{transform:translateX(34px) scale(1)}}
