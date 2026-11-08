@@ -3134,7 +3134,10 @@ function enterWorkShed(run: () => void) {
   const gen = ++shedLoadGen;
   const at = performance.now();
   requestAnimationFrame(() => requestAnimationFrame(() => {
+    // 進工寮一律第一人稱，並看向前方 NPC
+    if (tpv) setTpv(false);
     try { run(); } finally {
+      yaw = tYaw = 0; pitch = tPitch = -0.22;
       const wait = Math.max(0, 1000 - (performance.now() - at));
       setTimeout(() => { if (gen === shedLoadGen) showShedLoading(false); }, wait);
     }
@@ -4716,3 +4719,10 @@ function rotTipTick(dt: number) {
   t.style.left = `${(_rtv.x + 1) / 2 * innerWidth}px`; t.style.top = `${(1 - _rtv.y) / 2 * innerHeight}px`; t.classList.add('on');
 }
 setInterval(() => { if (phase !== 'seam') { rotTipWasSeam = false; rotTipHide(); } }, 200);
+// ── 教學第 1 步（手機）：畫面滑動轉視角提示 ──
+setInterval(() => {
+  const on = COARSE && !!tut && TUT[tut.i].id === 'grab';
+  let t = document.getElementById('lookTip');
+  if (!t) { if (!on) return; t = document.createElement('div'); t.id = 'lookTip'; t.innerHTML = '<span class="ltHand"></span><span class="ltTxt">在畫面上滑動，可以轉動視角</span>'; document.body.appendChild(t); }
+  t.classList.toggle('on', on);
+}, 200);
