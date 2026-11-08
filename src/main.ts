@@ -2611,6 +2611,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.code === 'KeyG') { standUp(); return; }
+  if (e.code === 'Space' && plazaMode && walking) { if (!e.repeat) plazaJump(); return; }
   if (e.code === 'Space' && !e.repeat && umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
   if (e.code === 'Space' && !e.repeat) { if (phase === 'grillPlace') grillAct(); else if (plazaOnGrill() && (phase === 'pick' || phase === 'empty' || phase === 'busy')) void grillRaceAt(innerWidth / 2, innerHeight / 2); else if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (isGrillPhase()) grillAct(); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) { if (!tutMeat()) toss(true); } else if (phase === 'aim') { holding = true; hold = 0; } }
   if (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
@@ -3161,7 +3162,7 @@ function launchPlaza() {
     applySeatPose: (pos, yaw) => applyPlazaSeatPose(pos, yaw),
     getPhase: () => phase,
     // 可丟殼且準星瞄到人：同步 throwAim，遠端播左手舉殼
-    getSyncPhase: () => ((phase === 'empty' || phase === 'seam') && plazaThrowTarget() ? 'throwAim' : phase),
+    getSyncPhase: () => jumpY > 0 ? 'jump' : ((phase === 'empty' || phase === 'seam') && plazaThrowTarget() ? 'throwAim' : phase),
     getCount: () => count,
     getWalkXZ: () => (walking ? { x: walkPos.x, z: walkPos.z } : { x: SEAT.x, z: SEAT.z }),
     getYaw: () => (walking ? yaw : seatYaw),
@@ -3642,6 +3643,7 @@ function frameBody() {
   if (walking) walkStep(rdt); else { walkMotion.spd = walkMotion.strafe = 0; }
   let camPitch = pitch - pe * 0.08, camRoll = 0;
   camera.position.copy(walking ? walkPos : SEAT);
+  if (jumpY > 0) camera.position.y += jumpY;
   // 廣場第一人稱走路：死鬥同款頭晃（上下／側移／輕 roll）
   if (plazaMode && walking && !tpv) {
     const walkRef = 2.4;
@@ -4269,8 +4271,9 @@ function camTick(dt: number) {
       pitch = tPitch = PLAZA_WALK_PITCH;
       const rig = ensurePlazaMe();
       rig.outer.visible = true;
-      rig.outer.position.set(walkPos.x, 0, walkPos.z);
+      rig.outer.position.set(walkPos.x, jumpY, walkPos.z);
       rig.outer.rotation.y = yaw;
+      if (jumpY > 0) { const ja = -2.4 * Math.sin((1 - jumpT / JUMP_DUR) * Math.PI); rig.shoulderL.rotation.x = ja; const sr = (rig as any).shoulderR; if (sr) sr.rotation.x = ja; }
       const swing = sw * 0.55;
       rig.legL.rotation.x = swing; rig.legR.rotation.x = -swing;
       rig.shinL.rotation.x = Math.max(0, -swing * 0.5); rig.shinR.rotation.x = Math.max(0, swing * 0.5);
@@ -4279,13 +4282,13 @@ function camTick(dt: number) {
       if (sp > 0.25) posePlazaWalkSwingArms(rig, swing);
       else posePlazaHangArms(rig);
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-      const cp = new THREE.Vector3(walkPos.x - fx * 2.9, 2.2, walkPos.z - fz * 2.9);
+      const cp = new THREE.Vector3(walkPos.x - fx * 2.9, 2.2 + jumpY * 0.35, walkPos.z - fz * 2.9);
       if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
       { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, 1.0, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
       tpCam.updateMatrixWorld(); return;
     }
     // 工寮：沿用 me3 走路模組
-    me3.position.set(walkPos.x, walkPos.y - 1.55 - 0.4, walkPos.z); me3.rotation.y = yaw; meTorso.position.y = 0.43; meTorso.rotation.x = 0;
+    me3.position.set(walkPos.x, walkPos.y - 1.55 - 0.4 + jumpY, walkPos.z); me3.rotation.y = yaw; meTorso.position.y = 0.43; meTorso.rotation.x = 0;
     meLegL.rotation.x = sw * 0.6; meLegR.rotation.x = -sw * 0.6; meArmL.rotation.x = -sw * 0.5; meArmR.rotation.x = sw * 0.5; meArmL.rotation.z = meArmR.rotation.z = 0; meHead.rotation.y = 0;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw), gy = walkPos.y - 1.95;
     const cp = new THREE.Vector3(walkPos.x - fx * 2.9, gy + 2.5, walkPos.z - fz * 2.9);
@@ -4726,3 +4729,21 @@ setInterval(() => {
   if (!t) { if (!on) return; t = document.createElement('div'); t.id = 'lookTip'; t.innerHTML = '<span class="ltHand"></span><span class="ltTxt">在畫面上滑動，可以轉動視角</span>'; document.body.appendChild(t); }
   t.classList.toggle('on', on);
 }, 200);
+
+// ── 廣場跳躍（走動時才可跳；用 phase "jump" 同步給其他玩家）──
+const JUMP_DUR = 0.6, JUMP_H = 0.8;
+let jumpY = 0, jumpT = 0;
+function plazaJump() { if (!plazaMode || !walking || jumpT > 0) return; jumpT = JUMP_DUR; }
+{
+  const jb = document.getElementById('jumpBtn');
+  if (jb) jb.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); plazaJump(); });
+  let last = performance.now();
+  const step = () => {
+    const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (jumpT > 0) { jumpT = Math.max(0, jumpT - dt); const u = 1 - jumpT / JUMP_DUR; jumpY = jumpT > 0 ? 4 * JUMP_H * u * (1 - u) : 0; }
+    if (!plazaMode || !walking) { jumpT = 0; jumpY = 0; }
+    on('jumpBtn', plazaMode && walking && state === 'play');
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}

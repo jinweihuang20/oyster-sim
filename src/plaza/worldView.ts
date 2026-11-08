@@ -1090,7 +1090,10 @@ export function createPlazaWorldView(
       const back = r.seated ? -0.08 : 0;
       const ox = r.x + Math.sin(r.yaw) * back;
       const oz = r.z + Math.cos(r.yaw) * back;
-      r.rig.outer.position.set(ox, 0, oz);
+      let jy = 0; const rj = r as any;
+      if ((r.phase || '') === 'jump' && !r.seated) { if (!rj.jt) rj.jt = performance.now(); }
+      if (rj.jt) { const u = (performance.now() - rj.jt) / 600; if (u >= 1) { if ((r.phase || '') !== 'jump') rj.jt = 0; } else { jy = 3.2 * u * (1 - u); { const a = -2.4 * Math.sin(u * Math.PI); r.rig.shoulderL.rotation.x = a; (r.rig as any).shoulderR && ((r.rig as any).shoulderR.rotation.x = a); } } }
+      r.rig.outer.position.set(ox, jy, oz);
       r.rig.outer.rotation.y = r.yaw;
       r.rig.outer.updateMatrixWorld(true);
       const show = r.rig.outer.visible && !r.awaitingPose;
