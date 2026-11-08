@@ -101,7 +101,7 @@ export function makeWorldLabel(
         ctx.fillStyle = '#d4d9de';
       } else {
         // 真人：實底白名牌＋藍細邊＋人像線條圖示
-        ctx.fillStyle = 'rgba(255,255,255,0.96)';
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.fill();
         ctx.strokeStyle = '#2a5a86';
         ctx.lineWidth = 2.5;
