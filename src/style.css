@@ -1420,3 +1420,11 @@ body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
 
 /* 成就提示：不透明 */
 #achBan{background:#fbf7ee!important;opacity:1!important;-webkit-backdrop-filter:none;backdrop-filter:none;border:1px solid #e2d3a8!important;box-shadow:0 8px 24px rgba(10,20,35,.28),0 2px 6px rgba(10,20,35,.12)!important;color:#1f2a36!important}
+
+/* 老玩家簽到搬家提示 */
+#calBtn.tipGlow{animation:calGlow 1.4s ease-in-out infinite !important}
+@keyframes calGlow{0%,100%{box-shadow:0 0 0 0 rgba(74,144,217,.55)}50%{box-shadow:0 0 0 7px rgba(74,144,217,0)}}
+#calTip{position:fixed;z-index:60;display:flex;align-items:center;gap:8px;max-width:240px;padding:9px 10px 9px 12px;background:#fbf7ee;color:#2b3138;border:1.5px solid #e2d3a8;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.18);font-size:14px;line-height:1.4;cursor:pointer;animation:calTipIn .3s ease-out}
+#calTip::before{content:"";position:absolute;top:-7px;right:var(--ax,14px);width:12px;height:12px;background:#fbf7ee;border-left:1.5px solid #e2d3a8;border-top:1.5px solid #e2d3a8;transform:rotate(45deg)}
+#calTip .calTipX{all:unset;flex:none;width:22px;height:22px;border-radius:50%;background:#e9e6df;color:#6b7480;font-size:12px;display:grid;place-items:center;cursor:pointer}
+@keyframes calTipIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}

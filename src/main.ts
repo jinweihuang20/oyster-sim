@@ -442,7 +442,7 @@ function renderDaily() {
   document.getElementById('calBtn')?.classList.toggle('due', !done);
   const box = document.getElementById('dailyMsg'); if (!box) return;
   const got = done ? (save.streakDay ?? 1) : nextStreak() - 1, today = done ? got : got + 1;
-  box.querySelector('.dcGrid')!.innerHTML = [1, 2, 3, 4, 5, 6, 7].map(i => `<div class="dcCell${i <= got ? ' got' : ''}${i === today && !done ? ' now' : ''}${i === 7 ? ' big' : ''}"><span class="dcD">第 ${i} 天</span><i class="ic ${i <= got ? 'ic-check' : i === 7 ? 'ic-gift' : 'ic-coin'}"></i><b>$${(eco.dailyPays[i - 1] ?? 0).toLocaleString('zh-TW')}</b>${i === 7 ? '<small>另送小禮物</small>' : ''}</div>`).join('');
+  box.querySelector('.dcGrid')!.innerHTML = [1, 2, 3, 4, 5, 6, 7].map(i => `<div class="dcCell${i <= got ? ' got' : ''}${i === today && !done ? ' now' : ''}${i === 7 ? ' big' : ''}"><span class="dcD">第 ${i} 天</span><i class="ic ${i <= got ? 'ic-check' : i === 7 ? 'ic-gift' : 'ic-coin'}"></i><b>$${(eco.dailyPays[i - 1] ?? 0).toLocaleString('zh-TW')}</b>${i === 7 ? '<small>另送傳說奇物</small>' : ''}</div>`).join('');
   const btn = box.querySelector<HTMLButtonElement>('.dcGo')!; btn.disabled = done; btn.textContent = done ? '今天領過了' : '領取';
   box.querySelector('.dcNote')!.textContent = done ? `已連續上工 ${got} 天，明天再來` : today === 7 ? '今天是第 7 天大獎！' : `再 ${7 - today} 天拿第 7 天大獎・斷一天會從第 1 天重來`;
 }
@@ -473,8 +473,7 @@ setInterval(() => {
   dailyAutoDay = t; openDaily();
 }, 1200);
 function dailyItem(): string {
-  if (Math.random() < 0.5 || !MEDS.length) { save.dex[0]++; return '白珍珠 1 顆'; }
-  const m = MEDS[Math.floor(Math.random() * MEDS.length)]; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; return `${m.n} 1 個`;
+  legendSync(); const i = legendPick(); save.odd[i] = (save.odd[i] ?? 0) + 1; save.legendN = legendTotal(); return `傳說奇物：${ODD[i].name}`;
 }
 function claimDaily(ev?: Event) {
   if (save.bonusDay === todayKey()) { renderDaily(); return; }
@@ -3324,7 +3323,7 @@ btn('resMenu', () => {
 });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
-$('calBtn').onclick = () => openDaily(); renderDaily(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
+$('calBtn').onclick = () => { calTipOff(); openDaily(); }; renderDaily(); calTipCheck(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
 setTimeout(checkReturn, 600);
 $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖鑑、生涯紀錄、設定都會清掉，無法復原。')) { LS.removeItem('oyster-sim'); LS.removeItem('oyster-mix'); location.reload(); } };
@@ -4677,4 +4676,21 @@ requestAnimationFrame(() => requestAnimationFrame(dismissBoot));
   });
   const sl = document.getElementById('shopList');
   if (sl) { new MutationObserver(lab).observe(sl, { childList: true, subtree: true }); lab(); }
+}
+
+// ── 老玩家提示：簽到按鈕搬到右上角日曆 ──
+const CAL_TIP_KEY = 'calTipSeen1';
+function calTipOff() { try { localStorage.setItem(CAL_TIP_KEY, '1'); } catch { } document.getElementById('calTip')?.remove(); document.getElementById('calBtn')?.classList.remove('tipGlow'); }
+function calTipCheck() {
+  try { if (localStorage.getItem(CAL_TIP_KEY)) return; } catch { return; }
+  if (!(save.bonusN ?? 0) || save.bonusDay === todayKey()) return;
+  const b = document.getElementById('calBtn'); if (!b || document.getElementById('calTip')) return;
+  b.classList.add('tipGlow');
+  const t = document.createElement('div'); t.id = 'calTip';
+  t.innerHTML = '<span>簽到移到這裡囉！點日曆領上工費</span><button class="calTipX" aria-label="關閉">✕</button>';
+  document.body.appendChild(t);
+  const place = () => { if (!t.isConnected) return; const r = b.getBoundingClientRect(); if (!r.width) { t.style.display = 'none'; return; } t.style.display = ''; t.style.top = `${r.bottom + 10}px`; t.style.right = `${Math.max(8, innerWidth - r.right - 4)}px`; t.style.setProperty('--ax', `${Math.max(12, innerWidth - r.right - 4 - Math.max(8, innerWidth - r.right - 4) + r.width / 2 - 7)}px`); requestAnimationFrame(place); };
+  place();
+  t.querySelector<HTMLButtonElement>('.calTipX')!.onclick = e => { e.stopPropagation(); calTipOff(); };
+  t.onclick = () => { calTipOff(); openDaily(); };
 }
