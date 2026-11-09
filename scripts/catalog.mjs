@@ -50,7 +50,11 @@ export function buildCatalog(src, version = '', oddSrc = src, wpnSrc = '') {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8')
+    + '\n' + readFileSync(new URL('../src/shop/yardShop.ts', import.meta.url), 'utf8')
+    + '\n' + readFileSync(new URL('../src/shop/meds.ts', import.meta.url), 'utf8')
+    + '\n' + readFileSync(new URL('../src/shop/shopEquip.ts', import.meta.url), 'utf8')
+    + '\n' + readFileSync(new URL('../src/world/locs.ts', import.meta.url), 'utf8');
   const odd = readFileSync(new URL('../src/shop/oddities.ts', import.meta.url), 'utf8');
   const wpn = readFileSync(new URL('../src/dm/weapons.ts', import.meta.url), 'utf8');
   const c = buildCatalog(main, '', odd, wpn);

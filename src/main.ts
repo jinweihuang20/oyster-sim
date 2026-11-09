@@ -20,6 +20,14 @@ import {
   syncEqPreview, refreshEqPreview, stopEqPreview, ODD,
   type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS,
   initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop,
+  initYardShop, GEAR, KNIVES, UMBS, BOWLS,
+  gearOn, knifeNow, umbNow, bowlNow,
+  fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
+  ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
+  renderShop, getShopNewIds,
+  initClothUi, eqOwned, setEquip, equipNow, wornIds, setsOn, slOn, fxAll,
+  migrateEquip, SCARED, applySleeve, sleeveGold, eqTex, eqSvg, figSvg,
+  renderEquip, renderClothShop, shareOutfit, askSet, openEquip,
 } from './shop';
 import {
   Social, initAnnounce, featAnnounce, featDots, initFeedback, openFb, fbShow,
@@ -918,17 +926,11 @@ function dressAma(n: Npc) {
   const PANTS = [0x3a5068, 0x4a5a68, 0x5a4a3a, 0x2a5a78, 0x4a6a5a, 0x586070]; (n.pants as THREE.MeshStandardMaterial).color.set(PANTS[Math.floor(Math.random() * PANTS.length)]);
 }
 let nightShift = false, walkHintShown = false, saltNext = false;
-// 器具（手套、收音機）：買了可開關
-const GEAR = [
-  { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
-  { id: 'radio', n: '收音機', price: 300, good: '阿婆氣消得快：怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：丟殼預警變晚（⚠ 和提示聲晚一半才出現）' },
-  { id: 'glasses', n: '👓 老花眼鏡', price: 200, good: '蚵仔縫更亮更粗、光暈更大；插刀判定範圍 +25%', bad: '看遠有點霧：畫面邊緣微暗' }];
 function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && !plazaMode && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '<i class="ic ic-radio"></i><i class="led"></i>' : `<i class="ic ic-radio"></i> ${on ? STATIONS[radioSt()].n : '關'}`; b.title = on ? `收音機：${STATIONS[radioSt()].n}` : '收音機：關（點按鈕切換）'; }
 // 收音機按鈕循環：關 → 懷舊歌謠台 → 廣播電台 → 台語老歌 → 關
 function toggleRadio() { if (!save.shop.owned.includes('radio') || state !== 'play' || tut || plazaMode) return; save.gear = save.gear ?? {};
   if (!gearOn('radio')) { save.gear.radio = true; save.radioSt = 0; } else if (radioSt() < STATIONS.length - 1) save.radioSt = radioSt() + 1; else save.gear.radio = false;
   if (gearOn('radio')) achAdd('radio', STATIONS[radioSt()].id); persist(); achCheck(); drawRadio(); toast(gearOn('radio') ? `收音機：${STATIONS[radioSt()].n}（阿婆心情好，但丟殼預警會變晚）` : '收音機關掉：聽得到丟殼預警了', '#cfc3ff'); }
-const gearOn = (id: string) => save.shop.owned.includes(id) && save.gear?.[id] !== false;
 const isNight = () => { const h = new Date().getHours(); return h >= 20 || h < 5; };
 // 天色跟著玩家裝置的時間（黎明／白天／黃昏／夜晚，平滑過渡）
 // 時, 天空, 霧, 半球光, 強度, 太陽 — 清爽晴天為主，黎明／黃昏略暖但不髒
@@ -1464,35 +1466,7 @@ const PRY = [{ w: 0.3, sp: 0.8 }, { w: 0.22, sp: 1.05 }, { w: 0.2, sp: 1.35 }, {
 let pryHits = 0;
 const PRY_NEED = [2, 3, 4, 5], PRY_C = 0.55, PRY_RED = 0.86;
 let needleStart = 0, combo = 0, dayCombo = 0;
-// ----- 剝殼刀（各有利弊） -----
-type Knife = { id: string; n: string; price: number; green: number; speed: number; steps: number; stab: number; seam: number; luck: number; blade: number; desc: string };
-const KNIVES: Knife[] = [
-  { id: 'basic', luck: 1, n: '舊蚵刀', price: 0, green: 1, speed: 1, steps: 0, stab: 1, seam: 1, blade: 0xd0d0d8, desc: '媽媽留下來的，普普通通' },
-  { id: 'dull', luck: 3, n: '便宜鈍刀', price: 20, green: 0.7, speed: 0.85, steps: 0, stab: 1.5, seam: 1, blade: 0x8a8a80, desc: '夜市 20 塊，指針較慢、運氣特別好，但綠區小、很常割到手' },
-  { id: 'wide', luck: 0, n: '寬口刀', price: 150, green: 1.5, speed: 1.35, steps: 0, stab: 1, seam: 0.85, blade: 0xe8e0c8, desc: '刀面寬，綠區大，但指針快、比較難找縫' },
-  { id: 'point', luck: 2, n: '尖口刀', price: 200, green: 0.9, speed: 1, steps: -1, stab: 1.6, seam: 1, blade: 0xb0c8e0, desc: '尖尖的一下就進去，少撬一下，運氣較好，但比較危險' },
-  { id: 'seam', luck: 0, n: '找縫刀', price: 180, green: 0.9, speed: 1.1, steps: 0, stab: 0.8, seam: 1.6, blade: 0xc8e0b0, desc: '找縫很簡單，撬的時候比較費力' },
-  { id: 'master', luck: 4, n: '師傅刀', price: 1200, green: 1.2, speed: 0.95, steps: -1, stab: 0.6, seam: 1.25, blade: 0xffe28a, desc: '老師傅手工，樣樣好，就是貴' },
-];
-type Umb = { id: string; n: string; price: number; open: number; dur: number; perf: number; cover: number; reflect: number; look: string; size: number; desc: string };
-const UMBS: Umb[] = [
-  { id: 'stripe', n: '紅白傘', price: 0, open: 0.05, dur: 4, perf: 0.28, cover: 0.95, reflect: 1, look: 'stripe', size: 1, desc: '工寮門口撿到的，各方面都普通好用' },
-  { id: 'clear', n: '超商透明傘', price: 30, open: 0.05, dur: 3, perf: 0.2, cover: 0.85, reflect: 0.6, look: 'clear', size: 0.8, desc: '便宜又輕，但傘面小、反彈沒力，撐一下手就痠' },
-  { id: 'fold', n: '自動摺疊傘', price: 160, open: 0, dur: 3, perf: 0.4, cover: 0.8, reflect: 1.2, look: 'navy', size: 0.7, desc: '一按就開，完美反彈時機最寬，但傘面小' },
-  { id: 'beach', n: '海灘陽傘', price: 260, open: 0.25, dur: 8, perf: 0.15, cover: 1, reflect: 0.8, look: 'beach', size: 1.3, desc: '又大又能撐很久，但開傘比較慢、完美時機窄' },
-  { id: 'temple', n: '廟會涼傘', price: 1500, open: 0.05, dur: 5, perf: 0.35, cover: 1, reflect: 1.6, look: 'temple', size: 1.05, desc: '神明的涼傘，反彈超有力，就是貴' },
-];
-const umbNow = () => UMBS.find(u => u.id === save.shop.equipped.umb) ?? UMBS[0];
 function applyUmb() { const u = umbNow(); buildUmb(u.look, u.size); }
-// ----- 盆仔（裝肉用） -----
-type Bowl = { id: string; n: string; price: number; r: number; bounce: number; dist: number; perf: number; bonus: number; h: number; color: number; metal?: number; desc: string };
-const BOWLS: Bowl[] = [
-  { id: 'plastic', n: '塑膠臉盆', price: 0, r: 0.17, bounce: 0, dist: 1, perf: 0.10, bonus: 0, h: 0.14, color: 0x4a8ac0, desc: '藍色塑膠盆，普通' },
-  { id: 'wide', n: '大臉盆', price: 120, r: 0.27, bounce: 0.3, dist: 1, perf: 0.10, bonus: 0, h: 0.06, color: 0xd04a3a, desc: '寬又淺的大紅盆，亮圈比較大，好認' },
-  { id: 'bucket', n: '深桶', price: 180, r: 0.12, bounce: 0, dist: 1.1, perf: 0.08, bonus: 1, h: 0.34, color: 0x3a8a4a, desc: '深又窄，進去就跑不掉，肉比較鮮一顆加 $1' },
-  { id: 'low', n: '矮盆', price: 150, r: 0.16, bounce: 0.1, dist: 0.7, perf: 0.16, bonus: 0, h: 0.08, color: 0xe0b030, desc: '放比較近、比較矮，順手好點' },
-  { id: 'steel', n: '不銹鋼盆', price: 900, r: 0.21, bounce: 0.05, dist: 0.9, perf: 0.13, bonus: 1, h: 0.15, color: 0xd8dde4, metal: 0.9, desc: '專業級，樣樣好，就是貴' },
-];
 // ----- 位仔（換位） -----
 const seatNow = () => SEATS.find(x => x.id === save.seat) ?? SEATS[0];
 const seatGround = (st: Seat) => new THREE.Vector3(-Math.sin(st.a) * st.r, 0, Math.cos(st.a) * st.r);
@@ -1527,7 +1501,6 @@ function setPlazaSeatPropsVisible(v: boolean) {
   for (const m of splats) m.visible = v;
   if (!v) { bowlRing.visible = false; basinRing.visible = false; }
 }
-const bowlNow = () => BOWLS.find(b => b.id === save.shop.equipped.bowl) ?? BOWLS[0];
 /** 臉盆／肉碗貼蚵堆表面，避免被殼遮住；烤位改貼地並外移，勿與爐干涉 */
 function liftSeatPropsOntoPile() {
   let ox = 0, oz = 0;
@@ -1575,177 +1548,36 @@ function applyBowl() {
   BOWL_L.set(SEAT0.x + (home.x - SEAT0.x) * b.dist * S.bowl, home.y, SEAT0.z + (home.z - SEAT0.z) * b.dist * S.bowl); buildBowl(b);
   liftSeatPropsOntoPile();
 }
-const knifeNow = () => KNIVES.find(k => k.id === save.shop.equipped.knife) ?? KNIVES[0];
 const pryW = () => Math.min(0.6, Math.min(1.6, 1 + 0.15 * pryHits) * PRY[diff].w * knifeNow().green * medM('green') * (newbie() ? 1.3 : 1));
 const PRY_SLOW = 0.56; // 整體放慢（0.8→0.56，再慢 30%）
 const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * knifeNow().speed * medM('speed') * fxAll().speed;
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
 const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? 1.25 : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
-function pctTxt(v: number, goodHigh: boolean) { if (v === 1) return '<span style="opacity:.6">—</span>'; const p = Math.round((v - 1) * 100), good = goodHigh ? p > 0 : p < 0; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${p > 0 ? '+' : ''}${p}%</b>`; }
-// 商店價格：每次打開雜貨店向伺服器拿一次（後台「商店價格」可改價、打折）；拿不到就照內建價格
-type ShopPx = { price: number; base: number; sale?: boolean; endsAt?: number | null };
-const PX_URL = 'https://game-status.gwtech.org/s/shop/prices?game=oyster-sim';
-/** 後台「標為新品」的物品 key（給雜貨店新品標記用） */
-let shopNewIds: string[] = [];
-let shopPx: Record<string, ShopPx> = {}, shopPxAt = 0, shopPxTry = 0, shopSkew = 0, payBusy = false;
-async function fetchPrices(ms = 2000) {
-  shopPxTry = Date.now(); const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
-  try {
-    const r = await fetch(PX_URL, { mode: 'cors', cache: 'no-store', signal: c.signal });
-    const j = r.ok ? await r.json() : null;
-    if (!j || typeof j.items !== 'object') return false;
-    const old = JSON.stringify(shopPx); shopPx = j.items; shopNewIds = Array.isArray(j.newIds) ? j.newIds.filter((x: unknown) => typeof x === 'string') : []; (window as any).__shopNewIds = shopNewIds; shopPxAt = Date.now(); shopSkew = typeof j.serverTime === 'number' ? j.serverTime - Date.now() : 0;
-    return old !== JSON.stringify(shopPx) ? 'changed' : true;
-  } catch { return false; } finally { clearTimeout(t); }
-}
-const pxNow = () => Date.now() + shopSkew;
-const pxLive = (k: string) => { const p = shopPx[k]; return p && p.price > 0 && !(p.endsAt && pxNow() >= p.endsAt) ? p : null; };
-const px = (k: string, base: number) => { const p = pxLive(k); if (p) return p.price; const q = shopPx[k]; return q && q.base > 0 ? q.base : base; };
-function cdTxt(ms: number) { if (ms <= 0) return '特價已結束'; const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `剩 ${d} 天 ${h} 小時` : `剩 ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
-/** 價格標示：特價時原價劃掉＋新價＋「特價」＋倒數 */
-function pxHtml(k: string, base: number, pre = '') {
-  const p = pxLive(k); if (!p || !p.sale || p.price >= p.base) return `${pre}$${px(k, base)}`;
-  return `<span class="pxSale">${pre}<s>$${p.base}</s>$${p.price}</span><span class="saleTag">特價</span>`;
-}
-/** 特價倒數：放在物品說明下面的小字 */
-function pxCd(k: string) { const p = pxLive(k); return p?.sale && p.endsAt && p.price < p.base ? `<small class="saleCd" data-end="${p.endsAt}">特價${cdTxt(p.endsAt - pxNow())}</small>` : ''; }
-setInterval(() => { if (!$('shop').classList.contains('show')) return; let gone = false; $('shop').querySelectorAll<HTMLElement>('.saleCd').forEach(e => { const left = +e.dataset.end! - pxNow(); e.textContent = '特價' + cdTxt(left); if (left <= 0) gone = true; }); if (gone) renderShop(); }, 1000);
-function openShopPx() { fetchPrices().then(r => { if (r === 'changed' && $('shop').classList.contains('show')) renderShop(); }); }
-function pxMsg(t: string) {
-  const m = document.createElement('div'); m.className = 'giftMsg bad';
-  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-shop"></i> 價格有變動</b><p style="margin:6px 0">${t}</p><div class="mbtns"><button class="gmYes">知道了</button></div></div>`;
-  const close = () => m.remove(); m.querySelectorAll('.gmX,.gmYes').forEach(b => b.addEventListener('click', close)); m.addEventListener('click', e => { if (e.target === m) close(); });
-  document.body.appendChild(m);
-}
-/** 結帳：價格超過 60 秒沒更新就重拿一次；價格變了就跳提示、不扣錢。回傳實際要付的錢，不能買回 null */
-async function payFor(k: string, base: number, name: string): Promise<number | null> {
-  if (payBusy) return null;
-  let price = px(k, base);
-  if (Date.now() - Math.max(shopPxAt, shopPxTry) > 60_000) {
-    payBusy = true; try { await fetchPrices(); } finally { payBusy = false; }
-    const np = px(k, base);
-    if (np !== price) { renderShop(); pxMsg(`「${esc(name)}」現在是 $${np}（剛剛顯示 $${price}），價格已經更新，要買的話請再按一次。`); return null; }
-    price = np;
-  }
-  return save.money >= price ? price : null;
-}
-function ensureStarterWeapons() {
-  for (const w of shopWeapons()) if (w.price <= 0 && !save.shop.owned.includes(w.id)) save.shop.owned.push(w.id);
-}
-/** 開發模式（vite dev）視為已購買全部上架槍，方便測死鬥 */
-function ownsWeapon(id: string) {
-  if (save.shop.owned.includes(id)) return true;
-  return import.meta.env.DEV && isWeaponId(id) && WEAPON_DEFS[id].inShop;
-}
-function ownedWeaponIds(): WeaponId[] {
-  ensureStarterWeapons();
-  if (import.meta.env.DEV) return shopWeapons().map(w => w.id);
-  return shopWeapons().map(w => w.id).filter(id => save.shop.owned.includes(id));
-}
-function weaponNow(): WeaponId {
-  const id = save.shop.equipped.weapon;
-  const owned = ownedWeaponIds();
-  return id && isWeaponId(id) && owned.includes(id) ? id : 'oysterGun';
-}
-function renderShop() {
-  if (!save.shop.owned.includes('basic')) save.shop.owned.push('basic');
-  ensureStarterWeapons();
-  const cur = knifeNow().id;
-  $('shopList').innerHTML = `<h3><i class="ic ic-knife"></i> 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>找縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
-    const own = save.shop.owned.includes(k.id);
-    const tr = save.trial?.id === k.id, btn = tr ? `${k.id === cur ? '<b>使用中</b><br>' : `<button data-eq="${k.id}">換</button><br>`}<button data-buy="${k.id}" ${save.money < px(k.id, k.price) ? 'disabled' : ''}>${pxHtml(k.id, k.price, '買斷 ')}</button>` : k.id === cur ? '<b>使用中</b>' : own ? `<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${save.money < px(k.id, k.price) ? 'disabled' : ''}>${pxHtml(k.id, k.price)}</button>`;
-    return `<tr><td><b>${k.n}</b>${save.trial?.id === k.id ? ` <span class="trialTag">試用剩 ${save.trial.left} 班</span>` : ''}<br><small>${k.desc}</small>${pxCd(k.id)}</td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
-  if (!save.shop.owned.includes('stripe')) save.shop.owned.push('stripe');
-  const cu = umbNow().id, B = UMBS[0];
-  const rel = (v: number, b: number, goodHigh: boolean, unit: string) => { if (v === b) return `<span style="opacity:.6">${v}${unit}</span>`; const good = goodHigh ? v > b : v < b; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${v}${unit}</b>`; };
-  $('shopList').innerHTML += `<h3><i class="ic ic-umb"></i> 雨傘</h3><table class="kt"><tr><th>傘</th><th>開傘</th><th>可撐</th><th>完美窗</th><th>遮擋</th><th>反彈力</th><th></th></tr>` + UMBS.map(u => {
-    const own = save.shop.owned.includes(u.id);
-    const btn = u.id === cu ? '<b>使用中</b>' : own ? `<button data-ueq="${u.id}">換</button>` : `<button data-ubuy="${u.id}" ${save.money < px(u.id, u.price) ? 'disabled' : ''}>${pxHtml(u.id, u.price)}</button>`;
-    return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small>${pxCd(u.id)}</td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
-  if (!save.shop.owned.includes('plastic')) save.shop.owned.push('plastic');
-  const cb = bowlNow().id;
-  $('shopList').innerHTML += `<h3><i class="ic ic-bowl"></i> 盆仔</h3><table class="kt"><tr><th>盆</th><th>加價</th><th></th></tr>` + BOWLS.map(b => {
-    const own = save.shop.owned.includes(b.id);
-    const bk = b.id === 'wide' ? 'bowl-wide' : b.id; const btn = b.id === cb ? '<b>使用中</b>' : own ? `<button data-beq="${b.id}">換</button>` : `<button data-bbuy="${b.id}" ${save.money < px(bk, b.price) ? 'disabled' : ''}>${pxHtml(bk, b.price)}</button>`;
-    return `<tr><td><b>${b.n}</b><br><small>${b.desc}</small>${pxCd(b.id === 'wide' ? 'bowl-wide' : b.id)}</td><td>${rel(b.bonus, 0, true, '$')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
-  $('shopList').querySelectorAll('button[data-bbuy],button[data-beq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
-    const id = b.getAttribute('data-bbuy') || b.getAttribute('data-beq')!; const w = BOWLS.find(x => x.id === id)!;
-    if (b.hasAttribute('data-bbuy')) { const pr = await payFor(id === 'wide' ? 'bowl-wide' : id, w.price, w.n); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
-    if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; }
-    save.shop.equipped.bowl = id; persist(); applyBowl(); renderShop();
-  });
-  $('shopList').querySelectorAll('button[data-ubuy],button[data-ueq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
-    const id = b.getAttribute('data-ubuy') || b.getAttribute('data-ueq')!; const u = UMBS.find(x => x.id === id)!;
-    if (b.hasAttribute('data-ubuy')) { const pr = await payFor(id, u.price, u.n); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
-    save.shop.equipped.umb = id; persist(); applyUmb(); renderShop();
-  });
-  $('shopList').querySelectorAll('button[data-buy],button[data-eq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
-    const id = b.getAttribute('data-buy') || b.getAttribute('data-eq')!; const k = KNIVES.find(x => x.id === id)!;
-    if (b.hasAttribute('data-buy')) { const pr = await payFor(id, k.price, k.n); if (pr == null) return; save.money -= pr; if (save.trial?.id === id) delete save.trial; else save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
-    save.shop.equipped.knife = id; persist(); applyKnife(); renderShop();
-  });
-  $('shopList').insertAdjacentHTML('beforeend', '<h4 class="shH4"><i class="ic ic-gear"></i> 其他器具（買了可以開關）</h4><table class="kt">' + GEAR.map(g => { const own = save.shop.owned.includes(g.id), on = gearOn(g.id);
-    return `<tr><td><b>${g.n}</b><br><small style="color:#9be37a">${g.good}</small><small style="color:#ff8a7a">${g.bad}</small>${pxCd(g.id)}</td><td>${own ? `<button data-gtog="${g.id}">${on ? '✅ 使用中' : '⬜ 沒用'}</button>` : `<button data-gbuy="${g.id}" ${save.money < px(g.id, g.price) ? 'disabled' : ''}>${pxHtml(g.id, g.price)}</button>`}</td></tr>`; }).join('') + '</table>');
-  $('shopList').querySelectorAll('button[data-gbuy],button[data-gtog]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
-    const id = b.getAttribute('data-gbuy') || b.getAttribute('data-gtog')!; const g = GEAR.find(x => x.id === id)!; save.gear = save.gear ?? {};
-    if (b.hasAttribute('data-gbuy')) { const pr = await payFor(id, g.price, g.n.replace(/^\S+\s/, '')); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); save.gear[id] = true; track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
-    else save.gear[id] = !gearOn(id);
-    persist(); renderShop(); drawRadio(); applyGloves();
-  });
-  const cw = weaponNow();
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg> 槍枝</h3><p style="font-size:12px;opacity:.8"><b style="color:#d9952b">點整列可預覽 3D 模型</b>（進去後拖曳旋轉）；買了才能在死鬥裡裝備；${WEAPON_DEFS.oysterGun.name}開局就送。${import.meta.env.DEV ? '（開發模式：全部已解鎖）' : ''}</p><table class="kt"><tr><th>槍</th><th>傷害</th><th>彈匣</th><th>射速</th><th>彈速</th><th></th></tr>` + shopWeapons().map(w => {
-    const own = ownsWeapon(w.id);
-    const btn = w.id === cw ? '<b>死鬥預設</b>' : own ? `<button data-weq="${w.id}">設為預設</button>` : `<button data-wbuy="${w.id}" ${save.money < px(w.id, w.price) ? 'disabled' : ''}>${pxHtml(w.id, w.price)}</button>`;
-    return `<tr class="wpnRow" data-wprev="${w.id}" role="button" tabindex="0" title="點擊預覽"><td><b>${w.name}</b> <small style="opacity:.7">預覽</small><br><small>${w.blurb}</small>${pxCd(w.id)}</td><td>${w.damage}${w.pelletCount > 1 ? `<br><small>×${w.pelletCount}</small>` : ''}</td><td>${w.maxAmmo}</td><td>${w.fireRate.toFixed(1)}/s${w.burstCount > 1 ? `<br><small>${w.burstCount} 連發</small>` : ''}${w.pelletCount > 1 ? `<br><small>散彈 ×${w.pelletCount}</small>` : ''}</td><td>${w.bulletSpeed}</td><td>${btn}</td></tr>`;
-  }).join('') + '</table>');
-  const wpnPrevCtx = () => ({ shellGeos: SHELL_GEOS, shellMat: pileMat });
-  const showWpnPrev = (id: WeaponId) => {
-    const w = WEAPON_DEFS[id];
-    const own = ownsWeapon(id);
-    const isDef = weaponNow() === id;
-    const act = isDef
-      ? '<button type="button" class="ghost" disabled>死鬥預設中</button>'
-      : own
-        ? `<button type="button" data-prev-eq="${id}">設為死鬥預設</button>`
-        : `<button type="button" data-prev-buy="${id}" ${save.money < px(id, w.price) ? 'disabled' : ''}>${pxHtml(id, w.price, '購買 ')}</button>`;
-    openWeaponPreview({
-      id,
-      ctx: wpnPrevCtx(),
-      actionsHtml: `${act}<button type="button" class="ghost" data-prev-x>關閉</button>`,
-      bindActions: (box, close) => {
-        box.querySelector('[data-prev-x]')?.addEventListener('click', close);
-        box.querySelector(`[data-prev-eq="${id}"]`)?.addEventListener('click', () => {
-          save.shop.equipped.weapon = id; persist(); close(); renderShop();
-        });
-        box.querySelector(`[data-prev-buy="${id}"]`)?.addEventListener('click', async () => {
-          const pr = await payFor(id, w.price, w.name); if (pr == null) return;
-          save.money -= pr; save.shop.owned.push(id); save.shop.equipped.weapon = id;
-          track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); persist(); close(); renderShop();
-        });
-      },
-    });
-  };
-  $('shopList').querySelectorAll<HTMLElement>('.wpnRow').forEach(row => {
-    row.onclick = e => {
-      if ((e.target as HTMLElement).closest('button')) return;
-      const id = row.dataset.wprev; if (id && isWeaponId(id)) showWpnPrev(id);
-    };
-  });
-  $('shopList').querySelectorAll('button[data-wbuy],button[data-weq]').forEach(b => (b as HTMLButtonElement).onclick = async e => {
-    e.stopPropagation();
-    const id = (b.getAttribute('data-wbuy') || b.getAttribute('data-weq'))!;
-    if (!isWeaponId(id)) return;
-    const w = WEAPON_DEFS[id];
-    if (b.hasAttribute('data-wbuy')) {
-      const pr = await payFor(id, w.price, w.name); if (pr == null) return;
-      save.money -= pr; save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle();
-    }
-    save.shop.equipped.weapon = id; persist(); renderShop();
-  });
-  renderClothShop(); renderMedShop(); renderItemShop(); shopTabs(); newDecor();
-}
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : 1); }
+
+initYardShop({
+  getSave: () => save,
+  persist,
+  track,
+  esc,
+  getAc: () => ac,
+  SFX,
+  applyKnife,
+  applyUmb,
+  applyBowl,
+  applyGloves,
+  drawRadio,
+  clearBowlMeat: () => { if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; } },
+  renderClothShop,
+  renderMedShop,
+  renderItemShop: () => renderItemShop(),
+  shopTabs: () => shopTabs(),
+  newDecor: () => newDecor(),
+  shellGeos: SHELL_GEOS,
+  pileMat,
+});
+
 const PRY_GRACE = 0.04;
 // 等速來回（三角波）；視覺佮判定用同一時間公式（事件 timeStamp）
 const needle = (ms = performance.now()) => {
@@ -3955,215 +3787,6 @@ initMeds({
 });
 initMedsUi();
 
-// ---------- 裝備（頭／手／衣服／褲子／鞋子）----------
-// Slot/EQUIP/SETS → shopEquip.ts
-const eqOwned = (id: string) => (EQUIP.find(e => e.id === id)?.price === 0) || save.shop.owned.includes(id);
-const setEquip = (slot: Slot, id: string) => { save.equip = save.equip ?? {}; save.equip[slot] = id; };
-const equipNow = (slot: Slot) => EQUIP.find(e => e.slot === slot && e.id === save.equip?.[slot] && eqOwned(e.id)) ?? EQUIP.find(e => e.slot === slot && e.price === 0)!;
-const wornIds = () => SLOTS.map(([s]) => equipNow(s).id);
-const setsOn = () => { const w = wornIds(); return SETS.filter(s => s.need.every(i => w.includes(i))); };
-const slOn = (id: string) => wornIds().includes(id);
-function fxAll(): Required<Fx> {
-  const r = { bowl: 0, keep: 0, speed: 1, pearl: 1, nag: 1, throw: 1, dmg: 1, luck: 0 };
-  for (const f of [...SLOTS.map(([s]) => equipNow(s).fx), ...setsOn().map(s => s.fx)]) { r.bowl += f.bowl ?? 0; r.keep += f.keep ?? 0; r.luck += f.luck ?? 0; r.speed *= f.speed ?? 1; r.pearl *= f.pearl ?? 1; r.nag *= f.nag ?? 1; r.throw *= f.throw ?? 1; r.dmg *= f.dmg ?? 1; }
-  r.keep = Math.min(0.7, r.keep); r.throw = Math.max(0.1, r.throw);
-  if (evRun) { r.throw = Math.max(1, r.throw); r.nag = Math.max(1, r.nag); } // 活動中阿婆是瘋子：怕你、少丟、少唸的效果都不算
-  return r;
-}
-function migrateEquip() { save.equip = save.equip ?? {}; for (const [s] of SLOTS) if (!save.equip[s] || !eqOwned(save.equip[s])) save.equip[s] = EQUIP.find(e => e.slot === s && e.price === 0)!.id; }
-let sleeveTry: string | null = null, scaredT = 10;
-const SCARED = ['這個人看起來很流氓…', '不要惹那位', '手上那個刺青…你敢丟殼你丟', '小聲點，那個人在看', '我剛剛什麼都沒說喔', '那個刺青是真的嗎…', '今天大家安靜剝蚵就好', '殼不要往那邊丟啦', '那位是哪個角頭的…', '好啦好啦，我專心剝', '這位做的鐵板燒一定很好吃'];
-function patDraw(g: CanvasRenderingContext2D, e: Eq, W: number, H: number) {
-  g.fillStyle = e.base; g.fillRect(0, 0, W, H);
-  const dot = (x: number, y: number, r: number, col: string) => { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); };
-  if (e.pat === 'flower') for (let i = 0; i < 40; i++) { const x = (i * 37) % W, y = (i * 53) % H; for (let k = 0; k < 5; k++) dot(x + Math.cos(k * 1.26) * 5, y + Math.sin(k * 1.26) * 5, 3, '#fff3c8'); dot(x, y, 2.5, '#3a8a4a'); }
-  if (e.pat === 'rain') { g.strokeStyle = '#fff7a0'; g.lineWidth = 3; for (let y = 10; y < H; y += 30) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); } }
-  if (e.pat === 'camo') for (let i = 0; i < 30; i++) dot((i * 41) % W, (i * 29) % H, 8 + (i % 3) * 4, ['#2e3a1e', '#8a7a4a', '#3e5228'][i % 3]);
-  if (e.pat === 'neon') { g.fillStyle = '#ffffff'; for (let y = 20; y < H; y += 40) g.fillRect(0, y, W, 6); }
-  if (e.pat === 'tattoo') { g.strokeStyle = '#1e2a4a'; g.lineWidth = 3; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(W / 2, H + 12 - i * 22, 40, Math.PI, 2 * Math.PI); g.stroke(); } dot(40, 40, 9, '#b8323a'); dot(90, 80, 9, '#2a5a9a'); }
-  if (e.pat === 'dragon') { g.strokeStyle = '#ffd25a'; g.lineWidth = 4; g.beginPath(); for (let x = 0; x <= W; x += 4) g.lineTo(x, H / 2 + Math.sin(x / 10) * 26); g.stroke(); }
-}
-function eqTex(e: Eq) { const c = document.createElement('canvas'); c.width = c.height = 128; patDraw(c.getContext('2d')!, e, 128, 128); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 3); return t; }
-function applySleeve() {
-  const s = sleeveTry ? EQUIP.find(x => x.id === sleeveTry)! : equipNow('hand');
-  sleeve.map?.dispose(); sleeve.map = eqTex(s); sleeve.color.set(0xffffff);
-  sleeve.emissive.set(s.pat === 'neon' ? 0x1a8a50 : 0x000000); sleeve.needsUpdate = true;
-  shirtCuff.color.set(equipNow('body').base);
-}
-function sleeveGold() { if (!slOn('sl_dragon')) return; let k = 0; const iv = setInterval(() => { sleeve.emissive.set(k % 2 ? 0x000000 : 0xb08010); if (++k > 8) { clearInterval(iv); sleeve.emissive.set(0); } }, 150); }
-// 線條圖示：各部位一個簡單輪廓，填該件顏色
-let eqSvgN = 0;
-function eqSvg(e: Eq, w = 72, grey = false) {
-  const s = '#1b1b1b', f = grey ? '#a8a8a8' : e.base;
-  const P: Record<Slot, string> = {
-    head: `<path d="M10 40Q36 6 62 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M6 40H66" stroke="${s}" stroke-width="2.5"/>`,
-    hand: `<rect x="6" y="18" width="44" height="22" rx="8" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
-    body: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
-    legs: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
-    feet: `<path d="M10 40q0-14 16-14h14q16 4 22 14v6H10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>` };
-  const ID: Record<string, string> = {
-    sl_flower: `<defs><clipPath id="c_sl_flower"><rect x="6" y="18" width="44" height="22" rx="8"/></clipPath></defs><rect x="6" y="18" width="44" height="22" rx="8" fill="${f}"/><g clip-path="url(#c_sl_flower)"><g transform="translate(14 24)"><circle r="2.6" fill="#fff3c8"/><circle r="1" fill="#f0c020"/></g><g transform="translate(26 33)"><circle r="2.6" fill="#fff3c8"/><circle r="1" fill="#f0c020"/></g><g transform="translate(38 23)"><circle r="2.6" fill="#fff3c8"/><circle r="1" fill="#f0c020"/></g><g transform="translate(46 34)"><circle r="2.6" fill="#fff3c8"/><circle r="1" fill="#f0c020"/></g><g transform="translate(10 36)"><circle r="2.6" fill="#fff3c8"/><circle r="1" fill="#f0c020"/></g><g transform="translate(32 28)"><circle r="2.6" fill="#fff3c8"/><circle r="1" fill="#f0c020"/></g><path d="M18 30l3-2M42 29l3 2M30 37l3-1" stroke="#3a8a4a" stroke-width="1.5"/></g><rect x="6" y="18" width="44" height="22" rx="8" fill="none" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
-    sl_rain: `<defs><clipPath id="c_sl_rain"><rect x="6" y="18" width="44" height="22" rx="8"/></clipPath></defs><rect x="6" y="18" width="44" height="22" rx="8" fill="${f}"/><g clip-path="url(#c_sl_rain)"><path d="M12 22q12-3 28 0" stroke="#fff8c8" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M24 26v10M34 26v10" stroke="#c8a010" stroke-width="1.2"/><path d="M14 30q2 3 0 5" stroke="#5aa8e8" stroke-width="1.6" fill="none"/></g><path d="M44 18v22" stroke="${s}" stroke-width="2"/><path d="M46 19v20" stroke="#c8a010" stroke-width="1"/><path d="M48 19v20" stroke="#c8a010" stroke-width="1"/><rect x="6" y="18" width="44" height="22" rx="8" fill="none" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
-    sl_89: `<defs><clipPath id="c_sl_89"><rect x="6" y="18" width="44" height="22" rx="8"/></clipPath></defs><rect x="6" y="18" width="44" height="22" rx="8" fill="#e8b890"/><g clip-path="url(#c_sl_89)"><path d="M6 34q5-4 10 0t10 0t10 0t10 0V40H6Z" fill="#2a4a8a" stroke="${s}" stroke-width="1.2"/><path d="M9 34q2-3 4 0M21 34q2-3 4 0M33 34q2-3 4 0" stroke="#fff" stroke-width="1" fill="none"/><path d="M18 26q6-6 12 0q-6 6-12 0Z" fill="#e8501a" stroke="${s}" stroke-width="1.2"/><path d="M30 26l5-3v6Z" fill="#e8501a" stroke="${s}" stroke-width="1.2"/><circle cx="21" cy="25.5" r=".8" fill="${s}"/><path d="M36 21q3-3 6 0q3-2 5 1" stroke="${s}" stroke-width="1.3" fill="none"/><path d="M8 22q3-3 6 0" stroke="${s}" stroke-width="1.3" fill="none"/></g><rect x="6" y="18" width="5" height="22" fill="#3a5a8a"/><rect x="6" y="18" width="44" height="22" rx="8" fill="none" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
-    sl_camo: `<defs><clipPath id="c_sl_camo"><rect x="6" y="18" width="44" height="22" rx="8"/></clipPath></defs><rect x="6" y="18" width="44" height="22" rx="8" fill="${f}"/><g clip-path="url(#c_sl_camo)"><path d="M6 22q6-4 10 0t6 6q-6 4-10 0Z" fill="#8a7a4a"/><path d="M24 30q6-4 12 0t4 8H22Z" fill="#2e3a1e"/><path d="M34 18q6 2 8 6t-6 4q-4-2-2-10Z" fill="#2e3a1e"/><path d="M10 34q4-2 8 2l-2 4H8Z" fill="#2e3a1e"/><path d="M40 32q4-2 8 0v6q-6 0-8-6Z" fill="#8a7a4a"/></g><rect x="6" y="18" width="44" height="22" rx="8" fill="none" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
-    sl_neon: `<defs><clipPath id="c_sl_neon"><rect x="6" y="18" width="44" height="22" rx="8"/></clipPath></defs><rect x="6" y="18" width="44" height="22" rx="8" fill="${f}"/><g clip-path="url(#c_sl_neon)"><rect x="6" y="27" width="44" height="5" fill="#e8f0f0" stroke="${s}" stroke-width="1"/><path d="M12 27l3 5M20 27l3 5M28 27l3 5M36 27l3 5" stroke="#9ab" stroke-width="1"/><path d="M10 22h14" stroke="#c8ffe0" stroke-width="2" stroke-linecap="round"/></g><rect x="6" y="18" width="44" height="22" rx="8" fill="none" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/><path d="M2 24l-3-2M2 30h-4M2 36l-3 2" stroke="#39ff9a" stroke-width="1.6" stroke-linecap="round"/>`,
-    sl_dragon: `<defs><clipPath id="c_sl_dragon"><rect x="6" y="18" width="44" height="22" rx="8"/></clipPath></defs><rect x="6" y="18" width="44" height="22" rx="8" fill="${f}"/><g clip-path="url(#c_sl_dragon)"><path d="M8 33q6-10 12-2t12-2t10-6" stroke="#e8b830" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M8 33q6-10 12-2t12-2t10-6" stroke="#fff3a8" stroke-width=".7" fill="none" stroke-dasharray="1.5 1.5"/><path d="M14 30l-1-3M20 31l1-3M26 32l-1-3M32 29l1-3" stroke="#e8b830" stroke-width="1.2"/><path d="M42 23l5-2-1 4l2 2-5 1Z" fill="#e8b830" stroke="#fff3a8" stroke-width=".6"/><circle cx="44" cy="23.5" r=".8" fill="#c82a2a"/><path d="M47 21l2-3M46 26q3 1 2 4" stroke="#e8b830" stroke-width="1" fill="none"/><path d="M10 22q2-2 4 0M36 37q2-2 4 0" stroke="#e8b830" stroke-width="1" fill="none"/></g><path d="M6 20h44M6 38h44" stroke="#e8b830" stroke-width="1" stroke-dasharray="2 2"/><rect x="6" y="18" width="44" height="22" rx="8" fill="none" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
-    hd_basic: `<path d="M14 40Q36 8 58 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M56 36l10 10-4 4-8-8" fill="${f}" stroke="${s}" stroke-width="2.5"/><circle cx="28" cy="30" r="2.5" fill="#fff3c8"/><circle cx="42" cy="26" r="2.5" fill="#fff3c8"/>`,
-    hd_hat: `<path d="M4 44L36 10L68 44Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 36H52M28 26H44" stroke="${s}" stroke-width="1.5"/>`,
-    hd_fisher: `<path d="M20 36V20Q36 10 52 20V36Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M8 44L20 36H52L64 44Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
-    hd_helmet: `<path d="M14 40Q14 12 36 12Q58 12 58 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M8 40H64V46H8Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M36 12V40" stroke="${s}" stroke-width="2"/>`,
-    hd_crown: `<path d="M10 46L14 18L26 32L36 12L46 32L58 18L62 46Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="36" cy="38" r="4" fill="#c82a2a" stroke="${s}" stroke-width="1.5"/>`,
-    bd_vest: `<path d="M22 10L14 20v36h16V22l6 6 6-6v34h16V20L50 10l-8 8h-12Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
-    bd_rain: `<path d="M24 8L8 22l6 8 6-4v32h32V26l6 4 6-8L48 8l-12 10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M36 18V58" stroke="${s}" stroke-width="2"/>`,
-    ft_boots: `<path d="M18 8h18v28q16 2 22 10v6H18Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
-    ft_work: `<path d="M16 18h20v14q18 2 22 12v8H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 24h10M22 30h10" stroke="#e8d8a8" stroke-width="2"/>`,
-    lg_flower: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="26" cy="22" r="3" fill="#fff3c8"/><circle cx="46" cy="36" r="3" fill="#fff3c8"/>` };
-  // iOS WebKit：多個同名 clipPath id 會解析到第一個（可能在隱藏元素裡），每個實例改用唯一 id
-  const u = `_${++eqSvgN}`;
-  let body = (ID[e.id] ?? P[e.slot]).replace(/id="(c_[a-z0-9_]+)"/g, `id="$1${u}"`).replace(/url\(#(c_[a-z0-9_]+)\)/g, `url(#$1${u})`);
-  if (grey) body = body.replace(/fill="#(?!a8a8a8)[0-9a-fA-F]{3,6}"/g, 'fill="#c4c4c4"');
-  return `<svg class="slv" viewBox="0 0 72 60" width="${w}" height="${w * 60 / 72}">${body}</svg>`;
-}
-// 全身人形（裝備面板與分享卡共用的配色）
-function figSvg() {
-  const k = '#1b1b1b', SK = '#e8b890', H = equipNow('head'), A = equipNow('hand'), B = equipNow('body'), L = equipNow('legs'), F = equipNow('feet');
-  const ol = `stroke="${k}" stroke-width="3" stroke-linejoin="round"`;
-  // 圖樣：每個人形只出現一次，id 固定
-  const fl = (id: string, c: string) => `<pattern id="${id}" width="14" height="14" patternUnits="userSpaceOnUse"><rect width="14" height="14" fill="${c}"/><g fill="#fff3c8"><circle cx="4" cy="4" r="1.8"/><circle cx="7" cy="4" r="1.8"/><circle cx="5.5" cy="1.6" r="1.8"/><circle cx="5.5" cy="6.4" r="1.8"/></g><circle cx="5.5" cy="4" r="1.2" fill="#3a8a4a"/><circle cx="11" cy="11" r="1.5" fill="#fff3c8"/></pattern>`;
-  const defs = `<defs>
-${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
-<pattern id="pCamo" width="30" height="30" patternUnits="userSpaceOnUse"><rect width="30" height="30" fill="#5a6b3a"/><path d="M2 6q6-6 12 0t8 8q-6 4-12 0T2 6Z" fill="#2e3a1e"/><path d="M16 20q6-4 10 2t-4 6q-8 0-6-8Z" fill="#8a7a4a"/><circle cx="24" cy="6" r="3.5" fill="#3e5228"/></pattern>
-<pattern id="pNeon" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(70)"><rect width="10" height="10" fill="#39ff9a"/><rect width="10" height="3" fill="#fff"/></pattern>
-<pattern id="pSeq" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#b84ad8"/><circle cx="2" cy="2" r="1.6" fill="#f0c8ff"/><circle cx="6" cy="6" r="1.6" fill="#ffd8f8"/></pattern>
-<pattern id="pTat" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="${SK}"/><path d="M0 12q4-8 8 0t8 0" stroke="#1e2a4a" stroke-width="1.6" fill="none"/><circle cx="12" cy="4" r="2" fill="#b8323a"/></pattern>
-</defs>`;
-  void 0;
-  const PF: Record<string, string> = { flower: 'url(#pFlower)', camo: 'url(#pCamo)', neon: 'url(#pNeon)', tattoo: 'url(#pTat)' };
-  // ---- 手臂（在衣服後面）：肩到腕，手在末端 ----
-  const armFill = A.id === 'sl_flower' ? 'url(#pFlower)' : A.id === 'sl_camo' ? 'url(#pCamo)' : A.id === 'sl_neon' ? 'url(#pNeon)' : A.id === 'sl_89' ? 'url(#pTat)' : A.base;
-  const arm = (x1: number, x2: number) => { const d = `M${x1} 100L${x2} 160`, dx = x2 - x1, len = Math.hypot(dx, 60), nx = -60 / len, ny = dx / len;
-    let ex = '';
-    if (A.id === 'sl_rain') ex = `<path d="M${x1 + nx * 3} ${100 + ny * 3}L${x2 + nx * 3} ${160 + ny * 3}" stroke="#fffbe0" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>`;
-    if (A.id === 'sl_dragon') { let p = ''; for (let i = 0; i <= 10; i++) { const t = i / 10, o = Math.sin(i * 1.6) * 4; p += `${i ? 'L' : 'M'}${(x1 + dx * t + nx * o).toFixed(1)} ${(100 + 60 * t + ny * o).toFixed(1)}`; } ex = `<path d="${p}" stroke="#ffd25a" stroke-width="2" fill="none"/><circle cx="${x1 + dx * 0.2}" cy="112" r="2.2" fill="#ffd25a"/>`; }
-    if (A.id === 'sl_89') ex = `<path d="M${x1} 100L${x2} 160" stroke="#1e2a4a" stroke-width="1" stroke-dasharray="3 4" fill="none"/>`;
-    return `<path d="${d}" stroke="${k}" stroke-width="20" stroke-linecap="round"/><path d="${d}" stroke="${armFill}" stroke-width="14" stroke-linecap="round"/>${ex}<path d="M${x2 - 7} 158h14" stroke="${k}" stroke-width="2"/><circle cx="${x2 + (x2 < 80 ? -1 : 1)}" cy="170" r="9" fill="${SK}" stroke="${k}" stroke-width="3"/>`; };
-  // ---- 衣服 ----
-  const T = 'M50 90h60l10 20-10 6-2-4v70H52v-70l-2 4-10-6Z';
-  const body: Record<string, string> = {
-    bd_basic: `<path d="${T}" fill="#e8e4d8" ${ol}/><path d="M70 90q10 10 20 0" fill="none" stroke="${k}" stroke-width="2"/><ellipse cx="80" cy="130" rx="12" ry="8" fill="#9a9488" stroke="${k}" stroke-width="2"/><path d="M70 130q10-6 20 0" stroke="#e8e4d8" stroke-width="1.5" fill="none"/>`,
-    bd_rain: `<path d="${T}" fill="#ffd21a" ${ol}/><path d="M80 92V182" stroke="${k}" stroke-width="2"/>${[110, 130, 150, 170].map(y => `<circle cx="80" cy="${y}" r="2.5" fill="#fff" stroke="${k}" stroke-width="1.5"/>`).join('')}<path d="M56 100l4 70" stroke="#fffbe0" stroke-width="3" opacity=".8"/>`,
-    bd_vest: `<path d="${T}" fill="#f2efe4" ${ol}/><path d="M52 92h18l-2 90H52Z M108 92H90l2 90h16Z" fill="#c82a2a" stroke="${k}" stroke-width="2.5" stroke-linejoin="round"/><path d="M70 92l-2 90M90 92l2 90" stroke="#ffd25a" stroke-width="3"/><path d="M56 150h8M96 150h8" stroke="#ffd25a" stroke-width="2"/>`,
-    bd_boss: `<path d="${T}" fill="#1e2a3a" ${ol}/><path d="M66 90l14 14 14-14" fill="#2e3e52" stroke="${k}" stroke-width="2.5"/><path d="M80 104V182" stroke="#c8c8c8" stroke-width="2.5" stroke-dasharray="2 2"/><rect x="58" y="140" width="14" height="12" fill="none" stroke="#c8c8c8" stroke-width="2"/><rect x="88" y="140" width="14" height="12" fill="none" stroke="#c8c8c8" stroke-width="2"/>`,
-    bd_sequin: `<path d="${T}" fill="url(#pSeq)" ${ol}/><path d="M64 92q16 16 32 0" fill="none" stroke="#ffd25a" stroke-width="3"/>` };
-  const hood = B.id === 'bd_rain' ? `<path d="M50 92Q48 34 80 30Q112 34 110 92Z" fill="#ffd21a" ${ol}/>` : '';
-  // ---- 褲子 ----
-  const P = 'M54 182h52l6 86H86l-6-60-6 60H48Z';
-  const legs: Record<string, string> = {
-    lg_basic: `<path d="${P}" fill="#4a4a52" ${ol}/><path d="M58 190q8 10 16 0M86 190q8 10 16 0" stroke="#8a8a92" stroke-width="2" fill="none"/><rect x="92" y="222" width="12" height="12" fill="none" stroke="#8a8a92" stroke-width="2"/>`,
-    lg_rain: `<path d="${P}" fill="#ffd21a" ${ol}/><path d="M60 190l-6 72M100 190l4 72" stroke="#fffbe0" stroke-width="3" opacity=".85"/>`,
-    lg_flower: `<path d="${P}" fill="url(#pFlower)" ${ol}/>`,
-    lg_camo: `<path d="${P}" fill="url(#pCamo)" ${ol}/><rect x="56" y="214" width="12" height="14" fill="none" stroke="#2e3a1e" stroke-width="2"/>` };
-  // ---- 鞋子 ----
-  const toes = (x: number) => [0, 1, 2, 3].map(i => `<circle cx="${x + 6 + i * 7}" cy="270" r="3" fill="${SK}" stroke="${k}" stroke-width="1.2"/>`).join('');
-  const slip = (sole: string, strap: string) => [40, 84].map(x => `<rect x="${x - 4}" y="276" width="40" height="7" rx="3" fill="${sole}" stroke="${k}" stroke-width="2.5"/>${toes(x)}<path d="M${x + 2} 276q16-12 32 0" fill="none" stroke="${strap}" stroke-width="5"/>`).join('');
-  const feet: Record<string, string> = {
-    ft_basic: slip('#f2f2ee', '#2a5ab0'),
-    ft_gold: slip('#e8b830', '#ffd25a') + `<circle cx="56" cy="271" r="2" fill="#fff"/><circle cx="100" cy="271" r="2" fill="#fff"/>`,
-    ft_boots: [44, 84].map(x => `<path d="M${x} 236h30v40h6v8H${x - 4}v-8h4Z" fill="#ffd21a" ${ol}/><path d="M${x + 4} 242v32" stroke="#fffbe0" stroke-width="3"/>`).join(''),
-    ft_work: [40, 84].map(x => `<path d="M${x + 2} 258h30l4 18h4v8H${x - 2}v-8h4Z" fill="#6a4a2a" ${ol}/>${[262, 268, 274].map(y => `<path d="M${x + 10} ${y}l12 3M${x + 22} ${y}l-12 3" stroke="#e8d8a8" stroke-width="1.5"/>`).join('')}`).join('') };
-  // ---- 頭 ----
-  const hd: Record<string, string> = {
-    hd_basic: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="url(#pFlowerR)" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#c84a5a" ${ol}/>`,
-    hd_hat: `<path d="M28 58L80 22L132 58Q80 66 28 58Z" fill="#d8b46a" ${ol}/><path d="M48 50L112 50M62 40H98M80 22V58" stroke="#8a6a2a" stroke-width="1.5"/><path d="M62 62q18 28 36 0" fill="none" stroke="${k}" stroke-width="1.5"/>`,
-    hd_fisher: `<path d="M58 54V38Q80 26 102 38V54Z" fill="#4a6a8a" ${ol}/><path d="M44 62L58 52H102L116 62Q80 68 44 62Z" fill="#4a6a8a" ${ol}/><path d="M58 50H102" stroke="#2a3a4a" stroke-width="2.5"/>`,
-    hd_helmet: `<path d="M56 56Q56 30 80 30Q104 30 104 56Z" fill="#ffb21a" ${ol}/><path d="M48 54H112V60H48Z" fill="#ffb21a" ${ol}/><path d="M80 30V54M70 33v21M90 33v21" stroke="${k}" stroke-width="2"/>`,
-    hd_crown: `<path d="M58 54L60 28L70 40L80 22L90 40L100 28L102 54Z" fill="#e8b830" ${ol}/><path d="M58 54H102" stroke="#b8862a" stroke-width="4"/><circle cx="80" cy="44" r="4" fill="#c82a2a" stroke="${k}" stroke-width="1.5"/><circle cx="66" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="94" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="80" cy="22" r="2.5" fill="#fff6dc" stroke="${k}"/>` };
-  const face = `<circle cx="80" cy="66" r="24" fill="${SK}" ${ol}/><circle cx="71" cy="66" r="2.6" fill="${k}"/><circle cx="89" cy="66" r="2.6" fill="${k}"/><path d="M73 76q7 6 14 0" fill="none" stroke="${k}" stroke-width="2.2" stroke-linecap="round"/><circle cx="66" cy="73" r="3" fill="#f0a090" opacity=".7"/><circle cx="94" cy="73" r="3" fill="#f0a090" opacity=".7"/>`;
-  void PF;
-  return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${arm(50, 34)}${arm(110, 126)}${legs[L.id] ?? legs.lg_basic}${body[B.id] ?? body.bd_basic}${face}${hd[H.id] ?? hd.hd_basic}${feet[F.id] ?? feet.ft_basic}</svg>`;
-}
-// 裝備面板 v2：場景＋木牌部位卡＋加成看板＋套裝收集
-// ax/ay：僅首幀佔位；實際圓圈／線由 equipPreview 投影 3D（頭＝帽子中心），不再用 ay 去拉人物高度
-const EQ_CARD: Record<Slot, { side: 'l' | 'r'; top: number; ax: number; ay: number }> = {
-  head: { side: 'l', top: 2, ax: 80, ay: 36 }, hand: { side: 'l', top: 34, ax: 40, ay: 170 }, feet: { side: 'l', top: 66, ax: 70, ay: 270 },
-  body: { side: 'r', top: 18, ax: 98, ay: 122 }, legs: { side: 'r', top: 48, ax: 94, ay: 203 } };
-const EQ_FW = 54.04, EQ_FT = 2, EQ_FH = 86, EQ_CH = 27, EQ_CW = 30;
-const eqAx = (vx: number) => 50 + (vx - 80) / 160 * EQ_FW, eqAy = (vy: number) => EQ_FT + vy / 300 * EQ_FH;
-const SVG_SHED = `<svg class="eqShed" viewBox="0 0 300 400" preserveAspectRatio="none" aria-hidden="true"><defs><radialGradient id="eqSpot" cx="50%" cy="48%" r="45%"><stop offset="0" stop-color="#fff6d8" stop-opacity=".95"/><stop offset=".6" stop-color="#ffe9b0" stop-opacity=".35"/><stop offset="1" stop-color="#ffe9b0" stop-opacity="0"/></radialGradient><pattern id="eqMat" width="14" height="10" patternUnits="userSpaceOnUse"><rect width="14" height="10" fill="#c9a865"/><path d="M0 5h14" stroke="#a8864a" stroke-width="1.4"/><path d="M7 0v5M0 5v5M14 5v5" stroke="#b39352" stroke-width="1"/></pattern></defs>
-<rect width="300" height="400" fill="#2c4a63"/><path d="M0 0h300v54L150 30 0 54Z" fill="#5d8fb3"/>${Array.from({ length: 16 }, (_, i) => `<path d="M${i * 20} ${54 - i * 1.6 * (i < 8 ? 1 : 0) - (i >= 8 ? (15 - i) * 1.6 : 0)}V0" stroke="#3f6f92" stroke-width="2"/>`).join('')}<path d="M0 54L150 30 300 54" fill="none" stroke="#16191d" stroke-width="4"/>
-<rect x="20" y="52" width="10" height="280" fill="#6b4a2a" stroke="#16191d" stroke-width="2"/><rect x="270" y="52" width="10" height="280" fill="#6b4a2a" stroke="#16191d" stroke-width="2"/>
-${[46, 76, 224, 254].map((x, j) => `<path d="M${x} 50V${120 + j % 2 * 30}" stroke="#d9c9a0" stroke-width="1.5"/>${[0, 1, 2, 3].map(k => `<ellipse cx="${x + (k % 2 ? 4 : -4)}" cy="${66 + k * 16 + j % 2 * 6}" rx="6" ry="4" fill="#9aa39a" stroke="#16191d" stroke-width="1.5"/>`).join('')}`).join('')}
-<rect width="300" height="400" fill="url(#eqSpot)"/><path d="M0 330L300 330 300 400 0 400Z" fill="url(#eqMat)"/><path d="M0 330H300" stroke="#16191d" stroke-width="3"/><ellipse cx="150" cy="350" rx="70" ry="10" fill="#000" opacity=".25"/></svg>`;
-let eqPick: Slot | null = null;
-function eqStats(): string[] {
-  const f = fxAll(), pc = (v: number) => Math.round(v * 100), out: string[] = [];
-  if (f.pearl > 1.0001) out.push(`珍珠率|+${pc(f.pearl - 1)}%`);
-  if (f.bowl) out.push(`每碗多拿|+$${f.bowl}`);
-  if (f.throw < 0.9999) out.push(`被丟殼機率|−${pc(1 - f.throw)}%`);
-  if (f.nag < 0.9999) out.push(`阿婆唸人、干擾|−${pc(1 - f.nag)}%`);
-  if (f.dmg < 0.9999) out.push(`受到傷害|−${pc(1 - f.dmg)}%`);
-  if (f.speed < 0.9999) out.push(`翹殼指針|慢 ${pc(1 - f.speed)}%`);
-  if (f.keep) out.push(`沒中保住連擊|${pc(f.keep)}%`);
-  if (f.luck) out.push(`幸運|+${f.luck}`);
-  return out;
-}
-function renderEquip() {
-  const sets = setsOn(), st = eqStats(), worn = wornIds();
-  const lines = SLOTS.map(([s]) => { const c = EQ_CARD[s], cx = c.side === 'l' ? EQ_CW : 100 - EQ_CW, cy = c.top + EQ_CH / 2;
-    return `<line data-slot="${s}" x1="${cx}" y1="${cy}" x2="${eqAx(c.ax).toFixed(1)}" y2="${eqAy(c.ay).toFixed(1)}"/><circle data-slot="${s}" cx="${eqAx(c.ax).toFixed(1)}" cy="${eqAy(c.ay).toFixed(1)}" r="1.1"/>`; }).join('');
-  const cards = SLOTS.map(([s, n]) => { const c = EQ_CARD[s], e = equipNow(s);
-    return `<button class="eqCard ${c.side}${eqPick === s ? ' on' : ''}" data-slot="${s}" style="top:${c.top}%"><span class="eqTag">${n}</span>${eqSvg(e, 44)}<b>${e.n}</b><small>${e.price ? e.eff : '基本款，沒有加成'}</small></button>`; }).join('');
-  const hits = SLOTS.map(([s]) => { const c = EQ_CARD[s]; return `<button class="eqHit" data-slot="${s}" aria-label="${SLOTS.find(x => x[0] === s)![1]}" style="left:${eqAx(c.ax)}%;top:${eqAy(c.ay)}%"></button>`; }).join('');
-  const pickName = eqPick ? SLOTS.find(x => x[0] === eqPick)![1] : '';
-  $('eqBody').innerHTML =
-    `<div class="eqBoard"><div class="eqBoardT">目前加成</div>${st.length ? `<div class="eqStats">${st.map(x => { const [a, b] = x.split('|'); return `<div><small>${a}</small><b>${b}</b></div>`; }).join('')}</div>` : '<p class="eqNone">現在穿的都是基本款，還沒有加成。去服飾店挑幾件吧。</p>'}</div>` +
-    `<div class="eqStage">${SVG_SHED}<div class="eqFigW" id="eqFigW"></div><svg class="eqLines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${hits}${cards}</div>` +
-    (eqPick ? `<div class="eqList"><div class="eqListT">換${pickName}<small>點一件就換上，換穿免費</small></div>${EQUIP.filter(e => e.slot === eqPick && eqOwned(e.id)).map(e => `<button data-eqset="${e.id}" class="${equipNow(e.slot).id === e.id ? 'on' : ''}">${eqSvg(e, 48)}<span><b>${e.n}</b><small>${e.eff}</small></span>${equipNow(e.slot).id === e.id ? '<em>穿著中</em>' : ''}</button>`).join('')}<p class="eqHint">想要更多款式，去服飾店看看。</p></div>` : '<p class="eqHint">點人身上的部位或旁邊的木牌來換裝。</p>') +
-    `<div class="eqSecT">套裝收集</div><div class="eqSets">${SETS.map(s => { const done = sets.includes(s), have = s.need.filter(i => eqOwned(i)).length;
-      const full = have === s.need.length; return `<div class="eqSet${done ? ' done' : ''}${full ? ' full' : ''}"${full ? ` data-setid="${s.id}" role="button"` : ''}><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqSvg(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}${full ? `<em class="eqSetGo"><i class="ic ${done ? 'ic-check' : 'ic-hand'}"></i> ${done ? '穿著中' : '一鍵換上'}</em>` : ''}</div>`; }).join('')}</div>` +
-    `<div id="eqShareOut"></div><p class="eqHint">分享到 Discord 有機會拿神秘好禮</p><div class="eqDock"><button id="eqShare"><i class="ic ic-send"></i>分享穿搭</button><button id="eqShop"><i class="ic ic-shop"></i>去服飾店</button></div>`;
-  syncEqPreview($('eqFigW'), {
-    head: equipNow('head').id, hand: equipNow('hand').id,
-    body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
-  });
-  $('eqBody').querySelectorAll('button[data-slot]').forEach(b => (b as HTMLButtonElement).onclick = () => { const s = b.getAttribute('data-slot') as Slot; eqPick = eqPick === s ? null : s; renderEquip(); if (eqPick) $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
-  $('eqBody').querySelectorAll<HTMLElement>('.eqSet[data-setid]').forEach(el => el.onclick = () => { const st = SETS.find(x => x.id === el.dataset.setid); if (st) askSet(st); });
-  $('eqBody').querySelectorAll('button[data-eqset]').forEach(b => (b as HTMLButtonElement).onclick = () => { const e = EQUIP.find(x => x.id === b.getAttribute('data-eqset'))!; setEquip(e.slot, e.id); persist(); applySleeve(); applyOutfit3(); renderEquip(); });
-  ($('eqShare') as HTMLButtonElement).onclick = shareOutfit;
-  ($('eqShop') as HTMLButtonElement).onclick = () => { openShopPx(); $('equip').classList.remove('show'); stopEqPreview(); eqFromRes = false; if (eqPick) clothTab = eqPick; renderShop(); const gs = Array.from(document.querySelectorAll('#shopList .stab')); const i = gs.findIndex(g => g.querySelector('.slGrid')); if (i >= 0) { shopTab = i; renderShop(); } $('shop').classList.add('show'); $('shop').scrollTop = 0; };
-}
-let clothTab: Slot = 'hand';
-function renderClothShop() {
-  if (sleeveTry) { sleeveTry = null; applySleeve(); }
-  const items = EQUIP.filter(e => e.slot === clothTab && e.price > 0).sort((a, b) => a.price - b.price);
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-hand"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。</p><div class="clTabs">${SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === clothTab ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
-    return `<div class="slCard${cur ? ' on' : ''}">${eqSvg(s)}<b>${s.n}</b><small>${s.eff}</small>${pxCd(s.id)}<div class="slBtns">${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${save.money < px(s.id, s.price) ? 'disabled' : ''}>${pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
-  $('shopList').querySelectorAll('button[data-ctab]').forEach(b => (b as HTMLButtonElement).onclick = () => { clothTab = b.getAttribute('data-ctab') as Slot; renderShop(); });
-  $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
-    const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = EQUIP.find(x => x.id === id)!;
-    if (b.hasAttribute('data-slbuy')) { const pr = await payFor(id, s.price, s.n); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); track('buy', { item: id, price: pr }); if (ac) SFX.jingle(); }
-    setEquip(s.slot, id); sleeveTry = null; persist(); applySleeve(); applyOutfit3(); renderShop();
-  });
-}
-// 分享穿搭卡：直接畫在 canvas 上
-async function shareOutfit() {
-  const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d')!;
-  g.fillStyle = '#1e3a5a'; g.fillRect(0, 0, W, H); g.strokeStyle = '#f0e6c8'; g.lineWidth = 14; g.strokeRect(30, 30, W - 60, H - 60);
-  g.fillStyle = '#c8302a'; g.fillRect(60, 60, W - 120, 150); g.strokeStyle = '#1b1b1b'; g.lineWidth = 6; g.strokeRect(60, 60, W - 120, 150);
-  g.fillStyle = '#fff6dc'; g.textAlign = 'center'; g.font = 'bold 84px sans-serif'; g.fillText('剝蚵仔模擬器', W / 2, 165);
-  g.font = 'bold 60px sans-serif'; g.fillText(myName(), W / 2, 300); g.font = '36px sans-serif'; g.fillStyle = '#c8d8e8'; g.fillText('#' + statsId.slice(0, 4).toUpperCase() + ' 的今日穿搭', W / 2, 352);
-  const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(figSvg().replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="750" '));
-  await new Promise(r => { img.onload = r; img.onerror = r; }); g.fillStyle = '#f0e6c8'; g.fillRect(80, 400, 440, 780); g.drawImage(img, 100, 415, 400, 750);
-  g.textAlign = 'left'; let y = 450;
-  for (const [s, n] of SLOTS) { const e = equipNow(s); g.fillStyle = e.base; g.fillRect(570, y - 40, 50, 50); g.strokeStyle = '#1b1b1b'; g.lineWidth = 4; g.strokeRect(570, y - 40, 50, 50); g.fillStyle = '#c8d8e8'; g.font = '32px sans-serif'; g.fillText(n, 640, y - 12); g.fillStyle = '#fff6dc'; g.font = 'bold 42px sans-serif'; g.fillText(e.n, 640, y + 34); y += 130; }
-  const sets = setsOn(); if (sets.length) { g.fillStyle = '#ffd25a'; g.font = 'bold 40px sans-serif'; g.fillText('套裝：' + sets.map(s => s.n).join('、'), 570, y + 10); }
-  g.textAlign = 'center'; g.fillStyle = '#c8d8e8'; g.font = '34px sans-serif'; g.fillText('https://jinweihuang20.github.io/oyster-sim/', W / 2, H - 80);
-  const blob: Blob | null = await new Promise(r => c.toBlob(r, 'image/png')); if (!blob) return;
-  const file = new File([blob], 'oyster-outfit.png', { type: 'image/png' }); const url = URL.createObjectURL(blob);
-  $('eqShareOut').innerHTML = `<img src="${url}" alt="穿搭卡" style="width:100%;border-radius:8px;margin-top:8px"><p class="eqHint">手機也可以長按圖片儲存。</p><a href="${url}" download="oyster-outfit.png" class="btnLike">儲存圖片</a><p class="eqHint" style="margin-top:10px">加入 Discord 分享穿搭，就送神秘好禮！</p><a href="https://discord.gg/tpPBqxACVq" target="_blank" rel="noopener" class="btnLike dcBtn">加入 Discord</a>`;
-  const nav = navigator as any;
-  if (COARSE && nav.canShare?.({ files: [file] })) { try { await nav.share({ files: [file], title: '剝蚵仔模擬器', text: '看看我的剝蚵穿搭 https://jinweihuang20.github.io/oyster-sim/' }); } catch { } }
-}
 // 第一次教學開始前取名字（只出現一次）；關面板後再進工寮／教學
 let nameAfter: (() => void) | null = null;
 function nameDismiss() {
@@ -4188,6 +3811,42 @@ $('naSkip').style.display = 'none'; $('naSkip').onclick = () => { }; $('naClose'
 // 老玩家名字還是預設「剝蚵人」就要求改名
 if (save.tutDone && !save.name) setTimeout(() => namePrompt(), 600);
 { const i = $('naIn'); for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'keydown']) i.addEventListener(ev, e => e.stopPropagation()); }
+// ---------- 裝備狀態（UI 見 shop/clothUi）----------
+let sleeveTry: string | null = null, scaredT = 10;
+let clothTab: Slot = 'hand';
+let eqPick: Slot | null = null;
+let eqFromRes = false;
+
+initClothUi({
+  getSave: () => save,
+  persist,
+  track,
+  getAc: () => ac,
+  SFX,
+  applyOutfit3: () => applyOutfit3(),
+  renderShop,
+  openShopPx,
+  getShopTab: () => shopTab,
+  setShopTab: (n) => { shopTab = n; },
+  px, pxCd, pxHtml, payFor,
+  syncEqPreview,
+  stopEqPreview,
+  myName: () => myName(),
+  statsId,
+  COARSE,
+  sleeve,
+  shirtCuff,
+  getEqFromRes: () => eqFromRes,
+  setEqFromRes: (v) => { eqFromRes = v; },
+  isEvRun: () => !!evRun,
+  getSleeveTry: () => sleeveTry,
+  setSleeveTry: (v) => { sleeveTry = v; },
+  getClothTab: () => clothTab,
+  setClothTab: (v) => { clothTab = v; },
+  getEqPick: () => eqPick,
+  setEqPick: (v) => { eqPick = v; },
+});
+
 migrateEquip(); persist(); applySleeve();
 // 禮物信箱：伺服器沒開或還沒有這個路由時安靜失敗
 let giftList: Social.Gift[] = [], giftAt = 0;
@@ -4258,26 +3917,6 @@ function applyGift(g: Social.Gift) {
   persist(); renderDex();
 }
 function giftBadge() { const ob = document.getElementById('oGift'); if (ob) ob.style.display = giftList.length ? '' : 'none'; }
-function askSet(st: typeof SETS[number]) {
-  document.getElementById('giftMsg')?.remove();
-  const worn = wornIds(), on = st.need.every(i => worn.includes(i));
-  const m = document.createElement('div'); m.id = 'giftMsg'; m.className = 'giftMsg setAsk';
-  const items = st.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<li>${eqSvg(e, 32, false)}<span>${e.n}</span></li>`; }).join('');
-  m.innerHTML = on
-    ? `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-check"></i> 已經穿著這套了</b><p class="saEff">${st.n}：${st.eff}</p><div class="mbtns"><button class="gmNo"><i class="ic ic-check"></i> 確定</button></div></div>`
-    : `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-hand"></i> 要換上「${st.n}」嗎？</b><ul class="saList">${items}</ul><p class="saEff">套裝加成：${st.eff}</p><div class="mbtns"><button class="gmNo">取消</button><button class="gmYes"><i class="ic ic-check"></i> 換上</button></div></div>`;
-  const close = () => m.remove();
-  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
-  m.querySelector('.gmYes')?.addEventListener('click', () => {
-    for (const i of st.need) { const e = EQUIP.find(x => x.id === i); if (e && eqOwned(i)) setEquip(e.slot, i); }
-    persist(); applySleeve(); applyOutfit3(); renderEquip(); try { SFX.jingle(); } catch { /* 無音訊 */ }
-    m.querySelector('.gmBox')!.innerHTML = `<button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-check"></i> 已換上「${st.n}」</b><p class="saEff">套裝加成生效：${st.eff}</p><div class="mbtns"><button class="gmNo"><i class="ic ic-check"></i> 確定</button></div>`;
-    m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
-    setTimeout(close, 2200);
-  });
-  m.addEventListener('click', e => { if (e.target === m) close(); });
-  document.body.appendChild(m);
-}
 function giftMsg(ok: boolean, title: string, lines: string[]) {
   document.getElementById('giftMsg')?.remove();
   const esc2 = (v: string) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
@@ -4462,9 +4101,7 @@ function camTick(dt: number) {
 tpv = !!save.tpv; applyOutfit3(); drawCamBtn(); tpReady = true;
 $('camBtn').onclick = () => setTpv(!tpv);
 { const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) { c.checked = tpv; c.onchange = () => setTpv(c.checked); } }
-let eqFromRes = false;
 // iOS：面板顯示後才重畫一次內容，避免隱藏時插入的 SVG 不上色
-function openEquip() { renderEquip(); $('equip').classList.add('show'); requestAnimationFrame(() => { void $('equip').offsetHeight; renderEquip(); }); }
 $('eqClose').onclick = () => { $('equip').classList.remove('show'); stopEqPreview(); if (eqFromRes) { eqFromRes = false; $('result').classList.add('show'); } };
 $('rEquip').onclick = () => { eqFromRes = true; $('result').classList.remove('show'); eqPick = null; openEquip(); };
 $('oEquip').onclick = () => { eqPick = null; openEquip(); };
@@ -4662,7 +4299,7 @@ new MutationObserver(ms => { for (const m of ms) { const el = m.target as HTMLEl
 
 // ---------- 新商品上架提示 ----------
 // 商品 key：類別-id。SHOP_NEW 接後台「標為新品」的 newIds（接受 key 或 id）；SHOP_RECENT 是舊玩家第一次也要提示的近期新品
-const SHOP_NEW = { has: (k: string) => shopNewIds.includes(k) || shopNewIds.includes(k.split('-').slice(1).join('-')) };
+const SHOP_NEW = { has: (k: string) => getShopNewIds().includes(k) || getShopNewIds().includes(k.split('-').slice(1).join('-')) };
 const SHOP_RECENT = ['item-moon'];
 const NEW_CAT: Record<string, string> = { knife: '刀具', umb: '雨傘', bowl: '器具', gear: '器具', cloth: '服飾', med: '藥品', item: '道具' };
 const NEW_ATTR: [string, string][] = [['buy', 'knife'], ['eq', 'knife'], ['ubuy', 'umb'], ['ueq', 'umb'], ['bbuy', 'bowl'], ['beq', 'bowl'], ['gbuy', 'gear'], ['gtog', 'gear'], ['slbuy', 'cloth'], ['sleq', 'cloth'], ['mbuy', 'med'], ['ibuy', 'item']];
