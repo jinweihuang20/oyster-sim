@@ -1008,7 +1008,7 @@ function pushChat(m: PlazaChat) {
   }
 }
 
-/** 手機直向坐著時：聊天鈕移到「藥品／道具」正上方；橫向／桌面地圖用 top，勿設 bottom 以免撐高跑版 */
+/** 手機直向坐著時：聊天鈕移到「藥品／道具」正上方；地圖鈕固定 CSS 位置，坐下不改 */
 let fabB = '';
 function placeChatFab() {
   if (!ui) return;
@@ -1024,21 +1024,13 @@ function placeChatFab() {
   const fab = ui.querySelector('#pzChatFab') as HTMLElement | null;
   const peek = ui.querySelector('#pzChatPeek') as HTMLElement | null;
   const chat = ui.querySelector('#pzChat') as HTMLElement | null;
-  const mapFab = ui.querySelector('#pzMapFab') as HTMLElement | null;
   const up = b ? `calc(${b} + 52px)` : '';
   if (fab) fab.style.bottom = b;
   if (peek) peek.style.bottom = up;
   if (chat) chat.style.bottom = up;
-  if (mapFab) {
-    // 僅直向手機才用 bottom 抬地圖；否則清掉 inline，交給 CSS top（地圖-狀態列）
-    if (b) {
-      mapFab.style.bottom = `calc(${b} + 104px)`;
-      mapFab.style.top = 'auto';
-    } else {
-      mapFab.style.bottom = '';
-      mapFab.style.top = '';
-    }
-  }
+  // 地圖鈕不跟坐下位移；清掉可能殘留的 inline top/bottom
+  const mapFab = ui.querySelector('#pzMapFab') as HTMLElement | null;
+  if (mapFab) { mapFab.style.bottom = ''; mapFab.style.top = ''; }
 }
 
 function refreshPlazaMap() {
