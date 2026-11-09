@@ -3489,7 +3489,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
-{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：45fps・降解析・關陰影・廣場簡化（重新整理後 AA／精度／GPU 才會變）' : '已關省電：滿幀・柔和陰影（重新整理後抗鋸齒／GPU 才會變）', '#9be37a'); }; }
+{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：60fps・降解析・關陰影・廣場簡化（重新整理後 AA／精度／GPU 才會變）' : '已關省電：滿幀・柔和陰影（重新整理後抗鋸齒／GPU 才會變）', '#9be37a'); }; }
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => $('dex').classList.remove('show');
 
@@ -3600,8 +3600,8 @@ function frameBody() {
   }
   const now = performance.now();
   const paused = isPaused();
-  // 選單／暫停約 15fps；省電遊玩約 45fps；一般遊玩滿幀
-  const minMs = (state !== 'play' || paused) ? 1000 / 15 : (mix.eco ? 1000 / 45 : 0);
+  // 選單／暫停約 15fps；遊玩滿幀（省電靠降解析／關陰影，不鎖幀）
+  const minMs = (state !== 'play' || paused) ? 1000 / 15 : 0;
   if (minMs > 0 && now - lastDrawAt < minMs) { scheduleFrame(); return; }
   lastDrawAt = now;
   if (isDeathmatchActive()) { clock.getDelta(); scheduleFrame(); return; }
