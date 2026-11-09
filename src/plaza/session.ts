@@ -107,7 +107,7 @@ export function plazaPileObs(): [number, number, number][] {
   for (const o of plazaStallObstacles()) out.push(o);
   return out;
 }
-/** 走動時遠端站立玩家碰撞圓（蹲／躺略過） */
+/** 走動時遠端站立玩家碰撞圓（擋路不推擠；蹲／躺略過；跳躍仍擋） */
 export function plazaWalkBodies(): [number, number, number][] {
   return view?.walkBodies() ?? [];
 }

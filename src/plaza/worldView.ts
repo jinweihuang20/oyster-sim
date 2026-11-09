@@ -1146,7 +1146,7 @@ function hashPid(pid: string) {
     for (const k of stallKeepers) { k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15; posePlazaStallKeeper(k.rig, tSec, k.ph); tickKeeperBubble(k, tSec); }
   }
 
-  /** 站立／走動的遠端：擋路；蹲、躺、坐下、尚未現身：不擋 */
+  /** 站立／走動／跳躍的遠端：擋路（不推擠）；蹲、躺、坐下、尚未現身：不擋 */
   function walkBodies(): [number, number, number][] {
     const out: [number, number, number][] = [];
     for (const r of remotes.values()) {

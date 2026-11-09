@@ -13,9 +13,8 @@ export type WalkSeatDeps = {
   plazaSeated: () => boolean;
   plazaStandWalk: () => void;
   plazaPileObs: () => [number, number, number][];
-  /** 遠端站立玩家碰撞圓；跳躍中可不擋 */
+  /** 遠端站立玩家碰撞圓（擋路不推擠；蹲／躺略過） */
   plazaWalkBodies: () => [number, number, number][];
-  getJumpY: () => number;
   plazaWalkBound: () => number;
   plazaNearSeat: () => { pileId: number; slot: number } | null;
   plazaMySeat: () => { pileId: number; slot: number } | null;
@@ -161,20 +160,30 @@ export function walkStep(dt: number) {
   const moveSp = (D.isPlazaMode() ? 2.4 : 1.7) * walkTune.mul;
   walkMotion.spd = l * moveSp; walkMotion.strafe = r * moveSp;
   const yaw = D.getYaw();
+  const prevX = walkPos.x, prevZ = walkPos.z;
   const sp = moveSp * dt; walkPos.x += (-Math.sin(yaw) * f + Math.cos(yaw) * r) * sp; walkPos.z += (-Math.cos(yaw) * f - Math.sin(yaw) * r) * sp;
   const obs: [number, number, number][] = D.isPlazaMode()
     ? [...D.plazaPileObs()]
     : [[0, 0, 1.15], [D.BASIN.x, D.BASIN.z, 0.42], [D.BOWL.x, D.BOWL.z, D.getBowlR() + 0.12], [2.6, 2.6, 0.75], [2.9, -2.5, 0.35], [3.1, -1.9, 0.35], [-2.9, 2.6, 0.35], [3.0, 0.5, 0.3], [-3.0, 0.2, 0.3]];
-  if (D.isPlazaMode()) {
-    // 跳躍離地夠高可越過站立玩家；蹲／躺遠端本身就不進 walkBodies
-    if (D.getJumpY() < 0.28) for (const b of D.plazaWalkBodies()) obs.push(b);
-  } else {
+  if (!D.isPlazaMode()) {
     D.getNpcs().forEach(n => obs.push([n.g.position.x, n.g.position.z, 0.5]));
     D.stools.forEach(g => obs.push([g.position.x, g.position.z, 0.28]));
   }
+  // 場景障礙：推出圓外（可沿邊滑）
   for (let it = 0; it < 3; it++) for (const [x, z, rr] of obs) {
     const dx = walkPos.x - x, dz = walkPos.z - z, d = Math.hypot(dx, dz);
     if (d < rr + 0.2 && d > 1e-4) { walkPos.x = x + dx / d * (rr + 0.2); walkPos.z = z + dz / d * (rr + 0.2); }
+  }
+  // 玩家之間：擋路但不推擠；跳躍同樣干涉（不因離地穿透）
+  if (D.isPlazaMode()) {
+    for (const [x, z, rr] of D.plazaWalkBodies()) {
+      const dx = walkPos.x - x, dz = walkPos.z - z, d = Math.hypot(dx, dz);
+      const minD = rr + 0.2;
+      if (d >= minD || d <= 1e-4) continue;
+      const pd = Math.hypot(prevX - x, prevZ - z);
+      // 已在圈內且這步是往外／不加深：放行以便脫困；否則還原本幀位移
+      if (!(pd < minD && d + 1e-8 >= pd)) { walkPos.x = prevX; walkPos.z = prevZ; break; }
+    }
   }
   if (!D.isPlazaMode() && walkPos.z < -2.55 && walkPos.x < -1.3) walkPos.z = -2.55;
   const bound = D.isPlazaMode() ? D.plazaWalkBound() : 3.25;
