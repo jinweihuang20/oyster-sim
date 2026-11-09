@@ -451,3 +451,58 @@ export function applyPlazaBodyPose(rig: PlayerRig, pose: string, k: number) {
     r.shinR && (r.shinR.rotation.x = r.shinR.rotation.x * (1 - k) - 2.3 * k);
   }
 }
+
+/** 與 plaza/worldView 坐姿對齊：椅面 0.42、髖略抬 0.14 */
+export const PLAZA_CHAIR_SEAT_Y = 0.42;
+export const PLAZA_SIT_HIP_LIFT = 0.14;
+const PLAZA_HIP_Y = 0.72;
+const PLAZA_TORSO_Y = 0.92;
+export const PLAZA_SIT_ROOT_Y = (PLAZA_CHAIR_SEAT_Y + PLAZA_SIT_HIP_LIFT) - PLAZA_HIP_Y;
+
+/** 廣場坐下：同站立 avatar，只改腿／髖／臂（與遠端 poseSit 相同） */
+export function posePlazaSit(rig: PlayerRig) {
+  posePlazaHangArms(rig, true);
+  rig.outer.scale.setScalar(1);
+  rig.root.scale.set(1, 1, 1);
+  rig.root.position.y = PLAZA_SIT_ROOT_Y;
+  rig.legL.scale.set(1, 1, 1);
+  rig.legR.scale.set(1, 1, 1);
+  rig.shinL.scale.set(1, 1, 1);
+  rig.shinR.scale.set(1, 1, 1);
+  rig.torso.scale.set(1, 1, 1);
+  rig.legL.rotation.set(1.25, 0.06, 0.08);
+  rig.legR.rotation.set(1.25, -0.06, -0.08);
+  rig.shinL.rotation.set(-1.35, 0, 0);
+  rig.shinR.rotation.set(-1.35, 0, 0);
+  rig.torso.rotation.x = -0.06;
+  rig.torso.position.y = PLAZA_TORSO_Y - 0.02;
+  rig.head.rotation.y = 0;
+  rig.head.rotation.x = 0;
+}
+
+/** 廣場站立預設（清掉坐姿） */
+export function posePlazaStand(rig: PlayerRig) {
+  posePlazaHangArms(rig, false);
+  rig.outer.scale.setScalar(1);
+  rig.root.scale.set(1, 1, 1);
+  rig.root.position.set(0, 0, 0);
+  rig.legL.rotation.set(0, 0, 0);
+  rig.legR.rotation.set(0, 0, 0);
+  rig.shinL.rotation.set(0, 0, 0);
+  rig.shinR.rotation.set(0, 0, 0);
+  rig.legL.scale.set(1, 1, 1);
+  rig.legR.scale.set(1, 1, 1);
+  rig.shinL.scale.set(1, 1, 1);
+  rig.shinR.scale.set(1, 1, 1);
+  rig.torso.scale.set(1, 1, 1);
+  rig.torso.rotation.x = 0;
+  rig.torso.position.y = PLAZA_TORSO_Y;
+}
+
+/** 吸菸區坐下：右手近嘴（與遠端 smoke phase 相同） */
+export function posePlazaSmokeSit(rig: PlayerRig) {
+  posePlazaSit(rig);
+  placePlazaArmChain(rig.upperL, rig.lowerL, -0.22, 0.28, 0, -0.18, 0.12, -0.12, -0.14, 0.06, -0.22);
+  placePlazaArmChain(rig.upperR, rig.lowerR, 0.22, 0.32, 0, 0.08, 0.42, -0.12, 0.04, 0.52, -0.2);
+  if (rig.head) rig.head.rotation.x = -0.04;
+}

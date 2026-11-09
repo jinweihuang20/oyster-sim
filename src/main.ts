@@ -46,13 +46,14 @@ import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
 import {
   makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
+  posePlazaSit, posePlazaStand, posePlazaSmokeSit,
   plazaJumpHeight, PLAZA_JUMP_DUR, applyPlazaBodyPose as applyBodyPose, type PlayerRig,
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
 import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
-  plazaHitPile, plazaMyPileOrigin, pileIsGrill,
+  plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
@@ -3843,14 +3844,15 @@ function camTick(dt: number) {
   if (!tpReady) return;
   const show = tpv && state === 'play';
   const enter = show && !tpWas; tpWas = show;
-  const usePlazaMe = show && plazaMode && walking;
+  // 廣場第三人稱：走動／坐下都用同一套 makePlayerAvatar（與遠端一致）；工寮仍用 me3
+  const usePlazaMe = show && plazaMode;
   tpOn = show;
   me3.visible = show && !usePlazaMe;
   if (plazaMe) plazaMe.outer.visible = usePlazaMe;
   umbTick3(dt, show); handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
   if (!show) { if (plazaMe) plazaMe.outer.visible = false; return; }
   const kk = enter ? 1 : 1 - Math.exp(-5 * dt);
-  meSeatLegs.visible = !walking; meLegL.visible = meLegR.visible = walking && !plazaMode;
+  meSeatLegs.visible = !walking && !plazaMode; meLegL.visible = meLegR.visible = walking && !plazaMode;
   if (walking) {
     const sp = Math.hypot(walkPos.x - lastWalk.x, walkPos.z - lastWalk.z) / Math.max(dt, 1e-3); lastWalk.copy(walkPos); walkMovingT = sp > 0.3 ? performance.now() : walkMovingT;
     walkPh += Math.min(sp, 3) * dt * 5; const sw = Math.min(1, sp / 1.2) * Math.sin(walkPh);
@@ -3859,6 +3861,8 @@ function camTick(dt: number) {
       // 廣場：死鬥同款 avatar，腳底 y=0、頭高 ≈1.5；第三人稱鎖俯仰，避免遠端跟著點頭
       pitch = tPitch = PLAZA_WALK_PITCH;
       const rig = ensurePlazaMe();
+      // 剛從坐下站起：清掉坐姿髖偏移
+      if (rig.root.position.y !== 0) posePlazaStand(rig);
       rig.outer.visible = true;
       rig.outer.position.set(walkPos.x, jumpY, walkPos.z);
       rig.outer.rotation.order = 'YXZ';
@@ -3900,17 +3904,22 @@ function camTick(dt: number) {
     { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     tpCam.updateMatrixWorld(); return;
   }
-  me3.position.set(SEAT.x, SEAT.y - 1.02, SEAT.z); me3.rotation.y = seatYaw;
   cheerT = Math.max(0, cheerT - dt); ouchT = Math.max(0, ouchT - dt);
   const up = cheerT > 0 ? Math.sin(Math.min(1, cheerT) * Math.PI) : 0;
-  meArmL.rotation.x = meArmR.rotation.x = -up * 2.4; meArmL.rotation.z = -up * 0.3; meArmR.rotation.z = up * 0.3;
-  meTorso.rotation.x = ouchT > 0 ? Math.sin(ouchT / 0.6 * Math.PI) * 0.35 : 0; meTorso.position.y = up * 0.06;
-  meHead.rotation.y = (plazaMode && tpv) ? 0 : yaw * 0.6; meTorso.position.y = Math.max(meTorso.position.y, 0);
-  // 廣場第三人稱坐下：手／身體參考座位朝向，不跟繞轉鏡頭
-  const h = (plazaMode && tpv) ? seatYaw : (seatYaw + yaw * 0.35), fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
   if (plazaMode) {
-    // 廣場坐下第三人稱：鏡頭可繞角色轉，身體朝向維持 seatYaw（me3 已設）
-    meHead.rotation.y = 0;
+    // 廣場坐下：與走動同一 plazaMe／裝備；只套坐姿（吸菸座另套抽烟手勢）
+    const rig = ensurePlazaMe();
+    const mine = plazaMySeat();
+    const pose = mine ? seatPose(mine.pileId, mine.slot) : { pos: new THREE.Vector3(SEAT.x, 0, SEAT.z), yaw: seatYaw };
+    const back = -0.08;
+    rig.outer.visible = true;
+    rig.outer.position.set(pose.pos.x + Math.sin(pose.yaw) * back, 0, pose.pos.z + Math.cos(pose.yaw) * back);
+    rig.outer.rotation.order = 'YXZ';
+    rig.outer.rotation.y = pose.yaw;
+    rig.outer.rotation.x = 0;
+    const smoke = smokeSitActive || (mine ? isSmokePile(mine.pileId) : false);
+    if (smoke) posePlazaSmokeSit(rig); else posePlazaSit(rig);
+    handRig.visible = false;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
     const dist = 3.1;
     const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = dist * Math.cos(el);
@@ -3919,7 +3928,15 @@ function camTick(dt: number) {
     if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
     { const f = tpFovFor('plazaSit'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     tpCam.lookAt(tpLook); tpCam.updateMatrixWorld();
-  } else {
+    return;
+  }
+  // 工寮坐下：沿用 me3（走動亦同套）
+  me3.position.set(SEAT.x, SEAT.y - 1.02, SEAT.z); me3.rotation.y = seatYaw;
+  meArmL.rotation.x = meArmR.rotation.x = -up * 2.4; meArmL.rotation.z = -up * 0.3; meArmR.rotation.z = up * 0.3;
+  meTorso.rotation.x = ouchT > 0 ? Math.sin(ouchT / 0.6 * Math.PI) * 0.35 : 0; meTorso.position.y = up * 0.06;
+  meHead.rotation.y = yaw * 0.6; meTorso.position.y = Math.max(meTorso.position.y, 0);
+  const h = seatYaw + yaw * 0.35, fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
+  {
     // 工寮：從背後斜 3/4 看，人在畫面中下、全身入鏡
     const cp = new THREE.Vector3(SEAT.x - fx * 2.6 - rx * 1.5, SEAT.y + 0.85, SEAT.z - fz * 2.6 - rz * 1.5);
     const lt = new THREE.Vector3(SEAT.x + fx * 0.8 + rx * 0.35, SEAT.y - 0.2, SEAT.z + fz * 0.8 + rz * 0.35);
@@ -4099,8 +4116,8 @@ function umbHit3(at: THREE.Vector3) {
 }
 function umbTick3(dt: number, show: boolean) {
   if (!umb3Ready) return;
-  // 廣場走動用 DM avatar：傘掛在 plazaMe；其餘掛回 me3
-  if (show && plazaMode && walking) {
+  // 廣場第三人稱（走／坐）傘掛 plazaMe；工寮掛 me3
+  if (show && plazaMode) {
     const host = ensurePlazaMe().outer;
     if (umb3.parent !== host) host.add(umb3);
   } else if (umb3.parent !== me3) me3.add(umb3);

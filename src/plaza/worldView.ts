@@ -3,7 +3,9 @@ import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
 import {
   makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
+  posePlazaSit, posePlazaStand, posePlazaSmokeSit,
   plazaJumpHeight, PLAZA_JUMP_DUR, posePlazaStallKeeper, applyPlazaBodyPose, type PlayerRig,
+  PLAZA_SIT_ROOT_Y,
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, isSmokePile, SMOKE_PILE_ID, type PlazaSeatRef } from './layout';
@@ -109,10 +111,9 @@ const AMA_LOOKS: AmaFarmLook[] = [
  * 坐時髖略高於椅面：大腿 mesh 在髖下方，對齊 HIP 會整個人沉進椅子。
  */
 const AVATAR_SCALE = 1;
-const HIP_Y = 0.72;
-/** 髖高於坐墊，讓大腿／屁股貼在椅面上 */
+/** 髖高於坐墊，讓大腿／屁股貼在椅面上（數值見 character.PLAZA_SIT_*） */
 const SIT_HIP_LIFT = 0.14;
-const SIT_ROOT_Y = (CHAIR_SEAT_Y + SIT_HIP_LIFT) / AVATAR_SCALE - HIP_Y;
+const SIT_ROOT_Y = PLAZA_SIT_ROOT_Y;
 
 const _hangDir = new THREE.Vector3();
 const _hangX = new THREE.Vector3();
@@ -706,42 +707,8 @@ function hashPid(pid: string) {
   }
 
   /** 坐下：大腿貼椅面、小腿下垂；略後仰離蚵堆 */
-  function poseSit(r: Remote) {
-    hangArms(r, true);
-    r.rig.outer.scale.setScalar(AVATAR_SCALE);
-    r.rig.root.scale.set(1, 1, 1);
-    r.rig.root.position.y = SIT_ROOT_Y;
-    r.rig.legL.scale.set(1, 1, 1);
-    r.rig.legR.scale.set(1, 1, 1);
-    r.rig.shinL.scale.set(1, 1, 1);
-    r.rig.shinR.scale.set(1, 1, 1);
-    r.rig.torso.scale.set(1, 1, 1);
-    // 大腿近水平貼坐墊，小腿垂下
-    r.rig.legL.rotation.set(1.25, 0.06, 0.08);
-    r.rig.legR.rotation.set(1.25, -0.06, -0.08);
-    r.rig.shinL.rotation.set(-1.35, 0, 0);
-    r.rig.shinR.rotation.set(-1.35, 0, 0);
-    r.rig.torso.rotation.x = -0.06;
-    r.rig.torso.position.y = TORSO_Y - 0.02;
-  }
-
-  function poseStand(r: Remote) {
-    hangArms(r, false);
-    r.rig.outer.scale.setScalar(AVATAR_SCALE);
-    r.rig.root.scale.set(1, 1, 1);
-    r.rig.root.position.set(0, 0, 0);
-    r.rig.legL.rotation.set(0, 0, 0);
-    r.rig.legR.rotation.set(0, 0, 0);
-    r.rig.shinL.rotation.set(0, 0, 0);
-    r.rig.shinR.rotation.set(0, 0, 0);
-    r.rig.legL.scale.set(1, 1, 1);
-    r.rig.legR.scale.set(1, 1, 1);
-    r.rig.shinL.scale.set(1, 1, 1);
-    r.rig.shinR.scale.set(1, 1, 1);
-    r.rig.torso.scale.set(1, 1, 1);
-    r.rig.torso.rotation.x = 0;
-    r.rig.torso.position.y = TORSO_Y;
-  }
+  function poseSit(r: Remote) { posePlazaSit(r.rig); }
+  function poseStand(r: Remote) { posePlazaStand(r.rig); }
 
   function applyActionPose(r: Remote) {
     if (r.throwT > 0) { poseThrow(r); applyHeadLook(r); return; }
@@ -751,8 +718,7 @@ function hashPid(pid: string) {
       poseSit(r);
       if (ph === 'smoke' || isSmokePile(r.pileId)) {
         // 抽烟 idle：右手近嘴、無刀無蚵
-        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.28, 0, -0.18, 0.12, -0.12, -0.14, 0.06, -0.22);
-        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.32, 0, 0.08, 0.42, -0.12, 0.04, 0.52, -0.2);
+        posePlazaSmokeSit(r.rig);
         r.knife.visible = false;
         r.oyster.visible = false;
         r.headWorkX = -0.04;
