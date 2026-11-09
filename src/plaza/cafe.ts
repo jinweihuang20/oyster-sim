@@ -266,15 +266,16 @@ export function makePlazaCafe(
       add(new THREE.BoxGeometry(0.1, 0.06, 0.52), trim, [fx - 0.05, 3.95, z], root, false);
     }
   }
-  // 門口暖燈（最多 1 盞；省電／低畫質不開）
-  if (!LO) {
-    const pl = new THREE.PointLight(0xffd8a8, 4.5, 6, 1.6);
-    pl.position.set(fx - 0.6, 2.45, doorZ);
-    pl.castShadow = false;
-    root.add(pl);
-    lights.push(pl);
-  }
+  // 門口暖光：自發光燈泡＋光暈，不再加 PointLight
   add(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe0b0 }), [fx - 0.5, 2.58, doorZ], root, false);
+  if (!LO) {
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.32, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffd8a8, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }),
+    );
+    halo.position.set(fx - 0.5, 2.58, doorZ);
+    root.add(halo);
+  }
 
   // ── 前庭北端花台改到樸子腳北側（見 seafood.ts）；兩店之間補一道石材側牆 ──
   add(rboxEnv(B.x1 - B.x0, 3.4, B.z0 - SEAFOOD_BUILDING.z1, 0.04), stoneSideMat, [(B.x0 + B.x1) / 2, 1.7, (B.z0 + SEAFOOD_BUILDING.z1) / 2], root, false);

@@ -16,6 +16,7 @@ import {
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
+import { mergeStaticMeshes, countMeshes } from './mergeStatic';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
 import { makePlazaCafe } from './cafe';
@@ -151,6 +152,9 @@ export function createPlazaWorldView(
   const remotes = new Map<string, Remote>();
   const seatMeshes = new Map<string, THREE.Mesh>();
   const pileGroups: THREE.Group[] = [];
+  const chairsRoot = new THREE.Group();
+  chairsRoot.name = 'plazaChairs';
+  root.add(chairsRoot);
   let nearKey: string | null = null;
 
   // 水泥廣場貼皮（分格對齊蚵堆）
@@ -186,7 +190,7 @@ export function createPlazaWorldView(
     for (let s = 0; s < seatN; s++) {
       const pose = seatPose(i, s);
       const { group, pad } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
-      root.add(group);
+      chairsRoot.add(group);
       seatMeshes.set(seatKey(i, s), pad);
     }
   }
@@ -217,6 +221,25 @@ export function createPlazaWorldView(
   // 樸子腳北側「聯合競選總部」組合屋外觀（無座位、無點光）
   const hq = makePlazaHq(M, add, LO);
   root.add(hq.group);
+
+  // 合併靜態桌椅／棚架／攤位（略過選位墊、炭火、吊扇、薄煙；店面小零件留給遠景 LOD）
+  const padSet = new Set<THREE.Object3D>([...seatMeshes.values()]);
+  const skipMerge = (m: THREE.Mesh) => {
+    if (padSet.has(m)) return true;
+    let p: THREE.Object3D | null = m;
+    while (p) {
+      if (p.name === 'charcoalFire' || p.name === 'plazaCeilingFan' || p.name === 'cigSmoke') return true;
+      p = p.parent;
+    }
+    return false;
+  };
+  const meshBefore = countMeshes(root);
+  mergeStaticMeshes(chairsRoot, { skip: skipMerge, name: 'chairsMerged' });
+  mergeStaticMeshes(bigShed.group, { skip: skipMerge, name: 'shedMerged' });
+  for (const pile of pileGroups) mergeStaticMeshes(pile, { skip: skipMerge, name: 'pileMerged' });
+  mergeStaticMeshes(ambiance.group, { skip: skipMerge, name: 'ambianceMerged' });
+  mergeStaticMeshes(smokeArea.group, { skip: skipMerge, name: 'smokeMerged' });
+  root.userData.mergeStats = { meshesBefore: meshBefore, meshesAfter: countMeshes(root) };
 
   // 遠景細節裁切：建築小零件（窗框、桌上小物、菸蒂…）與貼圖招牌，鏡頭離建築夠遠就不畫
   type DetailLod = { box: THREE.Box3; small: THREE.Object3D[]; signs: THREE.Object3D[]; smallOn: boolean; signOn: boolean };
@@ -446,14 +469,15 @@ export function createPlazaWorldView(
   // 南排共烤：伺服器同步的烤網上蚵仔
   const grill = createGrillView(root);
 
-  // 四堆一盞實際點光（對齊吊燈外觀；不投影以免 4 燈吃效能）
-  const plazaLights: THREE.PointLight[] = [...ambiance.lights, ...cafe.lights, ...seafood.lights];
+  // 只留對角兩盞真正的吊燈（外觀四盞都還在）；招牌／攤位／炭火改自發光，避免每幀開關燈害著色器重編
+  const plazaLights: THREE.PointLight[] = [];
   const roofLamps: THREE.PointLight[] = [];
-  const roofLampBaseI = LO ? 7 : 9.5;
-  for (const [x, z] of PLAZA_LAMP_XZ) {
-    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 13 : 15, 1.35);
+  const roofLampBaseI = LO ? 8 : 11;
+  for (const [x, z] of [PLAZA_LAMP_XZ[0], PLAZA_LAMP_XZ[3]]) {
+    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 14 : 16, 1.35);
     pl.position.set(x, PLAZA_ROOF_Y - 0.55, z);
     pl.castShadow = false;
+    pl.visible = true;
     root.add(pl);
     plazaLights.push(pl);
     roofLamps.push(pl);
@@ -1484,19 +1508,8 @@ function hashPid(pid: string) {
     const eco = !!opts.eco?.();
     const cx = camera.position.x, cz = camera.position.z;
     const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
-    // 省電：只留兩盞對角吊燈、關掉攤位動態燈
-    for (let i = 0; i < roofLamps.length; i++) {
-      const on = !eco || (i === 0 || i === 3);
-      roofLamps[i].visible = on;
-      roofLamps[i].intensity = on ? (eco ? roofLampBaseI * 0.85 : roofLampBaseI) : 0;
-    }
-    // 攤位火光、店門口暖燈照的範圍只有幾公尺：鏡頭離超過約 18 m 就關（±2 m 緩衝）
-    for (const L of [...ambiance.lights, ...cafe.lights, ...seafood.lights]) {
-      if (eco) { L.visible = false; continue; }
-      L.getWorldPosition(_lodP);
-      const ld = Math.hypot(_lodP.x - cx, _lodP.z - cz);
-      L.visible = L.visible ? ld < 20 : ld < 16;
-    }
+    // 燈數固定，只調亮度，不開關 visible（three.js 增減燈會重編著色器）
+    for (const pl of roofLamps) pl.intensity = eco ? roofLampBaseI * 0.85 : roofLampBaseI;
     tickDetailLod(dt, cx, cz);
 
     const k = Math.min(1, dt * 10);
