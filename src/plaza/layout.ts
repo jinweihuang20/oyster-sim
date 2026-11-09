@@ -108,14 +108,26 @@ export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDis
   return best;
 }
 
-/** 吸菸區碰撞（棚外；遮雨棚／菸灰缸／長椅） */
+/**
+ * 立式菸灰缸相對 SMOKE_CENTER 的 xz（西側、遠離圓凳弧；與凳中心距離 ≥ ~1.17）
+ * 舊位 (0,0)/(0.55,±0.85) 與 seat0／seat3 幾乎重疊（≈0.15）。
+ */
+export const SMOKE_ASHTRAY_XZ: readonly [number, number][] = [
+  [-0.65, 0],
+  [-0.5, -0.85],
+  [-0.5, 0.85],
+];
+/** 菸灰缸頂緣高度：約坐姿肩高略下（坐姿頭≈1.51、肩≈1.06；舊頂≈1.02） */
+export const SMOKE_ASHTRAY_TOP_Y = 0.88;
+/** 菸灰缸柱碰撞半徑 */
+export const SMOKE_ASHTRAY_RADIUS = 0.22;
+
+/** 吸菸區碰撞（棚外大圈＋菸灰缸柱；菸灰缸勿擋東側入座路徑） */
 export function plazaSmokeObstacles(): [number, number, number][] {
   const { x, z } = SMOKE_CENTER;
   return [
     [x, z, 1.55],
-    [x + 0.55, z - 0.85, 0.28],
-    [x + 0.55, z + 0.85, 0.28],
-    [x - 0.35, z, 0.28],
+    ...SMOKE_ASHTRAY_XZ.map(([dx, dz]) => [x + dx, z + dz, SMOKE_ASHTRAY_RADIUS] as [number, number, number]),
   ];
 }
 

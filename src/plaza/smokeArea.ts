@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
-import { SMOKE_CENTER, SMOKE_SEAT_COUNT, SMOKE_PILE_ID, seatPose, seatKey, plazaSmokeObstacles } from './layout';
+import { SMOKE_CENTER, SMOKE_SEAT_COUNT, SMOKE_PILE_ID, SMOKE_ASHTRAY_XZ, SMOKE_ASHTRAY_TOP_Y, seatPose, seatKey, plazaSmokeObstacles } from './layout';
 import { makePlazaChair } from './props';
 import { makeCigSmoke, type CharcoalFireFx } from './fireFx';
 
@@ -102,14 +102,17 @@ export function makePlazaSmokeArea(
     roof.rotation.x = -0.04;
   }
 
-  // 立式菸灰缸 ×3
+  // 立式菸灰缸 ×3（西側留空檔，頂緣約坐姿肩高略下）
   {
     const metal = M(0x5a6068, { metalness: 0.45, roughness: 0.5 });
     const top = M(0x3a4048, { metalness: 0.35, roughness: 0.55 });
-    for (const [dx, dz] of [[0, 0], [0.55, -0.85], [0.55, 0.85]] as const) {
-      add(rcyl(0.055, 0.06, 0.95, segs), metal, [cx + dx, 0.48, cz + dz], root, true);
-      add(rcyl(0.12, 0.13, 0.05, segs), top, [cx + dx, 0.98, cz + dz], root, false);
-      add(rcyl(0.035, 0.04, 0.04, 6), M(0x2a2e32), [cx + dx, 1.02, cz + dz], root, false);
+    const topY = SMOKE_ASHTRAY_TOP_Y;
+    const postH = topY - 0.08; // 柱頂略低於盤
+    const postY = postH / 2;
+    for (const [dx, dz] of SMOKE_ASHTRAY_XZ) {
+      add(rcyl(0.055, 0.06, postH, segs), metal, [cx + dx, postY, cz + dz], root, true);
+      add(rcyl(0.12, 0.13, 0.05, segs), top, [cx + dx, topY - 0.04, cz + dz], root, false);
+      add(rcyl(0.035, 0.04, 0.04, 6), M(0x2a2e32), [cx + dx, topY, cz + dz], root, false);
     }
   }
 
@@ -141,7 +144,7 @@ export function makePlazaSmokeArea(
 
   // 區內淡煙氣氛
   const ambientSmoke = makeCigSmoke({ count: lowDetail ? 4 : 7, seed: 12045, scale: 1.1 });
-  ambientSmoke.group.position.set(cx, 1.05, cz);
+  ambientSmoke.group.position.set(cx, SMOKE_ASHTRAY_TOP_Y + 0.04, cz);
   root.add(ambientSmoke.group);
 
   return {
