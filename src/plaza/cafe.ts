@@ -5,7 +5,7 @@ import {
   CAFE_BUILDING, SEAFOOD_BUILDING, CAFE_PORCH_DEPTH, CAFE_OPENING, CAFE_SOUTH_WALL_END, seatPose, seatKey,
 } from './layout';
 import { CHAIR_SEAT_Y } from './props';
-import { makeSmokeLabelTexture } from './smokeArea';
+import { makeSmokeLabelTexture, makeCigButts } from './smokeArea';
 import { makeCigSmoke, type CharcoalFireFx } from './fireFx';
 
 type MatFn = (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial;
@@ -300,6 +300,9 @@ export function makePlazaCafe(
     add(rcyl(0.035, 0.04, TABLE_Y - 0.02, segs), woodDark, [CAFE_TABLE_X, TABLE_Y / 2, z], root, true);
     add(rcyl(0.2, 0.22, 0.03, segs), woodDark, [CAFE_TABLE_X, 0.015, z], root, false);
     add(rcyl(0.075, 0.065, 0.035, segs), ashMat, [CAFE_TABLE_X, TABLE_Y + 0.037, z], root, false);
+    const butts = makeCigButts(3, 0.02, 0.05, 4200 + Math.round(z * 131));
+    butts.position.set(CAFE_TABLE_X, TABLE_Y + 0.0545 - 0.006, z);
+    root.add(butts);
   }
   for (let s = 0; s < CAFE_SMOKE_SEAT_COUNT; s++) {
     const pose = seatPose(CAFE_SMOKE_PILE_ID, s);
