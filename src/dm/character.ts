@@ -598,9 +598,10 @@ export function posePlazaSmokeSit(rig: PlayerRig, puffKOrOpts: number | SmokeSit
   }
   // 放開：先離嘴（外推＋略降）
   if (away > 0.01) {
-    wrx += away * 0.08;
-    wrz -= away * 0.06;
-    wry -= away * 0.04;
+    const a = away * k; // 越放下越淡，不會跳
+    wrx += a * 0.08;
+    wrz -= a * 0.06;
+    wry -= a * 0.04;
   }
   // 彈烟灰：腕輕抖
   if (flick > 0.01) {

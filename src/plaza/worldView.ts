@@ -369,12 +369,13 @@ export function createPlazaWorldView(
       sn.animT = 1;
       if (sn.holdT >= sn.holdDur) {
         sn.phase = 'down';
-        sn.awayT = 1;
+        sn.awayT = 0;
         sn.releaseAt = now;
       }
     } else if (sn.phase === 'down') {
-      if (sn.awayT > 0) sn.awayT = Math.max(0, sn.awayT - dt / 0.12);
-      else sn.animT = Math.max(0, sn.animT - dt / 0.5);
+      // 放開：一邊放下一邊略離嘴，不再先彈回嘴邊
+      sn.animT = Math.max(0, sn.animT - dt / 0.5);
+      sn.awayT = sn.animT > 0 ? Math.min(1, sn.awayT + dt / 0.12) : 0;
       if (sn.releaseAt && now - sn.releaseAt >= 1000) {
         const ms = sn.holdMs;
         sn.releaseAt = 0;
@@ -385,16 +386,15 @@ export function createPlazaWorldView(
             scale: sc,
             count: LO ? Math.round(4 + strength * 4) : Math.round(6 + strength * 8),
             seed: 7200 + (Math.abs(hashPid('exh') + (now | 0)) % 4000),
+            reach: strength,
           });
-          const mouth = new THREE.Vector3();
-          sn.rig.head.getWorldPosition(mouth);
+          sn.rig.head.updateMatrixWorld(true);
+          const mouth = sn.rig.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
           const yaw = sn.rig.outer.rotation.y;
-          mouth.x += -Math.sin(yaw) * 0.14;
-          mouth.y -= 0.01;
-          mouth.z += -Math.cos(yaw) * 0.14;
           fx.group.position.copy(mouth);
+          fx.group.rotation.y = yaw;
           root.add(fx.group);
-          sn.exhales.push({ fx, age: 0, life: 2.6, yaw });
+          sn.exhales.push({ fx, age: 0, life: 3.6, yaw });
         }
       }
       if (sn.animT <= 0.001 && sn.awayT <= 0.001 && !sn.releaseAt) {
@@ -419,9 +419,6 @@ export function createPlazaWorldView(
       const e = sn.exhales[i];
       e.age += dt;
       e.fx.tick(tSec, dt);
-      e.fx.group.position.y += 0.22 * dt;
-      e.fx.group.position.x += -Math.sin(e.yaw) * 0.14 * dt;
-      e.fx.group.position.z += -Math.cos(e.yaw) * 0.14 * dt;
       if (e.age >= e.life) {
         try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
         e.fx.dispose();
@@ -956,7 +953,7 @@ function hashPid(pid: string) {
     r.puff = {
       held: false,
       animT,
-      awayT: 1,
+      awayT: 0,
       holdMs,
       autoEndAt: 0,
       releaseAt: holdMs >= REMOTE_PUFF_MIN_HOLD_MS ? now : 0,
@@ -968,16 +965,14 @@ function hashPid(pid: string) {
     if (holdMs < REMOTE_PUFF_MIN_HOLD_MS || !r.rig?.head) return;
     const strength = Math.min(1, holdMs / 5000);
     const sc = 0.35 + strength * 1.15;
-    const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 6100 + Math.floor(Math.random() * 4000) });
-    const mouth = new THREE.Vector3();
-    r.rig.head.getWorldPosition(mouth);
+    const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 6100 + Math.floor(Math.random() * 4000), reach: strength });
+    r.rig.head.updateMatrixWorld(true);
+    const mouth = r.rig.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
     const yaw = r.rig.outer.rotation.y;
-    mouth.x += -Math.sin(yaw) * 0.14;
-    mouth.y -= 0.01;
-    mouth.z += -Math.cos(yaw) * 0.14;
     fx.group.position.copy(mouth);
+    fx.group.rotation.y = yaw;
     root.add(fx.group);
-    remoteExhales.push({ fx, age: 0, life: 2.6, yaw });
+    remoteExhales.push({ fx, age: 0, life: 3.6, yaw });
   }
 
   function tickRemotePuff(r: Remote, dt: number) {
@@ -988,17 +983,16 @@ function hashPid(pid: string) {
     if (pf.held && pf.autoEndAt && now >= pf.autoEndAt) {
       // 缺 end：逾時自動放下（不吐煙）
       pf.held = false;
-      pf.awayT = 1;
       pf.releaseAt = 0;
       pf.exhaled = true;
       pf.autoEndAt = 0;
     }
     if (pf.held) {
       pf.animT = Math.min(1, pf.animT + dt / REMOTE_PUFF_UP);
-      pf.awayT = 0;
+      pf.awayT = Math.max(0, pf.awayT - dt / 0.2);
     } else {
-      if (pf.awayT > 0) pf.awayT = Math.max(0, pf.awayT - dt / REMOTE_PUFF_AWAY);
-      else pf.animT = Math.max(0, pf.animT - dt / REMOTE_PUFF_DOWN);
+      pf.animT = Math.max(0, pf.animT - dt / REMOTE_PUFF_DOWN);
+      pf.awayT = pf.animT > 0 ? Math.min(1, pf.awayT + dt / REMOTE_PUFF_AWAY) : 0;
     }
     if (pf.releaseAt && !pf.exhaled && now - pf.releaseAt >= 1000) {
       pf.exhaled = true;
@@ -1022,9 +1016,6 @@ function hashPid(pid: string) {
       const e = remoteExhales[i];
       e.age += dt;
       e.fx.tick(performance.now() * 0.001, dt);
-      e.fx.group.position.y += 0.22 * dt;
-      e.fx.group.position.x += -Math.sin(e.yaw) * 0.14 * dt;
-      e.fx.group.position.z += -Math.cos(e.yaw) * 0.14 * dt;
       if (e.age >= e.life) {
         try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
         e.fx.dispose();

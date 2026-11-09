@@ -491,20 +491,21 @@ export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette
 export function makeAvatarCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette {
   const group = new THREE.Group();
   group.name = 'avatarCigarette';
-  const sc = 2.4;
+  const sc = 2.4; // 粗細
+  const L = 0.95; // 長度（原本跟粗細同倍率，太長）
   const filter = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.0055 * sc, 0.0055 * sc, 0.028 * sc, opts.lowDetail ? 5 : 6),
+    new THREE.CylinderGeometry(0.0055 * sc, 0.0055 * sc, 0.028 * L, opts.lowDetail ? 5 : 6),
     new THREE.MeshStandardMaterial({ color: 0xd4a574, roughness: 0.9, metalness: 0 }),
   );
   filter.rotation.x = Math.PI / 2;
-  filter.position.z = 0.014 * sc;
+  filter.position.z = 0.014 * L;
   group.add(filter);
   const stick = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.0048 * sc, 0.0048 * sc, 0.09 * sc, opts.lowDetail ? 5 : 6),
+    new THREE.CylinderGeometry(0.0048 * sc, 0.0048 * sc, 0.09 * L, opts.lowDetail ? 5 : 6),
     new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.95, metalness: 0 }),
   );
   stick.rotation.x = Math.PI / 2;
-  stick.position.z = -0.04 * sc;
+  stick.position.z = -0.04 * L;
   group.add(stick);
   const tip = new THREE.Mesh(
     new THREE.SphereGeometry(0.0065 * sc, opts.lowDetail ? 5 : 6, 4),
@@ -516,7 +517,7 @@ export function makeAvatarCigarette(opts: { lowDetail?: boolean } = {}): FpCigar
       metalness: 0.05,
     }),
   );
-  tip.position.z = -0.088 * sc;
+  tip.position.z = -0.088 * L;
   group.add(tip);
   const smoke = makeCigSmoke({ count: opts.lowDetail ? 2 : 3, seed: 6601, scale: 0.55 });
   smoke.group.position.copy(tip.position);
@@ -576,67 +577,117 @@ export function spawnAshSpeck(parent: THREE.Object3D, local: THREE.Vector3) {
   };
 }
 
-/** 第一人稱吐煙：一坨較濃的煙，往前／上飄散後淡出（單次，用完 dispose） */
-export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: number } = {}): CharcoalFireFx {
+/** 吐煙用柔邊煙霧貼圖：高斯衰減疊低頻雜訊做出絲狀不均勻感（3 種變化） */
+const puffTexs: THREE.Texture[] = [];
+function getPuffTex(i: number): THREE.Texture {
+  if (!puffTexs.length) {
+    for (let v = 0; v < 3; v++) {
+      const N = 96, c = document.createElement('canvas'); c.width = c.height = N;
+      const g = c.getContext('2d')!;
+      const img = g.createImageData(N, N);
+      const rn = rng(4242 + v * 977);
+      // 低頻雜訊：幾個隨機高斯小團疊加
+      const blobs = Array.from({ length: 9 }, () => ({ x: (rn() - 0.5) * 1.1, y: (rn() - 0.5) * 1.1, r: 0.22 + rn() * 0.3, w: 0.4 + rn() * 0.6 }));
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const dx = (x + 0.5) / N * 2 - 1, dy = (y + 0.5) / N * 2 - 1;
+        const r2 = dx * dx + dy * dy;
+        let n = 0;
+        for (const b of blobs) { const ex = dx - b.x, ey = dy - b.y; n += b.w * Math.exp(-(ex * ex + ey * ey) / (b.r * b.r)); }
+        const env = Math.exp(-r2 * 3.2) * Math.max(0, 1 - r2);
+        const a = Math.min(1, env * (0.35 + 0.65 * Math.min(1, n)));
+        const k = (y * N + x) * 4;
+        img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+        img.data[k + 3] = Math.round(a * 255);
+      }
+      g.putImageData(img, 0, 0);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      puffTexs.push(t);
+    }
+  }
+  return puffTexs[i % puffTexs.length];
+}
+
+/** 吐煙：從嘴邊連續噴出一道細煙，前段快、受阻力減速後往上飄、捲動擴散淡出（單次，用完 dispose）。
+ *  group 的 -Z 為噴出方向；世界空間使用時請把 group.rotation.y 設成角色朝向。 */
+export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: number; reach?: number } = {}): CharcoalFireFx {
+  // reach 0–1：按越久吐越遠（不給則維持原本距離）
+  const reachK = opts.reach == null ? 1 : 0.4 + 2.2 * Math.min(1, Math.max(0, opts.reach));
   const rn = rng(opts.seed ?? (9000 + Math.floor(Math.random() * 8000)));
   const sc = Math.max(0.15, opts.scale ?? 1);
-  const n = Math.max(4, opts.count ?? Math.round(8 + sc * 6));
+  const n = Math.min(44, Math.max(10, Math.round((opts.count ?? Math.round(8 + sc * 6)) * 2.6)));
   const group = new THREE.Group();
   group.name = 'exhalePuff';
-  type S = { mesh: THREE.Mesh; age: number; life: number; vx: number; vy: number; vz: number; base: number };
+  type S = { sp: THREE.Sprite; mat: THREE.SpriteMaterial; delay: number; age: number; life: number; vx: number; vy: number; vz: number; s0: number; s1: number; ar: number; rot: number; spin: number; ph: number; fq: number; peak: number; tone: number; lift: number };
   const smokes: S[] = [];
+  const emitDur = opts.reach == null ? 0.3 + 0.35 * Math.min(1, sc) : 0.25 + 0.6 * Math.min(1, Math.max(0, opts.reach));
   for (let i = 0; i < n; i++) {
-    const mat = smokeMat.clone();
-    mat.opacity = 0.28;
-    mat.color.setHex(0xb0ada8);
-    const mesh = new THREE.Mesh(smokeGeo, mat);
-    mesh.userData.sharedGeo = true;
-    mesh.renderOrder = 3;
-    mesh.visible = true;
-    group.add(mesh);
+    const k = i / Math.max(1, n - 1);
+    const mat = new THREE.SpriteMaterial({ map: getPuffTex(i), color: 0xc2c7cd, transparent: true, opacity: 0, depthWrite: false });
+    const sp = new THREE.Sprite(mat);
+    sp.renderOrder = 3;
+    sp.visible = false;
+    group.add(sp);
+    // 前段的煙較快較濃，尾段較慢較淡；吐氣方向略朝下
+    const speed = (0.5 + rn() * 0.4) * (1 - k * 0.6) * (0.6 + 0.4 * sc) * reachK;
+    const spread = 0.1 + k * 0.22 + rn() * 0.08;
     const ang = rn() * Math.PI * 2;
-    const rad = 0.02 + rn() * 0.05 * sc;
     smokes.push({
-      mesh,
-      age: rn() * 0.08,
-      life: 1.4 + rn() * 1.1,
-      vx: Math.cos(ang) * 0.04 * sc + (rn() - 0.5) * 0.03,
-      vy: 0.12 + rn() * 0.18 * sc,
-      // 相機空間往前（-Z）
-      vz: -(0.22 + rn() * 0.28) * sc,
-      base: 0.1 * sc + rn() * 0.12 * sc,
+      sp, mat,
+      delay: k * emitDur + rn() * 0.04,
+      age: 0,
+      life: 2.0 + rn() * 1.6,
+      vx: Math.cos(ang) * spread * speed,
+      vy: Math.sin(ang) * spread * speed - 0.12 * speed,
+      vz: -speed,
+      s0: (0.014 + rn() * 0.01) * (0.7 + 0.3 * sc),
+      s1: (0.13 + rn() * 0.16) * (0.6 + 0.4 * sc),
+      ar: 0.6 + rn() * 0.8,
+      rot: rn() * Math.PI * 2,
+      spin: (rn() - 0.5) * 1.2,
+      ph: rn() * Math.PI * 2,
+      fq: 1.4 + rn() * 1.8,
+      peak: (0.26 + rn() * 0.16) * Math.min(1, 0.55 + 0.45 * sc) * (1 - k * 0.4),
+      tone: 0.9 + rn() * 0.14,
+      lift: 0.14 + rn() * 0.16,
     });
-    mesh.position.set(Math.cos(ang) * rad, (rn() - 0.3) * 0.04, -0.02 - rn() * 0.04);
-    mesh.scale.setScalar(smokes[i].base);
   }
+  let t = 0;
   return {
     group,
     light: null,
     tick: (_t, dt) => {
       const step = Math.min(0.05, Math.max(0, dt));
+      t += step;
+      const drag = Math.exp(-3.2 * step);
       for (const s of smokes) {
+        if (t < s.delay) continue;
+        if (s.age === 0) { s.sp.position.set((rn() - 0.5) * 0.006, (rn() - 0.5) * 0.004, -0.005); s.sp.visible = true; }
         s.age += step;
-        if (s.age >= s.life) {
-          s.mesh.visible = false;
-          continue;
-        }
+        if (s.age >= s.life) { s.sp.visible = false; continue; }
         const u = s.age / s.life;
-        s.mesh.position.x += s.vx * step;
-        s.mesh.position.y += s.vy * step;
-        s.mesh.position.z += s.vz * step;
-        s.mesh.scale.setScalar(s.base * (1 + u * 2.4));
-        const m = s.mesh.material as THREE.MeshBasicMaterial;
-        // 先略濃再淡
-        const fade = u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85;
-        m.opacity = 0.32 * sc * Math.max(0, fade);
-        s.mesh.visible = m.opacity > 0.01;
+        // 阻力減速，熱煙慢慢浮起（越後面浮得越明顯）
+        s.vx *= drag; s.vz *= drag; s.vy = s.vy * drag + s.lift * Math.min(1, s.age / 0.6) * step;
+        // 捲動：各團不同頻率左右／前後擺，散成一絲一絲
+        const curl = 0.08 * Math.min(1, u * 2);
+        s.sp.position.x += (s.vx + Math.sin(s.age * s.fq + s.ph) * curl) * step;
+        s.sp.position.y += s.vy * step;
+        s.sp.position.z += (s.vz + Math.cos(s.age * s.fq * 0.8 + s.ph) * curl * 0.7) * step;
+        const grow = 1 - Math.pow(1 - u, 2.4);
+        const sz = s.s0 + (s.s1 - s.s0) * grow;
+        s.sp.scale.set(sz * s.ar, sz / Math.sqrt(s.ar), 1);
+        s.rot += s.spin * step * (1 - u * 0.5);
+        s.mat.rotation = s.rot;
+        const fadeIn = Math.min(1, s.age / 0.06);
+        const fadeOut = Math.pow(1 - u, 1.4);
+        s.mat.opacity = s.peak * fadeIn * fadeOut;
+        // 剛吐出偏藍灰，散開後轉淡灰白
+        const c = s.tone * (0.78 + 0.14 * u);
+        s.mat.color.setRGB(c * 0.97, c, c * 1.04);
       }
     },
     dispose: () => {
-      for (const s of smokes) {
-        const m = s.mesh.material as THREE.Material;
-        if (!s.mesh.userData.sharedMat) m.dispose();
-      }
+      for (const s of smokes) s.mat.dispose();
       group.clear();
     },
   };

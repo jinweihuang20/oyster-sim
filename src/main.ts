@@ -2901,7 +2901,7 @@ function endPuff() {
   b.classList.remove('held', 'low');
   c.textContent = '';
   b.style.removeProperty('--p');
-  puffAwayT = 1;
+  puffAwayT = 0;
   const holdMs = Math.round(Math.min(PUFF_HOLD_MAX, held) * 1000);
   if (plazaMode) void plazaSendPuff(false, holdMs);
   if (held < PUFF_MIN_HOLD || !smokeSitActive) {
@@ -2915,22 +2915,20 @@ function endPuff() {
 function spawnExhalePuff(strength: number) {
   if (!smokeSitActive || strength <= 0) return;
   const sc = 0.35 + strength * 1.15;
-  const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 5100 + Math.floor(Math.random() * 4000) });
+  const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 5100 + Math.floor(Math.random() * 4000), reach: tpv && plazaMe ? strength : undefined });
   puffExhaleHeadT = 1;
   if (tpv && plazaMe) {
-    const mouth = new THREE.Vector3();
-    plazaMe.head.getWorldPosition(mouth);
+    plazaMe.head.updateMatrixWorld(true);
+    const mouth = plazaMe.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
     const yaw = plazaMe.outer.rotation.y;
-    mouth.x += -Math.sin(yaw) * 0.14;
-    mouth.y -= 0.01;
-    mouth.z += -Math.cos(yaw) * 0.14;
     fx.group.position.copy(mouth);
+    fx.group.rotation.y = yaw;
     scene.add(fx.group);
-    puffExhales.push({ fx, age: 0, life: 2.6, world: true });
+    puffExhales.push({ fx, age: 0, life: 3.6, world: true });
   } else {
-    fx.group.position.set(0.01, -0.02, -0.26);
+    fx.group.position.set(0, -0.085, -0.05); // 嘴巴在眼睛下方，煙從畫面下緣往前上方吐出
     camera.add(fx.group);
-    puffExhales.push({ fx, age: 0, life: 2.6, world: false });
+    puffExhales.push({ fx, age: 0, life: 3.6, world: false });
   }
 }
 function puffVisualK() { return easeSmokePuff(puffAnimT); }
@@ -2960,10 +2958,11 @@ function tickPuffUi(rdt: number) {
     c.textContent = `${rem.toFixed(1)}s`;
     b.classList.toggle('low', rem < 1.2);
     puffAnimT = Math.min(1, puffAnimT + rdt / PUFF_UP_SEC);
-    puffAwayT = 0;
+    puffAwayT = Math.max(0, puffAwayT - rdt / 0.2);
   } else {
-    if (puffAwayT > 0) puffAwayT = Math.max(0, puffAwayT - rdt / PUFF_AWAY_SEC);
-    else puffAnimT = Math.max(0, puffAnimT - rdt / PUFF_DOWN_SEC);
+    // 放開：一邊放下一邊略離嘴，不再先彈回嘴邊
+    puffAnimT = Math.max(0, puffAnimT - rdt / PUFF_DOWN_SEC);
+    puffAwayT = puffAnimT > 0 ? Math.min(1, puffAwayT + rdt / PUFF_AWAY_SEC) : 0;
   }
   // 吸氣鏡頭微仰
   const inhale = puffInhaleK();
@@ -2981,12 +2980,6 @@ function tickPuffUi(rdt: number) {
     const e = puffExhales[i];
     e.age += rdt;
     e.fx.tick(performance.now() * 0.001, rdt);
-    if (e.world) {
-      const yaw = plazaMe ? plazaMe.outer.rotation.y : 0;
-      e.fx.group.position.y += 0.22 * rdt;
-      e.fx.group.position.x += -Math.sin(yaw) * 0.14 * rdt;
-      e.fx.group.position.z += -Math.cos(yaw) * 0.14 * rdt;
-    }
     if (e.age >= e.life) {
       try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
       e.fx.dispose();
@@ -3048,13 +3041,14 @@ function applySmokeSitFpHands() {
   let ry = puffBezier(R.ry, M.ry, B.ry, u);
   let rz = puffBezier(R.rz, M.rz, B.rz, u);
   if (away > 0.01) {
-    const t = away;
-    x = B.x + (A.x - B.x) * t;
-    y = B.y + (A.y - B.y) * t;
-    z = B.z + (A.z - B.z) * t;
-    rx = B.rx + (A.rx - B.rx) * t;
-    ry = B.ry + (A.ry - B.ry) * t;
-    rz = B.rz + (A.rz - B.rz) * t;
+    // 離嘴偏移乘上舉手程度：越放下越淡，不會跳
+    const t = away * u;
+    x += (A.x - B.x) * t;
+    y += (A.y - B.y) * t;
+    z += (A.z - B.z) * t;
+    rx += (A.rx - B.rx) * t;
+    ry += (A.ry - B.ry) * t;
+    rz += (A.rz - B.rz) * t;
   }
   if (flick > 0.01 && u < 0.2) {
     x += flick * 0.04; y -= flick * 0.02; rz += flick * 0.15;
