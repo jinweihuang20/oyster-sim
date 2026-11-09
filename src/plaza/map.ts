@@ -1,5 +1,5 @@
 import {
-  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, SEAFOOD_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, pileCenter, pileIsGrill, SMOKE_CENTER,
+  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, SEAFOOD_BUILDING, HQ_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, pileCenter, pileIsGrill, SMOKE_CENTER,
 } from './layout';
 import { PLAZA_STALL_SITES } from './ambiance';
 import { plazaDisplayName, type PlazaPlayer } from './types';
@@ -223,6 +223,24 @@ export function drawPlazaMap(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('樸子腳', l + w / 2, t + h / 2);
+  }
+
+  // 聯合競選總部（樸子腳北側）
+  {
+    const [x0, y0] = to(HQ_BUILDING.x0, HQ_BUILDING.z0);
+    const [x1, y1] = to(HQ_BUILDING.x1, HQ_BUILDING.z1);
+    const l = Math.min(x0, x1), t = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+    ctx.fillStyle = 'rgba(31,107,62,.82)';
+    roundRect(ctx, l, t, w, h, size * 0.008);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(140,198,63,.9)';
+    ctx.lineWidth = Math.max(1, size * 0.0025);
+    ctx.stroke();
+    ctx.fillStyle = '#f4f7f0';
+    ctx.font = `800 ${Math.max(8, size * 0.022)}px system-ui,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('競選總部', l + w / 2, t + h / 2);
   }
 
   // 吸菸區

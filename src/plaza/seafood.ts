@@ -268,7 +268,7 @@ export function makePlazaSeafood(
     for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.02, 0.1, 0.02), dark, [AX - 0.1, 2.8, doorZ + s * 0.8], root, false);
   }
 
-  // ── 北側花台（接東牆短牆頭到店牆，取代多那芝原北側花台） ──
+  // ── 前庭北端花台（東牆短牆頭到店牆；隨開口北移到競選總部北側） ──
   {
     const x0 = WALK_BOUND + 0.14, x1 = fx, z = CAFE_OPENING.z0 + 0.15;
     add(rboxEnv(x1 - x0, 0.55, 0.4, 0.06), M(0x9a9890, { roughness: 0.92 }), [(x0 + x1) / 2, 0.275, z], root, true);

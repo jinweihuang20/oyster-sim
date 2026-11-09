@@ -27,14 +27,22 @@ export const CAFE_TABLE_RADIUS = 0.36;
 export const CAFE_BUILDING = { x0: 14.2, x1: 19.6, z0: 5.0, z1: 11.0, h: 5.2, doorZ: 8.15 } as const;
 /** 門廊深度（x 13.2..14.2） */
 export const CAFE_PORCH_DEPTH = 1.0;
-/** 東牆開口 z 範圍（其餘留短牆）：南段多那芝＋往北接樸子腳，連成一條店面前庭 */
-export const CAFE_OPENING = { z0: -1.8, z1: 11.5 } as const;
+/** 東牆開口 z 範圍（其餘留短牆）：南段多那芝＋樸子腳＋北段競選總部，連成一條店面前庭 */
+export const CAFE_OPENING = { z0: -8.3, z1: 11.5 } as const;
 /** 南牆實牆止於此 x（東端 8.0..11.5 拆掉，換矮欄杆） */
 export const CAFE_SOUTH_WALL_END = 8.0;
 /** 東延區可走範圍（咖啡店前庭）：x ∈ (WALK_BOUND, xMax]、z ∈ [zMin, WALK_BOUND] */
-export const CAFE_FORECOURT = { xMax: 13.95, zMin: -1.2 } as const;
+export const CAFE_FORECOURT = { xMax: 13.95, zMin: -7.7 } as const;
 /** 多那芝北側海產店「樸子腳」（外觀，不可進入）：正門朝西 */
 export const SEAFOOD_BUILDING = { x0: 14.2, x1: 19.6, z0: -1.4, z1: 4.4, h: 4.2, doorZ: 1.5 } as const;
+/** 樸子腳北側「聯合競選總部」組合屋（外觀，不可進入、無座位）：正門朝西 */
+export const HQ_BUILDING = { x0: 14.2, x1: 19.6, z0: -8.0, z1: -1.6, h: 3.1 } as const;
+/** 競選總部門口擺設（碰撞圓）：旗架、疊放塑膠椅、小講台 */
+export const HQ_PROPS: readonly { kind: 'flags' | 'chairs' | 'podium'; x: number; z: number; r: number }[] = [
+  { kind: 'flags', x: 13.72, z: -7.25, r: 0.32 },
+  { kind: 'chairs', x: 13.68, z: -6.3, r: 0.3 },
+  { kind: 'podium', x: 13.58, z: -3.0, r: 0.36 },
+];
 /** 樸子腳騎樓紅柱 x（前庭內，有碰撞） */
 export const SEAFOOD_ARCADE_X = 13.78;
 /** 樸子腳門口座位（與後端 PlazaWorld.SeafoodPileId 對齊）：3 圓桌 × 2 板凳，純坐、不抽菸、不開工班 */
@@ -247,6 +255,8 @@ export function plazaCafeObstacles(): [number, number, number][] {
     ...SEAFOOD_TABLE_Z.map(z => [SEAFOOD_TABLE_X, z, SEAFOOD_TABLE_RADIUS] as [number, number, number]),
     ...seafoodColumnZ().map(z => [SEAFOOD_ARCADE_X, z, 0.1] as [number, number, number]),
     ...SEAFOOD_PROPS.map(p => [p.x, p.z, p.r] as [number, number, number]),
+    // 競選總部門口擺設（與 hq.ts 對齊）
+    ...HQ_PROPS.map(p => [p.x, p.z, p.r] as [number, number, number]),
   ];
 }
 

@@ -15,6 +15,7 @@ import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
 import { makePlazaCafe } from './cafe';
 import { makePlazaSeafood } from './seafood';
+import { makePlazaHq } from './hq';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
@@ -244,6 +245,10 @@ export function createPlazaWorldView(
   const seafood = makePlazaSeafood(M, add, LO);
   root.add(seafood.group);
   for (const [k, pad] of seafood.seatPads) seatMeshes.set(k, pad);
+
+  // 樸子腳北側「聯合競選總部」組合屋外觀（無座位、無點光）
+  const hq = makePlazaHq(M, add, LO);
+  root.add(hq.group);
 
   // 攤位老闆（純客戶端，不經伺服器）：站在攤台後方、面向廣場中心
   const stallKeepers: { rig: PlayerRig; ph: number; lines: string[]; bub: WorldLabel | null; next: number; until: number; li: number }[] = [];
@@ -1649,6 +1654,7 @@ function hashPid(pid: string) {
     smokeArea.ambientSmoke.dispose();
     cafe.dispose();
     seafood.dispose();
+    hq.dispose();
     if (selfCig) { root.remove(selfCig.group); selfCig.dispose(); selfCig = null; }
     for (const pl of plazaLights) { root.remove(pl); pl.dispose(); }
     plazaLights.length = 0;
