@@ -251,6 +251,53 @@ export function createPlazaWorldView(
   const hq = makePlazaHq(M, add, LO);
   root.add(hq.group);
 
+  // 遠景細節裁切：建築小零件（窗框、桌上小物、菸蒂…）與貼圖招牌，鏡頭離建築夠遠就不畫
+  type DetailLod = { box: THREE.Box3; small: THREE.Object3D[]; signs: THREE.Object3D[]; smallOn: boolean; signOn: boolean };
+  const detailLods: DetailLod[] = [];
+  {
+    const padSet = new Set<THREE.Object3D>([...cafe.seatPads.values(), ...seafood.seatPads.values()]);
+    const sph = new THREE.Sphere(), sc = new THREE.Vector3();
+    for (const g of [cafe.group, seafood.group, hq.group]) {
+      g.updateMatrixWorld(true);
+      const d: DetailLod = { box: new THREE.Box3().setFromObject(g), small: [], signs: [], smallOn: true, signOn: true };
+      const walk = (o: THREE.Object3D) => {
+        if (o.userData.noLod || padSet.has(o)) return;
+        const m = o as THREE.Mesh;
+        if (m.isMesh && o.visible && !(m as any).isInstancedMesh) {
+          const mat = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.MeshStandardMaterial;
+          const geo = m.geometry;
+          o.getWorldScale(sc);
+          // 招牌＝有貼圖的細長平面（高 ≤ 0.8 m）；整面店面貼圖牆不算，避免遠看破洞
+          const pg = geo as THREE.PlaneGeometry;
+          if (mat?.map && geo.type === 'PlaneGeometry' && pg.parameters.height * sc.y <= 0.8) { d.signs.push(o); return; }
+          if (mat?.map) { for (const c of o.children) walk(c); return; }
+          if (!geo.boundingSphere) geo.computeBoundingSphere();
+          sph.copy(geo.boundingSphere!);
+          if (sph.radius * Math.max(sc.x, sc.y, sc.z) < 0.3) { d.small.push(o); return; }
+        }
+        for (const c of o.children) walk(c);
+      };
+      walk(g);
+      detailLods.push(d);
+    }
+  }
+  let lodT = 0;
+  const _lodP = new THREE.Vector3();
+  /** 鏡頭到建築外框的水平距離；小零件 >25 m、招牌 >40 m 不畫（±2 m 緩衝免閃） */
+  function tickDetailLod(dt: number, cx: number, cz: number) {
+    if ((lodT -= dt) > 0) return;
+    lodT = 0.25;
+    for (const d of detailLods) {
+      _lodP.set(cx, (d.box.min.y + d.box.max.y) / 2, cz);
+      d.box.clampPoint(_lodP, _lodP);
+      const dist = Math.hypot(_lodP.x - cx, _lodP.z - cz);
+      const smallOn = d.smallOn ? dist < 27 : dist < 23;
+      const signOn = d.signOn ? dist < 42 : dist < 38;
+      if (smallOn !== d.smallOn) { d.smallOn = smallOn; for (const o of d.small) o.visible = smallOn; }
+      if (signOn !== d.signOn) { d.signOn = signOn; for (const o of d.signs) o.visible = signOn; }
+    }
+  }
+
   // 攤位老闆（純客戶端，不經伺服器）：站在攤台後方、面向廣場中心
   const stallKeepers: { rig: PlayerRig; ph: number; lines: string[]; bub: WorldLabel | null; next: number; until: number; li: number }[] = [];
   const KEEPER_LINES: Record<string, string[]> = {
@@ -1459,9 +1506,14 @@ function hashPid(pid: string) {
       roofLamps[i].visible = on;
       roofLamps[i].intensity = on ? (eco ? roofLampBaseI * 0.85 : roofLampBaseI) : 0;
     }
-    for (const L of ambiance.lights) L.visible = !eco;
-    for (const L of cafe.lights) L.visible = !eco;
-    for (const L of seafood.lights) L.visible = !eco;
+    // 攤位火光、店門口暖燈照的範圍只有幾公尺：鏡頭離超過約 18 m 就關（±2 m 緩衝）
+    for (const L of [...ambiance.lights, ...cafe.lights, ...seafood.lights]) {
+      if (eco) { L.visible = false; continue; }
+      L.getWorldPosition(_lodP);
+      const ld = Math.hypot(_lodP.x - cx, _lodP.z - cz);
+      L.visible = L.visible ? ld < 20 : ld < 16;
+    }
+    tickDetailLod(dt, cx, cz);
 
     const k = Math.min(1, dt * 10);
     const t = now();

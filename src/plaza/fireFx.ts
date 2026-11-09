@@ -130,6 +130,7 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
   const rn = rng(opts.seed ?? 42);
 
   const group = new THREE.Group();
+  group.userData.noLod = true; // 自己控制顯示，遠景細節裁切不要碰
   group.name = 'charcoalFire';
 
   // 底炭層（flat：薄層，鋼盤與烤網之間）
@@ -351,6 +352,7 @@ export function makeCigSmoke(opts: { count?: number; seed?: number; scale?: numb
   const n = Math.max(2, opts.count ?? 5);
   const sc = opts.scale ?? 0.55;
   const group = new THREE.Group();
+  group.userData.noLod = true; // 自己控制顯示，遠景細節裁切不要碰
   group.name = 'cigSmoke';
   type S = { mesh: THREE.Mesh; age: number; life: number; vx: number; vz: number; speed: number; base: number };
   const smokes: S[] = [];
@@ -427,6 +429,7 @@ export type FpCigarette = {
 
 export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette {
   const group = new THREE.Group();
+  group.userData.noLod = true; // 自己控制顯示，遠景細節裁切不要碰
   group.name = 'fpCigarette';
   // 沿 -Z 伸出（相機前方），右手握著
   const filter = new THREE.Mesh(
@@ -490,6 +493,7 @@ export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette
 /** 第三人稱方塊人手持菸（掛 lowerR 腕端；比例比 FP 大） */
 export function makeAvatarCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette {
   const group = new THREE.Group();
+  group.userData.noLod = true; // 自己控制顯示，遠景細節裁切不要碰
   group.name = 'avatarCigarette';
   const sc = 2.4; // 粗細
   const L = 0.95; // 長度（原本跟粗細同倍率，太長）
@@ -617,6 +621,7 @@ export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: nu
   const sc = Math.max(0.15, opts.scale ?? 1);
   const n = Math.min(44, Math.max(10, Math.round((opts.count ?? Math.round(8 + sc * 6)) * 2.6)));
   const group = new THREE.Group();
+  group.userData.noLod = true; // 自己控制顯示，遠景細節裁切不要碰
   group.name = 'exhalePuff';
   type S = { sp: THREE.Sprite; mat: THREE.SpriteMaterial; delay: number; age: number; life: number; vx: number; vy: number; vz: number; s0: number; s1: number; ar: number; rot: number; spin: number; ph: number; fq: number; peak: number; tone: number; lift: number };
   const smokes: S[] = [];
