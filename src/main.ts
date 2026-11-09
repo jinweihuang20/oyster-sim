@@ -89,6 +89,7 @@ let plazaMode = false;
 function setPlazaMode(v: boolean) {
   plazaMode = v;
   document.body.classList.toggle('plazaMode', v);
+  applyPlazaShadowMode();
 }
 let plazaPayWait: Promise<number> | null = null;
 /** 廣場休閒：第一次坐下起算遊玩秒數（給結算／後端 softCap） */
@@ -382,6 +383,21 @@ type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: nu
 const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE, rotTip: true };
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
   const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
+/** 廣場陰影不每幀重算（約 4 次／秒）；工寮仍每幀更新 */
+let plazaShadowAcc = 0;
+function applyPlazaShadowMode() {
+  if (mix.eco) {
+    renderer.shadowMap.autoUpdate = false;
+    return;
+  }
+  if (plazaMode) {
+    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = true;
+    plazaShadowAcc = 0;
+  } else {
+    renderer.shadowMap.autoUpdate = true;
+  }
+}
 /** 熱切省電：關陰影、降 DPR；antialias／precision 僅啟動時套用 */
 function applyEcoGfx() {
   // 省電：手機約 1.25×、桌面約 1.5×；一般最多 2×
@@ -394,6 +410,7 @@ function applyEcoGfx() {
   lamp.shadow.mapSize.set(map, map);
   lamp.shadow.map?.dispose();
   lamp.shadow.map = null;
+  applyPlazaShadowMode();
 }
 applyEcoGfx();
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
@@ -3619,6 +3636,13 @@ function frameBody() {
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
   const rdt = Math.min(clock.getDelta(), 0.05);
+  if (plazaMode && !mix.eco && renderer.shadowMap.enabled) {
+    plazaShadowAcc += rdt;
+    if (plazaShadowAcc >= 0.25) {
+      plazaShadowAcc = 0;
+      renderer.shadowMap.needsUpdate = true;
+    }
+  }
   slowmo = Math.max(0, slowmo - rdt); const dt = rdt * (slowmo > 0.4 ? 0.3 : 1), t = clock.elapsedTime;
   for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= rdt; if (timers[i].t <= 0) { const f = timers[i].f; timers.splice(i, 1); f(); } }
   flinch = Math.max(0, flinch - rdt);
