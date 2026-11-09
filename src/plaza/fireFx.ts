@@ -413,3 +413,71 @@ export function makeCigSmoke(opts: { count?: number; seed?: number; scale?: numb
     },
   };
 }
+
+/** 第一人稱手持香菸（細白煙柱＋橘紅菸頭＋濾嘴；冒煙重用 makeCigSmoke） */
+export type FpCigarette = {
+  group: THREE.Group;
+  tip: THREE.Object3D;
+  smoke: CharcoalFireFx;
+  tick: (tSec: number, dt: number) => void;
+  dispose: () => void;
+};
+
+export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette {
+  const group = new THREE.Group();
+  group.name = 'fpCigarette';
+  // 沿 -Z 伸出（相機前方），右手握著
+  const filter = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0055, 0.0055, 0.028, 6),
+    new THREE.MeshStandardMaterial({ color: 0xd4a574, roughness: 0.9, metalness: 0 }),
+  );
+  filter.rotation.x = Math.PI / 2;
+  filter.position.z = 0.014;
+  group.add(filter);
+  const stick = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0048, 0.0048, 0.09, 6),
+    new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.95, metalness: 0 }),
+  );
+  stick.rotation.x = Math.PI / 2;
+  stick.position.z = -0.04;
+  group.add(stick);
+  const tip = new THREE.Mesh(
+    new THREE.SphereGeometry(0.0062, 6, 5),
+    new THREE.MeshStandardMaterial({
+      color: 0x3a1810,
+      emissive: 0xff4a12,
+      emissiveIntensity: 0.95,
+      roughness: 0.6,
+      metalness: 0.05,
+    }),
+  );
+  tip.position.z = -0.088;
+  group.add(tip);
+  const smoke = makeCigSmoke({ count: opts.lowDetail ? 2 : 4, seed: 7703, scale: 0.35 });
+  smoke.group.position.copy(tip.position);
+  smoke.group.position.y += 0.004;
+  group.add(smoke.group);
+  return {
+    group,
+    tip,
+    smoke,
+    tick: (tSec, dt) => {
+      // 菸頭微微閃爍
+      const m = tip.material as THREE.MeshStandardMaterial;
+      m.emissiveIntensity = 0.75 + Math.sin(tSec * 7.5) * 0.2;
+      smoke.tick(tSec, dt);
+    },
+    dispose: () => {
+      smoke.dispose();
+      group.traverse(o => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (mesh.geometry && !mesh.userData.sharedGeo) mesh.geometry.dispose();
+        const mat = mesh.material as THREE.Material | THREE.Material[];
+        if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+        else if (mat && !mesh.userData.sharedMat) mat.dispose();
+      });
+      group.clear();
+    },
+  };
+}

@@ -57,6 +57,7 @@ import {
   plazaToggleMap, plazaCloseMap, plazaMapIsOpen, seatPose, plazaPushOutfit,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
+import { makeFpCigarette, type FpCigarette } from './plaza/fireFx';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import { $, on, toast, initDomToast, tickToast } from './ui';
@@ -2888,6 +2889,41 @@ function plazaHideYard(hide: boolean) {
     updSky();
   }
 }
+
+/** 吸菸區第一人稱手持菸 */
+let fpCig: FpCigarette | null = null;
+let smokeSitActive = false;
+function ensureFpCigarette() {
+  if (fpCig) return fpCig;
+  fpCig = makeFpCigarette({ lowDetail: COARSE });
+  // 右手指尖前方，像夾著一根菸
+  fpCig.group.position.set(-0.01, 0.02, -0.22);
+  fpCig.group.rotation.set(0.15, 0.35, 0.4);
+  handR.add(fpCig.group);
+  return fpCig;
+}
+function setSmokeSitHands(on: boolean) {
+  smokeSitActive = on;
+  if (on) {
+    const cig = ensureFpCigarette();
+    cig.group.visible = true;
+    knife.visible = false;
+    oyster.visible = false;
+    handRig.visible = !tpv;
+  } else {
+    if (fpCig) fpCig.group.visible = false;
+    knife.visible = true;
+    // oyster 可見度由 phase 管；站起後 handRig 會藏
+  }
+}
+function disposeFpCigarette() {
+  if (!fpCig) return;
+  handR.remove(fpCig.group);
+  fpCig.dispose();
+  fpCig = null;
+  smokeSitActive = false;
+}
+
 /** 廣場坐下：強制第一人稱（不寫入存檔偏好；站起再還原） */
 function plazaEnsureFpView() {
   if (!tpv) { drawCamBtn(); return; }
@@ -2904,8 +2940,10 @@ function clearPlazaLeaveUi() {
   on('joy', false);
   on('standBtn', false);
   on('sitBtn', false);
+  setSmokeSitHands(false);
+  disposeFpCigarette();
   handRig.visible = true;
-  document.body.classList.remove('plazaRoam');
+  document.body.classList.remove('plazaRoam', 'plazaSmokeSit');
   const info = document.getElementById('seatInfo');
   if (info) info.innerHTML = '';
   const kb = document.getElementById('joyK');
@@ -3155,8 +3193,11 @@ function launchPlaza() {
     },
     enterSmokeSit: () => {
       setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
-      document.body.classList.add('plazaRoam');
-      handRig.visible = false;
+      // plazaRoam 會藏剝蚵鈕；plazaSmokeSit 讓站起／回主選單與一般座位同款可見
+      document.body.classList.add('plazaRoam', 'plazaSmokeSit');
+      tYaw = yaw = 0; tPitch = pitch = -0.35;
+      plazaEnsureFpView();
+      setSmokeSitHands(true);
       on('standBtn', true); on('throwBtn', false); on('stealBtn', false);
       on('umbBtn', false); on('medBtn', true); on('quitBtn', true); on('camBtn', COARSE);
       if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
@@ -3166,6 +3207,9 @@ function launchPlaza() {
     },
     goWalk: () => {
       document.body.classList.add('plazaRoam');
+      document.body.classList.remove('plazaSmokeSit');
+      setSmokeSitHands(false);
+      disposeFpCigarette();
       plazaEnterWalkPose(true);
       on('camBtn', COARSE);
       if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
@@ -3434,6 +3478,14 @@ function frameBody() {
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
     on('standBtn', !walking && (!plazaMode || plazaSeated()));
+    if (smokeSitActive) {
+      // 第三人稱時藏手持菸；第一人稱顯示
+      handRig.visible = !tpv;
+      if (fpCig) {
+        fpCig.group.visible = !tpv;
+        if (!tpv) fpCig.tick(performance.now() * 0.001, rdt);
+      }
+    }
     // 電腦廣場隱藏視角鈕（用 V）；手機仍顯示
     on('camBtn', !plazaMode || COARSE);
     if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }

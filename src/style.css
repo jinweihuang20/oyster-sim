@@ -956,6 +956,8 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 body.plazaMode #top,body.plazaMode #stats,body.plazaRoam #top,body.plazaRoam #stats{z-index:9100}
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
+/* 吸菸區坐下：仍屬 plazaRoam（藏剝蚵鈕），但要顯示站起／回主選單（與一般座位同款） */
+body.plazaRoam.plazaSmokeSit #standBtn.on,body.plazaRoam.plazaSmokeSit #quitBtn.on{visibility:visible!important;pointer-events:auto!important;display:block!important}
 /* 電腦廣場：視角用 V，隱藏右下視角鈕 */
 @media (pointer:fine){
   body.plazaMode #camBtn,body.plazaRoam #camBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
