@@ -9,7 +9,7 @@ import {
   PLAZA_SIT_ROOT_Y,
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
-import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, type PlazaSeatRef } from './layout';
+import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
@@ -203,6 +203,7 @@ export function createPlazaWorldView(
 
   const fireFx: CharcoalFireFx[] = [];
   for (let i = 0; i < PILE_COUNT; i++) {
+    if (pileIsRemoved(i)) continue;
     const c = pileCenter(i);
     // 南排烤蚵台；其餘沿用工寮蚵山（InstancedMesh）
     const pile = pileIsGrill(i)
@@ -255,7 +256,6 @@ export function createPlazaWorldView(
   const KEEPER_LINES: Record<string, string[]> = {
     bbq: ['烤肉喔！剛烤好的！', '香腸一支三十，兩支五十五！', '來喔來喔，烤玉米也有！', '要辣的跟我說喔～'],
     'drink-s': ['冰涼的青草茶喔！', '剝蚵剝到口渴了吧？來一杯！', '冬瓜茶、楊桃汁，現倒現喝！', '大杯的才三十喔！'],
-    seafood: ['現撈的喔！新鮮的！', '蚵仔煎、蚵仔湯，好吃又便宜！', '今天的蝦子很大隻喔！', '來看看，不買沒關係！'],
   };
   PLAZA_STALL_SITES.filter((s) => KEEPER_LINES[s.id]).forEach((site, idx) => {
     const look = AMA_LOOKS[(idx * 3 + 1) % AMA_LOOKS.length];

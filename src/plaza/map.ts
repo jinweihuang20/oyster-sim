@@ -1,5 +1,5 @@
 import {
-  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, SEAFOOD_BUILDING, HQ_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, pileCenter, pileIsGrill, SMOKE_CENTER,
+  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, SEAFOOD_BUILDING, HQ_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, pileCenter, pileIsGrill, pileIsRemoved, SMOKE_CENTER,
 } from './layout';
 import { PLAZA_STALL_SITES } from './ambiance';
 import { plazaDisplayName, type PlazaPlayer } from './types';
@@ -27,11 +27,9 @@ const STALL_LABEL: Record<string, string> = {
   snack: '小吃',
   'snack-n': '小吃',
   fruit: '水果',
-  'fruit-e': '水果',
   cart: '推車',
   'cart-n': '推車',
   noodle: '麵攤',
-  seafood: '海鮮',
   sweet: '甜品',
 };
 
@@ -134,6 +132,7 @@ export function drawPlazaMap(
   // 蚵堆／烤台
   const mapSpanX = MAP_MAX_X - MAP_MIN_X;
   for (let i = 0; i < PILE_COUNT; i++) {
+    if (pileIsRemoved(i)) continue;
     const c = pileCenter(i);
     const [mx, my] = to(c.x, c.z);
     const r = (1.05 / mapSpanX) * (size - pad * 2) * 0.92;

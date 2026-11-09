@@ -38,11 +38,7 @@ export const PLAZA_STALL_SITES: readonly {
   // 坐式烤肉區（西南角矮桌圍爐，非立式高台）
   { id: 'bbqSit', x: -7.4, z: 9.5, kind: 'bbqSit', radius: 1.45 },
   // 西邊改潮間帶／養殖預留，不再放攤
-  // 東
-  { id: 'snack', x: 9.7, z: -1.8, kind: 'snack', radius: 1.1 },
-  { id: 'seafood', x: 9.65, z: 2.8, kind: 'seafood', radius: 1.15 },
-  // 原位 (9.5,6.2) 讓給多那芝咖啡入口，移到東側偏北
-  { id: 'fruit-e', x: 9.6, z: -5.6, kind: 'fruit', radius: 1.0 },
+  // 東側三攤已移除（讓出東排蚵堆空位＋店面前庭）
   // 北（碼頭在棚外；攤位仍在棚內走道）
   { id: 'fruit', x: -4.0, z: -9.6, kind: 'fruit', radius: 1.05 },
   { id: 'snack-n', x: 1.2, z: -9.65, kind: 'snack', radius: 1.05 },

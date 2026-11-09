@@ -2,10 +2,14 @@ import * as THREE from 'three';
 
 export const PILE_COUNT = 16;
 export const SLOTS_PER_PILE = 4;
+/** 已移除的蚵堆（東側第 4／8／12 堆＝pileId 3／7／11）；保留 id 空間，不建 mesh／不給入座 */
+export const REMOVED_PILE_IDS: readonly number[] = [3, 7, 11];
+export const pileIsRemoved = (pileId: number) => REMOVED_PILE_IDS.includes(pileId);
+export const pileIsActive = (pileId: number) => pileId >= 0 && pileId < PILE_COUNT && !pileIsRemoved(pileId);
 /** 每堆額外阿婆座位（slot = SLOTS_PER_PILE + npcSlot）；僅 NpcPileIds 有 */
 export const NPC_SLOTS_PER_PILE = 2;
-/** 先只在這 5 堆放阿婆（與後端 PlazaWorld.NpcPileIds 對齊） */
-export const NPC_PILE_IDS: readonly number[] = [1, 4, 7, 10, 13];
+/** 有阿婆的堆（與後端 PlazaWorld.NpcPileIds 對齊；不含已移除堆） */
+export const NPC_PILE_IDS: readonly number[] = [1, 4, 10, 13];
 export const pileHasNpc = (pileId: number) => NPC_PILE_IDS.includes(pileId);
 /** 南排改烤蚵台（多人共烤，座位／同步沿用舊堆模組） */
 export const GRILL_PILE_IDS: readonly number[] = [12, 13, 14, 15];
@@ -74,7 +78,7 @@ export function smokeNpcSeatPose() {
   const yaw = Math.atan2(pos.x - center.x, pos.z - center.z);
   return { pos, yaw, center, angle: a };
 }
-export const PLAZA_CAPACITY = PILE_COUNT * SLOTS_PER_PILE;
+export const PLAZA_CAPACITY = (PILE_COUNT - REMOVED_PILE_IDS.length) * SLOTS_PER_PILE;
 export const PILE_SPACING = 5.2;
 /** 椅子離堆心距離（貼近蚵堆；身體靠 hangArms／後仰避免埋進堆裡） */
 export const SEAT_RADIUS = 1.38;
@@ -196,6 +200,7 @@ export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDis
     if (!best || d < best.dist) best = { pileId, slot, dist: d };
   };
   for (let p = 0; p < PILE_COUNT; p++) {
+    if (pileIsRemoved(p)) continue;
     for (let s = 0; s < SLOTS_PER_PILE; s++) consider(p, s);
   }
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
@@ -264,6 +269,7 @@ export function plazaCafeObstacles(): [number, number, number][] {
 export function pileObstacles(): [number, number, number][] {
   const out: [number, number, number][] = [];
   for (let i = 0; i < PILE_COUNT; i++) {
+    if (pileIsRemoved(i)) continue;
     const c = pileCenter(i);
     out.push([c.x, c.z, 1.05]);
   }

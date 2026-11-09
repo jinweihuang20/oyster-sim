@@ -3,7 +3,7 @@ import { rboxEnv, rcyl } from '../core/geo';
 import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
 import {
   PILE_SPACING, PLAZA_LAMP_XZ, WALK_BOUND, pileCenter, seatPose, CAFE_OPENING, CAFE_SOUTH_WALL_END,
-  PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, pileHasNpc,
+  PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, pileHasNpc, pileIsRemoved,
 } from './layout';
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
@@ -317,6 +317,7 @@ export function plazaShedPosts(): { x: number; z: number }[] {
 
 function shedPostClear(x: number, z: number, pad = 0.28) {
   for (let i = 0; i < PILE_COUNT; i++) {
+    if (pileIsRemoved(i)) continue;
     const c = pileCenter(i);
     if (Math.hypot(x - c.x, z - c.z) < 1.05 + pad) return false;
     const seatN = SLOTS_PER_PILE + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
