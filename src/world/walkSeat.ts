@@ -13,7 +13,7 @@ export type WalkSeatDeps = {
   plazaSeated: () => boolean;
   plazaStandWalk: () => void;
   plazaPileObs: () => [number, number, number][];
-  /** 遠端站立玩家碰撞圓（擋路不推擠；蹲／躺略過） */
+  /** 遠端玩家碰撞圓（擋路不推擠；含站／蹲／躺／跳） */
   plazaWalkBodies: () => [number, number, number][];
   plazaWalkBound: () => number;
   plazaNearSeat: () => { pileId: number; slot: number } | null;

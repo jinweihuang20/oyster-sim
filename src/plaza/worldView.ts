@@ -1146,14 +1146,23 @@ function hashPid(pid: string) {
     for (const k of stallKeepers) { k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15; posePlazaStallKeeper(k.rig, tSec, k.ph); tickKeeperBubble(k, tSec); }
   }
 
-  /** 站立／走動／跳躍的遠端：擋路（不推擠）；蹲、躺、坐下、尚未現身：不擋 */
+  /** 站立／蹲／躺／跳躍的遠端：擋路（不推擠）；坐下、尚未現身：不擋 */
   function walkBodies(): [number, number, number][] {
     const out: [number, number, number][] = [];
     for (const r of remotes.values()) {
       if (r.seated || r.awaitingPose || !r.rig.outer.visible) continue;
       const ph = r.phase || '';
-      if (ph === 'crouch' || ph === 'lie') continue;
-      out.push([r.x, r.z, 0.38]);
+      if (ph === 'lie') {
+        // 躺平後身體沿面向伸長：腳／腰／頭三段圓
+        const fx = -Math.sin(r.yaw), fz = -Math.cos(r.yaw);
+        out.push([r.x, r.z, 0.32]);
+        out.push([r.x + fx * 0.55, r.z + fz * 0.55, 0.36]);
+        out.push([r.x + fx * 1.05, r.z + fz * 1.05, 0.32]);
+      } else if (ph === 'crouch') {
+        out.push([r.x, r.z, 0.45]); // 蹲時膝蓋前伸，略加大
+      } else {
+        out.push([r.x, r.z, 0.38]);
+      }
     }
     return out;
   }
