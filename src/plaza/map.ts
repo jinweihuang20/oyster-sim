@@ -175,19 +175,21 @@ export function drawPlazaMap(
   const me = markers.find(m => m.self);
   const drawMarker = (m: PlazaMapMarker) => {
     const [mx, my] = to(m.x, m.z);
-    const rad = Math.max(5, size * (m.self ? 0.022 : 0.017));
+    // 遠端只留小點；自己稍大一點
+    const rad = Math.max(2.5, size * (m.self ? 0.014 : 0.009));
     ctx.beginPath();
-    ctx.arc(mx, my, rad + 2, 0, Math.PI * 2);
-    ctx.fillStyle = m.self ? 'rgba(80,200,255,.35)' : 'rgba(0,0,0,.35)';
+    ctx.arc(mx, my, rad + (m.self ? 1.5 : 1), 0, Math.PI * 2);
+    ctx.fillStyle = m.self ? 'rgba(80,200,255,.35)' : 'rgba(0,0,0,.28)';
     ctx.fill();
     ctx.beginPath();
     ctx.arc(mx, my, rad, 0, Math.PI * 2);
     ctx.fillStyle = m.self ? '#5ad0ff' : m.seated ? '#ffb060' : '#ff7a6a';
     ctx.fill();
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = Math.max(1, size * 0.003);
+    ctx.lineWidth = Math.max(1, size * (m.self ? 0.0025 : 0.0018));
     ctx.stroke();
-    // 面前 = (-sin yaw, -cos yaw)：投射到地圖像素
+    // 名字／視角箭頭：只有自己顯示
+    if (!m.self) return;
     const ahead = 0.55;
     const [ax, ay] = to(m.x - Math.sin(m.yaw) * ahead, m.z - Math.cos(m.yaw) * ahead);
     const dx = ax - mx, dy = ay - my;
@@ -196,18 +198,17 @@ export function drawPlazaMap(
     ctx.beginPath();
     ctx.moveTo(mx, my);
     ctx.lineTo(mx + (dx / dl) * len, my + (dy / dl) * len);
-    ctx.strokeStyle = m.self ? '#e8ffff' : 'rgba(255,255,255,.85)';
-    ctx.lineWidth = Math.max(1.5, size * 0.004);
+    ctx.strokeStyle = '#e8ffff';
+    ctx.lineWidth = Math.max(1.5, size * 0.0035);
     ctx.stroke();
-    const label = m.self ? '你' : (m.nick.length > 6 ? m.nick.slice(0, 5) + '…' : m.nick);
-    ctx.font = `800 ${Math.max(10, size * 0.03)}px system-ui,sans-serif`;
+    ctx.font = `800 ${Math.max(10, size * 0.028)}px system-ui,sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.lineWidth = Math.max(2, size * 0.006);
     ctx.strokeStyle = 'rgba(10,8,4,.75)';
-    ctx.strokeText(label, mx, my - rad - 2);
-    ctx.fillStyle = m.self ? '#c8f4ff' : '#fff6e8';
-    ctx.fillText(label, mx, my - rad - 2);
+    ctx.strokeText('你', mx, my - rad - 2);
+    ctx.fillStyle = '#c8f4ff';
+    ctx.fillText('你', mx, my - rad - 2);
   };
   for (const m of others) drawMarker(m);
   if (me) drawMarker(me);
