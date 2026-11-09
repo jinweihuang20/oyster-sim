@@ -146,6 +146,8 @@ export type PlazaWorldOpts = {
   shellGeo: THREE.BufferGeometry;
   shellMat: THREE.Material;
   lowDetail?: boolean;
+  /** 省電：執行中動態降燈／炭火／遠距角色 */
+  eco?: () => boolean;
 };
 
 export function createPlazaWorldView(
@@ -232,13 +234,18 @@ export function createPlazaWorldView(
 
   // 四堆一盞實際點光（對齊吊燈外觀；不投影以免 4 燈吃效能）
   const plazaLights: THREE.PointLight[] = [...ambiance.lights];
+  const roofLamps: THREE.PointLight[] = [];
+  const roofLampBaseI = LO ? 7 : 9.5;
   for (const [x, z] of PLAZA_LAMP_XZ) {
-    const pl = new THREE.PointLight(0xffe2b8, LO ? 7 : 9.5, LO ? 13 : 15, 1.35);
+    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 13 : 15, 1.35);
     pl.position.set(x, PLAZA_ROOF_Y - 0.55, z);
     pl.castShadow = false;
     root.add(pl);
     plazaLights.push(pl);
+    roofLamps.push(pl);
   }
+  const _firePos = new THREE.Vector3();
+  let fireThrottle = 0;
 
   function hitPile(raycaster: THREE.Raycaster): number | null {
     const hits = raycaster.intersectObjects(pileGroups, true);
@@ -1065,7 +1072,18 @@ function hashPid(pid: string) {
 
   const now = () => performance.now();
 
-  function tick(dt: number, _camera: THREE.Camera) {
+  function tick(dt: number, camera: THREE.Camera) {
+    const eco = !!opts.eco?.();
+    const cx = camera.position.x, cz = camera.position.z;
+    const FAR2 = 20 * 20, MID2 = 12 * 12, FIRE2 = 14 * 14;
+    // 省電：只留兩盞對角吊燈、關掉攤位動態燈
+    for (let i = 0; i < roofLamps.length; i++) {
+      const on = !eco || (i === 0 || i === 3);
+      roofLamps[i].visible = on;
+      roofLamps[i].intensity = on ? (eco ? roofLampBaseI * 0.85 : roofLampBaseI) : 0;
+    }
+    for (const L of ambiance.lights) L.visible = !eco;
+
     const k = Math.min(1, dt * 10);
     const t = now();
     for (const r of remotes.values()) {
@@ -1079,6 +1097,9 @@ function hashPid(pid: string) {
       r.lookYaw += (r.tLookYaw - r.lookYaw) * Math.min(1, dt * 10);
       r.pitch += (r.tPitch - r.pitch) * Math.min(1, dt * 10);
       const rj = r as any;
+      const dist2 = (r.x - cx) * (r.x - cx) + (r.z - cz) * (r.z - cz);
+      const far = eco && dist2 > FAR2;
+      const mid = eco && dist2 > MID2;
       if ((r.phase || '') === 'jump' && !r.seated) { if (!rj.jt) rj.jt = performance.now(); }
       let jumpElapsed = -1;
       if (rj.jt) {
@@ -1088,26 +1109,31 @@ function hashPid(pid: string) {
           jumpElapsed = -1;
         }
       }
-      if (!r.seated && jumpElapsed >= 0) {
-        posePlazaJump(r.rig, jumpElapsed);
-        if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
-      } else if (!r.seated && r.moving) {
-        r.bob += dt * 10;
-        const swing = posePlazaWalkCycle(r.rig, r.bob, 1);
-        if (r.throwT <= 0) { swingArms(r, swing); hideHold(r); }
-      } else if (!r.seated) {
-        r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
-        r.rig.shinL.rotation.x *= 0.8; r.rig.shinR.rotation.x *= 0.8;
-        r.rig.root.position.y *= 0.8;
-        r.rig.torso.rotation.y *= 0.8; r.rig.torso.rotation.z *= 0.8; r.rig.torso.rotation.x *= 0.8;
-        if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
+      // 遠距：只更新座標，略過走路／甩臂細動畫
+      if (!far) {
+        if (!r.seated && jumpElapsed >= 0) {
+          posePlazaJump(r.rig, jumpElapsed);
+          if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
+        } else if (!r.seated && r.moving && !mid) {
+          r.bob += dt * 10;
+          const swing = posePlazaWalkCycle(r.rig, r.bob, 1);
+          if (r.throwT <= 0) { swingArms(r, swing); hideHold(r); }
+        } else if (!r.seated) {
+          r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
+          r.rig.shinL.rotation.x *= 0.8; r.rig.shinR.rotation.x *= 0.8;
+          r.rig.root.position.y *= 0.8;
+          r.rig.torso.rotation.y *= 0.8; r.rig.torso.rotation.z *= 0.8; r.rig.torso.rotation.x *= 0.8;
+          if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
+        }
+        if (r.throwT > 0) {
+          r.throwT -= dt;
+          poseThrow(r);
+          if (r.throwT <= 0) { r.throwT = 0; applyActionPose(r); }
+        }
+        applyHeadLook(r);
+      } else if (r.throwT > 0) {
+        r.throwT = Math.max(0, r.throwT - dt);
       }
-      if (r.throwT > 0) {
-        r.throwT -= dt;
-        poseThrow(r);
-        if (r.throwT <= 0) { r.throwT = 0; applyActionPose(r); }
-      }
-      applyHeadLook(r);
       // 坐下略往前（負＝朝蚵堆），避免後背穿出椅背
       const back = r.seated ? -0.08 : 0;
       const ox = r.x + Math.sin(r.yaw) * back;
@@ -1117,13 +1143,18 @@ function hashPid(pid: string) {
       r.rig.outer.rotation.order = 'YXZ';
       r.rig.outer.rotation.y = r.yaw;
       r.rig.outer.rotation.x = 0;
-      { const ph = r.seated ? '' : (r.phase || ''); const want = ph === 'crouch' || ph === 'lie' ? 1 : 0; if (want) rj.pz = ph; rj.pk = (rj.pk ?? 0) + (want - (rj.pk ?? 0)) * 0.18; if (rj.pk > 0.001 && rj.pz && !r.moving) { r.rig.legL.rotation.x = r.rig.legR.rotation.x = 0; r.rig.shinL.rotation.x = r.rig.shinR.rotation.x = 0; } if (rj.pk > 0.001 && rj.pz) applyPlazaBodyPose(r.rig, rj.pz, rj.pk); }
+      if (!far) {
+        { const ph = r.seated ? '' : (r.phase || ''); const want = ph === 'crouch' || ph === 'lie' ? 1 : 0; if (want) rj.pz = ph; rj.pk = (rj.pk ?? 0) + (want - (rj.pk ?? 0)) * 0.18; if (rj.pk > 0.001 && rj.pz && !r.moving) { r.rig.legL.rotation.x = r.rig.legR.rotation.x = 0; r.rig.shinL.rotation.x = r.rig.shinR.rotation.x = 0; } if (rj.pk > 0.001 && rj.pz) applyPlazaBodyPose(r.rig, rj.pz, rj.pk); }
+      }
       { const now = performance.now(); const mu = rj.mt ? (now - rj.mt) / 1800 : -1; const inMoon = (r.phase || '') === 'moon'; r.rig.outer.rotation.z = 0;
         if (mu >= 0 && mu < 1) { r.rig.outer.position.x += Math.sin(rj.mz) * 22 * mu; r.rig.outer.position.z += Math.cos(rj.mz) * 22 * mu; r.rig.outer.position.y += 22 * mu; r.rig.outer.rotation.x = mu * 14; r.rig.outer.rotation.z = mu * 9; r.rig.outer.visible = true; rj.mh = true; }
         else if (inMoon && !(mu < 0 && rj.mt && now < rj.mt)) { r.rig.outer.visible = false; rj.mh = true; }
         else if (rj.mh && !inMoon) { r.rig.outer.visible = true; rj.mh = false; rj.mt = 0; }
         else if (mu >= 1 && !inMoon) { rj.mt = 0; rj.mh = false; r.rig.outer.visible = true; } }
-      r.rig.outer.updateMatrixWorld(true);
+      // 省電遠距：隱藏模型（碰撞仍用 x/z）
+      if (far && !rj.mh && (r.phase || '') !== 'moon') r.rig.outer.visible = false;
+      else if (!far && !rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
+      if (!far) r.rig.outer.updateMatrixWorld(true);
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       r.tag.sprite.visible = show;
       if (show) placeAboveHead(r.tag.sprite, r.rig.head, 0.22);
@@ -1142,10 +1173,31 @@ function hashPid(pid: string) {
     } else if (selfBubble.sprite.visible) selfBubble.sprite.visible = false;
     grill.tick(t);
     const tSec = t * 0.001;
-    for (const f of fireFx) f.tick(tSec, dt);
-    ambiance.tick(tSec, dt);
+    // 省電：炭火約 15Hz，且只動鏡頭附近
+    fireThrottle += dt;
+    const runFire = !eco || fireThrottle >= 1 / 15;
+    if (runFire) {
+      const fdt = eco ? fireThrottle : dt;
+      fireThrottle = 0;
+      for (const f of fireFx) {
+        f.group.getWorldPosition(_firePos);
+        const fd2 = (_firePos.x - cx) * (_firePos.x - cx) + (_firePos.z - cz) * (_firePos.z - cz);
+        if (eco && fd2 > FIRE2) continue;
+        f.tick(tSec, fdt);
+      }
+      ambiance.tick(tSec, fdt);
+    }
     bigShed.tick(dt);
-    for (const k of stallKeepers) { k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15; posePlazaStallKeeper(k.rig, tSec, k.ph); tickKeeperBubble(k, tSec); }
+    for (const k of stallKeepers) {
+      if (eco) {
+        const dx = k.rig.outer.position.x - cx, dz = k.rig.outer.position.z - cz;
+        if (dx * dx + dz * dz > FAR2) { k.rig.outer.visible = false; continue; }
+        k.rig.outer.visible = true;
+      }
+      k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15;
+      if (!eco) posePlazaStallKeeper(k.rig, tSec, k.ph);
+      tickKeeperBubble(k, tSec);
+    }
   }
 
   /** 站立／蹲／躺／跳躍的遠端：擋路（不推擠）；坐下、尚未現身：不擋；躺＝isLie */

@@ -87,11 +87,11 @@ const bootEco = (() => {
   return COARSE;
 })();
 const canvas = $('c') as HTMLCanvasElement;
-// 移動端／省電：mediump、關 AA；仍用 high-performance 讓系統選對 GPU，陰影改便宜類型
+// 移動端／省電：mediump、關 AA、low-power GPU；一般 high-performance（powerPreference 僅建 renderer 時生效）
 const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: !bootEco,
-  powerPreference: 'high-performance',
+  powerPreference: bootEco ? 'low-power' : 'high-performance',
   precision: bootEco ? 'mediump' : 'highp',
   preserveDrawingBuffer: !!SHOT,
 });
@@ -367,8 +367,8 @@ const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('
   const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
 /** 熱切省電：關陰影、降 DPR；antialias／precision 僅啟動時套用 */
 function applyEcoGfx() {
-  // 省電：手機約 1×、桌面約 1.25×；一般最多 2×
-  const dprCap = mix.eco ? (COARSE ? 1 : 1.25) : 2;
+  // 省電：手機約 1.25×、桌面約 1.5×；一般最多 2×
+  const dprCap = mix.eco ? (COARSE ? 1.25 : 1.5) : 2;
   renderer.setPixelRatio(Math.min(devicePixelRatio, dprCap));
   renderer.shadowMap.enabled = !mix.eco;
   renderer.shadowMap.type = mix.eco ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
@@ -3269,6 +3269,7 @@ function launchPlaza() {
       return false;
     },
     getUmb: () => umbHeld || umbT > 0,
+    getEco: () => mix.eco,
     getPlazaSpawn: () => save.plazaSpawn,
     persistPlazaSpawn: (spawn) => { save.plazaSpawn = spawn; persist(); },
     onShellThrow: (e) => {
@@ -3478,7 +3479,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
-{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：30fps・降解析・關陰影（重新整理後 AA／精度才會變）' : '已關省電：滿幀・柔和陰影（重新整理後抗鋸齒才會變）', '#9be37a'); }; }
+{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：45fps・降解析・關陰影・廣場簡化（重新整理後 AA／精度／GPU 才會變）' : '已關省電：滿幀・柔和陰影（重新整理後抗鋸齒／GPU 才會變）', '#9be37a'); }; }
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => $('dex').classList.remove('show');
 
@@ -3538,8 +3539,8 @@ function frameBody() {
   }
   const now = performance.now();
   const paused = isPaused();
-  // 選單／暫停約 15fps；省電遊玩約 30fps；一般遊玩滿幀
-  const minMs = (state !== 'play' || paused) ? 1000 / 15 : (mix.eco ? 1000 / 30 : 0);
+  // 選單／暫停約 15fps；省電遊玩約 45fps；一般遊玩滿幀
+  const minMs = (state !== 'play' || paused) ? 1000 / 15 : (mix.eco ? 1000 / 45 : 0);
   if (minMs > 0 && now - lastDrawAt < minMs) { scheduleFrame(); return; }
   lastDrawAt = now;
   if (isDeathmatchActive()) { clock.getDelta(); scheduleFrame(); return; }

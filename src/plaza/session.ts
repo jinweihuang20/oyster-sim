@@ -78,6 +78,8 @@ export type PlazaDeps = {
   getPlazaSpawn?: () => PlazaSpawnMemory | null | undefined;
   /** 離開時寫入站位（坐著離開會帶 pileId/slot） */
   persistPlazaSpawn?: (spawn: PlazaSpawnMemory) => void;
+  /** 省電模式（廣場簡化／降負載） */
+  getEco?: () => boolean;
 };
 
 let active = false;
@@ -325,7 +327,9 @@ export function openPlaza(D: PlazaDeps) {
   view = createPlazaWorldView(D.scene, D.bubbles, {
     shellGeo: D.shellGeo,
     shellMat: D.shellMat,
-    lowDetail: matchMedia('(pointer: coarse)').matches,
+    // 手機或省電：少幾何／少燈；執行中仍可依 getEco 再降動態負載
+    lowDetail: matchMedia('(pointer: coarse)').matches || !!D.getEco?.(),
+    eco: () => !!D.getEco?.(),
   });
   buildUi();
   wireClient(D);
