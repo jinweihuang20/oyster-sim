@@ -331,8 +331,9 @@ export function createPlazaWorldView(
     const sn = smokeNpc;
     const dist2 = (sn.rig.outer.position.x - cx) ** 2 + (sn.rig.outer.position.z - cz) ** 2;
     const far = eco && dist2 > 20 * 20;
-    sn.rig.outer.visible = !far;
-    sn.tag.sprite.visible = !far;
+    const hide = eco && dist2 > 60 * 60;
+    sn.rig.outer.visible = !hide;
+    sn.tag.sprite.visible = !hide;
     if (far) return;
     ensurePlazaSmokeCig(sn.rig, LO);
     const cig = getPlazaSmokeCig(sn.rig);
@@ -1423,7 +1424,7 @@ function hashPid(pid: string) {
   function tick(dt: number, camera: THREE.Camera) {
     const eco = !!opts.eco?.();
     const cx = camera.position.x, cz = camera.position.z;
-    const FAR2 = 20 * 20, FIRE2 = 14 * 14;
+    const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
     // 省電：只留兩盞對角吊燈、關掉攤位動態燈
     for (let i = 0; i < roofLamps.length; i++) {
       const on = !eco || (i === 0 || i === 3);
@@ -1534,9 +1535,9 @@ function hashPid(pid: string) {
         else if (rj.mh && !inMoon) { r.rig.outer.visible = true; rj.mh = false; rj.mt = 0; }
         else if (mu >= 1 && !inMoon) { rj.mt = 0; rj.mh = false; r.rig.outer.visible = true; } }
       // 省電遠距：隱藏模型（碰撞仍用 x/z）
-      if (far && !rj.mh && (r.phase || '') !== 'moon') r.rig.outer.visible = false;
-      else if (!far && !rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
-      if (!far) r.rig.outer.updateMatrixWorld(true);
+      if (eco && dist2 > HIDE2 && !rj.mh && (r.phase || '') !== 'moon') r.rig.outer.visible = false;
+      else if (!(eco && dist2 > HIDE2) && !rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
+      r.rig.outer.updateMatrixWorld(true);
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       r.tag.sprite.visible = show;
       if (show) placeAboveHead(r.tag.sprite, r.rig.head, 0.22);
@@ -1606,7 +1607,7 @@ function hashPid(pid: string) {
     for (const k of stallKeepers) {
       if (eco) {
         const dx = k.rig.outer.position.x - cx, dz = k.rig.outer.position.z - cz;
-        if (dx * dx + dz * dz > FAR2) { k.rig.outer.visible = false; continue; }
+        const kd2 = dx * dx + dz * dz; k.rig.outer.visible = kd2 <= HIDE2; if (kd2 > FAR2) continue;
         k.rig.outer.visible = true;
       }
       k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15;
