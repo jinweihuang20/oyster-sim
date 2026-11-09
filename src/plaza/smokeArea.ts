@@ -14,7 +14,7 @@ type AddFn = (
 ) => THREE.Mesh;
 
 /** 畫「吸菸區」地貼／立牌用的線條 canvas 貼圖 */
-function makeSmokeLabelTexture(text: string, w = 256, h = 96) {
+export function makeSmokeLabelTexture(text: string, w = 256, h = 96) {
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
   const c = cv.getContext('2d')!;

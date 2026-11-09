@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
 import {
-  PILE_SPACING, PLAZA_LAMP_XZ, WALK_BOUND, pileCenter, seatPose,
+  PILE_SPACING, PLAZA_LAMP_XZ, WALK_BOUND, pileCenter, seatPose, CAFE_OPENING, CAFE_SOUTH_WALL_END,
   PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, pileHasNpc,
 } from './layout';
 
@@ -440,28 +440,30 @@ export function makePlazaBigShed(
     const plankH = lowDetail ? 0.36 : 0.28;
     const plankA = M(0x6a5540, { roughness: 0.92 });
     const plankB = M(0x534330, { roughness: 0.94 });
-    const studs = [-10.6, -5.2, 0, 5.2, 10.6];
     const n = Math.ceil(wallH / plankH);
-    const face = (axis: 'x' | 'z', outer: number) => {
+    /** a0..a1＝沿牆方向的實牆段（東牆在多那芝咖啡處開口、南牆東端拆掉） */
+    const face = (axis: 'x' | 'z', outer: number, a0: number, a1: number, studs: number[]) => {
       // outer＝內側面在 WALK_BOUND；板心再往外半厚
       const c = outer + thick * 0.5;
+      const len = a1 - a0, mid = (a0 + a1) * 0.5;
       for (let i = 0; i < n; i++) {
         const y0 = i * plankH;
         const h = Math.min(plankH * 0.9, wallH - y0);
         if (h < 0.06) break;
         const y = y0 + h * 0.5;
-        if (axis === 'x') add(rboxEnv(thick, h, span), i % 2 ? plankA : plankB, [c, y, 0], g, false);
-        else add(rboxEnv(span, h, thick), i % 2 ? plankA : plankB, [0, y, c], g, false);
+        if (axis === 'x') add(rboxEnv(thick, h, len), i % 2 ? plankA : plankB, [c, y, mid], g, false);
+        else add(rboxEnv(len, h, thick), i % 2 ? plankA : plankB, [mid, y, c], g, false);
       }
       for (const s of studs) {
         if (axis === 'x') add(rboxEnv(thick + 0.04, wallH, 0.16), wood, [c + 0.02, wallH * 0.5, s], g, true);
         else add(rboxEnv(0.16, wallH, thick + 0.04), wood, [s, wallH * 0.5, c + 0.02], g, true);
       }
-      if (axis === 'x') add(rboxEnv(thick + 0.06, 0.1, span + 0.2), wood, [c, wallH + 0.02, 0], g, false);
-      else add(rboxEnv(span + 0.2, 0.1, thick + 0.06), wood, [0, wallH + 0.02, c], g, false);
+      if (axis === 'x') add(rboxEnv(thick + 0.06, 0.1, len + 0.1), wood, [c, wallH + 0.02, mid], g, false);
+      else add(rboxEnv(len + 0.1, 0.1, thick + 0.06), wood, [mid, wallH + 0.02, c], g, false);
     };
-    face('x', WALK_BOUND); // 東
-    face('z', WALK_BOUND); // 南
+    const half = span / 2;
+    face('x', WALK_BOUND, -half, CAFE_OPENING.z0, [-10.6, -5.2, 0, CAFE_OPENING.z0 - 0.08]); // 東（南段開口通咖啡店）
+    face('z', WALK_BOUND, -half, CAFE_SOUTH_WALL_END, [-10.6, -5.2, 0, 5.2, CAFE_SOUTH_WALL_END - 0.08]); // 南（東端拆掉）
   }
 
   // 鏽鐵皮厝頂（長條斜舖，蓋住整場）

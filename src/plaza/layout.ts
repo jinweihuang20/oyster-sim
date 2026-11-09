@@ -14,7 +14,28 @@ export const pileIsGrill = (pileId: number) => GRILL_PILE_IDS.includes(pileId);
 export const SMOKE_PILE_ID = 100;
 export const SMOKE_SEAT_COUNT = 4;
 export const SMOKE_CENTER = { x: -12.0, z: -2.6 } as const;
-export const isSmokePile = (pileId: number) => pileId === SMOKE_PILE_ID;
+/** 東南角多那芝咖啡門口吸菸區（與後端 PlazaWorld.CafeSmokePileId 對齊）：3 桌 × 2 座 */
+export const CAFE_SMOKE_PILE_ID = 101;
+export const CAFE_SMOKE_SEAT_COUNT = 6;
+/** 門口小桌中心（x 固定，z 由北到南） */
+export const CAFE_TABLE_X = 12.3;
+export const CAFE_TABLE_Z: readonly number[] = [6.05, 8.15, 10.25];
+/** 椅心離桌心（沿 z） */
+export const CAFE_CHAIR_OFFSET = 0.6;
+export const CAFE_TABLE_RADIUS = 0.36;
+/** 咖啡店建築（外觀，不可進入）：正門朝西 */
+export const CAFE_BUILDING = { x0: 14.2, x1: 19.6, z0: 5.0, z1: 11.0, h: 5.2, doorZ: 8.15 } as const;
+/** 門廊深度（x 13.2..14.2） */
+export const CAFE_PORCH_DEPTH = 1.0;
+/** 東牆開口 z 範圍（其餘留短牆） */
+export const CAFE_OPENING = { z0: 5.0, z1: 11.5 } as const;
+/** 南牆實牆止於此 x（東端 8.0..11.5 拆掉，換矮欄杆） */
+export const CAFE_SOUTH_WALL_END = 8.0;
+/** 東延區可走範圍（咖啡店前庭）：x ∈ (WALK_BOUND, xMax]、z ∈ [zMin, WALK_BOUND] */
+export const CAFE_FORECOURT = { xMax: 13.95, zMin: 5.3 } as const;
+export const isSmokePile = (pileId: number) => pileId === SMOKE_PILE_ID || pileId === CAFE_SMOKE_PILE_ID;
+export const isCafeSmokePile = (pileId: number) => pileId === CAFE_SMOKE_PILE_ID;
+export const smokeSeatCountOf = (pileId: number) => (pileId === CAFE_SMOKE_PILE_ID ? CAFE_SMOKE_SEAT_COUNT : SMOKE_SEAT_COUNT);
 /** 吸菸區氣氛 NPC 椅（非玩家位；伺服器座位仍 0..SMOKE_SEAT_COUNT-1） */
 /** 南側外緣：離玩家凳／菸灰缸／棚柱皆 ≥~1.6，不擋東側入座 */
 export const SMOKE_NPC_ANGLE = -Math.PI / 2;
@@ -41,9 +62,30 @@ export const NPC_SEAT_RADIUS = 1.52;
 export const WALK_BOUND = 11.5;
 /** 西緣延伸到潮間帶／養殖預留區 */
 export const WALK_BOUND_WEST = 24;
+/** 東緣延伸到多那芝咖啡（實際可走僅前庭，見 plazaClampWalk） */
+export const WALK_BOUND_EAST = 20;
 export type PlazaWalkBounds = { minX: number; maxX: number; minZ: number; maxZ: number };
 export function plazaWalkBounds(): PlazaWalkBounds {
-  return { minX: -WALK_BOUND_WEST, maxX: WALK_BOUND, minZ: -WALK_BOUND, maxZ: WALK_BOUND };
+  return { minX: -WALK_BOUND_WEST, maxX: WALK_BOUND_EAST, minZ: -WALK_BOUND, maxZ: WALK_BOUND };
+}
+/** 該點是否在可走區（主廣場＋咖啡前庭） */
+export function plazaWalkAllowed(x: number, z: number, margin = 0): boolean {
+  if (x < -WALK_BOUND_WEST + margin || z < -WALK_BOUND + margin || z > WALK_BOUND - margin) return false;
+  if (x <= WALK_BOUND - margin) return true;
+  return x <= CAFE_FORECOURT.xMax - margin && z >= CAFE_FORECOURT.zMin + margin;
+}
+/**
+ * 東延區夾限：出了東牆線（x > WALK_BOUND）只准在咖啡前庭；
+ * 碰到開口北側短牆時，往位移較小的方向推回（可沿牆滑）。
+ */
+export function plazaClampWalk(p: { x: number; z: number }) {
+  if (p.x <= WALK_BOUND) return p;
+  if (p.z < CAFE_FORECOURT.zMin) {
+    const dx = p.x - WALK_BOUND, dz = CAFE_FORECOURT.zMin - p.z;
+    if (dx <= dz) p.x = WALK_BOUND; else p.z = CAFE_FORECOURT.zMin;
+  }
+  if (p.x > CAFE_FORECOURT.xMax) p.x = CAFE_FORECOURT.xMax;
+  return p;
 }
 /** 潮間帶世界範圍（棚西外側往西） */
 export const TIDAL_FLAT = {
@@ -71,6 +113,13 @@ export const PLAZA_LAMP_XZ: readonly [number, number][] = [
 
 /** 一堆座位：0–3 玩家、4–5 阿婆；皆朝堆心。吸菸區 pileId=SMOKE_PILE_ID。 */
 export function seatPose(pileId: number, slot: number) {
+  if (isCafeSmokePile(pileId)) {
+    const t = Math.max(0, Math.min(CAFE_TABLE_Z.length - 1, slot >> 1));
+    const center = new THREE.Vector3(CAFE_TABLE_X, 0, CAFE_TABLE_Z[t]);
+    const pos = new THREE.Vector3(CAFE_TABLE_X, 0, center.z + ((slot & 1) ? CAFE_CHAIR_OFFSET : -CAFE_CHAIR_OFFSET));
+    const yaw = Math.atan2(pos.x - center.x, pos.z - center.z);
+    return { pos, yaw, center, angle: 0 };
+  }
   if (isSmokePile(pileId)) {
     const n = Math.max(1, SMOKE_SEAT_COUNT - 1);
     const a = -0.95 + (slot / n) * 1.9;
@@ -121,6 +170,7 @@ export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDis
     for (let s = 0; s < SLOTS_PER_PILE; s++) consider(p, s);
   }
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
+  for (let s = 0; s < CAFE_SMOKE_SEAT_COUNT; s++) consider(CAFE_SMOKE_PILE_ID, s);
   return best;
 }
 
@@ -150,6 +200,18 @@ export function plazaSmokeObstacles(): [number, number, number][] {
   ];
 }
 
+/** 咖啡門口：小桌圓＋東牆開口北端短牆頭（椅不擋，才能走近入座） */
+export function plazaCafeObstacles(): [number, number, number][] {
+  return [
+    ...CAFE_TABLE_Z.map(z => [CAFE_TABLE_X, z, CAFE_TABLE_RADIUS] as [number, number, number]),
+    [WALK_BOUND + 0.07, CAFE_OPENING.z0, 0.12],
+    // 門口護欄外側柱、吸菸區立牌（與 cafe.ts 對齊）
+    [CAFE_BUILDING.x0 - CAFE_PORCH_DEPTH + 0.12, CAFE_BUILDING.doorZ - 0.86, 0.07],
+    [CAFE_BUILDING.x0 - CAFE_PORCH_DEPTH + 0.12, CAFE_BUILDING.doorZ + 0.86, 0.07],
+    [CAFE_BUILDING.x0 - CAFE_PORCH_DEPTH + 0.25, WALK_BOUND - 0.3, 0.08],
+  ];
+}
+
 /** 碰撞用：每堆一個圓（遮雨棚柱另見 plazaCanopySites） */
 export function pileObstacles(): [number, number, number][] {
   const out: [number, number, number][] = [];
@@ -173,6 +235,7 @@ function spawnPointClear(
   margin = 0.35,
 ): boolean {
   if (x < bounds.minX + margin || x > bounds.maxX - margin || z < bounds.minZ + margin || z > bounds.maxZ - margin) return false;
+  if (!plazaWalkAllowed(x, z, margin)) return false;
   for (const [ox, oz, radius] of obs) {
     if (Math.hypot(x - ox, z - oz) < radius + SPAWN_CLEAR) return false;
   }

@@ -41,7 +41,8 @@ export const PLAZA_STALL_SITES: readonly {
   // 東
   { id: 'snack', x: 9.7, z: -1.8, kind: 'snack', radius: 1.1 },
   { id: 'seafood', x: 9.65, z: 2.8, kind: 'seafood', radius: 1.15 },
-  { id: 'fruit-e', x: 9.5, z: 6.2, kind: 'fruit', radius: 1.0 },
+  // 原位 (9.5,6.2) 讓給多那芝咖啡入口，移到東側偏北
+  { id: 'fruit-e', x: 9.6, z: -5.6, kind: 'fruit', radius: 1.0 },
   // 北（碼頭在棚外；攤位仍在棚內走道）
   { id: 'fruit', x: -4.0, z: -9.6, kind: 'fruit', radius: 1.05 },
   { id: 'snack-n', x: 1.2, z: -9.65, kind: 'snack', radius: 1.05 },

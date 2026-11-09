@@ -1,5 +1,5 @@
 import {
-  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, TIDAL_FLAT, pileCenter, pileIsGrill, SMOKE_CENTER,
+  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, pileCenter, pileIsGrill, SMOKE_CENTER,
 } from './layout';
 import { PLAZA_STALL_SITES } from './ambiance';
 import { plazaDisplayName, type PlazaPlayer } from './types';
@@ -15,7 +15,7 @@ export type PlazaMapMarker = {
 
 /** 地圖世界範圍（含西潮間帶＋北側碼頭） */
 const MAP_MIN_X = -WALK_BOUND_WEST - 0.6;
-const MAP_MAX_X = WALK_BOUND + 0.6;
+const MAP_MAX_X = WALK_BOUND_EAST + 0.6;
 const MAP_MIN_Z = -13.6;
 const MAP_MAX_Z = WALK_BOUND + 0.6;
 
@@ -168,6 +168,43 @@ export function drawPlazaMap(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(STALL_LABEL[s.id] || s.kind, mx, my);
+  }
+
+  // 多那芝咖啡（東南角）＋門口吸菸區
+  {
+    const [x0, y0] = to(CAFE_BUILDING.x0, CAFE_BUILDING.z0);
+    const [x1, y1] = to(CAFE_BUILDING.x1, CAFE_BUILDING.z1);
+    const l = Math.min(x0, x1), t = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+    ctx.fillStyle = 'rgba(207,196,176,.78)';
+    roundRect(ctx, l, t, w, h, size * 0.008);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60,64,68,.8)';
+    ctx.lineWidth = Math.max(1, size * 0.0025);
+    ctx.stroke();
+    ctx.fillStyle = '#2b2f33';
+    ctx.font = `800 ${Math.max(9, size * 0.028)}px system-ui,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('多那芝', l + w / 2, t + h / 2);
+    // 前庭可走區
+    const [fx0, fy0] = to(WALK_BOUND, CAFE_FORECOURT.zMin);
+    const [fx1, fy1] = to(CAFE_FORECOURT.xMax, WALK_BOUND);
+    ctx.strokeStyle = 'rgba(255,255,255,.18)';
+    ctx.setLineDash([size * 0.012, size * 0.01]);
+    ctx.strokeRect(Math.min(fx0, fx1), Math.min(fy0, fy1), Math.abs(fx1 - fx0), Math.abs(fy1 - fy0));
+    ctx.setLineDash([]);
+    const [mx, my] = to(CAFE_TABLE_X, CAFE_TABLE_Z[1]);
+    const rw = Math.max(8, size * 0.028);
+    ctx.fillStyle = 'rgba(32,56,72,.78)';
+    roundRect(ctx, mx - rw * 0.75, my - rw * 1.6, rw * 1.5, rw * 3.2, size * 0.01);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(42,90,134,.9)';
+    ctx.stroke();
+    ctx.fillStyle = '#e8f2fa';
+    ctx.font = `700 ${Math.max(8, size * 0.022)}px system-ui,sans-serif`;
+    ctx.fillText('吸', mx, my - rw * 0.9);
+    ctx.fillText('菸', mx, my);
+    ctx.fillText('區', mx, my + rw * 0.9);
   }
 
   // 吸菸區

@@ -19,6 +19,8 @@ export type WalkSeatDeps = {
   /** 對稱邊界（工寮／舊呼叫）；廣場優先用 plazaWalkRect */
   plazaWalkBound: () => number;
   plazaWalkRect?: () => { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** 矩形夾限後再套區域（東延僅咖啡前庭） */
+  plazaWalkClamp?: (p: { x: number; z: number }) => void;
   plazaNearSeat: () => { pileId: number; slot: number } | null;
   plazaMySeat: () => { pileId: number; slot: number } | null;
   seatPose: (pileId: number, slot: number) => { pos: THREE.Vector3; yaw: number };
@@ -195,6 +197,7 @@ export function walkStep(dt: number) {
     const b = D.plazaWalkRect();
     walkPos.x = D.clamp(walkPos.x, b.minX, b.maxX);
     walkPos.z = D.clamp(walkPos.z, b.minZ, b.maxZ);
+    D.plazaWalkClamp?.(walkPos);
   } else {
     const bound = D.isPlazaMode() ? D.plazaWalkBound() : 3.25;
     walkPos.x = D.clamp(walkPos.x, -bound, bound); walkPos.z = D.clamp(walkPos.z, -bound, bound);
@@ -207,6 +210,8 @@ export function walkStep(dt: number) {
     D.$('seatCard').classList.add('mini');
     if (n) D.$('seatInfo').textContent = n.pileId === 100
       ? `吸菸區・座 ${n.slot + 1}`
+      : n.pileId === 101
+      ? `多那芝吸菸區・座 ${n.slot + 1}`
       : `第 ${n.pileId + 1} 堆・座 ${n.slot + 1}`;
     return;
   }

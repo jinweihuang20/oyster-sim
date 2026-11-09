@@ -13,6 +13,7 @@ import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
+import { makePlazaCafe } from './cafe';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
@@ -233,6 +234,11 @@ export function createPlazaWorldView(
   root.add(smokeArea.group);
   for (const [k, pad] of smokeArea.seatPads) seatMeshes.set(k, pad);
 
+  // 東南角多那芝咖啡外觀＋門口吸菸區（座位 pileId=CAFE_SMOKE_PILE_ID）
+  const cafe = makePlazaCafe(M, add, LO);
+  root.add(cafe.group);
+  for (const [k, pad] of cafe.seatPads) seatMeshes.set(k, pad);
+
   // 攤位老闆（純客戶端，不經伺服器）：站在攤台後方、面向廣場中心
   const stallKeepers: { rig: PlayerRig; ph: number; lines: string[]; bub: WorldLabel | null; next: number; until: number; li: number }[] = [];
   const KEEPER_LINES: Record<string, string[]> = {
@@ -419,7 +425,7 @@ export function createPlazaWorldView(
   const grill = createGrillView(root);
 
   // 四堆一盞實際點光（對齊吊燈外觀；不投影以免 4 燈吃效能）
-  const plazaLights: THREE.PointLight[] = [...ambiance.lights];
+  const plazaLights: THREE.PointLight[] = [...ambiance.lights, ...cafe.lights];
   const roofLamps: THREE.PointLight[] = [];
   const roofLampBaseI = LO ? 7 : 9.5;
   for (const [x, z] of PLAZA_LAMP_XZ) {
@@ -1403,6 +1409,7 @@ function hashPid(pid: string) {
       roofLamps[i].intensity = on ? (eco ? roofLampBaseI * 0.85 : roofLampBaseI) : 0;
     }
     for (const L of ambiance.lights) L.visible = !eco;
+    for (const L of cafe.lights) L.visible = !eco;
 
     const k = Math.min(1, dt * 10);
     const t = now();
@@ -1539,9 +1546,11 @@ function hashPid(pid: string) {
       }
       ambiance.tick(tSec, fdt);
       smokeArea.tick(tSec, fdt);
+      cafe.tick(tSec, fdt);
     } else {
       // 吸菸薄煙仍低頻更新
       smokeArea.tick(tSec, dt);
+      cafe.tick(tSec, dt);
     }
     tickRemoteExhales(dt);
     // 遠端吸菸：手持菸（掛腕）＋菸頭薄煙；不再用頭側飄煙以免看起來沒拿菸
@@ -1626,6 +1635,7 @@ function hashPid(pid: string) {
     for (const f of fireFx) f.dispose();
     fireFx.length = 0;
     smokeArea.ambientSmoke.dispose();
+    cafe.dispose();
     if (selfCig) { root.remove(selfCig.group); selfCig.dispose(); selfCig = null; }
     for (const pl of plazaLights) { root.remove(pl); pl.dispose(); }
     plazaLights.length = 0;

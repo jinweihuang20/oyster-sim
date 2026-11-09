@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PlazaClient } from './hubClient';
 import {
-  PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds,
+  PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds, plazaClampWalk, plazaCafeObstacles,
   seatPose, seatKey, nearestFreeSeat, pileObstacles, pileCenter, randomWalkSpawn, resolveWalkSpawn,
   isSmokePile, plazaSmokeObstacles,
   type PlazaSeatRef, type PlazaSpawnMemory,
@@ -114,11 +114,14 @@ export function plazaMySeat() { return myPile != null && mySlot != null ? { pile
 /** @deprecated 對稱邊界；走動請用 plazaWalkRect */
 export function plazaWalkBound() { return WALK_BOUND; }
 export function plazaWalkRect() { return plazaWalkBounds(); }
+/** 東延咖啡前庭夾限（在矩形夾限之後呼叫） */
+export function plazaWalkClamp(p: { x: number; z: number }) { plazaClampWalk(p); }
 export function plazaPileObs(): [number, number, number][] {
   const out = pileObstacles();
   for (const p of plazaShedPosts()) out.push([p.x, p.z, 0.22]);
   for (const o of plazaStallObstacles()) out.push(o);
   for (const o of plazaSmokeObstacles()) out.push(o);
+  for (const o of plazaCafeObstacles()) out.push(o);
   return out;
 }
 /** 走動時遠端玩家碰撞圓 `[x,z,r,isLie]`（擋路不推擠；坐下略過） */
@@ -128,7 +131,7 @@ export function plazaWalkBodies(): [number, number, number, number][] {
 /** 入場障礙：棚柱＋攤位 */
 function plazaSpawnExtraObs(): [number, number, number][] {
   const posts: [number, number, number][] = plazaShedPosts().map(p => [p.x, p.z, 0.22]);
-  return [...posts, ...plazaStallObstacles(), ...plazaSmokeObstacles()];
+  return [...posts, ...plazaStallObstacles(), ...plazaSmokeObstacles(), ...plazaCafeObstacles()];
 }
 
 /** 入場隨機站位（避開蚵堆／棚柱／攤位，面向中心） */
