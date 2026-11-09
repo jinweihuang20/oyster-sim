@@ -727,6 +727,7 @@ function hashPid(pid: string) {
     const ph = (r.phase || '').toLowerCase();
     if (r.seated) {
       poseSit(r);
+      (r as any)._loco = (ph === 'smoke' || isSmokePile(r.pileId)) ? 'smoke' : 'sit';
       if (ph === 'smoke' || isSmokePile(r.pileId)) {
         // 抽烟 idle：右手近嘴、無刀無蚵
         posePlazaSmokeSit(r.rig);
@@ -801,9 +802,18 @@ function hashPid(pid: string) {
       // 烤位不拿剝蚵刀（含 pick／aim／empty）
       if (pileIsGrill(r.pileId)) r.knife.visible = false;
     } else {
-      poseStand(r);
+      // 走動中勿每次 Sync 都 poseStand：會把腿／走路相位洗成站姿，遠端看起來像滑行
+      const loco = (r as any)._loco as string | undefined;
+      const phL = (r.phase || '').toLowerCase();
+      // 只在離開坐／菸／飛彈後重置站姿；勿看 root.y（走路 bob 也會抬髖）
+      const needStand = !!(r as any)._stoodUp || loco === 'sit' || loco === 'smoke' || loco === 'moon';
+      if (needStand) {
+        poseStand(r);
+        (r as any)._stoodUp = false;
+      }
       hideHold(r);
       r.headWorkX = 0;
+      (r as any)._loco = phL === 'jump' ? 'jump' : (phL === 'moon' ? 'moon' : 'walk');
     }
     applyHeadLook(r);
   }
@@ -896,6 +906,7 @@ function hashPid(pid: string) {
     const prevPile = r.pileId, prevSlot = r.slot;
     r.pileId = p.pileId; r.slot = p.slot; r.phase = p.phase || r.phase; r.count = p.count ?? r.count;
     r.seated = !!p.seated; r.moving = !!p.moving;
+    if (wasSeated && !r.seated) (r as any)._stoodUp = true;
     r.umb = !!p.umb;
     r.tLookYaw = Number.isFinite(p.lookYaw) ? Math.max(-1.6, Math.min(1.6, p.lookYaw!)) : 0;
     r.tPitch = Number.isFinite(p.pitch) ? Math.max(-1.4, Math.min(0.85, p.pitch!)) : 0;
@@ -915,6 +926,7 @@ function hashPid(pid: string) {
       const pose = seatPose(p.pileId, p.slot);
       r.tx = pose.pos.x; r.tz = pose.pos.z; r.tyaw = pose.yaw;
       r.x = pose.pos.x; r.z = pose.pos.z; r.yaw = pose.yaw;
+      (r as any)._wh = []; (r as any)._walkOn = false;
     } else {
       // 剛站起：若封包座標異常（0,0 或離座位太遠），先站在椅後再跟 Sync
       if (wasSeated && prevPile >= 0) {
@@ -1085,7 +1097,7 @@ function hashPid(pid: string) {
   function tick(dt: number, camera: THREE.Camera) {
     const eco = !!opts.eco?.();
     const cx = camera.position.x, cz = camera.position.z;
-    const FAR2 = 20 * 20, MID2 = 12 * 12, FIRE2 = 14 * 14;
+    const FAR2 = 20 * 20, FIRE2 = 14 * 14;
     // 省電：只留兩盞對角吊燈、關掉攤位動態燈
     for (let i = 0; i < roofLamps.length; i++) {
       const on = !eco || (i === 0 || i === 3);
@@ -1109,7 +1121,6 @@ function hashPid(pid: string) {
       const rj = r as any;
       const dist2 = (r.x - cx) * (r.x - cx) + (r.z - cz) * (r.z - cz);
       const far = eco && dist2 > FAR2;
-      const mid = eco && dist2 > MID2;
       if ((r.phase || '') === 'jump' && !r.seated) { if (!rj.jt) rj.jt = performance.now(); }
       let jumpElapsed = -1;
       if (rj.jt) {
@@ -1121,26 +1132,48 @@ function hashPid(pid: string) {
       }
       // 遠距：只更新座標，略過走路／甩臂細動畫
       if (!far) {
-        // 用實際位移估速度，擺手／跨步跟本機一樣依速度縮放（勿固定全速 bob）
-        const lx = rj._lx as number | undefined, lz = rj._lz as number | undefined;
-        const moveSp = (lx == null || lz == null) ? 0 : Math.hypot(r.x - lx, r.z - lz) / Math.max(dt, 1e-3);
-        rj._lx = r.x; rj._lz = r.z;
-        const walkAmp = Math.min(1, moveSp / 1.2);
-        const wantWalk = !r.seated && jumpElapsed < 0 && (r.moving || walkAmp > 0.12) && !mid;
+        // 平滑速度：用 ~200ms 視窗位移（單幀 lerp 殘差常→0，會誤判成沒在走）
+        const nowMs = performance.now();
+        type Hist = { t: number; x: number; z: number };
+        let hist = rj._wh as Hist[] | undefined;
+        if (!hist) { hist = []; rj._wh = hist; }
+        hist.push({ t: nowMs, x: r.x, z: r.z });
+        while (hist.length > 1 && nowMs - hist[0].t > 220) hist.shift();
+        let moveSp = 0;
+        if (hist.length >= 2) {
+          const a = hist[0], b = hist[hist.length - 1];
+          const dtH = (b.t - a.t) * 0.001;
+          if (dtH > 0.04) moveSp = Math.hypot(b.x - a.x, b.z - a.z) / dtH;
+        }
+        // 仍朝目標插值時補一點「接近速度」，避免視窗內幾乎貼齊目標卻其實在走
+        const toT = Math.hypot(r.tx - r.x, r.tz - r.z);
+        if (toT > 0.04) moveSp = Math.max(moveSp, Math.min(2.8, toT * 8));
+        // 遲滯：避免 Sync 間閃爍站／走
+        let walkOn = !!rj._walkOn;
+        if (walkOn) walkOn = moveSp > 0.08 || !!r.moving;
+        else walkOn = moveSp > 0.22 || !!r.moving;
+        rj._walkOn = walkOn;
+        const gaitSp = walkOn ? Math.max(moveSp, r.moving ? 0.9 : 0.55) : moveSp;
+        const walkAmp = Math.min(1, gaitSp / 1.2);
+        // mid 仍播走路（只在 far 省）；否則中距會整段滑行無跨步
+        const wantWalk = !r.seated && jumpElapsed < 0 && walkOn;
         if (!r.seated && jumpElapsed >= 0) {
           posePlazaJump(r.rig, jumpElapsed);
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
+          rj._loco = 'jump';
         } else if (wantWalk) {
-          r.bob += Math.min(moveSp, 3) * dt * 5;
-          const swing = posePlazaWalkCycle(r.rig, r.bob, Math.max(0.2, walkAmp));
+          r.bob += Math.min(gaitSp, 3) * dt * 5;
+          const swing = posePlazaWalkCycle(r.rig, r.bob, Math.max(0.25, walkAmp));
           // 走動一律輕微ㄑ字彎肘擺臂（勿切回直臂下垂）
           if (r.throwT <= 0) { swingArms(r, swing); hideHold(r); }
+          rj._loco = 'walk';
         } else if (!r.seated) {
           r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
           r.rig.shinL.rotation.x *= 0.8; r.rig.shinR.rotation.x *= 0.8;
           r.rig.root.position.y *= 0.8;
           r.rig.torso.rotation.y *= 0.8; r.rig.torso.rotation.z *= 0.8; r.rig.torso.rotation.x *= 0.8;
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
+          rj._loco = 'walk';
         }
         if (r.throwT > 0) {
           r.throwT -= dt;
