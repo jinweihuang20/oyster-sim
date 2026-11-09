@@ -12,6 +12,8 @@ export type Save = {
   name?: string; locSeen?: string[]; gear?: Record<string, boolean>; radioSt?: number; ach?: AchSave;
   redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>;
   namePrompted?: number; tpv?: number; legendDry?: number; legendN?: number;
+  /** 上次離開廣場的站位（含坐著離開時記住的椅旁站點） */
+  plazaSpawn?: { x: number; z: number; yaw: number; pileId?: number; slot?: number };
 };
 
 export const START_MONEY = 10000;
@@ -62,6 +64,16 @@ export function loadSave(LS: SaveStorage): Save {
     out.ach = { got: rec(A.got), st: rec(A.st), locs: sa(A.locs), seats: sa(A.seats), radio: sa(A.radio), sets: sa(A.sets), fresh: sa(A.fresh), title: typeof A.title === 'string' ? A.title.slice(0, 12) : '', pts: Math.max(0, Math.floor(num(A.pts))) };
   }
   if (Array.isArray(raw.redeemed)) out.redeemed = raw.redeemed.filter((x: any) => typeof x === 'string');
+  if (raw.plazaSpawn && typeof raw.plazaSpawn === 'object') {
+    const p = raw.plazaSpawn;
+    const x = num(p.x, NaN), z = num(p.z, NaN), yaw = num(p.yaw, NaN);
+    if (Number.isFinite(x + z + yaw)) {
+      out.plazaSpawn = { x, z, yaw };
+      const pileId = Math.floor(num(p.pileId, -1));
+      const slot = Math.floor(num(p.slot, -1));
+      if (pileId >= 0 && slot >= 0) { out.plazaSpawn.pileId = pileId; out.plazaSpawn.slot = slot; }
+    }
+  }
   return out;
 }
 

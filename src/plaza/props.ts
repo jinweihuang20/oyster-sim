@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
-import { PILE_SPACING, PLAZA_LAMP_XZ, pileCenter, seatPose, PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, pileHasNpc } from './layout';
+import {
+  PILE_SPACING, PLAZA_LAMP_XZ, WALK_BOUND, pileCenter, seatPose,
+  PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, pileHasNpc,
+} from './layout';
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 
@@ -341,6 +344,64 @@ function collectPlazaShedPosts(): { x: number; z: number }[] {
   return out;
 }
 
+/** 大棚樑／鐵皮高度（玩家頭高約 1.55，約三人身高） */
+export const PLAZA_ROOF_Y = 4.65;
+export const PLAZA_POST_H = 4.75;
+
+/** 工業大吊扇：超長扇葉，掛在樑下 */
+function makePlazaCeilingFan(
+  M: (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial,
+  add: (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], parent: THREE.Object3D, cast?: boolean) => THREE.Mesh,
+  lowDetail: boolean,
+  x: number,
+  z: number,
+  roofY: number,
+  spinSign: number,
+): { root: THREE.Group; tick: (dt: number) => void } {
+  const root = new THREE.Group();
+  root.name = 'plazaCeilingFan';
+  root.position.set(x, 0, z);
+  const metal = M(0x4a4a48, { metalness: 0.55, roughness: 0.45 });
+  const hubMat = M(0x3a3a38, { metalness: 0.4, roughness: 0.5 });
+  const bladeMat = M(0x6e6558, { roughness: 0.82, side: THREE.DoubleSide });
+  const segs = lowDetail ? 5 : 8;
+  const hangY = roofY - 0.12;
+  // 吊桿＋馬達殼
+  add(rcyl(0.035, 0.04, 0.55, segs), metal, [0, hangY - 0.28, 0], root, false);
+  add(rcyl(0.16, 0.18, 0.14, segs), hubMat, [0, hangY - 0.58, 0], root, false);
+  add(rcyl(0.09, 0.1, 0.08, 6), metal, [0, hangY - 0.68, 0], root, false);
+
+  const rotor = new THREE.Group();
+  rotor.position.set(0, hangY - 0.72, 0);
+  root.add(rotor);
+  add(rcyl(0.22, 0.2, 0.06, segs), hubMat, [0, 0.02, 0], rotor, false);
+
+  const bladeLen = lowDetail ? 2.6 : 3.05;
+  const bladeW = lowDetail ? 0.28 : 0.34;
+  const nBlades = 3;
+  for (let i = 0; i < nBlades; i++) {
+    const arm = new THREE.Group();
+    arm.rotation.y = (i / nBlades) * Math.PI * 2;
+    rotor.add(arm);
+    const blade = add(
+      rboxEnv(bladeLen, 0.035, bladeW),
+      bladeMat,
+      [bladeLen * 0.52, 0, 0],
+      arm,
+      false,
+    );
+    // 略俯角、微扭，比較像工業扇葉
+    blade.rotation.z = -0.08;
+    blade.rotation.x = 0.12;
+  }
+
+  const speed = 2.1 * spinSign; // ~20 RPM（現速三倍）
+  return {
+    root,
+    tick: (dt: number) => { rotor.rotation.y += speed * dt; },
+  };
+}
+
 /**
  * 廣場大棚：鏽鐵皮厝頂＋外圈木柱（風格同自家工寮，柱只立外圈避開堆椅）。
  * 工寮原棚進廣場仍隱藏，改用這座加大棚架。
@@ -349,15 +410,16 @@ export function makePlazaBigShed(
   M: (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial,
   add: (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], parent: THREE.Object3D, cast?: boolean) => THREE.Mesh,
   lowDetail = false,
-): { group: THREE.Group; posts: { x: number; z: number }[] } {
+): { group: THREE.Group; posts: { x: number; z: number }[]; tick: (dt: number) => void } {
   const g = new THREE.Group();
   g.name = 'plazaBigShed';
   const posts = collectPlazaShedPosts();
   const wood = M(0x5a4a3a, { roughness: 0.88 });
   const rust = [0x8a5a3a, 0x9a6a48, 0x7a6a5e];
-  const postH = 3.15;
-  const roofY = 3.08;
+  const postH = PLAZA_POST_H;
+  const roofY = PLAZA_ROOF_Y;
   const segs = lowDetail ? 5 : 7;
+  const fanTicks: ((dt: number) => void)[] = [];
 
   for (const p of posts) {
     add(rcyl(0.07, 0.08, postH, segs), wood, [p.x, postH / 2, p.z], g, true);
@@ -369,6 +431,38 @@ export function makePlazaBigShed(
   beam(0, roofY - 0.08, 10.6, 21.4, 0.14);
   beam(-10.6, roofY - 0.08, 0, 0.14, 21.4);
   beam(10.6, roofY - 0.08, 0, 0.14, 21.4);
+
+  // 東／南牆：貼齊走動極限，橫木條頂到屋頂樑
+  {
+    const thick = 0.14;
+    const wallH = roofY - 0.04;
+    const span = 21.4;
+    const plankH = lowDetail ? 0.36 : 0.28;
+    const plankA = M(0x6a5540, { roughness: 0.92 });
+    const plankB = M(0x534330, { roughness: 0.94 });
+    const studs = [-10.6, -5.2, 0, 5.2, 10.6];
+    const n = Math.ceil(wallH / plankH);
+    const face = (axis: 'x' | 'z', outer: number) => {
+      // outer＝內側面在 WALK_BOUND；板心再往外半厚
+      const c = outer + thick * 0.5;
+      for (let i = 0; i < n; i++) {
+        const y0 = i * plankH;
+        const h = Math.min(plankH * 0.9, wallH - y0);
+        if (h < 0.06) break;
+        const y = y0 + h * 0.5;
+        if (axis === 'x') add(rboxEnv(thick, h, span), i % 2 ? plankA : plankB, [c, y, 0], g, false);
+        else add(rboxEnv(span, h, thick), i % 2 ? plankA : plankB, [0, y, c], g, false);
+      }
+      for (const s of studs) {
+        if (axis === 'x') add(rboxEnv(thick + 0.04, wallH, 0.16), wood, [c + 0.02, wallH * 0.5, s], g, true);
+        else add(rboxEnv(0.16, wallH, thick + 0.04), wood, [s, wallH * 0.5, c + 0.02], g, true);
+      }
+      if (axis === 'x') add(rboxEnv(thick + 0.06, 0.1, span + 0.2), wood, [c, wallH + 0.02, 0], g, false);
+      else add(rboxEnv(span + 0.2, 0.1, thick + 0.06), wood, [0, wallH + 0.02, c], g, false);
+    };
+    face('x', WALK_BOUND); // 東
+    face('z', WALK_BOUND); // 南
+  }
 
   // 鏽鐵皮厝頂（長條斜舖，蓋住整場）
   const n = lowDetail ? 22 : 34;
@@ -395,5 +489,16 @@ export function makePlazaBigShed(
     }
   }
 
-  return { group: g, posts };
+  // 兩把超大吊扇（避開四角吊燈，對角擺）
+  for (const [fx, fz, dir] of [[-4.0, 4.0, 1], [4.0, -4.0, -1]] as const) {
+    const fan = makePlazaCeilingFan(M, add, lowDetail, fx, fz, roofY, dir);
+    g.add(fan.root);
+    fanTicks.push(fan.tick);
+  }
+
+  return {
+    group: g,
+    posts,
+    tick: (dt: number) => { for (const t of fanTicks) t(dt); },
+  };
 }

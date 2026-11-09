@@ -16,7 +16,9 @@ export type WalkSeatDeps = {
   /** 遠端玩家碰撞圓 `[x,z,r,isLie]`（擋路不推擠；含站／蹲／躺／跳） */
   plazaWalkBodies: () => [number, number, number, number][];
   getJumpY: () => number;
+  /** 對稱邊界（工寮／舊呼叫）；廣場優先用 plazaWalkRect */
   plazaWalkBound: () => number;
+  plazaWalkRect?: () => { minX: number; maxX: number; minZ: number; maxZ: number };
   plazaNearSeat: () => { pileId: number; slot: number } | null;
   plazaMySeat: () => { pileId: number; slot: number } | null;
   seatPose: (pileId: number, slot: number) => { pos: THREE.Vector3; yaw: number };
@@ -189,8 +191,14 @@ export function walkStep(dt: number) {
     }
   }
   if (!D.isPlazaMode() && walkPos.z < -2.55 && walkPos.x < -1.3) walkPos.z = -2.55;
-  const bound = D.isPlazaMode() ? D.plazaWalkBound() : 3.25;
-  walkPos.x = D.clamp(walkPos.x, -bound, bound); walkPos.z = D.clamp(walkPos.z, -bound, bound);
+  if (D.isPlazaMode() && D.plazaWalkRect) {
+    const b = D.plazaWalkRect();
+    walkPos.x = D.clamp(walkPos.x, b.minX, b.maxX);
+    walkPos.z = D.clamp(walkPos.z, b.minZ, b.maxZ);
+  } else {
+    const bound = D.isPlazaMode() ? D.plazaWalkBound() : 3.25;
+    walkPos.x = D.clamp(walkPos.x, -bound, bound); walkPos.z = D.clamp(walkPos.z, -bound, bound);
+  }
   walkPos.y = 1.55 + (D.isPlazaMode() && !D.getTpv() ? 0 : Math.sin(performance.now() / 120) * 0.012 * Math.min(1, l));
   if (D.isPlazaMode()) {
     nearSeat = null; D.stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });

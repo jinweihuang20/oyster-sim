@@ -40,11 +40,12 @@ import {
 import { makeMeshHelpers } from './dm/mesh';
 import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
-  plazaWalkBound, plazaPileObs, plazaWalkBodies, plazaRandomSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
+  plazaWalkBound, plazaWalkRect, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
-  plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen, seatPose, plazaPushOutfit,
+  plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
+  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, seatPose, plazaPushOutfit,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
@@ -2608,7 +2609,13 @@ window.addEventListener('keydown', e => {
   if (state === 'play' && !tut && e.code === 'KeyM') { const L = $('medList'); if (document.pointerLockElement) document.exitPointerLock(); L.classList.toggle('show'); if (L.classList.contains('show')) renderMedList(); return; }
   if (state === 'play' && $('medList').classList.contains('show') && /^Digit[1-9]$/.test(e.code)) { const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0); const m = own[+e.code.slice(5) - 1]; if (m) { useMed(m.id); renderMedList(); } return; }
   if (tut && e.code === 'Enter' && TUT[tut.i].next) { $('tutNext').click(); return; }
-  // 廣場：Enter 開聊天並直接打字
+  // 廣場：N 開／關地圖；Enter 開聊天
+  if (state === 'play' && plazaMode && isPlazaActive() && !e.repeat && e.code === 'KeyN') {
+    e.preventDefault();
+    if (document.pointerLockElement) document.exitPointerLock();
+    plazaToggleMap();
+    return;
+  }
   if (state === 'play' && plazaMode && isPlazaActive() && !e.repeat && (e.code === 'Enter' || e.key === 'Enter')) {
     e.preventDefault();
     if (document.pointerLockElement) document.exitPointerLock();
@@ -2714,7 +2721,7 @@ btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, 
 initWalkSeat({
   $, on, COARSE, clamp,
   getState: () => state, getPhase: () => phase,
-  isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaNearSeat, plazaMySeat, seatPose,
+  isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaNearSeat, plazaMySeat, seatPose,
   setPlazaSeatPropsVisible, oyster, shellGeo, shellTopMat, shellTop, handRig, SEAT, BASIN, BOWL, getBowlR: () => BOWL_R,
   seatGround, seatNow,
   getSeatYaw: () => seatYaw, setSeatYaw: v => { seatYaw = v; },
@@ -3260,6 +3267,8 @@ function launchPlaza() {
       return false;
     },
     getUmb: () => umbHeld || umbT > 0,
+    getPlazaSpawn: () => save.plazaSpawn,
+    persistPlazaSpawn: (spawn) => { save.plazaSpawn = spawn; persist(); },
     onShellThrow: (e) => {
       // 自己丟的已經在本地飛過；別人的殼（含打向自己）播飛行動畫＋甩臂
       try {
@@ -3327,8 +3336,8 @@ function launchPlaza() {
       plazaHideYard(true);
       state = 'play'; syncShiftUi();
       moonReset(); // 0 NPC
-      // 入場隨機站位，面向廣場中心
-      { const spawn = plazaRandomSpawn(); walkPos.set(spawn.x, 1.55, spawn.z); tYaw = yaw = spawn.yaw; }
+      // 入場用上次離開位置；坐著離開且椅被佔則站旁邊避開
+      { const spawn = plazaResolveEnterSpawn(); walkPos.set(spawn.x, 1.55, spawn.z); tYaw = yaw = spawn.yaw; }
       tPitch = pitch = -0.18;
       plazaEnterWalkPose(false);
       drawRadio();
@@ -4482,6 +4491,7 @@ initFeedback({
 /** 關閉最上層可關視窗（ESC／手機返回共用）。主選單／結算不關。 */
 function closeTopModal(): boolean {
   if (closeWeaponPreview()) return true;
+  if (plazaMapIsOpen()) { plazaCloseMap(); return true; }
   if (plazaChatIsOpen()) { plazaCloseChat(); return true; }
   for (const id of ['giftMsg', 'newMsg', 'featMsg', 'svMsg']) {
     const m = document.getElementById(id);

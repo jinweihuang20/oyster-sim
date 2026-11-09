@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
+import { makePlazaTidalFlat } from './tidalFlat';
 
 type MatFn = (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial;
 type AddFn = (
@@ -36,10 +37,7 @@ export const PLAZA_STALL_SITES: readonly {
   { id: 'drink-s', x: 5.9, z: 9.5, kind: 'drink', radius: 1.0 },
   // 坐式烤肉區（西南角矮桌圍爐，非立式高台）
   { id: 'bbqSit', x: -7.4, z: 9.5, kind: 'bbqSit', radius: 1.45 },
-  // 西
-  { id: 'drink', x: -9.7, z: 3.2, kind: 'drink', radius: 1.05 },
-  { id: 'noodle', x: -9.7, z: -1.0, kind: 'noodle', radius: 1.1 },
-  { id: 'sweet', x: -9.55, z: -5.2, kind: 'sweet', radius: 0.95 },
+  // 西邊改潮間帶／養殖預留，不再放攤
   // 東
   { id: 'snack', x: 9.7, z: -1.8, kind: 'snack', radius: 1.1 },
   { id: 'seafood', x: 9.65, z: 2.8, kind: 'seafood', radius: 1.15 },
@@ -56,7 +54,7 @@ export function plazaStallObstacles(): [number, number, number][] {
 }
 
 /**
- * 廣場氣氛：夜市攤＋立式／坐式烤肉＋北側碼頭漁船。
+ * 廣場氣氛：夜市攤＋立式／坐式烤肉＋北側碼頭漁船＋西側潮間帶。
  */
 export function makePlazaAmbiance(
   M: MatFn,
@@ -94,6 +92,7 @@ export function makePlazaAmbiance(
   }
 
   root.add(makePlazaHarbor(M, add, segs, lowDetail));
+  root.add(makePlazaTidalFlat(M, add, lowDetail).group);
 
   return {
     group: root,

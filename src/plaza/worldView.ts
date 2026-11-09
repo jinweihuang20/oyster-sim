@@ -7,7 +7,7 @@ import {
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, type PlazaSeatRef } from './layout';
-import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
+import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import type { CharcoalFireFx } from './fireFx';
@@ -199,7 +199,8 @@ export function createPlazaWorldView(
   }
 
   // 廣場大棚（鏽鐵皮＋外圈木柱，避開堆／椅；工寮原棚進場仍隱藏）
-  root.add(makePlazaBigShed(M, add, LO).group);
+  const bigShed = makePlazaBigShed(M, add, LO);
+  root.add(bigShed.group);
 
   // 外圈夜市攤／烤肉區（氣氛；碰撞見 plazaStallObstacles）
   const ambiance = makePlazaAmbiance(M, add, LO);
@@ -232,8 +233,8 @@ export function createPlazaWorldView(
   // 四堆一盞實際點光（對齊吊燈外觀；不投影以免 4 燈吃效能）
   const plazaLights: THREE.PointLight[] = [...ambiance.lights];
   for (const [x, z] of PLAZA_LAMP_XZ) {
-    const pl = new THREE.PointLight(0xffe2b8, LO ? 6.5 : 9, LO ? 11.5 : 13.5, 1.4);
-    pl.position.set(x, 2.55, z);
+    const pl = new THREE.PointLight(0xffe2b8, LO ? 7 : 9.5, LO ? 13 : 15, 1.35);
+    pl.position.set(x, PLAZA_ROOF_Y - 0.55, z);
     pl.castShadow = false;
     root.add(pl);
     plazaLights.push(pl);
@@ -1143,6 +1144,7 @@ function hashPid(pid: string) {
     const tSec = t * 0.001;
     for (const f of fireFx) f.tick(tSec, dt);
     ambiance.tick(tSec, dt);
+    bigShed.tick(dt);
     for (const k of stallKeepers) { k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15; posePlazaStallKeeper(k.rig, tSec, k.ph); tickKeeperBubble(k, tSec); }
   }
 

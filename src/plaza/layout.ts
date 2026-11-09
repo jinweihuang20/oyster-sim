@@ -16,8 +16,22 @@ export const PILE_SPACING = 5.2;
 export const SEAT_RADIUS = 1.38;
 /** 阿婆椅略外移，夾在玩家座位之間 */
 export const NPC_SEAT_RADIUS = 1.52;
-/** 廣場走動邊界（約蓋住 4×4 堆） */
+/** 廣場走動邊界（東南北約蓋住 4×4 堆） */
 export const WALK_BOUND = 11.5;
+/** 西緣延伸到潮間帶／養殖預留區 */
+export const WALK_BOUND_WEST = 24;
+export type PlazaWalkBounds = { minX: number; maxX: number; minZ: number; maxZ: number };
+export function plazaWalkBounds(): PlazaWalkBounds {
+  return { minX: -WALK_BOUND_WEST, maxX: WALK_BOUND, minZ: -WALK_BOUND, maxZ: WALK_BOUND };
+}
+/** 潮間帶世界範圍（棚西外側往西） */
+export const TIDAL_FLAT = {
+  /** 泥灘東緣（貼近棚柱環外側） */
+  xInner: -11.2,
+  xOuter: -WALK_BOUND_WEST,
+  zMin: -10.2,
+  zMax: 10.2,
+} as const;
 export const SIT_DIST = 1.15;
 
 /** 4×4 蚵仔堆中心 */
@@ -84,6 +98,25 @@ export function pileObstacles(): [number, number, number][] {
   return out;
 }
 
+/** 離開廣場時記住的站位；坐著離開時帶 pileId/slot 供下次避開佔椅 */
+export type PlazaSpawnMemory = { x: number; z: number; yaw: number; pileId?: number; slot?: number };
+
+const SPAWN_CLEAR = 0.5;
+
+function spawnPointClear(
+  x: number,
+  z: number,
+  obs: [number, number, number][],
+  bounds: PlazaWalkBounds = plazaWalkBounds(),
+  margin = 0.35,
+): boolean {
+  if (x < bounds.minX + margin || x > bounds.maxX - margin || z < bounds.minZ + margin || z > bounds.maxZ - margin) return false;
+  for (const [ox, oz, radius] of obs) {
+    if (Math.hypot(x - ox, z - oz) < radius + SPAWN_CLEAR) return false;
+  }
+  return true;
+}
+
 /**
  * 入場隨機站位：在走動界內、避開蚵堆圓，並朝廣場中心。
  * `extraObs` 可帶入棚柱等 `[x, z, radius]`。
@@ -91,17 +124,71 @@ export function pileObstacles(): [number, number, number][] {
 export function randomWalkSpawn(extraObs: [number, number, number][] = []): { x: number; z: number; yaw: number } {
   const bound = WALK_BOUND * 0.82;
   const obs = [...pileObstacles(), ...extraObs];
-  const clear = 0.5;
   for (let n = 0; n < 48; n++) {
     const x = (Math.random() * 2 - 1) * bound;
     const z = (Math.random() * 2 - 1) * bound;
-    let hit = false;
-    for (const [ox, oz, radius] of obs) {
-      if (Math.hypot(x - ox, z - oz) < radius + clear) { hit = true; break; }
-    }
-    if (hit) continue;
+    if (!spawnPointClear(x, z, obs, { minX: -bound, maxX: bound, minZ: -bound, maxZ: bound }, 0)) continue;
     // yaw=0 看 -Z；atan2(x,z) 讓面前朝向原點
     return { x, z, yaw: Math.atan2(x, z) };
   }
   return { x: 0, z: WALK_BOUND * 0.72, yaw: 0 };
+}
+
+/**
+ * 用上次離開位置入場；坐著離開且該椅現已被佔 → 站遠一點，不跟現坐者重疊。
+ * 無有效記憶或完全卡死時退回隨機。
+ */
+export function resolveWalkSpawn(
+  last: PlazaSpawnMemory | null | undefined,
+  opts: { extraObs?: [number, number, number][]; takenSeats?: Set<string> } = {},
+): { x: number; z: number; yaw: number } {
+  const extraObs = opts.extraObs ?? [];
+  const taken = opts.takenSeats ?? new Set<string>();
+  const baseObs = [...pileObstacles(), ...extraObs];
+  const seatObs: [number, number, number][] = [];
+  for (const k of taken) {
+    const parts = k.split(':');
+    const ps = Number(parts[0]), ss = Number(parts[1]);
+    if (!Number.isFinite(ps) || !Number.isFinite(ss) || ps < 0 || ss < 0) continue;
+    const pose = seatPose(ps, ss);
+    seatObs.push([pose.pos.x, pose.pos.z, 0.42]);
+  }
+  const obs = [...baseObs, ...seatObs];
+
+  const tryAt = (x: number, z: number, yaw: number) =>
+    (spawnPointClear(x, z, obs) ? { x, z, yaw } : null);
+
+  if (last && Number.isFinite(last.x + last.z + last.yaw)) {
+    const pileId = last.pileId;
+    const slot = last.slot;
+    if (pileId != null && pileId >= 0 && slot != null && slot >= 0) {
+      const pose = seatPose(pileId, slot);
+      const occupied = taken.has(seatKey(pileId, slot));
+      // 佔椅時站遠一點，避免跟現坐者碰撞圓重疊
+      const dists = occupied ? [1.2, 1.55, 1.9, 0.95] : [0.55, 0.9, 1.25];
+      const laterals = [0, 0.55, -0.55, 0.95, -0.95];
+      const fx = Math.sin(pose.yaw), fz = Math.cos(pose.yaw);
+      const lx = Math.cos(pose.yaw), lz = -Math.sin(pose.yaw);
+      for (const d of dists) {
+        for (const lat of laterals) {
+          const hit = tryAt(pose.pos.x + fx * d + lx * lat, pose.pos.z + fz * d + lz * lat, pose.yaw);
+          if (hit) return hit;
+        }
+      }
+    }
+
+    {
+      const hit = tryAt(last.x, last.z, last.yaw);
+      if (hit) return hit;
+      for (const d of [0.45, 0.9, 1.4, 2.0]) {
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          const hit2 = tryAt(last.x + Math.cos(a) * d, last.z + Math.sin(a) * d, last.yaw);
+          if (hit2) return hit2;
+        }
+      }
+    }
+  }
+
+  return randomWalkSpawn(extraObs);
 }
