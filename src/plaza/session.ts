@@ -672,10 +672,11 @@ function buildUi() {
 #pzRow button{pointer-events:auto;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;padding:8px 12px}
 @media (max-width:420px){#pzChat{width:min(72vw,240px)}#pzLog{height:52px}}
 /* 地圖：左下聊天上方；開圖時全螢幕半透明＋中央畫布 */
-#pzMapFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 220px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#2a6a8a;color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #0a1820}
+/* 左上：狀態列（#top／#stats）下方 */
+#pzMapFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;top:calc(env(safe-area-inset-top) + 118px);bottom:auto;z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#2a6a8a;color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #0a1820}
 #pzMapFab .ic{background:currentColor}
-@media (pointer:fine){#pzMapFab{bottom:calc(env(safe-area-inset-bottom) + 70px)}}
-@media (pointer:coarse) and (orientation:landscape){#pzMapFab{bottom:calc(env(safe-area-inset-bottom) + 172px)}}
+@media (pointer:fine){#pzMapFab{top:calc(env(safe-area-inset-top) + 108px)}}
+@media (pointer:coarse) and (orientation:landscape){#pzMapFab{top:calc(env(safe-area-inset-top) + 72px)}}
 #pzMap{display:none;pointer-events:auto;position:absolute;inset:0;z-index:6;background:rgba(8,10,12,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px)}
 #pzMap.open{display:flex;flex-direction:column;gap:10px}
 #pzMapHd{display:flex;align-items:center;justify-content:space-between;gap:10px;width:min(92vw,420px);color:#ffe6b0;font-weight:900;font-size:16px}
