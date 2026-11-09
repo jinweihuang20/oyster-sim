@@ -134,7 +134,7 @@ export class PlazaClient {
 
   get connectionId() { return this.conn?.connectionId ?? ''; }
 
-  async connect(pid: string, nick: string, opts?: { keepAttempt?: boolean }): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; chat?: PlazaChat[]; grills?: PlazaGrillOyster[] }> {
+  async connect(pid: string, nick: string, opts?: { keepAttempt?: boolean }): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; chat?: PlazaChat[]; grills?: PlazaGrillOyster[]; carryNpc?: boolean }> {
     this.pid = pid;
     this.nick = nick;
     this.intentionalStop = false;
@@ -235,7 +235,7 @@ export class PlazaClient {
     });
   }
 
-  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[]; grills?: PlazaGrillOyster[] }> {
+  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[]; grills?: PlazaGrillOyster[]; carryNpc?: boolean }> {
     if (!this.conn) return { ok: false, err: 'no_conn' };
     try {
       const r = await this.conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot; chat?: any[]; grills?: any[] }>('Join', this.pid, this.nick);
@@ -246,7 +246,8 @@ export class PlazaClient {
       const chat = Array.isArray(raw) ? raw.map(normChatDto) : [];
       const rawG = (r as any).grills ?? (r as any).Grills ?? [];
       const grills = Array.isArray(rawG) ? rawG.map(normGrillOyster) : [];
-      return { ok: true, snap: r.snap, token: this.token, chat, grills };
+      const carryNpc = !!(r as any).carryNpc || !!(r as any).CarryNpc;
+      return { ok: true, snap: r.snap, token: this.token, chat, grills, carryNpc };
     } catch (e: any) {
       return { ok: false, err: e?.message || 'join_fail' };
     }
@@ -411,6 +412,26 @@ export class PlazaClient {
       const r = await this.conn.invoke<{ ok: boolean; err?: string; oyster?: any; count?: number }>('GrillTake', oysterId);
       return { ok: !!r?.ok, err: r?.err, oyster: r?.oyster ? normGrillOyster(r.oyster) : undefined, count: r?.count ?? 0 };
     } catch (e: any) { return { ok: false as const, err: e?.message || 'take_fail', oyster: undefined, count: 0 }; }
+  }
+
+  /** 抱起阿婆；舊伺服器無此方法時 catch 略過 */
+  async carryNpc(npcConnId: string) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn' };
+    try {
+      return await this.conn.invoke<{ ok: boolean; err?: string }>('CarryNpc', npcConnId);
+    } catch (e: any) {
+      return { ok: false as const, err: e?.message || 'carry_fail' };
+    }
+  }
+
+  /** 放下阿婆；舊伺服器無此方法時 catch 略過 */
+  async placeNpc(npcConnId: string, pileId: number, slot: number) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', snap: undefined as PlazaSnapshot | undefined };
+    try {
+      return await this.conn.invoke<{ ok: boolean; err?: string; snap?: PlazaSnapshot }>('PlaceNpc', npcConnId, pileId, slot);
+    } catch (e: any) {
+      return { ok: false as const, err: e?.message || 'place_fail', snap: undefined as PlazaSnapshot | undefined };
+    }
   }
 
   /** 吸菸區抽一口同步；舊伺服器無此方法時 catch 略過，不中斷 */

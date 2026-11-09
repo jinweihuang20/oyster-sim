@@ -3,7 +3,7 @@ import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
 import {
   makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
-  posePlazaSit, posePlazaStand, posePlazaSmokeSit, easeSmokePuff,
+  posePlazaSit, posePlazaStand, posePlazaSmokeSit, posePlazaCarried, posePlazaCarryHold, easeSmokePuff,
   clearPlazaSmokeCig, getPlazaSmokeCig, ensurePlazaSmokeCig,
   plazaJumpHeight, PLAZA_JUMP_DUR, posePlazaStallKeeper, applyPlazaBodyPose, type PlayerRig,
   PLAZA_SIT_ROOT_Y,
@@ -65,6 +65,7 @@ type Remote = {
   /** 剛進場、座標尚不可信：先藏模型，避免從原點高速滑行 */
   awaitingPose: boolean;
   isNpc?: boolean;
+  carriedBy?: string;
   /** 遠端「抽一口」：舉臂／吸氣／吐煙 */
   puff?: {
     held: boolean;
@@ -157,7 +158,7 @@ export type PlazaWorldView = {
   moonLaunch: (connId: string, delayMs?: number, fromX?: number, fromZ?: number) => void;
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) => void;
-  setSelfPose: (x: number, z: number, yaw: number, seated: boolean, smoke?: boolean) => void;
+  setSelfPose: (x: number, z: number, yaw: number, seated: boolean, smoke?: boolean, connId?: string) => void;
   playThrowFx: (connId: string) => void;
   /** 遠端抽一口：start 舉臂吸氣；end 放下並依 holdMs 吐煙 */
   applyRemotePuff: (opts: { connId?: string; pid?: string; start: boolean; holdMs: number }) => void;
@@ -509,6 +510,27 @@ export function createPlazaWorldView(
   function aimTargets(): PlazaAimTarget[] {
     const out: PlazaAimTarget[] = [];
     for (const r of remotes.values()) {
+      const carried = !!(r.carriedBy || (r.phase || '') === 'carried');
+      if (carried && r.isNpc && (r.phase || '') !== 'moon') {
+        const h = headWorld(r, new THREE.Vector3());
+        const b = bowlWorld(r, new THREE.Vector3());
+        out.push({
+          connId: r.connId || r.key,
+          nick: plazaDisplayName(r.nick, r.numTag),
+          pileId: r.pileId,
+          phase: r.phase || 'carried',
+          x: r.x, z: r.z, yaw: r.yaw,
+          lookYaw: r.tLookYaw,
+          seated: false,
+          count: r.count,
+          umb: r.umb,
+          isNpc: r.isNpc,
+          carriedBy: r.carriedBy,
+          head: { x: h.x, y: h.y, z: h.z },
+          bowl: { x: b.x, y: b.y, z: b.z },
+        });
+        continue;
+      }
       if (!r.seated || r.pileId < 0 || isLeisurePile(r.pileId) || (r.phase || '') === 'moon') continue;
       const h = headWorld(r, new THREE.Vector3());
       const b = bowlWorld(r, new THREE.Vector3());
@@ -1116,6 +1138,21 @@ function hashPid(pid: string) {
     if (r.throwT > 0) { poseThrow(r); applyHeadLook(r); return; }
     if (r.umb) { poseUmb(r); applyHeadLook(r); return; }
     const ph = (r.phase || '').toLowerCase();
+    if (r.carriedBy || ph === 'carried') {
+      posePlazaCarried(r.rig);
+      hideHold(r);
+      r.headWorkX = 0.1;
+      (r as any)._loco = 'carried';
+      applyHeadLook(r);
+      return;
+    }
+    if (anyoneCarriedBy(r.connId) && !r.seated) {
+      posePlazaCarryHold(r.rig);
+      hideHold(r);
+      r.headWorkX = 0;
+      applyHeadLook(r);
+      return;
+    }
     if (r.seated) {
       poseSit(r);
       (r as any)._loco = (ph === 'smoke' || isSmokePile(r.pileId)) ? 'smoke' : 'sit';
@@ -1202,7 +1239,7 @@ function hashPid(pid: string) {
       const loco = (r as any)._loco as string | undefined;
       const phL = (r.phase || '').toLowerCase();
       // 只在離開坐／菸／飛彈後重置站姿；勿看 root.y（走路 bob 也會抬髖）
-      const needStand = !!(r as any)._stoodUp || loco === 'sit' || loco === 'smoke' || loco === 'moon';
+      const needStand = !!(r as any)._stoodUp || loco === 'sit' || loco === 'smoke' || loco === 'moon' || loco === 'carried';
       if (needStand) {
         poseStand(r);
         (r as any)._stoodUp = false;
@@ -1291,6 +1328,7 @@ function hashPid(pid: string) {
         tLookYaw: 0, lookYaw: 0, tPitch: 0, pitch: 0, headWorkX: 0,
         awaitingPose,
         isNpc,
+        carriedBy: p.carriedBy || '',
       };
       remotes.set(pid, r);
       r.props.visible = r.seated && !isLeisurePile(r.pileId);
@@ -1308,7 +1346,10 @@ function hashPid(pid: string) {
     const prevPile = r.pileId, prevSlot = r.slot;
     r.pileId = p.pileId; r.slot = p.slot; r.phase = p.phase || r.phase; r.count = p.count ?? r.count;
     r.seated = !!p.seated; r.moving = !!p.moving;
+    const wasCarried = !!r.carriedBy;
+    r.carriedBy = p.carriedBy || '';
     if (wasSeated && !r.seated) { (r as any)._stoodUp = true; clearRemotePuff(r); }
+    if (wasCarried && !r.carriedBy) (r as any)._stoodUp = true;
     r.umb = !!p.umb;
     r.tLookYaw = Number.isFinite(p.lookYaw) ? Math.max(-1.6, Math.min(1.6, p.lookYaw!)) : 0;
     r.tPitch = Number.isFinite(p.pitch) ? Math.max(-1.4, Math.min(0.85, p.pitch!)) : 0;
@@ -1324,7 +1365,14 @@ function hashPid(pid: string) {
       const label = r.isNpc ? r.nick : plazaDisplayName(r.nick, r.numTag);
       r.tag.setText(r.seated && !isLeisurePile(r.pileId) ? `${label} · ${r.count}` : label);
     }
-    if (r.seated && p.pileId >= 0) {
+    if (r.carriedBy) {
+      r.seated = false;
+      if (typeof p.x === 'number') r.tx = p.x;
+      if (typeof p.z === 'number') r.tz = p.z;
+      if (typeof p.yaw === 'number') r.tyaw = p.yaw;
+      snapRemoteIfFar(r, 6);
+      revealRemoteIfReady(r);
+    } else if (r.seated && p.pileId >= 0) {
       const pose = seatPose(p.pileId, p.slot);
       r.tx = pose.pos.x; r.tz = pose.pos.z; r.tyaw = pose.yaw;
       r.x = pose.pos.x; r.z = pose.pos.z; r.yaw = pose.yaw;
@@ -1441,8 +1489,22 @@ function hashPid(pid: string) {
     r.bubUntil = until;
   }
 
-  function setSelfPose(x: number, z: number, yaw: number, seated: boolean, smoke = false) {
+  let selfConnId = '';
+  function anyoneCarriedBy(connId?: string) {
+    if (!connId) return false;
+    for (const o of remotes.values()) if (o.carriedBy === connId) return true;
+    return false;
+  }
+  function findCarrierPose(connId: string): { x: number; z: number; yaw: number } | null {
+    if (selfConnId && connId === selfConnId) return { x: selfX, z: selfZ, yaw: selfYaw };
+    for (const o of remotes.values()) {
+      if (o.connId === connId) return { x: o.x, z: o.z, yaw: o.yaw };
+    }
+    return null;
+  }
+  function setSelfPose(x: number, z: number, yaw: number, seated: boolean, smoke = false, connId = '') {
     selfX = x; selfZ = z; selfYaw = yaw; selfSeated = seated; selfSmoke = !!(seated && smoke);
+    if (connId) selfConnId = connId;
     if (selfSmoke && !selfCig) {
       selfCig = makeCigSmoke({ count: LO ? 3 : 5, seed: 9901, scale: 0.7 });
       root.add(selfCig.group);
@@ -1592,6 +1654,7 @@ function hashPid(pid: string) {
           tickRemotePuff(r, dt);
         }
         applyHeadLook(r);
+        if (!r.seated && anyoneCarriedBy(r.connId)) posePlazaCarryHold(r.rig);
       } else if (r.throwT > 0) {
         r.throwT = Math.max(0, r.throwT - dt);
       } else if (r.seated && r.puff) {
@@ -1599,17 +1662,37 @@ function hashPid(pid: string) {
       }
       // 坐下略往前（負＝朝蚵堆），避免後背穿出椅背
       const back = r.seated ? -0.08 : 0;
-      const ox = r.x + Math.sin(r.yaw) * back;
-      const oz = r.z + Math.cos(r.yaw) * back;
-      const jy = jumpElapsed >= 0 ? plazaJumpHeight(jumpElapsed) : 0;
-      r.rig.outer.position.set(ox, jy, oz);
+      let ox = r.x + Math.sin(r.yaw) * back;
+      let oz = r.z + Math.cos(r.yaw) * back;
+      let oy = jumpElapsed >= 0 ? plazaJumpHeight(jumpElapsed) : 0;
+      let rotX = 0;
+      let rotZ = 0;
+      if (r.carriedBy && (r.phase || '') !== 'moon') {
+        const car = findCarrierPose(r.carriedBy);
+        if (car) {
+          const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw);
+          const sx = Math.cos(car.yaw), sz = -Math.sin(car.yaw);
+          // 模型原點在腳底：前傾後髖會沿角色 +Z（＝抱人者右方）移出，往回扣才會橫躺在胸口
+          const tilt = 1.15;
+          const side = 0.72 * Math.sin(tilt);
+          r.x = r.tx = car.x + fx * 0.22 - sx * side;
+          r.z = r.tz = car.z + fz * 0.22 - sz * side;
+          r.yaw = r.tyaw = car.yaw + Math.PI / 2;
+        }
+        ox = r.x; oz = r.z; oy = 0.82;
+        rotX = 1.15; rotZ = 0.08;
+        posePlazaCarried(r.rig);
+      } else if (!r.seated && anyoneCarriedBy(r.connId)) {
+        posePlazaCarryHold(r.rig);
+      }
+      r.rig.outer.position.set(ox, oy, oz);
       r.rig.outer.rotation.order = 'YXZ';
       r.rig.outer.rotation.y = r.yaw;
-      r.rig.outer.rotation.x = 0;
+      r.rig.outer.rotation.x = rotX;
       if (!far) {
         { const ph = r.seated ? '' : (r.phase || ''); const want = ph === 'crouch' || ph === 'lie' ? 1 : 0; if (want) rj.pz = ph; rj.pk = (rj.pk ?? 0) + (want - (rj.pk ?? 0)) * 0.18; if (rj.pk > 0.001 && rj.pz && !r.moving) { r.rig.legL.rotation.x = r.rig.legR.rotation.x = 0; r.rig.shinL.rotation.x = r.rig.shinR.rotation.x = 0; } if (rj.pk > 0.001 && rj.pz) applyPlazaBodyPose(r.rig, rj.pz, rj.pk); }
       }
-      { const now = performance.now(); const mu = rj.mt ? (now - rj.mt) / 1800 : -1; const inMoon = (r.phase || '') === 'moon'; r.rig.outer.rotation.z = 0;
+      { const now = performance.now(); const mu = rj.mt ? (now - rj.mt) / 1800 : -1; const inMoon = (r.phase || '') === 'moon'; r.rig.outer.rotation.z = rotZ;
         if (mu >= 0 && mu < 1) { r.rig.outer.position.x += Math.sin(rj.mz) * 22 * mu; r.rig.outer.position.z += Math.cos(rj.mz) * 22 * mu; r.rig.outer.position.y += 22 * mu; r.rig.outer.rotation.x = mu * 14; r.rig.outer.rotation.z = mu * 9; r.rig.outer.visible = true; rj.mh = true; }
         else if (inMoon && !(mu < 0 && rj.mt && now < rj.mt)) { r.rig.outer.visible = false; rj.mh = true; }
         else if (rj.mh && !inMoon) { r.rig.outer.visible = true; rj.mh = false; rj.mt = 0; }
@@ -1703,6 +1786,7 @@ function hashPid(pid: string) {
     const out: [number, number, number, number][] = [];
     for (const r of remotes.values()) {
       if (r.seated || r.awaitingPose || !r.rig.outer.visible) continue;
+      if (r.carriedBy || (r.phase || '') === 'carried' || (r.phase || '') === 'moon') continue;
       const ph = r.phase || '';
       if (ph === 'lie') {
         // outer.Rx=+π/2 後身體沿 +Z 倒地，再經 yaw 變成 (sin,cos)＝面向的反方向（頭在腳後方）

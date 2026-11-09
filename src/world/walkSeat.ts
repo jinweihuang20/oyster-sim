@@ -22,6 +22,7 @@ export type WalkSeatDeps = {
   /** 矩形夾限後再套區域（東延僅咖啡前庭） */
   plazaWalkClamp?: (p: { x: number; z: number }) => void;
   plazaNearSeat: () => { pileId: number; slot: number } | null;
+  plazaNearPrompt?: () => { kind: 'sit' | 'carry' | 'place'; info: string; btn: string; pileId?: number; slot?: number } | null;
   plazaMySeat: () => { pileId: number; slot: number } | null;
   seatPose: (pileId: number, slot: number) => { pos: THREE.Vector3; yaw: number };
   setPlazaSeatPropsVisible: (v: boolean) => void;
@@ -205,16 +206,28 @@ export function walkStep(dt: number) {
   walkPos.y = 1.55 + (D.isPlazaMode() && !D.getTpv() ? 0 : Math.sin(performance.now() / 120) * 0.012 * Math.min(1, l));
   if (D.isPlazaMode()) {
     nearSeat = null; D.stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
-    const n = D.plazaNearSeat();
-    D.on('seatCard', !!n);
+    const prompt = D.plazaNearPrompt?.();
+    const n = prompt && prompt.pileId != null && prompt.slot != null
+      ? { pileId: prompt.pileId, slot: prompt.slot }
+      : D.plazaNearSeat();
+    D.on('seatCard', !!(prompt || n));
     D.$('seatCard').classList.add('mini');
-    if (n) D.$('seatInfo').textContent = n.pileId === 100
-      ? `吸菸區・座 ${n.slot + 1}`
-      : n.pileId === 101
-      ? `多那芝吸菸區・座 ${n.slot + 1}`
-      : n.pileId === 102
-      ? `樸子腳・座 ${n.slot + 1}`
-      : `第 ${n.pileId + 1} 堆・座 ${n.slot + 1}`;
+    const btn = D.$('sitBtn');
+    if (prompt) {
+      D.$('seatInfo').textContent = prompt.info;
+      if (btn) btn.innerHTML = `<i class="ic ic-chair"></i> ${prompt.btn}<span class="key"> (E)</span>`;
+    } else if (n) {
+      D.$('seatInfo').textContent = n.pileId === 100
+        ? `吸菸區・座 ${n.slot + 1}`
+        : n.pileId === 101
+        ? `多那芝吸菸區・座 ${n.slot + 1}`
+        : n.pileId === 102
+        ? `樸子腳・座 ${n.slot + 1}`
+        : `第 ${n.pileId + 1} 堆・座 ${n.slot + 1}`;
+      if (btn) btn.innerHTML = `<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>`;
+    } else if (btn) {
+      btn.innerHTML = `<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>`;
+    }
     return;
   }
   let best: Seat | null = null, bd = 0.85;

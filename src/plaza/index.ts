@@ -1,6 +1,6 @@
 export {
   openPlaza, closePlaza, isPlazaActive, plazaSeated, plazaMySeat, plazaShiftStarted,
-  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaRandomSpawn, plazaResolveEnterSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk,
+  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaRandomSpawn, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk,
   plazaHitPile, plazaMyPileOrigin,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillHit, plazaGrillUpsertLocal, plazaGrillRemoveLocal,

@@ -27,6 +27,8 @@ export type PlazaPlayer = {
   feet?: string;
   /** 伺服器阿婆（每堆 2 人），同步同真人 */
   isNpc?: boolean;
+  /** 抱起這位阿婆的玩家 connId；空＝沒被抱 */
+  carriedBy?: string;
 };
 
 export type PlazaSnapshot = {
@@ -117,6 +119,7 @@ export type PlazaAimTarget = {
   count: number;
   umb: boolean;
   isNpc?: boolean;
+  carriedBy?: string;
   head: { x: number; y: number; z: number };
   bowl: { x: number; y: number; z: number };
 };

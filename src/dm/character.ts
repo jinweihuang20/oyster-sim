@@ -622,3 +622,50 @@ export function posePlazaSmokeSit(rig: PlayerRig, puffKOrOpts: number | SmokeSit
 export function clearSmokeCigIfAny(rig: PlayerRig) {
   clearPlazaSmokeCig(rig);
 }
+
+
+/** 被橫抱：膝蓋微彎、雙手擱在身前，像被人托在胸前 */
+export function posePlazaCarried(rig: PlayerRig) {
+  clearPlazaSmokeCig(rig);
+  posePlazaHangArms(rig, true);
+  rig.outer.scale.setScalar(1);
+  rig.root.scale.set(1, 1, 1);
+  rig.root.position.y = 0;
+  rig.legL.rotation.set(1.15, 0.12, 0.18);
+  rig.legR.rotation.set(1.05, -0.1, -0.14);
+  rig.shinL.rotation.set(-1.15, 0, 0);
+  rig.shinR.rotation.set(-1.05, 0, 0);
+  rig.torso.rotation.x = 0.12;
+  rig.torso.position.y = PLAZA_TORSO_Y - 0.02;
+  if (rig.head) { rig.head.rotation.x = 0.18; rig.head.rotation.y = 0.08; }
+  placePlazaArmChain(
+    rig.upperL, rig.lowerL,
+    -0.22, 0.30, 0,
+    -0.16, 0.16, -0.16,
+    -0.08, 0.10, -0.22,
+  );
+  placePlazaArmChain(
+    rig.upperR, rig.lowerR,
+    0.22, 0.30, 0,
+    0.14, 0.14, -0.18,
+    0.06, 0.08, -0.24,
+  );
+}
+
+/** 抱人者：雙手向前托住（橫抱） */
+export function posePlazaCarryHold(rig: PlayerRig) {
+  posePlazaHangArms(rig, false);
+  placePlazaArmChain(
+    rig.upperL, rig.lowerL,
+    -0.22, 0.30, 0,
+    -0.14, 0.24, -0.22,
+    -0.08, 0.22, -0.34,
+  );
+  placePlazaArmChain(
+    rig.upperR, rig.lowerR,
+    0.22, 0.30, 0,
+    0.16, 0.22, -0.20,
+    0.10, 0.20, -0.32,
+  );
+  rig.torso.rotation.x = 0.04;
+}
