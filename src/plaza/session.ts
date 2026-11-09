@@ -173,6 +173,20 @@ function myCarriedNpc(): PlazaPlayer | null {
 
 export function plazaCarrying() { return !!myCarriedNpc(); }
 
+/** 抱著的阿婆不是自己放下就不見了：抱太久被放在原地，提示一下 */
+let carryWatchId = '';
+let carryPlacing = false;
+function checkCarryLost() {
+  const n = myCarriedNpc();
+  if (n) { carryWatchId = n.connId; return; }
+  if (!carryWatchId) return;
+  const id = carryWatchId;
+  carryWatchId = '';
+  if (carryPlacing) return;
+  const p = snap?.players.find((x) => x.connId === id);
+  if (p && (p.phase || '') === 'stand') deps?.toast('抱太久手痠了，阿婆先放在原地站著', '#ffb08a');
+}
+
 function seatLabel(pileId: number, slot: number) {
   if (pileId === 100) return `吸菸區・座 ${slot + 1}`;
   if (pileId === 101) return `多那芝吸菸區・座 ${slot + 1}`;
@@ -529,6 +543,7 @@ function wireClient(D: PlazaDeps) {
     onRoster: (s) => {
       snap = normalizeSnap(s);
       view?.syncRoster(snap, D.id);
+      checkCarryLost();
       syncPlazaPeopleHud();
       if (!netDown && !seated) setHud(`${plazaHudPeople(snap)}　靠近空位坐下`);
     },
@@ -990,10 +1005,13 @@ function setNetBanner(t: string | null, ok = false) {
 function nearestCarryNpc(wx: number, wz: number) {
   let best: { connId: string; nick: string; dist: number } | null = null;
   for (const p of snap?.players ?? []) {
-    if (!p.isNpc || !p.seated || p.pileId < 0 || p.slot < 0) continue;
+    if (!p.isNpc) continue;
     if ((p.phase || '') === 'moon' || p.carriedBy) continue;
-    const pose = seatPose(p.pileId, p.slot);
-    const d = Math.hypot(wx - pose.pos.x, wz - pose.pos.z);
+    // 坐著看座位；被放在原地站著的看她本人位置
+    const sit = p.seated && p.pileId >= 0 && p.slot >= 0;
+    if (!sit && (p.phase || '') !== 'stand') continue;
+    const pos = sit ? seatPose(p.pileId, p.slot).pos : { x: p.x, z: p.z };
+    const d = Math.hypot(wx - pos.x, wz - pos.z);
     if (d > CARRY_DIST) continue;
     if (!best || d < best.dist) best = { connId: p.connId, nick: p.nick || '阿婆', dist: d };
   }
@@ -1054,6 +1072,7 @@ async function plazaDoPlace(seat: PlazaSeatRef): Promise<boolean> {
   const npc = myCarriedNpc();
   if (!npc) { deps.toast('沒有抱著阿婆', '#ffb08a'); return false; }
   sittingBusy = true;
+  carryPlacing = true;
   try {
     const r = await client.placeNpc(npc.connId, seat.pileId, seat.slot);
     if (!r.ok) {
@@ -1065,7 +1084,7 @@ async function plazaDoPlace(seat: PlazaSeatRef): Promise<boolean> {
     if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
     deps.toast('阿婆坐好了', '#9be37a');
     return true;
-  } finally { sittingBusy = false; }
+  } finally { sittingBusy = false; carryPlacing = false; checkCarryLost(); }
 }
 
 /** 嘗試坐附近空位（E／坐這裡）；靠近阿婆則抱起，抱著時改放下 */
