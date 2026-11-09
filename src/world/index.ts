@@ -12,3 +12,7 @@ export {
   setWalking, setNearSeat, clearWalkInput,
 } from './walkSeat';
 export { makeWorldLabel, type WorldLabel, type WorldLabelKind } from './worldLabel';
+export {
+  initYardScene, LAND, shedAnim, disposeShed, buildShed, applyShedLook, showLand, WATER_C, getShedG,
+  type YardSceneDeps,
+} from './yardScene';
