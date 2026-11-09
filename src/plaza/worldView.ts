@@ -648,6 +648,43 @@ function hashPid(pid: string) {
     sprite.position.set(_tagHead.x, _tagHead.y + yLift, _tagHead.z);
   }
 
+  /** 名牌不做深度測試會蓋過一切：後方玩家的名牌若落在較近玩家的臉上，就淡掉 */
+  const _occCam = new THREE.Vector3(), _occV = new THREE.Vector3();
+  const _occHeads: { r: Remote; x: number; y: number; d: number }[] = [];
+  function fadeOccludedTags(camera: THREE.Camera, dt: number) {
+    camera.updateMatrixWorld();
+    const inv = camera.matrixWorldInverse;
+    _occHeads.length = 0;
+    for (const r of remotes.values()) {
+      if (!r.tag.sprite.visible || !r.rig?.head) continue;
+      r.rig.head.getWorldPosition(_occV).applyMatrix4(inv);
+      if (_occV.z > -0.1) continue;
+      _occHeads.push({ r, x: _occV.x / -_occV.z, y: _occV.y / -_occV.z, d: -_occV.z });
+    }
+    const k = Math.min(1, dt * 10);
+    for (const r of remotes.values()) {
+      const sp = r.tag.sprite;
+      if (!sp.visible) continue;
+      _occCam.set(sp.position.x, sp.position.y + sp.scale.y * 0.5, sp.position.z).applyMatrix4(inv);
+      let hidden = false;
+      if (_occCam.z < -0.1) {
+        const d = -_occCam.z;
+        const lx = _occCam.x / d, ly = _occCam.y / d;
+        const hw = (sp.scale.x * 0.35) / d, hh = (sp.scale.y * 0.5) / d;
+        for (const h of _occHeads) {
+          if (h.r === r || h.d > d - 0.3) continue;
+          const hr = 0.2 / h.d; // 頭＋頭髮約半寬
+          if (Math.abs(lx - h.x) < hw + hr && Math.abs(ly - h.y) < hh + hr) { hidden = true; break; }
+        }
+      }
+      const rr = r as any;
+      const cur = typeof rr._tagA === 'number' ? rr._tagA : 1;
+      const next = cur + ((hidden ? 0.12 : 1) - cur) * k;
+      rr._tagA = next;
+      r.tag.setOpacity(next);
+    }
+  }
+
   /** 遠端雨傘：跟本機一樣「往前開」擋殼，不是頭頂撐雨 */
   function makeRemoteUmb() {
     const g = new THREE.Group();
@@ -1537,6 +1574,7 @@ function hashPid(pid: string) {
         r.bubble.sprite.visible = true;
       } else if (r.bubble.sprite.visible) r.bubble.sprite.visible = false;
     }
+    fadeOccludedTags(camera, dt);
     if (selfBubUntil > t) {
       const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
       const back = selfSeated ? -0.08 : 0;
