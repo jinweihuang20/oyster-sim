@@ -446,14 +446,15 @@ export function createPlazaWorldView(
   // 南排共烤：伺服器同步的烤網上蚵仔
   const grill = createGrillView(root);
 
-  // 四堆一盞實際點光（對齊吊燈外觀；不投影以免 4 燈吃效能）
-  const plazaLights: THREE.PointLight[] = [...ambiance.lights, ...cafe.lights, ...seafood.lights];
+  // 只留對角兩盞真正的吊燈（外觀四盞都還在）；招牌／攤位／炭火改自發光，避免每幀開關燈害著色器重編
+  const plazaLights: THREE.PointLight[] = [];
   const roofLamps: THREE.PointLight[] = [];
-  const roofLampBaseI = LO ? 7 : 9.5;
-  for (const [x, z] of PLAZA_LAMP_XZ) {
-    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 13 : 15, 1.35);
+  const roofLampBaseI = LO ? 8 : 11;
+  for (const [x, z] of [PLAZA_LAMP_XZ[0], PLAZA_LAMP_XZ[3]]) {
+    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 14 : 16, 1.35);
     pl.position.set(x, PLAZA_ROOF_Y - 0.55, z);
     pl.castShadow = false;
+    pl.visible = true;
     root.add(pl);
     plazaLights.push(pl);
     roofLamps.push(pl);
@@ -1484,19 +1485,8 @@ function hashPid(pid: string) {
     const eco = !!opts.eco?.();
     const cx = camera.position.x, cz = camera.position.z;
     const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
-    // 省電：只留兩盞對角吊燈、關掉攤位動態燈
-    for (let i = 0; i < roofLamps.length; i++) {
-      const on = !eco || (i === 0 || i === 3);
-      roofLamps[i].visible = on;
-      roofLamps[i].intensity = on ? (eco ? roofLampBaseI * 0.85 : roofLampBaseI) : 0;
-    }
-    // 攤位火光、店門口暖燈照的範圍只有幾公尺：鏡頭離超過約 18 m 就關（±2 m 緩衝）
-    for (const L of [...ambiance.lights, ...cafe.lights, ...seafood.lights]) {
-      if (eco) { L.visible = false; continue; }
-      L.getWorldPosition(_lodP);
-      const ld = Math.hypot(_lodP.x - cx, _lodP.z - cz);
-      L.visible = L.visible ? ld < 20 : ld < 16;
-    }
+    // 燈數固定，只調亮度，不開關 visible（three.js 增減燈會重編著色器）
+    for (const pl of roofLamps) pl.intensity = eco ? roofLampBaseI * 0.85 : roofLampBaseI;
     tickDetailLod(dt, cx, cz);
 
     const k = Math.min(1, dt * 10);

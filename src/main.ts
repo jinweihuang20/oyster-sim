@@ -3850,7 +3850,7 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
   // 廣場改靠四象限吊燈照明；中央主燈改弱補光，避免只亮中間
   lamp.intensity = plazaMode
-    ? 4.2 + Math.sin(t * 1.3) * 0.35
+    ? 5.2 + Math.sin(t * 1.3) * 0.35
     : 26 + Math.sin(t * 1.3) * 1.0;
   skyDome.tick(viewCam(), t);
   renderer.render(scene, viewCam());

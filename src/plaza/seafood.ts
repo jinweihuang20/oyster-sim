@@ -326,16 +326,17 @@ export function makePlazaSeafood(
     }
   }
 
-  // 門口暖燈（最多 1 盞；省電／低畫質不開、不投影）
-  if (!LO) {
-    const pl = new THREE.PointLight(0xffe0b8, 4, 6, 1.6);
-    pl.position.set(fx - 0.35, 2.7, doorZ);
-    pl.castShadow = false;
-    root.add(pl);
-    lights.push(pl);
-  }
+  // 門口暖光：自發光燈泡＋光暈，不再加 PointLight
   for (const z of [doorZ - 1.6, doorZ + 1.6]) {
     add(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff0d0 }), [fx - 0.3, 2.95, z], root, false);
+    if (!LO) {
+      const halo = new THREE.Mesh(
+        new THREE.SphereGeometry(0.28, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffe0b8, transparent: true, opacity: 0.2, depthWrite: false, blending: THREE.AdditiveBlending }),
+      );
+      halo.position.set(fx - 0.3, 2.95, z);
+      root.add(halo);
+    }
   }
 
   // ── 門口座位：3 張圓桌 × 2 張紅色塑膠板凳 ──

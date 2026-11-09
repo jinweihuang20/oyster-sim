@@ -200,7 +200,7 @@ export function makePlazaGrill(
     pulseSpeed: 0.32,
     chunks: lowDetail ? 26 : 42,
     hotRatio: 0.72,
-    withLight: !lowDetail,
+    withLight: false,
     lightIntensity: 2.8,
     lightDistance: 4.2,
     seed: 1100 + pileId * 97,
