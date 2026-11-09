@@ -2918,18 +2918,15 @@ function spawnExhalePuff(strength: number) {
   const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 5100 + Math.floor(Math.random() * 4000) });
   puffExhaleHeadT = 1;
   if (tpv && plazaMe) {
-    const mouth = new THREE.Vector3();
-    plazaMe.head.getWorldPosition(mouth);
+    plazaMe.head.updateMatrixWorld(true);
+    const mouth = plazaMe.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
     const yaw = plazaMe.outer.rotation.y;
-    mouth.x += -Math.sin(yaw) * 0.14;
-    mouth.y -= 0.01;
-    mouth.z += -Math.cos(yaw) * 0.14;
     fx.group.position.copy(mouth);
     fx.group.rotation.y = yaw;
     scene.add(fx.group);
     puffExhales.push({ fx, age: 0, life: 3.6, world: true });
   } else {
-    fx.group.position.set(0.01, -0.02, -0.26);
+    fx.group.position.set(0, -0.085, -0.05); // 嘴巴在眼睛下方，煙從畫面下緣往前上方吐出
     camera.add(fx.group);
     puffExhales.push({ fx, age: 0, life: 3.6, world: false });
   }
