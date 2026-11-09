@@ -2915,7 +2915,7 @@ function endPuff() {
 function spawnExhalePuff(strength: number) {
   if (!smokeSitActive || strength <= 0) return;
   const sc = 0.35 + strength * 1.15;
-  const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 5100 + Math.floor(Math.random() * 4000) });
+  const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 5100 + Math.floor(Math.random() * 4000), reach: tpv && plazaMe ? strength : undefined });
   puffExhaleHeadT = 1;
   if (tpv && plazaMe) {
     plazaMe.head.updateMatrixWorld(true);

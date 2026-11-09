@@ -491,20 +491,21 @@ export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette
 export function makeAvatarCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette {
   const group = new THREE.Group();
   group.name = 'avatarCigarette';
-  const sc = 2.4;
+  const sc = 2.4; // 粗細
+  const L = 0.95; // 長度（原本跟粗細同倍率，太長）
   const filter = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.0055 * sc, 0.0055 * sc, 0.028 * sc, opts.lowDetail ? 5 : 6),
+    new THREE.CylinderGeometry(0.0055 * sc, 0.0055 * sc, 0.028 * L, opts.lowDetail ? 5 : 6),
     new THREE.MeshStandardMaterial({ color: 0xd4a574, roughness: 0.9, metalness: 0 }),
   );
   filter.rotation.x = Math.PI / 2;
-  filter.position.z = 0.014 * sc;
+  filter.position.z = 0.014 * L;
   group.add(filter);
   const stick = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.0048 * sc, 0.0048 * sc, 0.09 * sc, opts.lowDetail ? 5 : 6),
+    new THREE.CylinderGeometry(0.0048 * sc, 0.0048 * sc, 0.09 * L, opts.lowDetail ? 5 : 6),
     new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.95, metalness: 0 }),
   );
   stick.rotation.x = Math.PI / 2;
-  stick.position.z = -0.04 * sc;
+  stick.position.z = -0.04 * L;
   group.add(stick);
   const tip = new THREE.Mesh(
     new THREE.SphereGeometry(0.0065 * sc, opts.lowDetail ? 5 : 6, 4),
@@ -516,7 +517,7 @@ export function makeAvatarCigarette(opts: { lowDetail?: boolean } = {}): FpCigar
       metalness: 0.05,
     }),
   );
-  tip.position.z = -0.088 * sc;
+  tip.position.z = -0.088 * L;
   group.add(tip);
   const smoke = makeCigSmoke({ count: opts.lowDetail ? 2 : 3, seed: 6601, scale: 0.55 });
   smoke.group.position.copy(tip.position);
@@ -609,7 +610,9 @@ function getPuffTex(i: number): THREE.Texture {
 
 /** 吐煙：從嘴邊連續噴出一道細煙，前段快、受阻力減速後往上飄、捲動擴散淡出（單次，用完 dispose）。
  *  group 的 -Z 為噴出方向；世界空間使用時請把 group.rotation.y 設成角色朝向。 */
-export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: number } = {}): CharcoalFireFx {
+export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: number; reach?: number } = {}): CharcoalFireFx {
+  // reach 0–1：按越久吐越遠（不給則維持原本距離）
+  const reachK = opts.reach == null ? 1 : 0.4 + 2.2 * Math.min(1, Math.max(0, opts.reach));
   const rn = rng(opts.seed ?? (9000 + Math.floor(Math.random() * 8000)));
   const sc = Math.max(0.15, opts.scale ?? 1);
   const n = Math.min(44, Math.max(10, Math.round((opts.count ?? Math.round(8 + sc * 6)) * 2.6)));
@@ -617,7 +620,7 @@ export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: nu
   group.name = 'exhalePuff';
   type S = { sp: THREE.Sprite; mat: THREE.SpriteMaterial; delay: number; age: number; life: number; vx: number; vy: number; vz: number; s0: number; s1: number; ar: number; rot: number; spin: number; ph: number; fq: number; peak: number; tone: number; lift: number };
   const smokes: S[] = [];
-  const emitDur = 0.3 + 0.35 * Math.min(1, sc);
+  const emitDur = opts.reach == null ? 0.3 + 0.35 * Math.min(1, sc) : 0.25 + 0.6 * Math.min(1, Math.max(0, opts.reach));
   for (let i = 0; i < n; i++) {
     const k = i / Math.max(1, n - 1);
     const mat = new THREE.SpriteMaterial({ map: getPuffTex(i), color: 0xc2c7cd, transparent: true, opacity: 0, depthWrite: false });
@@ -626,7 +629,7 @@ export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: nu
     sp.visible = false;
     group.add(sp);
     // 前段的煙較快較濃，尾段較慢較淡；吐氣方向略朝下
-    const speed = (0.5 + rn() * 0.4) * (1 - k * 0.6) * (0.6 + 0.4 * sc);
+    const speed = (0.5 + rn() * 0.4) * (1 - k * 0.6) * (0.6 + 0.4 * sc) * reachK;
     const spread = 0.1 + k * 0.22 + rn() * 0.08;
     const ang = rn() * Math.PI * 2;
     smokes.push({

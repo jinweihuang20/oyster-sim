@@ -385,6 +385,7 @@ export function createPlazaWorldView(
             scale: sc,
             count: LO ? Math.round(4 + strength * 4) : Math.round(6 + strength * 8),
             seed: 7200 + (Math.abs(hashPid('exh') + (now | 0)) % 4000),
+            reach: strength,
           });
           sn.rig.head.updateMatrixWorld(true);
           const mouth = sn.rig.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
@@ -963,7 +964,7 @@ function hashPid(pid: string) {
     if (holdMs < REMOTE_PUFF_MIN_HOLD_MS || !r.rig?.head) return;
     const strength = Math.min(1, holdMs / 5000);
     const sc = 0.35 + strength * 1.15;
-    const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 6100 + Math.floor(Math.random() * 4000) });
+    const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 6100 + Math.floor(Math.random() * 4000), reach: strength });
     r.rig.head.updateMatrixWorld(true);
     const mouth = r.rig.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
     const yaw = r.rig.outer.rotation.y;
