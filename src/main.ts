@@ -47,6 +47,7 @@ import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponI
 import {
   makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
   posePlazaSit, posePlazaStand, posePlazaSmokeSit, easeSmokePuff,
+  clearPlazaSmokeCig, ensurePlazaSmokeCig, getPlazaSmokeCig,
   plazaJumpHeight, PLAZA_JUMP_DUR, applyPlazaBodyPose as applyBodyPose, type PlayerRig,
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
@@ -60,7 +61,7 @@ import {
   plazaToggleMap, plazaCloseMap, plazaMapIsOpen, seatPose, plazaPushOutfit,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
-import { makeFpCigarette, makeExhalePuff, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
+import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
@@ -2808,22 +2809,32 @@ function disposeFpCigarette() {
   smokeSitActive = false;
 }
 
-/** 吸菸區「抽一口」：FP 手／TP avatar 同倒數；舉手弧線＋吐煙 */
+/** 吸菸區「抽一口」：FP／TP 分階段動作＋手持菸／吐煙 */
 const PUFF_HOLD_MAX = 5;
 const PUFF_MIN_HOLD = 0.3;
 const PUFF_UP_SEC = 0.7;
 const PUFF_DOWN_SEC = 0.5;
+const PUFF_AWAY_SEC = 0.12;
 let puffHeld = false;
 let puffT = 0;
-/** 0＝膝上休息 → 1＝嘴邊（時間驅動，再經 ease） */
+/** 0＝膝上 → 1＝嘴邊 */
 let puffAnimT = 0;
+/** 放開後先離嘴 1→0 */
+let puffAwayT = 0;
 let puffStrength = 0;
 let puffReleaseAt = 0;
+/** 吐煙瞬間頭微前傾 */
+let puffExhaleHeadT = 0;
+let puffCamPitch = 0;
+let puffAshCD = 6 + Math.random() * 4;
+let puffFlickT = 0;
 const puffExhales: { fx: CharcoalFireFx; age: number; life: number; world?: boolean }[] = [];
-// FP：膝上休息（右下）／嘴邊（畫面中下）／弧線中點（肘抬）
+const puffAshes: { tick: (dt: number) => boolean; dispose: () => void }[] = [];
+// FP：膝上／弧頂／嘴邊／離嘴外推
 const PUFF_FP_REST = { x: 0.30, y: -0.48, z: -0.36, rx: 1.05, ry: 0.45, rz: 0.25 };
-const PUFF_FP_MID = { x: 0.16, y: -0.10, z: -0.26, rx: 0.55, ry: 0.05, rz: -0.25 };
-const PUFF_FP_MOUTH = { x: 0.02, y: -0.11, z: -0.16, rx: 0.25, ry: -0.20, rz: -0.55 };
+const PUFF_FP_MID = { x: 0.18, y: -0.08, z: -0.24, rx: 0.5, ry: 0.0, rz: -0.2 };
+const PUFF_FP_MOUTH = { x: 0.015, y: -0.10, z: -0.15, rx: 0.2, ry: -0.22, rz: -0.58 };
+const PUFF_FP_AWAY = { x: 0.08, y: -0.14, z: -0.22, rx: 0.35, ry: -0.05, rz: -0.35 };
 const PUFF_FP_L = { x: -0.38, y: -0.58, z: -0.32, rx: 1.25, ry: -0.35, rz: 0.55 };
 
 function clearPuffExhales() {
@@ -2832,13 +2843,17 @@ function clearPuffExhales() {
     e.fx.dispose();
   }
   puffExhales.length = 0;
+  for (const a of puffAshes) a.dispose();
+  puffAshes.length = 0;
 }
 function cancelPuff(opts?: { keepAnim?: boolean }) {
   puffHeld = false;
   puffT = 0;
   puffStrength = 0;
   puffReleaseAt = 0;
-  if (!opts?.keepAnim) puffAnimT = 0;
+  puffAwayT = 0;
+  puffExhaleHeadT = 0;
+  if (!opts?.keepAnim) { puffAnimT = 0; puffCamPitch = 0; }
   const b = document.getElementById('puffBtn');
   const c = document.getElementById('puffCd');
   if (b) { b.classList.remove('held', 'low'); b.style.removeProperty('--p'); }
@@ -2849,6 +2864,8 @@ function startPuff() {
   puffHeld = true;
   puffT = 0;
   puffReleaseAt = 0;
+  puffAwayT = 0;
+  puffFlickT = 0;
   $('puffBtn').classList.add('held');
   $('puffBtn').classList.remove('low');
 }
@@ -2860,6 +2877,7 @@ function endPuff() {
   b.classList.remove('held', 'low');
   c.textContent = '';
   b.style.removeProperty('--p');
+  puffAwayT = 1;
   if (held < PUFF_MIN_HOLD || !smokeSitActive) {
     puffStrength = 0;
     puffReleaseAt = 0;
@@ -2872,31 +2890,42 @@ function spawnExhalePuff(strength: number) {
   if (!smokeSitActive || strength <= 0) return;
   const sc = 0.35 + strength * 1.15;
   const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 5100 + Math.floor(Math.random() * 4000) });
+  puffExhaleHeadT = 1;
   if (tpv && plazaMe) {
-    // 第三人稱：掛在場景，從嘴前飄出
     const mouth = new THREE.Vector3();
     plazaMe.head.getWorldPosition(mouth);
     const yaw = plazaMe.outer.rotation.y;
-    mouth.x += -Math.sin(yaw) * 0.12;
-    mouth.y -= 0.02;
-    mouth.z += -Math.cos(yaw) * 0.12;
+    mouth.x += -Math.sin(yaw) * 0.14;
+    mouth.y -= 0.01;
+    mouth.z += -Math.cos(yaw) * 0.14;
     fx.group.position.copy(mouth);
-    // 世界座標：改粒子速度為上＋身體前方（覆寫 tick 內局部 -Z）
     scene.add(fx.group);
-    puffExhales.push({ fx, age: 0, life: 2.4, world: true });
+    puffExhales.push({ fx, age: 0, life: 2.6, world: true });
   } else {
-    fx.group.position.set(0.02, -0.04, -0.28);
+    fx.group.position.set(0.01, -0.02, -0.26);
     camera.add(fx.group);
-    puffExhales.push({ fx, age: 0, life: 2.4, world: false });
+    puffExhales.push({ fx, age: 0, life: 2.6, world: false });
   }
+}
+function puffVisualK() { return easeSmokePuff(puffAnimT); }
+function puffInhaleK() {
+  return puffHeld && puffAnimT >= 0.98 ? 1 : (puffHeld && puffAnimT > 0.7 ? (puffAnimT - 0.7) / 0.3 : 0);
+}
+function puffBezier(a: number, m: number, b: number, u: number) {
+  const o = 1 - u;
+  return o * o * a + 2 * o * u * m + u * u * b;
 }
 function tickPuffUi(rdt: number) {
   const show = smokeSitActive && state === 'play';
   on('puffBtn', show);
   if (!show) {
     if (puffHeld || puffReleaseAt || puffAnimT > 0) cancelPuff();
+    if (plazaMe) clearPlazaSmokeCig(plazaMe);
     return;
   }
+  // 本機 TP avatar 手持菸
+  if (plazaMe) ensurePlazaSmokeCig(plazaMe, COARSE);
+
   if (puffHeld) {
     puffT = Math.min(PUFF_HOLD_MAX, puffT + rdt);
     const rem = PUFF_HOLD_MAX - puffT;
@@ -2905,9 +2934,17 @@ function tickPuffUi(rdt: number) {
     c.textContent = `${rem.toFixed(1)}s`;
     b.classList.toggle('low', rem < 1.2);
     puffAnimT = Math.min(1, puffAnimT + rdt / PUFF_UP_SEC);
+    puffAwayT = 0;
   } else {
-    puffAnimT = Math.max(0, puffAnimT - rdt / PUFF_DOWN_SEC);
+    if (puffAwayT > 0) puffAwayT = Math.max(0, puffAwayT - rdt / PUFF_AWAY_SEC);
+    else puffAnimT = Math.max(0, puffAnimT - rdt / PUFF_DOWN_SEC);
   }
+  // 吸氣鏡頭微仰
+  const inhale = puffInhaleK();
+  const wantCam = inhale * 0.045; // ~2.5°
+  puffCamPitch += (wantCam - puffCamPitch) * Math.min(1, rdt * 6);
+  puffExhaleHeadT = Math.max(0, puffExhaleHeadT - rdt / 0.45);
+
   if (puffReleaseAt && performance.now() - puffReleaseAt >= 1000) {
     const s = puffStrength;
     puffReleaseAt = 0;
@@ -2918,12 +2955,11 @@ function tickPuffUi(rdt: number) {
     const e = puffExhales[i];
     e.age += rdt;
     e.fx.tick(performance.now() * 0.001, rdt);
-    // 世界空間吐煙：額外往上／前飄
     if (e.world) {
       const yaw = plazaMe ? plazaMe.outer.rotation.y : 0;
-      e.fx.group.position.y += 0.18 * rdt;
-      e.fx.group.position.x += -Math.sin(yaw) * 0.12 * rdt;
-      e.fx.group.position.z += -Math.cos(yaw) * 0.12 * rdt;
+      e.fx.group.position.y += 0.22 * rdt;
+      e.fx.group.position.x += -Math.sin(yaw) * 0.14 * rdt;
+      e.fx.group.position.z += -Math.cos(yaw) * 0.14 * rdt;
     }
     if (e.age >= e.life) {
       try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
@@ -2931,40 +2967,75 @@ function tickPuffUi(rdt: number) {
       puffExhales.splice(i, 1);
     }
   }
+  // idle 彈烟灰
+  if (!puffHeld && puffAnimT < 0.05 && puffFlickT <= 0) {
+    puffAshCD -= rdt;
+    if (puffAshCD <= 0) {
+      puffFlickT = 1;
+      puffAshCD = 6 + Math.random() * 4;
+      spawnPuffAsh();
+    }
+  }
+  if (puffFlickT > 0) puffFlickT = Math.max(0, puffFlickT - rdt / 0.28);
+  for (let i = puffAshes.length - 1; i >= 0; i--) {
+    if (!puffAshes[i].tick(rdt)) { puffAshes[i].dispose(); puffAshes.splice(i, 1); }
+  }
+  // 菸頭亮度
+  const tipBoost = inhale * 1.2 + (puffHeld ? 0.35 : 0);
+  if (fpCig && !tpv) fpCig.setTipBoost(tipBoost);
+  if (plazaMe) {
+    const cig = getPlazaSmokeCig(plazaMe);
+    if (cig) {
+      cig.setTipBoost(tipBoost);
+      cig.tick(performance.now() * 0.001, rdt);
+    }
+  }
 }
-function puffVisualK() {
-  return easeSmokePuff(puffAnimT);
+function spawnPuffAsh() {
+  if (tpv && plazaMe) {
+    const cig = getPlazaSmokeCig(plazaMe);
+    if (!cig) return;
+    const local = new THREE.Vector3(0.02, 0.02, -0.2);
+    puffAshes.push(spawnAshSpeck(cig.group, local));
+  } else if (fpCig && !tpv) {
+    puffAshes.push(spawnAshSpeck(fpCig.group, new THREE.Vector3(0, 0.01, -0.09)));
+  }
 }
-/** 二次貝茲：休息→弧頂→嘴邊 */
-function puffBezier(a: number, m: number, b: number, u: number) {
-  const o = 1 - u;
-  return o * o * a + 2 * o * u * m + u * u * b;
-}
-/** 吸菸座 FP：左手下垂；右手弧線抽烟（不影響剝蚵等其他模式） */
+/** 吸菸座 FP：左手下垂；右手分階段抽烟 */
 function applySmokeSitFpHands() {
   if (!smokeSitActive || tpv) return;
-  // 左手自然下垂（畫面左下緣／外）
   handL.position.set(PUFF_FP_L.x, PUFF_FP_L.y, PUFF_FP_L.z);
   handL.rotation.set(PUFF_FP_L.rx, PUFF_FP_L.ry, PUFF_FP_L.rz);
   const u = puffVisualK();
-  const bob = u > 0.85 ? Math.sin(performance.now() * 0.004) * 0.006 : 0;
-  const R = PUFF_FP_REST, M = PUFF_FP_MID, B = PUFF_FP_MOUTH;
-  handR.position.set(
-    puffBezier(R.x, M.x, B.x, u),
-    puffBezier(R.y, M.y, B.y, u) + bob,
-    puffBezier(R.z, M.z, B.z, u),
-  );
-  handR.rotation.set(
-    puffBezier(R.rx, M.rx, B.rx, u),
-    puffBezier(R.ry, M.ry, B.ry, u),
-    puffBezier(R.rz, M.rz, B.rz, u),
-  );
+  const away = puffAwayT;
+  const inhale = puffInhaleK();
+  const flick = Math.sin(puffFlickT * Math.PI);
+  const bob = inhale > 0.2 ? Math.sin(performance.now() * 0.0035) * 0.005 * inhale : 0;
+  const R = PUFF_FP_REST, M = PUFF_FP_MID, B = PUFF_FP_MOUTH, A = PUFF_FP_AWAY;
+  let x = puffBezier(R.x, M.x, B.x, u);
+  let y = puffBezier(R.y, M.y, B.y, u) + bob;
+  let z = puffBezier(R.z, M.z, B.z, u);
+  let rx = puffBezier(R.rx, M.rx, B.rx, u);
+  let ry = puffBezier(R.ry, M.ry, B.ry, u);
+  let rz = puffBezier(R.rz, M.rz, B.rz, u);
+  if (away > 0.01) {
+    const t = away;
+    x = B.x + (A.x - B.x) * t;
+    y = B.y + (A.y - B.y) * t;
+    z = B.z + (A.z - B.z) * t;
+    rx = B.rx + (A.rx - B.rx) * t;
+    ry = B.ry + (A.ry - B.ry) * t;
+    rz = B.rz + (A.rz - B.rz) * t;
+  }
+  if (flick > 0.01 && u < 0.2) {
+    x += flick * 0.04; y -= flick * 0.02; rz += flick * 0.15;
+  }
+  // 吸氣肩微抬
+  y += inhale * 0.012;
+  handR.position.set(x, y, z);
+  handR.rotation.set(rx, ry, rz);
   if (fpCig) {
-    // 抽烟時菸略轉正對嘴；休息時更往外撇
-    fpCig.group.rotation.set(0.55 - u * 0.25, 0.65 - u * 0.45, 0.15 - u * 0.05);
-    const tip = fpCig.tip as THREE.Mesh;
-    const mat = tip.material as THREE.MeshStandardMaterial;
-    mat.emissiveIntensity = 0.7 + Math.sin(performance.now() * 0.007) * 0.15 + u * 1.4;
+    fpCig.group.rotation.set(0.55 - u * 0.28, 0.65 - u * 0.5, 0.15 - u * 0.08);
   }
 }
 
@@ -2988,6 +3059,7 @@ function clearPlazaLeaveUi() {
   cancelPuff();
   clearPuffExhales();
   disposeFpCigarette();
+  if (plazaMe) clearPlazaSmokeCig(plazaMe);
   handRig.visible = true;
   document.body.classList.remove('plazaRoam', 'plazaSmokeSit');
   const info = document.getElementById('seatInfo');
@@ -3266,6 +3338,7 @@ function launchPlaza() {
       cancelPuff();
       clearPuffExhales();
       disposeFpCigarette();
+      if (plazaMe) clearPlazaSmokeCig(plazaMe);
       plazaEnterWalkPose(true);
       on('camBtn', COARSE);
       if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
@@ -3703,7 +3776,7 @@ function frameBody() {
   moonTick(rdt);
   shake = Math.max(0, shake - rdt);
   if (walking && bodyPose !== 'lie') walkStep(rdt); else if (walking) { walkMotion.spd = walkMotion.strafe = 0; } else { walkMotion.spd = walkMotion.strafe = 0; }
-  let camPitch = pitch - pe * 0.08, camRoll = 0;
+  let camPitch = pitch - pe * 0.08 + (smokeSitActive && !tpv ? puffCamPitch : 0), camRoll = 0;
   camera.position.copy(walking ? walkPos : SEAT);
   if (jumpY > 0) camera.position.y += jumpY;
   if (poseK > 0.001) camera.position.y -= poseK * (bodyPose === 'lie' || lastPose === 'lie' ? 1.2 : 0.55);
@@ -4101,7 +4174,21 @@ function camTick(dt: number) {
     rig.outer.rotation.y = pose.yaw;
     rig.outer.rotation.x = 0;
     const smoke = smokeSitActive || (mine ? isSmokePile(mine.pileId) : false);
-    if (smoke) posePlazaSmokeSit(rig, smokeSitActive ? puffVisualK() : 0); else posePlazaSit(rig);
+    if (smoke) {
+      if (smokeSitActive) {
+        posePlazaSmokeSit(rig, {
+          puffK: puffVisualK(),
+          inhale: puffInhaleK(),
+          away: puffAwayT,
+          flick: puffFlickT,
+        });
+        // 吐煙時頭微前傾
+        if (puffExhaleHeadT > 0 && rig.head) rig.head.rotation.x += puffExhaleHeadT * 0.06;
+      } else posePlazaSmokeSit(rig, 0);
+    } else {
+      clearPlazaSmokeCig(rig);
+      posePlazaSit(rig);
+    }
     handRig.visible = false;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
     const dist = 3.1;

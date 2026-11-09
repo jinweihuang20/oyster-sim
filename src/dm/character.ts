@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { MatFn, MeshAdd } from './weapons';
 import { rbox } from '../core/geo';
+import { makeAvatarCigarette, type FpCigarette } from '../plaza/fireFx';
 
 const SKIN = 0xe8bc98;
 
@@ -482,6 +483,7 @@ export function posePlazaSit(rig: PlayerRig) {
 
 /** 廣場站立預設（清掉坐姿） */
 export function posePlazaStand(rig: PlayerRig) {
+  clearPlazaSmokeCig(rig);
   posePlazaHangArms(rig, false);
   rig.outer.scale.setScalar(1);
   rig.root.scale.set(1, 1, 1);
@@ -505,38 +507,110 @@ export function easeSmokePuff(t: number) {
   return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
 }
 
-/** 吸菸區坐下：左手自然下垂；右手休息在膝上，puffK=1 時舉到嘴邊（弧線插值） */
-export function posePlazaSmokeSit(rig: PlayerRig, puffK = 0) {
+const PLAZA_CIG_UD = 'plazaCig';
+
+/** 吸菸座：把菸掛在右腕（lowerR 腕端）。手骨 handR 在廣場是藏起來的，故不掛 handR。 */
+export function ensurePlazaSmokeCig(rig: PlayerRig, lowDetail = false): FpCigarette {
+  let cig = rig.lowerR.userData[PLAZA_CIG_UD] as FpCigarette | undefined;
+  if (cig) {
+    cig.group.visible = true;
+    return cig;
+  }
+  cig = makeAvatarCigarette({ lowDetail });
+  // lowerR 沿 +Y；腕在 +restLen/2 ≈ +0.12
+  cig.group.position.set(0.035, 0.125, 0.04);
+  // 濾嘴朝掌／身體側（+Z 偏內），菸頭朝外
+  cig.group.rotation.set(0.35, 1.1, 0.25);
+  rig.lowerR.add(cig.group);
+  rig.lowerR.userData[PLAZA_CIG_UD] = cig;
+  return cig;
+}
+
+export function clearPlazaSmokeCig(rig: PlayerRig) {
+  const cig = rig.lowerR.userData[PLAZA_CIG_UD] as FpCigarette | undefined;
+  if (!cig) return;
+  try { rig.lowerR.remove(cig.group); } catch { /* */ }
+  cig.dispose();
+  delete rig.lowerR.userData[PLAZA_CIG_UD];
+}
+
+export function getPlazaSmokeCig(rig: PlayerRig): FpCigarette | null {
+  return (rig.lowerR.userData[PLAZA_CIG_UD] as FpCigarette | undefined) ?? null;
+}
+
+export type SmokeSitPoseOpts = {
+  /** 0 休息 → 1 嘴邊 */
+  puffK?: number;
+  /** 吸氣：頭後仰／胸微抬 0..1（手已在嘴邊時） */
+  inhale?: number;
+  /** 放開先離嘴：手腕略外推 0..1 */
+  away?: number;
+  /** 彈烟灰：手腕輕彈 0..1 */
+  flick?: number;
+};
+
+/** 吸菸區坐下：左手擱大腿；右手休息膝上，可舉到嘴邊；自動掛手持菸 */
+export function posePlazaSmokeSit(rig: PlayerRig, puffKOrOpts: number | SmokeSitPoseOpts = 0) {
+  const opts: SmokeSitPoseOpts = typeof puffKOrOpts === 'number' ? { puffK: puffKOrOpts } : puffKOrOpts;
+  const puffK = opts.puffK ?? 0;
+  const inhale = Math.min(1, Math.max(0, opts.inhale ?? 0));
+  const away = Math.min(1, Math.max(0, opts.away ?? 0));
+  const flick = Math.min(1, Math.max(0, opts.flick ?? 0));
+
   posePlazaSit(rig);
-  // 左手：坐姿自然下垂（略往前，不舉）
+  ensurePlazaSmokeCig(rig);
+
+  // 左手：擱在左大腿（坐姿外側前方）
   placePlazaArmChain(
     rig.upperL, rig.lowerL,
     -0.22, 0.30, 0,
-    -0.28, 0.08, -0.18,
-    -0.26, -0.06, -0.32,
+    -0.30, 0.06, -0.12,
+    -0.22, -0.08, -0.22,
   );
+
   const k = easeSmokePuff(puffK);
-  // 右手休息：膝上／大腿外側，菸朝外
   const rSh = [0.22, 0.30, 0] as const;
-  const rEl0 = [0.30, 0.10, -0.16] as const;
-  const rWr0 = [0.26, -0.02, -0.30] as const;
-  // 右手抽烟：肘抬高畫弧，手腕到嘴前（頭略下方）
-  const rEl1 = [0.20, 0.42, -0.06] as const;
-  const rWr1 = [0.05, 0.50, -0.26] as const;
+  // 休息：右膝／大腿外側
+  const rEl0 = [0.32, 0.08, -0.14] as const;
+  const rWr0 = [0.28, -0.04, -0.28] as const;
+  // 嘴邊：肘抬、腕轉內到唇前
+  const rEl1 = [0.18, 0.44, -0.04] as const;
+  const rWr1 = [0.04, 0.52, -0.24] as const;
   const lerp = (a: number, b: number) => a + (b - a) * k;
-  // 弧線：中段肘更往上／外
   const lift = Math.sin(k * Math.PI);
-  const elx = lerp(rEl0[0], rEl1[0]) + lift * 0.06;
-  const ely = lerp(rEl0[1], rEl1[1]) + lift * 0.10;
-  const elz = lerp(rEl0[2], rEl1[2]) - lift * 0.04;
-  const wrx = lerp(rWr0[0], rWr1[0]);
-  const wry = lerp(rWr0[1], rWr1[1]) + Math.sin(k * Math.PI * 2) * 0.004 * k; // 微幅呼吸感在呼叫端再加
-  const wrz = lerp(rWr0[2], rWr1[2]);
-  placePlazaArmChain(
-    rig.upperR, rig.lowerR,
-    rSh[0], rSh[1], rSh[2],
-    elx, ely, elz,
-    wrx, wry, wrz,
-  );
-  if (rig.head) rig.head.rotation.x = -0.04 - k * 0.02;
+  let elx = lerp(rEl0[0], rEl1[0]) + lift * 0.07;
+  let ely = lerp(rEl0[1], rEl1[1]) + lift * 0.11;
+  let elz = lerp(rEl0[2], rEl1[2]) - lift * 0.05;
+  let wrx = lerp(rWr0[0], rWr1[0]);
+  let wry = lerp(rWr0[1], rWr1[1]);
+  let wrz = lerp(rWr0[2], rWr1[2]);
+  // 吸氣時手微留嘴邊＋輕顫
+  if (inhale > 0.01 && k > 0.85) {
+    wry += inhale * 0.01;
+    wrx += Math.sin(inhale * 8) * 0.003 * inhale;
+  }
+  // 放開：先離嘴（外推＋略降）
+  if (away > 0.01) {
+    wrx += away * 0.08;
+    wrz -= away * 0.06;
+    wry -= away * 0.04;
+  }
+  // 彈烟灰：腕輕抖
+  if (flick > 0.01) {
+    const f = Math.sin(flick * Math.PI);
+    wrx += f * 0.05;
+    wry -= f * 0.03;
+    wrz += f * 0.02;
+  }
+  placePlazaArmChain(rig.upperR, rig.lowerR, rSh[0], rSh[1], rSh[2], elx, ely, elz, wrx, wry, wrz);
+
+  // 頭／胸：吸氣後仰微抬；吐煙前可再前傾由呼叫端疊
+  if (rig.head) rig.head.rotation.x = -0.04 - k * 0.02 - inhale * 0.08;
+  rig.torso.position.y = (rig.torso.position.y || 0) + inhale * 0.018;
+  rig.torso.rotation.x = (rig.torso.rotation.x || 0) - inhale * 0.03;
+}
+
+/** 站起／非吸菸：拿掉手持菸 */
+export function clearSmokeCigIfAny(rig: PlayerRig) {
+  clearPlazaSmokeCig(rig);
 }

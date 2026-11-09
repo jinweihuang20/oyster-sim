@@ -419,6 +419,8 @@ export type FpCigarette = {
   group: THREE.Group;
   tip: THREE.Object3D;
   smoke: CharcoalFireFx;
+  /** 額外菸頭亮度（吸一口時拉高） */
+  setTipBoost: (v: number) => void;
   tick: (tSec: number, dt: number) => void;
   dispose: () => void;
 };
@@ -457,14 +459,16 @@ export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette
   smoke.group.position.copy(tip.position);
   smoke.group.position.y += 0.004;
   group.add(smoke.group);
+  let tipBoost = 0;
   return {
     group,
     tip,
     smoke,
+    setTipBoost: (v) => { tipBoost = Math.max(0, v); },
     tick: (tSec, dt) => {
-      // 菸頭微微閃爍
+      // 菸頭微微閃爍；吸一口時更亮
       const m = tip.material as THREE.MeshStandardMaterial;
-      m.emissiveIntensity = 0.75 + Math.sin(tSec * 7.5) * 0.2;
+      m.emissiveIntensity = 0.7 + Math.sin(tSec * 7.5) * 0.18 + tipBoost * (0.9 + Math.sin(tSec * 3.2) * 0.25);
       smoke.tick(tSec, dt);
     },
     dispose: () => {
@@ -478,6 +482,96 @@ export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette
         else if (mat && !mesh.userData.sharedMat) mat.dispose();
       });
       group.clear();
+    },
+  };
+}
+
+
+/** 第三人稱方塊人手持菸（掛 lowerR 腕端；比例比 FP 大） */
+export function makeAvatarCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette {
+  const group = new THREE.Group();
+  group.name = 'avatarCigarette';
+  const sc = 2.4;
+  const filter = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0055 * sc, 0.0055 * sc, 0.028 * sc, opts.lowDetail ? 5 : 6),
+    new THREE.MeshStandardMaterial({ color: 0xd4a574, roughness: 0.9, metalness: 0 }),
+  );
+  filter.rotation.x = Math.PI / 2;
+  filter.position.z = 0.014 * sc;
+  group.add(filter);
+  const stick = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.0048 * sc, 0.0048 * sc, 0.09 * sc, opts.lowDetail ? 5 : 6),
+    new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.95, metalness: 0 }),
+  );
+  stick.rotation.x = Math.PI / 2;
+  stick.position.z = -0.04 * sc;
+  group.add(stick);
+  const tip = new THREE.Mesh(
+    new THREE.SphereGeometry(0.0065 * sc, opts.lowDetail ? 5 : 6, 4),
+    new THREE.MeshStandardMaterial({
+      color: 0x3a1810,
+      emissive: 0xff4a12,
+      emissiveIntensity: 0.95,
+      roughness: 0.6,
+      metalness: 0.05,
+    }),
+  );
+  tip.position.z = -0.088 * sc;
+  group.add(tip);
+  const smoke = makeCigSmoke({ count: opts.lowDetail ? 2 : 3, seed: 6601, scale: 0.55 });
+  smoke.group.position.copy(tip.position);
+  smoke.group.position.y += 0.01;
+  group.add(smoke.group);
+  let tipBoost = 0;
+  return {
+    group,
+    tip,
+    smoke,
+    setTipBoost: (v) => { tipBoost = Math.max(0, v); },
+    tick: (tSec, dt) => {
+      const m = tip.material as THREE.MeshStandardMaterial;
+      m.emissiveIntensity = 0.7 + Math.sin(tSec * 7.5) * 0.18 + tipBoost * (0.9 + Math.sin(tSec * 3.2) * 0.25);
+      smoke.tick(tSec, dt);
+    },
+    dispose: () => {
+      smoke.dispose();
+      group.traverse(o => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (mesh.geometry && !mesh.userData.sharedGeo) mesh.geometry.dispose();
+        const mat = mesh.material as THREE.Material | THREE.Material[];
+        if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+        else if (mat && !mesh.userData.sharedMat) mat.dispose();
+      });
+      group.clear();
+    },
+  };
+}
+
+/** 彈烟灰：一小點灰粒往下掉 */
+export function spawnAshSpeck(parent: THREE.Object3D, local: THREE.Vector3) {
+  const mat = smokeMat.clone();
+  mat.color.setHex(0x6a6560);
+  mat.opacity = 0.55;
+  const mesh = new THREE.Mesh(smokeGeo, mat);
+  mesh.userData.sharedGeo = true;
+  mesh.scale.setScalar(0.04);
+  mesh.position.copy(local);
+  parent.add(mesh);
+  let age = 0;
+  const life = 0.55;
+  return {
+    tick: (dt: number) => {
+      age += dt;
+      mesh.position.y -= 0.25 * dt;
+      mesh.position.x += (Math.random() - 0.5) * 0.02 * dt;
+      mat.opacity = 0.55 * Math.max(0, 1 - age / life);
+      mesh.scale.setScalar(0.04 * (1 + age * 1.2));
+      return age < life;
+    },
+    dispose: () => {
+      parent.remove(mesh);
+      mat.dispose();
     },
   };
 }

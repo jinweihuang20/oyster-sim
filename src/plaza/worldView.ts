@@ -4,6 +4,7 @@ import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVi
 import {
   makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
   posePlazaSit, posePlazaStand, posePlazaSmokeSit,
+  clearPlazaSmokeCig, getPlazaSmokeCig, ensurePlazaSmokeCig,
   plazaJumpHeight, PLAZA_JUMP_DUR, posePlazaStallKeeper, applyPlazaBodyPose, type PlayerRig,
   PLAZA_SIT_ROOT_Y,
 } from '../dm/character';
@@ -966,6 +967,7 @@ function hashPid(pid: string) {
 
   function destroyRemote(r: Remote) {
     if (r.cigSmoke) { root.remove(r.cigSmoke.group); r.cigSmoke.dispose(); r.cigSmoke = undefined; }
+    clearPlazaSmokeCig(r.rig);
     root.remove(r.rig.outer); r.tag.dispose(); r.bubble.dispose();
     // 只刪「指向同一具模型」的 key，避免誤刪同 pid 的另一筆
     for (const [k, x] of [...remotes]) {
@@ -1206,26 +1208,24 @@ function hashPid(pid: string) {
       // 吸菸薄煙仍低頻更新
       smokeArea.tick(tSec, dt);
     }
-    // 遠端抽烟煙：掛在頭側
+    // 遠端吸菸：手持菸（掛腕）＋菸頭薄煙；不再用頭側飄煙以免看起來沒拿菸
     for (const r of remotes.values()) {
       const want = r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke');
-      if (want && !r.cigSmoke) {
-        r.cigSmoke = makeCigSmoke({ count: LO ? 3 : 5, seed: 4400 + (r.pileId * 17 + r.slot), scale: 0.65 });
-        root.add(r.cigSmoke.group);
+      if (want) {
+        ensurePlazaSmokeCig(r.rig, LO);
+        const cig = getPlazaSmokeCig(r.rig);
+        if (cig) cig.tick(tSec, dt);
+      } else {
+        clearPlazaSmokeCig(r.rig);
       }
-      if (r.cigSmoke) {
-        r.cigSmoke.group.visible = want;
-        if (want) {
-          r.rig.head.getWorldPosition(_firePos);
-          r.cigSmoke.group.position.set(_firePos.x + 0.08, _firePos.y + 0.02, _firePos.z - 0.06);
-          r.cigSmoke.tick(tSec, dt);
-        }
-      }
+      // 舊頭側煙：隱藏（保留物件以免重配額抖動；離場 destroy 會清）
+      if (r.cigSmoke) r.cigSmoke.group.visible = false;
     }
+    // 本機第三人稱 avatar 的菸由 main plazaMe 掛載；此處 selfCig 僅作後備薄煙，坐下吸菸時關掉避免重複
     if (selfCig) {
-      selfCig.group.visible = selfSmoke;
-      if (selfSmoke) {
-        const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
+      selfCig.group.visible = selfSmoke && !selfSeated;
+      if (selfCig.group.visible) {
+        const headY = 1.72;
         selfCig.group.position.set(
           selfX - Math.sin(selfYaw) * 0.12 + Math.cos(selfYaw) * 0.08,
           headY,
