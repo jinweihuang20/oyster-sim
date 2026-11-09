@@ -637,7 +637,8 @@ export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: nu
     group.add(sp);
     // 前段的煙較快較濃，尾段較慢較淡；吐氣方向略朝下
     const speed = (0.5 + rn() * 0.4) * (1 - k * 0.6) * (0.6 + 0.4 * sc) * reachK;
-    const spread = 0.1 + k * 0.22 + rn() * 0.08;
+    // 噴得遠時側向擴散不跟著放大，收成一道比較集中的煙柱
+    const spread = (0.1 + k * 0.22 * (1 - 0.5 * reachR) + rn() * 0.08) * (Math.min(reachK, 1.5) / reachK);
     const ang = rn() * Math.PI * 2;
     smokes.push({
       sp, mat,
@@ -645,7 +646,7 @@ export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: nu
       age: 0,
       life: (2.0 + rn() * 1.6) * (1 + 0.45 * reachR),
       vx: Math.cos(ang) * spread * speed,
-      vy: Math.sin(ang) * spread * speed - 0.12 * speed,
+      vy: Math.sin(ang) * spread * speed - 0.12 * speed * (Math.min(reachK, 1.5) / reachK),
       vz: -speed,
       s0: (0.014 + rn() * 0.01) * (0.7 + 0.3 * sc),
       s1: (0.13 + rn() * 0.16) * (0.6 + 0.4 * sc),
@@ -654,7 +655,7 @@ export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: nu
       spin: (rn() - 0.5) * 1.2,
       ph: rn() * Math.PI * 2,
       fq: 1.4 + rn() * 1.8,
-      peak: (0.26 + rn() * 0.16) * Math.min(1, 0.55 + 0.45 * sc) * (1 - k * 0.4),
+      peak: (0.26 + rn() * 0.16) * Math.min(1, 0.55 + 0.45 * sc) * (1 - k * 0.4) * (1 + 0.3 * reachR),
       tone: 0.9 + rn() * 0.14,
       lift: 0.14 + rn() * 0.16,
     });
