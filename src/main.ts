@@ -2781,8 +2781,19 @@ let smokeSitActive = false;
 function ensureFpCigarette() {
   if (fpCig) return fpCig;
   fpCig = makeFpCigarette({ lowDetail: COARSE });
-  // 第一人稱不畫手：菸直接掛鏡頭，位置由 applySmokeSitFpHands 每幀設定
-  camera.add(fpCig.group);
+  // 夾在右手指尖：以「手在嘴邊」那一格反推菸在手上的位置，讓舉到嘴邊時濾嘴剛好含在嘴（畫面下緣正中）、菸頭朝前微上
+  const hand = new THREE.Object3D();
+  hand.position.set(PUFF_FP_MOUTH.x, PUFF_FP_MOUTH.y, PUFF_FP_MOUTH.z);
+  hand.rotation.set(PUFF_FP_MOUTH.rx, PUFF_FP_MOUTH.ry, PUFF_FP_MOUTH.rz);
+  hand.scale.setScalar(PUFF_FP_HAND_SCALE);
+  hand.updateMatrix();
+  const cigAtMouth = new THREE.Object3D();
+  cigAtMouth.position.set(0.004, -0.04, -0.07);
+  cigAtMouth.rotation.set(0.14, 0.06, 0);
+  cigAtMouth.updateMatrix();
+  const local = hand.matrix.clone().invert().multiply(cigAtMouth.matrix);
+  local.decompose(fpCig.group.position, fpCig.group.quaternion, fpCig.group.scale);
+  handR.add(fpCig.group);
   return fpCig;
 }
 function setSmokeSitHands(on: boolean) {
@@ -2797,6 +2808,7 @@ function setSmokeSitHands(on: boolean) {
     if (fpCig) fpCig.group.visible = false;
     handL.visible = true;
     handR.visible = true;
+    handR.scale.setScalar(1);
     knife.visible = true;
     const sleeve = handR.children[0] as THREE.Mesh | undefined;
     const cuff = handR.children[2] as THREE.Mesh | undefined;
@@ -2836,10 +2848,12 @@ const puffExhales: { fx: CharcoalFireFx; age: number; life: number; world?: bool
 const puffAshes: { tick: (dt: number) => boolean; dispose: () => void }[] = [];
 // FP：膝上／弧頂／嘴邊／離嘴外推
 const PUFF_FP_REST = { x: 0.30, y: -0.48, z: -0.36, rx: 1.05, ry: 0.45, rz: 0.25 };
-const PUFF_FP_MID = { x: 0.12, y: -0.26, z: -0.2, rx: 0.8, ry: 0.05, rz: -0.4 };
-// 嘴邊：手掌壓在畫面下緣、手指斜朝前上，只露手背上半＋菸；前臂往下出畫面（不再穿過鏡頭）
-const PUFF_FP_MOUTH = { x: 0.03, y: -0.19, z: -0.14, rx: 0.9, ry: -0.08, rz: -0.6 };
-const PUFF_FP_AWAY = { x: 0.09, y: -0.22, z: -0.16, rx: 0.8, ry: 0.0, rz: -0.45 };
+const PUFF_FP_MID = { x: 0.1, y: -0.3, z: -0.15, rx: 1.0, ry: 0.1, rz: -0.3 };
+// 嘴邊：手從右下斜舉上來，指尖夾菸在嘴前；手掌與前臂在畫面右下外
+const PUFF_FP_MOUTH = { x: 0.011, y: -0.15, z: -0.008, rx: 1.15, ry: 0, rz: -0.9 };
+/** 抽菸時右手縮小，舉到嘴邊只佔畫面右下約四分之一 */
+const PUFF_FP_HAND_SCALE = 0.6;
+const PUFF_FP_AWAY = { x: 0.04, y: -0.2, z: -0.05, rx: 1.0, ry: 0.0, rz: -0.7 };
 const PUFF_FP_L = { x: -0.38, y: -0.58, z: -0.32, rx: 1.25, ry: -0.35, rz: 0.55 };
 
 function clearPuffExhales() {
@@ -3017,8 +3031,8 @@ function spawnPuffAsh() {
 function applySmokeSitFpHands() {
   if (!smokeSitActive || tpv) return;
   // 第一人稱只顯示朝前的香菸：雙手模型藏起來，菸仍跟著右手軌跡
-  handL.visible = false;
-  handR.visible = false;
+  handL.visible = false; // 左手垂在膝邊，第一人稱看不到
+  handR.visible = true;
   handL.position.set(PUFF_FP_L.x, PUFF_FP_L.y, PUFF_FP_L.z);
   handL.rotation.set(PUFF_FP_L.rx, PUFF_FP_L.ry, PUFF_FP_L.rz);
   const u = puffVisualK();
@@ -3049,6 +3063,7 @@ function applySmokeSitFpHands() {
   y += inhale * 0.012;
   handR.position.set(x, y, z);
   handR.rotation.set(rx, ry, rz);
+  handR.scale.setScalar(PUFF_FP_HAND_SCALE);
   // 嘴邊把袖管往肘側／下拉，減少畫面裡的前臂
   const sleeve = handR.children[0] as THREE.Mesh | undefined;
   const cuff = handR.children[2] as THREE.Mesh | undefined;
@@ -3057,17 +3072,6 @@ function applySmokeSitFpHands() {
     sleeve.scale.set(1, 1, 1 - u * 0.25);
   }
   if (cuff) cuff.position.set(0, -u * 0.06, 0.66 + u * 0.35);
-  if (fpCig) {
-    // 鏡頭空間：平常垂在畫面外（手放膝上）；抽一口時濾嘴含在嘴（畫面下緣正中，被近裁切面吃掉），菸頭朝前微上
-    const k = away > 0.01 ? 1 - away * 0.6 : u;
-    const fl = flick > 0.01 && u < 0.2 ? flick : 0;
-    fpCig.group.position.set(
-      0.045 + (0.004 - 0.045) * k + fl * 0.006,
-      -0.22 + (-0.04 + 0.22) * k + inhale * 0.003 - fl * 0.006,
-      -0.2 + (-0.07 + 0.2) * k,
-    );
-    fpCig.group.rotation.set(0.35 + (0.14 - 0.35) * k, 0.35 + (0.06 - 0.35) * k, 0.25 * (1 - k) + fl * 0.2);
-  }
 }
 
 /** 廣場坐下：強制第一人稱（不寫入存檔偏好；站起再還原） */
