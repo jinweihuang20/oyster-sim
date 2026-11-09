@@ -673,23 +673,37 @@ function buildUi() {
 @media (max-width:420px){#pzChat{width:min(72vw,240px)}#pzLog{height:52px}}
 /* 地圖：左下聊天上方；開圖時全螢幕半透明＋中央畫布 */
 /* 左上：狀態列（#top／#stats）下方 */
-#pzMapFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;top:calc(env(safe-area-inset-top) + 118px);bottom:auto;z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#2a6a8a;color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #0a1820}
+/* z-index 低於聊天／離開；狀態列另在 style.css 抬到 plazaRoot 之上 */
+/* 直向手機：狀態列下方；桌面／橫向：畫面左上角 */
+#pzMapFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;top:calc(env(safe-area-inset-top) + 118px);bottom:auto;z-index:1;min-width:48px;height:44px;padding:0 12px;border:1.5px solid rgba(232,246,255,.35);border-radius:12px;background:rgba(32,72,96,.48);color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+#pzMapFab:active{background:rgba(32,72,96,.62)}
 #pzMapFab .ic{background:currentColor}
-@media (pointer:fine){#pzMapFab{top:calc(env(safe-area-inset-top) + 108px)}}
-@media (pointer:coarse) and (orientation:landscape){#pzMapFab{top:calc(env(safe-area-inset-top) + 72px)}}
+@media (pointer:fine){#pzMapFab{top:calc(env(safe-area-inset-top) + 10px);left:calc(env(safe-area-inset-left) + 10px)}}
+@media (pointer:coarse) and (orientation:landscape){#pzMapFab{top:calc(env(safe-area-inset-top) + 10px);left:calc(env(safe-area-inset-left) + 10px)}}
 #pzMap{display:none;pointer-events:auto;position:absolute;inset:0;z-index:6;background:rgba(8,10,12,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px)}
 #pzMap.open{display:flex;flex-direction:column;gap:10px}
 #pzMapHd{display:flex;align-items:center;justify-content:space-between;gap:10px;width:min(92vw,420px);color:#ffe6b0;font-weight:900;font-size:16px}
 #pzMapHd button{pointer-events:auto;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;padding:8px 14px;font-size:14px}
-#pzMapCvs{width:min(92vw,min(72vh,420px));height:min(92vw,min(72vh,420px));max-width:100%;border-radius:14px;border:2px solid rgba(217,149,43,.65);box-shadow:0 8px 28px #000a;background:#1a2218;touch-action:none}
+#pzMapCvs{width:min(92vw,min(72vh,420px));height:min(92vw,min(72vh,420px));max-width:100%;border-radius:14px;border:2px solid rgba(217,149,43,.65);box-shadow:0 8px 28px #000a;background:#1a2218;touch-action:none;aspect-ratio:1;flex:0 1 auto}
 #pzMapLeg{width:min(92vw,420px);display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:#d8e0d0;font-weight:700}
 #pzMapLeg span{display:inline-flex;align-items:center;gap:5px}
 #pzMapLeg i{width:10px;height:10px;border-radius:50%;display:inline-block}
+/* 桌面／手機橫向：地圖盡量撐滿可視區（預留標題＋圖例） */
+@media (pointer:fine),(pointer:coarse) and (orientation:landscape){
+  #pzMap{padding:calc(env(safe-area-inset-top) + 8px) 12px calc(env(safe-area-inset-bottom) + 8px);gap:8px}
+  #pzMapHd,#pzMapLeg{width:min(96vw,calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 84px));max-width:96vw}
+  #pzMapCvs{
+    width:min(96vw,calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 84px));
+    height:min(96vw,calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 84px));
+    max-width:96vw;
+    max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 84px);
+  }
+}
 </style>
 <button id="pzX" type="button" aria-label="離開廣場">離開廣場</button>
 <div id="pzHud">準備中…</div>
 <div id="pzNet" role="status" aria-live="polite"></div>
-<button id="pzMapFab" type="button" aria-label="地圖"><i class="ic ic-pin"></i> 地圖<span class="key"> (N)</span></button>
+<button id="pzMapFab" type="button" aria-label="地圖"><i class="ic ic-pin"></i> 地圖<span class="key"> (M)</span></button>
 <button id="pzChatFab" type="button" aria-label="聊天">聊天<span class="key"> (ENTER)</span><span class="pzBadge" aria-hidden="true">0</span></button>
 <button id="pzChatPeek" type="button" aria-label="打開聊天"></button>
 <div id="pzChat">

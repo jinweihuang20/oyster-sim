@@ -221,6 +221,8 @@ export function posePlazaHangArms(rig: PlayerRig, sit = false) {
   rig.weaponMount.visible = false;
   rig.handL.visible = false;
   rig.handR.visible = false;
+  rig.shoulderL.rotation.set(0, 0, 0);
+  if (rig.shoulderR) rig.shoulderR.rotation.set(0, 0, 0);
   const hang = (upper: THREE.Group, lower: THREE.Group, side: number) => {
     const shx = side * 0.22, shy = 0.30, shz = 0;
     const uFwd = sit ? 0.42 : 0.1;
@@ -320,28 +322,35 @@ export function posePlazaJump(rig: PlayerRig, elapsed: number) {
   }
 }
 
-/** 廣場走路擺臂：與腿反向（swing>0＝左腿前→右臂前）；前＝負 Z */
+/**
+ * 廣場走路擺臂：全程保持ㄑ字彎肘（上臂略後下、前臂往前），
+ * 與腿反向輕擺（swing>0＝左腿前→右臂較前）；前＝負 Z。
+ */
 export function posePlazaWalkSwingArms(rig: PlayerRig, swing: number) {
   rig.weaponMount.visible = false;
   rig.handL.visible = false;
   rig.handR.visible = false;
-  const amp = 0.32;
-  const base = 0.06;
-  const frontL = base - swing * amp;
-  const frontR = base + swing * amp;
-  const hangSwing = (upper: THREE.Group, lower: THREE.Group, side: number, front: number) => {
-    const shx = side * 0.22, shy = 0.30;
+  rig.shoulderL.rotation.set(0, 0, 0);
+  if (rig.shoulderR) rig.shoulderR.rotation.set(0, 0, 0);
+  const amp = 0.2;
+  // fwd>0＝該臂較往前
+  const fwdL = -swing * amp;
+  const fwdR = swing * amp;
+  const hangSwing = (upper: THREE.Group, lower: THREE.Group, side: number, fwd: number) => {
+    const shx = side * 0.22, shy = 0.30, shz = 0;
     const out = side * 0.05;
+    // 肘：上臂往下略後，形成ㄑ的轉折點
     const elbowX = shx + out;
-    const elbowY = shy - 0.22;
-    const elbowZ = -front;
-    const wristX = elbowX + out * 0.4;
-    const wristY = elbowY - 0.18;
-    const wristZ = -(front + 0.08);
-    placePlazaArmChain(upper, lower, shx, shy, 0, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
+    const elbowY = shy - 0.13;
+    const elbowZ = shz + 0.05 - fwd * 0.55;
+    // 腕：固定比肘更靠前、高度接近肘 → 前臂近水平，維持ㄑ字
+    const wristX = elbowX + out * 0.2;
+    const wristY = elbowY - 0.03;
+    const wristZ = elbowZ - 0.24;
+    placePlazaArmChain(upper, lower, shx, shy, shz, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
   };
-  hangSwing(rig.upperL, rig.lowerL, -1, frontL);
-  hangSwing(rig.upperR, rig.lowerR, 1, frontR);
+  hangSwing(rig.upperL, rig.lowerL, -1, fwdL);
+  hangSwing(rig.upperR, rig.lowerR, 1, fwdR);
 }
 
 /** 持槍：手黏槍，臂段每幀對準（外彎肘） */

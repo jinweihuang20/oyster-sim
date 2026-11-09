@@ -1111,12 +1111,19 @@ function hashPid(pid: string) {
       }
       // 遠距：只更新座標，略過走路／甩臂細動畫
       if (!far) {
+        // 用實際位移估速度，擺手／跨步跟本機一樣依速度縮放（勿固定全速 bob）
+        const lx = rj._lx as number | undefined, lz = rj._lz as number | undefined;
+        const moveSp = (lx == null || lz == null) ? 0 : Math.hypot(r.x - lx, r.z - lz) / Math.max(dt, 1e-3);
+        rj._lx = r.x; rj._lz = r.z;
+        const walkAmp = Math.min(1, moveSp / 1.2);
+        const wantWalk = !r.seated && jumpElapsed < 0 && (r.moving || walkAmp > 0.12) && !mid;
         if (!r.seated && jumpElapsed >= 0) {
           posePlazaJump(r.rig, jumpElapsed);
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
-        } else if (!r.seated && r.moving && !mid) {
-          r.bob += dt * 10;
-          const swing = posePlazaWalkCycle(r.rig, r.bob, 1);
+        } else if (wantWalk) {
+          r.bob += Math.min(moveSp, 3) * dt * 5;
+          const swing = posePlazaWalkCycle(r.rig, r.bob, Math.max(0.2, walkAmp));
+          // 走動一律ㄑ字彎肘擺臂（勿切回直臂下垂）
           if (r.throwT <= 0) { swingArms(r, swing); hideHold(r); }
         } else if (!r.seated) {
           r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;

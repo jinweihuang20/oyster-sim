@@ -1,5 +1,6 @@
-*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,"Noto Sans TC",sans-serif;color:#fff;touch-action:none;overscroll-behavior-x:none;user-select:none;-webkit-user-select:none}
-#c{position:fixed;inset:0;width:100%;height:100%}
+*{box-sizing:border-box}html,body{margin:0;height:100%;height:100dvh;overflow:hidden;background:#000;font-family:system-ui,"Noto Sans TC",sans-serif;color:#fff;touch-action:none;overscroll-behavior-x:none;user-select:none;-webkit-user-select:none}
+/* fixed + 100dvh：切 App 回來較不易跟錯舊的 100% 視窗高度 */
+#c{position:fixed;inset:0;width:100%;height:100%;height:100dvh;max-height:100dvh}
 /* 主畫面：遊戲風場景背板，蓋住 3D（選單時顯示） */
 #menuBack{position:fixed;inset:0;z-index:8;display:none;pointer-events:none;overflow:hidden;background:#120c08}
 #menuBack .mbSky{position:absolute;inset:0 0 40% 0;background:
@@ -130,14 +131,15 @@ body.plazaMode #toast{top:var(--plaza-toast-top,calc(var(--sa-top,0px) + 118px))
 html,body{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-text-size-adjust:100%}
 button{touch-action:manipulation}
 @media (pointer:coarse){
- #top{top:calc(var(--sa-top) + 6px);gap:8px;padding:2px 4px 2px 10px;font-size:14px;max-width:calc(100vw - 12px)}
+ /* 上／下兩條狀態列等寬（同左右 inset） */
+ #top{top:calc(var(--sa-top) + 6px);left:calc(var(--sa-left) + 8px);right:calc(var(--sa-right) + 8px);transform:none;width:auto;max-width:none;box-sizing:border-box;justify-content:space-between;gap:8px;padding:2px 4px 2px 10px;font-size:14px}
  #top .hudItem{flex-direction:row;gap:4px;align-items:center}
  #top .hudL,#hpPct{display:none!important}
  #top .hudV{font-size:inherit}
  #top button{min-width:44px;min-height:44px;padding:0 10px;font-size:15px;border-radius:12px}
  #hpBar{width:40px}
- /* 統計列靠左；視角鈕在同一列右側 */
- #stats{top:calc(var(--sa-top) + 58px);left:calc(var(--sa-left) + 8px);right:calc(var(--sa-right) + 8px);transform:none;font-size:11px;white-space:normal;text-align:left;width:auto;max-width:none;line-height:1.35;flex-wrap:nowrap;justify-content:flex-start;align-items:center;gap:6px;padding:3px 6px 3px 8px}
+ /* 統計列與 #top 同寬；視角鈕在同一列右側 */
+ #stats{top:calc(var(--sa-top) + 58px);left:calc(var(--sa-left) + 8px);right:calc(var(--sa-right) + 8px);transform:none;box-sizing:border-box;font-size:11px;white-space:normal;text-align:left;width:auto;max-width:none;line-height:1.35;flex-wrap:nowrap;justify-content:flex-start;align-items:center;gap:6px;padding:3px 6px 3px 8px}
  #statsT{flex:1 1 auto;min-width:0;justify-content:flex-start;flex-wrap:wrap}
  #stats .stL{display:none!important}
  #stats .stI{display:inline-flex}
@@ -920,6 +922,8 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 #plazaLoad #plazaLoadCancel{margin-top:8px;min-height:44px;padding:8px 20px;border:2px solid #d9952b;border-radius:12px;background:#2a1810;color:#ffd23f;font-weight:800;font-size:15px}
 @keyframes pzLoadSlide{0%{transform:translateX(-100%)}100%{transform:translateX(280%)}}
 
+/* 廣場：狀態列蓋過 #plazaRoot(9000)，避免地圖鈕擋到 #top／#stats */
+body.plazaMode #top,body.plazaMode #stats,body.plazaRoam #top,body.plazaRoam #stats{z-index:9100}
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
 /* 電腦廣場：視角用 V，隱藏右下視角鈕 */

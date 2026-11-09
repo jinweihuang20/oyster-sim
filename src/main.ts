@@ -2608,16 +2608,18 @@ window.addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
   // V＝視角（第三人稱／第一人稱）；收音機改點按鈕
   if (e.code === 'KeyV' && !e.repeat && state === 'play' && !tut) { setTpv(!tpv); return; }
-  if (state === 'play' && !tut && e.code === 'KeyM') { const L = $('medList'); if (document.pointerLockElement) document.exitPointerLock(); L.classList.toggle('show'); if (L.classList.contains('show')) renderMedList(); return; }
-  if (state === 'play' && $('medList').classList.contains('show') && /^Digit[1-9]$/.test(e.code)) { const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0); const m = own[+e.code.slice(5) - 1]; if (m) { useMed(m.id); renderMedList(); } return; }
-  if (tut && e.code === 'Enter' && TUT[tut.i].next) { $('tutNext').click(); return; }
-  // 廣場：N 開／關地圖；Enter 開聊天
-  if (state === 'play' && plazaMode && isPlazaActive() && !e.repeat && e.code === 'KeyN') {
+  // 廣場：M 開／關地圖（與道具快捷對調）
+  if (state === 'play' && plazaMode && isPlazaActive() && !e.repeat && e.code === 'KeyM') {
     e.preventDefault();
     if (document.pointerLockElement) document.exitPointerLock();
     plazaToggleMap();
     return;
   }
+  // 藥品／道具：N（原 M）
+  if (state === 'play' && !tut && e.code === 'KeyN') { const L = $('medList'); if (document.pointerLockElement) document.exitPointerLock(); L.classList.toggle('show'); if (L.classList.contains('show')) renderMedList(); return; }
+  if (state === 'play' && $('medList').classList.contains('show') && /^Digit[1-9]$/.test(e.code)) { const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0); const m = own[+e.code.slice(5) - 1]; if (m) { useMed(m.id); renderMedList(); } return; }
+  if (tut && e.code === 'Enter' && TUT[tut.i].next) { $('tutNext').click(); return; }
+  // 廣場：Enter 開聊天
   if (state === 'play' && plazaMode && isPlazaActive() && !e.repeat && (e.code === 'Enter' || e.key === 'Enter')) {
     e.preventDefault();
     if (document.pointerLockElement) document.exitPointerLock();
@@ -3505,9 +3507,50 @@ function npcShuck(n: Npc, dt: number, t: number) {
 
 // ---------- 主迴圈 ----------
 let baseFov = 70, narrow = false;
-function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); tpCam.aspect = camera.aspect; tpCam.updateProjectionMatrix();
-  narrow = camera.aspect < 0.8; baseFov = narrow ? 82 : 70; handRig.position.set(0, narrow ? -0.02 : 0, 0); handRig.scale.set(narrow ? 0.42 : 0.7, narrow ? 0.6 : 0.7, 0.7); }
-addEventListener('resize', resize); resize();
+/** 用畫布實際 CSS 盒徑算 buffer／相機比例（切 App 回來時 innerWidth 常短暫錯） */
+function viewSize() {
+  const cw = canvas.clientWidth | 0, ch = canvas.clientHeight | 0;
+  if (cw > 1 && ch > 1) return { w: cw, h: ch };
+  const vv = window.visualViewport;
+  const w = Math.round(vv?.width || innerWidth || 1);
+  const h = Math.round(vv?.height || innerHeight || 1);
+  return { w: Math.max(1, w), h: Math.max(1, h) };
+}
+function resize() {
+  const { w, h } = viewSize();
+  // 回前景時 DPR 偶爾變；與省電上限對齊
+  const dprCap = mix.eco ? (COARSE ? 1.25 : 1.5) : 2;
+  const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+  if (Math.abs(renderer.getPixelRatio() - dpr) > 1e-3) renderer.setPixelRatio(dpr);
+  const bufW = renderer.domElement.width, bufH = renderer.domElement.height;
+  const wantW = Math.max(1, Math.floor(w * dpr)), wantH = Math.max(1, Math.floor(h * dpr));
+  if (bufW !== wantW || bufH !== wantH) renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  tpCam.aspect = camera.aspect;
+  tpCam.updateProjectionMatrix();
+  narrow = camera.aspect < 0.8;
+  baseFov = narrow ? 82 : 70;
+  handRig.position.set(0, narrow ? -0.02 : 0, 0);
+  handRig.scale.set(narrow ? 0.42 : 0.7, narrow ? 0.6 : 0.7, 0.7);
+}
+/** 切 App／旋轉後連跑兩幀，等 layout／visualViewport 穩定 */
+function fixViewport() {
+  resize();
+  requestAnimationFrame(() => {
+    resize();
+    requestAnimationFrame(resize);
+  });
+}
+addEventListener('resize', resize);
+window.visualViewport?.addEventListener('resize', () => { resize(); });
+window.visualViewport?.addEventListener('scroll', () => { resize(); });
+addEventListener('orientationchange', () => {
+  setTimeout(fixViewport, 50);
+  setTimeout(fixViewport, 280);
+});
+addEventListener('pageshow', () => { fixViewport(); });
+resize();
 const clock = new THREE.Clock(); const v = new THREE.Vector3();
 let chatTimer = 2;
 const warnEl = $('warn');
@@ -3524,7 +3567,10 @@ function scheduleFrame() {
   requestAnimationFrame(frame);
 }
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && frameSleeping) { clock.getDelta(); lastDrawAt = 0; scheduleFrame(); }
+  if (!document.hidden) {
+    fixViewport();
+    if (frameSleeping) { clock.getDelta(); lastDrawAt = 0; scheduleFrame(); }
+  }
 });
 // 主迴圈出錯也不能停：停了計時、暫停、預警都會卡住
 function frame() { try { frameBody(); } catch (e) { if (frameErr++ < 3) console.error('frame', e); scheduleFrame(); } }
@@ -4385,8 +4431,9 @@ function camTick(dt: number) {
         posePlazaHangArms(rig);
       } else {
         const amp = Math.min(1, sp / 1.2);
-        const swing = posePlazaWalkCycle(rig, walkPh, amp);
-        if (sp > 0.25) posePlazaWalkSwingArms(rig, swing);
+        const swing = posePlazaWalkCycle(rig, walkPh, Math.max(0.15, amp));
+        // 走動維持ㄑ字彎肘；停住才自然下垂
+        if (sp > 0.12) posePlazaWalkSwingArms(rig, swing);
         else {
           posePlazaHangArms(rig);
           rig.torso.rotation.y *= 0.8; rig.torso.rotation.z *= 0.8; rig.torso.rotation.x *= 0.8;

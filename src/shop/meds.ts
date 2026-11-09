@@ -68,7 +68,7 @@ export function drawMeds() {
   if (el) el.innerHTML = medOn().map(m => `<span>${m.emo}${Math.ceil(medT[m.id])}s</span>`).join('') + (D.getSaltNext() ? '<span>🧂下一粒</span>' : '');
   const n = MEDS.reduce((a, m) => a + (save.meds[m.id] ?? 0), 0) + D.getItems().reduce((a, m) => a + (save.meds[m.id] ?? 0), 0);
   const b = document.getElementById('medBtn');
-  if (b) { b.innerHTML = '<i class="ic ic-pill"></i> 藥品/道具' + '<span class="key"> (M)</span>' + (n ? '' : '<small>去雜貨店買</small>'); b.classList.toggle('empty', !n); }
+  if (b) { b.innerHTML = '<i class="ic ic-pill"></i> 藥品/道具' + '<span class="key"> (N)</span>' + (n ? '' : '<small>去雜貨店買</small>'); b.classList.toggle('empty', !n); }
   const L = document.getElementById('medList'); if (L && L.classList.contains('show')) renderMedList();
 }
 
