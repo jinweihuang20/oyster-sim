@@ -1157,6 +1157,12 @@ function hashPid(pid: string) {
   function ensure(p: PlazaPlayer, selfPid: string): Remote | null {
     if (!p || !p.pid || p.pid === selfPid) return null;
     const pid = p.pid;
+    // 已移除的蚵堆（舊版伺服器仍會送那堆的阿婆）：不畫、清掉殘留
+    if ((p.isNpc || pid.startsWith('npc-')) && p.pileId != null && pileIsRemoved(p.pileId)) {
+      const old = findRemoteByPid(pid);
+      if (old) destroyRemote(old);
+      return null;
+    }
     // 以 pid 為唯一 key；掃掉同 pid 的舊 connId key／重複分身
     let r = findRemoteByPid(pid);
     if (!r && p.connId) {
