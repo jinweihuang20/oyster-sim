@@ -158,7 +158,7 @@ export function walkStep(dt: number) {
   const k = (c: string) => walkKeys.has(c) ? 1 : 0;
   let f = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - joy.y, r = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + joy.x;
   const l = Math.hypot(f, r); if (l > 1) { f /= l; r /= l; }
-  const moveSp = (D.isPlazaMode() ? 2.4 : 1.7) * walkTune.mul;
+  const moveSp = (D.isPlazaMode() ? 3.0 : 1.7) * walkTune.mul;
   walkMotion.spd = l * moveSp; walkMotion.strafe = r * moveSp;
   const yaw = D.getYaw();
   const prevX = walkPos.x, prevZ = walkPos.z;
