@@ -873,7 +873,20 @@ function syncPlazaPeopleHud() {
   const h = document.getElementById('onHud');
   const nEl = document.getElementById('onHudN');
   if (!h || !nEl) return;
+  // 手機橫向矮螢幕 #stats 會藏起來：在 #top 另放一份廣場人數（CSS 只在橫向顯示）
+  let top = document.getElementById('pzTopOn');
+  const topBar = document.getElementById('top');
+  if (!top && topBar) {
+    top = document.createElement('span');
+    top.id = 'pzTopOn';
+    top.className = 'hudItem';
+    const svg = h.querySelector('svg');
+    top.innerHTML = `${svg ? svg.outerHTML : ''}<span class="hudV" id="pzTopOnN">0</span>`;
+    const shop = topBar.querySelector('#shopBtn');
+    topBar.insertBefore(top, shop);
+  }
   if (!active) {
+    top?.classList.remove('on');
     delete h.dataset.plaza;
     h.style.display = 'none';
     h.removeAttribute('title');
@@ -889,6 +902,13 @@ function syncPlazaPeopleHud() {
   nEl.textContent = String(n);
   h.title = `廣場目前 ${n} 人（可坐 ${cap}）`;
   h.setAttribute('aria-label', h.title);
+  if (top) {
+    top.classList.add('on');
+    const tn = top.querySelector('#pzTopOnN');
+    if (tn) tn.textContent = String(n);
+    top.title = h.title;
+    top.setAttribute('aria-label', h.title);
+  }
 }
 
 /** 連線狀態條：坐下時也顯示（不跟 #pzHud 一起藏） */

@@ -1578,3 +1578,11 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
   #gauge.tw #fill{height:32px}
   #gauge.tw #fill .ic{width:30px;height:30px}
 }
+
+/* 廣場人數（#top 內）：只在手機橫向顯示；狀態列上緣對齊左上「地圖」鈕 */
+#pzTopOn{display:none!important}
+@media (pointer:coarse) and (orientation:landscape){
+ #top #pzTopOn.on{display:inline-flex!important;align-items:center;gap:3px;color:#9fe0a8;font-weight:800}
+ #top #pzTopOn svg{width:15px;height:15px}
+ body.plazaMode #top,body.plazaRoam #top{top:calc(env(safe-area-inset-top,0px) + 4px)}
+}
