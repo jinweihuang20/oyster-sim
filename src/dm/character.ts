@@ -247,23 +247,24 @@ export function posePlazaHangArms(rig: PlayerRig, sit = false) {
  * @returns stride（給擺臂用，左腿前為正）
  */
 export function posePlazaWalkCycle(rig: PlayerRig, ph: number, amp: number): number {
-  const a = Math.min(1, Math.max(0, amp));
+  // 壓低幅度：走路感，避免像跑步
+  const a = Math.min(1, Math.max(0, amp)) * 0.72;
   const stride = Math.sin(ph) * a;
   const stride2 = Math.sin(ph * 2);
-  // 大腿跨步（幅度收斂，減少晃）
-  rig.legL.rotation.x = stride * 0.5;
-  rig.legR.rotation.x = -stride * 0.5;
-  // 膝蓋：shin 負向才是向前彎（與蹲姿／坐姿同號）；後腿抬起時多彎
-  const baseKnee = 0.04 + 0.04 * a;
-  const liftL = Math.max(0, -Math.sin(ph)) * 0.4 * a;
-  const liftR = Math.max(0, Math.sin(ph)) * 0.4 * a;
+  // 大腿小跨步
+  rig.legL.rotation.x = stride * 0.32;
+  rig.legR.rotation.x = -stride * 0.32;
+  // 膝蓋：shin 負向才是向前彎；抬腿輕彎即可
+  const baseKnee = 0.05 + 0.03 * a;
+  const liftL = Math.max(0, -Math.sin(ph)) * 0.22 * a;
+  const liftR = Math.max(0, Math.sin(ph)) * 0.22 * a;
   rig.shinL.rotation.x = -(baseKnee + liftL);
   rig.shinR.rotation.x = -(baseKnee + liftR);
-  // 身體輕顛＋輕扭（壓低避免「整個人在晃」）
-  rig.root.position.y = Math.abs(stride2) * 0.018 * a;
-  rig.torso.rotation.y = stride * 0.05;
-  rig.torso.rotation.z = stride * -0.03;
-  rig.torso.rotation.x = -0.02 * a;
+  // 身體輕顛＋輕扭
+  rig.root.position.y = Math.abs(stride2) * 0.01 * a;
+  rig.torso.rotation.y = stride * 0.03;
+  rig.torso.rotation.z = stride * -0.02;
+  rig.torso.rotation.x = -0.015 * a;
   return stride;
 }
 
@@ -323,8 +324,8 @@ export function posePlazaJump(rig: PlayerRig, elapsed: number) {
 }
 
 /**
- * 廣場走路擺臂：全程保持ㄑ字彎肘（上臂略後下、前臂往前），
- * 與腿反向輕擺（swing>0＝左腿前→右臂較前）；前＝負 Z。
+ * 廣場走路擺臂：接近真人散步——臂大致下垂、肘自然微彎（約 20°），
+ * 前後輕擺；勿抬肘／前臂近水平（那像跑步）。swing>0＝左腿前→右臂略前；前＝負 Z。
  */
 export function posePlazaWalkSwingArms(rig: PlayerRig, swing: number) {
   rig.weaponMount.visible = false;
@@ -332,21 +333,24 @@ export function posePlazaWalkSwingArms(rig: PlayerRig, swing: number) {
   rig.handR.visible = false;
   rig.shoulderL.rotation.set(0, 0, 0);
   if (rig.shoulderR) rig.shoulderR.rotation.set(0, 0, 0);
-  const amp = 0.2;
-  // fwd>0＝該臂較往前
-  const fwdL = -swing * amp;
-  const fwdR = swing * amp;
+  const s = Math.max(-1, Math.min(1, swing));
+  // 擺幅適中：跟腿對側、像散步不是甩臂
+  const amp = 0.12;
+  const fwdL = -s * amp;
+  const fwdR = s * amp;
   const hangSwing = (upper: THREE.Group, lower: THREE.Group, side: number, fwd: number) => {
     const shx = side * 0.22, shy = 0.30, shz = 0;
-    const out = side * 0.05;
-    // 肘：上臂往下略後，形成ㄑ的轉折點
+    const out = side * 0.04;
+    // 上臂幾乎下垂，隨步伐前後；肘略低於肩
     const elbowX = shx + out;
-    const elbowY = shy - 0.13;
-    const elbowZ = shz + 0.05 - fwd * 0.55;
-    // 腕：固定比肘更靠前、高度接近肘 → 前臂近水平，維持ㄑ字
-    const wristX = elbowX + out * 0.2;
-    const wristY = elbowY - 0.03;
-    const wristZ = elbowZ - 0.24;
+    const elbowY = shy - 0.23;
+    const elbowZ = shz - (0.06 + fwd);
+    // 前臂再往下並略往前 → 自然微彎肘（非水平ㄑ）
+    // 手臂往後時肘略多彎一點（真人 gait）
+    const back = Math.max(0, -fwd);
+    const wristX = elbowX + out * 0.35;
+    const wristY = elbowY - (0.17 - back * 0.04);
+    const wristZ = elbowZ - (0.12 + back * 0.04);
     placePlazaArmChain(upper, lower, shx, shy, shz, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
   };
   hangSwing(rig.upperL, rig.lowerL, -1, fwdL);

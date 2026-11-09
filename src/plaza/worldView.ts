@@ -1121,9 +1121,9 @@ function hashPid(pid: string) {
           posePlazaJump(r.rig, jumpElapsed);
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
         } else if (wantWalk) {
-          r.bob += Math.min(moveSp, 3) * dt * 5;
-          const swing = posePlazaWalkCycle(r.rig, r.bob, Math.max(0.2, walkAmp));
-          // 走動一律ㄑ字彎肘擺臂（勿切回直臂下垂）
+          // 相位放慢、幅度封頂，遠端不要像在跑步
+          r.bob += Math.min(moveSp, 2.2) * dt * 3.2;
+          const swing = posePlazaWalkCycle(r.rig, r.bob, Math.min(0.75, Math.max(0.25, walkAmp)));
           if (r.throwT <= 0) { swingArms(r, swing); hideHold(r); }
         } else if (!r.seated) {
           r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
