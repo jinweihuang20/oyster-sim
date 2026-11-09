@@ -60,7 +60,7 @@ import {
   plazaToggleMap, plazaCloseMap, plazaMapIsOpen, seatPose, plazaPushOutfit,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
-import { makeFpCigarette, type FpCigarette } from './plaza/fireFx';
+import { makeFpCigarette, makeExhalePuff, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
@@ -2262,9 +2262,10 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyQ') giveUp();
   if (e.code === 'KeyF') throwShell();
   if (e.code === 'KeyR' && !e.repeat) openUmbrella();
+  if (e.code === 'KeyT' && !e.repeat) startPuff();
   if (e.code === 'KeyE' && !e.repeat) startSteal();
 });
-window.addEventListener('keyup', e => { walkKeys.delete(e.code); if (e.code === 'Space') release(); if (/Key[AD]|Arrow(Left|Right)/.test(e.code)) rotKey = 0; if (e.code === 'KeyE') stopSteal(); if (e.code === 'KeyR') closeUmbrella(); });
+window.addEventListener('keyup', e => { walkKeys.delete(e.code); if (e.code === 'Space') release(); if (/Key[AD]|Arrow(Left|Right)/.test(e.code)) rotKey = 0; if (e.code === 'KeyE') stopSteal(); if (e.code === 'KeyR') closeUmbrella(); if (e.code === 'KeyT') endPuff(); });
 // 換畫面後 350ms 內忽略點擊，防止放開觸發後的合成 click 穿透到新畫面同位置的按鈕
 let guardUntil = 0;
 function inputGuard() { guardUntil = performance.now() + 350; }
@@ -2314,7 +2315,7 @@ $('bmGo').onclick = () => { void (async () => {
     },
   });
 })(); };
-$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (plazaMode) void plazaTrySit(); else if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
+$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (plazaMode) void plazaTrySit(); else if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('puffBtn', startPuff, endPuff); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('puffBtn').addEventListener(ev, endPuff); addEventListener('blur', endPuff); document.addEventListener('visibilitychange', () => { if (document.hidden) endPuff(); }); $('puffBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
@@ -2804,6 +2805,127 @@ function disposeFpCigarette() {
   smokeSitActive = false;
 }
 
+/** 吸菸區第一人稱「抽一口」：按住倒數同開傘，手往鏡頭靠，放開後吐煙 */
+const PUFF_HOLD_MAX = 5;
+const PUFF_MIN_HOLD = 0.3;
+let puffHeld = false;
+let puffT = 0;
+let puffPoseK = 0;
+let puffStrength = 0;
+let puffReleaseAt = 0;
+const puffExhales: { fx: CharcoalFireFx; age: number; life: number }[] = [];
+const PUFF_HAND_REST = { x: 0.2, y: -0.26, z: -0.45, rx: 0.3, ry: 0.5, rz: -0.2 };
+const PUFF_HAND_MOUTH = { x: 0.04, y: -0.06, z: -0.2, rx: 0.55, ry: 0.12, rz: -0.4 };
+
+function clearPuffExhales() {
+  for (const e of puffExhales) {
+    try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
+    e.fx.dispose();
+  }
+  puffExhales.length = 0;
+}
+function cancelPuff(opts?: { keepPose?: boolean }) {
+  puffHeld = false;
+  puffT = 0;
+  puffStrength = 0;
+  puffReleaseAt = 0;
+  if (!opts?.keepPose) puffPoseK = 0;
+  const b = document.getElementById('puffBtn');
+  const c = document.getElementById('puffCd');
+  if (b) { b.classList.remove('held', 'low'); b.style.removeProperty('--p'); }
+  if (c) c.textContent = '';
+}
+function startPuff() {
+  if (state !== 'play' || !smokeSitActive || tpv || puffHeld) return;
+  puffHeld = true;
+  puffT = 0;
+  puffReleaseAt = 0;
+  $('puffBtn').classList.add('held');
+  $('puffBtn').classList.remove('low');
+}
+function endPuff() {
+  if (!puffHeld) return;
+  const held = puffT;
+  puffHeld = false;
+  const b = $('puffBtn'), c = $('puffCd');
+  b.classList.remove('held', 'low');
+  c.textContent = '';
+  b.style.removeProperty('--p');
+  if (held < PUFF_MIN_HOLD || !smokeSitActive || tpv) {
+    puffStrength = 0;
+    puffReleaseAt = 0;
+    return;
+  }
+  puffStrength = Math.min(1, held / PUFF_HOLD_MAX);
+  puffReleaseAt = performance.now();
+}
+function spawnExhalePuff(strength: number) {
+  if (!smokeSitActive || tpv || strength <= 0) return;
+  const sc = 0.35 + strength * 1.15;
+  const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 5100 + Math.floor(Math.random() * 4000) });
+  // 鏡頭前方略下（嘴前）
+  fx.group.position.set(0.02, -0.04, -0.28);
+  camera.add(fx.group);
+  puffExhales.push({ fx, age: 0, life: 2.4 });
+}
+function tickPuffUi(rdt: number) {
+  const show = smokeSitActive && !tpv && state === 'play';
+  on('puffBtn', show);
+  if (!show) {
+    if (puffHeld || puffReleaseAt) cancelPuff();
+    return;
+  }
+  if (puffHeld) {
+    puffT = Math.min(PUFF_HOLD_MAX, puffT + rdt);
+    const rem = PUFF_HOLD_MAX - puffT;
+    const b = $('puffBtn'), c = $('puffCd');
+    b.style.setProperty('--p', `${((rem / PUFF_HOLD_MAX) * 100).toFixed(1)}%`);
+    c.textContent = `${rem.toFixed(1)}s`;
+    b.classList.toggle('low', rem < 1.2);
+  }
+  // 手姿：按住時約 1.2s 靠到嘴邊；放開平滑收回
+  const want = puffHeld ? Math.min(1, puffT / 1.2) : 0;
+  puffPoseK += (want - puffPoseK) * Math.min(1, rdt * 7);
+  // 放開後 1 秒吐煙
+  if (puffReleaseAt && performance.now() - puffReleaseAt >= 1000) {
+    const s = puffStrength;
+    puffReleaseAt = 0;
+    puffStrength = 0;
+    spawnExhalePuff(s);
+  }
+  // 吐煙粒子
+  for (let i = puffExhales.length - 1; i >= 0; i--) {
+    const e = puffExhales[i];
+    e.age += rdt;
+    e.fx.tick(performance.now() * 0.001, rdt);
+    if (e.age >= e.life) {
+      try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
+      e.fx.dispose();
+      puffExhales.splice(i, 1);
+    }
+  }
+}
+function applyPuffHandPose() {
+  if (!smokeSitActive || puffPoseK < 0.001) return;
+  const k = puffPoseK;
+  const a = PUFF_HAND_REST, b = PUFF_HAND_MOUTH;
+  handR.position.set(
+    a.x + (b.x - a.x) * k,
+    a.y + (b.y - a.y) * k,
+    a.z + (b.z - a.z) * k,
+  );
+  handR.rotation.set(
+    a.rx + (b.rx - a.rx) * k,
+    a.ry + (b.ry - a.ry) * k,
+    a.rz + (b.rz - a.rz) * k,
+  );
+  if (fpCig && k > 0.01) {
+    const tip = fpCig.tip as THREE.Mesh;
+    const m = tip.material as THREE.MeshStandardMaterial;
+    m.emissiveIntensity = 0.75 + Math.sin(performance.now() * 0.0075) * 0.2 + k * 1.35;
+  }
+}
+
 /** 廣場坐下：強制第一人稱（不寫入存檔偏好；站起再還原） */
 function plazaEnsureFpView() {
   if (!tpv) { drawCamBtn(); return; }
@@ -2821,6 +2943,8 @@ function clearPlazaLeaveUi() {
   on('standBtn', false);
   on('sitBtn', false);
   setSmokeSitHands(false);
+  cancelPuff();
+  clearPuffExhales();
   disposeFpCigarette();
   handRig.visible = true;
   document.body.classList.remove('plazaRoam', 'plazaSmokeSit');
@@ -3089,6 +3213,8 @@ function launchPlaza() {
       document.body.classList.add('plazaRoam');
       document.body.classList.remove('plazaSmokeSit');
       setSmokeSitHands(false);
+      cancelPuff();
+      clearPuffExhales();
       disposeFpCigarette();
       plazaEnterWalkPose(true);
       on('camBtn', COARSE);
@@ -3327,6 +3453,7 @@ function frameBody() {
   tickToast(rdt);
   tension = Math.max(0, tension - rdt * 1.6);
   if (umbHeld) { umbT = Math.max(0, umbT - rdt); if (umbT <= 0) { umbHeld = false; umbTired = true; $('umbBtn').classList.remove('held'); toast('手痠了，放開再重新撐傘', '#ffcf8a'); } } else umbT = 0; $('umbBtn').classList.toggle('cd', umbTired); { const b = $('umbBtn'), c = $('umbCd'); if (umbHeld) { const f = umbT / Math.max(0.1, umbLen); b.style.setProperty('--p', `${(f * 100).toFixed(1)}%`); c.textContent = `${umbT.toFixed(1)}s`; b.classList.toggle('low', umbT < 1.2); } else { c.textContent = ''; b.classList.remove('low'); } }
+  tickPuffUi(rdt);
   const us = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0; umbS = us; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
   let warnNpc: Npc | null = null;
   if (state === 'play') {
@@ -3493,6 +3620,7 @@ function frameBody() {
   if (phase === 'crab') handL.position.x += Math.sin(t * 30) * 0.02;
   reach = Math.max(0, reach - rdt); const rk = Math.sin(Math.min(1, reach / 0.35) * Math.PI); handL.position.z -= rk * 0.18; handL.position.y -= rk * 0.12;
   if (phase === 'scoop') { const sk = Math.sin(t * 6); handL.position.z -= 0.2 + sk * 0.05; handR.position.z = -0.6 + sk * 0.05; handL.position.y += 0.05; } else handR.position.z = -0.45;
+  applyPuffHandPose();
   // 找縫／撬殼：右手把刀尖帶到左手蚵仔的殼縫上（平滑靠近）
   { const want = !plazaOnGrill() && (phase === 'seam' || phase === 'twist') && oyster.visible ? 1 : 0; knifeK += (want - knifeK) * Math.min(1, rdt * 8);
     if (plazaOnGrill()) { knife.visible = false; knifeK = 0; }
@@ -3828,6 +3956,7 @@ function applyOutfit3() {
 }
 function setTpv(v: boolean) {
   tpv = v;
+  if (v) cancelPuff();
   if (plazaForceTp) plazaForceTp = false; // 玩家手動切換，之後跟存檔偏好
   if (plazaMode && !walking) {
     // 第三人稱：鏡頭從角色背後開始繞；切回第一人稱：相對座位轉頭歸零

@@ -481,3 +481,69 @@ export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette
     },
   };
 }
+
+/** 第一人稱吐煙：一坨較濃的煙，往前／上飄散後淡出（單次，用完 dispose） */
+export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: number } = {}): CharcoalFireFx {
+  const rn = rng(opts.seed ?? (9000 + Math.floor(Math.random() * 8000)));
+  const sc = Math.max(0.15, opts.scale ?? 1);
+  const n = Math.max(4, opts.count ?? Math.round(8 + sc * 6));
+  const group = new THREE.Group();
+  group.name = 'exhalePuff';
+  type S = { mesh: THREE.Mesh; age: number; life: number; vx: number; vy: number; vz: number; base: number };
+  const smokes: S[] = [];
+  for (let i = 0; i < n; i++) {
+    const mat = smokeMat.clone();
+    mat.opacity = 0.28;
+    mat.color.setHex(0xb0ada8);
+    const mesh = new THREE.Mesh(smokeGeo, mat);
+    mesh.userData.sharedGeo = true;
+    mesh.renderOrder = 3;
+    mesh.visible = true;
+    group.add(mesh);
+    const ang = rn() * Math.PI * 2;
+    const rad = 0.02 + rn() * 0.05 * sc;
+    smokes.push({
+      mesh,
+      age: rn() * 0.08,
+      life: 1.4 + rn() * 1.1,
+      vx: Math.cos(ang) * 0.04 * sc + (rn() - 0.5) * 0.03,
+      vy: 0.12 + rn() * 0.18 * sc,
+      // 相機空間往前（-Z）
+      vz: -(0.22 + rn() * 0.28) * sc,
+      base: 0.1 * sc + rn() * 0.12 * sc,
+    });
+    mesh.position.set(Math.cos(ang) * rad, (rn() - 0.3) * 0.04, -0.02 - rn() * 0.04);
+    mesh.scale.setScalar(smokes[i].base);
+  }
+  return {
+    group,
+    light: null,
+    tick: (_t, dt) => {
+      const step = Math.min(0.05, Math.max(0, dt));
+      for (const s of smokes) {
+        s.age += step;
+        if (s.age >= s.life) {
+          s.mesh.visible = false;
+          continue;
+        }
+        const u = s.age / s.life;
+        s.mesh.position.x += s.vx * step;
+        s.mesh.position.y += s.vy * step;
+        s.mesh.position.z += s.vz * step;
+        s.mesh.scale.setScalar(s.base * (1 + u * 2.4));
+        const m = s.mesh.material as THREE.MeshBasicMaterial;
+        // 先略濃再淡
+        const fade = u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85;
+        m.opacity = 0.32 * sc * Math.max(0, fade);
+        s.mesh.visible = m.opacity > 0.01;
+      }
+    },
+    dispose: () => {
+      for (const s of smokes) {
+        const m = s.mesh.material as THREE.Material;
+        if (!s.mesh.userData.sharedMat) m.dispose();
+      }
+      group.clear();
+    },
+  };
+}

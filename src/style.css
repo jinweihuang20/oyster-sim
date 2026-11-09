@@ -326,9 +326,11 @@ body.tutOn .ntag{display:none!important}
 }
 
 /* 撐傘倒數 */
-#umbBtn{position:relative;overflow:hidden}#umbCd{margin-left:6px;font-variant-numeric:tabular-nums;font-size:.85em}
+#umbBtn,#puffBtn{position:relative;overflow:hidden}#umbCd,#puffCd{margin-left:6px;font-variant-numeric:tabular-nums;font-size:.85em}
 #umbBtn.held{background:linear-gradient(90deg,#2e9e4f var(--p,100%),rgba(30,60,40,.9) var(--p,100%))!important}
 #umbBtn.held.low{background:linear-gradient(90deg,#e0392b var(--p,100%),rgba(70,20,20,.9) var(--p,100%))!important;animation:ulow .3s infinite alternate}
+#puffBtn.held{background:linear-gradient(90deg,#2e9e4f var(--p,100%),rgba(30,60,40,.9) var(--p,100%))!important}
+#puffBtn.held.low{background:linear-gradient(90deg,#e0392b var(--p,100%),rgba(70,20,20,.9) var(--p,100%))!important;animation:ulow .3s infinite alternate}
 @keyframes ulow{to{filter:brightness(1.35)}}
 #shopTabs button{overflow:visible!important;text-overflow:clip!important;padding:4px 2px!important;font-size:14px!important;line-height:1.15;white-space:normal!important;word-break:keep-all!important;min-width:56px!important}
 #shopTabs .ti{display:block;font-size:16px}#shopTabs .tl{display:block;white-space:nowrap}
@@ -957,7 +959,7 @@ body.plazaMode #top,body.plazaMode #stats,body.plazaRoam #top,body.plazaRoam #st
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
 /* 吸菸區坐下：仍屬 plazaRoam（藏剝蚵鈕），但要顯示站起／回主選單（與一般座位同款） */
-body.plazaRoam.plazaSmokeSit #standBtn.on,body.plazaRoam.plazaSmokeSit #quitBtn.on{visibility:visible!important;pointer-events:auto!important;display:block!important}
+body.plazaRoam.plazaSmokeSit #standBtn.on,body.plazaRoam.plazaSmokeSit #quitBtn.on,body.plazaRoam.plazaSmokeSit #puffBtn.on{visibility:visible!important;pointer-events:auto!important;display:block!important}
 /* 電腦廣場：視角用 V，隱藏右下視角鈕 */
 @media (pointer:fine){
   body.plazaMode #camBtn,body.plazaRoam #camBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
@@ -1380,6 +1382,8 @@ body #locPick button.loc:not(.locPlaza):disabled,body #locPick button.loc.lock:n
 /* 撐傘倒數條：要寫在毛玻璃底色之後，不然會被蓋掉 */
 #umbBtn.held,#btns #umbBtn.held:active{background:linear-gradient(90deg,rgba(46,158,79,.78) var(--p,100%),rgba(22,28,36,.55) var(--p,100%))!important;border-color:rgba(185,255,176,.45)!important}
 #umbBtn.held.low,#btns #umbBtn.held.low:active{background:linear-gradient(90deg,rgba(224,57,43,.8) var(--p,100%),rgba(22,28,36,.55) var(--p,100%))!important}
+#puffBtn.held,#btns #puffBtn.held:active{background:linear-gradient(90deg,rgba(46,158,79,.78) var(--p,100%),rgba(22,28,36,.55) var(--p,100%))!important;border-color:rgba(185,255,176,.45)!important}
+#puffBtn.held.low,#btns #puffBtn.held.low:active{background:linear-gradient(90deg,rgba(224,57,43,.8) var(--p,100%),rgba(22,28,36,.55) var(--p,100%))!important}
 
 /* ===== 剝蚵中頂列：深色毛玻璃 ===== */
 #top{background:rgba(22,28,36,.55)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.18)!important;border-radius:14px!important;box-shadow:0 4px 14px rgba(0,0,0,.22)!important;color:#f2f4f7!important}
