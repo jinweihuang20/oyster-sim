@@ -15,6 +15,22 @@ export const SMOKE_PILE_ID = 100;
 export const SMOKE_SEAT_COUNT = 4;
 export const SMOKE_CENTER = { x: -12.0, z: -2.6 } as const;
 export const isSmokePile = (pileId: number) => pileId === SMOKE_PILE_ID;
+/** 吸菸區氣氛 NPC 椅（非玩家位；伺服器座位仍 0..SMOKE_SEAT_COUNT-1） */
+/** 南側外緣：離玩家凳／菸灰缸／棚柱皆 ≥~1.6，不擋東側入座 */
+export const SMOKE_NPC_ANGLE = -Math.PI / 2;
+export const SMOKE_NPC_RADIUS = 2.5;
+export function smokeNpcSeatPose() {
+  const center = new THREE.Vector3(SMOKE_CENTER.x, 0, SMOKE_CENTER.z);
+  const a = SMOKE_NPC_ANGLE;
+  const radius = SMOKE_NPC_RADIUS;
+  const pos = new THREE.Vector3(
+    center.x + Math.cos(a) * radius,
+    0,
+    center.z + Math.sin(a) * radius,
+  );
+  const yaw = Math.atan2(pos.x - center.x, pos.z - center.z);
+  return { pos, yaw, center, angle: a };
+}
 export const PLAZA_CAPACITY = PILE_COUNT * SLOTS_PER_PILE;
 export const PILE_SPACING = 5.2;
 /** 椅子離堆心距離（貼近蚵堆；身體靠 hangArms／後仰避免埋進堆裡） */
@@ -125,9 +141,12 @@ export const SMOKE_ASHTRAY_RADIUS = 0.22;
 /** 吸菸區碰撞（棚外大圈＋菸灰缸柱；菸灰缸勿擋東側入座路徑） */
 export function plazaSmokeObstacles(): [number, number, number][] {
   const { x, z } = SMOKE_CENTER;
+  const npc = smokeNpcSeatPose();
   return [
     [x, z, 1.55],
     ...SMOKE_ASHTRAY_XZ.map(([dx, dz]) => [x + dx, z + dz, SMOKE_ASHTRAY_RADIUS] as [number, number, number]),
+    // NPC 圓凳（玩家不可坐，但仍擋路）
+    [npc.pos.x, npc.pos.z, 0.38],
   ];
 }
 

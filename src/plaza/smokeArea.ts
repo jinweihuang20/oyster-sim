@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
-import { SMOKE_CENTER, SMOKE_SEAT_COUNT, SMOKE_PILE_ID, SMOKE_ASHTRAY_XZ, SMOKE_ASHTRAY_TOP_Y, seatPose, seatKey, plazaSmokeObstacles } from './layout';
+import { SMOKE_CENTER, SMOKE_SEAT_COUNT, SMOKE_PILE_ID, SMOKE_ASHTRAY_XZ, SMOKE_ASHTRAY_TOP_Y, seatPose, seatKey, plazaSmokeObstacles, smokeNpcSeatPose } from './layout';
 import { makePlazaChair } from './props';
 import { makeCigSmoke, type CharcoalFireFx } from './fireFx';
 
@@ -64,7 +64,7 @@ export function makePlazaSmokeArea(
     root.add(g);
     const edge = M(0x2a5a86, { roughness: 0.55, metalness: 0.05 });
     const dash = M(0xc8d0d8, { roughness: 0.85 });
-    const half = 1.85;
+    const half = 2.55;
     // outer accent rim
     add(rboxEnv(half * 2 + 0.08, 0.02, 0.06), edge, [0, 0, -half], g, false);
     add(rboxEnv(half * 2 + 0.08, 0.02, 0.06), edge, [0, 0, half], g, false);
@@ -95,10 +95,10 @@ export function makePlazaSmokeArea(
   {
     const wood = M(0x5a5e62, { roughness: 0.88 });
     const tarp = M(0x6a7884, { side: THREE.DoubleSide, roughness: 0.78 });
-    for (const [sx, sz] of [[-0.95, -0.95], [0.95, -0.95], [-0.95, 0.95], [0.95, 0.95]] as const) {
+    for (const [sx, sz] of [[-1.15, -1.35], [1.15, -1.35], [-1.15, 1.35], [1.15, 1.35]] as const) {
       add(rcyl(0.04, 0.045, 2.05, segs), wood, [cx + sx, 1.02, cz + sz], root, true);
     }
-    const roof = add(rboxEnv(2.15, 0.035, 2.15), tarp, [cx, 2.08, cz], root, false);
+    const roof = add(rboxEnv(2.55, 0.035, 2.95), tarp, [cx, 2.08, cz], root, false);
     roof.rotation.x = -0.04;
   }
 
@@ -134,12 +134,18 @@ export function makePlazaSmokeArea(
     root.add(sign);
   }
 
-  // 座位（塑膠圓凳，朝區心）
+  // 座位（塑膠圓凳，朝區心）；僅 0..SMOKE_SEAT_COUNT-1 可坐
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) {
     const pose = seatPose(SMOKE_PILE_ID, s);
     const { group, pad } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
     root.add(group);
     seatPads.set(seatKey(SMOKE_PILE_ID, s), pad);
+  }
+  // 氣氛 NPC 專用椅（不進 seatPads → 無入座提示）
+  {
+    const pose = smokeNpcSeatPose();
+    const { group } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
+    root.add(group);
   }
 
   // 區內淡煙氣氛
