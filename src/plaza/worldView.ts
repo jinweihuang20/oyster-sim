@@ -369,12 +369,13 @@ export function createPlazaWorldView(
       sn.animT = 1;
       if (sn.holdT >= sn.holdDur) {
         sn.phase = 'down';
-        sn.awayT = 1;
+        sn.awayT = 0;
         sn.releaseAt = now;
       }
     } else if (sn.phase === 'down') {
-      if (sn.awayT > 0) sn.awayT = Math.max(0, sn.awayT - dt / 0.12);
-      else sn.animT = Math.max(0, sn.animT - dt / 0.5);
+      // 放開：一邊放下一邊略離嘴，不再先彈回嘴邊
+      sn.animT = Math.max(0, sn.animT - dt / 0.5);
+      sn.awayT = sn.animT > 0 ? Math.min(1, sn.awayT + dt / 0.12) : 0;
       if (sn.releaseAt && now - sn.releaseAt >= 1000) {
         const ms = sn.holdMs;
         sn.releaseAt = 0;
@@ -952,7 +953,7 @@ function hashPid(pid: string) {
     r.puff = {
       held: false,
       animT,
-      awayT: 1,
+      awayT: 0,
       holdMs,
       autoEndAt: 0,
       releaseAt: holdMs >= REMOTE_PUFF_MIN_HOLD_MS ? now : 0,
@@ -982,17 +983,16 @@ function hashPid(pid: string) {
     if (pf.held && pf.autoEndAt && now >= pf.autoEndAt) {
       // 缺 end：逾時自動放下（不吐煙）
       pf.held = false;
-      pf.awayT = 1;
       pf.releaseAt = 0;
       pf.exhaled = true;
       pf.autoEndAt = 0;
     }
     if (pf.held) {
       pf.animT = Math.min(1, pf.animT + dt / REMOTE_PUFF_UP);
-      pf.awayT = 0;
+      pf.awayT = Math.max(0, pf.awayT - dt / 0.2);
     } else {
-      if (pf.awayT > 0) pf.awayT = Math.max(0, pf.awayT - dt / REMOTE_PUFF_AWAY);
-      else pf.animT = Math.max(0, pf.animT - dt / REMOTE_PUFF_DOWN);
+      pf.animT = Math.max(0, pf.animT - dt / REMOTE_PUFF_DOWN);
+      pf.awayT = pf.animT > 0 ? Math.min(1, pf.awayT + dt / REMOTE_PUFF_AWAY) : 0;
     }
     if (pf.releaseAt && !pf.exhaled && now - pf.releaseAt >= 1000) {
       pf.exhaled = true;
