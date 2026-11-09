@@ -1153,11 +1153,10 @@ function hashPid(pid: string) {
       if (r.seated || r.awaitingPose || !r.rig.outer.visible) continue;
       const ph = r.phase || '';
       if (ph === 'lie') {
-        // 躺平後身體沿面向伸長：腳／腰／頭三段圓
-        const fx = -Math.sin(r.yaw), fz = -Math.cos(r.yaw);
-        out.push([r.x, r.z, 0.32]);
-        out.push([r.x + fx * 0.55, r.z + fz * 0.55, 0.36]);
-        out.push([r.x + fx * 1.05, r.z + fz * 1.05, 0.32]);
+        // outer.Rx=+π/2 後身體沿 +Z 倒地，再經 yaw 變成 (sin,cos)＝面向的反方向（頭在腳後方）
+        const bx = Math.sin(r.yaw), bz = Math.cos(r.yaw);
+        for (const [t, rr] of [[0, 0.34], [0.35, 0.38], [0.7, 0.4], [1.05, 0.36], [1.35, 0.32]] as const)
+          out.push([r.x + bx * t, r.z + bz * t, rr]);
       } else if (ph === 'crouch') {
         out.push([r.x, r.z, 0.45]); // 蹲時膝蓋前伸，略加大
       } else {
