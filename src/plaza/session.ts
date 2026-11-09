@@ -634,8 +634,8 @@ function buildUi() {
 #pzX{pointer-events:auto;position:absolute;top:auto;bottom:calc(env(safe-area-inset-bottom) + 18px);right:calc(env(safe-area-inset-right) + 12px);left:auto;min-width:42px;height:44px;padding:0 14px;font-size:14px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:12px;font-weight:800;white-space:nowrap;box-shadow:2px 2px 0 #1b1208}
 #pzX.hide{display:none}
 @media (pointer:coarse){#pzX{bottom:calc(env(safe-area-inset-bottom) + 16px);right:calc(env(safe-area-inset-right) + 12px);min-height:48px;padding:0 16px;font-size:15px}}
-/* 橫向矮屏視角鈕也在右下，離開鈕改疊在上方 */
-@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#pzX{bottom:calc(env(safe-area-inset-bottom) + 68px)}}
+/* 橫向：視角在狀態列，離開鈕可靠底 */
+@media (pointer:coarse) and (orientation:landscape){#pzX{bottom:calc(env(safe-area-inset-bottom) + 10px);min-height:40px;padding:0 12px;font-size:13px}}
 /* 聊天放左側，避開右下雨傘／丟殼／偷 */
 #pzChatFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 168px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
 #pzChatFab .pzBadge{display:none;position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e23b2f;color:#fff;font-size:11px;font-weight:900;line-height:18px;text-align:center;box-shadow:0 1px 0 #1b1208;pointer-events:none}
@@ -674,12 +674,14 @@ function buildUi() {
 /* 地圖：左下聊天上方；開圖時全螢幕半透明＋中央畫布 */
 /* 左上：狀態列（#top／#stats）下方 */
 /* z-index 低於聊天／離開；狀態列另在 style.css 抬到 plazaRoot 之上 */
-/* 直向手機：狀態列下方；桌面／橫向：畫面左上角 */
+/* 直向手機：狀態列下方；桌面／橫向：與 #top 同一列左側（地圖-狀態列） */
 #pzMapFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;top:calc(env(safe-area-inset-top) + 118px);bottom:auto;z-index:1;min-width:48px;height:44px;padding:0 12px;border:1.5px solid rgba(232,246,255,.35);border-radius:12px;background:rgba(32,72,96,.48);color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 #pzMapFab:active{background:rgba(32,72,96,.62)}
 #pzMapFab .ic{background:currentColor}
-@media (pointer:fine){#pzMapFab{top:calc(env(safe-area-inset-top) + 10px);left:calc(env(safe-area-inset-left) + 10px)}}
-@media (pointer:coarse) and (orientation:landscape){#pzMapFab{top:calc(env(safe-area-inset-top) + 10px);left:calc(env(safe-area-inset-left) + 10px)}}
+@media (pointer:fine){#pzMapFab{top:calc(env(safe-area-inset-top) + 14px);left:calc(env(safe-area-inset-left) + 10px);height:44px;z-index:2}}
+@media (pointer:coarse) and (orientation:landscape){
+  #pzMapFab{top:calc(env(safe-area-inset-top) + 4px);left:calc(env(safe-area-inset-left) + 8px);height:40px;min-width:44px;padding:0 10px;font-size:13px;z-index:2}
+}
 #pzMap{display:none;pointer-events:auto;position:absolute;inset:0;z-index:6;background:rgba(8,10,12,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px)}
 #pzMap.open{display:flex;flex-direction:column;gap:10px}
 #pzMapHd{display:flex;align-items:center;justify-content:space-between;gap:10px;width:min(92vw,420px);color:#ffe6b0;font-weight:900;font-size:16px}
@@ -1006,12 +1008,13 @@ function pushChat(m: PlazaChat) {
   }
 }
 
-/** 手機坐著時：聊天鈕移到「藥品／道具」正上方，聊天窗／預覽／地圖跟著往上 */
+/** 手機直向坐著時：聊天鈕移到「藥品／道具」正上方；橫向／桌面地圖用 top，勿設 bottom 以免撐高跑版 */
 let fabB = '';
 function placeChatFab() {
   if (!ui) return;
+  const portraitPhone = matchMedia('(pointer:coarse) and (orientation:portrait)').matches;
   let b = '';
-  if (seated && matchMedia('(pointer:coarse)').matches) {
+  if (seated && portraitPhone) {
     const med = document.getElementById('medBtn');
     const r = med?.getBoundingClientRect();
     if (r && r.height > 0) b = `${Math.round(innerHeight - r.top + 8)}px`;
@@ -1023,11 +1026,19 @@ function placeChatFab() {
   const chat = ui.querySelector('#pzChat') as HTMLElement | null;
   const mapFab = ui.querySelector('#pzMapFab') as HTMLElement | null;
   const up = b ? `calc(${b} + 52px)` : '';
-  const mapUp = b ? `calc(${b} + 104px)` : '';
   if (fab) fab.style.bottom = b;
   if (peek) peek.style.bottom = up;
   if (chat) chat.style.bottom = up;
-  if (mapFab) mapFab.style.bottom = mapUp;
+  if (mapFab) {
+    // 僅直向手機才用 bottom 抬地圖；否則清掉 inline，交給 CSS top（地圖-狀態列）
+    if (b) {
+      mapFab.style.bottom = `calc(${b} + 104px)`;
+      mapFab.style.top = 'auto';
+    } else {
+      mapFab.style.bottom = '';
+      mapFab.style.top = '';
+    }
+  }
 }
 
 function refreshPlazaMap() {

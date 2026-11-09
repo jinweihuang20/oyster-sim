@@ -167,8 +167,26 @@ button{touch-action:manipulation}
  .kt button{min-height:44px;min-width:64px;padding:6px 8px}
  #gauge{height:18px;width:min(78vw,340px)}
 }
+@media (pointer:coarse) and (orientation:landscape){
+ /* 橫向：地圖｜狀態列；雜貨／圖鑑／設定／視角靠右 */
+ #top{
+  top:calc(var(--sa-top) + 4px);
+  left:calc(var(--sa-left) + 96px);
+  right:calc(var(--sa-right) + 8px);
+  gap:4px;padding:2px 4px 2px 8px;font-size:13px;
+  justify-content:flex-start;align-items:center;
+ }
+ #top .hudItem{gap:2px;padding:0;flex-shrink:1;min-width:0}
+ #top #shopBtn{margin-left:auto}
+ #top button{min-width:36px;min-height:34px;padding:0 7px;font-size:12px;flex-shrink:0}
+ #top #camBtn.hudCam{
+  position:static!important;margin:0 0 0 2px!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;
+  width:34px;min-width:34px;height:34px;min-height:34px;border-radius:8px;z-index:6;
+ }
+ #top #camBtn.hudCam.on{display:inline-flex!important}
+ #top #camBtn.hudCam svg{width:16px;height:16px}
+}
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
- #top{top:calc(var(--sa-top) + 4px)}
  #stats{display:none}
  #hint{top:56px!important;font-size:13px!important}
  #btns{flex-direction:row-reverse;align-items:flex-end;flex-wrap:wrap;max-width:50vw}
@@ -176,6 +194,18 @@ button{touch-action:manipulation}
  .mb{bottom:38%}
  .panel{width:min(calc(100vw - var(--sa-left) - var(--sa-right) - 24px),640px)}
  #gauge{bottom:22%}
+}
+/* 橫向較高螢幕：stats 跟 #top 同左緣並縮小間距 */
+@media (pointer:coarse) and (orientation:landscape) and (min-height:501px){
+ #stats{
+  left:calc(var(--sa-left) + 96px);
+  right:calc(var(--sa-right) + 8px);
+  gap:4px;padding:2px 4px 2px 6px;
+ }
+ #statsT{gap:2px}
+ #stats .stCell{padding:2px 4px;gap:2px;min-width:0}
+ /* 視角已在 #top，stats 不再留 cam 空位 */
+ #stats #camBtn.hudCam{display:none!important}
 }
 @media (pointer:coarse){
  #btns button.mb{min-width:64px!important;min-height:64px!important;width:64px;height:64px;padding:0!important}
@@ -930,10 +960,7 @@ body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRo
 @media (pointer:fine){
   body.plazaMode #camBtn,body.plazaRoam #camBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
 }
-/* 橫向矮屏會藏 #stats，視角鈕改浮在右下以免閒逛時不見 */
-@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
-  body.plazaRoam #camBtn.hudCam.on{display:inline-flex!important;position:fixed!important;right:calc(var(--sa-right) + 12px)!important;bottom:calc(var(--sa-bottom) + 16px)!important;left:auto!important;top:auto!important;z-index:8601!important;margin:0!important}
-}
+/* 橫向：視角改在上方 #top，勿再浮右下 */
 /* 方向搖桿貼近底部，略留空隙 */
 body.plazaRoam #joy{z-index:8400;left:calc(var(--sa-left) + 16px)!important;bottom:calc(var(--sa-bottom) + 14px)!important}
 @media (pointer:coarse) and (orientation:landscape){body.plazaRoam #joy{bottom:calc(var(--sa-bottom) + 12px)!important;left:calc(var(--sa-left) + 12px)!important}}
@@ -1477,14 +1504,31 @@ body.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 132px)!important}
 body.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!important}
 body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
 #crouchBtn.act,#lieBtn.act{background:rgba(42,90,134,.72)!important}
+/* 電腦廣場閒逛：動作／藥品叠在「離開廣場」上方，勿蓋住右下離開鈕 */
 @media (pointer:fine){
-  #poseBtn.on,#jumpBtn.on,#crouchBtn.on,#lieBtn.on{display:none!important}
+  body.plazaRoam #poseBtn.on{
+    display:flex!important;
+    bottom:calc(var(--sa-bottom,0px) + 70px)!important;
+    z-index:9010;
+  }
+  body.plazaRoam #jumpBtn.on,body.plazaRoam #crouchBtn.on,body.plazaRoam #lieBtn.on{display:none!important}
+  body.plazaRoam.poseOpen #jumpBtn.on,body.plazaRoam.poseOpen #crouchBtn.on,body.plazaRoam.poseOpen #lieBtn.on{display:flex!important}
+  body.plazaRoam.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 126px)!important}
+  body.plazaRoam.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 182px)!important}
+  body.plazaRoam.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 238px)!important}
+  body.plazaRoam #medBtn.on{
+    position:fixed!important;right:calc(var(--sa-right,0px) + 12px)!important;left:auto!important;top:auto!important;
+    bottom:calc(var(--sa-bottom,0px) + 126px)!important;z-index:9010;
+    min-width:96px!important;min-height:48px!important;margin:0!important;
+  }
+  body.plazaRoam.poseOpen #medBtn.on{bottom:calc(var(--sa-bottom,0px) + 294px)!important}
 }
-@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
-  #poseBtn.on{bottom:calc(var(--sa-bottom,0px) + 132px)!important}
-  body.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!important}
-  body.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
-  body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 300px)!important}
+/* 橫向廣場：離開／動作／藥品往下靠底（視角已移到狀態列） */
+@media (pointer:coarse) and (orientation:landscape){
+  #poseBtn.on{bottom:calc(var(--sa-bottom,0px) + 58px)!important}
+  body.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 110px)!important}
+  body.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 162px)!important}
+  body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 214px)!important}
 }
 
 #moonAim .maEnd{display:none}#moonAim.pz .maX{display:none}#moonAim.pz .maEnd{display:block;pointer-events:auto;position:absolute;left:0;right:0;top:calc(var(--sa-top) + 168px);margin:0 auto;width:max-content;padding:9px 22px;font-size:16px;font-weight:700;color:#fff;background:rgba(20,26,34,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.35);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.25)}

@@ -2714,9 +2714,17 @@ if (matchMedia('(pointer:coarse)').matches) {
   $('hud').appendChild(corner);
   corner.appendChild($('quitBtn'));
   corner.appendChild($('giveUp'));
-  // 視角：掛在統計列右側；統計列本身靠左
+  // 視角：直向掛統計列右側；橫向掛上方狀態列右側
   $('camBtn').classList.add('hudCam');
-  $('stats').appendChild($('camBtn'));
+  const placeCamBtn = () => {
+    const cam = $('camBtn');
+    const land = matchMedia('(orientation: landscape)').matches;
+    const host = land ? $('top') : $('stats');
+    if (cam.parentElement !== host) host.appendChild(cam);
+  };
+  placeCamBtn();
+  matchMedia('(orientation: landscape)').addEventListener('change', placeCamBtn);
+  addEventListener('orientationchange', () => setTimeout(placeCamBtn, 60));
 }
 else $('btns').insertBefore($('radioBtn'), $('medBtn'));
 btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, () => rotKey = 0);
@@ -3506,7 +3514,7 @@ function npcShuck(n: Npc, dt: number, t: number) {
 }
 
 // ---------- 主迴圈 ----------
-let baseFov = 70, narrow = false;
+let baseFov = 70, narrow = false, wideView = false;
 /** 用畫布實際 CSS 盒徑算 buffer／相機比例（切 App 回來時 innerWidth 常短暫錯） */
 function viewSize() {
   const cw = canvas.clientWidth | 0, ch = canvas.clientHeight | 0;
@@ -3515,6 +3523,11 @@ function viewSize() {
   const w = Math.round(vv?.width || innerWidth || 1);
   const h = Math.round(vv?.height || innerHeight || 1);
   return { w: Math.max(1, w), h: Math.max(1, h) };
+}
+/** 第三人稱：橫向加垂直 FOV，避免寬螢幕看起來扁扁的 */
+function tpFovFor(mode: 'walk' | 'plazaSit' | 'shedSit') {
+  if (wideView) return mode === 'plazaSit' ? 78 : mode === 'walk' ? 72 : 70;
+  return mode === 'plazaSit' ? 64 : 58;
 }
 function resize() {
   const { w, h } = viewSize();
@@ -3525,12 +3538,14 @@ function resize() {
   const bufW = renderer.domElement.width, bufH = renderer.domElement.height;
   const wantW = Math.max(1, Math.floor(w * dpr)), wantH = Math.max(1, Math.floor(h * dpr));
   if (bufW !== wantW || bufH !== wantH) renderer.setSize(w, h, false);
-  camera.aspect = w / h;
+  camera.aspect = w / Math.max(1, h);
   camera.updateProjectionMatrix();
   tpCam.aspect = camera.aspect;
   tpCam.updateProjectionMatrix();
   narrow = camera.aspect < 0.8;
-  baseFov = narrow ? 82 : 70;
+  // 橫向寬螢幕：垂直 FOV 加大，畫面才不會顯得壓扁
+  wideView = camera.aspect > 1.35;
+  baseFov = narrow ? 82 : wideView ? 78 : 70;
   handRig.position.set(0, narrow ? -0.02 : 0, 0);
   handRig.scale.set(narrow ? 0.42 : 0.7, narrow ? 0.6 : 0.7, 0.7);
 }
@@ -4441,11 +4456,14 @@ function camTick(dt: number) {
         applyBodyPose(rig, lastPose, poseK);
       }
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-      const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = tpDist * Math.cos(el);
-const cp = new THREE.Vector3(walkPos.x - fx * hd, 1.4 + tpDist * Math.sin(el) + jumpY * 0.35 - poseK * (lastPose === 'lie' ? 0.7 : 0.35), walkPos.z - fz * hd);
-      { const CAP = 2.7, R = 10.9, hy = 1.4; if (cp.y > CAP) { const k = (CAP - hy) / (cp.y - hy); const ix = walkPos.x + (cp.x - walkPos.x) * k, iz = walkPos.z + (cp.z - walkPos.z) * k; if (Math.abs(ix) < R && Math.abs(iz) < R) { cp.x = ix; cp.z = iz; cp.y = CAP; } } }
+      const dist = wideView ? tpDist * 0.92 : tpDist;
+      const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = dist * Math.cos(el);
+      const eyeY = wideView ? 1.55 : 1.4;
+      const cp = new THREE.Vector3(walkPos.x - fx * hd, eyeY + dist * Math.sin(el) + jumpY * 0.35 - poseK * (lastPose === 'lie' ? 0.7 : 0.35), walkPos.z - fz * hd);
+      { const CAP = 2.7, R = 10.9, hy = eyeY; if (cp.y > CAP) { const k = (CAP - hy) / (cp.y - hy); const ix = walkPos.x + (cp.x - walkPos.x) * k, iz = walkPos.z + (cp.z - walkPos.z) * k; if (Math.abs(ix) < R && Math.abs(iz) < R) { cp.x = ix; cp.z = iz; cp.y = CAP; } } }
       if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
-      { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, 1.0, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
+      { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, wideView ? 1.15 : 1.0, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
+      { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
       tpCam.updateMatrixWorld(); return;
     }
     // 工寮：沿用 me3 走路模組
@@ -4454,7 +4472,9 @@ const cp = new THREE.Vector3(walkPos.x - fx * hd, 1.4 + tpDist * Math.sin(el) + 
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw), gy = walkPos.y - 1.95;
     const cp = new THREE.Vector3(walkPos.x - fx * 2.9, gy + 2.5, walkPos.z - fz * 2.9);
     if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
-    { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, gy + 0.9, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); } tpCam.updateMatrixWorld(); return;
+    { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, gy + 0.9, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
+    { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
+    tpCam.updateMatrixWorld(); return;
   }
   me3.position.set(SEAT.x, SEAT.y - 1.02, SEAT.z); me3.rotation.y = seatYaw;
   cheerT = Math.max(0, cheerT - dt); ouchT = Math.max(0, ouchT - dt);
@@ -4474,14 +4494,14 @@ const cp = new THREE.Vector3(walkPos.x - fx * hd, 1.4 + tpDist * Math.sin(el) + 
     const cp = new THREE.Vector3(SEAT.x + ox * 3.1, SEAT.y + 1.65, SEAT.z + oz * 3.1);
     const lt = new THREE.Vector3(cx + lx * 0.15, 0.7, cz + lz * 0.15);
     if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
-    tpCam.fov = 64; tpCam.updateProjectionMatrix();
+    { const f = tpFovFor('plazaSit'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     tpCam.lookAt(tpLook); tpCam.updateMatrixWorld();
   } else {
     // 工寮：從背後斜 3/4 看，人在畫面中下、全身入鏡
     const cp = new THREE.Vector3(SEAT.x - fx * 2.6 - rx * 1.5, SEAT.y + 0.85, SEAT.z - fz * 2.6 - rz * 1.5);
     const lt = new THREE.Vector3(SEAT.x + fx * 0.8 + rx * 0.35, SEAT.y - 0.2, SEAT.z + fz * 0.8 + rz * 0.35);
     if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
-    if (tpCam.fov !== 58) { tpCam.fov = 58; tpCam.updateProjectionMatrix(); }
+    { const f = tpFovFor('shedSit'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     tpCam.lookAt(tpLook); tpCam.updateMatrixWorld();
   }
   // 蚵仔與刀跟著角色的手（handRig 掛在 camera 底下，換算到角色胸前）
