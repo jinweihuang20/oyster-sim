@@ -496,6 +496,26 @@ export function createPlazaWorldView(
         });
         continue;
       }
+      // 被放在原地站著的阿婆：只給飛彈瞄
+      const standNpc = leisureNpc && r.isNpc && !r.seated && !carried && (r.phase || '') === 'stand';
+      if (standNpc) {
+        const h = headWorld(r, new THREE.Vector3());
+        out.push({
+          connId: r.connId || r.key,
+          nick: plazaDisplayName(r.nick, r.numTag),
+          pileId: -1,
+          phase: 'stand',
+          x: r.x, z: r.z, yaw: r.yaw,
+          lookYaw: r.tLookYaw,
+          seated: false,
+          count: r.count,
+          umb: r.umb,
+          isNpc: true,
+          head: { x: h.x, y: h.y, z: h.z },
+          bowl: { x: h.x, y: h.y, z: h.z },
+        });
+        continue;
+      }
       // 休息座（吸菸區／咖啡廳／樸子腳）只給飛彈瞄阿婆，不給丟殼／偷
       if (!r.seated || r.pileId < 0 || (isLeisurePile(r.pileId) && !(leisureNpc && r.isNpc)) || (r.phase || '') === 'moon') continue;
       const h = headWorld(r, new THREE.Vector3());
@@ -942,6 +962,24 @@ function hashPid(pid: string) {
       releaseAt: holdMs >= REMOTE_PUFF_MIN_HOLD_MS ? now : 0,
       exhaled: holdMs < REMOTE_PUFF_MIN_HOLD_MS,
     };
+  }
+
+  /** 吸菸座的阿婆：每隔一陣子自己抽一口（純前端，各玩家時間點不同步） */
+  function tickNpcAutoPuff(r: Remote) {
+    const now = performance.now();
+    const st = ((r as any)._npcPuff ??= { next: now + 3000 + Math.random() * 9000, endAt: 0, hold: 0 });
+    if (st.endAt) {
+      if (now >= st.endAt) {
+        st.endAt = 0;
+        applyRemotePuff({ connId: r.connId || r.key, start: false, holdMs: st.hold });
+        st.next = now + 9000 + Math.random() * 14000;
+      }
+      return;
+    }
+    if (now < st.next || r.puff) return;
+    st.hold = 1200 + Math.random() * 3800;
+    st.endAt = now + st.hold;
+    applyRemotePuff({ connId: r.connId || r.key, start: true, holdMs: 0 });
   }
 
   function spawnRemoteExhale(r: Remote, holdMs: number) {
@@ -1531,7 +1569,9 @@ function hashPid(pid: string) {
           r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
           r.rig.shinL.rotation.x *= 0.8; r.rig.shinR.rotation.x *= 0.8;
           r.rig.root.position.y *= 0.8;
-          r.rig.torso.rotation.y *= 0.8; r.rig.torso.rotation.z *= 0.8; r.rig.torso.rotation.x *= 0.8;
+          r.rig.torso.rotation.y *= 0.8; r.rig.torso.rotation.z *= 0.8;
+          // 阿婆每幀會再疊駝背角；用衰減會越疊越彎成 90 度，站著時直接歸零讓駝背只疊一次
+          r.rig.torso.rotation.x = r.isNpc ? 0 : r.rig.torso.rotation.x * 0.8;
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
           rj._loco = 'walk';
         }
@@ -1637,6 +1677,7 @@ function hashPid(pid: string) {
     // 遠端吸菸：手持菸（掛腕）＋菸頭薄煙；不再用頭側飄煙以免看起來沒拿菸
     for (const r of remotes.values()) {
       const want = r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke');
+      if (want && r.isNpc && isSmokePile(r.pileId)) tickNpcAutoPuff(r);
       if (want) {
         ensurePlazaSmokeCig(r.rig, LO);
         const cig = getPlazaSmokeCig(r.rig);
