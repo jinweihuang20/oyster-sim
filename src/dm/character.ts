@@ -652,20 +652,20 @@ export function posePlazaCarried(rig: PlayerRig) {
   );
 }
 
-/** 抱人者：雙手向前托住（橫抱） */
+/** 抱人者：雙手向前托在胸腰高度（橫抱） */
 export function posePlazaCarryHold(rig: PlayerRig) {
   posePlazaHangArms(rig, false);
   placePlazaArmChain(
     rig.upperL, rig.lowerL,
     -0.22, 0.30, 0,
-    -0.14, 0.24, -0.22,
-    -0.08, 0.22, -0.34,
+    -0.16, 0.12, -0.20,
+    -0.10, 0.06, -0.32,
   );
   placePlazaArmChain(
     rig.upperR, rig.lowerR,
     0.22, 0.30, 0,
-    0.16, 0.22, -0.20,
-    0.10, 0.20, -0.32,
+    0.18, 0.10, -0.18,
+    0.12, 0.04, -0.30,
   );
-  rig.torso.rotation.x = 0.04;
+  rig.torso.rotation.x = 0.06;
 }

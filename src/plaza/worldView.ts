@@ -2,6 +2,11 @@ import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
 import {
+  AMA_LOOKS, AMA_SCALE, AMA_SIT_LIFT, AMA_CARRY_TILT, AMA_CARRY_Y, AMA_CARRY_FWD, AMA_CARRY_ROLL,
+  amaCarrySide, pickAmaLook, amaShirtHex,
+  dressPlazaAma, dressPlazaAber, applyAmaAppearance,
+} from './amaLook';
+import {
   makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
   posePlazaSit, posePlazaStand, posePlazaSmokeSit, posePlazaCarried, posePlazaCarryHold, easeSmokePuff,
   clearPlazaSmokeCig, getPlazaSmokeCig, ensurePlazaSmokeCig,
@@ -82,49 +87,10 @@ type Remote = {
 
 const SHIRTS = [0xc45c26, 0x3a6ea5, 0x2f7d4a, 0x8a3a6a, 0x6a5a2a, 0x4a4a7a];
 const HAIRS = [0x222222, 0x555555, 0x888888, 0x3a2a1a, 0xdddddd];
-/** 廣場阿婆農婦裝：依 pid 抽一套，頭巾／斗笠／漁夫帽混搭 */
-type AmaFarmLook = {
-  shirt: number;
-  hair: number;
-  pants: number;
-  /** 頭巾／斗笠染色（斗笠偏草黃） */
-  headTint: number;
-  head: 'hd_basic' | 'hd_hat' | 'hd_fisher';
-  hand: 'sl_flower' | 'hn_basic' | 'sl_rain';
-  legs: 'lg_basic' | 'lg_flower';
-  feet: 'ft_basic' | 'ft_boots';
-  apron: boolean;
-  bun: boolean;
-};
-const AMA_LOOKS: AmaFarmLook[] = [
-  // 橘衫＋紅花頭巾＋圍裙＋藍白拖
-  { shirt: 0xe87840, hair: 0x8a8a8a, pants: 0x3a5068, headTint: 0xc84a5a, head: 'hd_basic', hand: 'sl_flower', legs: 'lg_basic', feet: 'ft_basic', apron: true, bun: true },
-  // 綠衫＋斗笠＋花褲＋雨鞋
-  { shirt: 0x3a9a6a, hair: 0x444444, pants: 0x2a3848, headTint: 0xd8b46a, head: 'hd_hat', hand: 'sl_flower', legs: 'lg_flower', feet: 'ft_boots', apron: true, bun: true },
-  // 粉衫＋藍花頭巾、白髮、無圍裙
-  { shirt: 0xe86878, hair: 0xc8c8c8, pants: 0x4a4a52, headTint: 0x5a7ab0, head: 'hd_basic', hand: 'hn_basic', legs: 'lg_basic', feet: 'ft_basic', apron: false, bun: true },
-  // 茄紫衫＋斗笠＋素袖＋工作褲
-  { shirt: 0x8a4a7a, hair: 0x666666, pants: 0x3a4050, headTint: 0xc9a56a, head: 'hd_hat', hand: 'hn_basic', legs: 'lg_basic', feet: 'ft_basic', apron: true, bun: false },
-  // 芥黃衫＋漁夫帽＋碎花袖
-  { shirt: 0xc9a24a, hair: 0x555555, pants: 0x4a5540, headTint: 0x4a6a8a, head: 'hd_fisher', hand: 'sl_flower', legs: 'lg_basic', feet: 'ft_boots', apron: false, bun: true },
-  // 青色衫＋黃頭巾＋花褲
-  { shirt: 0x2a8a8a, hair: 0xaaaaaa, pants: 0x3a5068, headTint: 0xe0b040, head: 'hd_basic', hand: 'sl_flower', legs: 'lg_flower', feet: 'ft_basic', apron: true, bun: true },
-  // 酒紅衫＋斗笠＋雨衣袖＋雨鞋（像剛從外面進來）
-  { shirt: 0xa04050, hair: 0x777777, pants: 0x2a2a38, headTint: 0xb89550, head: 'hd_hat', hand: 'sl_rain', legs: 'lg_basic', feet: 'ft_boots', apron: true, bun: true },
-  // 天藍衫＋粉頭巾、無髻、拖鞋
-  { shirt: 0x4a8aba, hair: 0x3a2a1a, pants: 0x5a4a3a, headTint: 0xe86a8a, head: 'hd_basic', hand: 'hn_basic', legs: 'lg_flower', feet: 'ft_basic', apron: false, bun: false },
-  // 橄欖綠＋斗笠＋花褲、無圍裙
-  { shirt: 0x6a7a3a, hair: 0xbbbbbb, pants: 0x3a3a48, headTint: 0xe0c078, head: 'hd_hat', hand: 'sl_flower', legs: 'lg_flower', feet: 'ft_basic', apron: false, bun: true },
-  // 藕粉衫＋花頭巾＋圍裙＋雨鞋
-  { shirt: 0xd89090, hair: 0x999999, pants: 0x4a5568, headTint: 0xc86a5a, head: 'hd_basic', hand: 'sl_flower', legs: 'lg_basic', feet: 'ft_boots', apron: true, bun: true },
-  // 深灰藍＋漁夫帽＋素袖工作褲
-  { shirt: 0x4a5a6a, hair: 0xdddddd, pants: 0x2a3040, headTint: 0x3a5a7a, head: 'hd_fisher', hand: 'hn_basic', legs: 'lg_basic', feet: 'ft_basic', apron: true, bun: true },
-  // 橙紅衫＋斗笠＋碎花袖＋藍白拖
-  { shirt: 0xd06030, hair: 0x6a6a6a, pants: 0x3a4860, headTint: 0xd0a860, head: 'hd_hat', hand: 'sl_flower', legs: 'lg_basic', feet: 'ft_basic', apron: true, bun: true },
-];
+/** 廣場阿婆外觀（花布衫、袖套、白髮包髻、駝背）見 amaLook */
 
 /**
- * 與死鬥 NPC 同一套 makePlayerAvatar，比例 1:1（不再縮放）。
+ * 玩家 1:1；阿婆見 AMA_SCALE。
  * 坐時髖略高於椅面：大腿 mesh 在髖下方，對齊 HIP 會整個人沉進椅子。
  */
 const AVATAR_SCALE = 1;
@@ -307,14 +273,14 @@ export function createPlazaWorldView(
   };
   PLAZA_STALL_SITES.filter((s) => KEEPER_LINES[s.id]).forEach((site, idx) => {
     const look = AMA_LOOKS[(idx * 3 + 1) % AMA_LOOKS.length];
-    const rig = makePlayerAvatar({ shirt: look.shirt, hair: look.hair, pants: look.pants }, M, add, LO);
+    const rig = makePlayerAvatar({ shirt: amaShirtHex(look), hair: look.hair, pants: look.pants }, M, add, LO);
     dressPlazaAma(rig, look);
     posePlazaHangArms(rig, false);
+    applyAmaAppearance(rig);
     const out = Math.atan2(site.x, site.z);
     const back = site.kind === 'bbqSit' ? 1.05 : site.kind === 'cart' ? 0.6 : 0.68;
     rig.outer.position.set(site.x + Math.sin(out) * back, 0, site.z + Math.cos(out) * back);
     rig.outer.rotation.y = out;
-    rig.outer.scale.setScalar(AVATAR_SCALE);
     root.add(rig.outer);
     stallKeepers.push({ rig, ph: idx * 1.7, lines: KEEPER_LINES[site.id], bub: null, next: 3 + idx * 4, until: 0, li: idx });
   });
@@ -337,12 +303,11 @@ export function createPlazaWorldView(
     exhales: { fx: CharcoalFireFx; age: number; life: number; yaw: number }[];
   };
   const smokeNpcPose = smokeNpcSeatPose();
-  const smokeNpcLook = AMA_LOOKS[7 % AMA_LOOKS.length]; // 固定一套，全場一致
   const smokeNpcRig = makePlayerAvatar(
-    { shirt: smokeNpcLook.shirt, hair: smokeNpcLook.hair, pants: smokeNpcLook.pants },
+    { shirt: 0x4a6a8a, hair: 0x8a8a8a, pants: 0x3a3a48 },
     M, add, LO,
   );
-  dressPlazaAma(smokeNpcRig, smokeNpcLook);
+  dressPlazaAber(smokeNpcRig);
   smokeNpcRig.outer.scale.setScalar(AVATAR_SCALE);
   smokeNpcRig.outer.position.set(smokeNpcPose.pos.x, 0, smokeNpcPose.pos.z);
   smokeNpcRig.outer.rotation.order = 'YXZ';
@@ -574,99 +539,10 @@ function hashPid(pid: string) {
   function hashLook(pid: string, isNpc = false) {
     const h = hashPid(pid);
     if (isNpc) {
-      const a = AMA_LOOKS[Math.abs(h) % AMA_LOOKS.length];
-      return { shirt: a.shirt, hair: a.hair, pants: a.pants };
+      const a = pickAmaLook(pid);
+      return { shirt: amaShirtHex(a), hair: a.hair, pants: a.pants };
     }
     return { shirt: SHIRTS[Math.abs(h) % SHIRTS.length], hair: HAIRS[Math.abs(h >> 3) % HAIRS.length], pants: 0x2a2a40 };
-  }
-
-  /** 依變體套農婦裝：頭巾／斗笠／漁夫帽、袖口、褲、鞋、圍裙皆可不同 */
-  function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook) {
-    applyOutfitToRig(rig, {
-      head: ama.head,
-      hand: ama.hand,
-      body: 'bd_basic',
-      legs: ama.legs,
-      feet: ama.feet,
-    });
-    const mats = rig.outfitMats;
-    if (!mats) return;
-    for (const m of mats.body) {
-      m.map = null;
-      m.color.setHex(ama.shirt);
-      m.emissive.setHex(0);
-      m.needsUpdate = true;
-    }
-    for (const m of mats.hair) {
-      m.map = null;
-      m.color.setHex(ama.hair);
-      m.emissive.setHex(0);
-      m.needsUpdate = true;
-    }
-    // 素色工作褲才蓋色；花褲保留碎花貼圖
-    if (ama.legs === 'lg_basic') {
-      for (const m of mats.legs) {
-        m.map = null;
-        m.color.setHex(ama.pants);
-        m.emissive.setHex(0);
-        m.needsUpdate = true;
-      }
-    }
-    if (ama.feet === 'ft_basic') {
-      // 藍白拖：鞋面藍、鞋底米白
-      if (mats.feet[0]) {
-        mats.feet[0].map = null;
-        mats.feet[0].color.setHex(0x2a5ab0);
-        mats.feet[0].needsUpdate = true;
-      }
-      if (mats.feet[1]) {
-        mats.feet[1].map = null;
-        mats.feet[1].color.setHex(0xf6f2ea);
-        mats.feet[1].needsUpdate = true;
-      }
-    }
-    if (rig.hatG) {
-      const tint = new THREE.Color(ama.headTint);
-      rig.hatG.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
-        if (mesh.isMesh && mat?.color) mat.color.copy(tint);
-      });
-      // 只有花布頭巾打側結；斗笠／漁夫帽不加
-      if (ama.head === 'hd_basic' && !rig.hatG.userData.amaKnot) {
-        const knotM = new THREE.MeshStandardMaterial({ color: ama.headTint, roughness: 0.8 });
-        const knot = new THREE.Mesh(rboxEnv(0.08, 0.06, 0.1), knotM);
-        knot.position.set(0.14, 0.12, 0.02);
-        knot.rotation.z = 0.4;
-        rig.hatG.add(knot);
-        rig.hatG.userData.amaKnot = 1;
-      }
-    }
-    if (ama.apron && !rig.torso.userData.amaApron) {
-      const apronM = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.92 });
-      const strapM = new THREE.MeshStandardMaterial({ color: 0xe4ddd0, roughness: 0.9 });
-      const apron = new THREE.Mesh(rboxEnv(0.26, 0.34, 0.03), apronM);
-      apron.position.set(0, 0.02, -0.13);
-      rig.torso.add(apron);
-      for (const s of [-1, 1] as const) {
-        const strap = new THREE.Mesh(rboxEnv(0.028, 0.2, 0.02), strapM);
-        strap.position.set(s * 0.09, 0.28, -0.1);
-        strap.rotation.z = s * 0.18;
-        rig.torso.add(strap);
-      }
-      const pocket = new THREE.Mesh(rboxEnv(0.1, 0.08, 0.02), strapM);
-      pocket.position.set(0.06, -0.06, -0.145);
-      rig.torso.add(pocket);
-      rig.torso.userData.amaApron = 1;
-    }
-    if (ama.bun && !rig.head.userData.amaBun) {
-      const bunM = new THREE.MeshStandardMaterial({ color: ama.hair, roughness: 0.85 });
-      const bun = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), bunM);
-      // 斗笠下髮髻略往後，避免穿模
-      bun.position.set(0, ama.head === 'hd_hat' ? 0.06 : 0.12, ama.head === 'hd_hat' ? 0.14 : 0.12);
-      rig.head.add(bun);
-      rig.head.userData.amaBun = 1;
-    }
   }
 
   void bubblesHost;
@@ -1135,6 +1011,7 @@ function hashPid(pid: string) {
   function poseStand(r: Remote) { posePlazaStand(r.rig); }
 
   function applyActionPose(r: Remote) {
+    try {
     if (r.throwT > 0) { poseThrow(r); applyHeadLook(r); return; }
     if (r.umb) { poseUmb(r); applyHeadLook(r); return; }
     const ph = (r.phase || '').toLowerCase();
@@ -1249,6 +1126,9 @@ function hashPid(pid: string) {
       (r as any)._loco = phL === 'jump' ? 'jump' : (phL === 'moon' ? 'moon' : 'walk');
     }
     applyHeadLook(r);
+    } finally {
+      if (r.isNpc) applyAmaAppearance(r.rig);
+    }
   }
 
   function findRemoteByPid(pid: string): Remote | undefined {
@@ -1299,7 +1179,8 @@ function hashPid(pid: string) {
       const look = hashLook(pid, isNpc);
       const rig = makePlayerAvatar(look, M, add, LO);
       if (isNpc) {
-        dressPlazaAma(rig, AMA_LOOKS[Math.abs(hashPid(pid)) % AMA_LOOKS.length]);
+        dressPlazaAma(rig, pickAmaLook(pid));
+        applyAmaAppearance(rig);
       } else {
         applyOutfitToRig(rig, normalizeOutfitIds({
           head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
@@ -1307,7 +1188,7 @@ function hashPid(pid: string) {
       }
       root.add(rig.outer);
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
-      rig.outer.scale.setScalar(AVATAR_SCALE);
+      rig.outer.scale.setScalar(isNpc ? AMA_SCALE : AVATAR_SCALE);
       const umbMesh = makeRemoteUmb();
       const { props, bowlNode, meatRoot } = makeRemoteProps();
       const { knife, oyster } = makeRemoteHold();
@@ -1633,8 +1514,13 @@ function hashPid(pid: string) {
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
           rj._loco = 'jump';
         } else if (wantWalk) {
-          r.bob += Math.min(gaitSp, 3) * dt * 5;
-          const swing = posePlazaWalkCycle(r.rig, r.bob, Math.max(0.25, walkAmp));
+          // 阿婆跨步較慢、步伐較小（廣場 NPC 多半坐下，若座標移動仍用這套）
+          if (r.isNpc) {
+            r.bob += Math.min(gaitSp, 1.6) * dt * 2.6;
+          } else {
+            r.bob += Math.min(gaitSp, 3) * dt * 5;
+          }
+          const swing = posePlazaWalkCycle(r.rig, r.bob, Math.max(0.2, r.isNpc ? walkAmp * 0.55 : Math.max(0.25, walkAmp)));
           // 走動一律輕微ㄑ字彎肘擺臂（勿切回直臂下垂）
           if (r.throwT <= 0) { swingArms(r, swing); hideHold(r); }
           rj._loco = 'walk';
@@ -1673,18 +1559,22 @@ function hashPid(pid: string) {
           const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw);
           const sx = Math.cos(car.yaw), sz = -Math.sin(car.yaw);
           // 模型原點在腳底：前傾後髖會沿角色 +Z（＝抱人者右方）移出，往回扣才會橫躺在胸口
-          const tilt = 1.15;
-          const side = 0.72 * Math.sin(tilt);
-          r.x = r.tx = car.x + fx * 0.22 - sx * side;
-          r.z = r.tz = car.z + fz * 0.22 - sz * side;
+          const tilt = AMA_CARRY_TILT;
+          const side = amaCarrySide(tilt);
+          r.x = r.tx = car.x + fx * AMA_CARRY_FWD - sx * side;
+          r.z = r.tz = car.z + fz * AMA_CARRY_FWD - sz * side;
           r.yaw = r.tyaw = car.yaw + Math.PI / 2;
         }
-        ox = r.x; oz = r.z; oy = 0.82;
-        rotX = 1.15; rotZ = 0.08;
+        ox = r.x; oz = r.z; oy = AMA_CARRY_Y;
+        rotX = AMA_CARRY_TILT; rotZ = AMA_CARRY_ROLL;
         posePlazaCarried(r.rig);
       } else if (!r.seated && anyoneCarriedBy(r.connId)) {
         posePlazaCarryHold(r.rig);
       }
+      if (r.isNpc && r.seated && !(r.carriedBy && (r.phase || '') !== 'moon')) {
+        oy += AMA_SIT_LIFT;
+      }
+      if (r.isNpc) applyAmaAppearance(r.rig);
       r.rig.outer.position.set(ox, oy, oz);
       r.rig.outer.rotation.order = 'YXZ';
       r.rig.outer.rotation.y = r.yaw;
@@ -1776,6 +1666,7 @@ function hashPid(pid: string) {
       }
       k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15;
       if (!eco) posePlazaStallKeeper(k.rig, tSec, k.ph);
+      applyAmaAppearance(k.rig);
       tickKeeperBubble(k, tSec);
     }
     tickSmokeNpc(dt, tSec, eco, cx, cz);
