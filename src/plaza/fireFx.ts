@@ -342,3 +342,74 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
 
   return { group, light, tick, dispose };
 }
+
+/**
+ * 薄煙（吸菸區／嘴邊）：無炭火／無光，只循環小煙團。
+ */
+export function makeCigSmoke(opts: { count?: number; seed?: number; scale?: number } = {}): CharcoalFireFx {
+  const rn = rng(opts.seed ?? 8801);
+  const n = Math.max(2, opts.count ?? 5);
+  const sc = opts.scale ?? 0.55;
+  const group = new THREE.Group();
+  group.name = 'cigSmoke';
+  type S = { mesh: THREE.Mesh; age: number; life: number; vx: number; vz: number; speed: number; base: number };
+  const smokes: S[] = [];
+  for (let i = 0; i < n; i++) {
+    const mat = smokeMat.clone();
+    mat.opacity = 0.16;
+    mat.color.setHex(0x9a9894);
+    const mesh = new THREE.Mesh(smokeGeo, mat);
+    mesh.userData.sharedGeo = true;
+    mesh.renderOrder = 2;
+    mesh.visible = false;
+    group.add(mesh);
+    smokes.push({
+      mesh,
+      age: rn() * 2,
+      life: 1.2 + rn() * 1.4,
+      vx: (rn() - 0.5) * 0.06,
+      vz: (rn() - 0.5) * 0.06,
+      speed: 0.18 + rn() * 0.22,
+      base: 0.08 * sc + rn() * 0.06 * sc,
+    });
+  }
+  function reset(s: S) {
+    s.age = 0;
+    s.life = 1.1 + rn() * 1.5;
+    s.vx = (rn() - 0.5) * 0.07;
+    s.vz = (rn() - 0.5) * 0.07;
+    s.speed = 0.16 + rn() * 0.24;
+    s.base = 0.07 * sc + rn() * 0.07 * sc;
+    s.mesh.position.set((rn() - 0.5) * 0.04, 0.02, (rn() - 0.5) * 0.04);
+    s.mesh.scale.setScalar(s.base);
+    s.mesh.visible = true;
+    const m = s.mesh.material as THREE.MeshBasicMaterial;
+    m.opacity = 0.18;
+  }
+  for (const s of smokes) reset(s);
+  return {
+    group,
+    light: null,
+    tick: (_t, dt) => {
+      const step = Math.min(0.05, Math.max(0, dt));
+      for (const s of smokes) {
+        s.age += step;
+        if (s.age >= s.life) { reset(s); continue; }
+        const u = s.age / s.life;
+        s.mesh.position.x += s.vx * step;
+        s.mesh.position.z += s.vz * step;
+        s.mesh.position.y += s.speed * step;
+        s.mesh.scale.setScalar(s.base * (1 + u * 1.8));
+        const m = s.mesh.material as THREE.MeshBasicMaterial;
+        m.opacity = 0.18 * (1 - u);
+      }
+    },
+    dispose: () => {
+      for (const s of smokes) {
+        const m = s.mesh.material as THREE.Material;
+        if (!s.mesh.userData.sharedMat) m.dispose();
+      }
+      group.clear();
+    },
+  };
+}

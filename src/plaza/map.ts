@@ -1,5 +1,5 @@
 import {
-  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, TIDAL_FLAT, pileCenter, pileIsGrill,
+  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, TIDAL_FLAT, pileCenter, pileIsGrill, SMOKE_CENTER,
 } from './layout';
 import { PLAZA_STALL_SITES } from './ambiance';
 import { plazaDisplayName, type PlazaPlayer } from './types';
@@ -168,6 +168,23 @@ export function drawPlazaMap(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(STALL_LABEL[s.id] || s.kind, mx, my);
+  }
+
+  // 吸菸區
+  {
+    const [mx, my] = to(SMOKE_CENTER.x, SMOKE_CENTER.z);
+    const rw = Math.max(8, size * 0.028);
+    ctx.fillStyle = 'rgba(32,56,72,.78)';
+    roundRect(ctx, mx - rw * 1.6, my - rw * 0.7, rw * 3.2, rw * 1.4, size * 0.01);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(42,90,134,.9)';
+    ctx.lineWidth = Math.max(1, size * 0.0025);
+    ctx.stroke();
+    ctx.fillStyle = '#e8f2fa';
+    ctx.font = `700 ${Math.max(9, size * 0.026)}px system-ui,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('吸菸區', mx, my);
   }
 
   // 玩家（別人先、自己後）

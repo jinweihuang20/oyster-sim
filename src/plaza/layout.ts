@@ -10,6 +10,11 @@ export const pileHasNpc = (pileId: number) => NPC_PILE_IDS.includes(pileId);
 /** 南排改烤蚵台（多人共烤，座位／同步沿用舊堆模組） */
 export const GRILL_PILE_IDS: readonly number[] = [12, 13, 14, 15];
 export const pileIsGrill = (pileId: number) => GRILL_PILE_IDS.includes(pileId);
+/** 吸菸區虛擬堆（與後端 PlazaWorld.SmokePileId 對齊） */
+export const SMOKE_PILE_ID = 100;
+export const SMOKE_SEAT_COUNT = 4;
+export const SMOKE_CENTER = { x: -12.0, z: -2.6 } as const;
+export const isSmokePile = (pileId: number) => pileId === SMOKE_PILE_ID;
 export const PLAZA_CAPACITY = PILE_COUNT * SLOTS_PER_PILE;
 export const PILE_SPACING = 5.2;
 /** 椅子離堆心距離（貼近蚵堆；身體靠 hangArms／後仰避免埋進堆裡） */
@@ -48,8 +53,21 @@ export const PLAZA_LAMP_XZ: readonly [number, number][] = [
   [PILE_SPACING, PILE_SPACING],
 ];
 
-/** 一堆座位：0–3 玩家、4–5 阿婆；皆朝堆心 */
+/** 一堆座位：0–3 玩家、4–5 阿婆；皆朝堆心。吸菸區 pileId=SMOKE_PILE_ID。 */
 export function seatPose(pileId: number, slot: number) {
+  if (isSmokePile(pileId)) {
+    const n = Math.max(1, SMOKE_SEAT_COUNT - 1);
+    const a = -0.95 + (slot / n) * 1.9;
+    const radius = 1.15;
+    const center = new THREE.Vector3(SMOKE_CENTER.x, 0, SMOKE_CENTER.z);
+    const pos = new THREE.Vector3(
+      center.x + Math.cos(a) * radius,
+      0,
+      center.z + Math.sin(a) * radius,
+    );
+    const yaw = Math.atan2(pos.x - center.x, pos.z - center.z);
+    return { pos, yaw, center, angle: a };
+  }
   const center = pileCenter(pileId);
   const npc = slot >= SLOTS_PER_PILE;
   const a = npc
@@ -72,20 +90,33 @@ export function seatKey(pileId: number, slot: number) {
 
 export type PlazaSeatRef = { pileId: number; slot: number };
 
-/** 找最近的空位（taken 為 `pile:slot`） */
+/** 找最近的空位（taken 為 `pile:slot`；含吸菸區） */
 export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDist = SIT_DIST): (PlazaSeatRef & { dist: number }) | null {
   let best: (PlazaSeatRef & { dist: number }) | null = null;
+  const consider = (pileId: number, slot: number) => {
+    const k = seatKey(pileId, slot);
+    if (taken.has(k)) return;
+    const pose = seatPose(pileId, slot);
+    const d = Math.hypot(x - pose.pos.x, z - pose.pos.z);
+    if (d > maxDist) return;
+    if (!best || d < best.dist) best = { pileId, slot, dist: d };
+  };
   for (let p = 0; p < PILE_COUNT; p++) {
-    for (let s = 0; s < SLOTS_PER_PILE; s++) {
-      const k = seatKey(p, s);
-      if (taken.has(k)) continue;
-      const pose = seatPose(p, s);
-      const d = Math.hypot(x - pose.pos.x, z - pose.pos.z);
-      if (d > maxDist) continue;
-      if (!best || d < best.dist) best = { pileId: p, slot: s, dist: d };
-    }
+    for (let s = 0; s < SLOTS_PER_PILE; s++) consider(p, s);
   }
+  for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
   return best;
+}
+
+/** 吸菸區碰撞（棚外；遮雨棚／菸灰缸／長椅） */
+export function plazaSmokeObstacles(): [number, number, number][] {
+  const { x, z } = SMOKE_CENTER;
+  return [
+    [x, z, 1.55],
+    [x + 0.55, z - 0.85, 0.28],
+    [x + 0.55, z + 0.85, 0.28],
+    [x - 0.35, z, 0.28],
+  ];
 }
 
 /** 碰撞用：每堆一個圓（遮雨棚柱另見 plazaCanopySites） */

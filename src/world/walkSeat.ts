@@ -205,7 +205,9 @@ export function walkStep(dt: number) {
     const n = D.plazaNearSeat();
     D.on('seatCard', !!n);
     D.$('seatCard').classList.add('mini');
-    if (n) D.$('seatInfo').textContent = `第 ${n.pileId + 1} 堆・座 ${n.slot + 1}`;
+    if (n) D.$('seatInfo').textContent = n.pileId === 100
+      ? `吸菸區・座 ${n.slot + 1}`
+      : `第 ${n.pileId + 1} 堆・座 ${n.slot + 1}`;
     return;
   }
   let best: Seat | null = null, bd = 0.85;

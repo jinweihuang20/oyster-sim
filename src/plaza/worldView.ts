@@ -6,11 +6,12 @@ import {
   plazaJumpHeight, PLAZA_JUMP_DUR, posePlazaStallKeeper, applyPlazaBodyPose, type PlayerRig,
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
-import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, type PlazaSeatRef } from './layout';
+import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, isSmokePile, SMOKE_PILE_ID, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
+import { makePlazaSmokeArea } from './smokeArea';
 import { createGrillView, type PlazaGrillView } from './grillView';
-import type { CharcoalFireFx } from './fireFx';
+import { makeCigSmoke, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 import { plazaDisplayName } from './types';
@@ -47,6 +48,7 @@ type Remote = {
   tx: number; tz: number; tyaw: number;
   x: number; z: number; yaw: number;
   bob: number;
+  cigSmoke?: CharcoalFireFx;
   /** 遠端丟殼甩臂剩餘秒數 */
   throwT: number;
   /** 目標／目前轉頭 */
@@ -138,7 +140,7 @@ export type PlazaWorldView = {
   moonLaunch: (connId: string, delayMs?: number, fromX?: number, fromZ?: number) => void;
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) => void;
-  setSelfPose: (x: number, z: number, yaw: number, seated: boolean) => void;
+  setSelfPose: (x: number, z: number, yaw: number, seated: boolean, smoke?: boolean) => void;
   playThrowFx: (connId: string) => void;
   tick: (dt: number, camera: THREE.Camera) => void;
   dispose: () => void;
@@ -210,6 +212,11 @@ export function createPlazaWorldView(
   const ambiance = makePlazaAmbiance(M, add, LO);
   root.add(ambiance.group);
 
+  // 西側棚外吸菸區（座位 pileId=SMOKE_PILE_ID）
+  const smokeArea = makePlazaSmokeArea(M, add, LO);
+  root.add(smokeArea.group);
+  for (const [k, pad] of smokeArea.seatPads) seatMeshes.set(k, pad);
+
   // 攤位老闆（純客戶端，不經伺服器）：站在攤台後方、面向廣場中心
   const stallKeepers: { rig: PlayerRig; ph: number; lines: string[]; bub: WorldLabel | null; next: number; until: number; li: number }[] = [];
   const KEEPER_LINES: Record<string, string[]> = {
@@ -263,7 +270,7 @@ export function createPlazaWorldView(
   function aimTargets(): PlazaAimTarget[] {
     const out: PlazaAimTarget[] = [];
     for (const r of remotes.values()) {
-      if (!r.seated || r.pileId < 0 || (r.phase || '') === 'moon') continue;
+      if (!r.seated || r.pileId < 0 || isSmokePile(r.pileId) || (r.phase || '') === 'moon') continue;
       const h = headWorld(r, new THREE.Vector3());
       const b = bowlWorld(r, new THREE.Vector3());
       out.push({
@@ -397,7 +404,8 @@ function hashPid(pid: string) {
   selfBubble.sprite.visible = false;
   root.add(selfBubble.sprite);
   let selfBubUntil = 0;
-  let selfX = 0, selfZ = 0, selfYaw = 0, selfSeated = false;
+  let selfX = 0, selfZ = 0, selfYaw = 0, selfSeated = false, selfSmoke = false;
+  let selfCig: CharcoalFireFx | null = null;
   const _tagHead = new THREE.Vector3();
 
   /** 掛在 root（勿掛 head）：轉頭時本地 +Y 會歪掉 */
@@ -741,7 +749,14 @@ function hashPid(pid: string) {
     const ph = (r.phase || '').toLowerCase();
     if (r.seated) {
       poseSit(r);
-      if (ph === 'twist' || ph === 'pry') {
+      if (ph === 'smoke' || isSmokePile(r.pileId)) {
+        // 抽烟 idle：右手近嘴、無刀無蚵
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.28, 0, -0.18, 0.12, -0.12, -0.14, 0.06, -0.22);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.32, 0, 0.08, 0.42, -0.12, 0.04, 0.52, -0.2);
+        r.knife.visible = false;
+        r.oyster.visible = false;
+        r.headWorkX = -0.04;
+      } else if (ph === 'twist' || ph === 'pry') {
         // 左手握蚵、右手持刀撬
         placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.14, 0.2, -0.26, -0.08, 0.14, -0.4);
         placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.16, 0.18, -0.22, 0.02, 0.12, -0.38);
@@ -889,8 +904,8 @@ function hashPid(pid: string) {
         isNpc,
       };
       remotes.set(pid, r);
-      r.props.visible = r.seated;
-      if (r.seated) syncRemoteMeats(r);
+      r.props.visible = r.seated && !isSmokePile(r.pileId);
+      if (r.seated && !isSmokePile(r.pileId)) syncRemoteMeats(r);
       hangArms(r, r.seated);
       if (awaitingPose) { rig.outer.visible = false; r.tag.sprite.visible = false; }
     }
@@ -910,14 +925,14 @@ function hashPid(pid: string) {
     // 走動時身體已朝 yaw；頭左右相對量通常為 0（由傳送端決定是否鎖 pitch）
     r.umbMesh.visible = r.umb;
     if (r.umb) layoutRemoteUmb(r.umbMesh, r.seated);
-    r.props.visible = r.seated;
-    if (r.seated) syncRemoteMeats(r);
+    r.props.visible = r.seated && !isSmokePile(r.pileId);
+    if (r.seated && !isSmokePile(r.pileId)) syncRemoteMeats(r);
     if (p.nick && p.nick !== r.nick) r.nick = p.nick;
     if (p.isNpc != null) r.isNpc = !!p.isNpc;
     if (!r.isNpc && p.tag) r.numTag = String(p.tag).replace(/^#/, '');
     {
       const label = r.isNpc ? r.nick : plazaDisplayName(r.nick, r.numTag);
-      r.tag.setText(r.seated ? `${label} · ${r.count}` : label);
+      r.tag.setText(r.seated && !isSmokePile(r.pileId) ? `${label} · ${r.count}` : label);
     }
     if (r.seated && p.pileId >= 0) {
       const pose = seatPose(p.pileId, p.slot);
@@ -974,6 +989,7 @@ function hashPid(pid: string) {
   function upsert(p: PlazaPlayer, selfPid: string) { applyPose(p, selfPid); }
 
   function destroyRemote(r: Remote) {
+    if (r.cigSmoke) { root.remove(r.cigSmoke.group); r.cigSmoke.dispose(); r.cigSmoke = undefined; }
     root.remove(r.rig.outer); r.tag.dispose(); r.bubble.dispose();
     // 只刪「指向同一具模型」的 key，避免誤刪同 pid 的另一筆
     for (const [k, x] of [...remotes]) {
@@ -1033,8 +1049,13 @@ function hashPid(pid: string) {
     r.bubUntil = until;
   }
 
-  function setSelfPose(x: number, z: number, yaw: number, seated: boolean) {
-    selfX = x; selfZ = z; selfYaw = yaw; selfSeated = seated;
+  function setSelfPose(x: number, z: number, yaw: number, seated: boolean, smoke = false) {
+    selfX = x; selfZ = z; selfYaw = yaw; selfSeated = seated; selfSmoke = !!(seated && smoke);
+    if (selfSmoke && !selfCig) {
+      selfCig = makeCigSmoke({ count: LO ? 3 : 5, seed: 9901, scale: 0.7 });
+      root.add(selfCig.group);
+    }
+    if (selfCig) selfCig.group.visible = selfSmoke;
   }
 
   function setPhase(p: PlazaPlayer) { applyPose(p, /* 勿用空字串，否則會把「自己」建成遠端分身 */ '\0'); }
@@ -1204,6 +1225,38 @@ function hashPid(pid: string) {
         f.tick(tSec, fdt);
       }
       ambiance.tick(tSec, fdt);
+      smokeArea.tick(tSec, fdt);
+    } else {
+      // 吸菸薄煙仍低頻更新
+      smokeArea.tick(tSec, dt);
+    }
+    // 遠端抽烟煙：掛在頭側
+    for (const r of remotes.values()) {
+      const want = r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke');
+      if (want && !r.cigSmoke) {
+        r.cigSmoke = makeCigSmoke({ count: LO ? 3 : 5, seed: 4400 + (r.pileId * 17 + r.slot), scale: 0.65 });
+        root.add(r.cigSmoke.group);
+      }
+      if (r.cigSmoke) {
+        r.cigSmoke.group.visible = want;
+        if (want) {
+          r.rig.head.getWorldPosition(_firePos);
+          r.cigSmoke.group.position.set(_firePos.x + 0.08, _firePos.y + 0.02, _firePos.z - 0.06);
+          r.cigSmoke.tick(tSec, dt);
+        }
+      }
+    }
+    if (selfCig) {
+      selfCig.group.visible = selfSmoke;
+      if (selfSmoke) {
+        const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
+        selfCig.group.position.set(
+          selfX - Math.sin(selfYaw) * 0.12 + Math.cos(selfYaw) * 0.08,
+          headY,
+          selfZ - Math.cos(selfYaw) * 0.12 - Math.sin(selfYaw) * 0.08,
+        );
+        selfCig.tick(tSec, dt);
+      }
     }
     bigShed.tick(dt);
     for (const k of stallKeepers) {
@@ -1244,6 +1297,8 @@ function hashPid(pid: string) {
     grill.dispose();
     for (const f of fireFx) f.dispose();
     fireFx.length = 0;
+    smokeArea.ambientSmoke.dispose();
+    if (selfCig) { root.remove(selfCig.group); selfCig.dispose(); selfCig = null; }
     for (const pl of plazaLights) { root.remove(pl); pl.dispose(); }
     plazaLights.length = 0;
     selfBubble.dispose();

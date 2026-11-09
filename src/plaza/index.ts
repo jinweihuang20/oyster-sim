@@ -12,5 +12,5 @@ export {
 export type { PlazaAimTarget, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent } from './types';
 export {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, seatPose, WALK_BOUND, WALK_BOUND_WEST, plazaWalkBounds, TIDAL_FLAT,
-  pileCenter, pileIsGrill, GRILL_PILE_IDS,
+  pileCenter, pileIsGrill, GRILL_PILE_IDS, SMOKE_PILE_ID, SMOKE_SEAT_COUNT, SMOKE_CENTER, isSmokePile,
 } from './layout';

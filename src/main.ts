@@ -3380,6 +3380,17 @@ function launchPlaza() {
       on('standBtn', true); on('umbBtn', true); on('medBtn', true);
       toast('換位坐下', '#9fe0ff'); SFX.pop(); later(0.3, goPick);
     },
+    enterSmokeSit: () => {
+      setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
+      document.body.classList.add('plazaRoam');
+      handRig.visible = false;
+      on('standBtn', true); on('throwBtn', false); on('stealBtn', false);
+      on('umbBtn', false); on('medBtn', true); on('quitBtn', true); on('camBtn', COARSE);
+      if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
+      toast('吸菸區・休息一下', '#9be37a');
+      hint.textContent = '吸菸區：按「🚶」站起來繼續逛';
+      SFX.pop();
+    },
     goWalk: () => {
       document.body.classList.add('plazaRoam');
       plazaEnterWalkPose(true);

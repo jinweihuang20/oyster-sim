@@ -3,6 +3,7 @@ import { PlazaClient } from './hubClient';
 import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds,
   seatPose, seatKey, nearestFreeSeat, pileObstacles, pileCenter, randomWalkSpawn, resolveWalkSpawn,
+  isSmokePile, plazaSmokeObstacles,
   type PlazaSeatRef, type PlazaSpawnMemory,
 } from './layout';
 import { plazaShedPosts } from './props';
@@ -32,6 +33,8 @@ export type PlazaDeps = {
   beginShift: (pileId: number, slot: number) => void;
   /** 已在工班中再坐下（換位） */
   resumeSit: (pileId: number, slot: number) => void;
+  /** 吸菸區坐下：不開剝蚵工班 */
+  enterSmokeSit: (slot: number) => void;
   /** 站起恢復走動（不結束工班） */
   goWalk: () => void;
   applySeatPose: (pos: THREE.Vector3, yaw: number) => void;
@@ -115,6 +118,7 @@ export function plazaPileObs(): [number, number, number][] {
   const out = pileObstacles();
   for (const p of plazaShedPosts()) out.push([p.x, p.z, 0.22]);
   for (const o of plazaStallObstacles()) out.push(o);
+  for (const o of plazaSmokeObstacles()) out.push(o);
   return out;
 }
 /** 走動時遠端玩家碰撞圓 `[x,z,r,isLie]`（擋路不推擠；坐下略過） */
@@ -124,7 +128,7 @@ export function plazaWalkBodies(): [number, number, number, number][] {
 /** 入場障礙：棚柱＋攤位 */
 function plazaSpawnExtraObs(): [number, number, number][] {
   const posts: [number, number, number][] = plazaShedPosts().map(p => [p.x, p.z, 0.22]);
-  return [...posts, ...plazaStallObstacles()];
+  return [...posts, ...plazaStallObstacles(), ...plazaSmokeObstacles()];
 }
 
 /** 入場隨機站位（避開蚵堆／棚柱／攤位，面向中心） */
@@ -156,7 +160,7 @@ export function plazaHitPile(raycaster: THREE.Raycaster): number | null {
 }
 /** 自己坐下的那堆中心（補蚵飛出起點） */
 export function plazaMyPileOrigin(out = new THREE.Vector3()) {
-  if (myPile == null) return null;
+  if (myPile == null || isSmokePile(myPile)) return null;
   return pileCenter(myPile, out);
 }
 
@@ -612,6 +616,7 @@ function takenSet(exceptMine = true) {
   const t = new Set<string>();
   for (const p of snap?.players ?? []) {
     if (exceptMine && deps && p.pid === deps.id) continue;
+    if (!p.seated || p.pileId < 0 || p.slot < 0) continue;
     t.add(seatKey(p.pileId, p.slot));
   }
   return t;
@@ -889,15 +894,16 @@ export function plazaUpdateNear(wx: number, wz: number) {
   return near;
 }
 
-/** 嘗試坐附近空位（E／坐落） */
+/** 嘗試坐附近空位（E／坐落）；吸菸區不開剝蚵工班 */
 export async function plazaTrySit(): Promise<boolean> {
   if (!deps || !active || seated || sittingBusy) return false;
   const seat = near ?? nearestFreeSeat(deps.getWalkXZ().x, deps.getWalkXZ().z, takenSet(true), SIT_DIST);
   if (!seat) { deps.toast('靠近空的藍色板凳再坐', '#ffb08a'); return false; }
   sittingBusy = true;
   try {
+    const smoke = isSmokePile(seat.pileId);
     const first = !shiftStarted;
-    // 離線：先在本機坐下（單機剝蚵／烤肉），重連後 restoreAfterRejoin 會向伺服器補登記座位
+    // 離線：先在本機坐下；重連後 restoreAfterRejoin 會向伺服器補登記座位
     const r = !client?.connected ? { ok: true as const, err: undefined, snap: undefined }
       : first || myPile == null
       ? await client.claimSeat(seat.pileId, seat.slot)
@@ -915,7 +921,8 @@ export async function plazaTrySit(): Promise<boolean> {
     view?.highlight(seat.pileId, seat.slot);
     seated = true; near = null;
     syncSeatChrome();
-    if (first) { shiftStarted = true; deps.beginShift(seat.pileId, seat.slot); }
+    if (smoke) deps.enterSmokeSit(seat.slot);
+    else if (first) { shiftStarted = true; deps.beginShift(seat.pileId, seat.slot); }
     else deps.resumeSit(seat.pileId, seat.slot);
     return true;
   } finally { sittingBusy = false; }
@@ -1068,7 +1075,8 @@ export function plazaToggleMap() {
 export function tickPlaza(dt: number) {
   if (!active || !deps) return;
   const p = deps.getWalkXZ();
-  view?.setSelfPose(p.x, p.z, deps.getYaw(), seated);
+  const smokeSit = seated && myPile != null && isSmokePile(myPile);
+  view?.setSelfPose(p.x, p.z, deps.getYaw(), seated, smokeSit);
   tickPlazaTags(view, deps.camera(), dt);
   if (!seated) plazaUpdateNear(p.x, p.z);
   placeChatFab();
@@ -1080,7 +1088,9 @@ export function tickPlaza(dt: number) {
     phaseTimer = 0;
     const yaw = deps.getYaw();
     const sp = deps.getSyncPhase?.();
-    const phase = seated ? (sp ?? deps.getPhase()) : (sp === 'jump' || sp === 'crouch' || sp === 'lie' ? sp : 'walk');
+    const phase = seated
+      ? (smokeSit ? 'smoke' : (sp ?? deps.getPhase()))
+      : (sp === 'jump' || sp === 'crouch' || sp === 'lie' ? sp : 'walk');
     const moving = !seated && deps.getMoving();
     // 第三人稱走動：鎖 look，避免遠端上下點頭；第一人稱／坐下照常同步頭
     const lockLook = !seated && (deps.getTpv?.() ?? false);
