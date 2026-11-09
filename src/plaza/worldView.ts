@@ -1551,7 +1551,9 @@ function hashPid(pid: string) {
           r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
           r.rig.shinL.rotation.x *= 0.8; r.rig.shinR.rotation.x *= 0.8;
           r.rig.root.position.y *= 0.8;
-          r.rig.torso.rotation.y *= 0.8; r.rig.torso.rotation.z *= 0.8; r.rig.torso.rotation.x *= 0.8;
+          r.rig.torso.rotation.y *= 0.8; r.rig.torso.rotation.z *= 0.8;
+          // 阿婆每幀會再疊駝背角；用衰減會越疊越彎成 90 度，站著時直接歸零讓駝背只疊一次
+          r.rig.torso.rotation.x = r.isNpc ? 0 : r.rig.torso.rotation.x * 0.8;
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
           rj._loco = 'walk';
         }
