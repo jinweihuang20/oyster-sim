@@ -3657,6 +3657,8 @@ function frameBody() {
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
     on('standBtn', !walking && (!plazaMode || plazaSeated()));
+    // 吸菸區／樸子腳坐著：不剝蚵，藏左下臉盆與肉碗
+    if (plazaMode && seatRig.visible && document.body.classList.contains('plazaSmokeSit')) setPlazaSeatPropsVisible(false);
     if (smokeSitActive) {
       // 第三人稱時藏手持菸；第一人稱顯示
       handRig.visible = !tpv;
