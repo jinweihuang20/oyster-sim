@@ -2781,10 +2781,8 @@ let smokeSitActive = false;
 function ensureFpCigarette() {
   if (fpCig) return fpCig;
   fpCig = makeFpCigarette({ lowDetail: COARSE });
-  // 食指／中指間夾菸：濾嘴朝掌心（近嘴），菸頭朝外
-  fpCig.group.position.set(0.0, 0.012, -0.175);
-  fpCig.group.rotation.set(0.55, 0.65, 0.15);
-  handR.add(fpCig.group);
+  // 第一人稱不畫手：菸直接掛鏡頭，位置由 applySmokeSitFpHands 每幀設定
+  camera.add(fpCig.group);
   return fpCig;
 }
 function setSmokeSitHands(on: boolean) {
@@ -2798,7 +2796,7 @@ function setSmokeSitHands(on: boolean) {
   } else {
     if (fpCig) fpCig.group.visible = false;
     handL.visible = true;
-    for (const c of handR.children) if (!fpCig || c !== fpCig.group) c.visible = true;
+    handR.visible = true;
     knife.visible = true;
     const sleeve = handR.children[0] as THREE.Mesh | undefined;
     const cuff = handR.children[2] as THREE.Mesh | undefined;
@@ -2809,7 +2807,7 @@ function setSmokeSitHands(on: boolean) {
 }
 function disposeFpCigarette() {
   if (!fpCig) return;
-  handR.remove(fpCig.group);
+  fpCig.group.parent?.remove(fpCig.group);
   fpCig.dispose();
   fpCig = null;
   smokeSitActive = false;
@@ -3020,7 +3018,7 @@ function applySmokeSitFpHands() {
   if (!smokeSitActive || tpv) return;
   // 第一人稱只顯示朝前的香菸：雙手模型藏起來，菸仍跟著右手軌跡
   handL.visible = false;
-  for (const c of handR.children) c.visible = !!fpCig && c === fpCig.group;
+  handR.visible = false;
   handL.position.set(PUFF_FP_L.x, PUFF_FP_L.y, PUFF_FP_L.z);
   handL.rotation.set(PUFF_FP_L.rx, PUFF_FP_L.ry, PUFF_FP_L.rz);
   const u = puffVisualK();
@@ -3060,9 +3058,15 @@ function applySmokeSitFpHands() {
   }
   if (cuff) cuff.position.set(0, -u * 0.06, 0.66 + u * 0.35);
   if (fpCig) {
-    // 濾嘴朝鏡頭／嘴，菸頭朝外前
-    fpCig.group.position.set(-0.01, 0.01, -0.16 - u * 0.04);
-    fpCig.group.rotation.set(0.35 + u * 0.15, 0.25 - u * 0.35, 0.1);
+    // 鏡頭空間：平常垂在畫面外（手放膝上）；抽一口時濾嘴含在嘴（畫面下緣正中，被近裁切面吃掉），菸頭朝前微上
+    const k = away > 0.01 ? 1 - away * 0.6 : u;
+    const fl = flick > 0.01 && u < 0.2 ? flick : 0;
+    fpCig.group.position.set(
+      0.045 + (0.004 - 0.045) * k + fl * 0.006,
+      -0.22 + (-0.04 + 0.22) * k + inhale * 0.003 - fl * 0.006,
+      -0.2 + (-0.07 + 0.2) * k,
+    );
+    fpCig.group.rotation.set(0.35 + (0.14 - 0.35) * k, 0.35 + (0.06 - 0.35) * k, 0.25 * (1 - k) + fl * 0.2);
   }
 }
 
