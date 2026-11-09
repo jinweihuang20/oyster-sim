@@ -667,7 +667,7 @@ const HINTS: Record<Phase, string> = {
   seam: COARSE ? '按住 ◀ ▶ 或拖蚵仔來轉，找殼縫；縫對準刀尖時點一下蚵仔插刀（拖其他地方是看四周）' : '滾輪／A D 轉蚵仔找殼縫，縫對準刀尖時點一下（或 Space）插刀',
   twist: COARSE ? '看指針來回擺動，走到綠區時點一下螢幕撬一下；撬夠次數殼就打開。點在紅區太用力會把殼弄碎' : '看指針來回擺動，走到綠區時點一下滑鼠（或按 Space）撬一下；撬夠次數殼就打開。點在紅區太用力會把殼弄碎',
   aim: '肉在刀尖上！點一下碗（或碗附近）丟進去，0.8 秒內點有「俐落」+$1，2 秒沒點會自己進碗',
-  empty: COARSE ? '空殼：按「丟殼」對準阿婆丟過去，或者等一下自動丟掉' : '空殼：F／右鍵對準阿婆丟過去，或者等一下自動丟掉',
+  empty: COARSE ? '空殼：按「丟殼」對準阿婆丟過去，或者等一下自動丟掉' : '空殼：F／右鍵／「丟殼」對準阿婆丟過去，或者等一下自動丟掉',
   crab: COARSE ? '螃蟹夾手了！快狂點螢幕把牠甩掉！' : '螃蟹夾手了！快連點（滑鼠／Space）把牠甩掉！',
   busy: '',
   grillPlace: COARSE ? '點烤網放上這顆（不拿刀）；放完再拿下一顆。空手才能掀殼／拿肉' : '點烤網放上這顆（不拿刀）；放完再拿下一顆。空手才能掀殼／拿肉',
@@ -3234,7 +3234,7 @@ function launchPlaza() {
       plazaEnsureFpView();
       startDay();
       on('standBtn', true);
-      hint.textContent = '休閒模式：點面前蚵堆撈蚵，想換堆按「🚶」。無倒數，離開再結算。';
+      hint.textContent = '休閒模式：點面前蚵堆撈蚵，想換堆按「換位置」。無倒數，離開再結算。';
       toast('坐下了！第一人稱可左右轉約 90° 看旁邊', '#9be37a');
     },
     resumeSit: () => {
@@ -3256,7 +3256,7 @@ function launchPlaza() {
       on('umbBtn', false); on('medBtn', true); on('quitBtn', true); on('camBtn', COARSE);
       if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
       toast('吸菸區・休息一下', '#9be37a');
-      hint.textContent = '吸菸區：按「🚶」站起來繼續逛';
+      hint.textContent = '吸菸區：按「換位置」站起來繼續逛；可按住「抽一口」';
       SFX.pop();
     },
     goWalk: () => {
@@ -3560,7 +3560,7 @@ function frameBody() {
           ? `${aim.nick}在看，不要偷…`
           : why
             ? `${aim.nick}：${why}`
-            : `${aim.nick}沒注意！${COARSE ? '按住「偷」' : '按住 E'}偷他的肉`;
+            : `${aim.nick}沒注意！${COARSE ? '按住「偷」' : '按住 E／「偷」'}偷對方的肉`;
       }
       if (plazaStealTgt) {
         const live = plazaAimTargets().find(t => t.connId === plazaStealTgt!.connId);
@@ -3584,7 +3584,7 @@ function frameBody() {
       }
     } else {
     const tgt = walking || evRun?.steal === 'no_steal' ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
-    if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！${COARSE ? '按住「偷」' : '按住 E'}偷她的肉` : `${tgt.name}在看，不要偷…`;
+    if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！${COARSE ? '按住「偷」' : '按住 E／「偷」'}偷對方的肉` : `${tgt.name}在看，不要偷…`;
     if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
     }
     updReticle();
@@ -3618,7 +3618,7 @@ function frameBody() {
     if (warnEl.style.left !== wLeft) warnEl.style.left = wLeft;
     if (warnEl.style.opacity !== wOp) warnEl.style.opacity = wOp;
     if (warnEl.textContent !== wTxt) warnEl.textContent = wTxt;
-    hint.textContent = `${warnNpc.name}要丟殼過來了！快${COARSE ? '按住「雨傘」' : '按住 R 撐傘'}！`;
+    hint.textContent = `${warnNpc.name}要丟殼過來了！快${COARSE ? '按住「雨傘」' : '按住 R／「雨傘」'}！`;
   } else if (warnEl.classList.contains('on')) warnEl.classList.remove('on');
   for (const n of npcs) {
     n.look -= dt; n.bubT -= rdt;
@@ -3827,8 +3827,8 @@ function npcTip(n: Npc) {
 <li><b>會讓她生氣</b>：用殼丟中她（+35，丟歪打中 +30）、偷她的肉（+12，被抓到再 +20）。</li>
 <li><b>越生氣越常丟你</b>：怒氣越高，她丟殼的頻率越高、準備時間越短；怒氣到 90 會連丟 3 顆殼。</li>
 <li><b>怎麼讓她消氣</b>：8 秒內不要再丟她或偷她，之後怒氣每秒降 2.5。<b>起來走動</b>時氣消得快：只要 2 秒、之後每秒降 7.5。</li>
-<li><b>被丟的時候</b>：看到 ⚠ 就趕快按住 ☂ 雨傘擋（放開就收起來，撐傘時不能剝蚵）；連續擋下 3 次，阿婆們會暫時比較少丟。</li>
-<li><b>真的被盯上</b>：可以「🚶 換位置」，換到比較不容易被丟中的位子。</li></ul><p style="opacity:.7;font-size:12px">點這裡關閉</p>`;
+<li><b>被丟的時候</b>：看到 ⚠ 就趕快按住「雨傘」擋（電腦可按住 R；放開就收起來，撐傘時不能剝蚵）；連續擋下 3 次，阿婆們會暫時比較少丟。</li>
+<li><b>真的被盯上</b>：可以按「換位置」（電腦按 G），換到比較不容易被丟中的位子。</li></ul><p style="opacity:.7;font-size:12px">點這裡關閉</p>`;
   el.classList.add('show');
 }
 

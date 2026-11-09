@@ -117,7 +117,7 @@ export function standUp() {
   walking = true; D.handRig.visible = false; walkPos.copy(D.SEAT).setY(1.55); const out = D.seatGround(D.seatNow()).setLength(0.45); walkPos.add(out);
   const y = D.getYaw() + D.getSeatYaw(); D.setTYaw(y); D.setYaw(y); D.setTPitch(-0.25); D.setPitch(-0.25);
   D.$('diff').textContent = ''; D.on('standBtn', false); D.on('joy', true); D.on('stealBtn', false);
-  D.hint.textContent = D.COARSE ? '用搖桿行路，走去空的藍色板凳邊仔，按「坐落」換位' : 'WASD 行路，走去空的藍色板凳邊仔，按 E 坐落換位';
+  D.hint.textContent = D.COARSE ? '用搖桿走動，走到空的藍色板凳旁，按「坐這裡」坐下' : 'WASD 走動，走到空的藍色板凳旁，按 E／「坐這裡」坐下';
 }
 
 /** 廣場：站起後的本地走動狀態（由 plazaStandWalk 呼叫） */
@@ -144,7 +144,7 @@ export function plazaEnterWalkPose(fromSeat = true) {
   D.on('standBtn', false); D.on('umbBtn', false); D.on('medBtn', false); D.on('stealBtn', false); D.on('joy', true); D.on('camBtn', D.COARSE);
   if (D.COARSE) { const cam = D.$('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
   D.stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
-  D.hint.textContent = D.COARSE ? '廣場走走・可按「視角」切換・靠近空位坐下' : 'WASD 走動・V 切換視角・空白鍵跳躍・C 蹲下・Z 躺下・E 坐下剝蚵';
+  D.hint.textContent = D.COARSE ? '廣場走走・可按「視角」切換・靠近空位按「坐這裡」' : 'WASD 走動・V／「視角」切換・Space 跳躍・C 蹲下・Z 躺下・E／「坐這裡」坐下';
 }
 
 export function sitDown(id: string) {
@@ -153,7 +153,7 @@ export function sitDown(id: string) {
   if (id !== D.getSaveSeat()) D.track('seat', { seat: id });
   D.applySeat(id); D.persist(); D.handRig.visible = true;
   D.setTYaw(0); D.setYaw(0); D.setTPitch(-0.85); D.setPitch(-0.85);
-  D.toast(`坐落${D.seatNow().n}`, '#9fe0ff'); D.SFX.pop(); D.later(0.3, D.goPick);
+  D.toast(`已坐下：${D.seatNow().n}`, '#9fe0ff'); D.SFX.pop(); D.later(0.3, D.goPick);
 }
 
 export function walkStep(dt: number) {

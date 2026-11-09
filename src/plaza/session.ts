@@ -840,7 +840,7 @@ function showRoamUi() {
   syncSeatChrome();
 }
 
-/** 走動才顯示離開；坐下改用遊戲內 quit／🚶。上方狀態一律用遊戲 #top／#stats */
+/** 走動才顯示離開；坐下改用遊戲內 quit／換位置。上方狀態一律用遊戲 #top／#stats */
 function syncSeatChrome() {
   const leave = ui?.querySelector('#pzX') as HTMLElement | null;
   if (leave) leave.classList.toggle('hide', seated);
@@ -894,7 +894,7 @@ export function plazaUpdateNear(wx: number, wz: number) {
   return near;
 }
 
-/** 嘗試坐附近空位（E／坐落）；吸菸區不開剝蚵工班 */
+/** 嘗試坐附近空位（E／坐這裡）；吸菸區不開剝蚵工班 */
 export async function plazaTrySit(): Promise<boolean> {
   if (!deps || !active || seated || sittingBusy) return false;
   const seat = near ?? nearestFreeSeat(deps.getWalkXZ().x, deps.getWalkXZ().z, takenSet(true), SIT_DIST);
