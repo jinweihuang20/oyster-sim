@@ -50,6 +50,7 @@ import {
 } from './plaza';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
+import { $, on, toast, initDomToast, tickToast } from './ui';
 installNoZoom();
 { const s = document.createElement('style'); s.textContent = weaponPreviewCss(); document.head.appendChild(s); }
 const LS_P = __PREVIEW__ ? 'preview:' : '';
@@ -58,7 +59,6 @@ if (__PREVIEW__) document.addEventListener('DOMContentLoaded', () => { const t =
 
 
 // ---------- 基本設定 ----------
-const $ = (id: string) => document.getElementById(id)!;
 const params = new URLSearchParams(location.search);
 const SHOT = params.get('shot'); // 截圖測試用
 const SHIFT = 180;
@@ -694,12 +694,10 @@ const later = (t: number, f: () => void) => timers.push({ t, f });
 const flyers: { m: THREE.Object3D; p0: THREE.Vector3; p1: THREE.Vector3 | (() => THREE.Vector3); t: number; dur: number; h: number; end?: () => void }[] = [];
 const fly = (m: THREE.Object3D, p0: THREE.Vector3, p1: THREE.Vector3 | (() => THREE.Vector3), dur: number, h: number, end?: () => void) => { scene.add(m); m.position.copy(p0); flyers.push({ m, p0, p1, t: 0, dur, h, end }); };
 const gauge = $('gauge'), fill = $('fill'), zone = $('zone'), label = $('label'), hint = $('hint'), toastEl = $('toast');
-let toastT = 0;
-function toast(t: string, c = '#ffe080') {
-  toastEl.textContent = t; toastEl.style.color = c; toastEl.classList.add('on'); toastT = 1.1;
-  // 廣場：重算頂距，避免與跑馬燈交疊
-  if (plazaMode) try { Social.placeFeed(); } catch { /* Social 尚未 init */ }
-}
+initDomToast(toastEl, {
+  isPlazaMode: () => plazaMode,
+  onPlazaToast: () => { Social.placeFeed(); },
+});
 let inZ0 = '';
 function setInZ(z: string) { if (z === inZ0) return; const was = inZ0; inZ0 = z; gauge.classList.toggle('inZ', !!z); gauge.classList.toggle('inP', z === 'p'); $('gtag').textContent = z === 'p' ? '完美！' : z ? '現在！' : '';
   if (z && !was) { navigator.vibrate?.(15); tone(z === 'p' ? 1320 : 990, 0.04, 0.06, 'triangle'); } }
@@ -718,7 +716,6 @@ const HINTS: Record<Phase, string> = {
   grillFlip: '點烤開的蚵仔掀上殼（比手速；手上有東西不行）',
   grillTake: '點掀好的蚵仔拿肉（比手速；手上有東西不行）',
 };
-const on = (id: string, v: boolean) => $(id).classList.toggle('on', v);
 /** 丟殼／偷蚵準心：工寮與廣場同一套——瞄到碗→手掌「偷!」，可下手時 hot */
 function updReticle() {
   const el = $('reticle');
@@ -3627,7 +3624,7 @@ function frameBody() {
   slowmo = Math.max(0, slowmo - rdt); const dt = rdt * (slowmo > 0.4 ? 0.3 : 1), t = clock.elapsedTime;
   for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= rdt; if (timers[i].t <= 0) { const f = timers[i].f; timers.splice(i, 1); f(); } }
   flinch = Math.max(0, flinch - rdt);
-  toastT -= rdt; if (toastT <= 0) toastEl.classList.remove('on');
+  tickToast(rdt);
   tension = Math.max(0, tension - rdt * 1.6);
   if (umbHeld) { umbT = Math.max(0, umbT - rdt); if (umbT <= 0) { umbHeld = false; umbTired = true; $('umbBtn').classList.remove('held'); toast('手痠了，放開再重新撐傘', '#ffcf8a'); } } else umbT = 0; $('umbBtn').classList.toggle('cd', umbTired); { const b = $('umbBtn'), c = $('umbCd'); if (umbHeld) { const f = umbT / Math.max(0.1, umbLen); b.style.setProperty('--p', `${(f * 100).toFixed(1)}%`); c.textContent = `${umbT.toFixed(1)}s`; b.classList.toggle('low', umbT < 1.2); } else { c.textContent = ''; b.classList.remove('low'); } }
   const us = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0; umbS = us; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
