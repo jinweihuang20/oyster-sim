@@ -964,6 +964,24 @@ function hashPid(pid: string) {
     };
   }
 
+  /** 吸菸座的阿婆：每隔一陣子自己抽一口（純前端，各玩家時間點不同步） */
+  function tickNpcAutoPuff(r: Remote) {
+    const now = performance.now();
+    const st = ((r as any)._npcPuff ??= { next: now + 3000 + Math.random() * 9000, endAt: 0, hold: 0 });
+    if (st.endAt) {
+      if (now >= st.endAt) {
+        st.endAt = 0;
+        applyRemotePuff({ connId: r.connId || r.key, start: false, holdMs: st.hold });
+        st.next = now + 9000 + Math.random() * 14000;
+      }
+      return;
+    }
+    if (now < st.next || r.puff) return;
+    st.hold = 1200 + Math.random() * 3800;
+    st.endAt = now + st.hold;
+    applyRemotePuff({ connId: r.connId || r.key, start: true, holdMs: 0 });
+  }
+
   function spawnRemoteExhale(r: Remote, holdMs: number) {
     if (holdMs < REMOTE_PUFF_MIN_HOLD_MS || !r.rig?.head) return;
     const strength = Math.min(1, holdMs / 5000);
@@ -1659,6 +1677,7 @@ function hashPid(pid: string) {
     // 遠端吸菸：手持菸（掛腕）＋菸頭薄煙；不再用頭側飄煙以免看起來沒拿菸
     for (const r of remotes.values()) {
       const want = r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke');
+      if (want && r.isNpc && isSmokePile(r.pileId)) tickNpcAutoPuff(r);
       if (want) {
         ensurePlazaSmokeCig(r.rig, LO);
         const cig = getPlazaSmokeCig(r.rig);
