@@ -16,3 +16,8 @@ export {
 export {
   initTutorial, tut, TUT, tutMeat, tutGo, tutStart, tutEnd, tutPrep, isTut, getTut,
 } from './tutorial';
+
+export { initPersist, persist } from './persist';
+export {
+  initDaily, renderDaily, openDaily, claimDaily, checkReturn, stampRow, type DailyDeps,
+} from './daily';
