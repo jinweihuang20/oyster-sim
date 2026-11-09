@@ -131,8 +131,8 @@ export type PlazaWorldView = {
   grill: PlazaGrillView;
   /** 坐下遠端玩家的瞄準點（丟殼／偷肉） */
   aimTargets: () => PlazaAimTarget[];
-  /** 走動碰撞用：站立遠端玩家圓柱 `[x, z, radius]`（蹲／躺略過） */
-  walkBodies: () => [number, number, number][];
+  /** 走動碰撞用：遠端 `[x, z, radius, isLie]`；isLie=1 時跳躍夠高可越过 */
+  walkBodies: () => [number, number, number, number][];
   moonLaunch: (connId: string, delayMs?: number, fromX?: number, fromZ?: number) => void;
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) => void;
@@ -1146,9 +1146,9 @@ function hashPid(pid: string) {
     for (const k of stallKeepers) { k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15; posePlazaStallKeeper(k.rig, tSec, k.ph); tickKeeperBubble(k, tSec); }
   }
 
-  /** 站立／蹲／躺／跳躍的遠端：擋路（不推擠）；坐下、尚未現身：不擋 */
-  function walkBodies(): [number, number, number][] {
-    const out: [number, number, number][] = [];
+  /** 站立／蹲／躺／跳躍的遠端：擋路（不推擠）；坐下、尚未現身：不擋；躺＝isLie */
+  function walkBodies(): [number, number, number, number][] {
+    const out: [number, number, number, number][] = [];
     for (const r of remotes.values()) {
       if (r.seated || r.awaitingPose || !r.rig.outer.visible) continue;
       const ph = r.phase || '';
@@ -1156,11 +1156,11 @@ function hashPid(pid: string) {
         // outer.Rx=+π/2 後身體沿 +Z 倒地，再經 yaw 變成 (sin,cos)＝面向的反方向（頭在腳後方）
         const bx = Math.sin(r.yaw), bz = Math.cos(r.yaw);
         for (const [t, rr] of [[0, 0.34], [0.35, 0.38], [0.7, 0.4], [1.05, 0.36], [1.35, 0.32]] as const)
-          out.push([r.x + bx * t, r.z + bz * t, rr]);
+          out.push([r.x + bx * t, r.z + bz * t, rr, 1]);
       } else if (ph === 'crouch') {
-        out.push([r.x, r.z, 0.45]); // 蹲時膝蓋前伸，略加大
+        out.push([r.x, r.z, 0.45, 0]); // 蹲時膝蓋前伸，略加大
       } else {
-        out.push([r.x, r.z, 0.38]);
+        out.push([r.x, r.z, 0.38, 0]);
       }
     }
     return out;

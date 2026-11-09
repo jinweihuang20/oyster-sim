@@ -13,8 +13,9 @@ export type WalkSeatDeps = {
   plazaSeated: () => boolean;
   plazaStandWalk: () => void;
   plazaPileObs: () => [number, number, number][];
-  /** 遠端玩家碰撞圓（擋路不推擠；含站／蹲／躺／跳） */
-  plazaWalkBodies: () => [number, number, number][];
+  /** 遠端玩家碰撞圓 `[x,z,r,isLie]`（擋路不推擠；含站／蹲／躺／跳） */
+  plazaWalkBodies: () => [number, number, number, number][];
+  getJumpY: () => number;
   plazaWalkBound: () => number;
   plazaNearSeat: () => { pileId: number; slot: number } | null;
   plazaMySeat: () => { pileId: number; slot: number } | null;
@@ -174,9 +175,11 @@ export function walkStep(dt: number) {
     const dx = walkPos.x - x, dz = walkPos.z - z, d = Math.hypot(dx, dz);
     if (d < rr + 0.2 && d > 1e-4) { walkPos.x = x + dx / d * (rr + 0.2); walkPos.z = z + dz / d * (rr + 0.2); }
   }
-  // 玩家之間：擋路但不推擠；跳躍同樣干涉（不因離地穿透）
+  // 玩家之間：擋路但不推擠；站／蹲跳躍仍擋，躺著夠高可越过
   if (D.isPlazaMode()) {
-    for (const [x, z, rr] of D.plazaWalkBodies()) {
+    const clearLie = D.getJumpY() >= 0.32;
+    for (const [x, z, rr, isLie] of D.plazaWalkBodies()) {
+      if (isLie && clearLie) continue;
       const dx = walkPos.x - x, dz = walkPos.z - z, d = Math.hypot(dx, dz);
       const minD = rr + 0.2;
       if (d >= minD || d <= 1e-4) continue;
