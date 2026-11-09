@@ -16,6 +16,7 @@ import {
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
+import { mergeStaticMeshes, countMeshes } from './mergeStatic';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
 import { makePlazaCafe } from './cafe';
@@ -151,6 +152,9 @@ export function createPlazaWorldView(
   const remotes = new Map<string, Remote>();
   const seatMeshes = new Map<string, THREE.Mesh>();
   const pileGroups: THREE.Group[] = [];
+  const chairsRoot = new THREE.Group();
+  chairsRoot.name = 'plazaChairs';
+  root.add(chairsRoot);
   let nearKey: string | null = null;
 
   // 水泥廣場貼皮（分格對齊蚵堆）
@@ -186,7 +190,7 @@ export function createPlazaWorldView(
     for (let s = 0; s < seatN; s++) {
       const pose = seatPose(i, s);
       const { group, pad } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
-      root.add(group);
+      chairsRoot.add(group);
       seatMeshes.set(seatKey(i, s), pad);
     }
   }
@@ -217,6 +221,25 @@ export function createPlazaWorldView(
   // 樸子腳北側「聯合競選總部」組合屋外觀（無座位、無點光）
   const hq = makePlazaHq(M, add, LO);
   root.add(hq.group);
+
+  // 合併靜態桌椅／棚架／攤位（略過選位墊、炭火、吊扇、薄煙；店面小零件留給遠景 LOD）
+  const padSet = new Set<THREE.Object3D>([...seatMeshes.values()]);
+  const skipMerge = (m: THREE.Mesh) => {
+    if (padSet.has(m)) return true;
+    let p: THREE.Object3D | null = m;
+    while (p) {
+      if (p.name === 'charcoalFire' || p.name === 'plazaCeilingFan' || p.name === 'cigSmoke') return true;
+      p = p.parent;
+    }
+    return false;
+  };
+  const meshBefore = countMeshes(root);
+  mergeStaticMeshes(chairsRoot, { skip: skipMerge, name: 'chairsMerged' });
+  mergeStaticMeshes(bigShed.group, { skip: skipMerge, name: 'shedMerged' });
+  for (const pile of pileGroups) mergeStaticMeshes(pile, { skip: skipMerge, name: 'pileMerged' });
+  mergeStaticMeshes(ambiance.group, { skip: skipMerge, name: 'ambianceMerged' });
+  mergeStaticMeshes(smokeArea.group, { skip: skipMerge, name: 'smokeMerged' });
+  root.userData.mergeStats = { meshesBefore: meshBefore, meshesAfter: countMeshes(root) };
 
   // 遠景細節裁切：建築小零件（窗框、桌上小物、菸蒂…）與貼圖招牌，鏡頭離建築夠遠就不畫
   type DetailLod = { box: THREE.Box3; small: THREE.Object3D[]; signs: THREE.Object3D[]; smallOn: boolean; signOn: boolean };
