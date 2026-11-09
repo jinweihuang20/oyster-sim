@@ -1092,8 +1092,8 @@ export function tickPlaza(dt: number) {
       ? (smokeSit ? 'smoke' : (sp ?? deps.getPhase()))
       : (sp === 'jump' || sp === 'crouch' || sp === 'lie' ? sp : 'walk');
     const moving = !seated && deps.getMoving();
-    // 第三人稱走動：鎖 look，避免遠端上下點頭；第一人稱／坐下照常同步頭
-    const lockLook = !seated && (deps.getTpv?.() ?? false);
+    // 第三人稱（走動／坐下／躺著繞鏡頭）：鎖 look，身體朝向用 yaw；第一人稱坐下仍同步轉頭
+    const lockLook = !!(deps.getTpv?.() ?? false);
     const lookYaw = lockLook ? 0 : (deps.getLookYaw?.() ?? 0);
     const pitch = lockLook ? 0 : (deps.getPitch?.() ?? 0);
     void client.sync(p.x, p.z, yaw, phase, deps.getCount(), moving, deps.getUmb(), lookYaw, pitch);

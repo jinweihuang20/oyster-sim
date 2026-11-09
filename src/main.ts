@@ -2098,13 +2098,16 @@ let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch:
 const PLAZA_SIT_YAW = Math.PI / 2;
 const yl = () => {
   if (walking) return 1e9;
-  if (plazaMode) return tpv ? 0 : PLAZA_SIT_YAW;
+  // 廣場第三人稱坐下：鏡頭可 360° 繞轉（身體朝向另鎖 seatYaw）
+  if (plazaMode) return tpv ? 1e9 : PLAZA_SIT_YAW;
   return YAW;
 };
 const pitchLo = () => P0;
 const pitchHi = () => plazaMode && !walking ? 0.55 : P1;
-/** 廣場第三人稱走動：鎖上下視角（鏡頭固定俯仰，也不改 pitch 以免同步到遠端） */
-const plazaTpWalkLockPitch = () => plazaMode && walking && tpv;
+/** 廣場第三人稱（走動／坐下）：鏡頭俯仰用 tpPitch，不改 pitch（避免同步到遠端點頭） */
+const plazaTpOrbitPitch = () => plazaMode && tpv;
+/** @deprecated alias — 舊名仍給讀碼用 */
+const plazaTpWalkLockPitch = () => plazaTpOrbitPitch();
 const PLAZA_WALK_PITCH = -0.2; let tpPitch = 0.41; let walkMovingT = 0; const tpPitchFree = () => performance.now() - walkMovingT > 200;
 const YAW = 1.25, P0 = -1.05, P1 = 0.15;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -2136,7 +2139,7 @@ window.addEventListener('pointermove', e => {
       const k = 0.0022 * mix.sens;
       // 桌面 Pointer Lock：yaw 減＝往右看（與死鬥／觸控 FPS 同向）；反轉左右再開 invX
       const xS = mix.invX ? -1 : 1;
-      if (!(plazaMode && walking && bodyPose === 'lie')) yaw = tYaw = clamp(tYaw - e.movementX * k * xS, -yl(), yl());
+      yaw = tYaw = clamp(tYaw - e.movementX * k * xS, -yl(), yl());
       if (plazaTpWalkLockPitch()) { pitch = tPitch = PLAZA_WALK_PITCH; if (tpPitchFree()) tpPitch = clamp(tpPitch + e.movementY * k * 0.8, 0.05, 1.1); }
       else pitch = tPitch = clamp(tPitch - e.movementY * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
       camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld();
@@ -2156,7 +2159,7 @@ window.addEventListener('pointermove', e => {
     // 手機／觸控拖曳：維持 FPS（指右＝往右看）；勿與桌面滑鼠共用同一符號
     const k = 0.006 * mix.sens;
     const xS = mix.invX ? -1 : 1;
-    if (!(plazaMode && walking && bodyPose === 'lie')) tYaw = clamp(down.yaw - dx * k * xS, -yl(), yl());
+    tYaw = clamp(down.yaw - dx * k * xS, -yl(), yl());
     if (plazaTpWalkLockPitch() && tpPitchFree()) tpPitch = clamp((down.tp ?? tpPitch) + dy * k * 0.8, 0.05, 1.1);
 tPitch = plazaTpWalkLockPitch() ? PLAZA_WALK_PITCH : clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
     // 坐下／拖曳立刻上鏡頭（與 Pointer Lock 同手感，不等到下幀）
@@ -2947,10 +2950,10 @@ function launchPlaza() {
     getSyncPhase: () => jumpT > 0 ? 'jump' : bodyPose && walking ? bodyPose : ((phase === 'empty' || phase === 'seam') && plazaThrowTarget() ? 'throwAim' : phase),
     getCount: () => count,
     getWalkXZ: () => (walking ? { x: walkPos.x, z: walkPos.z } : { x: SEAT.x, z: SEAT.z }),
-    getYaw: () => (walking ? yaw : seatYaw),
-    // 坐下第一人稱：yaw＝相對座位轉頭；第三人稱坐下／走動：lookYaw＝0
+    getYaw: () => (!walking ? seatYaw : (plazaMode && bodyPose === 'lie' ? bodyYaw : yaw)),
+    // 坐下第一人稱：yaw＝相對座位轉頭；第三人稱／走動：lookYaw＝0（躺／繞鏡頭不轉身體）
     getLookYaw: () => (walking || tpv ? 0 : yaw),
-    getPitch: () => (walking && tpv ? 0 : pitch),
+    getPitch: () => (tpv ? 0 : pitch),
     getTpv: () => tpv,
     getOutfit: () => ({
       head: equipNow('head').id,
@@ -3825,8 +3828,11 @@ function applyOutfit3() {
 function setTpv(v: boolean) {
   tpv = v;
   if (plazaForceTp) plazaForceTp = false; // 玩家手動切換，之後跟存檔偏好
-  // 廣場坐下切第三人稱：清掉轉頭，避免遠端／本機頭還歪著
-  if (v && plazaMode && !walking) yaw = tYaw = 0;
+  if (plazaMode && !walking) {
+    // 第三人稱：鏡頭從角色背後開始繞；切回第一人稱：相對座位轉頭歸零
+    if (v) yaw = tYaw = seatYaw;
+    else yaw = tYaw = 0;
+  }
   save.tpv = v ? 1 : 0; persist(); applyOutfit3(); drawCamBtn();
   const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) c.checked = v;
 }
@@ -3856,7 +3862,8 @@ function camTick(dt: number) {
       rig.outer.visible = true;
       rig.outer.position.set(walkPos.x, jumpY, walkPos.z);
       rig.outer.rotation.order = 'YXZ';
-      rig.outer.rotation.y = yaw;
+      // 躺著：身體朝向鎖 bodyYaw，鏡頭仍用 yaw 繞轉
+      rig.outer.rotation.y = bodyPose === 'lie' ? bodyYaw : yaw;
       rig.outer.rotation.x = 0;
       if (jumpT > 0) {
         posePlazaJump(rig, PLAZA_JUMP_DUR - jumpT);
@@ -3898,18 +3905,17 @@ function camTick(dt: number) {
   const up = cheerT > 0 ? Math.sin(Math.min(1, cheerT) * Math.PI) : 0;
   meArmL.rotation.x = meArmR.rotation.x = -up * 2.4; meArmL.rotation.z = -up * 0.3; meArmR.rotation.z = up * 0.3;
   meTorso.rotation.x = ouchT > 0 ? Math.sin(ouchT / 0.6 * Math.PI) * 0.35 : 0; meTorso.position.y = up * 0.06;
-  meHead.rotation.y = yaw * 0.6; meTorso.position.y = Math.max(meTorso.position.y, 0);
-  const h = seatYaw + yaw * 0.35, fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
+  meHead.rotation.y = (plazaMode && tpv) ? 0 : yaw * 0.6; meTorso.position.y = Math.max(meTorso.position.y, 0);
+  // 廣場第三人稱坐下：手／身體參考座位朝向，不跟繞轉鏡頭
+  const h = (plazaMode && tpv) ? seatYaw : (seatYaw + yaw * 0.35), fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
   if (plazaMode) {
-    // 廣場坐下第三人稱：固定看堆心，不跟滑鼠轉頭
-    yaw = tYaw = 0;
+    // 廣場坐下第三人稱：鏡頭可繞角色轉，身體朝向維持 seatYaw（me3 已設）
     meHead.rotation.y = 0;
-    const origin = plazaMyPileOrigin();
-    const cx = origin ? origin.x : SEAT.x - Math.sin(seatYaw), cz = origin ? origin.z : SEAT.z - Math.cos(seatYaw);
-    let ox = SEAT.x - cx, oz = SEAT.z - cz; const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol;
-    const lx = -Math.sin(seatYaw), lz = -Math.cos(seatYaw);
-    const cp = new THREE.Vector3(SEAT.x + ox * 3.1, SEAT.y + 1.65, SEAT.z + oz * 3.1);
-    const lt = new THREE.Vector3(cx + lx * 0.15, 0.7, cz + lz * 0.15);
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    const dist = 3.1;
+    const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = dist * Math.cos(el);
+    const cp = new THREE.Vector3(SEAT.x - fx * hd, SEAT.y + 0.4 + dist * Math.sin(el), SEAT.z - fz * hd);
+    const lt = new THREE.Vector3(SEAT.x + fx * 0.2, SEAT.y - 0.15, SEAT.z + fz * 0.2);
     if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
     { const f = tpFovFor('plazaSit'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     tpCam.lookAt(tpLook); tpCam.updateMatrixWorld();
@@ -4253,7 +4259,14 @@ function plazaJump() { if (!plazaMode || !walking || jumpT > 0 || bodyPose === '
 let bodyPose: '' | 'crouch' | 'lie' = '';
 let lastPose: 'crouch' | 'lie' = 'crouch';
 let poseK = 0; // 0 站 → 1 完全蹲／躺（平滑過渡）
+/** 廣場躺著時鎖住的身體朝向（鏡頭可用 yaw 繞轉／張望） */
+let bodyYaw = 0;
 function setBodyPose(p: '' | 'crouch' | 'lie') {
+  if (plazaMode && walking) {
+    if (p === 'lie' && bodyPose !== 'lie') bodyYaw = yaw;
+    // 起來：鏡頭對回身體朝向，避免突然轉向；之後移動再慢慢帶轉
+    if (bodyPose === 'lie' && p !== 'lie') { yaw = tYaw = bodyYaw; }
+  }
   bodyPose = p; if (p) lastPose = p;
   walkTune.mul = p === 'crouch' ? 0.5 : 1;
   document.getElementById('crouchBtn')?.classList.toggle('act', p === 'crouch');
