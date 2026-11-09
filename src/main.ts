@@ -21,7 +21,7 @@ import {
   syncEqPreview, refreshEqPreview, stopEqPreview, ODD,
   type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS,
   initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop,
-  initYardShop, GEAR, KNIVES, UMBS, BOWLS,
+  initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS,
   gearOn, knifeNow, umbNow, bowlNow,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
@@ -58,10 +58,11 @@ import {
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
-  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, seatPose, plazaPushOutfit,
+  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, seatPose, plazaPushOutfit, plazaPushCosmetics,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
+import { GOLD_SMOKE_TINT, encodeCosmetics } from './plaza/cosmetics';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
@@ -549,13 +550,14 @@ var umb3Ready = false, umbSlow = 1; let umbSize = 1, umbS = 0, umbLook = 'stripe
 function buildUmb(look: string, size: number) {
   while (umb.children.length) umb.remove(umb.children[0]); umbSize = size; umbLook = look; if (umb3Ready) build3Umb();
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 32; const x = cv.getContext('2d')!;
-  const pal: Record<string, string[]> = { stripe: ['#c8302a', '#f4f0e8'], clear: ['#cfe6ff', '#e4f2ff'], navy: ['#1f2b4a', '#24335a'], beach: ['#e83a3a', '#f6c33a', '#3ab0e8', '#5ac85a'], temple: ['#b0141a', '#e8b030'] };
+  const pal: Record<string, string[]> = { stripe: ['#c8302a', '#f4f0e8'], clear: ['#cfe6ff', '#e4f2ff'], navy: ['#1f2b4a', '#24335a'], beach: ['#e83a3a', '#f6c33a', '#3ab0e8', '#5ac85a'], temple: ['#b0141a', '#e8b030'], gold: ['#8a1420', '#d4af37'] };
   const cols = pal[look] ?? pal.stripe; for (let i = 0; i < 8; i++) { x.fillStyle = cols[i % cols.length]; x.fillRect(i * 32, 0, 32, 32); }
-  if (look === 'temple') { x.fillStyle = '#ffe28a'; x.fillRect(0, 26, 256, 6); }
+  if (look === 'temple' || look === 'gold') { x.fillStyle = look === 'gold' ? '#ffe9a0' : '#ffe28a'; x.fillRect(0, 26, 256, 6); }
+  if (look === 'gold') { x.fillStyle = '#f3d56a'; x.fillRect(0, 0, 256, 5); }
   const tex = new THREE.CanvasTexture(cv);
-  const m = new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: look === 'clear' ? 0.1 : 0.8, transparent: look === 'clear', opacity: look === 'clear' ? 0.45 : 1 });
-  const c = mesh(new THREE.ConeGeometry(0.9 * size, 0.35 * size, look === 'temple' ? 24 : 16, 1, true), m, [0, 0, 0], umb); c.rotation.x = Math.PI / 2;
-  mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.7, 5), mat(look === 'temple' ? 0xd8a020 : 0x6a4a2a), [0, -0.05, 0.35], umb).rotation.x = Math.PI / 2;
+  const m = new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: look === 'clear' ? 0.1 : look === 'gold' ? 0.45 : 0.8, metalness: look === 'gold' ? 0.35 : 0, transparent: look === 'clear', opacity: look === 'clear' ? 0.45 : 1 });
+  const c = mesh(new THREE.ConeGeometry(0.9 * size, 0.35 * size, look === 'temple' || look === 'gold' ? 24 : 16, 1, true), m, [0, 0, 0], umb); c.rotation.x = Math.PI / 2;
+  mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.7, 5), mat(look === 'gold' ? 0xe8c040 : look === 'temple' ? 0xd8a020 : 0x6a4a2a), [0, -0.05, 0.35], umb).rotation.x = Math.PI / 2;
 }
 buildUmb('stripe', 1);
 umb.position.set(0, 0, -0.75);
@@ -1410,7 +1412,7 @@ const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * kni
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
 const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? 1.25 : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
-function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : 1); }
+function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : k.id === 'harbor' ? 1.12 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : k.id === 'harbor' ? 0.82 : 1); }
 
 initYardShop({
   getSave: () => save,
@@ -1424,6 +1426,7 @@ initYardShop({
   applyBowl,
   applyGloves,
   drawRadio,
+  onCosmeticsChange: () => refreshPlazaCosmetics(),
   clearBowlMeat: () => { if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; } },
   renderClothShop,
   renderMedShop,
@@ -2515,8 +2518,8 @@ btn('rAch', () => { achFromRes = true; $('result').classList.remove('show'); ach
 const ITEMS = [{ id: 'moon', n: '把你媽的愛送上月球', price: 5000, good: '選一位鄰居，發射飛彈鐵拳把對方送上月球，這一工都不會再出現', bad: '每一工最多用 2 個，下一工對方會回來' }];
 
 // 主選單／雜貨新品／簽到提示／禮物信箱（見 ui/menu、meta/gifts）
-const shopKeys = () => [...KNIVES.filter(k => k.price > 0).map(k => 'knife-' + k.id), ...UMBS.filter(u => u.price > 0).map(u => 'umb-' + u.id), ...BOWLS.filter(b => b.price > 0).map(b => 'bowl-' + b.id), ...GEAR.map(g => 'gear-' + g.id), ...EQUIP.filter(e => e.price > 0).map(e => 'cloth-' + e.id), ...MEDS.map(m => 'med-' + m.id), ...ITEMS.map(i => 'item-' + i.id)];
-const shopName = (k: string) => { const [c, ...r] = k.split('-'); const id = r.join('-'); const L: any[] = c === 'knife' ? KNIVES : c === 'umb' ? UMBS : c === 'bowl' ? BOWLS : c === 'gear' ? GEAR : c === 'cloth' ? EQUIP : c === 'med' ? MEDS : ITEMS; return L.find(x => x.id === id)?.n ?? id; };
+const shopKeys = () => [...KNIVES.filter(k => k.price > 0).map(k => 'knife-' + k.id), ...UMBS.filter(u => u.price > 0).map(u => 'umb-' + u.id), ...BOWLS.filter(b => b.price > 0).map(b => 'bowl-' + b.id), ...GEAR.map(g => 'gear-' + g.id), ...COSMETICS.map(g => 'gear-' + g.id), ...EQUIP.filter(e => e.price > 0).map(e => 'cloth-' + e.id), ...MEDS.map(m => 'med-' + m.id), ...ITEMS.map(i => 'item-' + i.id)];
+const shopName = (k: string) => { const [c, ...r] = k.split('-'); const id = r.join('-'); const L: any[] = c === 'knife' ? KNIVES : c === 'umb' ? UMBS : c === 'bowl' ? BOWLS : c === 'gear' ? [...GEAR, ...COSMETICS] : c === 'cloth' ? EQUIP : c === 'med' ? MEDS : ITEMS; return L.find(x => x.id === id)?.n ?? id; };
 let shopTab = 0;
 initMenu({
   getState: () => state,
@@ -2794,6 +2797,16 @@ function plazaHideYard(hide: boolean) {
   }
 }
 
+function applyLocalGoldSmoke() {
+  const tint = gearOn('goldPipe') ? GOLD_SMOKE_TINT : undefined;
+  fpCig?.setSmokeTint(tint);
+  if (plazaMe) getPlazaSmokeCig(plazaMe)?.setSmokeTint(tint);
+}
+function refreshPlazaCosmetics() {
+  applyLocalGoldSmoke();
+  if (isPlazaActive()) void plazaPushCosmetics();
+  try { Social.syncTitle(); } catch { /* Social 尚未初始化時略過 */ }
+}
 /** 吸菸區第一人稱手持菸 */
 let fpCig: FpCigarette | null = null;
 let smokeSitActive = false;
@@ -2813,6 +2826,7 @@ function ensureFpCigarette() {
   const local = hand.matrix.clone().invert().multiply(cigAtMouth.matrix);
   local.decompose(fpCig.group.position, fpCig.group.quaternion, fpCig.group.scale);
   handR.add(fpCig.group);
+  applyLocalGoldSmoke();
   return fpCig;
 }
 function setSmokeSitHands(on: boolean) {
@@ -2934,7 +2948,7 @@ function endPuff() {
 function spawnExhalePuff(strength: number) {
   if (!smokeSitActive || strength <= 0) return;
   const sc = 0.35 + strength * 1.15;
-  const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 5100 + Math.floor(Math.random() * 4000), reach: tpv && plazaMe ? strength : undefined });
+  const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 5100 + Math.floor(Math.random() * 4000), reach: tpv && plazaMe ? strength : undefined, tint: gearOn('goldPipe') ? GOLD_SMOKE_TINT : undefined });
   puffExhaleHeadT = 1;
   if (tpv && plazaMe) {
     plazaMe.head.updateMatrixWorld(true);
@@ -2968,6 +2982,7 @@ function tickPuffUi(rdt: number) {
   }
   // 本機 TP avatar 手持菸
   if (plazaMe) ensurePlazaSmokeCig(plazaMe, COARSE);
+  applyLocalGoldSmoke();
 
   if (puffHeld) {
     puffT = Math.min(PUFF_HOLD_MAX, puffT + rdt);
@@ -3250,6 +3265,11 @@ function launchPlaza() {
       body: equipNow('body').id,
       legs: equipNow('legs').id,
       feet: equipNow('feet').id,
+    }),
+    getCosmetics: () => encodeCosmetics({
+      goldSmoke: gearOn('goldPipe'),
+      cushion: gearOn('seatCush'),
+      nameFrame: gearOn('nameFrame'),
     }),
     getMoving: () => {
       if (!walking) return false;
@@ -3899,7 +3919,7 @@ initTutorial({
 $('oTut').onclick = () => { const run = () => enterWorkShed(() => tutStart()); if (!save.tutDone) ensureNameThen(run); else run(); };
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
-  label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : k === 'odd' ? `開到「${ODD[i]?.name ?? '奇物'}」` : k === 'ach' ? `達成金牌成就「${ACHS[i]?.n ?? '成就'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！`, title: () => achTitle() });
+  label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : k === 'odd' ? `開到「${ODD[i]?.name ?? '奇物'}」` : k === 'ach' ? `達成金牌成就「${ACHS[i]?.n ?? '成就'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！`, title: () => achTitle(), foil: () => gearOn('nameFrame') });
 Social.startPresence(() => state === 'play');
 void Social.maybeAnnounceFirstPlay(() => !save.tutDone && (save.days ?? 0) < 1 && !SHOT);
 $('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; syncShiftUi(); } const run = () => enterWorkShed(() => tutStart()); if (!save.tutDone) ensureNameThen(run); else run(); };
@@ -4431,25 +4451,27 @@ const umb3Can = new THREE.Group(); umb3.add(umb3Can);
 let umb3Open = 0, umb3Jolt = 0; const umbFx: { m: THREE.Mesh; t: number }[] = [];
 function build3Umb() {
   while (umb3.children.length > 1) umb3.remove(umb3.children[1]); while (umb3Can.children.length) umb3Can.remove(umb3Can.children[0]);
-  const pal: Record<string, number[]> = { stripe: [0xc8302a, 0xf4f0e8], clear: [0xcfe6ff, 0xe4f2ff], navy: [0x1f2b4a, 0x2a3c66], beach: [0xe83a3a, 0xf6c33a, 0x3ab0e8, 0x5ac85a], temple: [0xb0141a, 0xe8b030] };
-  const cols = pal[umbLook] ?? pal.stripe, N = umbLook === 'temple' ? 12 : 8, R = 0.62 * umbSize, Hh = 0.24 * umbSize, clear = umbLook === 'clear';
-  const metal = umbLook === 'temple' ? 0xd8a020 : 0x8a8a90;
+  const pal: Record<string, number[]> = { stripe: [0xc8302a, 0xf4f0e8], clear: [0xcfe6ff, 0xe4f2ff], navy: [0x1f2b4a, 0x2a3c66], beach: [0xe83a3a, 0xf6c33a, 0x3ab0e8, 0x5ac85a], temple: [0xb0141a, 0xe8b030], gold: [0x8a1420, 0xd4af37] };
+  const fancy = umbLook === 'temple' || umbLook === 'gold';
+  const cols = pal[umbLook] ?? pal.stripe, N = fancy ? 12 : 8, R = 0.62 * umbSize, Hh = 0.24 * umbSize, clear = umbLook === 'clear';
+  const metal = umbLook === 'gold' ? 0xe8c040 : umbLook === 'temple' ? 0xd8a020 : 0x8a8a90;
+  const grip = umbLook === 'gold' ? 0xd4af37 : umbLook === 'temple' ? 0xb0141a : 0x5a3a1a;
   // 傘桿＋J 形把手
   mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.95, 6), mat(metal), [0, 0.0, 0], umb3);
-  const hd = mesh(new THREE.TorusGeometry(0.05, 0.016, 6, 10, Math.PI), mat(umbLook === 'temple' ? 0xb0141a : 0x5a3a1a), [0.05, -0.47, 0], umb3); hd.rotation.z = Math.PI;
-  mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.14, 6), mat(umbLook === 'temple' ? 0xb0141a : 0x5a3a1a), [0, -0.42, 0], umb3);
+  const hd = mesh(new THREE.TorusGeometry(0.05, 0.016, 6, 10, Math.PI), mat(grip), [0.05, -0.47, 0], umb3); hd.rotation.z = Math.PI;
+  mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.14, 6), mat(grip), [0, -0.42, 0], umb3);
   // 傘面：一片一片的三角面，每片顏色輪流
   for (let i = 0; i < N; i++) {
     const a0 = i / N * Math.PI * 2, a1 = (i + 1) / N * Math.PI * 2, g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute([0, Hh, 0, Math.cos(a0) * R, 0, Math.sin(a0) * R, Math.cos(a1) * R, 0, Math.sin(a1) * R], 3)); g.computeVertexNormals();
-    const m = new THREE.MeshStandardMaterial({ color: cols[i % cols.length], side: THREE.DoubleSide, roughness: clear ? 0.1 : 0.8, transparent: clear, opacity: clear ? 0.5 : 1, flatShading: true });
+    const m = new THREE.MeshStandardMaterial({ color: cols[i % cols.length], side: THREE.DoubleSide, roughness: clear ? 0.1 : umbLook === 'gold' ? 0.42 : 0.8, metalness: umbLook === 'gold' ? 0.32 : 0, transparent: clear, opacity: clear ? 0.5 : 1, flatShading: true });
     umb3Can.add(new THREE.Mesh(g, m));
     // 傘骨
     const rib = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, Math.hypot(R, Hh), 4), mat(metal));
     rib.position.set(Math.cos(a0) * R / 2, Hh / 2, Math.sin(a0) * R / 2); rib.lookAt(new THREE.Vector3(Math.cos(a0) * R, 0, Math.sin(a0) * R).add(umb3.position)); rib.rotateX(Math.PI / 2); umb3Can.add(rib);
     mesh(new THREE.SphereGeometry(0.014, 5, 4), mat(metal), [Math.cos(a0) * R, -0.005, Math.sin(a0) * R], umb3Can);
   }
-  if (umbLook === 'temple') { const fr = mesh(new THREE.CylinderGeometry(R, R, 0.08, N, 1, true), new THREE.MeshStandardMaterial({ color: 0xffe28a, side: THREE.DoubleSide }), [0, -0.04, 0], umb3Can); void fr; }
+  if (fancy) { const fr = mesh(new THREE.CylinderGeometry(R, R, 0.08, N, 1, true), new THREE.MeshStandardMaterial({ color: umbLook === 'gold' ? 0xffe9a0 : 0xffe28a, side: THREE.DoubleSide, metalness: umbLook === 'gold' ? 0.4 : 0, roughness: 0.4 }), [0, -0.04, 0], umb3Can); void fr; }
   mesh(new THREE.ConeGeometry(0.02, 0.08, 6), mat(metal), [0, Hh + 0.04, 0], umb3Can);
   umb3Can.position.y = 0.42;
 }

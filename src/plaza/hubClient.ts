@@ -319,6 +319,11 @@ export class PlazaClient {
     try { await this.conn.invoke('SetOutfit', head, hand, body, legs, feet); } catch { /* ignore */ }
   }
 
+  async setCosmetics(cosmetics: string) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return;
+    try { await this.conn.invoke('SetCosmetics', cosmetics || ''); } catch { /* 舊伺服器沒這個方法 */ }
+  }
+
   async setPhase(phase: string, count: number) {
     return this.sync(0, 0, 0, phase, count, false, false);
   }

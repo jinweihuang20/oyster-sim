@@ -34,6 +34,7 @@ export function buildCatalog(src, version = '', oddSrc = src, wpnSrc = '') {
   // 盆的 id 'wide' 和刀重複：購買事件只能用價格分辨，所以盆另給 key
   ev(src, 'BOWLS').forEach(b => items.push({ id: b.id, key: b.id === 'wide' ? 'bowl-wide' : b.id, name: b.n, category: 'basin', price: b.price, limited: false }));
   ev(src, 'GEAR').forEach(g => items.push({ id: g.id, name: g.n.replace(/^\S+\s/, ''), category: 'tool', price: g.price, limited: false }));
+  ev(src, 'COSMETICS').forEach(g => items.push({ id: g.id, name: g.n, category: 'tool', price: g.price, limited: false }));
   ev(src, 'MEDS').forEach(m => items.push({ id: 'med-' + m.id, name: m.n, emo: m.emo, category: 'med', price: m.price, limited: false }));
   ev(src, 'ITEMS').forEach(m => items.push({ id: 'item-' + m.id, name: m.n, category: 'item', price: m.price, limited: false }));
   ev(src, 'EQUIP').forEach(e => items.push({ id: e.id, name: e.n, category: SLOT_CAT[e.slot] ?? 'equip', price: e.price, limited: false }));

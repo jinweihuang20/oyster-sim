@@ -15,6 +15,7 @@ import { plazaDisplayName } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 import { plazaSoftCapClient } from '../core/economy';
 import { myTag } from '../meta/social';
+import { parseCosmetics } from './cosmetics';
 
 export type PlazaDeps = {
   id: string;
@@ -57,6 +58,8 @@ export type PlazaDeps = {
   getTpv?: () => boolean;
   /** 目前五件裝備 id（進場／換裝同步） */
   getOutfit?: () => { head: string; hand: string; body: string; legs: string; feet: string };
+  /** 目前廣場外觀旗標（進場／開關後同步） */
+  getCosmetics?: () => string;
   /** 別人丟殼飛過（含打向自己，先播飛行動畫） */
   onShellThrow?: (e: PlazaShellEvent) => void;
   /** 殼飛到自己：結算擋／中 */
@@ -466,6 +469,12 @@ export async function plazaPushOutfit() {
   if (!client?.connected || !deps?.getOutfit) return;
   const o = deps.getOutfit();
   await client.setOutfit(o.head, o.hand, o.body, o.legs, o.feet);
+  await plazaPushCosmetics();
+}
+
+export async function plazaPushCosmetics() {
+  if (!client?.connected || !deps?.getCosmetics) return;
+  await client.setCosmetics(deps.getCosmetics());
 }
 
 function clearReconnectTimer() {
@@ -691,6 +700,7 @@ function normPlayer(p: any): PlazaPlayer {
     body: p?.body ?? p?.Body ?? 'bd_basic',
     legs: p?.legs ?? p?.Legs ?? 'lg_basic',
     feet: p?.feet ?? p?.Feet ?? 'ft_basic',
+    cosmetics: (p?.cosmetics ?? p?.Cosmetics) == null ? undefined : String(p.cosmetics ?? p.Cosmetics ?? ''),
     isNpc,
     carriedBy,
   };
@@ -1281,6 +1291,10 @@ export function tickPlaza(dt: number) {
   const smokeSit = seated && myPile != null && isSmokePile(myPile);
   const restSit = seated && myPile != null && isRestPile(myPile);
   view?.setSelfPose(p.x, p.z, deps.getYaw(), seated, smokeSit, client?.connectionId ?? '');
+  {
+    const cushOn = seated && parseCosmetics(deps.getCosmetics?.() || '').cushion;
+    view?.setSelfCushion(seated && cushOn, myPile ?? -1, mySlot ?? -1);
+  }
   tickPlazaTags(view, deps.camera(), dt);
   if (!seated) plazaUpdateNear(p.x, p.z);
   placeChatFab();

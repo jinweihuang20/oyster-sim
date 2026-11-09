@@ -1067,6 +1067,7 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 #achBan .ic{width:30px;height:30px;background-color:#ffd25a;flex-shrink:0}
 #achBan span{display:flex;flex-direction:column;line-height:1.2}#achBan small{font-size:12px;opacity:.85}#achBan b{font:900 18px var(--sign)}#achBan em{font-style:normal;font-size:13px;color:#ffd25a}
 .lbA,.fdA{font-style:normal;font-size:.8em;font-weight:900;margin-right:4px;padding:0 4px;border:1.5px solid currentColor;border-radius:2px;color:#b8322a;white-space:nowrap}
+.lbFoil{display:inline-flex;align-items:baseline;flex-wrap:wrap;gap:2px 4px;padding:1px 7px 2px;border:1.5px solid #c9a227;box-shadow:inset 0 0 0 1px #ecd27a,0 1px 3px rgba(201,162,39,.22);background:rgba(255,248,220,.38);border-radius:3px}
 .fdA{color:#ffd25a}
 
 #achBan.tap.on{pointer-events:auto;cursor:pointer}

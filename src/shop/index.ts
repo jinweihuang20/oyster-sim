@@ -9,7 +9,7 @@ export {
 } from './meds';
 
 export {
-  initYardShop, GEAR, KNIVES, UMBS, BOWLS,
+  initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS,
   gearOn, knifeNow, umbNow, bowlNow,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
