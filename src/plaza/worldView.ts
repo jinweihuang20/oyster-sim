@@ -496,6 +496,26 @@ export function createPlazaWorldView(
         });
         continue;
       }
+      // 被放在原地站著的阿婆：只給飛彈瞄
+      const standNpc = leisureNpc && r.isNpc && !r.seated && !carried && (r.phase || '') === 'stand';
+      if (standNpc) {
+        const h = headWorld(r, new THREE.Vector3());
+        out.push({
+          connId: r.connId || r.key,
+          nick: plazaDisplayName(r.nick, r.numTag),
+          pileId: -1,
+          phase: 'stand',
+          x: r.x, z: r.z, yaw: r.yaw,
+          lookYaw: r.tLookYaw,
+          seated: false,
+          count: r.count,
+          umb: r.umb,
+          isNpc: true,
+          head: { x: h.x, y: h.y, z: h.z },
+          bowl: { x: h.x, y: h.y, z: h.z },
+        });
+        continue;
+      }
       // 休息座（吸菸區／咖啡廳／樸子腳）只給飛彈瞄阿婆，不給丟殼／偷
       if (!r.seated || r.pileId < 0 || (isLeisurePile(r.pileId) && !(leisureNpc && r.isNpc)) || (r.phase || '') === 'moon') continue;
       const h = headWorld(r, new THREE.Vector3());
