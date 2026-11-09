@@ -149,6 +149,7 @@ export function plazaRandomSpawn() {
 function occupiedSeatKeys(): Set<string> {
   const t = new Set<string>();
   for (const p of snap?.players ?? []) {
+    if (p.carriedBy) continue;
     if (!p.seated || p.pileId < 0 || p.slot < 0) continue;
     t.add(seatKey(p.pileId, p.slot));
   }
@@ -647,7 +648,9 @@ function mergePlayer(n: PlazaPlayer) {
 }
 
 function normPlayer(p: any): PlazaPlayer {
-  const seated = !!(p?.seated ?? p?.Seated ?? ((p?.pileId ?? p?.PileId ?? -1) >= 0));
+  const carriedBy = String(p?.carriedBy ?? p?.CarriedBy ?? '') || undefined;
+  const rawSeated = !!(p?.seated ?? p?.Seated ?? ((p?.pileId ?? p?.PileId ?? -1) >= 0));
+  const seated = rawSeated && !carriedBy;
   const pid = p?.pid ?? p?.Pid ?? '';
   const isNpc = !!(p?.isNpc ?? p?.IsNpc) || String(pid).startsWith('npc-');
   return {
@@ -655,8 +658,8 @@ function normPlayer(p: any): PlazaPlayer {
     pid,
     nick: p?.nick ?? p?.Nick ?? (isNpc ? '阿婆' : '剝蚵人'),
     tag: isNpc ? undefined : (String(p?.tag ?? p?.Tag ?? '').replace(/^#/, '') || undefined),
-    pileId: p?.pileId ?? p?.PileId ?? -1,
-    slot: p?.slot ?? p?.Slot ?? -1,
+    pileId: carriedBy ? -1 : (p?.pileId ?? p?.PileId ?? -1),
+    slot: carriedBy ? -1 : (p?.slot ?? p?.Slot ?? -1),
     phase: p?.phase ?? p?.Phase ?? 'idle',
     count: p?.count ?? p?.Count ?? 0,
     joinedAt: p?.joinedAt ?? p?.JoinedAt ?? 0,
@@ -674,7 +677,7 @@ function normPlayer(p: any): PlazaPlayer {
     legs: p?.legs ?? p?.Legs ?? 'lg_basic',
     feet: p?.feet ?? p?.Feet ?? 'ft_basic',
     isNpc,
-    carriedBy: String(p?.carriedBy ?? p?.CarriedBy ?? '') || undefined,
+    carriedBy,
   };
 }
 function normChat(m: any): PlazaChat {
@@ -694,6 +697,7 @@ function takenSet(exceptMine = true) {
   const t = new Set<string>();
   for (const p of snap?.players ?? []) {
     if (exceptMine && deps && p.pid === deps.id) continue;
+    if (p.carriedBy) continue;
     if (!p.seated || p.pileId < 0 || p.slot < 0) continue;
     t.add(seatKey(p.pileId, p.slot));
   }

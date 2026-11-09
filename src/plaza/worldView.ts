@@ -1248,6 +1248,8 @@ function hashPid(pid: string) {
     }
     if (r.carriedBy) {
       r.seated = false;
+      r.pileId = -1;
+      r.slot = -1;
       if (typeof p.x === 'number') r.tx = p.x;
       if (typeof p.z === 'number') r.tz = p.z;
       if (typeof p.yaw === 'number') r.tyaw = p.yaw;

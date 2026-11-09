@@ -202,6 +202,9 @@ export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDis
   for (let p = 0; p < PILE_COUNT; p++) {
     if (pileIsRemoved(p)) continue;
     for (let s = 0; s < SLOTS_PER_PILE; s++) consider(p, s);
+    if (pileHasNpc(p)) {
+      for (let s = SLOTS_PER_PILE; s < SLOTS_PER_PILE + NPC_SLOTS_PER_PILE; s++) consider(p, s);
+    }
   }
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
   for (let s = 0; s < CAFE_SMOKE_SEAT_COUNT; s++) consider(CAFE_SMOKE_PILE_ID, s);
