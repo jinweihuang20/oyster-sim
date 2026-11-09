@@ -2797,6 +2797,8 @@ function setSmokeSitHands(on: boolean) {
     handRig.visible = !tpv;
   } else {
     if (fpCig) fpCig.group.visible = false;
+    handL.visible = true;
+    for (const c of handR.children) if (!fpCig || c !== fpCig.group) c.visible = true;
     knife.visible = true;
     const sleeve = handR.children[0] as THREE.Mesh | undefined;
     const cuff = handR.children[2] as THREE.Mesh | undefined;
@@ -3016,6 +3018,9 @@ function spawnPuffAsh() {
 /** 吸菸座 FP：左手下垂；右手分階段抽烟 */
 function applySmokeSitFpHands() {
   if (!smokeSitActive || tpv) return;
+  // 第一人稱只顯示朝前的香菸：雙手模型藏起來，菸仍跟著右手軌跡
+  handL.visible = false;
+  for (const c of handR.children) c.visible = !!fpCig && c === fpCig.group;
   handL.position.set(PUFF_FP_L.x, PUFF_FP_L.y, PUFF_FP_L.z);
   handL.rotation.set(PUFF_FP_L.rx, PUFF_FP_L.ry, PUFF_FP_L.rz);
   const u = puffVisualK();
