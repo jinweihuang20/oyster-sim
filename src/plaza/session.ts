@@ -216,8 +216,8 @@ export function plazaMyPileOrigin(out = new THREE.Vector3()) {
 export function plazaConnId() { return client?.connectionId ?? ''; }
 
 /** 坐下遠端玩家瞄準點 */
-export function plazaAimTargets(): PlazaAimTarget[] {
-  return view?.aimTargets() ?? [];
+export function plazaAimTargets(leisureNpc = false): PlazaAimTarget[] {
+  return view?.aimTargets(leisureNpc) ?? [];
 }
 
 export async function plazaThrowAt(

@@ -118,7 +118,7 @@ export type PlazaWorldView = {
   /** 共烤網上蚵仔 */
   grill: PlazaGrillView;
   /** 坐下遠端玩家的瞄準點（丟殼／偷肉） */
-  aimTargets: () => PlazaAimTarget[];
+  aimTargets: (leisureNpc?: boolean) => PlazaAimTarget[];
   /** 走動碰撞用：遠端 `[x, z, radius, isLie]`；isLie=1 時跳躍夠高可越过 */
   walkBodies: () => [number, number, number, number][];
   moonLaunch: (connId: string, delayMs?: number, fromX?: number, fromZ?: number) => void;
@@ -472,7 +472,7 @@ export function createPlazaWorldView(
     return null;
   }
 
-  function aimTargets(): PlazaAimTarget[] {
+  function aimTargets(leisureNpc = false): PlazaAimTarget[] {
     const out: PlazaAimTarget[] = [];
     for (const r of remotes.values()) {
       const carried = !!(r.carriedBy || (r.phase || '') === 'carried');
@@ -496,7 +496,8 @@ export function createPlazaWorldView(
         });
         continue;
       }
-      if (!r.seated || r.pileId < 0 || isLeisurePile(r.pileId) || (r.phase || '') === 'moon') continue;
+      // 休息座（吸菸區／咖啡廳／樸子腳）只給飛彈瞄阿婆，不給丟殼／偷
+      if (!r.seated || r.pileId < 0 || (isLeisurePile(r.pileId) && !(leisureNpc && r.isNpc)) || (r.phase || '') === 'moon') continue;
       const h = headWorld(r, new THREE.Vector3());
       const b = bowlWorld(r, new THREE.Vector3());
       out.push({

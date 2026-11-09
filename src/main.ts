@@ -2610,7 +2610,7 @@ function plazaAimTick() {
   if (!plazaAimOn) return;
   if (!plazaMode || state !== 'play' || !(save.meds.moon > 0)) { moonAimEnd(); return; }
   const cam = viewCam(); const seen = new Set<string>();
-  for (const t of plazaAimTargets()) {
+  for (const t of plazaAimTargets(true)) {
     if (!t.isNpc || t.phase === 'moon') continue;
     const p = new THREE.Vector3(t.head.x, t.head.y + 0.25, t.head.z).project(cam);
     if (!(p.z < 1 && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.95)) continue;
