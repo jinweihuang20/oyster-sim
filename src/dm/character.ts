@@ -238,6 +238,88 @@ export function posePlazaHangArms(rig: PlayerRig, sit = false) {
   hang(rig.upperR, rig.lowerR, 1);
 }
 
+/**
+ * 廣場走路腿部：跨步＋膝蓋彎曲（避免筆直無膝）。
+ * @param ph 相位（弧度）
+ * @param amp 0..1 移動幅度
+ * @returns stride（給擺臂用，左腿前為正）
+ */
+export function posePlazaWalkCycle(rig: PlayerRig, ph: number, amp: number): number {
+  const a = Math.min(1, Math.max(0, amp));
+  const stride = Math.sin(ph) * a;
+  const stride2 = Math.sin(ph * 2);
+  // 大腿跨步（幅度收斂，減少晃）
+  rig.legL.rotation.x = stride * 0.5;
+  rig.legR.rotation.x = -stride * 0.5;
+  // 膝蓋：shin 負向才是向前彎（與蹲姿／坐姿同號）；後腿抬起時多彎
+  const baseKnee = 0.04 + 0.04 * a;
+  const liftL = Math.max(0, -Math.sin(ph)) * 0.4 * a;
+  const liftR = Math.max(0, Math.sin(ph)) * 0.4 * a;
+  rig.shinL.rotation.x = -(baseKnee + liftL);
+  rig.shinR.rotation.x = -(baseKnee + liftR);
+  // 身體輕顛＋輕扭（壓低避免「整個人在晃」）
+  rig.root.position.y = Math.abs(stride2) * 0.018 * a;
+  rig.torso.rotation.y = stride * 0.05;
+  rig.torso.rotation.z = stride * -0.03;
+  rig.torso.rotation.x = -0.02 * a;
+  return stride;
+}
+
+/** 廣場跳躍時間軸：先微蹲再起飛（本機／遠端共用） */
+export const PLAZA_JUMP_CROUCH = 0.14;
+export const PLAZA_JUMP_AIR = 0.55;
+export const PLAZA_JUMP_DUR = PLAZA_JUMP_CROUCH + PLAZA_JUMP_AIR;
+export const PLAZA_JUMP_H = 0.8;
+export const PLAZA_JUMP_DIP = 0.14;
+
+/** 跳躍經過秒數 → 高度（負＝蹲壓） */
+export function plazaJumpHeight(elapsed: number): number {
+  if (elapsed <= 0) return 0;
+  if (elapsed < PLAZA_JUMP_CROUCH) {
+    const c = elapsed / PLAZA_JUMP_CROUCH;
+    return -PLAZA_JUMP_DIP * Math.sin(c * Math.PI * 0.5);
+  }
+  const u = Math.min(1, (elapsed - PLAZA_JUMP_CROUCH) / PLAZA_JUMP_AIR);
+  // u=0 接續蹲底；中段到峰值；落地歸零
+  return -PLAZA_JUMP_DIP * (1 - u) * (1 - u) + 4 * PLAZA_JUMP_H * u * (1 - u);
+}
+
+/** 跳躍腿／臂姿勢：蹲壓彎膝，起飛伸展＋手臂上揚 */
+export function posePlazaJump(rig: PlayerRig, elapsed: number) {
+  const total = PLAZA_JUMP_DUR;
+  if (elapsed <= 0 || elapsed >= total) return;
+  if (elapsed < PLAZA_JUMP_CROUCH) {
+    const c = elapsed / PLAZA_JUMP_CROUCH;
+    const k = Math.sin(c * Math.PI * 0.5);
+    rig.legL.rotation.x = 0.55 * k;
+    rig.legR.rotation.x = 0.55 * k;
+    // shin 負向＝膝蓋向前彎（同蹲姿）
+    rig.shinL.rotation.x = -(0.12 + 1.15 * k);
+    rig.shinR.rotation.x = -(0.12 + 1.15 * k);
+    rig.torso.rotation.x = 0.25 * k;
+    rig.root.position.y = 0;
+    const a = -0.35 * k;
+    rig.shoulderL.rotation.x = a;
+    if (rig.shoulderR) rig.shoulderR.rotation.x = a;
+  } else {
+    const u = (elapsed - PLAZA_JUMP_CROUCH) / PLAZA_JUMP_AIR;
+    // 起飛伸腿，落地前略收
+    const stretch = Math.sin(Math.min(1, u / 0.35) * Math.PI * 0.5);
+    const land = u > 0.75 ? (u - 0.75) / 0.25 : 0;
+    const thigh = -0.15 * stretch + 0.4 * land;
+    const knee = -(0.1 * (1 - stretch) + 0.55 * land);
+    rig.legL.rotation.x = thigh;
+    rig.legR.rotation.x = thigh;
+    rig.shinL.rotation.x = knee;
+    rig.shinR.rotation.x = knee;
+    rig.torso.rotation.x = -0.08 * stretch + 0.15 * land;
+    rig.root.position.y = 0;
+    const a = -2.2 * Math.sin(Math.min(1, u) * Math.PI);
+    rig.shoulderL.rotation.x = a;
+    if (rig.shoulderR) rig.shoulderR.rotation.x = a;
+  }
+}
+
 /** 廣場走路擺臂：與腿反向（swing>0＝左腿前→右臂前）；前＝負 Z */
 export function posePlazaWalkSwingArms(rig: PlayerRig, swing: number) {
   rig.weaponMount.visible = false;

@@ -33,7 +33,10 @@ import {
 } from './meta';
 import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
-import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, applyPlazaBodyPose as applyBodyPose, type PlayerRig } from './dm/character';
+import {
+  makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
+  plazaJumpHeight, PLAZA_JUMP_DUR, applyPlazaBodyPose as applyBodyPose, type PlayerRig,
+} from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
 import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
@@ -3235,7 +3238,7 @@ function launchPlaza() {
     applySeatPose: (pos, yaw) => applyPlazaSeatPose(pos, yaw),
     getPhase: () => phase,
     // 可丟殼且準星瞄到人：同步 throwAim，遠端播左手舉殼
-    getSyncPhase: () => jumpY > 0 ? 'jump' : bodyPose && walking ? bodyPose : ((phase === 'empty' || phase === 'seam') && plazaThrowTarget() ? 'throwAim' : phase),
+    getSyncPhase: () => jumpT > 0 ? 'jump' : bodyPose && walking ? bodyPose : ((phase === 'empty' || phase === 'seam') && plazaThrowTarget() ? 'throwAim' : phase),
     getCount: () => count,
     getWalkXZ: () => (walking ? { x: walkPos.x, z: walkPos.z } : { x: SEAT.x, z: SEAT.z }),
     getYaw: () => (walking ? yaw : seatYaw),
@@ -4365,15 +4368,19 @@ function camTick(dt: number) {
       rig.outer.rotation.order = 'YXZ';
       rig.outer.rotation.y = yaw;
       rig.outer.rotation.x = 0;
-      if (jumpY > 0) { const ja = -2.4 * Math.sin((1 - jumpT / JUMP_DUR) * Math.PI); rig.shoulderL.rotation.x = ja; const sr = (rig as any).shoulderR; if (sr) sr.rotation.x = ja; }
-      const swing = sw * 0.55;
-      rig.legL.rotation.x = swing; rig.legR.rotation.x = -swing;
-      rig.shinL.rotation.x = Math.max(0, -swing * 0.5); rig.shinR.rotation.x = Math.max(0, swing * 0.5);
-      rig.root.position.y = Math.abs(Math.sin(walkPh * 2)) * 0.03 * Math.min(1, sp / 1.2);
-      // 與遠端同款擺臂（停住則自然下垂）
-      if (sp > 0.25) posePlazaWalkSwingArms(rig, swing);
-      else posePlazaHangArms(rig);
-      applyBodyPose(rig, lastPose, poseK);
+      if (jumpT > 0) {
+        posePlazaJump(rig, PLAZA_JUMP_DUR - jumpT);
+        posePlazaHangArms(rig);
+      } else {
+        const amp = Math.min(1, sp / 1.2);
+        const swing = posePlazaWalkCycle(rig, walkPh, amp);
+        if (sp > 0.25) posePlazaWalkSwingArms(rig, swing);
+        else {
+          posePlazaHangArms(rig);
+          rig.torso.rotation.y *= 0.8; rig.torso.rotation.z *= 0.8; rig.torso.rotation.x *= 0.8;
+        }
+        applyBodyPose(rig, lastPose, poseK);
+      }
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
       const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = tpDist * Math.cos(el);
 const cp = new THREE.Vector3(walkPos.x - fx * hd, 1.4 + tpDist * Math.sin(el) + jumpY * 0.35 - poseK * (lastPose === 'lie' ? 0.7 : 0.35), walkPos.z - fz * hd);
@@ -4825,10 +4832,9 @@ setInterval(() => {
   t.classList.toggle('on', on);
 }, 200);
 
-// ── 廣場跳躍（走動時才可跳；用 phase "jump" 同步給其他玩家）──
-const JUMP_DUR = 0.6, JUMP_H = 0.8;
+// ── 廣場跳躍（先微蹲再跳；phase "jump" 同步；高度見 plazaJumpHeight）──
 let jumpY = 0, jumpT = 0;
-function plazaJump() { if (!plazaMode || !walking || jumpT > 0 || bodyPose === 'lie') return; if (bodyPose) setBodyPose(''); jumpT = JUMP_DUR; }
+function plazaJump() { if (!plazaMode || !walking || jumpT > 0 || bodyPose === 'lie') return; if (bodyPose) setBodyPose(''); jumpT = PLAZA_JUMP_DUR; }
 // ── 廣場蹲／躺（走動時才可用；用 phase "crouch"／"lie" 同步）──
 let bodyPose: '' | 'crouch' | 'lie' = '';
 let lastPose: 'crouch' | 'lie' = 'crouch';
@@ -4841,19 +4847,54 @@ function setBodyPose(p: '' | 'crouch' | 'lie') {
 }
 function plazaPose(p: 'crouch' | 'lie') { if (!plazaMode || !walking || jumpT > 0) return; setBodyPose(bodyPose === p ? '' : p); }
 {
-  const jb = document.getElementById('jumpBtn');
-  if (jb) jb.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); plazaJump(); });
-  for (const [id, p] of [['crouchBtn', 'crouch'], ['lieBtn', 'lie']] as const) document.getElementById(id)?.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); plazaPose(p); });
+  const poseBtn = document.getElementById('poseBtn');
+  const setPoseOpen = (v: boolean) => {
+    document.body.classList.toggle('poseOpen', v);
+    poseBtn?.classList.toggle('open', v);
+  };
+  poseBtn?.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    setPoseOpen(!document.body.classList.contains('poseOpen'));
+  });
+  document.getElementById('jumpBtn')?.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); plazaJump(); });
+  for (const [id, p] of [['crouchBtn', 'crouch'], ['lieBtn', 'lie']] as const)
+    document.getElementById(id)?.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); plazaPose(p); });
   let last = performance.now();
   const step = () => {
     const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (jumpT > 0) { jumpT = Math.max(0, jumpT - dt); const u = 1 - jumpT / JUMP_DUR; jumpY = jumpT > 0 ? 4 * JUMP_H * u * (1 - u) : 0; }
+    if (jumpT > 0) { jumpT = Math.max(0, jumpT - dt); jumpY = jumpT > 0 ? plazaJumpHeight(PLAZA_JUMP_DUR - jumpT) : 0; }
     if (!plazaMode || !walking) { jumpT = 0; jumpY = 0; if (bodyPose) setBodyPose(''); }
     // 躺著時一動（方向鍵／搖桿）就起來
     if (bodyPose === 'lie') { let mv = Math.abs(joy.x) > 0.15 || Math.abs(joy.y) > 0.15; for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) mv = true; if (mv) setBodyPose(''); }
     poseK += ((bodyPose ? 1 : 0) - poseK) * Math.min(1, dt * 10);
     const pz = plazaMode && walking && state === 'play';
-    on('jumpBtn', pz); if (pz && state === 'play') on('medBtn', true); on('crouchBtn', pz); on('lieBtn', pz); if (pz && COARSE) { const jb = document.getElementById('jumpBtn')!.getBoundingClientRect(); let b = innerHeight - jb.top + 8; for (const id of (state === 'play' ? ['crouchBtn', 'lieBtn', 'medBtn'] : ['crouchBtn', 'lieBtn'])) { const el = document.getElementById(id)!; const s = el.style; s.setProperty('position', 'fixed', 'important'); s.setProperty('right', (innerWidth - jb.right) + 'px', 'important'); s.setProperty('left', 'auto', 'important'); s.setProperty('top', 'auto', 'important'); s.setProperty('width', jb.width + 'px', 'important'); s.setProperty('height', jb.height + 'px', 'important'); s.setProperty('bottom', b + 'px', 'important'); s.setProperty('z-index', '30', 'important'); b += jb.height + 8; } (window as any).__mbFix = 1; } else if ((window as any).__mbFix) { (window as any).__mbFix = 0; const s = document.getElementById('medBtn')!.style; for (const k of ['position', 'right', 'left', 'top', 'width', 'height', 'bottom', 'z-index']) s.removeProperty(k); }
+    if (!pz) setPoseOpen(false);
+    on('poseBtn', pz); on('jumpBtn', pz); on('crouchBtn', pz); on('lieBtn', pz);
+    if (pz && state === 'play') on('medBtn', true);
+    // 手機：藥品鈕疊在動作鈕（或展開後最上方的躺）之上；跳／蹲／躺改由 CSS 排
+    if (pz && COARSE) {
+      const ar = poseBtn!.getBoundingClientRect();
+      const open = document.body.classList.contains('poseOpen');
+      const topEl = open ? document.getElementById('lieBtn')! : poseBtn!;
+      const top = topEl.getBoundingClientRect();
+      const med = document.getElementById('medBtn')!;
+      if (state === 'play') {
+        const s = med.style, b = innerHeight - top.top + 8;
+        s.setProperty('position', 'fixed', 'important');
+        s.setProperty('right', (innerWidth - ar.right) + 'px', 'important');
+        s.setProperty('left', 'auto', 'important');
+        s.setProperty('top', 'auto', 'important');
+        s.setProperty('width', ar.width + 'px', 'important');
+        s.setProperty('height', ar.height + 'px', 'important');
+        s.setProperty('bottom', b + 'px', 'important');
+        s.setProperty('z-index', '30', 'important');
+      }
+      (window as any).__mbFix = 1;
+    } else if ((window as any).__mbFix) {
+      (window as any).__mbFix = 0;
+      const s = document.getElementById('medBtn')!.style;
+      for (const k of ['position', 'right', 'left', 'top', 'width', 'height', 'bottom', 'z-index']) s.removeProperty(k);
+    }
     requestAnimationFrame(step);
   };
   requestAnimationFrame(step);

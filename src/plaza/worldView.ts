@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
-import { makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaStallKeeper, applyPlazaBodyPose, type PlayerRig } from '../dm/character';
+import {
+  makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
+  plazaJumpHeight, PLAZA_JUMP_DUR, posePlazaStallKeeper, applyPlazaBodyPose, type PlayerRig,
+} from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y } from './props';
@@ -1074,17 +1077,28 @@ function hashPid(pid: string) {
       r.yaw += dy * k;
       r.lookYaw += (r.tLookYaw - r.lookYaw) * Math.min(1, dt * 10);
       r.pitch += (r.tPitch - r.pitch) * Math.min(1, dt * 10);
-      if (!r.seated && r.moving) {
+      const rj = r as any;
+      if ((r.phase || '') === 'jump' && !r.seated) { if (!rj.jt) rj.jt = performance.now(); }
+      let jumpElapsed = -1;
+      if (rj.jt) {
+        jumpElapsed = (performance.now() - rj.jt) / 1000;
+        if (jumpElapsed >= PLAZA_JUMP_DUR) {
+          if ((r.phase || '') !== 'jump') rj.jt = 0;
+          jumpElapsed = -1;
+        }
+      }
+      if (!r.seated && jumpElapsed >= 0) {
+        posePlazaJump(r.rig, jumpElapsed);
+        if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
+      } else if (!r.seated && r.moving) {
         r.bob += dt * 10;
-        const swing = Math.sin(r.bob) * 0.55;
-        r.rig.legL.rotation.x = swing; r.rig.legR.rotation.x = -swing;
-        r.rig.shinL.rotation.x = Math.max(0, -swing * 0.5); r.rig.shinR.rotation.x = Math.max(0, swing * 0.5);
-        r.rig.root.position.y = Math.abs(Math.sin(r.bob * 2)) * 0.03;
+        const swing = posePlazaWalkCycle(r.rig, r.bob, 1);
         if (r.throwT <= 0) { swingArms(r, swing); hideHold(r); }
       } else if (!r.seated) {
         r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
         r.rig.shinL.rotation.x *= 0.8; r.rig.shinR.rotation.x *= 0.8;
         r.rig.root.position.y *= 0.8;
+        r.rig.torso.rotation.y *= 0.8; r.rig.torso.rotation.z *= 0.8; r.rig.torso.rotation.x *= 0.8;
         if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
       }
       if (r.throwT > 0) {
@@ -1097,9 +1111,7 @@ function hashPid(pid: string) {
       const back = r.seated ? -0.08 : 0;
       const ox = r.x + Math.sin(r.yaw) * back;
       const oz = r.z + Math.cos(r.yaw) * back;
-      let jy = 0; const rj = r as any;
-      if ((r.phase || '') === 'jump' && !r.seated) { if (!rj.jt) rj.jt = performance.now(); }
-      if (rj.jt) { const u = (performance.now() - rj.jt) / 600; if (u >= 1) { if ((r.phase || '') !== 'jump') rj.jt = 0; } else { jy = 3.2 * u * (1 - u); { const a = -2.4 * Math.sin(u * Math.PI); r.rig.shoulderL.rotation.x = a; (r.rig as any).shoulderR && ((r.rig as any).shoulderR.rotation.x = a); } } }
+      const jy = jumpElapsed >= 0 ? plazaJumpHeight(jumpElapsed) : 0;
       r.rig.outer.position.set(ox, jy, oz);
       r.rig.outer.rotation.order = 'YXZ';
       r.rig.outer.rotation.y = r.yaw;
