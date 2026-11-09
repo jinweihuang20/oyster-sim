@@ -528,7 +528,8 @@ export function ensurePlazaSmokeCig(rig: PlayerRig, lowDetail = false): FpCigare
 function orientPlazaSmokeCig(cig: FpCigarette) {
   // lowerR +Y＝腕向；菸沿大致 -X／外撇，濾嘴近掌心
   cig.group.position.set(0.05, 0.118, 0.01);
-  cig.group.rotation.set(0.2, Math.PI + 0.35, 0.55);
+  // 實測：抽到嘴邊時濾嘴朝嘴、菸頭朝外（遠離臉）；休息時菸約水平外撇
+  cig.group.rotation.set(-0.75, -0.35, -1.5);
 }
 
 export function clearPlazaSmokeCig(rig: PlayerRig) {
