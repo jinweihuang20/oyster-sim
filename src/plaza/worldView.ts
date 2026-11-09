@@ -294,8 +294,18 @@ export function createPlazaWorldView(
   }
 
   function moonLaunch(connId: string, delayMs = 0, fromX?: number, fromZ?: number) {
-  for (const r of remotes.values()) if ((r.connId || r.key) === connId) { const o = r.rig.outer.position; (r as any).mt = performance.now() + delayMs; (r as any).mz = fromX == null || fromZ == null ? Math.random() * 6.28 : Math.atan2(o.x - fromX, o.z - fromZ); }
-}
+    for (const r of remotes.values()) {
+      if ((r.connId || r.key) !== connId) continue;
+      const rj = r as any;
+      const now = performance.now();
+      // 本地樂觀發射後伺服器 NpcMoon 回聲會再叫一次：飛行中／已排程勿重設 mt／mz
+      // （否則會用已位移的 outer.position 重算方向，本地射手看到的軌跡就歪了）
+      if (rj.mt && now < rj.mt + 1800) continue;
+      const o = r.rig.outer.position;
+      rj.mt = now + delayMs;
+      rj.mz = fromX == null || fromZ == null ? Math.random() * 6.28 : Math.atan2(o.x - fromX, o.z - fromZ);
+    }
+  }
 
 function hashPid(pid: string) {
     let h = 0; for (let i = 0; i < pid.length; i++) h = (h * 31 + pid.charCodeAt(i)) | 0;

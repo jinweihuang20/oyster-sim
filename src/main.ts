@@ -2595,6 +2595,8 @@ function moonStart() {
 }
 function moonTapAt(x: number, y: number) { let best: Npc | null = null, bd = 70; moonAimEl.querySelectorAll<HTMLElement>('.maT').forEach(b => { const r = b.getBoundingClientRect(); const d = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y); if (d < bd) { bd = d; best = (b as any)._n; } }); if (best) moonFire(best); }
 let plazaAimOn = false;
+/** 本地剛發射飛彈：略過 NpcMoon 回聲的飛彈特效／提示 */
+let localMoonFxUntil = 0;
 function ensureMoonEnd() { if (!moonAimEl.querySelector('.maEnd')) { const eb = document.createElement('button'); eb.className = 'maEnd'; eb.textContent = '結束瞄準'; eb.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); }); eb.addEventListener('pointerup', e => { e.stopPropagation(); e.preventDefault(); moonAimEnd(); }); moonAimEl.appendChild(eb); } }
 function plazaMoonStart() {
   $('medList').classList.remove('show'); if (document.pointerLockElement) document.exitPointerLock();
@@ -2629,6 +2631,7 @@ function plazaAimTick() {
   const r = await plazaMoonNpc(t.connId, { x: p0.x, y: p0.y, z: p0.z });
   if (!r.ok) { toast(r.err === 'gone' ? '阿婆已經飛走了' : plazaZhErr(r.err), '#ffb08a'); return; }
   save.meds.moon--; achS().st.pzmoon = (achS().st.pzmoon ?? 0) + 1; persist(); achBump('moon'); drawMeds(); track('item_use', { item: 'moonpunch' });
+  localMoonFxUntil = performance.now() + 2500;
   if (ac) { SFX.whoosh(); tone(220, 0.5, 0.15, 'sawtooth', 0.05, 900); }
   toast(`把你媽的愛送上月球！目標：${t.nick}`, '#ffd25a');
   plazaMissileFx(p0, new THREE.Vector3(t.head.x, t.head.y, t.head.z));
@@ -3118,7 +3121,15 @@ function launchPlaza() {
     },
     onShellBlocked: (e) => { resolvePlazaBlocked(e); },
     onShellHit: (e) => { resolvePlazaShellHitFx(e); },
-    onNpcMoon: (e: any) => { plazaMissileFx(new THREE.Vector3(e.fromX, e.fromY, e.fromZ), new THREE.Vector3(e.toX, e.toY, e.toZ)); if (e.by) toast(`${e.by} 把阿婆送上月球了`, '#ffd25a'); },
+    onNpcMoon: (e: any) => {
+      const me = plazaConnId();
+      const byId = String(e?.byConnId ?? e?.ByConnId ?? '');
+      // 本地發射者已在 plazaMoonFire 播過飛彈／提示，略過回聲避免重播
+      if (performance.now() < localMoonFxUntil) return;
+      if (me && byId && byId === me) return;
+      plazaMissileFx(new THREE.Vector3(e.fromX, e.fromY, e.fromZ), new THREE.Vector3(e.toX, e.toY, e.toZ));
+      if (e.by) toast(`${e.by} 把阿婆送上月球了`, '#ffd25a');
+    },
     onGrillTaken: (e) => { try { onPlazaGrillTaken(e); } catch (err) { console.error(err); } },
     onStealResult: (e) => {
       const me = plazaConnId();
