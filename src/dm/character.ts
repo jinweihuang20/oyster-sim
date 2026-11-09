@@ -527,7 +527,7 @@ export function ensurePlazaSmokeCig(rig: PlayerRig, lowDetail = false): FpCigare
 /** 濾嘴在指／嘴側、菸頭＋煙朝外（mesh：filter=+Z、tip=-Z） */
 function orientPlazaSmokeCig(cig: FpCigarette) {
   // lowerR +Y＝腕向；菸沿大致 -X／外撇，濾嘴近掌心
-  cig.group.position.set(0.05, 0.118, 0.01);
+  cig.group.position.set(0.05, 0.24, 0.01);
   // 實測：抽到嘴邊時濾嘴朝嘴、菸頭朝外（遠離臉）；休息時菸約水平外撇
   cig.group.rotation.set(-0.75, -0.35, -1.5);
 }
@@ -580,8 +580,8 @@ export function posePlazaSmokeSit(rig: PlayerRig, puffKOrOpts: number | SmokeSit
   const rEl0 = [0.30, 0.10, -0.12] as const;
   const rWr0 = [0.26, -0.02, -0.26] as const;
   // 嘴邊：上臂仍低（肘約肩下 0.12～0.14），主要靠小臂彎到唇前
-  const rEl1 = [0.28, 0.16, -0.10] as const;
-  const rWr1 = [0.06, 0.48, -0.22] as const;
+  const rEl1 = [0.20, 0.20, -0.10] as const;
+  const rWr1 = [-0.16, 0.74, -0.24] as const;
   const lerp = (a: number, b: number) => a + (b - a) * k;
   // 弧線只微抬肘，避免上臂高舉
   const lift = Math.sin(k * Math.PI);

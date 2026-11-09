@@ -2838,7 +2838,7 @@ const puffAshes: { tick: (dt: number) => boolean; dispose: () => void }[] = [];
 const PUFF_FP_REST = { x: 0.30, y: -0.48, z: -0.36, rx: 1.05, ry: 0.45, rz: 0.25 };
 const PUFF_FP_MID = { x: 0.12, y: -0.16, z: -0.16, rx: 0.85, ry: 0.05, rz: -0.45 };
 // 嘴邊：手掌貼近鏡頭中下；前臂靠 rx 下壓出畫面，幾乎只露手＋菸
-const PUFF_FP_MOUTH = { x: 0.03, y: -0.035, z: -0.065, rx: 1.25, ry: -0.08, rz: -0.92 };
+const PUFF_FP_MOUTH = { x: 0.03, y: -0.075, z: -0.10, rx: 1.25, ry: -0.08, rz: -0.92 };
 const PUFF_FP_AWAY = { x: 0.09, y: -0.10, z: -0.12, rx: 0.85, ry: 0.0, rz: -0.5 };
 const PUFF_FP_L = { x: -0.38, y: -0.58, z: -0.32, rx: 1.25, ry: -0.35, rz: 0.55 };
 
