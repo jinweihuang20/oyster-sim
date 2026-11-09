@@ -1,5 +1,5 @@
 import {
-  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, pileCenter, pileIsGrill, SMOKE_CENTER,
+  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, SEAFOOD_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, pileCenter, pileIsGrill, SMOKE_CENTER,
 } from './layout';
 import { PLAZA_STALL_SITES } from './ambiance';
 import { plazaDisplayName, type PlazaPlayer } from './types';
@@ -205,6 +205,24 @@ export function drawPlazaMap(
     ctx.fillText('吸', mx, my - rw * 0.9);
     ctx.fillText('菸', mx, my);
     ctx.fillText('區', mx, my + rw * 0.9);
+  }
+
+  // 樸子腳（多那芝北側海產店）
+  {
+    const [x0, y0] = to(SEAFOOD_BUILDING.x0, SEAFOOD_BUILDING.z0);
+    const [x1, y1] = to(SEAFOOD_BUILDING.x1, SEAFOOD_BUILDING.z1);
+    const l = Math.min(x0, x1), t = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+    ctx.fillStyle = 'rgba(70,74,78,.82)';
+    roundRect(ctx, l, t, w, h, size * 0.008);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(184,50,42,.9)';
+    ctx.lineWidth = Math.max(1, size * 0.0025);
+    ctx.stroke();
+    ctx.fillStyle = '#f4efe6';
+    ctx.font = `800 ${Math.max(9, size * 0.026)}px system-ui,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('樸子腳', l + w / 2, t + h / 2);
   }
 
   // 吸菸區

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import {
   WALK_BOUND, CAFE_SMOKE_PILE_ID, CAFE_SMOKE_SEAT_COUNT, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_TABLE_RADIUS,
-  CAFE_BUILDING, CAFE_PORCH_DEPTH, CAFE_OPENING, CAFE_SOUTH_WALL_END, seatPose, seatKey,
+  CAFE_BUILDING, SEAFOOD_BUILDING, CAFE_PORCH_DEPTH, CAFE_OPENING, CAFE_SOUTH_WALL_END, seatPose, seatKey,
 } from './layout';
 import { CHAIR_SEAT_Y } from './props';
 import { makeSmokeLabelTexture } from './smokeArea';
@@ -276,12 +276,8 @@ export function makePlazaCafe(
   }
   add(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe0b0 }), [fx - 0.5, 2.58, doorZ], root, false);
 
-  // ── 前庭北側花台（接東牆短牆頭到店牆）──
-  {
-    const x0 = WALK_BOUND + 0.14, x1 = fx;
-    add(rboxEnv(x1 - x0, 0.55, 0.4, 0.06), M(0x9a9890, { roughness: 0.92 }), [(x0 + x1) / 2, 0.275, CAFE_OPENING.z0 - 0.2], root, true);
-    add(rboxEnv(x1 - x0 - 0.1, 0.12, 0.3, 0.2), M(0x5e7a52, { roughness: 0.95 }), [(x0 + x1) / 2, 0.6, CAFE_OPENING.z0 - 0.2], root, false);
-  }
+  // ── 前庭北端花台改到樸子腳北側（見 seafood.ts）；兩店之間補一道石材側牆 ──
+  add(rboxEnv(B.x1 - B.x0, 3.4, B.z0 - SEAFOOD_BUILDING.z1, 0.04), stoneSideMat, [(B.x0 + B.x1) / 2, 1.7, (B.z0 + SEAFOOD_BUILDING.z1) / 2], root, false);
   // ── 南側矮欄杆（取代拆掉的南牆東段）──
   {
     const x0 = CAFE_SOUTH_WALL_END, x1 = fx + 0.2, z = WALK_BOUND + 0.12;

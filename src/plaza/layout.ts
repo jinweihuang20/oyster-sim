@@ -27,12 +27,26 @@ export const CAFE_TABLE_RADIUS = 0.36;
 export const CAFE_BUILDING = { x0: 14.2, x1: 19.6, z0: 5.0, z1: 11.0, h: 5.2, doorZ: 8.15 } as const;
 /** 門廊深度（x 13.2..14.2） */
 export const CAFE_PORCH_DEPTH = 1.0;
-/** 東牆開口 z 範圍（其餘留短牆） */
-export const CAFE_OPENING = { z0: 5.0, z1: 11.5 } as const;
+/** 東牆開口 z 範圍（其餘留短牆）：南段多那芝＋往北接樸子腳，連成一條店面前庭 */
+export const CAFE_OPENING = { z0: -1.8, z1: 11.5 } as const;
 /** 南牆實牆止於此 x（東端 8.0..11.5 拆掉，換矮欄杆） */
 export const CAFE_SOUTH_WALL_END = 8.0;
 /** 東延區可走範圍（咖啡店前庭）：x ∈ (WALK_BOUND, xMax]、z ∈ [zMin, WALK_BOUND] */
-export const CAFE_FORECOURT = { xMax: 13.95, zMin: 5.3 } as const;
+export const CAFE_FORECOURT = { xMax: 13.95, zMin: -1.2 } as const;
+/** 多那芝北側海產店「樸子腳」（外觀，不可進入）：正門朝西 */
+export const SEAFOOD_BUILDING = { x0: 14.2, x1: 19.6, z0: -1.4, z1: 4.4, h: 4.2, doorZ: 1.5 } as const;
+/** 樸子腳騎樓紅柱 x（前庭內，有碰撞） */
+export const SEAFOOD_ARCADE_X = 13.78;
+/** 樸子腳門口座位（與後端 PlazaWorld.SeafoodPileId 對齊）：3 圓桌 × 2 板凳，純坐、不抽菸、不開工班 */
+export const SEAFOOD_PILE_ID = 102;
+export const SEAFOOD_SEAT_COUNT = 6;
+export const SEAFOOD_TABLE_X = 12.3;
+export const SEAFOOD_TABLE_Z: readonly number[] = [-0.45, 1.5, 3.45];
+export const SEAFOOD_STOOL_OFFSET = 0.55;
+export const SEAFOOD_TABLE_RADIUS = 0.34;
+export const isRestPile = (pileId: number) => pileId === SEAFOOD_PILE_ID;
+/** 非蚵堆座位（吸菸區＋休息座）：不開工班、不算容量、不能被偷／丟 */
+export const isLeisurePile = (pileId: number) => isSmokePile(pileId) || isRestPile(pileId);
 export const isSmokePile = (pileId: number) => pileId === SMOKE_PILE_ID || pileId === CAFE_SMOKE_PILE_ID;
 export const isCafeSmokePile = (pileId: number) => pileId === CAFE_SMOKE_PILE_ID;
 export const smokeSeatCountOf = (pileId: number) => (pileId === CAFE_SMOKE_PILE_ID ? CAFE_SMOKE_SEAT_COUNT : SMOKE_SEAT_COUNT);
@@ -113,6 +127,13 @@ export const PLAZA_LAMP_XZ: readonly [number, number][] = [
 
 /** 一堆座位：0–3 玩家、4–5 阿婆；皆朝堆心。吸菸區 pileId=SMOKE_PILE_ID。 */
 export function seatPose(pileId: number, slot: number) {
+  if (isRestPile(pileId)) {
+    const t = Math.max(0, Math.min(SEAFOOD_TABLE_Z.length - 1, slot >> 1));
+    const center = new THREE.Vector3(SEAFOOD_TABLE_X, 0, SEAFOOD_TABLE_Z[t]);
+    const pos = new THREE.Vector3(SEAFOOD_TABLE_X, 0, center.z + ((slot & 1) ? SEAFOOD_STOOL_OFFSET : -SEAFOOD_STOOL_OFFSET));
+    const yaw = Math.atan2(pos.x - center.x, pos.z - center.z);
+    return { pos, yaw, center, angle: 0 };
+  }
   if (isCafeSmokePile(pileId)) {
     const t = Math.max(0, Math.min(CAFE_TABLE_Z.length - 1, slot >> 1));
     const center = new THREE.Vector3(CAFE_TABLE_X, 0, CAFE_TABLE_Z[t]);
@@ -171,6 +192,7 @@ export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDis
   }
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
   for (let s = 0; s < CAFE_SMOKE_SEAT_COUNT; s++) consider(CAFE_SMOKE_PILE_ID, s);
+  for (let s = 0; s < SEAFOOD_SEAT_COUNT; s++) consider(SEAFOOD_PILE_ID, s);
   return best;
 }
 
@@ -200,6 +222,18 @@ export function plazaSmokeObstacles(): [number, number, number][] {
   ];
 }
 
+/** 樸子腳騎樓紅柱 z（兩端＋門兩側） */
+export function seafoodColumnZ(): number[] {
+  const B = SEAFOOD_BUILDING;
+  return [B.z0 + 0.2, B.doorZ - 1.05, B.doorZ + 1.05, B.z1 - 0.2];
+}
+/** 樸子腳騎樓下擺設（碰撞圓） */
+export const SEAFOOD_PROPS: readonly { kind: 'ice' | 'tank' | 'menu'; x: number; z: number; r: number }[] = [
+  { kind: 'ice', x: 13.72, z: -0.75, r: 0.32 },
+  { kind: 'menu', x: 13.6, z: 2.85, r: 0.22 },
+  { kind: 'tank', x: 13.85, z: 3.7, r: 0.3 },
+];
+
 /** 咖啡門口：小桌圓＋東牆開口北端短牆頭（椅不擋，才能走近入座） */
 export function plazaCafeObstacles(): [number, number, number][] {
   return [
@@ -209,6 +243,10 @@ export function plazaCafeObstacles(): [number, number, number][] {
     [CAFE_BUILDING.x0 - CAFE_PORCH_DEPTH + 0.12, CAFE_BUILDING.doorZ - 0.86, 0.07],
     [CAFE_BUILDING.x0 - CAFE_PORCH_DEPTH + 0.12, CAFE_BUILDING.doorZ + 0.86, 0.07],
     [CAFE_BUILDING.x0 - CAFE_PORCH_DEPTH + 0.25, WALK_BOUND - 0.3, 0.08],
+    // 樸子腳：圓桌、騎樓紅柱、門口保麗龍冰箱／魚缸／菜單架（與 seafood.ts 對齊）
+    ...SEAFOOD_TABLE_Z.map(z => [SEAFOOD_TABLE_X, z, SEAFOOD_TABLE_RADIUS] as [number, number, number]),
+    ...seafoodColumnZ().map(z => [SEAFOOD_ARCADE_X, z, 0.1] as [number, number, number]),
+    ...SEAFOOD_PROPS.map(p => [p.x, p.z, p.r] as [number, number, number]),
   ];
 }
 

@@ -3,7 +3,7 @@ import { PlazaClient } from './hubClient';
 import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds, plazaClampWalk, plazaCafeObstacles,
   seatPose, seatKey, nearestFreeSeat, pileObstacles, pileCenter, randomWalkSpawn, resolveWalkSpawn,
-  isSmokePile, plazaSmokeObstacles,
+  isSmokePile, isLeisurePile, isRestPile, plazaSmokeObstacles,
   type PlazaSeatRef, type PlazaSpawnMemory,
 } from './layout';
 import { plazaShedPosts } from './props';
@@ -35,6 +35,8 @@ export type PlazaDeps = {
   resumeSit: (pileId: number, slot: number) => void;
   /** 吸菸區坐下：不開剝蚵工班 */
   enterSmokeSit: (slot: number) => void;
+  /** 樸子腳門口等純坐座位：不抽菸、不開工班 */
+  enterRestSit: (slot: number) => void;
   /** 站起恢復走動（不結束工班） */
   goWalk: () => void;
   applySeatPose: (pos: THREE.Vector3, yaw: number) => void;
@@ -163,7 +165,7 @@ export function plazaHitPile(raycaster: THREE.Raycaster): number | null {
 }
 /** 自己坐下的那堆中心（補蚵飛出起點） */
 export function plazaMyPileOrigin(out = new THREE.Vector3()) {
-  if (myPile == null || isSmokePile(myPile)) return null;
+  if (myPile == null || isLeisurePile(myPile)) return null;
   return pileCenter(myPile, out);
 }
 
@@ -936,6 +938,7 @@ export async function plazaTrySit(): Promise<boolean> {
     seated = true; near = null;
     syncSeatChrome();
     if (smoke) deps.enterSmokeSit(seat.slot);
+    else if (isRestPile(seat.pileId)) deps.enterRestSit(seat.slot);
     else if (first) { shiftStarted = true; deps.beginShift(seat.pileId, seat.slot); }
     else deps.resumeSit(seat.pileId, seat.slot);
     return true;
@@ -1090,6 +1093,7 @@ export function tickPlaza(dt: number) {
   if (!active || !deps) return;
   const p = deps.getWalkXZ();
   const smokeSit = seated && myPile != null && isSmokePile(myPile);
+  const restSit = seated && myPile != null && isRestPile(myPile);
   view?.setSelfPose(p.x, p.z, deps.getYaw(), seated, smokeSit);
   tickPlazaTags(view, deps.camera(), dt);
   if (!seated) plazaUpdateNear(p.x, p.z);
@@ -1103,7 +1107,7 @@ export function tickPlaza(dt: number) {
     const yaw = deps.getYaw();
     const sp = deps.getSyncPhase?.();
     const phase = seated
-      ? (smokeSit ? 'smoke' : (sp ?? deps.getPhase()))
+      ? (smokeSit ? 'smoke' : restSit ? 'rest' : (sp ?? deps.getPhase()))
       : (sp === 'jump' || sp === 'crouch' || sp === 'lie' ? sp : 'walk');
     const moving = !seated && deps.getMoving();
     // 第三人稱（走動／坐下／躺著繞鏡頭）：鎖 look，身體朝向用 yaw；第一人稱坐下仍同步轉頭

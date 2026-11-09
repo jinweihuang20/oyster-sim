@@ -9,11 +9,12 @@ import {
   PLAZA_SIT_ROOT_Y,
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
-import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, isSmokePile, SMOKE_PILE_ID, smokeNpcSeatPose, type PlazaSeatRef } from './layout';
+import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
 import { makePlazaCafe } from './cafe';
+import { makePlazaSeafood } from './seafood';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
@@ -239,6 +240,11 @@ export function createPlazaWorldView(
   root.add(cafe.group);
   for (const [k, pad] of cafe.seatPads) seatMeshes.set(k, pad);
 
+  // 多那芝北側海產店「樸子腳」外觀＋門口座位（pileId=SEAFOOD_PILE_ID，純坐）
+  const seafood = makePlazaSeafood(M, add, LO);
+  root.add(seafood.group);
+  for (const [k, pad] of seafood.seatPads) seatMeshes.set(k, pad);
+
   // 攤位老闆（純客戶端，不經伺服器）：站在攤台後方、面向廣場中心
   const stallKeepers: { rig: PlayerRig; ph: number; lines: string[]; bub: WorldLabel | null; next: number; until: number; li: number }[] = [];
   const KEEPER_LINES: Record<string, string[]> = {
@@ -425,7 +431,7 @@ export function createPlazaWorldView(
   const grill = createGrillView(root);
 
   // 四堆一盞實際點光（對齊吊燈外觀；不投影以免 4 燈吃效能）
-  const plazaLights: THREE.PointLight[] = [...ambiance.lights, ...cafe.lights];
+  const plazaLights: THREE.PointLight[] = [...ambiance.lights, ...cafe.lights, ...seafood.lights];
   const roofLamps: THREE.PointLight[] = [];
   const roofLampBaseI = LO ? 7 : 9.5;
   for (const [x, z] of PLAZA_LAMP_XZ) {
@@ -453,7 +459,7 @@ export function createPlazaWorldView(
   function aimTargets(): PlazaAimTarget[] {
     const out: PlazaAimTarget[] = [];
     for (const r of remotes.values()) {
-      if (!r.seated || r.pileId < 0 || isSmokePile(r.pileId) || (r.phase || '') === 'moon') continue;
+      if (!r.seated || r.pileId < 0 || isLeisurePile(r.pileId) || (r.phase || '') === 'moon') continue;
       const h = headWorld(r, new THREE.Vector3());
       const b = bowlWorld(r, new THREE.Vector3());
       out.push({
@@ -1032,7 +1038,12 @@ function hashPid(pid: string) {
     if (r.seated) {
       poseSit(r);
       (r as any)._loco = (ph === 'smoke' || isSmokePile(r.pileId)) ? 'smoke' : 'sit';
-      if (ph === 'smoke' || isSmokePile(r.pileId)) {
+      if (ph === 'rest' || isRestPile(r.pileId)) {
+        // 樸子腳門口純坐：雙手自然垂放，無刀無蚵
+        r.knife.visible = false;
+        r.oyster.visible = false;
+        r.headWorkX = 0;
+      } else if (ph === 'smoke' || isSmokePile(r.pileId)) {
         // 抽烟 idle：右手近嘴、無刀無蚵；進行中的抽一口由 tickRemotePuff 驅動
         if (!r.puff) posePlazaSmokeSit(r.rig);
         r.knife.visible = false;
@@ -1195,8 +1206,8 @@ function hashPid(pid: string) {
         isNpc,
       };
       remotes.set(pid, r);
-      r.props.visible = r.seated && !isSmokePile(r.pileId);
-      if (r.seated && !isSmokePile(r.pileId)) syncRemoteMeats(r);
+      r.props.visible = r.seated && !isLeisurePile(r.pileId);
+      if (r.seated && !isLeisurePile(r.pileId)) syncRemoteMeats(r);
       hangArms(r, r.seated);
       if (awaitingPose) { rig.outer.visible = false; r.tag.sprite.visible = false; }
     }
@@ -1217,14 +1228,14 @@ function hashPid(pid: string) {
     // 走動時身體已朝 yaw；頭左右相對量通常為 0（由傳送端決定是否鎖 pitch）
     r.umbMesh.visible = r.umb;
     if (r.umb) layoutRemoteUmb(r.umbMesh, r.seated);
-    r.props.visible = r.seated && !isSmokePile(r.pileId);
-    if (r.seated && !isSmokePile(r.pileId)) syncRemoteMeats(r);
+    r.props.visible = r.seated && !isLeisurePile(r.pileId);
+    if (r.seated && !isLeisurePile(r.pileId)) syncRemoteMeats(r);
     if (p.nick && p.nick !== r.nick) r.nick = p.nick;
     if (p.isNpc != null) r.isNpc = !!p.isNpc;
     if (!r.isNpc && p.tag) r.numTag = String(p.tag).replace(/^#/, '');
     {
       const label = r.isNpc ? r.nick : plazaDisplayName(r.nick, r.numTag);
-      r.tag.setText(r.seated && !isSmokePile(r.pileId) ? `${label} · ${r.count}` : label);
+      r.tag.setText(r.seated && !isLeisurePile(r.pileId) ? `${label} · ${r.count}` : label);
     }
     if (r.seated && p.pileId >= 0) {
       const pose = seatPose(p.pileId, p.slot);
@@ -1410,6 +1421,7 @@ function hashPid(pid: string) {
     }
     for (const L of ambiance.lights) L.visible = !eco;
     for (const L of cafe.lights) L.visible = !eco;
+    for (const L of seafood.lights) L.visible = !eco;
 
     const k = Math.min(1, dt * 10);
     const t = now();
@@ -1636,6 +1648,7 @@ function hashPid(pid: string) {
     fireFx.length = 0;
     smokeArea.ambientSmoke.dispose();
     cafe.dispose();
+    seafood.dispose();
     if (selfCig) { root.remove(selfCig.group); selfCig.dispose(); selfCig = null; }
     for (const pl of plazaLights) { root.remove(pl); pl.dispose(); }
     plazaLights.length = 0;

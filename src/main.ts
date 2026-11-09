@@ -3353,6 +3353,20 @@ function launchPlaza() {
       hint.textContent = '吸菸區：按「換位置」站起來繼續逛；可按住「抽一口」';
       SFX.pop();
     },
+    enterRestSit: () => {
+      setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
+      // 與吸菸座同款按鈕可見度（站起／回主選單），但不拿菸、不顯示抽一口
+      document.body.classList.add('plazaRoam', 'plazaSmokeSit');
+      tYaw = yaw = 0; tPitch = pitch = -0.3;
+      plazaEnsureFpView();
+      handRig.visible = false;
+      on('standBtn', true); on('throwBtn', false); on('stealBtn', false);
+      on('umbBtn', false); on('medBtn', true); on('quitBtn', true); on('camBtn', COARSE);
+      if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
+      toast('樸子腳・坐下歇一會兒', '#9be37a');
+      hint.textContent = '樸子腳門口：按「換位置」站起來繼續逛';
+      SFX.pop();
+    },
     goWalk: () => {
       document.body.classList.add('plazaRoam');
       document.body.classList.remove('plazaSmokeSit');

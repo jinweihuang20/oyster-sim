@@ -462,7 +462,7 @@ export function makePlazaBigShed(
       else add(rboxEnv(len + 0.1, 0.1, thick + 0.06), wood, [mid, wallH + 0.02, c], g, false);
     };
     const half = span / 2;
-    face('x', WALK_BOUND, -half, CAFE_OPENING.z0, [-10.6, -5.2, 0, CAFE_OPENING.z0 - 0.08]); // 東（南段開口通咖啡店）
+    face('x', WALK_BOUND, -half, CAFE_OPENING.z0, [-10.6, -5.2, CAFE_OPENING.z0 - 0.08].filter(z => z <= CAFE_OPENING.z0 - 0.08)); // 東（南段開口通樸子腳＋多那芝）
     face('z', WALK_BOUND, -half, CAFE_SOUTH_WALL_END, [-10.6, -5.2, 0, 5.2, CAFE_SOUTH_WALL_END - 0.08]); // 南（東端拆掉）
   }
 

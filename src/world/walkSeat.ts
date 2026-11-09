@@ -212,6 +212,8 @@ export function walkStep(dt: number) {
       ? `吸菸區・座 ${n.slot + 1}`
       : n.pileId === 101
       ? `多那芝吸菸區・座 ${n.slot + 1}`
+      : n.pileId === 102
+      ? `樸子腳・座 ${n.slot + 1}`
       : `第 ${n.pileId + 1} 堆・座 ${n.slot + 1}`;
     return;
   }
