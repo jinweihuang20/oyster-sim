@@ -365,12 +365,14 @@ type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: nu
 const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE, rotTip: true };
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
   const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
-/** 熱切省電：陰影類型／貼圖解析度；antialias／precision 僅啟動時套用 */
+/** 熱切省電：關陰影、降 DPR；antialias／precision 僅啟動時套用 */
 function applyEcoGfx() {
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
+  // 省電：手機約 1×、桌面約 1.25×；一般最多 2×
+  const dprCap = mix.eco ? (COARSE ? 1 : 1.25) : 2;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, dprCap));
+  renderer.shadowMap.enabled = !mix.eco;
   renderer.shadowMap.type = mix.eco ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
-  lamp.castShadow = true;
+  lamp.castShadow = !mix.eco;
   const map = mix.eco ? 512 : 1024;
   lamp.shadow.mapSize.set(map, map);
   lamp.shadow.map?.dispose();
@@ -3476,7 +3478,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
-{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：陰影簡化（重新整理後 AA／精度才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒才會變）', '#9be37a'); }; }
+{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：30fps・降解析・關陰影（重新整理後 AA／精度才會變）' : '已關省電：滿幀・柔和陰影（重新整理後抗鋸齒才會變）', '#9be37a'); }; }
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => $('dex').classList.remove('show');
 
@@ -3536,8 +3538,8 @@ function frameBody() {
   }
   const now = performance.now();
   const paused = isPaused();
-  // 選單／暫停限約 15fps；遊玩（含省電）維持滿幀約 60fps
-  const minMs = (state !== 'play' || paused) ? 1000 / 15 : 0;
+  // 選單／暫停約 15fps；省電遊玩約 30fps；一般遊玩滿幀
+  const minMs = (state !== 'play' || paused) ? 1000 / 15 : (mix.eco ? 1000 / 30 : 0);
   if (minMs > 0 && now - lastDrawAt < minMs) { scheduleFrame(); return; }
   lastDrawAt = now;
   if (isDeathmatchActive()) { clock.getDelta(); scheduleFrame(); return; }
