@@ -616,7 +616,9 @@ function getPuffTex(i: number): THREE.Texture {
  *  group 的 -Z 為噴出方向；世界空間使用時請把 group.rotation.y 設成角色朝向。 */
 export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: number; reach?: number } = {}): CharcoalFireFx {
   // reach 0–1：按越久吐越遠（不給則維持原本距離）
-  const reachK = opts.reach == null ? 1 : 0.4 + 2.2 * Math.min(1, Math.max(0, opts.reach));
+  // 按滿約噴到 2 公尺（原本約 0.9）；曲線讓輕點仍然短
+  const reachR = opts.reach == null ? 0 : Math.min(1, Math.max(0, opts.reach));
+  const reachK = opts.reach == null ? 1 : 0.4 + 5.4 * Math.pow(reachR, 1.35);
   const rn = rng(opts.seed ?? (9000 + Math.floor(Math.random() * 8000)));
   const sc = Math.max(0.15, opts.scale ?? 1);
   const n = Math.min(44, Math.max(10, Math.round((opts.count ?? Math.round(8 + sc * 6)) * 2.6)));
@@ -641,7 +643,7 @@ export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: nu
       sp, mat,
       delay: k * emitDur + rn() * 0.04,
       age: 0,
-      life: 2.0 + rn() * 1.6,
+      life: (2.0 + rn() * 1.6) * (1 + 0.45 * reachR),
       vx: Math.cos(ang) * spread * speed,
       vy: Math.sin(ang) * spread * speed - 0.12 * speed,
       vz: -speed,
