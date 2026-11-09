@@ -39,6 +39,7 @@ import {
   initSurvey, setSvPrompted, svFetch, svAlert, svRender, svOpen, svList, svPrompted,
   initTutorial, tut, TUT, tutMeat, tutGo, tutStart, tutEnd,
   initPersist, persist, initDaily, renderDaily, openDaily, claimDaily, checkReturn,
+  initGifts, checkGifts, giftAlert, giftBadge, giftMsg, giftLabel, applyGift, renderGifts,
 } from './meta';
 import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
@@ -60,7 +61,10 @@ import {
 import { makeFpCigarette, type FpCigarette } from './plaza/fireFx';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
-import { $, on, toast, initDomToast, tickToast } from './ui';
+import {
+  $, on, toast, initDomToast, tickToast,
+  esc, bootQuiet, menuModalBusy, calTipOff, calTipCheck, initMenu, newDecor, newDots, newAnnounce,
+} from './ui';
 installNoZoom();
 { const s = document.createElement('style'); s.textContent = weaponPreviewCss(); document.head.appendChild(s); }
 const LS_P = __PREVIEW__ ? 'preview:' : '';
@@ -2652,6 +2656,46 @@ document.addEventListener('visibilitychange', () => {
 let achFromRes = false; // 從收工畫面打開成就，關掉後回到收工畫面
 btn('rAch', () => { achFromRes = true; $('result').classList.remove('show'); achOpen(); });
 const ITEMS = [{ id: 'moon', n: '把你媽的愛送上月球', price: 5000, good: '選一位鄰居，發射飛彈鐵拳把對方送上月球，這一工都不會再出現', bad: '每一工最多用 2 個，下一工對方會回來' }];
+
+// 主選單／雜貨新品／簽到提示／禮物信箱（見 ui/menu、meta/gifts）
+const shopKeys = () => [...KNIVES.filter(k => k.price > 0).map(k => 'knife-' + k.id), ...UMBS.filter(u => u.price > 0).map(u => 'umb-' + u.id), ...BOWLS.filter(b => b.price > 0).map(b => 'bowl-' + b.id), ...GEAR.map(g => 'gear-' + g.id), ...EQUIP.filter(e => e.price > 0).map(e => 'cloth-' + e.id), ...MEDS.map(m => 'med-' + m.id), ...ITEMS.map(i => 'item-' + i.id)];
+const shopName = (k: string) => { const [c, ...r] = k.split('-'); const id = r.join('-'); const L: any[] = c === 'knife' ? KNIVES : c === 'umb' ? UMBS : c === 'bowl' ? BOWLS : c === 'gear' ? GEAR : c === 'cloth' ? EQUIP : c === 'med' ? MEDS : ITEMS; return L.find(x => x.id === id)?.n ?? id; };
+let shopTab = 0;
+initMenu({
+  getState: () => state,
+  isTut: () => !!tut,
+  getSave: () => save,
+  LS,
+  Social,
+  giftAlert,
+  svAlert,
+  featAnnounce,
+  shopKeys,
+  shopName,
+  getShopTab: () => shopTab,
+  getShopNewIds,
+  KNIVES, UMBS, BOWLS, GEAR, EQUIP, MEDS, ITEMS,
+  openDaily,
+});
+initGifts({
+  getSave: () => save,
+  persist,
+  track,
+  renderDex: () => renderDex(),
+  renderDaily,
+  getState: () => state,
+  isTut: () => !!tut,
+  bootQuiet: () => !!bootQuiet(),
+  LS,
+  audio,
+  tone,
+  RAR,
+  ITEMS,
+  svAlert,
+  featAnnounce,
+  newAnnounce,
+});
+
 const MOON_MAX = 2;
 let moonUsed = 0, moonAimOn = false, punchT = 0;
 // ---------- 道具：把你媽的愛送上月球 ----------
@@ -3900,108 +3944,6 @@ initClothUi({
 });
 
 migrateEquip(); persist(); applySleeve();
-// 禮物信箱：伺服器沒開或還沒有這個路由時安靜失敗
-let giftList: Social.Gift[] = [], giftAt = 0;
-/** 第一次進遊戲（教學未完成且還沒上過工）：主畫面勿連跳禮物／問卷／公告 */
-function bootQuiet() {
-  return !save.tutDone && (save.days ?? 0) < 1;
-}
-async function checkGifts(force = false) {
-  if (!force && Date.now() - giftAt < 20e3) return; giftAt = Date.now();
-  try { giftList = await Social.gifts(); } catch { giftList = []; }
-  const b = document.getElementById('oGift'); if (b) b.style.display = giftList.length ? '' : 'none';
-  giftAlert();
-}
-// 新禮物提示：同一份禮物只提醒一次；上工中只亮 HUD 圖示，收工或回主選單再跳提示
-const giftSeen: string[] = (() => { try { return JSON.parse(LS.getItem('giftSeen') || '[]'); } catch { return []; } })();
-function giftNew() { return giftList.filter(g => !giftSeen.includes(String(g.id))); }
-function giftAlert() {
-  const n = giftNew(), h = document.getElementById('giftHud');
-  if (h) h.style.display = state === 'play' && n.length ? '' : 'none';
-  // 新人只亮信箱按鈕，不自動彈窗（也不標記已看，等教學後再提醒）
-  if (bootQuiet()) return;
-  if (!n.length || state === 'play' || tut || document.getElementById('giftMsg') || document.getElementById('newMsg') || document.getElementById('featMsg') || document.getElementById('svMsg') || $('gift').classList.contains('show')) return;
-  for (const g of n) giftSeen.push(String(g.id));
-  while (giftSeen.length > 200) giftSeen.shift();
-  try { LS.setItem('giftSeen', JSON.stringify(giftSeen)); } catch { /* 忽略 */ }
-  giftNotice(n);
-}
-function giftNotice(n: Social.Gift[]) {
-  const esc2 = (v: string) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
-  const m = document.createElement('div'); m.id = 'giftMsg'; m.className = 'giftMsg';
-  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-gift"></i> 你有新禮物</b><ul class="gnList">${n.map(g => `<li>${esc2(giftLabel(g))}${g.message ? `<br><small>「${esc2(g.message)}」</small>` : ''}</li>`).join('')}</ul><div class="mbtns"><button class="gmNo">稍後再領</button><button class="gmYes"><i class="ic ic-check"></i> 領取</button></div></div>`;
-  const close = () => { m.remove(); setTimeout(() => { svAlert(); featAnnounce(); newAnnounce(); }, 300); };
-  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
-  m.addEventListener('click', e => { if (e.target === m) close(); });
-  const y = m.querySelector<HTMLButtonElement>('.gmYes')!;
-  y.addEventListener('click', async () => {
-    if (y.disabled) return; y.disabled = true; y.textContent = '領取中…';
-    const got: string[] = []; let bad = '';
-    for (const g of n) {
-      const r = await Social.claimGift(g.id);
-      if (r.st === 'retry') { bad = r.why ?? '等一下再試'; continue; }
-      giftList = giftList.filter(x => String(x.id) !== String(g.id));
-      if (r.st === 'ok') { const gg = r.gift ?? g; applyGift(gg); got.push(giftGot(gg)); if (gg.message) got.push(`「${gg.message}」`); track('gift_claim', { type: gg.type, money: save.money }); }
-      else bad = r.why ?? '這份禮物已經不能領了';
-    }
-    renderDaily(); giftBadge(); close();
-    if (got.length) {
-      try { audio(); for (let k = 0; k < 5; k++) tone(1100 + k * 200, 0.12, 0.08, 'square', k * 0.06, 1600 + k * 200); tone(659, 0.45, 0.12, 'triangle', 0.35); } catch { }
-      giftMsg(true, '已領取！', [...got, ...(bad ? [`有一份沒領到：${bad}`] : []), `身上有 $${save.money}`]);
-    } else giftMsg(false, '沒領到', [bad || '等一下再試']);
-  });
-  document.body.appendChild(m);
-}
-function giftLabel(g: Social.Gift) {
-  if (g.type === 'money') return `$${Math.max(0, Math.floor(+g.amount! || 0))}`;
-  if (g.type === 'equip') return EQUIP.find(e => e.id === g.itemId)?.n ?? '服飾';
-  if (g.type === 'odd') return ODD[+g.itemId!]?.name ?? '奇物';
-  if (g.type === 'pearl') return RAR[+(g.tier ?? 0)]?.name ?? '珍珠';
-  if (g.type === 'item') return ITEMS.find(i => 'item-' + i.id === String(g.itemId) || i.id === String(g.itemId))?.n ?? '道具';
-  return '禮物';
-}
-function applyGift(g: Social.Gift) {
-  if (g.type === 'money') save.money += Math.max(0, Math.floor(+g.amount! || 0));
-  else if (g.type === 'equip') { if (EQUIP.some(e => e.id === g.itemId) && !save.shop.owned.includes(g.itemId as string)) save.shop.owned.push(g.itemId as string); }
-  else if (g.type === 'odd') { const i = +g.itemId!; if (Number.isInteger(i) && i >= 0 && i < save.odd.length) save.odd[i]++; }
-  else if (g.type === 'pearl') { const t = +(g.tier ?? 0); if (Number.isInteger(t) && t >= 0 && t < save.dex.length) save.dex[t]++; }
-  else if (g.type === 'item') { const it = ITEMS.find(i => 'item-' + i.id === String(g.itemId) || i.id === String(g.itemId)); if (it) save.meds[it.id] = (save.meds[it.id] ?? 0) + 1; }
-  persist(); renderDex();
-}
-function giftBadge() { const ob = document.getElementById('oGift'); if (ob) ob.style.display = giftList.length ? '' : 'none'; }
-function giftMsg(ok: boolean, title: string, lines: string[]) {
-  document.getElementById('giftMsg')?.remove();
-  const esc2 = (v: string) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
-  const m = document.createElement('div'); m.id = 'giftMsg'; m.className = 'giftMsg' + (ok ? '' : ' bad');
-  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ${ok ? 'ic-gift' : 'ic-warn'}"></i> ${esc2(title)}</b><ul>${lines.map(l => `<li>${esc2(l)}</li>`).join('')}</ul><div class="mbtns"><button class="gmOk"><i class="ic ic-check"></i> 確定</button></div></div>`;
-  const close = () => m.remove();
-  m.querySelectorAll('button').forEach(b => b.addEventListener('click', close));
-  m.addEventListener('click', e => { if (e.target === m) close(); });
-  document.body.appendChild(m);
-}
-function giftGot(g: Social.Gift) { return g.type === 'money' ? `+${giftLabel(g)}` : `${g.type === 'equip' ? '服飾' : g.type === 'odd' ? '奇物' : g.type === 'item' ? '道具' : '珍珠'}：${giftLabel(g)}`; }
-function renderGifts() {
-  const esc2 = (v: string) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
-  $('giftBody').innerHTML = giftList.length ? giftList.map(g => `<div class="gfRow"><div><b>${esc2(giftLabel(g))}</b><small>${esc2(g.message ?? '')}</small></div><button data-gift="${esc2(String(g.id))}">領取</button></div>`).join('') : '<p class="eqHint">目前沒有禮物。</p>';
-  $('giftBody').querySelectorAll<HTMLButtonElement>('button[data-gift]').forEach(b => b.onclick = async () => {
-    if (b.disabled) return;
-    const id = b.getAttribute('data-gift')!; b.disabled = true; b.classList.add('busy'); b.textContent = '領取中…';
-    const local = giftList.find(x => String(x.id) === id);
-    const r = await Social.claimGift(id);
-    if (r.st === 'retry') { b.disabled = false; b.classList.remove('busy'); b.textContent = '領取'; giftMsg(false, '沒領到', [r.why ?? '等一下再試']); return; }
-    giftList = giftList.filter(x => String(x.id) !== id);
-    if (r.st === 'ok') {
-      const g = r.gift ?? local!; applyGift(g); renderDaily();
-      try { audio(); for (let k = 0; k < 5; k++) tone(1100 + k * 200, 0.12, 0.08, 'square', k * 0.06, 1600 + k * 200); tone(659, 0.45, 0.12, 'triangle', 0.35); } catch { }
-      track('gift_claim', { type: g.type, money: save.money });
-      giftMsg(true, '已領取！', [giftGot(g), ...(g.message ? [`「${g.message}」`] : []), `身上有 $${save.money}`]);
-    } else giftMsg(false, '沒領到', [r.why ?? '這份禮物已經不能領了']);
-    renderGifts(); giftBadge();
-  });
-}
-$('oGift').onclick = () => { renderGifts(); $('gift').classList.add('show'); };
-$('giftClose').onclick = () => $('gift').classList.remove('show');
-setTimeout(() => checkGifts(true), 3000); Social.onPresence(() => { checkGifts(); });
 // ---------- 第三人稱視角 ----------
 // eslint-disable-next-line no-var
 var tpReady = false;
@@ -4157,7 +4099,6 @@ $('camBtn').onclick = () => setTpv(!tpv);
 $('eqClose').onclick = () => { $('equip').classList.remove('show'); stopEqPreview(); if (eqFromRes) { eqFromRes = false; $('result').classList.add('show'); } };
 $('rEquip').onclick = () => { eqFromRes = true; $('result').classList.remove('show'); eqPick = null; openEquip(); };
 $('oEquip').onclick = () => { eqPick = null; openEquip(); };
-let shopTab = 0;
 function shopTabs() {
   const list = $('shopList'), kids = Array.from(list.children); const groups: HTMLElement[] = []; let cur: HTMLElement | null = null; const head = document.createElement('div');
   for (const k of kids) { if (k.tagName === 'H3') { cur = document.createElement('div'); cur.className = 'stab'; groups.push(cur); } (cur ?? head).appendChild(k); }
@@ -4174,7 +4115,6 @@ function shopTabs2(groups: HTMLElement[], bar: HTMLElement) { groups.forEach((g,
 // 手機返回鍵：關掉最上層的視窗；上工中不離開；主畫面連按兩次才離開（同核心回收）
 function cleanName(v: string) { return [...v.replace(/[\u0000-\u001f\u007f<>&"'`]/g, '').trim()].slice(0, 8).join('').trim() || '剝蚵人'; }
 function myName() { return save.name ? cleanName(save.name) : '剝蚵人'; }
-function esc(v: string) { return v.replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';'); }
 function drawName() { const n = myName(); const m = document.getElementById('meLine'); if (m) { m.textContent = ''; const u = document.createElement('i'); u.className = 'ic ic-user'; m.append(u); const b = document.createElement('span'); b.id = 'nameEdit'; b.setAttribute('role', 'button'); b.tabIndex = 0; b.title = '點一下改名字'; b.textContent = n; const g = document.createElement('i'); g.textContent = ' ✎'; b.append(g); b.onkeydown = e => { if (e.key === 'Enter') b.click(); }; b.onclick = () => { ($('setBtn') as HTMLButtonElement).click(); setTimeout(() => ($('myName') as HTMLInputElement).focus(), 50); }; m.append(b); } const i = document.getElementById('myName') as HTMLInputElement | null; if (i && document.activeElement !== i) i.value = save.name ? n : ''; }
 { const i = $('myName') as HTMLInputElement; const commit = () => { const v = cleanName(i.value); save.name = v === '剝蚵人' ? undefined : v; i.value = save.name ? v : ''; persist(); drawName(); };
   i.addEventListener('change', commit); i.addEventListener('blur', commit); i.addEventListener('input', () => { const v = cleanName(i.value); save.name = v === '剝蚵人' ? undefined : v; persist(); }); i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); i.blur(); } });
@@ -4349,69 +4289,6 @@ new MutationObserver(ms => { for (const m of ms) { const el = m.target as HTMLEl
     requestAnimationFrame(() => { void el.offsetHeight; el.style.opacity = '0.999'; requestAnimationFrame(() => { el.style.opacity = ''; }); }); } })
   .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
 
-// ---------- 新商品上架提示 ----------
-// 商品 key：類別-id。SHOP_NEW 接後台「標為新品」的 newIds（接受 key 或 id）；SHOP_RECENT 是舊玩家第一次也要提示的近期新品
-const SHOP_NEW = { has: (k: string) => getShopNewIds().includes(k) || getShopNewIds().includes(k.split('-').slice(1).join('-')) };
-const SHOP_RECENT = ['item-moon'];
-const NEW_CAT: Record<string, string> = { knife: '刀具', umb: '雨傘', bowl: '器具', gear: '器具', cloth: '服飾', med: '藥品', item: '道具' };
-const NEW_ATTR: [string, string][] = [['buy', 'knife'], ['eq', 'knife'], ['ubuy', 'umb'], ['ueq', 'umb'], ['bbuy', 'bowl'], ['beq', 'bowl'], ['gbuy', 'gear'], ['gtog', 'gear'], ['slbuy', 'cloth'], ['sleq', 'cloth'], ['mbuy', 'med'], ['ibuy', 'item']];
-const shopKeys = () => [...KNIVES.filter(k => k.price > 0).map(k => 'knife-' + k.id), ...UMBS.filter(u => u.price > 0).map(u => 'umb-' + u.id), ...BOWLS.filter(b => b.price > 0).map(b => 'bowl-' + b.id), ...GEAR.map(g => 'gear-' + g.id), ...EQUIP.filter(e => e.price > 0).map(e => 'cloth-' + e.id), ...MEDS.map(m => 'med-' + m.id), ...ITEMS.map(i => 'item-' + i.id)];
-const shopName = (k: string) => { const [c, ...r] = k.split('-'); const id = r.join('-'); const L: any[] = c === 'knife' ? KNIVES : c === 'umb' ? UMBS : c === 'bowl' ? BOWLS : c === 'gear' ? GEAR : c === 'cloth' ? EQUIP : c === 'med' ? MEDS : ITEMS; return L.find(x => x.id === id)?.n ?? id; };
-let shopKnown: Set<string>, shopAnn: Set<string>;
-{ let raw: any = null; try { raw = JSON.parse(LS.getItem('shopKnown') ?? 'null'); } catch { }
-  if (Array.isArray(raw)) shopKnown = new Set(raw);
-  else { shopKnown = new Set(shopKeys().filter(k => !(save.days > 0 && SHOP_RECENT.includes(k)))); try { LS.setItem('shopKnown', JSON.stringify([...shopKnown])); } catch { } }
-  let a: any = null; try { a = JSON.parse(LS.getItem('shopAnn') ?? 'null'); } catch { } shopAnn = new Set(Array.isArray(a) ? a : []); }
-const newNow = () => shopKeys().filter(k => !shopKnown.has(k) || (SHOP_NEW.has(k) && !shopAnn.has('seen:' + k)));
-const saveNew = () => { try { LS.setItem('shopKnown', JSON.stringify([...shopKnown])); LS.setItem('shopAnn', JSON.stringify([...shopAnn])); } catch { } };
-const markSeen = (k: string) => { shopKnown.add(k); shopAnn.add('seen:' + k); };
-let newSnap: string[] = [];
-function newDecor() {
-  const shop = $('shop'); if (!shop.classList.contains('show')) newSnap = newNow();
-  const groups = Array.from(document.querySelectorAll<HTMLElement>('#shopList .stab'));
-  let changed = false;
-  groups.forEach((g, i) => { for (const [at, c] of NEW_ATTR) g.querySelectorAll(`button[data-${at}]`).forEach(b => {
-    const k = c + '-' + b.getAttribute('data-' + at); if (!newSnap.includes(k)) return;
-    const card = b.closest('tr, .slCard, .itemCard'); const nm = card?.querySelector('b');
-    if (nm && !card!.querySelector('.newTag')) nm.insertAdjacentHTML('afterend', '<span class="newTag">新品</span>');
-    if (i === shopTab && !shopKnown.has(k) || i === shopTab && !shopAnn.has('seen:' + k)) { markSeen(k); changed = true; } }); });
-  if (changed) saveNew();
-  const left = newNow();
-  document.querySelectorAll<HTMLElement>('#shopTabs button').forEach(b => { const t = b.textContent ?? ''; b.classList.toggle('hasNew', left.some(k => t.includes(NEW_CAT[k.split('-')[0]]))); });
-  newDots();
-}
-function newDots() {
-  const has = newNow().length > 0;
-  for (const id of ['shopBtn', 'shopBtn2', 'oShop', 'eqShop']) { const b = document.getElementById(id); if (!b) continue; let d = b.querySelector('.newDot'); if (has && !d) b.insertAdjacentHTML('beforeend', '<span class="newDot">新</span>'); else if (!has && d) d.remove(); }
-}
-function openShopAt(k: string) {
-  ($('shopBtn2') as HTMLButtonElement).click();
-  const cat = NEW_CAT[k.split('-')[0]]; const i = Array.from(document.querySelectorAll('#shopTabs button')).findIndex(b => (b.textContent ?? '').includes(cat));
-  if (i >= 0) (document.querySelectorAll('#shopTabs button')[i] as HTMLButtonElement).click();
-}
-function menuModalBusy() {
-  return state === 'play' || tut || !$('overlay').classList.contains('show')
-    || !!document.getElementById('giftMsg') || !!document.getElementById('newMsg') || !!document.getElementById('featMsg') || !!document.getElementById('svMsg')
-    || $('gift').classList.contains('show') || !!document.querySelector('.panel.show:not(#overlay)');
-}
-function newAnnounce() {
-  newDots();
-  if (bootQuiet()) return; // 新人先玩再說雜貨新品
-  const fresh = newNow().filter(k => !shopAnn.has(k)); if (!fresh.length) return;
-  if (menuModalBusy()) return;
-  const names = fresh.map(shopName).join('、');
-  fresh.forEach(k => shopAnn.add(k)); saveNew();
-  const day = todayKey(); if (LS.getItem('shopAnnDay') !== day) { try { LS.setItem('shopAnnDay', day); } catch { } Social.local(`雜貨店新上架：${names}`); }
-  const m = document.createElement('div'); m.id = 'newMsg'; m.className = 'giftMsg';
-  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-shop"></i> 雜貨店新上架</b><p class="nmTx">雜貨店新上架：${esc(names)}</p><div class="mbtns"><button class="gmNo">晚點再說</button><button class="gmYes">去看看</button></div></div>`;
-  const close = () => { m.remove(); setTimeout(() => { giftAlert(); svAlert(); featAnnounce(); }, 300); };
-  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', close));
-  m.querySelector('.gmYes')!.addEventListener('click', () => { close(); openShopAt(fresh[0]); });
-  document.body.appendChild(m);
-}
-setInterval(newAnnounce, 1500); setTimeout(newAnnounce, 2500);
-(window as any).__newShop = { now: () => newNow(), reset: () => { LS.removeItem('shopKnown'); LS.removeItem('shopAnn'); LS.removeItem('shopAnnDay'); } };
-
 initAnnounce({
   LS, LS_P, $: (id) => $(id), esc, bootQuiet: () => !!bootQuiet(), menuModalBusy: () => !!menuModalBusy(), Social,
   giftAlert, svAlert, newAnnounce,
@@ -4511,22 +4388,6 @@ requestAnimationFrame(() => requestAnimationFrame(dismissBoot));
   if (sl) { new MutationObserver(lab).observe(sl, { childList: true, subtree: true }); lab(); }
 }
 
-// ── 老玩家提示：簽到按鈕搬到右上角日曆 ──
-const CAL_TIP_KEY = 'calTipSeen1';
-function calTipOff() { try { localStorage.setItem(CAL_TIP_KEY, '1'); } catch { } document.getElementById('calTip')?.remove(); document.getElementById('calBtn')?.classList.remove('tipGlow'); }
-function calTipCheck() {
-  try { if (localStorage.getItem(CAL_TIP_KEY)) return; } catch { return; }
-  if (!(save.bonusN ?? 0) || save.bonusDay === todayKey()) return;
-  const b = document.getElementById('calBtn'); if (!b || document.getElementById('calTip')) return;
-  b.classList.add('tipGlow');
-  const t = document.createElement('div'); t.id = 'calTip';
-  t.innerHTML = '<span>簽到移到這裡囉！點日曆領上工費</span><button class="calTipX" aria-label="關閉">✕</button>';
-  document.body.appendChild(t);
-  const place = () => { if (!t.isConnected) return; const r = b.getBoundingClientRect(); if (!r.width) { t.style.display = 'none'; return; } t.style.display = ''; t.style.top = `${r.bottom + 10}px`; t.style.right = `${Math.max(8, innerWidth - r.right - 4)}px`; t.style.setProperty('--ax', `${Math.max(12, innerWidth - r.right - 4 - Math.max(8, innerWidth - r.right - 4) + r.width / 2 - 7)}px`); requestAnimationFrame(place); };
-  place();
-  t.querySelector<HTMLButtonElement>('.calTipX')!.onclick = e => { e.stopPropagation(); calTipOff(); };
-  t.onclick = () => { calTipOff(); openDaily(); };
-}
 // ── 手機提示：按住蚵仔左右拖可以轉動 ──
 const ROT_TIP_KEY = 'rotTipDragN';
 let rotTipN = (() => { try { return +(localStorage.getItem(ROT_TIP_KEY) ?? 0) || 0; } catch { return 0; } })();

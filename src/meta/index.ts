@@ -21,3 +21,7 @@ export { initPersist, persist } from './persist';
 export {
   initDaily, renderDaily, openDaily, claimDaily, checkReturn, stampRow, type DailyDeps,
 } from './daily';
+export {
+  initGifts, checkGifts, giftAlert, giftBadge, giftMsg, giftLabel, applyGift, renderGifts,
+  type GiftsDeps,
+} from './gifts';
