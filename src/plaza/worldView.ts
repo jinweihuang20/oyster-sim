@@ -128,6 +128,8 @@ export type PlazaWorldView = {
   grill: PlazaGrillView;
   /** 坐下遠端玩家的瞄準點（丟殼／偷肉） */
   aimTargets: () => PlazaAimTarget[];
+  /** 走動碰撞用：站立遠端玩家圓柱 `[x, z, radius]`（蹲／躺略過） */
+  walkBodies: () => [number, number, number][];
   moonLaunch: (connId: string, delayMs?: number, fromX?: number, fromZ?: number) => void;
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) => void;
@@ -1132,6 +1134,18 @@ function hashPid(pid: string) {
     for (const k of stallKeepers) { k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15; posePlazaStallKeeper(k.rig, tSec, k.ph); tickKeeperBubble(k, tSec); }
   }
 
+  /** 站立／走動的遠端：擋路；蹲、躺、坐下、尚未現身：不擋 */
+  function walkBodies(): [number, number, number][] {
+    const out: [number, number, number][] = [];
+    for (const r of remotes.values()) {
+      if (r.seated || r.awaitingPose || !r.rig.outer.visible) continue;
+      const ph = r.phase || '';
+      if (ph === 'crouch' || ph === 'lie') continue;
+      out.push([r.x, r.z, 0.38]);
+    }
+    return out;
+  }
+
   function dispose() {
     for (const r of [...remotes.values()]) destroyRemote(r);
     remotes.clear();
@@ -1155,7 +1169,7 @@ function hashPid(pid: string) {
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, aimTargets, moonLaunch, showChat, setSelfPose, playThrowFx, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, playThrowFx, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {

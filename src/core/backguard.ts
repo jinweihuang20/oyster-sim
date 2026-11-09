@@ -2,14 +2,28 @@
  * Web only: keeps the phone Back button / swipe-back inside the game.
  * A guard history entry sits on top of the real page; every popstate re-arms it and asks the game
  * what Back means right now. Returning 'exit' lets the next Back press actually leave.
+ * Also blocks iOS／多數 WebKit 左右邊緣滑回手勢（Android 系統手勢仍可能擋不住）。
  * Electron has no browser history UI, so this is a no-op there.
  */
 export type BackResult = 'handled' | 'confirm-exit';
 
 const isDesktopApp = (): boolean => false;
 
+/** 左右邊緣寬度（px）；太寬會吃到搖桿／轉蚵鈕 */
+const EDGE_SWIPE_PX = 22;
+
+function installEdgeSwipeBlock(): void {
+  // Safari 預設 touchstart 為 passive，一定要 { passive: false } 才能 preventDefault
+  window.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || !e.cancelable) return;
+    const x = e.touches[0].clientX;
+    if (x < EDGE_SWIPE_PX || x > innerWidth - EDGE_SWIPE_PX) e.preventDefault();
+  }, { passive: false, capture: true });
+}
+
 export function installBackGuard(onBack: () => BackResult, isInSortie: () => boolean): void {
   if (isDesktopApp() || !window.history?.pushState) return;
+  installEdgeSwipeBlock();
   const toast = document.getElementById('back-toast');
   let armedUntil = 0;
   let leaving = false;

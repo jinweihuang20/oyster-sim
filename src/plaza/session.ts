@@ -107,6 +107,10 @@ export function plazaPileObs(): [number, number, number][] {
   for (const o of plazaStallObstacles()) out.push(o);
   return out;
 }
+/** 走動時遠端站立玩家碰撞圓（蹲／躺略過） */
+export function plazaWalkBodies(): [number, number, number][] {
+  return view?.walkBodies() ?? [];
+}
 /** 入場隨機站位（避開蚵堆／棚柱／攤位，面向中心） */
 export function plazaRandomSpawn() {
   const posts: [number, number, number][] = plazaShedPosts().map(p => [p.x, p.z, 0.22]);

@@ -13,6 +13,9 @@ export type WalkSeatDeps = {
   plazaSeated: () => boolean;
   plazaStandWalk: () => void;
   plazaPileObs: () => [number, number, number][];
+  /** 遠端站立玩家碰撞圓；跳躍中可不擋 */
+  plazaWalkBodies: () => [number, number, number][];
+  getJumpY: () => number;
   plazaWalkBound: () => number;
   plazaNearSeat: () => { pileId: number; slot: number } | null;
   plazaMySeat: () => { pileId: number; slot: number } | null;
@@ -162,7 +165,10 @@ export function walkStep(dt: number) {
   const obs: [number, number, number][] = D.isPlazaMode()
     ? [...D.plazaPileObs()]
     : [[0, 0, 1.15], [D.BASIN.x, D.BASIN.z, 0.42], [D.BOWL.x, D.BOWL.z, D.getBowlR() + 0.12], [2.6, 2.6, 0.75], [2.9, -2.5, 0.35], [3.1, -1.9, 0.35], [-2.9, 2.6, 0.35], [3.0, 0.5, 0.3], [-3.0, 0.2, 0.3]];
-  if (!D.isPlazaMode()) {
+  if (D.isPlazaMode()) {
+    // 跳躍離地夠高可越過站立玩家；蹲／躺遠端本身就不進 walkBodies
+    if (D.getJumpY() < 0.28) for (const b of D.plazaWalkBodies()) obs.push(b);
+  } else {
     D.getNpcs().forEach(n => obs.push([n.g.position.x, n.g.position.z, 0.5]));
     D.stools.forEach(g => obs.push([g.position.x, g.position.z, 0.28]));
   }
