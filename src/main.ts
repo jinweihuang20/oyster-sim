@@ -47,13 +47,13 @@ import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponI
 import {
   makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
   posePlazaSit, posePlazaStand, posePlazaSmokeSit, easeSmokePuff,
-  clearPlazaSmokeCig, ensurePlazaSmokeCig, getPlazaSmokeCig,
+  clearPlazaSmokeCig, ensurePlazaSmokeCig, getPlazaSmokeCig, posePlazaCarryHold,
   plazaJumpHeight, PLAZA_JUMP_DUR, applyPlazaBodyPose as applyBodyPose, type PlayerRig,
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
 import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
-  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
+  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
@@ -1628,6 +1628,7 @@ function plazaThrowTarget(): PlazaAimTarget | null {
   let best: PlazaAimTarget | null = null, bestScore = 1e9;
   const cam = viewCam();
   for (const t of plazaAimTargets()) {
+    if (t.carriedBy || !t.seated || t.phase === 'carried') continue;
     if (!t?.connId || !t.head || ![t.head.x, t.head.y, t.head.z].every(Number.isFinite)) continue;
     const p = new THREE.Vector3(t.head.x, t.head.y, t.head.z).project(cam);
     if (p.z >= 1 || !Number.isFinite(p.x + p.y)) continue;
@@ -1682,6 +1683,7 @@ function bowlOnReticle(bx: number, by: number, bz: number, bowlR = 0.16, slack =
 function plazaStealAimTarget(): PlazaAimTarget | null {
   if (performance.now() < plazaStealBanUntil) return null;
   for (const t of plazaAimTargets()) {
+    if (t.carriedBy || !t.seated || t.phase === 'carried') continue;
     if (bowlOnReticle(t.bowl.x, t.bowl.y, t.bowl.z)) return t;
   }
   return null;
@@ -2349,7 +2351,7 @@ btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, 
 initWalkSeat({
   $, on, COARSE, clamp,
   getState: () => state, getPhase: () => phase,
-  isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaNearSeat, plazaMySeat, seatPose,
+  isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaNearSeat, plazaNearPrompt, plazaMySeat, seatPose,
   setPlazaSeatPropsVisible, oyster, shellGeo, shellTopMat, shellTop, handRig, SEAT, BASIN, BOWL, getBowlR: () => BOWL_R,
   seatGround, seatNow,
   getSeatYaw: () => seatYaw, setSeatYaw: v => { seatYaw = v; },
@@ -3093,6 +3095,8 @@ function clearPlazaLeaveUi() {
   document.body.classList.remove('plazaRoam', 'plazaSmokeSit');
   const info = document.getElementById('seatInfo');
   if (info) info.innerHTML = '';
+  const sit = document.getElementById('sitBtn');
+  if (sit) sit.innerHTML = '<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>';
   const kb = document.getElementById('joyK');
   if (kb) kb.style.transform = '';
 }
@@ -4175,6 +4179,7 @@ function camTick(dt: number) {
       if (jumpT > 0) {
         posePlazaJump(rig, PLAZA_JUMP_DUR - jumpT);
         posePlazaHangArms(rig);
+        if (plazaCarrying()) posePlazaCarryHold(rig);
       } else {
         const amp = Math.min(1, sp / 1.2);
         const swing = posePlazaWalkCycle(rig, walkPh, Math.max(0.15, amp));
@@ -4184,6 +4189,7 @@ function camTick(dt: number) {
           posePlazaHangArms(rig);
           rig.torso.rotation.y *= 0.8; rig.torso.rotation.z *= 0.8; rig.torso.rotation.x *= 0.8;
         }
+        if (plazaCarrying()) posePlazaCarryHold(rig);
         applyBodyPose(rig, lastPose, poseK);
       }
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw);

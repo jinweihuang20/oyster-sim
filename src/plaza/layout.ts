@@ -202,6 +202,33 @@ export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDis
   for (let p = 0; p < PILE_COUNT; p++) {
     if (pileIsRemoved(p)) continue;
     for (let s = 0; s < SLOTS_PER_PILE; s++) consider(p, s);
+    if (pileHasNpc(p)) {
+      for (let s = SLOTS_PER_PILE; s < SLOTS_PER_PILE + NPC_SLOTS_PER_PILE; s++) consider(p, s);
+    }
+  }
+  for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
+  for (let s = 0; s < CAFE_SMOKE_SEAT_COUNT; s++) consider(CAFE_SMOKE_PILE_ID, s);
+  for (let s = 0; s < SEAFOOD_SEAT_COUNT; s++) consider(SEAFOOD_PILE_ID, s);
+  return best;
+}
+
+/** 放下阿婆：玩家座＋阿婆加座＋休閒座 */
+export function nearestFreePlaceSeat(x: number, z: number, taken: Set<string>, maxDist = SIT_DIST): (PlazaSeatRef & { dist: number }) | null {
+  let best: (PlazaSeatRef & { dist: number }) | null = null;
+  const consider = (pileId: number, slot: number) => {
+    const k = seatKey(pileId, slot);
+    if (taken.has(k)) return;
+    const pose = seatPose(pileId, slot);
+    const d = Math.hypot(x - pose.pos.x, z - pose.pos.z);
+    if (d > maxDist) return;
+    if (!best || d < best.dist) best = { pileId, slot, dist: d };
+  };
+  for (let p = 0; p < PILE_COUNT; p++) {
+    if (pileIsRemoved(p)) continue;
+    for (let s = 0; s < SLOTS_PER_PILE; s++) consider(p, s);
+    if (pileHasNpc(p)) {
+      for (let s = SLOTS_PER_PILE; s < SLOTS_PER_PILE + NPC_SLOTS_PER_PILE; s++) consider(p, s);
+    }
   }
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
   for (let s = 0; s < CAFE_SMOKE_SEAT_COUNT; s++) consider(CAFE_SMOKE_PILE_ID, s);
