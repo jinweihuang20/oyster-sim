@@ -499,10 +499,44 @@ export function posePlazaStand(rig: PlayerRig) {
   rig.torso.position.y = PLAZA_TORSO_Y;
 }
 
-/** 吸菸區坐下：右手近嘴（與遠端 smoke phase 相同） */
-export function posePlazaSmokeSit(rig: PlayerRig) {
+/** ease-in-out（抽菸舉手／放下共用） */
+export function easeSmokePuff(t: number) {
+  const x = Math.min(1, Math.max(0, t));
+  return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+}
+
+/** 吸菸區坐下：左手自然下垂；右手休息在膝上，puffK=1 時舉到嘴邊（弧線插值） */
+export function posePlazaSmokeSit(rig: PlayerRig, puffK = 0) {
   posePlazaSit(rig);
-  placePlazaArmChain(rig.upperL, rig.lowerL, -0.22, 0.28, 0, -0.18, 0.12, -0.12, -0.14, 0.06, -0.22);
-  placePlazaArmChain(rig.upperR, rig.lowerR, 0.22, 0.32, 0, 0.08, 0.42, -0.12, 0.04, 0.52, -0.2);
-  if (rig.head) rig.head.rotation.x = -0.04;
+  // 左手：坐姿自然下垂（略往前，不舉）
+  placePlazaArmChain(
+    rig.upperL, rig.lowerL,
+    -0.22, 0.30, 0,
+    -0.28, 0.08, -0.18,
+    -0.26, -0.06, -0.32,
+  );
+  const k = easeSmokePuff(puffK);
+  // 右手休息：膝上／大腿外側，菸朝外
+  const rSh = [0.22, 0.30, 0] as const;
+  const rEl0 = [0.30, 0.10, -0.16] as const;
+  const rWr0 = [0.26, -0.02, -0.30] as const;
+  // 右手抽烟：肘抬高畫弧，手腕到嘴前（頭略下方）
+  const rEl1 = [0.20, 0.42, -0.06] as const;
+  const rWr1 = [0.05, 0.50, -0.26] as const;
+  const lerp = (a: number, b: number) => a + (b - a) * k;
+  // 弧線：中段肘更往上／外
+  const lift = Math.sin(k * Math.PI);
+  const elx = lerp(rEl0[0], rEl1[0]) + lift * 0.06;
+  const ely = lerp(rEl0[1], rEl1[1]) + lift * 0.10;
+  const elz = lerp(rEl0[2], rEl1[2]) - lift * 0.04;
+  const wrx = lerp(rWr0[0], rWr1[0]);
+  const wry = lerp(rWr0[1], rWr1[1]) + Math.sin(k * Math.PI * 2) * 0.004 * k; // 微幅呼吸感在呼叫端再加
+  const wrz = lerp(rWr0[2], rWr1[2]);
+  placePlazaArmChain(
+    rig.upperR, rig.lowerR,
+    rSh[0], rSh[1], rSh[2],
+    elx, ely, elz,
+    wrx, wry, wrz,
+  );
+  if (rig.head) rig.head.rotation.x = -0.04 - k * 0.02;
 }
