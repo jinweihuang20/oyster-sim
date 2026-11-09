@@ -4415,7 +4415,7 @@ function camTick(dt: number) {
   meSeatLegs.visible = !walking; meLegL.visible = meLegR.visible = walking && !plazaMode;
   if (walking) {
     const sp = Math.hypot(walkPos.x - lastWalk.x, walkPos.z - lastWalk.z) / Math.max(dt, 1e-3); lastWalk.copy(walkPos); walkMovingT = sp > 0.3 ? performance.now() : walkMovingT;
-    walkPh += Math.min(sp, 2.2) * dt * 3.2; const sw = Math.min(1, sp / 1.2) * Math.sin(walkPh);
+    walkPh += Math.min(sp, 3) * dt * 5; const sw = Math.min(1, sp / 1.2) * Math.sin(walkPh);
     handRig.visible = false;
     if (plazaMode) {
       // 廣場：死鬥同款 avatar，腳底 y=0、頭高 ≈1.5；第三人稱鎖俯仰，避免遠端跟著點頭
@@ -4430,9 +4430,9 @@ function camTick(dt: number) {
         posePlazaJump(rig, PLAZA_JUMP_DUR - jumpT);
         posePlazaHangArms(rig);
       } else {
-        const amp = Math.min(0.75, sp / 1.35);
-        const swing = posePlazaWalkCycle(rig, walkPh, Math.max(0.2, amp));
-        // 走動：自然微彎肘擺臂；停住才下垂
+        const amp = Math.min(1, sp / 1.2);
+        const swing = posePlazaWalkCycle(rig, walkPh, Math.max(0.15, amp));
+        // 走動維持輕微ㄑ字彎肘；停住才自然下垂
         if (sp > 0.12) posePlazaWalkSwingArms(rig, swing);
         else {
           posePlazaHangArms(rig);

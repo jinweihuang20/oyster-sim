@@ -113,7 +113,9 @@ const SIT_HIP_LIFT = 0.14;
 const SIT_ROOT_Y = (CHAIR_SEAT_Y + SIT_HIP_LIFT) / AVATAR_SCALE - HIP_Y;
 
 const _hangDir = new THREE.Vector3();
-const _hangUp = new THREE.Vector3(0, 1, 0);
+const _hangX = new THREE.Vector3();
+const _hangZ = new THREE.Vector3();
+const _hangMat = new THREE.Matrix4();
 
 export type PlazaWorldView = {
   root: THREE.Group;
@@ -622,14 +624,23 @@ function hashPid(pid: string) {
     if (raw < 1e-6) {
       seg.position.set(ax, ay - base * 0.5, az);
       seg.quaternion.identity();
-      seg.rotation.set(0, 0, 0);
       seg.scale.set(1, 1, 1);
       return;
     }
     _hangDir.multiplyScalar(1 / raw);
     seg.position.set(ax + _hangDir.x * base * 0.5, ay + _hangDir.y * base * 0.5, az + _hangDir.z * base * 0.5);
-    seg.quaternion.setFromUnitVectors(_hangUp, _hangDir);
-    seg.rotation.setFromQuaternion(seg.quaternion);
+    // 與 character.placePlazaArmSeg 同：鎖扭轉，避免近垂直時上臂翻轉
+    _hangX.set(1, 0, 0);
+    _hangX.addScaledVector(_hangDir, -_hangX.dot(_hangDir));
+    if (_hangX.lengthSq() < 1e-8) {
+      _hangX.set(0, 0, 1);
+      _hangX.addScaledVector(_hangDir, -_hangX.dot(_hangDir));
+    }
+    _hangX.normalize();
+    _hangZ.crossVectors(_hangX, _hangDir).normalize();
+    _hangX.crossVectors(_hangDir, _hangZ).normalize();
+    _hangMat.makeBasis(_hangX, _hangDir, _hangZ);
+    seg.quaternion.setFromRotationMatrix(_hangMat);
     seg.scale.set(1, 1, 1);
   }
 
@@ -1121,9 +1132,9 @@ function hashPid(pid: string) {
           posePlazaJump(r.rig, jumpElapsed);
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
         } else if (wantWalk) {
-          // 相位放慢、幅度封頂，遠端不要像在跑步
-          r.bob += Math.min(moveSp, 2.2) * dt * 3.2;
-          const swing = posePlazaWalkCycle(r.rig, r.bob, Math.min(0.75, Math.max(0.25, walkAmp)));
+          r.bob += Math.min(moveSp, 3) * dt * 5;
+          const swing = posePlazaWalkCycle(r.rig, r.bob, Math.max(0.2, walkAmp));
+          // 走動一律輕微ㄑ字彎肘擺臂（勿切回直臂下垂）
           if (r.throwT <= 0) { swingArms(r, swing); hideHold(r); }
         } else if (!r.seated) {
           r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
