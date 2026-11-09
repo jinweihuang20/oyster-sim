@@ -149,7 +149,7 @@ export function plazaRandomSpawn() {
 function occupiedSeatKeys(): Set<string> {
   const t = new Set<string>();
   for (const p of snap?.players ?? []) {
-    if (p.carriedBy) continue;
+    if (p.carriedBy || (p.isNpc && (p.phase || '') === 'moon')) continue; // 被抱走／飛彈飛走的阿婆讓出座位
     if (!p.seated || p.pileId < 0 || p.slot < 0) continue;
     t.add(seatKey(p.pileId, p.slot));
   }
@@ -697,7 +697,7 @@ function takenSet(exceptMine = true) {
   const t = new Set<string>();
   for (const p of snap?.players ?? []) {
     if (exceptMine && deps && p.pid === deps.id) continue;
-    if (p.carriedBy) continue;
+    if (p.carriedBy || (p.isNpc && (p.phase || '') === 'moon')) continue; // 被抱走／飛彈飛走的阿婆讓出座位
     if (!p.seated || p.pileId < 0 || p.slot < 0) continue;
     t.add(seatKey(p.pileId, p.slot));
   }
