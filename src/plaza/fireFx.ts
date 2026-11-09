@@ -576,67 +576,104 @@ export function spawnAshSpeck(parent: THREE.Object3D, local: THREE.Vector3) {
   };
 }
 
-/** 第一人稱吐煙：一坨較濃的煙，往前／上飄散後淡出（單次，用完 dispose） */
+/** 吐煙用柔邊煙霧貼圖（放射漸層＋少量雜訊，邊緣完全透明） */
+let puffTex: THREE.Texture | null = null;
+function getPuffTex(): THREE.Texture {
+  if (puffTex) return puffTex;
+  const N = 64, c = document.createElement('canvas'); c.width = c.height = N;
+  const g = c.getContext('2d')!;
+  const img = g.createImageData(N, N);
+  const rn = rng(4242);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const dx = (x + 0.5) / N * 2 - 1, dy = (y + 0.5) / N * 2 - 1;
+    const r = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
+    // 邊緣稍微不規則，像一團煙而不是圓球
+    const edge = 0.82 + 0.1 * Math.sin(ang * 3 + 1.3) + 0.06 * Math.sin(ang * 7);
+    let a = Math.max(0, 1 - r / edge);
+    a = a * a * (3 - 2 * a);
+    a *= 0.75 + 0.25 * rn();
+    const i = (y * N + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+    img.data[i + 3] = Math.round(a * 255);
+  }
+  g.putImageData(img, 0, 0);
+  puffTex = new THREE.CanvasTexture(c);
+  puffTex.colorSpace = THREE.SRGBColorSpace;
+  return puffTex;
+}
+
+/** 吐煙：從嘴邊連續噴出一道細煙，前段快、受阻力減速後往上飄、捲動擴散淡出（單次，用完 dispose）。
+ *  group 的 -Z 為噴出方向；世界空間使用時請把 group.rotation.y 設成角色朝向。 */
 export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: number } = {}): CharcoalFireFx {
   const rn = rng(opts.seed ?? (9000 + Math.floor(Math.random() * 8000)));
   const sc = Math.max(0.15, opts.scale ?? 1);
-  const n = Math.max(4, opts.count ?? Math.round(8 + sc * 6));
+  const n = Math.min(44, Math.max(10, Math.round((opts.count ?? Math.round(8 + sc * 6)) * 2.6)));
+  const tex = getPuffTex();
   const group = new THREE.Group();
   group.name = 'exhalePuff';
-  type S = { mesh: THREE.Mesh; age: number; life: number; vx: number; vy: number; vz: number; base: number };
+  type S = { sp: THREE.Sprite; mat: THREE.SpriteMaterial; delay: number; age: number; life: number; vx: number; vy: number; vz: number; s0: number; s1: number; rot: number; spin: number; ph: number; peak: number };
   const smokes: S[] = [];
+  const emitDur = 0.25 + 0.3 * Math.min(1, sc);
   for (let i = 0; i < n; i++) {
-    const mat = smokeMat.clone();
-    mat.opacity = 0.28;
-    mat.color.setHex(0xb0ada8);
-    const mesh = new THREE.Mesh(smokeGeo, mat);
-    mesh.userData.sharedGeo = true;
-    mesh.renderOrder = 3;
-    mesh.visible = true;
-    group.add(mesh);
-    const ang = rn() * Math.PI * 2;
-    const rad = 0.02 + rn() * 0.05 * sc;
+    const k = i / Math.max(1, n - 1);
+    const mat = new THREE.SpriteMaterial({ map: tex, color: 0xd6d3ce, transparent: true, opacity: 0, depthWrite: false });
+    const sp = new THREE.Sprite(mat);
+    sp.renderOrder = 3;
+    sp.visible = false;
+    group.add(sp);
+    // 前段的煙較快較濃，尾段較慢較淡
+    const speed = (0.55 + rn() * 0.35) * (1 - k * 0.55) * (0.6 + 0.4 * sc);
+    const spread = 0.12 + k * 0.18;
     smokes.push({
-      mesh,
-      age: rn() * 0.08,
-      life: 1.4 + rn() * 1.1,
-      vx: Math.cos(ang) * 0.04 * sc + (rn() - 0.5) * 0.03,
-      vy: 0.12 + rn() * 0.18 * sc,
-      // 相機空間往前（-Z）
-      vz: -(0.22 + rn() * 0.28) * sc,
-      base: 0.1 * sc + rn() * 0.12 * sc,
+      sp, mat,
+      delay: k * emitDur + rn() * 0.03,
+      age: 0,
+      life: 1.8 + rn() * 1.4,
+      vx: (rn() - 0.5) * spread * speed,
+      vy: (rn() - 0.35) * spread * speed + 0.02,
+      vz: -speed,
+      s0: (0.018 + rn() * 0.012) * (0.7 + 0.3 * sc),
+      s1: (0.16 + rn() * 0.12) * (0.6 + 0.4 * sc),
+      rot: rn() * Math.PI * 2,
+      spin: (rn() - 0.5) * 0.9,
+      ph: rn() * Math.PI * 2,
+      peak: (0.2 + rn() * 0.12) * Math.min(1, 0.55 + 0.45 * sc) * (1 - k * 0.35),
     });
-    mesh.position.set(Math.cos(ang) * rad, (rn() - 0.3) * 0.04, -0.02 - rn() * 0.04);
-    mesh.scale.setScalar(smokes[i].base);
   }
+  let t = 0;
   return {
     group,
     light: null,
     tick: (_t, dt) => {
       const step = Math.min(0.05, Math.max(0, dt));
+      t += step;
+      const drag = Math.exp(-2.6 * step);
       for (const s of smokes) {
+        if (t < s.delay) continue;
+        if (s.age === 0) { s.sp.position.set((rn() - 0.5) * 0.006, (rn() - 0.5) * 0.004, -0.005); s.sp.visible = true; }
         s.age += step;
-        if (s.age >= s.life) {
-          s.mesh.visible = false;
-          continue;
-        }
+        if (s.age >= s.life) { s.sp.visible = false; continue; }
         const u = s.age / s.life;
-        s.mesh.position.x += s.vx * step;
-        s.mesh.position.y += s.vy * step;
-        s.mesh.position.z += s.vz * step;
-        s.mesh.scale.setScalar(s.base * (1 + u * 2.4));
-        const m = s.mesh.material as THREE.MeshBasicMaterial;
-        // 先略濃再淡
-        const fade = u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85;
-        m.opacity = 0.32 * sc * Math.max(0, fade);
-        s.mesh.visible = m.opacity > 0.01;
+        s.vx *= drag; s.vz *= drag; s.vy = s.vy * drag + 0.09 * step; // 阻力減速，熱煙往上浮
+        // 輕微捲動，越後面越明顯
+        const curl = 0.05 * u;
+        s.sp.position.x += (s.vx + Math.sin(s.age * 2.3 + s.ph) * curl) * step;
+        s.sp.position.y += s.vy * step;
+        s.sp.position.z += (s.vz + Math.cos(s.age * 1.9 + s.ph) * curl * 0.6) * step;
+        const grow = 1 - Math.pow(1 - u, 2.2);
+        s.sp.scale.setScalar(s.s0 + (s.s1 - s.s0) * grow);
+        s.rot += s.spin * step;
+        s.mat.rotation = s.rot;
+        const fadeIn = Math.min(1, s.age / 0.08);
+        const fadeOut = Math.pow(1 - u, 1.6);
+        s.mat.opacity = s.peak * fadeIn * fadeOut;
+        // 越散越灰白
+        s.mat.color.setScalar(0.84 + 0.1 * u);
       }
     },
     dispose: () => {
-      for (const s of smokes) {
-        const m = s.mesh.material as THREE.Material;
-        if (!s.mesh.userData.sharedMat) m.dispose();
-      }
+      for (const s of smokes) s.mat.dispose();
       group.clear();
     },
   };

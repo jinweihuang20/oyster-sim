@@ -2925,12 +2925,13 @@ function spawnExhalePuff(strength: number) {
     mouth.y -= 0.01;
     mouth.z += -Math.cos(yaw) * 0.14;
     fx.group.position.copy(mouth);
+    fx.group.rotation.y = yaw;
     scene.add(fx.group);
-    puffExhales.push({ fx, age: 0, life: 2.6, world: true });
+    puffExhales.push({ fx, age: 0, life: 3.6, world: true });
   } else {
     fx.group.position.set(0.01, -0.02, -0.26);
     camera.add(fx.group);
-    puffExhales.push({ fx, age: 0, life: 2.6, world: false });
+    puffExhales.push({ fx, age: 0, life: 3.6, world: false });
   }
 }
 function puffVisualK() { return easeSmokePuff(puffAnimT); }
@@ -2981,12 +2982,6 @@ function tickPuffUi(rdt: number) {
     const e = puffExhales[i];
     e.age += rdt;
     e.fx.tick(performance.now() * 0.001, rdt);
-    if (e.world) {
-      const yaw = plazaMe ? plazaMe.outer.rotation.y : 0;
-      e.fx.group.position.y += 0.22 * rdt;
-      e.fx.group.position.x += -Math.sin(yaw) * 0.14 * rdt;
-      e.fx.group.position.z += -Math.cos(yaw) * 0.14 * rdt;
-    }
     if (e.age >= e.life) {
       try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
       e.fx.dispose();

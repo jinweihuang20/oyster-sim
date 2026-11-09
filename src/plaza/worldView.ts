@@ -393,8 +393,9 @@ export function createPlazaWorldView(
           mouth.y -= 0.01;
           mouth.z += -Math.cos(yaw) * 0.14;
           fx.group.position.copy(mouth);
+          fx.group.rotation.y = yaw;
           root.add(fx.group);
-          sn.exhales.push({ fx, age: 0, life: 2.6, yaw });
+          sn.exhales.push({ fx, age: 0, life: 3.6, yaw });
         }
       }
       if (sn.animT <= 0.001 && sn.awayT <= 0.001 && !sn.releaseAt) {
@@ -419,9 +420,6 @@ export function createPlazaWorldView(
       const e = sn.exhales[i];
       e.age += dt;
       e.fx.tick(tSec, dt);
-      e.fx.group.position.y += 0.22 * dt;
-      e.fx.group.position.x += -Math.sin(e.yaw) * 0.14 * dt;
-      e.fx.group.position.z += -Math.cos(e.yaw) * 0.14 * dt;
       if (e.age >= e.life) {
         try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
         e.fx.dispose();
@@ -976,8 +974,9 @@ function hashPid(pid: string) {
     mouth.y -= 0.01;
     mouth.z += -Math.cos(yaw) * 0.14;
     fx.group.position.copy(mouth);
+    fx.group.rotation.y = yaw;
     root.add(fx.group);
-    remoteExhales.push({ fx, age: 0, life: 2.6, yaw });
+    remoteExhales.push({ fx, age: 0, life: 3.6, yaw });
   }
 
   function tickRemotePuff(r: Remote, dt: number) {
@@ -1022,9 +1021,6 @@ function hashPid(pid: string) {
       const e = remoteExhales[i];
       e.age += dt;
       e.fx.tick(performance.now() * 0.001, dt);
-      e.fx.group.position.y += 0.22 * dt;
-      e.fx.group.position.x += -Math.sin(e.yaw) * 0.14 * dt;
-      e.fx.group.position.z += -Math.cos(e.yaw) * 0.14 * dt;
       if (e.age >= e.life) {
         try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
         e.fx.dispose();
