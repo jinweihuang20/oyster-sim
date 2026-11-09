@@ -241,6 +241,12 @@ export function plazaPlayThrowFx(connId: string) {
   view?.playThrowFx(connId);
 }
 
+/** 吸菸區抽一口同步；離線／未連線不送；舊伺服器無方法時 invoke catch 略過 */
+export async function plazaSendPuff(start: boolean, holdMs = 0) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn' };
+  return client.plazaPuff(start, holdMs);
+}
+
 export async function plazaStealFrom(targetConnId: string, caught = false) {
   if (!client?.connected) return { ok: false as const, err: 'no_conn', steal: undefined };
   return client.stealFrom(targetConnId, caught);
@@ -518,6 +524,11 @@ function wireClient(D: PlazaDeps) {
     onGrillTaken: (e) => {
       view?.grill.remove(e.oyster.id);
       try { D.onGrillTaken?.(e); } catch (err) { console.error('onGrillTaken', err); }
+    },
+    onPlazaPuff: (e) => {
+      const me = client?.connectionId ?? '';
+      if (e.connId && me && e.connId === me) return; // 忽略自己回聲
+      view?.applyRemotePuff(e);
     },
     onReconnecting: (attempt) => {
       if (!active) return;

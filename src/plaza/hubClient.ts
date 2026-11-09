@@ -25,6 +25,8 @@ export type PlazaHubHandlers = {
   onGrillUpsert?: (o: PlazaGrillOyster) => void;
   onGrillRemove?: (id: string, byConnId: string, byNick: string) => void;
   onGrillTaken?: (e: PlazaGrillTakenEvent) => void;
+  /** 吸菸區「抽一口」同步（其他人） */
+  onPlazaPuff?: (e: { connId: string; pid: string; start: boolean; holdMs: number }) => void;
   /** 連線中斷，開始自動重連 */
   onReconnecting?: (attempt: number) => void;
   /** 底層 socket 重連成功（尚未重新 Join） */
@@ -221,6 +223,16 @@ export class PlazaClient {
         });
       } catch (err) { console.error('GrillTaken', err); }
     });
+    conn.on('PlazaPuff', (e: any) => {
+      try {
+        this.handlers.onPlazaPuff?.({
+          connId: String(e?.connId ?? e?.ConnId ?? ''),
+          pid: String(e?.pid ?? e?.Pid ?? ''),
+          start: !!(e?.start ?? e?.Start),
+          holdMs: Math.max(0, Math.min(5000, Number(e?.holdMs ?? e?.HoldMs ?? 0) | 0)),
+        });
+      } catch (err) { console.error('PlazaPuff', err); }
+    });
   }
 
   private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[]; grills?: PlazaGrillOyster[] }> {
@@ -399,6 +411,18 @@ export class PlazaClient {
       const r = await this.conn.invoke<{ ok: boolean; err?: string; oyster?: any; count?: number }>('GrillTake', oysterId);
       return { ok: !!r?.ok, err: r?.err, oyster: r?.oyster ? normGrillOyster(r.oyster) : undefined, count: r?.count ?? 0 };
     } catch (e: any) { return { ok: false as const, err: e?.message || 'take_fail', oyster: undefined, count: 0 }; }
+  }
+
+  /** 吸菸區抽一口同步；舊伺服器無此方法時 catch 略過，不中斷 */
+  async plazaPuff(start: boolean, holdMs = 0) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn' };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string }>('PlazaPuff', !!start, Math.max(0, Math.min(5000, holdMs | 0)));
+      return { ok: !!r?.ok, err: r?.err };
+    } catch (e: any) {
+      // 舊 hub 無 PlazaPuff → MethodDoesNotExist；忽略以免 solo／舊服崩潰
+      return { ok: false as const, err: e?.message || 'puff_fail' };
+    }
   }
 
   async disconnect() {

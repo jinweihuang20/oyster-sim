@@ -55,7 +55,7 @@ import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile,
-  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaStealFrom, plazaZhErr,
+  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
   plazaToggleMap, plazaCloseMap, plazaMapIsOpen, seatPose, plazaPushOutfit,
@@ -2852,6 +2852,8 @@ function clearPuffExhales() {
   puffAshes.length = 0;
 }
 function cancelPuff(opts?: { keepAnim?: boolean }) {
+  const wasHeld = puffHeld;
+  const heldMs = Math.round(Math.min(PUFF_HOLD_MAX, puffT) * 1000);
   puffHeld = false;
   puffT = 0;
   puffStrength = 0;
@@ -2863,6 +2865,8 @@ function cancelPuff(opts?: { keepAnim?: boolean }) {
   const c = document.getElementById('puffCd');
   if (b) { b.classList.remove('held', 'low'); b.style.removeProperty('--p'); }
   if (c) c.textContent = '';
+  // 離座／取消：通知遠端放下（舊服無方法時 catch 略過）
+  if (wasHeld && plazaMode) void plazaSendPuff(false, heldMs);
 }
 function startPuff() {
   if (state !== 'play' || !smokeSitActive || puffHeld) return;
@@ -2873,6 +2877,7 @@ function startPuff() {
   puffFlickT = 0;
   $('puffBtn').classList.add('held');
   $('puffBtn').classList.remove('low');
+  if (plazaMode) void plazaSendPuff(true, 0);
 }
 function endPuff() {
   if (!puffHeld) return;
@@ -2883,6 +2888,8 @@ function endPuff() {
   c.textContent = '';
   b.style.removeProperty('--p');
   puffAwayT = 1;
+  const holdMs = Math.round(Math.min(PUFF_HOLD_MAX, held) * 1000);
+  if (plazaMode) void plazaSendPuff(false, holdMs);
   if (held < PUFF_MIN_HOLD || !smokeSitActive) {
     puffStrength = 0;
     puffReleaseAt = 0;
