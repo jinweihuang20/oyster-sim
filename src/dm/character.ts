@@ -514,16 +514,21 @@ export function ensurePlazaSmokeCig(rig: PlayerRig, lowDetail = false): FpCigare
   let cig = rig.lowerR.userData[PLAZA_CIG_UD] as FpCigarette | undefined;
   if (cig) {
     cig.group.visible = true;
+    orientPlazaSmokeCig(cig);
     return cig;
   }
   cig = makeAvatarCigarette({ lowDetail });
-  // lowerR 沿 +Y；腕在 +restLen/2 ≈ +0.12
-  cig.group.position.set(0.035, 0.125, 0.04);
-  // 濾嘴朝掌／身體側（+Z 偏內），菸頭朝外
-  cig.group.rotation.set(0.35, 1.1, 0.25);
   rig.lowerR.add(cig.group);
   rig.lowerR.userData[PLAZA_CIG_UD] = cig;
+  orientPlazaSmokeCig(cig);
   return cig;
+}
+
+/** 濾嘴在指／嘴側、菸頭＋煙朝外（mesh：filter=+Z、tip=-Z） */
+function orientPlazaSmokeCig(cig: FpCigarette) {
+  // lowerR +Y＝腕向；菸沿大致 -X／外撇，濾嘴近掌心
+  cig.group.position.set(0.05, 0.118, 0.01);
+  cig.group.rotation.set(0.2, Math.PI + 0.35, 0.55);
 }
 
 export function clearPlazaSmokeCig(rig: PlayerRig) {
@@ -570,17 +575,18 @@ export function posePlazaSmokeSit(rig: PlayerRig, puffKOrOpts: number | SmokeSit
 
   const k = easeSmokePuff(puffK);
   const rSh = [0.22, 0.30, 0] as const;
-  // 休息：右膝／大腿外側
-  const rEl0 = [0.32, 0.08, -0.14] as const;
-  const rWr0 = [0.28, -0.04, -0.28] as const;
-  // 嘴邊：肘抬、腕轉內到唇前
-  const rEl1 = [0.18, 0.44, -0.04] as const;
-  const rWr1 = [0.04, 0.52, -0.24] as const;
+  // 休息：上臂貼身略前（約 25°），肘低靠肋／膝外
+  const rEl0 = [0.30, 0.10, -0.12] as const;
+  const rWr0 = [0.26, -0.02, -0.26] as const;
+  // 嘴邊：上臂仍低（肘約肩下 0.12～0.14），主要靠小臂彎到唇前
+  const rEl1 = [0.28, 0.16, -0.10] as const;
+  const rWr1 = [0.06, 0.48, -0.22] as const;
   const lerp = (a: number, b: number) => a + (b - a) * k;
+  // 弧線只微抬肘，避免上臂高舉
   const lift = Math.sin(k * Math.PI);
-  let elx = lerp(rEl0[0], rEl1[0]) + lift * 0.07;
-  let ely = lerp(rEl0[1], rEl1[1]) + lift * 0.11;
-  let elz = lerp(rEl0[2], rEl1[2]) - lift * 0.05;
+  let elx = lerp(rEl0[0], rEl1[0]) + lift * 0.02;
+  let ely = lerp(rEl0[1], rEl1[1]) + lift * 0.03;
+  let elz = lerp(rEl0[2], rEl1[2]) - lift * 0.02;
   let wrx = lerp(rWr0[0], rWr1[0]);
   let wry = lerp(rWr0[1], rWr1[1]);
   let wrz = lerp(rWr0[2], rWr1[2]);

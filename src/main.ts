@@ -2798,6 +2798,10 @@ function setSmokeSitHands(on: boolean) {
   } else {
     if (fpCig) fpCig.group.visible = false;
     knife.visible = true;
+    const sleeve = handR.children[0] as THREE.Mesh | undefined;
+    const cuff = handR.children[2] as THREE.Mesh | undefined;
+    if (sleeve) { sleeve.position.set(0, 0, 0.32); sleeve.scale.set(1, 1, 1); }
+    if (cuff) cuff.position.set(0, 0, 0.66);
     // oyster 可見度由 phase 管；站起後 handRig 會藏
   }
 }
@@ -2832,9 +2836,10 @@ const puffExhales: { fx: CharcoalFireFx; age: number; life: number; world?: bool
 const puffAshes: { tick: (dt: number) => boolean; dispose: () => void }[] = [];
 // FP：膝上／弧頂／嘴邊／離嘴外推
 const PUFF_FP_REST = { x: 0.30, y: -0.48, z: -0.36, rx: 1.05, ry: 0.45, rz: 0.25 };
-const PUFF_FP_MID = { x: 0.18, y: -0.08, z: -0.24, rx: 0.5, ry: 0.0, rz: -0.2 };
-const PUFF_FP_MOUTH = { x: 0.015, y: -0.10, z: -0.15, rx: 0.2, ry: -0.22, rz: -0.58 };
-const PUFF_FP_AWAY = { x: 0.08, y: -0.14, z: -0.22, rx: 0.35, ry: -0.05, rz: -0.35 };
+const PUFF_FP_MID = { x: 0.12, y: -0.16, z: -0.16, rx: 0.85, ry: 0.05, rz: -0.45 };
+// 嘴邊：手掌貼近鏡頭中下；前臂靠 rx 下壓出畫面，幾乎只露手＋菸
+const PUFF_FP_MOUTH = { x: 0.03, y: -0.035, z: -0.065, rx: 1.25, ry: -0.08, rz: -0.92 };
+const PUFF_FP_AWAY = { x: 0.09, y: -0.10, z: -0.12, rx: 0.85, ry: 0.0, rz: -0.5 };
 const PUFF_FP_L = { x: -0.38, y: -0.58, z: -0.32, rx: 1.25, ry: -0.35, rz: 0.55 };
 
 function clearPuffExhales() {
@@ -3034,8 +3039,18 @@ function applySmokeSitFpHands() {
   y += inhale * 0.012;
   handR.position.set(x, y, z);
   handR.rotation.set(rx, ry, rz);
+  // 嘴邊把袖管往肘側／下拉，減少畫面裡的前臂
+  const sleeve = handR.children[0] as THREE.Mesh | undefined;
+  const cuff = handR.children[2] as THREE.Mesh | undefined;
+  if (sleeve) {
+    sleeve.position.set(0, -u * 0.1, 0.32 + u * 0.42);
+    sleeve.scale.set(1, 1, 1 - u * 0.25);
+  }
+  if (cuff) cuff.position.set(0, -u * 0.06, 0.66 + u * 0.35);
   if (fpCig) {
-    fpCig.group.rotation.set(0.55 - u * 0.28, 0.65 - u * 0.5, 0.15 - u * 0.08);
+    // 濾嘴朝鏡頭／嘴，菸頭朝外前
+    fpCig.group.position.set(-0.01, 0.01, -0.16 - u * 0.04);
+    fpCig.group.rotation.set(0.35 + u * 0.15, 0.25 - u * 0.35, 0.1);
   }
 }
 
