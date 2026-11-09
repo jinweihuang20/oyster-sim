@@ -3489,7 +3489,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
-{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：60fps・降解析・關陰影・廣場簡化（重新整理後 AA／精度／GPU 才會變）' : '已關省電：滿幀・柔和陰影（重新整理後抗鋸齒／GPU 才會變）', '#9be37a'); }; }
+{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：降解析・關陰影・廣場簡化（重新整理後 AA／精度／GPU 才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU 才會變）', '#9be37a'); }; }
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => $('dex').classList.remove('show');
 
@@ -3600,10 +3600,12 @@ function frameBody() {
   }
   const now = performance.now();
   const paused = isPaused();
-  // 選單／暫停約 15fps；遊玩滿幀（省電靠降解析／關陰影，不鎖幀）
-  const minMs = (state !== 'play' || paused) ? 1000 / 15 : 0;
-  if (minMs > 0 && now - lastDrawAt < minMs) { scheduleFrame(); return; }
-  lastDrawAt = now;
+  // 選單／暫停約 15fps；遊玩一律上限 60fps（高更新率手機不再跑 90／120 幀發燙）
+  const minMs = (state !== 'play' || paused) ? 1000 / 15 : 1000 / 60;
+  const since = now - lastDrawAt;
+  if (since < minMs - 1.5) { scheduleFrame(); return; }
+  // 餘數回扣：90Hz 等非整數倍螢幕平均仍接近 60fps
+  lastDrawAt = since < minMs * 2 ? now - (since % minMs) * (since >= minMs ? 1 : 0) : now;
   if (isDeathmatchActive()) { clock.getDelta(); scheduleFrame(); return; }
   if (shedAnim.length) { const t = now / 1000; for (const f of shedAnim) f(t); }
   if (paused) {
