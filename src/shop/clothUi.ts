@@ -81,10 +81,22 @@ export function eqTex(e: Eq) {
   return tex;
 }
 export function applySleeve() {
-  const s = D.getSleeveTry() ? EQUIP.find(x => x.id === D.getSleeveTry())! : equipNow('hand');
+  const trying = D.getSleeveTry();
+  const s = trying ? EQUIP.find(x => x.id === trying)! : equipNow('hand');
+  const body = equipNow('body');
+  const bare = !trying && (body.id === 'bd_bikini' || body.id === 'bd_nude') && s.id === 'hn_basic';
+  if (bare) {
+    D.sleeve.map?.dispose();
+    D.sleeve.map = null;
+    D.sleeve.color.set('#e8bc98');
+    D.sleeve.emissive.set(0);
+    D.sleeve.needsUpdate = true;
+    D.shirtCuff.color.set('#e8bc98');
+    return;
+  }
   D.sleeve.map?.dispose(); D.sleeve.map = eqTex(s); D.sleeve.color.set(0xffffff);
   D.sleeve.emissive.set(s.pat === 'neon' ? 0x1a8a50 : 0x000000); D.sleeve.needsUpdate = true;
-  D.shirtCuff.color.set(equipNow('body').base);
+  D.shirtCuff.color.set((body.id === 'bd_bikini' || body.id === 'bd_nude') ? s.base : body.base);
 }
 export function sleeveGold() { if (!slOn('sl_dragon')) return; let k = 0; const iv = setInterval(() => { D.sleeve.emissive.set(k % 2 ? 0x000000 : 0xb08010); if (++k > 8) { clearInterval(iv); D.sleeve.emissive.set(0); } }, 150); }
 // 線條圖示：各部位一個簡單輪廓，填該件顏色

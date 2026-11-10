@@ -649,27 +649,33 @@ function buildBodyDetails(rig: PlayerRig, body: EquipVis) {
   } else if (body.id === 'bd_bikini') {
     const flor = SM('bikini-flor', 0xffffff, { map: makeEqTexture(body), roughness: 0.72 });
     const white = solid(0xf7f2ea, 'bikini-w', { roughness: 0.74 });
+    const lift = (m: THREE.Mesh) => { m.renderOrder = 2; };
     // 上衣：兩塊方形罩杯＋白肩帶＋後帶（無解剖細節）
-    add(g, G('bik-cup', () => rbox(0.125, 0.075, 0.045)), flor, [-0.075, 0.22, -0.125]);
-    add(g, G('bik-cup', () => rbox(0.125, 0.075, 0.045)), flor, [0.075, 0.22, -0.125]);
-    add(g, G('bik-trim', () => rbox(0.13, 0.016, 0.02)), white, [-0.075, 0.185, -0.138]);
-    add(g, G('bik-trim', () => rbox(0.13, 0.016, 0.02)), white, [0.075, 0.185, -0.138]);
-    add(g, G('bik-strap', () => rbox(0.02, 0.16, 0.016)), white, [-0.06, 0.30, -0.10], [0, 0, 0.28]);
-    add(g, G('bik-strap', () => rbox(0.02, 0.16, 0.016)), white, [0.06, 0.30, -0.10], [0, 0, -0.28]);
-    add(g, G('bik-back', () => rbox(0.30, 0.018, 0.016)), white, [0, 0.225, 0.118]);
-    // 下身：同一件衣服帶的三角褲，蓋在髖部
-    add(g, G('bik-bot', () => rbox(0.30, 0.085, 0.235)), flor, [0, -0.155, 0]);
-    add(g, G('bik-wb', () => rbox(0.31, 0.02, 0.24)), white, [0, -0.112, 0]);
-    add(g, G('bik-tie', () => rbox(0.045, 0.03, 0.03)), flor, [-0.175, -0.155, 0]);
-    add(g, G('bik-tie', () => rbox(0.045, 0.03, 0.03)), flor, [0.175, -0.155, 0]);
+    lift(add(g, G('bik-cup', () => rbox(0.125, 0.075, 0.045)), flor, [-0.075, 0.22, -0.125]));
+    lift(add(g, G('bik-cup', () => rbox(0.125, 0.075, 0.045)), flor, [0.075, 0.22, -0.125]));
+    lift(add(g, G('bik-trim', () => rbox(0.13, 0.016, 0.02)), white, [-0.075, 0.185, -0.138]));
+    lift(add(g, G('bik-trim', () => rbox(0.13, 0.016, 0.02)), white, [0.075, 0.185, -0.138]));
+    lift(add(g, G('bik-strap', () => rbox(0.02, 0.16, 0.016)), white, [-0.06, 0.30, -0.10], [0, 0, 0.28]));
+    lift(add(g, G('bik-strap', () => rbox(0.02, 0.16, 0.016)), white, [0.06, 0.30, -0.10], [0, 0, -0.28]));
+    lift(add(g, G('bik-back', () => rbox(0.30, 0.018, 0.016)), white, [0, 0.225, 0.118]));
+    // 下身要比髖部方塊（0.40×0.10×0.24）更大，才不會被包在膚色裡面看不見
+    lift(add(g, G('bik-bot', () => rbox(0.44, 0.11, 0.28)), flor, [0, -0.165, 0]));
+    lift(add(g, G('bik-front', () => rbox(0.18, 0.065, 0.06)), flor, [0, -0.215, -0.125]));
+    lift(add(g, G('bik-rear', () => rbox(0.22, 0.075, 0.055)), flor, [0, -0.21, 0.128]));
+    lift(add(g, G('bik-wb', () => rbox(0.455, 0.03, 0.29)), white, [0, -0.102, 0]));
+    lift(add(g, G('bik-tie', () => rbox(0.06, 0.045, 0.045)), flor, [-0.235, -0.16, 0]));
+    lift(add(g, G('bik-tie', () => rbox(0.06, 0.045, 0.045)), flor, [0.235, -0.16, 0]));
+    lift(add(g, G('bik-tie2', () => rbox(0.028, 0.07, 0.024)), white, [-0.26, -0.185, 0]));
+    lift(add(g, G('bik-tie2', () => rbox(0.028, 0.07, 0.024)), white, [0.26, -0.185, 0]));
   } else if (body.id === 'bd_nude') {
-    // 膚色軀幹上的 X 字胸貼：兩條交叉膠帶，沒有奶頭或解剖細節
-    const tape = solid(0x2a2a2a, 'nude-x', { roughness: 0.88 });
-    const strip = G('nude-x', () => rbox(0.08, 0.016, 0.014));
-    add(g, strip, tape, [-0.075, 0.22, -0.122], [0, 0, 0.785]);
-    add(g, strip, tape, [-0.075, 0.22, -0.122], [0, 0, -0.785]);
-    add(g, strip, tape, [0.075, 0.22, -0.122], [0, 0, 0.785]);
-    add(g, strip, tape, [0.075, 0.22, -0.122], [0, 0, -0.785]);
+    // 膚色軀幹上的 X 字胸貼：往前凸出一點，避免跟身體貼在一起閃面
+    const tape = solid(0x2a2a2a, 'nude-x', { roughness: 0.88, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    const strip = G('nude-x', () => rbox(0.088, 0.02, 0.022));
+    const lift = (m: THREE.Mesh) => { m.renderOrder = 3; };
+    lift(add(g, strip, tape, [-0.075, 0.22, -0.138], [0, 0, 0.785]));
+    lift(add(g, strip, tape, [-0.075, 0.22, -0.138], [0, 0, -0.785]));
+    lift(add(g, strip, tape, [0.075, 0.22, -0.138], [0, 0, 0.785]));
+    lift(add(g, strip, tape, [0.075, 0.22, -0.138], [0, 0, -0.785]));
   }
 }
 
@@ -782,7 +788,13 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
     for (const m of mats.body) paintMat(m, body);
     for (const m of mats.legs) paintMat(m, legs);
   }
-  for (const m of mats.sleeve) paintMat(m, hand);
+  const bareArms = (body.id === 'bd_bikini' || body.id === 'bd_nude') && hand.id === 'hn_basic';
+  if (bareArms) {
+    for (const m of mats.sleeve) paintSolid(m, SKIN_HEX);
+    for (const arm of [rig.lowerL, rig.lowerR]) if (arm) ensureDet(arm, DET.sleeve);
+  } else {
+    for (const m of mats.sleeve) paintMat(m, hand);
+  }
   paintFeet(mats, feet);
   for (const m of mats.hair) {
     resetSurf(m);
@@ -791,7 +803,7 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   }
   if (rig.hatG) buildHat(rig.hatG, head);
   buildBodyDetails(rig, body);
-  buildSleeveDetails(rig, hand);
+  if (!bareArms) buildSleeveDetails(rig, hand);
   if (body.id === 'bd_bikini') {
     // 比基尼會把腿畫成膚色並自帶下身，清掉原本褲袋以免浮在皮膚上
     for (const leg of [rig.legL, rig.legR]) if (leg) ensureDet(leg, DET.leg);
