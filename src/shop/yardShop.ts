@@ -33,6 +33,7 @@ export type YardShopDeps = {
   getPlayerId: () => string;
   getNick: () => string;
   toast: (t: string, c?: string) => void;
+  getShopTab: () => number;
   onFlagChange?: () => void;
   setFlagText?: (text: string) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   upgradeFlag?: (track: FlagTrack) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
@@ -164,7 +165,16 @@ export function weaponNow(): WeaponId {
   const owned = ownedWeaponIds();
   return id && isWeaponId(id) && owned.includes(id) ? id : 'oysterGun';
 }
+let shopRenderSeq = 0;
+/** 非同步資料回來後重套目前分頁的顯示（不動捲動位置） */
+function reapplyShopTab() {
+  const gs = Array.from(document.querySelectorAll<HTMLElement>('#shopList .stab'));
+  const cur = D.getShopTab();
+  gs.forEach((g, i) => { g.style.display = i === cur ? '' : 'none'; });
+}
 export function renderShop() {
+  const seq = ++shopRenderSeq;
+  const keepScroll = $('shop').scrollTop;
   if (!D.getSave().shop.owned.includes('basic')) D.getSave().shop.owned.push('basic');
   ensureStarterWeapons();
   const cur = knifeNow().id;
@@ -273,6 +283,7 @@ export function renderShop() {
     D.getSave().shop.equipped.weapon = id; D.persist(); renderShop();
   });
   D.renderClothShop(); D.renderMedShop(); D.renderItemShop(); D.shopTabs(); D.newDecor();
+  if (seq > 1 && $('shop').classList.contains('show')) $('shop').scrollTop = keepScroll;
 }
 
 
@@ -413,13 +424,18 @@ function renderFlagShop(prefetched?: PlazaFlagState | null) {
   bindFlagShop(prefetched ?? null);
   if (own && prefetched === undefined) {
     const pid = D.getPlayerId();
+    const seq = shopRenderSeq;
     void fetchFlagSnapshot(pid).then(r => {
-      if (!document.getElementById('flagShop')) return;
-      if (!r.ok) return;
+      if (seq !== shopRenderSeq || !r.ok) return; // 商店已重畫過，舊的回應不要蓋新畫面
       const box = document.getElementById('flagShop');
-      if (!box) return;
-      box.outerHTML = flagShopHtml(r.mine, true);
+      if (!box || !box.parentElement) return;
+      const tmp = document.createElement('div');
+      tmp.innerHTML = flagShopHtml(r.mine, true);
+      const fresh = tmp.firstElementChild;
+      if (!fresh) return;
+      box.replaceWith(fresh);
       bindFlagShop(r.mine);
+      reapplyShopTab();
     });
   }
 }
