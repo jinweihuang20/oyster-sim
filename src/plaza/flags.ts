@@ -42,9 +42,9 @@ export const FLAG_COLORS: FlagColorSpec[] = [
 
 /** 尺寸三級；radius 是和其他旗的最小間距半徑 */
 export const FLAG_SIZES: FlagSizeSpec[] = [
-  { lv: 0, n: '小旗', price: 0, scale: 1, radius: 1.6 },
-  { lv: 1, n: '中旗', price: 80000, scale: 1.35, radius: 2.2 },
-  { lv: 2, n: '大旗', price: 180000, scale: 1.75, radius: 2.9 },
+  { lv: 0, n: '小旗', price: 0, scale: 1, radius: 0.8 },
+  { lv: 1, n: '中旗', price: 80000, scale: 1.35, radius: 1.05 },
+  { lv: 2, n: '大旗', price: 180000, scale: 1.75, radius: 1.35 },
 ];
 
 export const FLAG_FX: FlagFxSpec[] = [
@@ -78,6 +78,7 @@ export const FLAG_ERR_ZH: Record<string, string> = {
   seat: '不能插在座位上',
   stall: '不能插在攤位上',
   walkway: '不能插在主要走道上',
+  no_flag_zone: '東南邊店家前這一帶不能插旗，換個地方吧',
   too_close: '離別人的旗太近了',
   blocked: '這裡太擠，換個地方插',
   far: '走到要插的地方再按',
