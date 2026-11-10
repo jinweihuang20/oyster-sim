@@ -2275,12 +2275,13 @@ const up = (e: PointerEvent) => {
 };
 window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 let tpDist = 3.6; const clampTp = (v: number) => Math.min(6.5, Math.max(1.8, v));
-canvas.addEventListener('wheel', e => { if (plazaMode && walking) { tpDist = clampTp(tpDist + e.deltaY * 0.003); e.preventDefault(); } }, { passive: false });
+const tpZoomOn = () => tpv && state === 'play';
+canvas.addEventListener('wheel', e => { if (tpZoomOn()) { tpDist = clampTp(tpDist + e.deltaY * 0.003); e.preventDefault(); } }, { passive: false });
 { let pd = 0; const dist = (ts: TouchList) => Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY);
-  canvas.addEventListener('touchstart', e => { if (e.targetTouches.length === 2 && e.touches.length === 2) pd = dist(e.targetTouches); }, { passive: true });
-  canvas.addEventListener('touchmove', e => { if (pd > 0 && e.targetTouches.length === 2 && e.touches.length === 2 && plazaMode && walking) { const nd = dist(e.targetTouches); tpDist = clampTp(tpDist * pd / nd); pd = nd; } }, { passive: true });
+  canvas.addEventListener('touchstart', e => { if (e.targetTouches.length === 2 && e.touches.length === 2) { pd = dist(e.targetTouches); if (tpZoomOn()) down = null; } }, { passive: true });
+  canvas.addEventListener('touchmove', e => { if (pd > 0 && e.targetTouches.length === 2 && e.touches.length === 2 && tpZoomOn()) { const nd = dist(e.targetTouches); tpDist = clampTp(tpDist * pd / nd); pd = nd; } }, { passive: true });
   canvas.addEventListener('touchend', e => { if (e.targetTouches.length < 2) pd = 0; }, { passive: true }); }
-canvas.addEventListener('wheel', e => { if (phase === 'seam') { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
+canvas.addEventListener('wheel', e => { if (phase === 'seam' && !tpv) { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
   if (e.code === 'Escape' || e.key === 'Escape') {
     if (closeTopModal()) { e.preventDefault(); e.stopPropagation(); return; }
@@ -4370,9 +4371,12 @@ function camTick(dt: number) {
       }
     }
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-    const cp = new THREE.Vector3(walkPos.x - fx * 2.9, jumpY + 2.5, walkPos.z - fz * 2.9);
+    const z = tpDist / 3.6;
+    const ltx = walkPos.x + fx * 1.2, lty = jumpY + 0.9, ltz = walkPos.z + fz * 1.2;
+    const cx0 = walkPos.x - fx * 2.9, cy0 = jumpY + 2.5, cz0 = walkPos.z - fz * 2.9;
+    const cp = new THREE.Vector3(ltx + (cx0 - ltx) * z, lty + (cy0 - lty) * z, ltz + (cz0 - ltz) * z);
     if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
-    { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, jumpY + 0.9, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
+    { const lt = new THREE.Vector3(ltx, lty, ltz); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
     { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     tpCam.updateMatrixWorld(); return;
   }
@@ -4407,7 +4411,7 @@ function camTick(dt: number) {
     }
     handRig.visible = false;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-    const dist = 3.1;
+    const dist = wideView ? tpDist * 0.92 : tpDist;
     const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = dist * Math.cos(el);
     const cp = new THREE.Vector3(SEAT.x - fx * hd, SEAT.y + 0.4 + dist * Math.sin(el), SEAT.z - fz * hd);
     const lt = new THREE.Vector3(SEAT.x + fx * 0.2, SEAT.y - 0.15, SEAT.z + fz * 0.2);
@@ -4438,9 +4442,12 @@ function camTick(dt: number) {
   rig.head.rotation.y = yaw * 0.6;
   const h = seatYaw + yaw * 0.35, fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
   {
-    // 工寮：從背後斜 3/4 看，人在畫面中下、全身入鏡
-    const cp = new THREE.Vector3(SEAT.x - fx * 2.6 - rx * 1.5, SEAT.y + 0.85, SEAT.z - fz * 2.6 - rz * 1.5);
-    const lt = new THREE.Vector3(SEAT.x + fx * 0.8 + rx * 0.35, SEAT.y - 0.2, SEAT.z + fz * 0.8 + rz * 0.35);
+    // 工寮：從背後斜 3/4 看，人在畫面中下、全身入鏡；距離跟走動同一套縮放
+    const z = tpDist / 3.6;
+    const ltx = SEAT.x + fx * 0.8 + rx * 0.35, lty = SEAT.y - 0.2, ltz = SEAT.z + fz * 0.8 + rz * 0.35;
+    const cx0 = SEAT.x - fx * 2.6 - rx * 1.5, cy0 = SEAT.y + 0.85, cz0 = SEAT.z - fz * 2.6 - rz * 1.5;
+    const cp = new THREE.Vector3(ltx + (cx0 - ltx) * z, lty + (cy0 - lty) * z, ltz + (cz0 - ltz) * z);
+    const lt = new THREE.Vector3(ltx, lty, ltz);
     if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
     { const f = tpFovFor('shedSit'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     tpCam.lookAt(tpLook); tpCam.updateMatrixWorld();
