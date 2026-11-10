@@ -302,7 +302,7 @@ function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
       : '<span class="flagMax">已全部解鎖</span>';
     return `<div class="flagTrack"><div class="flagTrackHd">${label}</div><div class="flagChips">${chips}</div>${buy}</div>`;
   };
-  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選。</p><label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
+  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選。</p><label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button><div id="flagTextMsg" class="flagMsg" role="status" aria-live="polite"></div>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
 }
 
 function bindFlagShop(mine: PlazaFlagState | null) {
@@ -322,25 +322,38 @@ function bindFlagShop(mine: PlazaFlagState | null) {
     D.onFlagChange?.();
   };
   const saveBtn = box.querySelector<HTMLButtonElement>('button[data-fsave]');
+  const flagMsg = (t: string, ok: boolean) => {
+    const el = document.getElementById('flagTextMsg');
+    if (el) { el.textContent = t; el.className = 'flagMsg ' + (ok ? 'ok' : 'bad'); }
+    D.toast(t, ok ? '#9be37a' : '#ffb08a');
+  };
+  const withTimeout = <T,>(p: Promise<T>, ms: number) => Promise.race([p, new Promise<null>(res => setTimeout(() => res(null), ms))]);
+  const textIn = box.querySelector<HTMLInputElement>('#flagTextIn');
+  if (textIn) textIn.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); saveBtn?.click(); } };
   if (saveBtn) saveBtn.onclick = async () => {
     if (saveBtn.disabled) return;
-    if (!D.getSave().shop.owned.includes(FLAG_ITEM.id)) { D.toast(flagTextErr('no_flag'), '#ffb08a'); return; }
-    const inp = box.querySelector<HTMLInputElement>('#flagTextIn');
+    if (!D.getSave().shop.owned.includes(FLAG_ITEM.id)) { flagMsg(flagTextErr('no_flag'), false); return; }
+    const inp = textIn;
     const raw = inp?.value ?? '';
     const pid = D.getPlayerId();
     saveBtn.disabled = true;
+    const label = saveBtn.textContent;
+    saveBtn.textContent = '儲存中…';
     try {
-      let r = D.setFlagText ? await D.setFlagText(raw) : null;
-      if (!r || r.err === 'no_conn') r = await postFlagText(pid, raw);
-      if (!r.ok) { D.toast(flagTextErr(r.err), '#ffb08a'); return; }
-      const got = r.mine?.text ?? '';
-      if (inp) inp.value = got;
+      let r = D.setFlagText ? await withTimeout(D.setFlagText(raw), 8000) : null;
+      if (!r || r.err === 'no_conn' || r.err === 'nosup') r = await withTimeout(postFlagText(pid, raw), 8000);
+      if (!r) { flagMsg('伺服器沒有回應，文字還沒儲存，請稍後再試', false); return; }
+      if (!r.ok) { flagMsg(flagTextErr(r.err), false); return; }
+      const got = r.mine?.text ?? raw;
       const note = flagTextSaveNote(raw, got);
-      D.toast(note ? `旗幟文字已儲存（${note}）` : '旗幟文字已儲存', '#9be37a');
+      const msg = note ? `旗幟文字已儲存（${note}）` : `旗幟文字已儲存：「${got}」`;
       if (D.getAc()) D.SFX.jingle();
       renderFlagShop(r.mine ?? mine);
+      flagMsg(msg, true);
+    } catch {
+      flagMsg('儲存失敗，請稍後再試', false);
     } finally {
-      if (saveBtn.isConnected) saveBtn.disabled = false;
+      if (saveBtn.isConnected) { saveBtn.disabled = false; saveBtn.textContent = label; }
     }
   };
   box.querySelectorAll<HTMLButtonElement>('button[data-fsel]').forEach(b => {
