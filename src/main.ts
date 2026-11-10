@@ -68,6 +68,7 @@ import {
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
 import { GOLD_SMOKE_TINT, encodeCosmetics } from './plaza/cosmetics';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
+import { tickPlazaNight, peekPlazaNightT, applyPlazaNightSky } from './plaza/plazaTime';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
   $, on, toast, initDomToast, tickToast,
@@ -95,6 +96,8 @@ function setPlazaMode(v: boolean) {
   plazaMode = v;
   document.body.classList.toggle('plazaMode', v);
   applyPlazaShadowMode();
+  if (v) applyPlazaNightSky({ scene, hemi, sun, skyDome, nightT: tickPlazaNight(0, true), eco: mix.eco });
+  else try { updSky(); } catch { /* 離場還原工寮天色 */ }
 }
 let plazaPayWait: Promise<number> | null = null;
 /** 廣場休閒：第一次坐下起算遊玩秒數（給結算／後端 softCap） */
@@ -1012,6 +1015,8 @@ function updSky() {
   skyDome.setClouds(mix.eco ? 0 : night ? 0.1 : dawnDusk ? 0.38 : 0.56);
   try { applyShedLook(); } catch { /* 尚未初始化 */ }
   refreshEconomyLabels();
+  // 廣場跟台灣時間，不用裝置時區的工寮天色
+  if (plazaMode) applyPlazaNightSky({ scene, hemi, sun, skyDome, nightT: peekPlazaNightT(), eco: mix.eco });
 }
 
 /** 夜班％／俐落加給等文案（不重畫整塊地點卡） */
@@ -4135,6 +4140,7 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
   lamp.intensity = plazaMode
     ? 0
     : (mix.eco ? 18 : 26) + Math.sin(t * 1.3) * (mix.eco ? 0.5 : 1.0);
+  if (plazaMode) applyPlazaNightSky({ scene, hemi, sun, skyDome, nightT: peekPlazaNightT(), eco: mix.eco });
   skyDome.tick(viewCam(), t);
   renderSceneWithLocalAvatarOnTop(renderer, scene, viewCam(), plazaMe?.outer);
   scheduleFrame();

@@ -413,7 +413,7 @@ export function makePlazaBigShed(
   M: MatFn,
   add: (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], parent: THREE.Object3D, cast?: boolean) => THREE.Mesh,
   lowDetail = false,
-): { group: THREE.Group; posts: { x: number; z: number }[]; tick: (dt: number) => void } {
+): { group: THREE.Group; posts: { x: number; z: number }[]; tick: (dt: number) => void; setNight: (t: number) => void } {
   const g = new THREE.Group();
   g.name = 'plazaBigShed';
   const posts = collectPlazaShedPosts();
@@ -485,6 +485,7 @@ export function makePlazaBigShed(
     panel.rotation.z = 0.05;
   }
 
+  let setLampNight = (_t: number) => {};
   // 吊燈外觀：四堆一盞（與 PLAZA_LAMP_XZ／實際 PointLight 對齊）
   // 燈泡＋燈罩＋加法光暈都是自發光／Sprite，省電關點光時燈看起來仍亮，不加即時光源
   {
@@ -511,7 +512,7 @@ export function makePlazaBigShed(
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
-      opacity: lowDetail ? 0.95 : 0.8,
+      opacity: lowDetail ? 0.55 : 0.45,
     });
     const bulbSegs = lowDetail ? 8 : 10;
     for (const [x, z] of PLAZA_LAMP_XZ) {
@@ -528,10 +529,53 @@ export function makePlazaBigShed(
       const halo = new THREE.Sprite(glowMat);
       // 扁一點、略往下，避免光暈碰到厝頂被深度測試吃掉
       halo.position.set(x, y - 0.04, z);
-      halo.scale.set(lowDetail ? 1.5 : 1.7, lowDetail ? 0.72 : 0.82, 1);
+      halo.scale.set(lowDetail ? 1.65 : 1.8, lowDetail ? 0.78 : 0.88, 1);
       halo.renderOrder = 2;
       g.add(halo);
     }
+    // 地面光池：加法圓斑，不占即時光源；四片同材質可併成一次繪製
+    const poolCv = document.createElement('canvas');
+    poolCv.width = poolCv.height = 64;
+    {
+      const c = poolCv.getContext('2d')!;
+      const gr = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(255,230,170,0.95)');
+      gr.addColorStop(0.35, 'rgba(255,200,120,0.4)');
+      gr.addColorStop(0.7, 'rgba(255,180,90,0.1)');
+      gr.addColorStop(1, 'rgba(255,160,60,0)');
+      c.fillStyle = gr;
+      c.fillRect(0, 0, 64, 64);
+    }
+    const poolMap = new THREE.CanvasTexture(poolCv);
+    poolMap.colorSpace = THREE.SRGBColorSpace;
+    poolMap.needsUpdate = true;
+    const poolMat = new THREE.MeshBasicMaterial({
+      map: poolMap,
+      color: 0xffe2b0,
+      transparent: true,
+      opacity: lowDetail ? 0.12 : 0.08,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const poolGeo = new THREE.PlaneGeometry(7.2, 7.2);
+    for (const [x, z] of PLAZA_LAMP_XZ) {
+      const pool = new THREE.Mesh(poolGeo, poolMat);
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.set(x, 0.018, z);
+      pool.renderOrder = 1;
+      pool.name = 'lampPool';
+      g.add(pool);
+    }
+    const dayGlow = lowDetail ? 0.55 : 0.45;
+    const nightGlow = lowDetail ? 0.95 : 0.85;
+    const dayPool = lowDetail ? 0.12 : 0.08;
+    const nightPool = lowDetail ? 0.65 : 0.32;
+    setLampNight = (nt: number) => {
+      const k = Math.max(0, Math.min(1, nt));
+      glowMat.opacity = dayGlow + (nightGlow - dayGlow) * k;
+      poolMat.opacity = dayPool + (nightPool - dayPool) * k;
+    };
   }
 
   // 兩把超大吊扇（避開四角吊燈，對角擺）
@@ -545,5 +589,6 @@ export function makePlazaBigShed(
     group: g,
     posts,
     tick: (dt: number) => { for (const t of fanTicks) t(dt); },
+    setNight: (nt: number) => setLampNight(nt),
   };
 }
