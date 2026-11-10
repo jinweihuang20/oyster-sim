@@ -15,7 +15,8 @@ import {
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, isPlazaAber, type PlazaSeatRef } from './layout';
-import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
+import { makeYardLikePile, makePlazaGrill, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
+import { makeInstancedPlazaChairs, makeInstancedPads, type ChairPose } from './instancedProps';
 import { mergeStaticMeshes, countMeshes } from './mergeStatic';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
@@ -164,7 +165,9 @@ export function createPlazaWorldView(
   const chairsRoot = new THREE.Group();
   chairsRoot.name = 'plazaChairs';
   root.add(chairsRoot);
+  const chairPoses: ChairPose[] = [];
   let nearKey: string | null = null;
+  let padTaken = new Set<string>();
   const cushions = new Map<string, THREE.Group>();
   function makeSeatCushion() {
     const g = new THREE.Group();
@@ -249,9 +252,7 @@ export function createPlazaWorldView(
     const seatN = SLOTS_PER_PILE + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
     for (let s = 0; s < seatN; s++) {
       const pose = seatPose(i, s);
-      const { group, pad } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
-      chairsRoot.add(group);
-      seatMeshes.set(seatKey(i, s), pad);
+      chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(i, s) });
     }
   }
 
@@ -267,6 +268,7 @@ export function createPlazaWorldView(
   const smokeArea = makePlazaSmokeArea(M, add, LO);
   root.add(smokeArea.group);
   for (const [k, pad] of smokeArea.seatPads) seatMeshes.set(k, pad);
+  chairPoses.push(...smokeArea.chairPoses);
 
   // 東南角多那芝咖啡外觀＋門口吸菸區（座位 pileId=CAFE_SMOKE_PILE_ID）
   const cafe = makePlazaCafe(M, add, LO);
@@ -281,6 +283,9 @@ export function createPlazaWorldView(
   // 樸子腳北側「聯合競選總部」組合屋外觀（無座位、無點光）
   const hq = makePlazaHq(M, add, LO);
   root.add(hq.group);
+
+  const plazaChairs = makeInstancedPlazaChairs(chairPoses, M, LO);
+  chairsRoot.add(plazaChairs.group);
 
   // 合併靜態桌椅／棚架／攤位（略過選位墊、炭火、吊扇、薄煙；店面小零件留給遠景 LOD）
   const padSet = new Set<THREE.Object3D>([...seatMeshes.values()]);
@@ -303,6 +308,32 @@ export function createPlazaWorldView(
   mergeStaticMeshes(seafood.group, { skip: skipMerge, name: 'seafoodMerged' });
   mergeStaticMeshes(hq.group, { skip: skipMerge, name: 'hqMerged' });
   root.userData.mergeStats = { meshesBefore: meshBefore, meshesAfter: countMeshes(root) };
+
+  root.updateMatrixWorld(true);
+  const extraPadPoses: ChairPose[] = [];
+  const _padW = new THREE.Vector3();
+  const _padE = new THREE.Euler();
+  const _padQ = new THREE.Quaternion();
+  const _padS = new THREE.Vector3();
+  for (const [key, mesh] of [...seatMeshes]) {
+    mesh.updateWorldMatrix(true, false);
+    mesh.matrixWorld.decompose(_padW, _padQ, _padS);
+    _padE.setFromQuaternion(_padQ, 'YXZ');
+    extraPadPoses.push({ x: _padW.x, z: _padW.z, yaw: _padE.y, key });
+    mesh.removeFromParent();
+    seatMeshes.delete(key);
+  }
+  const extraPads = extraPadPoses.length ? makeInstancedPads(extraPadPoses, M, LO) : null;
+  if (extraPads) root.add(extraPads.mesh);
+  const allPads = extraPads ? [plazaChairs.pads, extraPads] : [plazaChairs.pads];
+  const paintInstancedPads = (taken: Set<string> | null) => {
+    for (const api of allPads) {
+      for (const k of api.keys()) {
+        api.setPad(k, { busy: taken ? taken.has(k) : false, highlight: nearKey != null && k === nearKey });
+      }
+      api.apply();
+    }
+  };
 
   // 遠景細節裁切：建築小零件（窗框、桌上小物、菸蒂…）與貼圖招牌，鏡頭離建築夠遠就不畫
   type DetailLod = { box: THREE.Box3; small: THREE.Object3D[]; signs: THREE.Object3D[]; smallOn: boolean; signOn: boolean };
@@ -1631,23 +1662,13 @@ function hashPid(pid: string) {
     const taken = new Set<string>();
     if (snap) for (const p of snap.players) { if (p.seated && p.pileId >= 0) taken.add(seatKey(p.pileId, p.slot)); }
     else for (const r of remotes.values()) { if (r.seated && r.pileId >= 0) taken.add(seatKey(r.pileId, r.slot)); }
-    for (const [k, m] of seatMeshes) {
-      const mat = m.material as THREE.MeshStandardMaterial;
-      const busy = taken.has(k);
-      mat.color.setHex(busy ? 0xc45c26 : 0x5a9ad0);
-      mat.opacity = busy ? 0.55 : 0.28;
-    }
+    padTaken = taken;
+    paintInstancedPads(taken);
   }
 
   function highlight(pileId: number | null, slot: number | null) {
     nearKey = pileId != null && slot != null ? seatKey(pileId, slot) : null;
-    for (const [k, m] of seatMeshes) {
-      const mat = m.material as THREE.MeshStandardMaterial;
-      if (!mat.emissive) continue;
-      const mine = nearKey != null && k === nearKey;
-      mat.emissive.setHex(mine ? 0x336610 : 0x000000);
-      if (mine) mat.opacity = 0.75;
-    }
+    paintInstancedPads(padTaken);
   }
 
   function highlightNear(seat: PlazaSeatRef | null) {
