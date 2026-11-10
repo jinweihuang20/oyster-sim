@@ -459,7 +459,7 @@ body.tutOn .ntag{display:none!important}
 @media (pointer:coarse) and (orientation:portrait){
  #top{position:absolute}
  #top #nightTag{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;font-size:12px;padding:1px 8px;border-radius:10px;background:rgba(20,12,6,.6);pointer-events:none}
- #top #setBtn,#top #shopBtn,#top #dexBtn{position:relative;z-index:2;flex-shrink:0}
+ #top #setBtn,#top #shopBtn,#top #dexBtn,#top #eqBtn{position:relative;z-index:2;flex-shrink:0}
  #top #timer,#top #count,#top #pearls{flex-shrink:1;min-width:0}
 }
 
@@ -967,6 +967,9 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 
 /* 廣場：狀態列蓋過 #plazaRoot(9000)，避免地圖鈕擋到 #top／#stats */
 body.plazaMode #top,body.plazaMode #stats,body.plazaRoam #top,body.plazaRoam #stats{z-index:9100}
+#top #eqBtn{display:none}
+body.plazaMode #top #eqBtn,body.plazaRoam #top #eqBtn{display:inline-block}
+body.plazaMode #top #dexBtn,body.plazaRoam #top #dexBtn{display:none!important}
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
 /* 吸菸區坐下：仍屬 plazaRoam（藏剝蚵鈕），但要顯示站起／回主選單（與一般座位同款） */
