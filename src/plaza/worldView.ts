@@ -332,7 +332,7 @@ export function createPlazaWorldView(
     sunDir: new THREE.Vector3(-3, 11, -5),
     lampXZ: PLAZA_LAMP_XZ,
     lampY: PLAZA_ROOF_Y - 0.55,
-    lampPool: LO,
+    lampPool: true,
   });
   const allPads = extraPads ? [plazaChairs.pads, extraPads] : [plazaChairs.pads];
   const paintInstancedPads = (taken: Set<string> | null) => {
@@ -573,15 +573,13 @@ export function createPlazaWorldView(
   const grill = createGrillView(root);
   const flags = createPlazaFlagView(root);
 
-  // 只留對角兩盞真正的吊燈（外觀四盞都還在）；招牌／攤位／炭火改自發光，避免每幀開關燈害著色器重編
+  // 一盞真正的點光源放在廣場正中央、高掛屋頂下，照亮整個廣場；四盞吊燈外觀靠自發光＋烘焙暖光
   const plazaLights: THREE.PointLight[] = [];
   const roofLamps: THREE.PointLight[] = [];
-  // LO：只留一盞動態點光（另一側靠環境光／自發光），一般兩盞對角
-  const roofLampXZ = LO ? [PLAZA_LAMP_XZ[0]] : [PLAZA_LAMP_XZ[0], PLAZA_LAMP_XZ[3]];
-  const roofLampBaseI = LO ? 14 : 16;
-  for (const [x, z] of roofLampXZ) {
-    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 18 : 18, 1.25);
-    pl.position.set(x, PLAZA_ROOF_Y - 0.55, z);
+  const roofLampBaseI = LO ? 9 : 10;
+  {
+    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, 26, 0.7);
+    pl.position.set(0, PLAZA_ROOF_Y - 0.35, 0);
     pl.castShadow = false;
     pl.visible = true;
     root.add(pl);
