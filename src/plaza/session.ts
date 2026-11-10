@@ -777,11 +777,26 @@ function buildUi() {
 #pzNet.on{display:block}
 #pzNet.ok{background:rgba(20,48,28,.92);border-color:#9be37a;color:#d8ffc8}
 /* 右下：避開上方狀態列、左下搖桿／聊天 */
-#pzX{pointer-events:auto;position:absolute;top:auto;bottom:calc(env(safe-area-inset-bottom) + 18px);right:calc(env(safe-area-inset-right) + 12px);left:auto;min-width:42px;height:44px;padding:0 14px;font-size:14px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:12px;font-weight:800;white-space:nowrap;box-shadow:2px 2px 0 #1b1208}
+/* 離開廣場：跟地圖同一組，排在地圖正下方 */
+#pzLeftFabs{pointer-events:none;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;top:calc(env(safe-area-inset-top) + 118px);bottom:auto;z-index:2;display:flex;flex-direction:column;align-items:stretch;gap:8px}
+#pzLeftFabs>button{pointer-events:auto;position:static;min-width:48px;height:44px;padding:0 12px;border:1.5px solid rgba(232,246,255,.35);border-radius:12px;background:rgba(32,72,96,.48);color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+#pzLeftFabs>button:active{background:rgba(32,72,96,.62)}
+#pzLeftFabs>button .ic{background:currentColor}
 #pzX.hide{display:none}
-@media (pointer:coarse){#pzX{bottom:calc(env(safe-area-inset-bottom) + 16px);right:calc(env(safe-area-inset-right) + 12px);min-height:48px;padding:0 16px;font-size:15px}}
-/* 橫向：視角在狀態列，離開鈕可靠底 */
-@media (pointer:coarse) and (orientation:landscape){#pzX{bottom:calc(env(safe-area-inset-bottom) + 10px);min-height:40px;padding:0 12px;font-size:13px}}
+@media (pointer:fine){#pzLeftFabs{top:calc(env(safe-area-inset-top) + 14px);left:calc(env(safe-area-inset-left) + 10px);z-index:2}#pzLeftFabs>button{height:44px}}
+@media (pointer:coarse) and (orientation:landscape){
+  #pzLeftFabs{top:calc(env(safe-area-inset-top) + 4px);left:calc(env(safe-area-inset-left) + 8px);gap:6px;z-index:2}
+  #pzLeftFabs>button{height:40px;min-width:44px;padding:0 10px;font-size:13px}
+}
+#pzLeaveAsk{display:none;pointer-events:auto;position:absolute;inset:0;z-index:8;align-items:center;justify-content:center;padding:24px;background:rgba(8,10,12,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#pzLeaveAsk.open{display:flex}
+#pzLeaveAsk .pzLeaveBox{width:min(92vw,360px);padding:22px 20px 16px;border-radius:16px;background:rgba(22,28,36,.82);border:1px solid rgba(255,255,255,.22);box-shadow:0 8px 28px rgba(0,0,0,.35);color:#f2f4f7;text-align:center}
+#pzLeaveAsk .pzLeaveBox p{margin:0 0 16px;font-size:17px;font-weight:800}
+#pzLeaveAsk .pzLeaveBtns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+#pzLeaveAsk .pzLeaveBtns button{pointer-events:auto;min-width:96px;min-height:44px;padding:0 16px;border-radius:12px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.10);color:#f2f4f7;font-weight:800;font-size:15px}
+#pzLeaveAsk .pzLeaveBtns #pzLeaveOk{background:rgba(42,90,134,.85);border-color:rgba(232,246,255,.4)}
+#pzLeaveAsk .pzLeaveBtns button:active{background:rgba(255,255,255,.2)}
+#pzLeaveAsk .pzLeaveBtns #pzLeaveOk:active{background:rgba(42,90,134,1)}
 /* 聊天放左側，避開右下雨傘／丟殼／偷 */
 #pzChatFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 168px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
 #pzChatFab .pzBadge{display:none;position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e23b2f;color:#fff;font-size:11px;font-weight:900;line-height:18px;text-align:center;box-shadow:0 1px 0 #1b1208;pointer-events:none}
@@ -793,7 +808,7 @@ function buildUi() {
 #pzChatPeek b{color:#ffd23f;font-weight:900}
 #pzChat{display:none;pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 220px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
 #pzChat.open{display:block}
-/* 電腦：聊天鈕底部與「離開廣場」切齊；視窗／預覽叠在鈕上方 */
+/* 電腦：聊天鈕靠左下；視窗／預覽叠在鈕上方（離開已改到地圖下方） */
 @media (pointer:fine){
   #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 18px);height:44px}
   #pzChatPeek{bottom:calc(env(safe-area-inset-bottom) + 70px)}
@@ -821,13 +836,7 @@ function buildUi() {
 /* 左上：狀態列（#top／#stats）下方 */
 /* z-index 低於聊天／離開；狀態列另在 style.css 抬到 plazaRoot 之上 */
 /* 直向手機：狀態列下方；桌面／橫向：與 #top 同一列左側（地圖-狀態列） */
-#pzMapFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;top:calc(env(safe-area-inset-top) + 118px);bottom:auto;z-index:1;min-width:48px;height:44px;padding:0 12px;border:1.5px solid rgba(232,246,255,.35);border-radius:12px;background:rgba(32,72,96,.48);color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-#pzMapFab:active{background:rgba(32,72,96,.62)}
-#pzMapFab .ic{background:currentColor}
-@media (pointer:fine){#pzMapFab{top:calc(env(safe-area-inset-top) + 14px);left:calc(env(safe-area-inset-left) + 10px);height:44px;z-index:2}}
-@media (pointer:coarse) and (orientation:landscape){
-  #pzMapFab{top:calc(env(safe-area-inset-top) + 4px);left:calc(env(safe-area-inset-left) + 8px);height:40px;min-width:44px;padding:0 10px;font-size:13px;z-index:2}
-}
+/* 地圖／離開樣式見 #pzLeftFabs */
 #pzMap{display:none;pointer-events:auto;position:absolute;inset:0;z-index:6;background:rgba(8,10,12,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px)}
 #pzMap.open{display:flex;flex-direction:column;gap:10px}
 #pzMapHd{display:flex;align-items:center;justify-content:space-between;gap:10px;width:min(92vw,420px);color:#ffe6b0;font-weight:900;font-size:16px}
@@ -848,10 +857,21 @@ function buildUi() {
   }
 }
 </style>
-<button id="pzX" type="button" aria-label="離開廣場">離開廣場</button>
+<div id="pzLeftFabs">
+<button id="pzMapFab" type="button" aria-label="地圖"><i class="ic ic-pin"></i> 地圖<span class="key"> (M)</span></button>
+<button id="pzX" type="button" aria-label="離開廣場"><i class="ic ic-exit"></i> 離開</button>
+</div>
+<div id="pzLeaveAsk" role="dialog" aria-modal="true" aria-label="確定離開廣場？">
+  <div class="pzLeaveBox">
+    <p>確定離開廣場？</p>
+    <div class="pzLeaveBtns">
+      <button id="pzLeaveOk" type="button">確定</button>
+      <button id="pzLeaveNo" type="button">取消</button>
+    </div>
+  </div>
+</div>
 <div id="pzHud">準備中…</div>
 <div id="pzNet" role="status" aria-live="polite"></div>
-<button id="pzMapFab" type="button" aria-label="地圖"><i class="ic ic-pin"></i> 地圖<span class="key"> (M)</span></button>
 <button id="pzChatFab" type="button" aria-label="聊天">聊天<span class="key"> (ENTER)</span><span class="pzBadge" aria-hidden="true">0</span></button>
 <button id="pzChatPeek" type="button" aria-label="打開聊天"></button>
 <div id="pzChat">
@@ -871,9 +891,14 @@ function buildUi() {
   </div>
 </div>`;
   document.body.appendChild(ui);
-  ui.querySelector('#pzX')!.addEventListener('click', () => {
-    if (shiftStarted) deps?.onExit();
-    else { const exit = deps?.onExit; void closePlaza(true).then(() => exit?.()); }
+  ui.querySelector('#pzX')!.addEventListener('click', () => plazaAskLeave());
+  ui.querySelector('#pzLeaveNo')!.addEventListener('click', () => plazaCloseLeaveAsk());
+  ui.querySelector('#pzLeaveOk')!.addEventListener('click', () => {
+    plazaCloseLeaveAsk();
+    plazaLeaveNow();
+  });
+  ui.querySelector('#pzLeaveAsk')!.addEventListener('click', (e) => {
+    if (e.target === ui!.querySelector('#pzLeaveAsk')) plazaCloseLeaveAsk();
   });
   const chat = ui.querySelector('#pzChat') as HTMLElement;
   const fab = ui.querySelector('#pzChatFab') as HTMLElement;
@@ -1461,6 +1486,22 @@ function refreshPlazaMap() {
 export function plazaMapIsOpen() {
   return !!ui?.querySelector('#pzMap')?.classList.contains('open');
 }
+export function plazaLeaveAskIsOpen() {
+  return !!ui?.querySelector('#pzLeaveAsk')?.classList.contains('open');
+}
+export function plazaCloseLeaveAsk() {
+  ui?.querySelector('#pzLeaveAsk')?.classList.remove('open');
+}
+function plazaAskLeave() {
+  if (!ui) return;
+  plazaCloseMap();
+  plazaCloseChat();
+  ui.querySelector('#pzLeaveAsk')?.classList.add('open');
+}
+function plazaLeaveNow() {
+  if (shiftStarted) deps?.onExit();
+  else { const exit = deps?.onExit; void closePlaza(true).then(() => exit?.()); }
+}
 export function plazaCloseMap() {
   ui?.querySelector('#pzMap')?.classList.remove('open');
 }
@@ -1513,7 +1554,7 @@ export function tickPlaza(dt: number) {
 /** 收工／結算時藏廣場 UI（離開鈕、聊天、地圖），避免擋結果面板 */
 export function plazaHideChrome(hide = true) {
   if (!ui) return;
-  if (hide) plazaCloseMap();
+  if (hide) { plazaCloseMap(); plazaCloseLeaveAsk(); }
   ui.style.display = hide ? 'none' : '';
 }
 

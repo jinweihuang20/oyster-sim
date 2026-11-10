@@ -60,7 +60,7 @@ import {
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
-  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, seatPose, plazaPushOutfit, plazaPushCosmetics,
+  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, plazaLeaveAskIsOpen, plazaCloseLeaveAsk, seatPose, plazaPushOutfit, plazaPushCosmetics,
   plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryShowFlag, plazaTryRemoveFlag, plazaTryUpgradeFlag, plazaTrySelectFlag,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
@@ -1252,7 +1252,7 @@ function pickAt(cx: number, cy: number) {
   if (phase !== 'pick' || state !== 'play') return;
   // 與偷肉／丟碗一樣：先對齊本幀鏡頭，避免點選落空
   if (!tpOn) {
-    camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0);
+    camera.rotation.set(pitch, yaw + flYaw + (walking ? 0 : seatYaw), 0);
     camera.updateMatrixWorld();
   }
   const cam = viewCam();
@@ -1694,7 +1694,7 @@ const _stealRight = new THREE.Vector3();
 function bowlOnReticle(bx: number, by: number, bz: number, bowlR = 0.16, slack = 1.65) {
   // 判定多在 camTick 之前：先把 FP 鏡頭對齊本幀 yaw/pitch
   if (!tpOn) {
-    camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0);
+    camera.rotation.set(pitch, yaw + flYaw + (walking ? 0 : seatYaw), 0);
     camera.updateMatrixWorld();
   }
   const cam = viewCam();
@@ -2176,6 +2176,85 @@ const plazaTpOrbitPitch = () => plazaMode && tpv;
 /** @deprecated alias — 舊名仍給讀碼用 */
 const plazaTpWalkLockPitch = () => plazaTpOrbitPitch();
 const PLAZA_WALK_PITCH = -0.2; let tpPitch = 0.41; let walkMovingT = 0; const tpPitchFree = () => performance.now() - walkMovingT > 200;
+
+/** 手機環視：只轉鏡頭、不轉角色朝向／移動方向；放開後約 0.3 秒轉回身後 */
+const FL_YAW_MAX = 150 * Math.PI / 180, FL_RETURN = 0.3;
+let flHeld = false, flPtr = -1, flDragId = -1, flYaw = 0, flRet = 0, flRetFrom = 0;
+let flDown: { x: number; y: number; yaw: number; tp: number; pitch: number } | null = null;
+let pinchOn = false;
+function flWrap(a: number) { a = (a + Math.PI) % (Math.PI * 2); if (a < 0) a += Math.PI * 2; return a - Math.PI; }
+function flPaintBtn() { document.getElementById('lookBtn')?.classList.toggle('held', flHeld); }
+function flBeginHold(e: PointerEvent) {
+  if (state !== 'play') return;
+  // 廣場坐下第三人稱：把已繞出去的鏡頭差轉進 flYaw，放開才會回到角色背後
+  if (!walking && plazaMode && tpv) {
+    flYaw = clamp(flWrap((yaw + flYaw) - seatYaw), -FL_YAW_MAX, FL_YAW_MAX);
+    yaw = tYaw = seatYaw;
+  }
+  flHeld = true; flPtr = e.pointerId; flRet = 0; flPaintBtn();
+  try { (e.currentTarget as HTMLElement | null)?.setPointerCapture(e.pointerId); } catch { }
+  flDragId = e.pointerId;
+  flDown = { x: e.clientX, y: e.clientY, yaw: flYaw, tp: tpPitch, pitch: tPitch };
+}
+function flStartDrag(e: PointerEvent) {
+  flDragId = e.pointerId;
+  flDown = { x: e.clientX, y: e.clientY, yaw: flYaw, tp: tpPitch, pitch: tPitch };
+}
+function flApplyDrag(e: PointerEvent) {
+  if (!flDown || pinchOn) return;
+  const dx = e.clientX - flDown.x, dy = e.clientY - flDown.y;
+  const k = 0.006 * mix.sens;
+  const xS = mix.invX ? -1 : 1;
+  flYaw = clamp(flDown.yaw - dx * k * xS, -FL_YAW_MAX, FL_YAW_MAX);
+  if (plazaTpOrbitPitch() && tpPitchFree()) tpPitch = clamp((flDown.tp ?? tpPitch) + dy * k * 0.8, 0.05, 1.1);
+  else if (!plazaTpOrbitPitch()) {
+    tPitch = clamp(flDown.pitch - dy * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
+    pitch = tPitch;
+    if (!tpv) { camera.rotation.set(pitch, yaw + flYaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld(); }
+  }
+}
+function flRelease() {
+  if (!flHeld && flPtr < 0 && !flDown) return;
+  flHeld = false; flPtr = -1; flDragId = -1; flDown = null; flPaintBtn();
+  if (Math.abs(flYaw) < 1e-4) { flYaw = 0; flRet = 0; return; }
+  flRetFrom = flYaw; flRet = FL_RETURN;
+}
+function flTick(dt: number) {
+  if (flHeld) return;
+  if (flRet <= 0) { flYaw = 0; return; }
+  flRet = Math.max(0, flRet - dt);
+  const u = 1 - flRet / FL_RETURN, k = u * u * (3 - 2 * u);
+  flYaw = flRetFrom * (1 - k);
+  if (flRet <= 0) flYaw = 0;
+}
+function placeLookBtn() {
+  const btn = document.getElementById('lookBtn');
+  if (!btn) return;
+  const show = COARSE && state === 'play';
+  btn.classList.toggle('on', show);
+  if (!show) {
+    if (flHeld) flRelease();
+    btn.style.right = ''; btn.style.bottom = '';
+    return;
+  }
+  const ids = ['poseBtn', 'jumpBtn', 'crouchBtn', 'lieBtn', 'umbBtn', 'puffBtn', 'throwBtn', 'stealBtn', 'flagBtn', 'flagPullBtn'];
+  let minL = Infinity, maxB = 0;
+  const consider = (el: HTMLElement | null) => {
+    if (!el) return;
+    if (el.id === 'lookBtn' || el.id === 'camBtn' || el.id === 'rotL' || el.id === 'rotR') return;
+    const r = el.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8) return;
+    if (r.right < innerWidth * 0.45) return;
+    minL = Math.min(minL, r.left);
+    maxB = Math.max(maxB, r.bottom);
+  };
+  for (const id of ids) consider(document.getElementById(id));
+  const box = document.getElementById('btns');
+  if (box) for (const el of Array.from(box.querySelectorAll('button')) as HTMLElement[]) consider(el);
+  if (!isFinite(minL) || maxB <= 0) { btn.style.right = ''; btn.style.bottom = ''; return; }
+  btn.style.right = Math.max(8, innerWidth - minL + 8) + 'px';
+  btn.style.bottom = Math.max(8, innerHeight - maxB) + 'px';
+}
 const YAW = 1.25, P0 = -1.05, P1 = 0.15;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const swipePhase = () => phase === 'twist' || phase === 'crab';
@@ -2191,6 +2270,8 @@ canvas.addEventListener('pointerdown', e => {
     if (tipNpc) { npcTip(tipNpc); return; }
   }
   if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
+  // 按住環視鈕時：這根或另一根手指只轉鏡頭，不轉角色、也不當剝殼點選
+  if (flHeld && e.pointerId !== flPtr) { flStartDrag(e); return; }
   if (walking) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (e.button === 2) { throwShell(); return; }
   // 坐下：預設先當轉視角（跟走動一樣跟手）；點蚵／點網靠 pointerup 小位移仍算點
@@ -2209,10 +2290,11 @@ window.addEventListener('pointermove', e => {
       yaw = tYaw = clamp(tYaw - e.movementX * k * xS, -yl(), yl());
       if (plazaTpWalkLockPitch()) { pitch = tPitch = PLAZA_WALK_PITCH; if (tpPitchFree()) tpPitch = clamp(tpPitch + e.movementY * k * 0.8, 0.05, 1.1); }
       else pitch = tPitch = clamp(tPitch - e.movementY * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
-      camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld();
+      camera.rotation.set(pitch, yaw + flYaw + (walking ? 0 : seatYaw), 0); camera.updateMatrixWorld();
     }
     return;
   }
+  if (flHeld && flDown && e.pointerId === flDragId) { flApplyDrag(e); return; }
   if (!down || down.id !== e.pointerId) return;
   const dx = e.clientX - down.x, dy = e.clientY - down.y;
   if (swipePhase() && !moonAimOn) return;
@@ -2231,12 +2313,14 @@ window.addEventListener('pointermove', e => {
 tPitch = plazaTpWalkLockPitch() ? PLAZA_WALK_PITCH : clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
     // 坐下／拖曳立刻上鏡頭（與 Pointer Lock 同手感，不等到下幀）
     yaw = tYaw; pitch = tPitch;
-    camera.rotation.set(pitch, yaw + (walking ? 0 : seatYaw), 0);
+    camera.rotation.set(pitch, yaw + flYaw + (walking ? 0 : seatYaw), 0);
     camera.updateMatrixWorld();
   }
 });
 function release() { if (!holding) return; const h = hold; holding = false; hold = 0; gauge.classList.remove('on'); void h; }
 const up = (e: PointerEvent) => {
+  if (flHeld && e.pointerId === flPtr) { flRelease(); return; }
+  if (flDown && e.pointerId === flDragId) { flDown = null; flDragId = -1; return; }
   if (moonAimOn && down && down.id === e.pointerId) { const d = down; down = null; if (!d.drag) moonTapAt(e.clientX, e.clientY); return; }
   if (down && down.id === e.pointerId && walking) { down = null; return; }
   if (!(down && down.id === e.pointerId)) return;
@@ -2278,9 +2362,9 @@ let tpDist = 3.6; const clampTp = (v: number) => Math.min(6.5, Math.max(1.8, v))
 const tpZoomOn = () => tpv && state === 'play';
 canvas.addEventListener('wheel', e => { if (tpZoomOn()) { tpDist = clampTp(tpDist + e.deltaY * 0.003); e.preventDefault(); } }, { passive: false });
 { let pd = 0; const dist = (ts: TouchList) => Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY);
-  canvas.addEventListener('touchstart', e => { if (e.targetTouches.length === 2 && e.touches.length === 2) { pd = dist(e.targetTouches); if (tpZoomOn()) down = null; } }, { passive: true });
+  canvas.addEventListener('touchstart', e => { if (e.targetTouches.length === 2 && e.touches.length === 2) { pd = dist(e.targetTouches); pinchOn = true; if (tpZoomOn()) { down = null; if (flDragId !== flPtr) { flDown = null; flDragId = -1; } } } }, { passive: true });
   canvas.addEventListener('touchmove', e => { if (pd > 0 && e.targetTouches.length === 2 && e.touches.length === 2 && tpZoomOn()) { const nd = dist(e.targetTouches); tpDist = clampTp(tpDist * pd / nd); pd = nd; } }, { passive: true });
-  canvas.addEventListener('touchend', e => { if (e.targetTouches.length < 2) pd = 0; }, { passive: true }); }
+  canvas.addEventListener('touchend', e => { if (e.targetTouches.length < 2) { pd = 0; pinchOn = false; } }, { passive: true }); }
 canvas.addEventListener('wheel', e => { if (phase === 'seam' && !tpv) { rot += e.deltaY * 0.004; e.preventDefault(); } }, { passive: false });
 window.addEventListener('keydown', e => {
   if (e.code === 'Escape' || e.key === 'Escape') {
@@ -3696,7 +3780,7 @@ function frameBody() {
   if (document.hidden) {
     clock.getDelta();
     if (state === 'play' && !pauseAt) {
-      pauseAt = performance.now(); holding = false; stopSteal(); closeUmbrella(); down = null; joy.x = joy.y = 0;
+      pauseAt = performance.now(); holding = false; stopSteal(); closeUmbrella(); down = null; flRelease(); joy.x = joy.y = 0;
       $('pauseTag').classList.add('on');
     }
     frameSleeping = true; return;
@@ -3712,7 +3796,7 @@ function frameBody() {
   if (isDeathmatchActive()) { clock.getDelta(); scheduleFrame(); return; }
   if (shedAnim.length) { const t = now / 1000; for (const f of shedAnim) f(t); }
   if (paused) {
-    clock.getDelta(); if (!pauseAt) { pauseAt = now; holding = false; stopSteal(); closeUmbrella(); down = null; joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
+    clock.getDelta(); if (!pauseAt) { pauseAt = now; holding = false; stopSteal(); closeUmbrella(); down = null; flRelease(); joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
     skyDome.tick(viewCam(), now / 1000);
     renderer.render(scene, viewCam()); scheduleFrame(); return;
   }
@@ -3931,6 +4015,7 @@ function frameBody() {
     applySmokeSitFpHands();
   }
   if (!swipePhase()) { yaw = tYaw; pitch = tPitch; }
+  flTick(rdt);
   // 廣場坐下：TP 鎖 0；FP 夾在 ±90°
   if (plazaMode && !walking) yaw = tYaw = clamp(yaw, -yl(), yl());
   moonTick(rdt);
@@ -3954,7 +4039,7 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     camPitch += cy * 0.005 * w;
     camRoll = sy * 0.007 * w + Math.max(-1, Math.min(1, walkMotion.strafe / walkRef)) * 0.018 * Math.min(1, walkMotion.bobW + 0.2);
   } else if (!walking) { walkMotion.bobW = 0; walkMotion.bobPh = 0; }
-  camera.rotation.set(camPitch, yaw + (walking ? 0 : seatYaw), camRoll);
+  camera.rotation.set(camPitch, yaw + flYaw + (walking ? 0 : seatYaw), camRoll);
   camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
   // 廣場改靠四象限吊燈照明；中央主燈改弱補光，避免只亮中間
@@ -4280,6 +4365,8 @@ function applyOutfit3() {
   if (isPlazaActive()) void plazaPushOutfit();
 }
 function setTpv(v: boolean) {
+  if (flHeld) flRelease();
+  flYaw = 0; flRet = 0;
   tpv = v;
   // 抽一口按住中切視角：保留倒數／動畫進度，只換 FP 手／TP avatar 呈現
   if (plazaForceTp) plazaForceTp = false; // 玩家手動切換，之後跟存檔偏好
@@ -4339,7 +4426,7 @@ function camTick(dt: number) {
         if (plazaCarrying()) posePlazaCarryHold(rig);
         applyBodyPose(rig, lastPose, poseK);
       }
-      const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      const fx = -Math.sin(yaw + flYaw), fz = -Math.cos(yaw + flYaw);
       const dist = wideView ? tpDist * 0.92 : tpDist;
       const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = dist * Math.cos(el);
       const eyeY = wideView ? 1.55 : 1.4;
@@ -4370,7 +4457,7 @@ function camTick(dt: number) {
         rig.torso.rotation.y *= 0.8; rig.torso.rotation.z *= 0.8; rig.torso.rotation.x *= 0.8;
       }
     }
-    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    const fx = -Math.sin(yaw + flYaw), fz = -Math.cos(yaw + flYaw);
     const z = tpDist / 3.6;
     const ltx = walkPos.x + fx * 1.2, lty = jumpY + 0.9, ltz = walkPos.z + fz * 1.2;
     const cx0 = walkPos.x - fx * 2.9, cy0 = jumpY + 2.5, cz0 = walkPos.z - fz * 2.9;
@@ -4410,7 +4497,7 @@ function camTick(dt: number) {
       posePlazaSit(rig);
     }
     handRig.visible = false;
-    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    const fx = -Math.sin(yaw + flYaw), fz = -Math.cos(yaw + flYaw);
     const dist = wideView ? tpDist * 0.92 : tpDist;
     const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = dist * Math.cos(el);
     const cp = new THREE.Vector3(SEAT.x - fx * hd, SEAT.y + 0.4 + dist * Math.sin(el), SEAT.z - fz * hd);
@@ -4440,7 +4527,7 @@ function camTick(dt: number) {
     cheer(rig.upperR, rig.lowerR, 1);
   }
   rig.head.rotation.y = yaw * 0.6;
-  const h = seatYaw + yaw * 0.35, fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
+  const h = seatYaw + yaw * 0.35 + flYaw, fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
   {
     // 工寮：從背後斜 3/4 看，人在畫面中下、全身入鏡；距離跟走動同一套縮放
     const z = tpDist / 3.6;
@@ -4457,6 +4544,17 @@ function camTick(dt: number) {
 }
 tpv = !!save.tpv; applyOutfit3(); drawCamBtn(); tpReady = true;
 $('camBtn').onclick = () => setTpv(!tpv);
+{
+  const lb = document.getElementById('lookBtn');
+  if (lb) {
+    lb.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); audio().resume(); flBeginHold(e); });
+    lb.addEventListener('pointermove', e => { if (flHeld && e.pointerId === flDragId) flApplyDrag(e); });
+    const end = (e: PointerEvent) => { if (e.pointerId === flPtr) flRelease(); };
+    lb.addEventListener('pointerup', end);
+    lb.addEventListener('pointercancel', end);
+    lb.addEventListener('contextmenu', e => e.preventDefault());
+  }
+}
 { const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) { c.checked = tpv; c.onchange = () => setTpv(c.checked); } }
 // iOS：面板顯示後才重畫一次內容，避免隱藏時插入的 SVG 不上色
 $('eqClose').onclick = () => { $('equip').classList.remove('show'); stopEqPreview(); if (eqFromRes) { eqFromRes = false; $('result').classList.add('show'); } };
@@ -4505,6 +4603,7 @@ initFeedback({
 /** 關閉最上層可關視窗（ESC／手機返回共用）。主選單／結算不關。 */
 function closeTopModal(): boolean {
   if (closeWeaponPreview()) return true;
+  if (plazaLeaveAskIsOpen()) { plazaCloseLeaveAsk(); return true; }
   if (plazaMapIsOpen()) { plazaCloseMap(); return true; }
   if (plazaChatIsOpen()) { plazaCloseChat(); return true; }
   for (const id of ['giftMsg', 'newMsg', 'featMsg', 'svMsg']) {
@@ -4821,6 +4920,7 @@ function plazaPose(p: 'crouch' | 'lie') { if (!plazaMode || !walking || jumpT > 
     // 躺著時一動（方向鍵／搖桿）就起來
     if (bodyPose === 'lie') { let mv = Math.abs(joy.x) > 0.15 || Math.abs(joy.y) > 0.15; for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) mv = true; if (mv) setBodyPose(''); }
     poseK += ((bodyPose ? 1 : 0) - poseK) * Math.min(1, dt * 10);
+    placeLookBtn();
     const pz = plazaMode && walking && state === 'play';
     if (!pz) setPoseOpen(false);
     on('poseBtn', pz); on('jumpBtn', pz); on('crouchBtn', pz); on('lieBtn', pz);
