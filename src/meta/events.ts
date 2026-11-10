@@ -144,7 +144,7 @@ export async function evLbOpen(id: number) {
   const r = await H.Social.evTop(id);
   if (!r || !Array.isArray(r.rows)) { body.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; return; }
   { const me = r.mine ?? r.rows.find((x: any) => x.me); if (me && me.rank <= 10 && !H.AS('top')) H.achBump('top'); }
-  const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${x.atitle ? `<span class="lbWho"><em class="lbAt">${H.esc(x.atitle)}</em><b class="lbNick">${H.esc(x.nick)}</b></span>` : `<span class="lbWho"><b class="lbNick">${H.esc(x.nick)}</b></span>`}<small class="lbId">#${H.esc(x.tag)}</small></span><span class="lbV">${Math.floor(x.v / 1000)} 顆${x.early ? `<small class="evE">提前 ${x.v % 1000} 秒</small>` : ''}</span></div>`;
+  const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}"><span class="lbR">${x.rank}</span><span class="lbN"><span class="lbWho">${x.atitle ? `<em class="lbAt">${H.esc(x.atitle)}</em>` : ''}<small class="lbId">#${H.esc(x.tag)}</small></span><b class="lbNick">${H.esc(x.nick)}</b></span><span class="lbV">${Math.floor(x.v / 1000)} 顆${x.early ? `<small class="evE">提前 ${x.v % 1000} 秒</small>` : ''}</span></div>`;
   body.innerHTML = (r.event ? `<p class="evDesc">${H.esc(r.event.name)}・共 ${r.total ?? r.rows.length} 人參加</p>` : '') +
     (r.rows.length ? r.rows.map(row).join('') + (r.mine ? '<div class="lbGap"></div>' + row(r.mine) : '') : '<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>完成活動就會出現你的成績</small></span></div>');
 }

@@ -120,7 +120,7 @@ async function render() {
   const foilOn = (x: any) => !!(x.foil || (x.me && D.foil?.()));
   const nameInner = (x: any) => {
     const at = x.atitle ? `<em class="lbAt">${esc(x.atitle)}</em>` : '';
-    return `<span class="lbWho">${at}<b class="lbNick">${esc(x.nick)}</b></span><small class="lbId">#${esc(x.tag)}</small>`;
+    return `<span class="lbWho">${at}<small class="lbId">#${esc(x.tag)}</small></span><b class="lbNick">${esc(x.nick)}</b>`;
   };
   const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
     (x.me ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>` : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span>`) + '</div>';

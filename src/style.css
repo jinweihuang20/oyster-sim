@@ -717,10 +717,10 @@ body.tutOn #feed{display:none!important}
 .lbEmpty .ic{font-size:36px;opacity:.7}.lbEmpty small{font-weight:400;font-size:13px}
 .lbRow{display:grid;grid-template-columns:2em minmax(0,1fr) auto auto;align-items:center;column-gap:8px;margin:0;padding:6px 8px;background:rgba(255,255,255,.35)}
 .lbR{width:auto;flex-shrink:0}
-.lbN{display:flex;flex-direction:column;align-items:stretch;gap:1px;min-width:0;overflow:visible;white-space:normal}
-.lbWho{display:flex;align-items:baseline;gap:4px;min-width:0;max-width:100%}
-.lbNick{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:900}
-.lbId,.lbN small.lbId{display:block;margin:0;opacity:.7;font-size:11px;line-height:1.25;white-space:nowrap;flex-shrink:0}
+.lbN{display:flex;flex-direction:column;align-items:stretch;gap:1px;width:100%;min-width:0;max-width:100%;overflow:visible;white-space:normal;justify-self:stretch}
+.lbWho{display:flex;align-items:baseline;gap:4px;min-width:0;max-width:100%;flex-shrink:0}
+.lbNick{display:block;width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:900}
+.lbId,.lbN small.lbId{display:inline;margin:0;opacity:.7;font-size:11px;line-height:1.25;white-space:nowrap;flex-shrink:0}
 .lbT{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lbV{text-align:right;min-width:3.5em;flex-shrink:0;font-variant-numeric:tabular-nums}
 .lbA{display:grid;grid-template-columns:repeat(2,48px);gap:4px;flex-shrink:0}
@@ -1078,7 +1078,7 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 #achBan .ic{width:30px;height:30px;background-color:#ffd25a;flex-shrink:0}
 #achBan span{display:flex;flex-direction:column;line-height:1.2}#achBan small{font-size:12px;opacity:.85}#achBan b{font:900 18px var(--sign)}#achBan em{font-style:normal;font-size:13px;color:#ffd25a}
 .lbAt,.fdA{font-style:normal;font-size:.8em;font-weight:900;margin-right:0;padding:0 4px;border:1.5px solid currentColor;border-radius:2px;color:#b8322a;white-space:nowrap;flex-shrink:0}
-.lbFoil{display:flex;flex-direction:column;align-items:stretch;gap:1px;min-width:0;max-width:100%;width:100%;box-sizing:border-box;padding:3px 8px 4px;border:1.5px solid #c9a227;box-shadow:inset 0 0 0 1px #ecd27a,0 1px 3px rgba(201,162,39,.22);background:rgba(255,248,220,.38);border-radius:3px}
+.lbFoil{display:flex;flex-direction:column;align-items:stretch;align-self:stretch;gap:1px;min-width:0;max-width:100%;width:100%;box-sizing:border-box;padding:3px 8px 4px;border:1.5px solid #c9a227;box-shadow:inset 0 0 0 1px #ecd27a,0 1px 3px rgba(201,162,39,.22);background:rgba(255,248,220,.38);border-radius:3px}
 .fdA{color:#ffd25a}
 
 #achBan.tap.on{pointer-events:auto;cursor:pointer}
