@@ -657,7 +657,7 @@ function hashPid(pid: string) {
 
   void bubblesHost;
 
-  const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: 0.36, depthTest: false });
+  const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: 0.36 });
   selfBubble.sprite.visible = false;
   root.add(selfBubble.sprite);
   let selfBubUntil = 0;
@@ -669,7 +669,6 @@ function hashPid(pid: string) {
   function ensureTag(nick: string, isNpc = false) {
     const tag = makeWorldLabel(nick, 'name', {
       worldH: 0.24,
-      depthTest: false,
       nameTone: isNpc ? 'npc' : 'player',
     });
     tag.sprite.visible = false;
@@ -692,7 +691,7 @@ function hashPid(pid: string) {
   }
 
   function ensureBubble(isNpc = false) {
-    const el = makeWorldLabel(' ', 'bubble', { worldH: 0.36, depthTest: false, nameTone: isNpc ? 'npc' : 'player' });
+    const el = makeWorldLabel(' ', 'bubble', { worldH: 0.36, nameTone: isNpc ? 'npc' : 'player' });
     el.sprite.visible = false;
     root.add(el.sprite);
     return el;

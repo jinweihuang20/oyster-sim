@@ -15,7 +15,7 @@ import {
   initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
   setWalking, setNearSeat, clearWalkInput,
-  makeWorldLabel, type WorldLabel,
+  makeWorldLabel, renderSceneWithLocalAvatarOnTop, type WorldLabel,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
 import {
@@ -299,9 +299,9 @@ function makeNpc(d: NpcDef) {
   markBowlDrawOrder(bowlM);
   bowl.y = npcBowlY + 0.05;
   // 掛 scene、每幀對齊頭世界座標（勿掛 head，轉頭會把 +Y 偏移帶歪）
-  const tag = makeWorldLabel(d.name, 'name', { worldH: 0.2, depthTest: false });
+  const tag = makeWorldLabel(d.name, 'name', { worldH: 0.2 });
   tag.sprite.visible = false; scene.add(tag.sprite);
-  const bubble = makeWorldLabel(' ', 'bubble', { worldH: 0.32, depthTest: false });
+  const bubble = makeWorldLabel(' ', 'bubble', { worldH: 0.32 });
   bubble.sprite.visible = false; scene.add(bubble.sprite);
   npcs.push({ ...a, tag, name: d.name, rate: d.rate, chatty: d.chatty, peek: d.peek, count: 0, pause: 0, look: 0, bubble, bubT: 0, lean: 0, cyc: Math.random(), dur: d.rate, ev: 0, mood: 0, angry: 0, distract: 0, turnDir: 1, windup: 0, throwCd: rnd(15, 30), stuck: null, baseY: 0, oy, top, meat, bowl, bowlMeat: [], bowlM });
 }
@@ -3852,7 +3852,7 @@ function frameBody() {
   if (paused) {
     clock.getDelta(); if (!pauseAt) { pauseAt = now; holding = false; stopSteal(); closeUmbrella(); down = null; flRelease(); joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
     skyDome.tick(viewCam(), now / 1000);
-    renderer.render(scene, viewCam()); scheduleFrame(); return;
+    renderSceneWithLocalAvatarOnTop(renderer, scene, viewCam(), plazaMe?.outer); scheduleFrame(); return;
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
   const rdt = Math.min(clock.getDelta(), 0.05);
@@ -4103,7 +4103,7 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     ? 0
     : (mix.eco ? 18 : 26) + Math.sin(t * 1.3) * (mix.eco ? 0.5 : 1.0);
   skyDome.tick(viewCam(), t);
-  renderer.render(scene, viewCam());
+  renderSceneWithLocalAvatarOnTop(renderer, scene, viewCam(), plazaMe?.outer);
   scheduleFrame();
 }
 function plazaGuidePending() {
