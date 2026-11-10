@@ -121,7 +121,7 @@ export const TIDAL_FLAT = {
   zMin: -10.2,
   zMax: 10.2,
 } as const;
-export const SIT_DIST = 1.15;
+export const SIT_DIST = 0.8;
 
 /** 4×4 蚵仔堆中心 */
 export function pileCenter(pileId: number, out = new THREE.Vector3()) {
