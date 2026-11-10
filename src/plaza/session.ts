@@ -1033,9 +1033,8 @@ export function plazaRefreshFlagUi() {
 }
 
 export async function plazaTrySetFlagText(text: string) {
-  const clipped = clipFlagText(text);
   if (client?.connected) {
-    const r = await client.setFlagText(clipped);
+    const r = await client.setFlagText(text);
     if (r.ok && r.flag) {
       myFlagText = r.flag.text;
       if (r.flag.planted) upsertFlag(r.flag);
@@ -1048,6 +1047,15 @@ export async function plazaTrySetFlagText(text: string) {
 export async function plazaTryUpgradeFlag(track: string) {
   if (client?.connected) {
     const r = await client.upgradeFlag(track);
+    if (r.ok && r.flag?.planted) upsertFlag(r.flag);
+    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null };
+  }
+  return { ok: false as const, err: 'no_conn', mine: null };
+}
+
+export async function plazaTrySelectFlag(track: string, level: number) {
+  if (client?.connected) {
+    const r = await client.selectFlag(track, level);
     if (r.ok && r.flag?.planted) upsertFlag(r.flag);
     return { ok: !!r.ok, err: r.err, mine: r.flag ?? null };
   }

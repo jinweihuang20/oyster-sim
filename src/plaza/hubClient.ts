@@ -505,4 +505,14 @@ export class PlazaClient {
       return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };
     }
   }
+
+  async selectFlag(track: string, level: number) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', flag: undefined as PlazaFlagState | undefined };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any }>('SelectFlag', track, level);
+      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined };
+    } catch {
+      return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };
+    }
+  }
 }

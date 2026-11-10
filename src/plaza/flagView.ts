@@ -34,6 +34,9 @@ type FlagObj = {
 function hexCss(n: number) {
   return '#' + (n >>> 0).toString(16).padStart(6, '0');
 }
+function shownColor(f: PlazaFlagState) { return f.colorSel; }
+function shownSize(f: PlazaFlagState) { return f.sizeSel; }
+function shownFx(f: PlazaFlagState) { return f.fxSel; }
 
 function paintFlag(canvas: HTMLCanvasElement, text: string, colorLv: number) {
   const spec = flagColorOf(colorLv);
@@ -142,12 +145,12 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
     const canvas = document.createElement('canvas');
     canvas.width = TEX_W;
     canvas.height = TEX_H;
-    paintFlag(canvas, f.text, f.color);
+    paintFlag(canvas, f.text, shownColor(f));
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.minFilter = THREE.LinearFilter;
     tex.magFilter = THREE.LinearFilter;
-    const spec = flagColorOf(f.color);
+    const spec = flagColorOf(shownColor(f));
     const mat = new THREE.MeshLambertMaterial({
       map: tex,
       side: THREE.DoubleSide,
@@ -178,7 +181,7 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
     group.add(base, pole, finial, cloth, pillar, sparks);
     const o: FlagObj = {
       k: f.k, group, cloth, mat, tex, canvas, pillar, sparks, sparkPos, sparkLife,
-      text: f.text, color: f.color, size: f.size, fx: f.fx,
+      text: f.text, color: shownColor(f), size: shownSize(f), fx: shownFx(f),
       seed: hashSeed(f.k), x: f.x, z: f.z,
     };
     applyPose(o, f);
@@ -189,19 +192,19 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
     o.x = f.x; o.z = f.z;
     o.group.position.set(f.x, 0, f.z);
     o.group.rotation.y = f.yaw;
-    const sc = flagSizeOf(f.size).scale;
+    const sc = flagSizeOf(shownSize(f)).scale;
     o.group.scale.setScalar(sc);
-    if (o.text !== f.text || o.color !== f.color) {
-      paintFlag(o.canvas, f.text, f.color);
+    if (o.text !== f.text || o.color !== shownColor(f)) {
+      paintFlag(o.canvas, f.text, shownColor(f));
       o.tex.needsUpdate = true;
-      const spec = flagColorOf(f.color);
+      const spec = flagColorOf(shownColor(f));
       o.mat.emissive.setHex(spec.style === 'foil' || spec.style === 'gradient' ? 0x3a2a10 : 0x000000);
       o.mat.emissiveIntensity = spec.style === 'foil' ? 0.18 : 0;
       o.text = f.text;
-      o.color = f.color;
+      o.color = shownColor(f);
     }
-    o.size = f.size;
-    o.fx = f.fx;
+    o.size = shownSize(f);
+    o.fx = shownFx(f);
   }
 
   function hashSeed(k: string) {

@@ -13,6 +13,9 @@ export type PlazaFlagState = {
   color: number;
   size: number;
   fx: number;
+  colorSel: number;
+  sizeSel: number;
+  fxSel: number;
   planted: boolean;
 };
 
@@ -88,6 +91,11 @@ export const FLAG_ERR_ZH: Record<string, string> = {
   nosup: '這台伺服器還沒開放插旗',
   max: '這一項已經升到頂了',
   grow: '旗變大後會跟隔壁的旗太近，先換個地方再升級',
+  locked: '這個選項還沒解鎖',
+  cafe_door: '咖啡店門口不能插旗',
+  seafood_door: '樸子腳門口不能插旗',
+  no_flag: '還沒有自己的旗幟',
+  offline: '現在連不上伺服器，請稍後再試',
   no_conn: '還沒連上廣場',
   no_pid: '找不到你的存檔編號',
 };
@@ -95,6 +103,35 @@ export const FLAG_ERR_ZH: Record<string, string> = {
 export function flagErrText(err?: string) {
   if (!err) return '沒成功';
   return FLAG_ERR_ZH[err] || err;
+}
+
+/** 儲存旗上文字時的說明（和插旗的 nosup 用詞不同） */
+export function flagTextErr(err?: string) {
+  const extra: Record<string, string> = {
+    too_long: '旗上最多寫 12 個字',
+    url: '旗上不能寫網址',
+    bad_text: '這句話有不適當的字，換一句吧',
+    control: '旗上不能有奇怪的符號',
+    no_flag: '還沒有自己的旗幟',
+    nosup: '這台伺服器還沒更新，暫時不能改旗上的字',
+    offline: '現在連不上伺服器，請稍後再試',
+    no_conn: '現在連不上伺服器，請稍後再試',
+    not_joined: '要先進入廣場',
+    slow: '慢一點再試',
+    no_pid: '找不到你的存檔編號',
+  };
+  if (err && extra[err]) return extra[err];
+  return flagErrText(err);
+}
+
+/** 伺服器有修剪或截斷時，回給玩家看的補充說明 */
+export function flagTextSaveNote(sent: string, got: string) {
+  if (sent === got) return '';
+  const trimmed = (sent ?? '').trim();
+  if (trimmed === got && sent !== trimmed) return '已幫你去掉頭尾空白';
+  if (trimmed.length > got.length) return '已幫你縮成 12 個字';
+  if (sent !== got) return '已幫你調整內容';
+  return '';
 }
 
 export function flagColorOf(lv: number) {
@@ -122,6 +159,15 @@ function fin(n: unknown, fallback = 0) {
 }
 
 export function normFlagDto(e: any): PlazaFlagState {
+  const color = Math.max(0, fin(e?.color ?? e?.Color, 0) | 0);
+  const size = Math.max(0, fin(e?.size ?? e?.Size, 0) | 0);
+  const fx = Math.max(0, fin(e?.fx ?? e?.Fx, 0) | 0);
+  const colorSelRaw = e?.colorSel ?? e?.ColorSel;
+  const sizeSelRaw = e?.sizeSel ?? e?.SizeSel;
+  const fxSelRaw = e?.fxSel ?? e?.FxSel;
+  const colorSel = colorSelRaw == null ? color : Math.min(color, Math.max(0, fin(colorSelRaw, color) | 0));
+  const sizeSel = sizeSelRaw == null ? size : Math.min(size, Math.max(0, fin(sizeSelRaw, size) | 0));
+  const fxSel = fxSelRaw == null ? fx : Math.min(fx, Math.max(0, fin(fxSelRaw, fx) | 0));
   return {
     k: String(e?.k ?? e?.K ?? ''),
     nick: String(e?.nick ?? e?.Nick ?? ''),
@@ -130,9 +176,7 @@ export function normFlagDto(e: any): PlazaFlagState {
     z: fin(e?.z ?? e?.Z),
     yaw: fin(e?.yaw ?? e?.Yaw),
     text: String(e?.text ?? e?.Text ?? ''),
-    color: Math.max(0, fin(e?.color ?? e?.Color, 0) | 0),
-    size: Math.max(0, fin(e?.size ?? e?.Size, 0) | 0),
-    fx: Math.max(0, fin(e?.fx ?? e?.Fx, 0) | 0),
+    color, size, fx, colorSel, sizeSel, fxSel,
     planted: !!(e?.planted ?? e?.Planted),
   };
 }
@@ -176,10 +220,10 @@ export async function postFlagText(pid: string, text: string): Promise<{ ok: boo
     });
     if (r.status === 404) return { ok: false, err: 'nosup' };
     const j = await r.json().catch(() => null);
-    if (!j) return { ok: false, err: 'nosup' };
+    if (!j) return { ok: false, err: r.status >= 500 ? 'offline' : 'nosup' };
     return { ok: !!j.ok, err: j.err, mine: j.mine ? normFlagDto(j.mine) : null };
   } catch {
-    return { ok: false, err: 'nosup' };
+    return { ok: false, err: 'offline' };
   }
 }
 
@@ -196,6 +240,23 @@ export async function postFlagUpgrade(pid: string, track: FlagTrack): Promise<{ 
     if (!j) return { ok: false, err: 'nosup' };
     return { ok: !!j.ok, err: j.err, mine: j.mine ? normFlagDto(j.mine) : null };
   } catch {
-    return { ok: false, err: 'nosup' };
+    return { ok: false, err: 'offline' };
+  }
+}
+
+export async function postFlagSelect(pid: string, track: FlagTrack, level: number): Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }> {
+  if (!pid) return { ok: false, err: 'no_pid' };
+  try {
+    const r = await fetch(`${flagApiBase()}/plaza/flag/select`, {
+      method: 'POST', mode: 'cors', cache: 'no-store',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ pid, track, level }),
+    });
+    if (r.status === 404) return { ok: false, err: 'nosup' };
+    const j = await r.json().catch(() => null);
+    if (!j) return { ok: false, err: r.status >= 500 ? 'offline' : 'nosup' };
+    return { ok: !!j.ok, err: j.err, mine: j.mine ? normFlagDto(j.mine) : null };
+  } catch {
+    return { ok: false, err: 'offline' };
   }
 }

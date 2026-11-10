@@ -7,9 +7,9 @@ import {
 } from '../deathmatch';
 import type * as THREE from 'three';
 import {
-  FLAG_ERR_ZH, FLAG_ITEM, FLAG_TEXT_MAX,
-  clipFlagText, fetchFlagSnapshot, flagColorOf, flagErrText, flagFxOf, flagSizeOf, nextFlagItem,
-  postFlagText, postFlagUpgrade, type FlagTrack, type PlazaFlagState,
+  FLAG_COLORS, FLAG_ERR_ZH, FLAG_FX, FLAG_ITEM, FLAG_SIZES, FLAG_TEXT_MAX,
+  fetchFlagSnapshot, flagErrText, flagTextErr, flagTextSaveNote, nextFlagItem,
+  postFlagSelect, postFlagText, postFlagUpgrade, type FlagTrack, type PlazaFlagState,
 } from '../plaza/flags';
 
 export type Knife = { id: string; n: string; price: number; green: number; speed: number; steps: number; stab: number; seam: number; luck: number; blade: number; desc: string };
@@ -36,6 +36,7 @@ export type YardShopDeps = {
   onFlagChange?: () => void;
   setFlagText?: (text: string) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   upgradeFlag?: (track: FlagTrack) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
+  selectFlag?: (track: FlagTrack, level: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   clearBowlMeat: () => void;
   renderClothShop: () => void;
   renderMedShop: () => void;
@@ -283,17 +284,25 @@ function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
     const can = save.money >= px(FLAG_ITEM.id, FLAG_ITEM.price);
     return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">買了可以在廣場插一支自己的旗，寫上最多 ${FLAG_TEXT_MAX} 個字。走到想放的地方按「插旗」，再插一次會搬到新位置。每個人同時只能有一支旗。</p><button data-fbuy ${can ? '' : 'disabled'}>${pxHtml(FLAG_ITEM.id, FLAG_ITEM.price)}</button>${pxCd(FLAG_ITEM.id)}</div>`;
   }
-  const color = flagColorOf(mine?.color ?? 0);
-  const size = flagSizeOf(mine?.size ?? 0);
-  const fx = flagFxOf(mine?.fx ?? 0);
+  const unlockedColor = mine?.color ?? 0;
+  const unlockedSize = mine?.size ?? 0;
+  const unlockedFx = mine?.fx ?? 0;
+  const selectedColor = mine?.colorSel ?? unlockedColor;
+  const selectedSize = mine?.sizeSel ?? unlockedSize;
+  const selectedFx = mine?.fxSel ?? unlockedFx;
   const text = D.esc(mine?.text || '');
-  const trackRow = (label: string, cur: string, track: FlagTrack, lv: number) => {
-    const nxt = nextFlagItem(track, lv);
-    if (!nxt) return `<div class="flagTrack"><span>${label}：<b>${cur}</b></span><span class="flagMax">已到頂</span></div>`;
-    const can = save.money >= px(nxt.id, nxt.price);
-    return `<div class="flagTrack"><span>${label}：<b>${cur}</b></span><button data-fup="${track}" ${can ? '' : 'disabled'}>下一檔 ${D.esc(nxt.n.replace(/^旗幟[^：]*：/, ''))} ${pxHtml(nxt.id, nxt.price)}</button>${pxCd(nxt.id)}</div>`;
+  const trackRow = (label: string, track: FlagTrack, unlocked: number, selected: number, opts: { lv: number; n: string }[]) => {
+    const chips = opts.filter(o => o.lv <= unlocked).map(o => {
+      const on = o.lv === selected;
+      return `<button type="button" class="flagChip${on ? ' on' : ''}" data-fsel="${track}" data-lv="${o.lv}"${on ? ' aria-current="true"' : ''}>${D.esc(o.n)}</button>`;
+    }).join('');
+    const nxt = nextFlagItem(track, unlocked);
+    const buy = nxt
+      ? `<button data-fup="${track}" ${save.money >= px(nxt.id, nxt.price) ? '' : 'disabled'}>解鎖 ${D.esc(nxt.n.replace(/^旗幟[^：]*：/, ''))} ${pxHtml(nxt.id, nxt.price)}</button>${pxCd(nxt.id)}`
+      : '<span class="flagMax">已全部解鎖</span>';
+    return `<div class="flagTrack"><div class="flagTrackHd">${label}</div><div class="flagChips">${chips}</div>${buy}</div>`;
   };
-  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。</p><label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button>${trackRow('顏色', color.n, 'color', color.lv)}${trackRow('尺寸', size.n, 'size', size.lv)}${trackRow('特效', fx.n, 'fx', fx.lv)}</div>`;
+  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選。</p><label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
 }
 
 function bindFlagShop(mine: PlazaFlagState | null) {
@@ -314,16 +323,42 @@ function bindFlagShop(mine: PlazaFlagState | null) {
   };
   const saveBtn = box.querySelector<HTMLButtonElement>('button[data-fsave]');
   if (saveBtn) saveBtn.onclick = async () => {
+    if (saveBtn.disabled) return;
+    if (!D.getSave().shop.owned.includes(FLAG_ITEM.id)) { D.toast(flagTextErr('no_flag'), '#ffb08a'); return; }
     const inp = box.querySelector<HTMLInputElement>('#flagTextIn');
-    const text = clipFlagText(inp?.value || '');
+    const raw = inp?.value ?? '';
     const pid = D.getPlayerId();
-    let r = D.setFlagText ? await D.setFlagText(text) : null;
-    if (!r || r.err === 'no_conn') r = await postFlagText(pid, text);
-    if (!r.ok) { D.toast(flagErrText(r.err), '#ffb08a'); return; }
-    if (D.getAc()) D.SFX.jingle();
-    D.toast('旗上的字已更新', '#9be37a');
-    renderFlagShop(r.mine ?? mine);
+    saveBtn.disabled = true;
+    try {
+      let r = D.setFlagText ? await D.setFlagText(raw) : null;
+      if (!r || r.err === 'no_conn') r = await postFlagText(pid, raw);
+      if (!r.ok) { D.toast(flagTextErr(r.err), '#ffb08a'); return; }
+      const got = r.mine?.text ?? '';
+      if (inp) inp.value = got;
+      const note = flagTextSaveNote(raw, got);
+      D.toast(note ? `旗幟文字已儲存（${note}）` : '旗幟文字已儲存', '#9be37a');
+      if (D.getAc()) D.SFX.jingle();
+      renderFlagShop(r.mine ?? mine);
+    } finally {
+      if (saveBtn.isConnected) saveBtn.disabled = false;
+    }
   };
+  box.querySelectorAll<HTMLButtonElement>('button[data-fsel]').forEach(b => {
+    b.onclick = async () => {
+      const track = b.getAttribute('data-fsel') as FlagTrack | null;
+      const lv = Number(b.getAttribute('data-lv'));
+      if (!track || !Number.isFinite(lv)) return;
+      const cur = track === 'color' ? (mine?.colorSel ?? mine?.color ?? 0) : track === 'size' ? (mine?.sizeSel ?? mine?.size ?? 0) : (mine?.fxSel ?? mine?.fx ?? 0);
+      if (lv === cur) return;
+      let r = D.selectFlag ? await D.selectFlag(track, lv) : null;
+      if (!r || r.err === 'no_conn') r = await postFlagSelect(D.getPlayerId(), track, lv);
+      if (!r.ok) {
+        D.toast(r.err === 'nosup' ? '這台伺服器還沒開放挑選旗幟樣式' : flagErrText(r.err), '#ffb08a');
+        return;
+      }
+      renderFlagShop(r.mine ?? mine);
+    };
+  });
   box.querySelectorAll<HTMLButtonElement>('button[data-fup]').forEach(b => {
     b.onclick = async () => {
       const track = b.getAttribute('data-fup') as FlagTrack | null;
