@@ -516,10 +516,15 @@ export class PlazaClient {
     }
   }
 
-  async upgradeFlag(track: string) {
+  async upgradeFlag(track: string, from?: number) {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', flag: undefined as PlazaFlagState | undefined };
+    let r: { ok: boolean; err?: string; flag?: any } | undefined;
     try {
-      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any }>('UpgradeFlag', track);
+      if (from != null) {
+        try { r = await this.conn.invoke('UpgradeFlagFrom', track, from); }
+        catch { r = undefined; } // 舊伺服器沒有這個方法：改用舊的
+      }
+      if (!r) r = await this.conn.invoke('UpgradeFlag', track);
       return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined };
     } catch {
       return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };

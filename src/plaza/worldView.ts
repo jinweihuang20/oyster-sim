@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
 import {
-  AMA_LOOKS, AMA_SCALE, AMA_SIT_LIFT, AMA_CARRY_TILT, AMA_CARRY_Y, AMA_CARRY_FWD, AMA_CARRY_ROLL,
+  AMA_LOOKS, AMA_SCALE, AMA_SIT_LIFT, AMA_CARRY_TILT, AMA_CARRY_Y, AMA_CARRY_FWD, AMA_CARRY_ROLL, AMA_CARRY_LIE_BACK, AMA_CARRY_LIE_Y,
   amaCarrySide, pickAmaLook, amaShirtHex,
   dressPlazaAma, dressPlazaAber, applyAmaAppearance,
 } from './amaLook';
@@ -131,6 +131,7 @@ export type PlazaWorldView = {
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) => void;
   setSelfPose: (x: number, z: number, yaw: number, seated: boolean, smoke?: boolean, connId?: string) => void;
+  setSelfBody: (pz: string, pk: number, jy: number) => void;
   setSelfCushion: (on: boolean, pileId: number, slot: number) => void;
   playThrowFx: (connId: string) => void;
   /** 遠端抽一口：start 舉臂吸氣；end 放下並依 holdMs 吐煙 */
@@ -1504,10 +1505,19 @@ function hashPid(pid: string) {
     for (const o of remotes.values()) if (o.carriedBy === connId) return true;
     return false;
   }
-  function findCarrierPose(connId: string): { x: number; z: number; yaw: number } | null {
-    if (selfConnId && connId === selfConnId) return { x: selfX, z: selfZ, yaw: selfYaw };
+  /** 自己的蹲／躺程度與跳躍高度（main 每幀餵），抱著的阿婆跟著調高度 */
+  let selfBody = { pz: '', pk: 0, jy: 0 };
+  function setSelfBody(pz: string, pk: number, jy: number) { selfBody = { pz, pk, jy }; }
+  type CarrierPose = { x: number; z: number; yaw: number; pz: string; pk: number; jy: number };
+  function findCarrierPose(connId: string): CarrierPose | null {
+    if (selfConnId && connId === selfConnId) return { x: selfX, z: selfZ, yaw: selfYaw, ...selfBody };
     for (const o of remotes.values()) {
-      if (o.connId === connId) return { x: o.x, z: o.z, yaw: o.yaw };
+      if (o.connId === connId) {
+        const oj = o as any;
+        let jy = 0;
+        if (oj.jt) { const el = (performance.now() - oj.jt) / 1000; if (el >= 0 && el < PLAZA_JUMP_DUR) jy = plazaJumpHeight(el); }
+        return { x: o.x, z: o.z, yaw: o.yaw, pz: oj.pz || '', pk: oj.pk || 0, jy };
+      }
     }
     return null;
   }
@@ -1678,18 +1688,23 @@ function hashPid(pid: string) {
       let rotZ = 0;
       if (r.carriedBy && (r.phase || '') !== 'moon') {
         const car = findCarrierPose(r.carriedBy);
+        // 抱的人蹲：整個人往下 0.4；躺：阿婆橫趴在對方胸口（身體往面向反方向倒）；跳：一起跳
+        const lk = car && car.pz === 'lie' ? car.pk : 0;
+        const ck = car && car.pz === 'crouch' ? car.pk : 0;
+        const tilt = AMA_CARRY_TILT + (Math.PI / 2 - AMA_CARRY_TILT) * lk;
         if (car) {
           const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw);
           const sx = Math.cos(car.yaw), sz = -Math.sin(car.yaw);
           // 模型原點在腳底：前傾後髖會沿角色 +Z（＝抱人者右方）移出，往回扣才會橫躺在胸口
-          const tilt = AMA_CARRY_TILT;
           const side = amaCarrySide(tilt);
-          r.x = r.tx = car.x + fx * AMA_CARRY_FWD - sx * side;
-          r.z = r.tz = car.z + fz * AMA_CARRY_FWD - sz * side;
+          const fwd = AMA_CARRY_FWD * (1 - lk) - AMA_CARRY_LIE_BACK * lk;
+          r.x = r.tx = car.x + fx * fwd - sx * side;
+          r.z = r.tz = car.z + fz * fwd - sz * side;
           r.yaw = r.tyaw = car.yaw + Math.PI / 2;
         }
-        ox = r.x; oz = r.z; oy = AMA_CARRY_Y;
-        rotX = AMA_CARRY_TILT; rotZ = AMA_CARRY_ROLL;
+        ox = r.x; oz = r.z;
+        oy = AMA_CARRY_Y + (AMA_CARRY_LIE_Y - AMA_CARRY_Y) * lk - 0.4 * ck + (car ? car.jy : 0);
+        rotX = tilt; rotZ = AMA_CARRY_ROLL * (1 - lk);
         posePlazaCarried(r.rig);
       } else if (!r.seated && anyoneCarriedBy(r.connId)) {
         posePlazaCarryHold(r.rig);
@@ -1867,7 +1882,7 @@ function hashPid(pid: string) {
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfCushion, playThrowFx, applyRemotePuff, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfBody, setSelfCushion, playThrowFx, applyRemotePuff, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {

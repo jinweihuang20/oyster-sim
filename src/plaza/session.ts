@@ -1091,9 +1091,9 @@ export async function plazaTrySetFlagText(text: string) {
   return { ok: false as const, err: 'no_conn', mine: null };
 }
 
-export async function plazaTryUpgradeFlag(track: string) {
+export async function plazaTryUpgradeFlag(track: string, from?: number) {
   if (client?.connected) {
-    const r = await client.upgradeFlag(track);
+    const r = await client.upgradeFlag(track, from);
     if (r.ok && r.flag?.planted) upsertFlag(r.flag);
     return { ok: !!r.ok, err: r.err, mine: r.flag ?? null };
   }
@@ -1451,6 +1451,9 @@ export function plazaToggleMap() {
   panel.classList.add('open');
   refreshPlazaMap();
 }
+
+/** 自己蹲／躺／跳的程度，給抱著的阿婆調高度 */
+export function plazaSetSelfBody(pz: string, pk: number, jy: number) { view?.setSelfBody(pz, pk, jy); }
 
 export function tickPlaza(dt: number) {
   if (!active || !deps) return;

@@ -16,6 +16,9 @@ export const AMA_CARRY_TILT = 1.05;
 export const AMA_CARRY_Y = 0.54;
 export const AMA_CARRY_FWD = 0.28;
 export const AMA_CARRY_ROLL = 0.06;
+/** 抱的人躺下：阿婆移到胸口（往頭的方向）並平趴的位置 */
+export const AMA_CARRY_LIE_BACK = 0.8;
+export const AMA_CARRY_LIE_Y = 0.42;
 
 export function amaCarrySide(tilt = AMA_CARRY_TILT) {
   return AMA_HIP_Y * AMA_SCALE * Math.sin(tilt);

@@ -80,6 +80,7 @@ export const FLAG_ERR_ZH: Record<string, string> = {
   walkway: '不能插在主要走道上',
   no_flag_zone: '東南邊店家前這一帶不能插旗，換個地方吧',
   too_close: '離別人的旗太近了',
+  stale: '等級剛更新過，這次沒有扣錢，請看清楚再買',
   blocked: '這裡太擠，換個地方插',
   far: '走到要插的地方再按',
   seated: '站著才能插旗',
@@ -228,13 +229,13 @@ export async function postFlagText(pid: string, text: string): Promise<{ ok: boo
   }
 }
 
-export async function postFlagUpgrade(pid: string, track: FlagTrack): Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }> {
+export async function postFlagUpgrade(pid: string, track: FlagTrack, from?: number): Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }> {
   if (!pid) return { ok: false, err: 'no_pid' };
   try {
     const r = await fetch(`${flagApiBase()}/plaza/flag/upgrade`, {
       method: 'POST', mode: 'cors', cache: 'no-store',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ pid, track }),
+      body: JSON.stringify(from == null ? { pid, track } : { pid, track, from }),
     });
     if (r.status === 404) return { ok: false, err: 'nosup' };
     const j = await r.json().catch(() => null);

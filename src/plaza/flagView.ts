@@ -22,6 +22,7 @@ type FlagObj = {
   sparks: THREE.Points;
   sparkPos: Float32Array;
   sparkLife: Float32Array;
+  waveGeo: THREE.PlaneGeometry | null;
   text: string;
   nick: string;
   color: number;
@@ -103,8 +104,10 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
   const baseGeo = new THREE.CylinderGeometry(0.08, 0.11, 0.08, 6);
   baseGeo.translate(0, 0.04, 0);
   baseGeo.userData.sharedGeo = true;
-  const clothGeo = new THREE.PlaneGeometry(1.12, 0.72, 1, 1);
+  // 旗面切 10 段，飄動時逐段彎曲（離旗桿越遠擺越大）；有飄動特效的旗才各自複製一份來變形
+  const clothGeo = new THREE.PlaneGeometry(1.12, 0.72, 10, 2);
   clothGeo.userData.sharedGeo = true;
+  const clothBaseX = Float32Array.from({ length: clothGeo.attributes.position.count }, (_, i) => clothGeo.attributes.position.getX(i));
   const pillarGeo = new THREE.PlaneGeometry(0.42, 3.4);
   pillarGeo.translate(0, 1.7, 0);
   pillarGeo.userData.sharedGeo = true;
@@ -122,7 +125,7 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
   });
   const sparkMat = new THREE.PointsMaterial({
     color: 0xffe9a0,
-    size: 0.08,
+    size: 0.16,
     transparent: true,
     opacity: 0.9,
     blending: THREE.AdditiveBlending,
@@ -194,7 +197,7 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
     sparks.userData.sharedMat = true;
     group.add(base, pole, finial, cloth, pillar, sparks);
     const o: FlagObj = {
-      k: f.k, group, cloth, mat, tex, canvas, pillar, sparks, sparkPos, sparkLife,
+      k: f.k, group, cloth, mat, tex, canvas, pillar, sparks, sparkPos, sparkLife, waveGeo: null,
       text: f.text, nick: f.nick, color: shownColor(f), size: shownSize(f), fx: shownFx(f),
       seed: hashSeed(f.k), x: f.x, z: f.z,
     };
@@ -220,6 +223,26 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
     }
     o.size = shownSize(f);
     o.fx = shownFx(f);
+    // 閃光要有發光色才看得到：一般布色原本 emissive 是黑色，強度怎麼調都不會亮
+    if (o.fx >= 2) o.mat.emissive.setHex(0xffd27a);
+    else { const sp = flagColorOf(o.color); o.mat.emissive.setHex(sp.style === 'foil' || sp.style === 'gradient' ? 0x3a2a10 : 0x000000); }
+    if (o.fx >= 1 && !o.waveGeo) { o.waveGeo = clothGeo.clone(); o.cloth.geometry = o.waveGeo; }
+    else if (o.fx < 1 && o.waveGeo) { o.cloth.geometry = clothGeo; o.waveGeo.dispose(); o.waveGeo = null; }
+  }
+
+  function bendCloth(o: FlagObj, t: number, amp: number) {
+    const g = o.waveGeo;
+    if (!g) return;
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const x0 = clothBaseX[i];
+      const u = (x0 + 0.56) / 1.12; // 0＝旗桿邊 → 1＝旗尾
+      const y = pos.getY(i);
+      pos.setZ(i, amp * u * (Math.sin(u * 5.2 - t * 4.2) * 0.16 + Math.sin(u * 2.4 - t * 2.3 + y * 1.5) * 0.06));
+      pos.setX(i, x0 - amp * u * u * 0.04);
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
   }
 
   function hashSeed(k: string) {
@@ -233,6 +256,7 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
     o.mat.dispose();
     o.tex.dispose();
     o.sparks.geometry.dispose();
+    o.waveGeo?.dispose();
   }
 
   function sync(list: PlazaFlagState[]) {
@@ -307,14 +331,17 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
       const onScreen = frustum.containsPoint(tmp);
       if (o.fx >= 1 && d < WAVE_NEAR) {
         const w = t * 2.1 + o.seed * 12;
-        o.cloth.rotation.y = Math.sin(w) * 0.1;
-        o.cloth.rotation.z = Math.sin(w * 0.73 + 0.4) * 0.07;
+        o.cloth.rotation.y = Math.sin(w) * 0.06;
+        o.cloth.rotation.z = Math.sin(w * 0.73 + 0.4) * 0.03;
+        if (onScreen) bendCloth(o, t + o.seed * 7, 1);
       } else {
         o.cloth.rotation.y = 0;
         o.cloth.rotation.z = 0;
       }
       if (o.fx >= 2 && d < SHIMMER_NEAR) {
-        const pulse = 0.12 + 0.22 * (0.5 + 0.5 * Math.sin(t * 3.4 + o.seed * 9));
+        // 每 2.4 秒閃一下金光，平常微亮
+        const ph = ((t + o.seed * 5) % 2.4) / 2.4;
+        const pulse = 0.06 + 0.06 * Math.sin(t * 3.4 + o.seed * 9) + (ph < 0.18 ? Math.sin(ph / 0.18 * Math.PI) * 0.55 : 0);
         o.mat.emissiveIntensity = pulse;
       } else {
         o.mat.emissiveIntensity = flagColorOf(o.color).style === 'foil' ? 0.18 : 0;

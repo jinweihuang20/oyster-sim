@@ -53,7 +53,7 @@ import {
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
 import {
-  openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
+  openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaSetSelfBody, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
@@ -1435,7 +1435,7 @@ initYardShop({
   onFlagChange: () => plazaRefreshFlagUi(),
   setFlagText: (text) => plazaTrySetFlagText(text),
   showFlag: (on) => on ? plazaTryShowFlag() : plazaTryRemoveFlag(),
-  upgradeFlag: (track) => plazaTryUpgradeFlag(track),
+  upgradeFlag: (track, from) => plazaTryUpgradeFlag(track, from),
   selectFlag: (track, level) => plazaTrySelectFlag(track, level),
   clearBowlMeat: () => { if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; } },
   renderClothShop,
@@ -1763,6 +1763,35 @@ function plazaOnStealCaught(nick: string) {
 }
 /** 廣場飛殼／受擊世代：離開廣場後作廢延遲回呼，避免關場後還跑 hurt */
 let plazaShellGen = 0;
+/** 廣場被丟殼預警：和工寮阿婆一樣先蓄力約 1 秒、亮 ⚠ 方向＋提示，再飛過來 */
+type PlazaWarn = { e: PlazaShellEvent; left: number; w0: number; warned: boolean; gen: number };
+const plazaWarns: PlazaWarn[] = [];
+const PLAZA_WINDUP = 1.0;
+let plazaThrowToMe: { e: PlazaShellEvent; at: number } | null = null;
+function plazaWarnStart(e: PlazaShellEvent) {
+  const w: PlazaWarn = { e, left: PLAZA_WINDUP, w0: PLAZA_WINDUP, warned: !gearOn('radio'), gen: plazaShellGen };
+  if (w.warned) SFX.alert();
+  plazaWarns.push(w);
+}
+/** 每幀：倒數、收音機晚亮、時間到才飛殼並在落地時結算 */
+function plazaWarnTick(dt: number): PlazaWarn | null {
+  let show: PlazaWarn | null = null;
+  for (let i = plazaWarns.length - 1; i >= 0; i--) {
+    const w = plazaWarns[i];
+    if (w.gen !== plazaShellGen || !plazaMode) { plazaWarns.splice(i, 1); continue; }
+    w.left -= dt;
+    if (!w.warned && w.left <= Math.min(w.w0, Math.max(0.5, w.w0 * 0.5))) { w.warned = true; SFX.alert(); }
+    if (w.left <= 0) {
+      plazaWarns.splice(i, 1);
+      const gen = w.gen;
+      try { plazaFlyShell(w.e); } catch { /* 動畫失敗也要結算 */ }
+      later(0.55, () => { if (gen !== plazaShellGen) return; resolvePlazaInbound(w.e); });
+      continue;
+    }
+    if (w.warned && (!show || w.left < show.left)) show = w;
+  }
+  return show;
+}
 function plazaShellCoordsOk(e: PlazaShellEvent) {
   return [e.fromX, e.fromY, e.fromZ, e.toX, e.toY, e.toZ].every(Number.isFinite);
 }
@@ -3306,13 +3335,22 @@ function launchPlaza() {
         if (e.fromConnId && e.fromConnId === plazaConnId()) return;
         if (!plazaMode || !isPlazaActive()) return;
         plazaPlayThrowFx(e.fromConnId);
+        if (e.toConnId && e.toConnId === plazaConnId()) {
+          // 打向自己：一般丟殼會接著收到 ShellInbound，改成先預警再飛；反彈回來的沒有 Inbound，稍等後照常飛
+          const rec = { e, at: performance.now() };
+          plazaThrowToMe = rec;
+          const gen = plazaShellGen;
+          later(0.15, () => { if (gen !== plazaShellGen || plazaThrowToMe !== rec) return; plazaThrowToMe = null; plazaFlyShell(e); });
+          return;
+        }
         plazaFlyShell(e);
       } catch (err) { console.error('plaza shell throw', err); }
     },
     onShellInbound: (e) => {
       // 飛行動畫約 0.55s 後結算；世代號避免離開廣場後還結算
-      const gen = plazaShellGen;
-      later(0.55, () => { if (gen !== plazaShellGen) return; resolvePlazaInbound(e); });
+      plazaThrowToMe = null; // 這顆由預警流程負責飛＋結算
+      if (!plazaMode || !isPlazaActive()) return;
+      plazaWarnStart(e);
     },
     onShellReflectHit: (e) => {
       // 反彈飛回約 0.4s；視覺走 ShellThrow，這裡結算傷害＋提示
@@ -3790,11 +3828,14 @@ function frameBody() {
     }
     updHud();
   }
+  if (plazaMode) plazaSetSelfBody(walking ? lastPose : '', walking ? poseK : 0, walking ? jumpY : 0);
   tickPlaza(rdt);
+  const pw = plazaWarnTick(rdt);
   // ⚠ 方向提示
   if (warnNpc && !warnNpc.warned) warnNpc = null;
-  if (warnNpc) {
-    _warnRel.copy(warnNpc.g.position).sub(camera.position);
+  if (warnNpc || pw) {
+    if (pw) _warnRel.set(pw.e.fromX, pw.e.fromY, pw.e.fromZ).sub(camera.position);
+    else _warnRel.copy(warnNpc!.g.position).sub(camera.position);
     camera.getWorldDirection(_warnFwd);
     let a = Math.atan2(_warnRel.x, _warnRel.z) - Math.atan2(_warnFwd.x, _warnFwd.z);
     a = Math.atan2(Math.sin(a), Math.cos(a));
@@ -3805,7 +3846,7 @@ function frameBody() {
     if (warnEl.style.left !== wLeft) warnEl.style.left = wLeft;
     if (warnEl.style.opacity !== wOp) warnEl.style.opacity = wOp;
     if (warnEl.textContent !== wTxt) warnEl.textContent = wTxt;
-    hint.textContent = `${warnNpc.name}要丟殼過來了！快${COARSE ? '按住「雨傘」' : '按住 R／「雨傘」'}！`;
+    hint.textContent = `${pw ? (pw.e.fromNick || '有人') : warnNpc!.name}要丟殼過來了！快${COARSE ? '按住「雨傘」' : '按住 R／「雨傘」'}！`;
   } else if (warnEl.classList.contains('on')) warnEl.classList.remove('on');
   for (const n of npcs) {
     n.look -= dt; n.bubT -= rdt;
