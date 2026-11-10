@@ -786,17 +786,20 @@ function buildFeetDetails(rig: PlayerRig, feet: EquipVis) {
     } else if (feet.id === 'ft_boots') {
       const yel = SM('boot-yel', 0xffffff, { map: makeEqTexture(feet), roughness: 0.72 });
       const yelD = SM('boot-yelD', 0xd4a010, { roughness: 0.75 });
-      add(host, G('rboot-shaft', () => rcyl(0.08, 0.085, 0.18, 10)), yel, [0, -0.20, -0.02]);
-      add(host, G('rboot-cuff', () => rcyl(0.09, 0.09, 0.03, 10)), yelD, [0, -0.105, -0.02]);
+      // 小腿是 0.13 寬的方柱，對角半徑約 0.092；舊筒徑 0.08～0.085 會讓膚色邊角穿出鞋面
+      const cover = (m: THREE.Mesh) => { m.renderOrder = 1; return m; };
+      cover(add(host, G('rboot-shaft2', () => rcyl(0.105, 0.11, 0.20, 10)), yel, [0, -0.21, -0.02]));
+      cover(add(host, G('rboot-cuff2', () => rcyl(0.115, 0.115, 0.03, 10)), yelD, [0, -0.105, -0.02]));
     } else if (feet.id === 'ft_work') {
       const brn = SM('wboot', 0xffffff, { map: makeEqTexture(feet), roughness: 0.8 });
       const brnD = SM('wbootD', 0x4a3018, { roughness: 0.78 });
       const lace = SM('wboot-lace', 0xe8d8a8, { roughness: 0.7 });
-      add(host, G('wboot-shaft', () => rcyl(0.075, 0.082, 0.12, 10)), brn, [0, -0.24, -0.02]);
-      add(host, G('wboot-toe', () => rbox(0.145, 0.055, 0.08)), brnD, [0, -0.325, -0.10]);
-      add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.22, -0.09]);
-      add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.248, -0.09]);
-      add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.276, -0.09]);
+      const cover = (m: THREE.Mesh) => { m.renderOrder = 1; return m; };
+      cover(add(host, G('wboot-shaft2', () => rcyl(0.105, 0.11, 0.14, 10)), brn, [0, -0.24, -0.02]));
+      cover(add(host, G('wboot-toe', () => rbox(0.145, 0.055, 0.08)), brnD, [0, -0.325, -0.10]));
+      cover(add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.22, -0.09]));
+      cover(add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.248, -0.09]));
+      cover(add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.276, -0.09]));
     }
   }
 }

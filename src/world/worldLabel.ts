@@ -245,9 +245,22 @@ export function renderSceneWithLocalAvatarOnTop(
   renderer.shadowMap.enabled = false;
   scene.background = null;
   camera.layers.set(LOCAL_AVATAR_LAYER);
+  // LessEqual 再畫一次時，幾乎貼在一起的小腿與雨鞋會互搶深度，膚色腿會蓋過鞋面；改 Equal 只重塗第一趟已寫入的角色像素，名牌沒寫深度故仍會被自己擋住
+  const prevDepthFn: { mat: THREE.Material; fn: THREE.DepthModes }[] = [];
+  localRoot.traverse(o => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const mat of mats) {
+      if (!mat) continue;
+      prevDepthFn.push({ mat, fn: mat.depthFunc });
+      mat.depthFunc = THREE.EqualDepth;
+    }
+  });
   try {
     renderer.render(scene, camera);
   } finally {
+    for (const { mat, fn } of prevDepthFn) mat.depthFunc = fn;
     camera.layers.mask = prevMask;
     renderer.autoClear = prevAuto;
     renderer.autoClearColor = prevAutoColor;
