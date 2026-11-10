@@ -1587,3 +1587,6 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
  #top #pzTopOn svg{width:15px;height:15px}
  body.plazaMode #top,body.plazaRoam #top{top:calc(env(safe-area-inset-top,0px) + 4px)}
 }
+
+/* 廣場裡開商店／圖鑑／裝備要蓋過廣場名牌、HUD 與按鈕 */
+body:is(.plazaMode,.plazaRoam) :is(#shop,#dex,#equip).show{z-index:9600!important}
