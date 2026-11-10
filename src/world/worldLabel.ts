@@ -232,15 +232,28 @@ export function renderSceneWithLocalAvatarOnTop(
   scene.traverse(o => { if ((o as THREE.Light).isLight) o.layers.enable(LOCAL_AVATAR_LAYER); });
   const prevMask = camera.layers.mask;
   const prevAuto = renderer.autoClear;
+  const prevAutoColor = renderer.autoClearColor;
+  const prevAutoDepth = renderer.autoClearDepth;
+  const prevAutoStencil = renderer.autoClearStencil;
   const prevShadow = renderer.shadowMap.enabled;
+  const prevBg = scene.background;
+  // Three.js 只要 scene.background 是 Color，即使 autoClear=false 也會 forceClear 整張畫布（含深度），世界就會被清掉只剩本機角色
   renderer.autoClear = false;
+  renderer.autoClearColor = false;
+  renderer.autoClearDepth = false;
+  renderer.autoClearStencil = false;
   renderer.shadowMap.enabled = false;
+  scene.background = null;
   camera.layers.set(LOCAL_AVATAR_LAYER);
   try {
     renderer.render(scene, camera);
   } finally {
     camera.layers.mask = prevMask;
     renderer.autoClear = prevAuto;
+    renderer.autoClearColor = prevAutoColor;
+    renderer.autoClearDepth = prevAutoDepth;
+    renderer.autoClearStencil = prevAutoStencil;
     renderer.shadowMap.enabled = prevShadow;
+    scene.background = prevBg;
   }
 }
