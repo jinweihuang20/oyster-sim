@@ -1690,7 +1690,7 @@ function hashPid(pid: string) {
     const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
     // 燈數固定，只調亮度，不開關 visible（three.js 增減燈會重編著色器）
     // 省電：吊燈改靠外觀球自發光，關掉動態點光
-    for (const pl of roofLamps) pl.intensity = eco ? 0 : roofLampBaseI;
+    for (const pl of roofLamps) pl.intensity = roofLampBaseI;
     tickDetailLod(dt, cx, cz);
 
     const k = Math.min(1, dt * 10);
