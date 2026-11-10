@@ -68,6 +68,7 @@ import {
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
 import { GOLD_SMOKE_TINT, encodeCosmetics } from './plaza/cosmetics';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
+import { registerBrightRenderer, setSceneBrightness, clampBright, BRIGHT_DEF } from './world/sceneBrightness';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
   $, on, toast, initDomToast, tickToast,
@@ -405,10 +406,10 @@ const leanFaces: THREE.Group[] = [];
 for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x3a9a6a : 0xe86878, s < 0 ? 0x444444 : 0xc8c8c8).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
-type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean; eco: boolean; rotTip: boolean };
-const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE, rotTip: true };
+type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean; eco: boolean; rotTip: boolean; bright: number };
+const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE, rotTip: true, bright: BRIGHT_DEF };
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
-  const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
+  const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; m.bright = clampBright(m.bright); return m; })();
 /** 廣場陰影不每幀重算（約 4 次／秒）；工寮仍每幀更新 */
 let plazaShadowAcc = 0;
 function applyPlazaShadowMode() {
@@ -440,6 +441,8 @@ function applyEcoGfx() {
   try { updSky(); } catch { /* 啟動時 sky／mix 尚未就緒 */ }
 }
 applyEcoGfx();
+registerBrightRenderer(renderer);
+setSceneBrightness(mix.bright);
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
 const STATS_URL = 'https://game-status.gwtech.org/e';
 const statsId = (() => { try { let v = LS.getItem('oyster-stats-id'); if (!v) { v = crypto.randomUUID(); LS.setItem('oyster-stats-id', v); } return v; } catch { return 'anon-' + Math.random().toString(36).slice(2, 14); } })();
@@ -3731,6 +3734,12 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
 { const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：降解析・關陰影・簡材質／少燈・降面（重新整理後 AA／精度／GPU／網格才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU／網格才會變）', '#9be37a'); }; }
+{ const el = $('v_bright') as HTMLInputElement; const pct = $('v_brightPct'); const syncBrightUi = () => { el.value = String(Math.round(mix.bright * 100)); pct.textContent = `${Math.round(mix.bright * 100)}%`; };
+  const applyBright = (n: number, save: boolean) => { mix.bright = setSceneBrightness(n); syncBrightUi(); if (save) applyMix(); };
+  syncBrightUi();
+  el.oninput = () => applyBright(Number(el.value) / 100, true);
+  $('v_brightReset').onclick = () => applyBright(BRIGHT_DEF, true);
+}
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => $('dex').classList.remove('show');
 

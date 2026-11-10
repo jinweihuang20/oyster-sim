@@ -1,5 +1,6 @@
 // 死鬥模式 session：場景組裝＋對局邏輯（武器／場地／破壞物見同目錄模組）
 import * as THREE from 'three';
+import { registerBrightRenderer } from '../world/sceneBrightness';
 import { WALK, SPRINT, HALF, EYE, R, PILES, PICK_R, SPAWNS, MAX_HP, makeCoverBoxes } from './constants';
 import type { Part, Fighter, Shell, DmUmb } from './types';
 import { WEAPON_DEFS, makeWeapon, buildWeaponView, armBurst, cooldownAfterShot, isWeaponId, partDamage, type Weapon, type WeaponId } from './weapons';
@@ -218,6 +219,7 @@ ${isTouch
   const LO = isTouch || matchMedia('(max-width: 900px)').matches;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LO, powerPreference: LO ? 'low-power' : 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, LO ? 1.25 : 2));
+  const unregBright = registerBrightRenderer(renderer);
   renderer.shadowMap.enabled = !LO;
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0xa8d0e8); scene.fog = new THREE.Fog(0xc0d8e0, LO ? 16 : 20, LO ? 55 : 70);
   const FOV0 = 70;
@@ -1325,7 +1327,7 @@ ${isTouch
   function teardown() {
     cancelAnimationFrame(raf); removeEventListener('keydown', kd); removeEventListener('keyup', ku); removeEventListener('resize', resize); removeEventListener('blur', blur); removeEventListener('mouseup', mu);
     document.removeEventListener('pointerlockchange', plc); if (document.pointerLockElement === canvas) document.exitPointerLock();
-    renderer.dispose(); root.remove(); active = false; delete (window as any).__dm;
+    unregBright(); renderer.dispose(); root.remove(); active = false; delete (window as any).__dm;
   }
   function requestExit() {
     if (document.pointerLockElement) document.exitPointerLock();

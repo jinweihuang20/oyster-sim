@@ -67,6 +67,7 @@ export function makeWorldLabel(
     depthTest,
     depthWrite: false,
     sizeAttenuation: true,
+    toneMapped: false,
   });
   const sprite = new THREE.Sprite(mat);
   sprite.center.set(0.5, 0);
