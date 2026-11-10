@@ -1,4 +1,5 @@
 export {
+  ROOM_ENABLED,
   isRoomActive, openRoomCreate, openRoomJoin, closeRoom, bindRoom,
   roomSyncScore, roomRemainSec, currentRoomSnap,
   roomTick, roomTrySit, roomStandWalk, roomNearPrompt, roomSeated, roomWalkBodies,

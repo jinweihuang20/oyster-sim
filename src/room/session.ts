@@ -50,13 +50,16 @@ let carriedConn = '';
 let poseAt = 0;
 let outfitSent = false;
 
+/** 主選單好友房入口；先關閉，程式保留以便之後再開。 */
+export const ROOM_ENABLED = false;
+
 export function bindRoom(h: RoomHooks) { hooks = h; }
 export function isRoomActive() { return !!snap; }
 export function currentRoomSnap() { return snap; }
 export function roomRemainSec() { return snap?.remainSec ?? 0; }
 
-export function openRoomCreate() { showSetup('create'); }
-export function openRoomJoin() { showSetup('join'); }
+export function openRoomCreate() { if (!ROOM_ENABLED) return; showSetup('create'); }
+export function openRoomJoin() { if (!ROOM_ENABLED) return; showSetup('join'); }
 
 export async function closeRoom(backToMenu = true) {
   const h = hooks;
