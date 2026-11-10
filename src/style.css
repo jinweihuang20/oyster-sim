@@ -1766,3 +1766,72 @@ body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!importan
 .clothTryAct{margin-top:10px}
 .clothTryAct button{width:100%;min-height:42px;background:#2a5a86!important;color:#fff!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:10px!important;box-shadow:0 2px 8px rgba(0,0,0,.22)!important;font-weight:800}
 .clothTryAct button:disabled{opacity:.55}
+
+/* 好友房地點卡：深藍實色，放在廣場旁邊 */
+#locPick .loc.locRoom{
+  position:relative;overflow:visible;padding-top:12px!important;
+  border:2px solid var(--ink)!important;border-radius:2px!important;
+  background:#2a5a86 var(--corr)!important;
+  box-shadow:2px 2px 8px rgba(0,0,0,.18)!important;
+  color:#fff!important;
+  cursor:default;
+}
+#locPick .loc.locRoom .pzTag{
+  position:absolute;top:-8px;left:8px;z-index:2;
+  background:#ffe08a;color:var(--ink);border:2px solid var(--ink);
+  box-shadow:2px 2px 0 var(--ink);padding:1px 7px;font:900 11px var(--sign);
+  letter-spacing:.06em;line-height:1.2
+}
+#locPick .loc.locRoom .ln{font-weight:900;letter-spacing:.03em;text-shadow:1px 1px 0 rgba(0,0,0,.35)}
+#locPick .loc.locRoom small.ld{color:rgba(255,253,247,.9);font-weight:700}
+#locPick .loc.locRoom .rmBtns{display:flex;gap:6px;margin-top:8px}
+#locPick .loc.locRoom .rmBtns button{
+  flex:1;min-height:40px;margin:0;padding:6px 8px;border:1.5px solid rgba(255,255,255,.45);
+  border-radius:6px;background:rgba(16,24,32,.45);color:#fff;font-weight:800;backdrop-filter:blur(8px)
+}
+#locPick .loc.locRoom .rmBtns button:active{transform:translate(1px,1px)}
+
+/* 好友房開／加入視窗、場內狀態列 */
+#roomModal{position:fixed;inset:0;z-index:13000;display:none;align-items:center;justify-content:center;background:rgba(8,12,18,.55);padding:16px}
+#roomModal.show{display:flex}
+#roomModal .rmCard,#roomLayer .rmHud{
+  width:min(92vw,420px);max-height:min(86vh,640px);overflow:auto;
+  background:rgba(22,28,36,.82);color:#f4f6f8;border:1.5px solid rgba(255,255,255,.28);
+  border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.28);backdrop-filter:blur(14px);padding:14px 16px
+}
+#roomModal h3{margin:0 0 8px;font-size:20px}
+#roomModal p,#roomModal label{display:block;margin:8px 0 4px;font-size:13px;font-weight:700;color:#e8edf2}
+#roomModal input[type=text],#roomModal input:not([type=range]){
+  width:100%;box-sizing:border-box;min-height:44px;padding:8px 10px;letter-spacing:.12em;
+  text-transform:uppercase;font-weight:800;font-size:18px;text-align:center;
+  border:1.5px solid rgba(255,255,255,.35);border-radius:8px;background:rgba(10,14,20,.55);color:#fff
+}
+.rmScenes,.rmModes,.rmActs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.rmScene,.rmMode,#roomModal button,#roomLayer button{
+  min-height:40px;padding:6px 10px;border:1.5px solid rgba(255,255,255,.35);border-radius:8px;
+  background:rgba(16,24,32,.45);color:#f4f6f8;font-weight:800;backdrop-filter:blur(8px)
+}
+.rmScene.on,.rmMode.on,button.rmPri{background:#2a5a86;border-color:#2a5a86;color:#fff}
+#roomLayer{position:fixed;z-index:9200;top:calc(var(--sa-top) + 8px);left:calc(var(--sa-left) + 8px);right:auto;bottom:auto;display:none;pointer-events:none}
+#roomLayer.show{display:block}
+#roomLayer .rmHud{pointer-events:auto;width:min(92vw,360px)}
+#roomLayer .rmHead{margin-bottom:8px}
+#roomLayer .rmHead b{display:block;font-size:18px;letter-spacing:.06em}
+#roomLayer .rmHead small{color:#d5dce4}
+#roomLayer .rmCount{font-size:64px;font-weight:900;text-align:center;line-height:1;margin:8px 0;color:#fff}
+#roomLayer .rmList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+#roomLayer .rmList li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:6px 8px;border:1px solid rgba(255,255,255,.2);border-radius:6px}
+#roomLayer .rmList li.me{border-color:#ffe08a}
+#roomLayer .rmList li b{font-size:14px}
+#roomLayer .rmList li small{opacity:.85;font-size:12px}
+#roomLayer .rmList button{min-height:32px;padding:2px 8px;font-size:12px}
+#roomLayer .rmEdit{margin:8px 0;font-size:13px}
+#roomLayer .rmWait{margin:0;font-size:13px;color:#d5dce4}
+body.roomPlay #roomLayer{top:auto;bottom:calc(var(--sa-bottom) + 8px);left:calc(var(--sa-left) + 8px)}
+body.roomPlay #roomLayer .rmHud{padding:8px 10px;width:min(92vw,320px)}
+body.roomPlay #roomLayer .rmList li button,body.roomPlay .rmEdit{display:none}
+body.roomResults #roomLayer{inset:0;display:flex;align-items:center;justify-content:center;background:rgba(8,12,18,.45);top:0;left:0;right:0;bottom:0}
+body.roomResults #roomLayer .rmHud{width:min(92vw,420px)}
+body.roomMode #overlay,body.roomMode #shedLoad{display:none!important}
+input[type=range]#rmSeats,input[type=range]#rmDur,input[type=range]#rmGoal,
+input[type=range]#rmEdSeats,input[type=range]#rmEdDur,input[type=range]#rmEdGoal{width:100%}

@@ -44,6 +44,7 @@ import {
   initPersist, persist, initDaily, renderDaily, openDaily, claimDaily, checkReturn,
   initGifts, checkGifts, giftAlert, giftBadge, giftMsg, giftLabel, applyGift, renderGifts,
 } from './meta';
+import { bindRoom, openRoomCreate, openRoomJoin, closeRoom, isRoomActive, roomSyncScore, roomRemainSec, currentRoomSnap } from './room';
 import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
 import {
@@ -456,7 +457,9 @@ initAudio({
 (window as any).__mus = musDebug;
 
 // ---------- 難度、珍珠、奇物、存檔 ----------
-const locNow = () => LOCS.find(l => l.id === save.loc && (l.need === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
+/** 好友房：房間指定場景（不看自己有沒有解鎖） */
+let roomLoc: string | null = null, roomPlay = false;
+const locNow = () => (roomLoc ? LOCS.find(l => l.id === roomLoc) : undefined) ?? LOCS.find(l => l.id === save.loc && (l.need === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
 const locW = () => locNow().w;
 const RAR = [
   { name: '白珍珠', color: 0xf4f1ea, css: '#f4f1ea', w: 70, price: 200, emo: '⚪', tease: '最常見的珍珠，多剝幾顆就有' },
@@ -1083,10 +1086,12 @@ function updHud() {
   const hpPct = String(Math.round(hp));
   if (hudPrev.hpPct !== hpPct) { hudPrev.hpPct = hpPct; const hpEl = document.getElementById('hpPct'); if (hpEl) hpEl.textContent = hpPct; }
   const timerLab = $('timer').previousElementSibling as HTMLElement | null;
-  const labTxt = plazaMode ? '模式' : '剩餘';
+  const labTxt = plazaMode || (roomPlay && currentRoomSnap()?.endMode !== 'timed') ? '模式' : '剩餘';
   if (timerLab && hudPrev.timerLab !== labTxt) { hudPrev.timerLab = labTxt; timerLab.textContent = labTxt; }
   const timerTxt = plazaMode
     ? '休閒'
+    : roomPlay
+    ? (currentRoomSnap()?.endMode === 'timed' ? (() => { const s = roomRemainSec(); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; })() : '好友房')
     : (() => { const s = Math.max(0, Math.ceil(timeLeft)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; })();
   if (hudPrev.timer !== timerTxt) { hudPrev.timer = timerTxt; $('timer').textContent = timerTxt; }
   if (hudPrev.count !== count) { hudPrev.count = count; $('count').innerHTML = `<i class="ic ic-oyster"></i> ${count}`; }
@@ -2055,7 +2060,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= eco.workedMinCount, queen = all[0].me && !temp && worked;
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
   const titles: string[] = []; let bonus = 0;
-  if (!plazaMode) {
+  if (!plazaMode && !roomPlay) {
     if (thrown === 0 && !temp && worked) { titles.push(`🕊 和平${esc(myName())}（+$${eco.peaceBonus}）`); bonus = eco.peaceBonus; }
     if (worked && shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
     if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
@@ -2068,19 +2073,23 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     ? Math.max(1, Math.round((performance.now() - plazaPlayAt) / 1000))
     : Math.round(shiftLen - Math.max(0, timeLeft));
   const seatLabel = plazaMode ? (() => { const s = plazaMySeat(); return s ? `p${s.pileId}s${s.slot}` : 'plaza'; })() : (save.seat ?? 'door');
-  if (!plazaMode) save.days++;
-  tickTrial(); autoUnlock(); save.best = Math.max(save.best, count); if (queen && !plazaMode) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
+  if (!plazaMode && !roomPlay) save.days++;
+  tickTrial(); autoUnlock(); save.best = Math.max(save.best, count); if (queen && !plazaMode && !roomPlay) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
-  if (!plazaMode) {
+  if (!plazaMode && !roomPlay) {
     for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
     achShift({ worked, temp, waste, cracked, steals, caught, hitsTaken, thrown, ev, evDone, evEarly, cnt: count });
   }
   const evHtml = ev ? evFinish(ev, evDone, evEarly) : '';
   const creditLocal = () => {
     save.money += lastPay.earn; persist();
-    if (!tut && !SHOT) { const td = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); let inc = 0; try { const o = JSON.parse(LS.getItem('oyster-lb-day') || '{}'); inc = o.d === td ? o.v : 0; } catch { } inc += Math.max(0, lastPay.earn); try { LS.setItem('oyster-lb-day', JSON.stringify({ d: td, v: inc })); } catch { } Social.submit({ income: inc, oysters: count, pearls: save.dex.reduce((a, b) => a + b, 0) }); }
+    if (!tut && !SHOT) Social.addPlayIncome(Math.max(0, lastPay.earn), { oysters: count, pearls: save.dex.reduce((a, b) => a + b, 0) });
   };
-  if (plazaMode) {
+  if (roomPlay) {
+    persist();
+    plazaPayWait = null;
+    track('room_end', { loc: locNow().id, item: 'room', count, earn, dur: durSec, reason: endReason });
+  } else if (plazaMode) {
     persist();
     track('plaza_end', { loc: locNow().id, item: 'plaza', count, opened, missed, perfects, cracked, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, dur: durSec, seat: seatLabel, reason: handPain ? 'hand' : endReason, dstat: dstatStr(), mode: 'plaza' });
     plazaPayWait = plazaReportEarn(earn, count, durSec).then(payout => {
@@ -2132,7 +2141,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
       if (b) b.disabled = false;
     });
   }
-  $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); if (ac) SFX.endJingle(queen && !handPain && !plazaMode);
+  if (!roomPlay) $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); if (ac) SFX.endJingle(queen && !handPain && !plazaMode);
 }
 function revealPearl(r: number) { react3('cheer');
   sleeveGold(); dayPearls.push(r); save.dex[r]++; if (r === 3) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
@@ -2614,7 +2623,8 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   const pzN = plazaOnlineN;
   const pzLive = pzN != null && pzN > 0;
   const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}${pzLive ? ' live' : ''}" data-loc="plaza"><span class="pzTag">多人</span><span class="ln">🦪 蚵仔廣場</span><span class="lm">${pzN != null ? `<i class="pzDot" aria-hidden="true"></i>${pzN} 人在線` : '連線中…'}</span><small>${plazaCur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${plazaCountLabel()}</small></button>`;
-  el.innerHTML = `<div class="locHead">${headTxt}</div><div class="locRow">` + plazaCard + LOCS.map(l => {
+  const roomCard = `<div class="loc locRoom"><span class="pzTag">好友</span><span class="ln">好友房</span><small class="ld">開一間房間，和朋友在同一個場景剝蚵</small><span class="rmBtns"><button type="button" data-room="create">開房間</button><button type="button" data-room="join">加入房間</button></span></div>`;
+  el.innerHTML = `<div class="locHead">${headTxt}</div><div class="locRow">` + plazaCard + roomCard + LOCS.map(l => {
     const own = l.need === 0 || save.locs!.includes(l.id), cur = !plazaCur && cl!.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
     if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small>${cur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${l.d}</small></button>`;
@@ -2623,6 +2633,10 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   const mark = (id?: string) => { if (id && !seen.includes(id)) { seen.push(id); persist(); } };
   el.querySelectorAll<HTMLButtonElement>('button.loc').forEach(b => b.addEventListener('click', () => mark(b.dataset.loc || b.dataset.lbuy), { capture: true }));
   requestAnimationFrame(() => el.querySelector('.loc.cur')?.scrollIntoView({ block: 'nearest', inline: 'center' }));
+  el.querySelectorAll<HTMLButtonElement>('[data-room]').forEach(b => b.onclick = ev => {
+    ev.stopPropagation(); audio();
+    if (b.dataset.room === 'join') openRoomJoin(); else openRoomCreate();
+  });
   el.querySelectorAll<HTMLButtonElement>('[data-loc]').forEach(b => b.onclick = () => {
     save.loc = b.dataset.loc;
     persist(); renderLocs();
@@ -2889,7 +2903,7 @@ const go = (len: number) => {
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 function launchDeathmatch(mode: DmMode) {
   $('overlay').classList.remove('show');
-  openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })(), grantOdd: (i) => { if (!Number.isInteger(i) || i < 0 || i >= ODD.length || ODD[i].limited) return null; save.odd[i] = (save.odd[i] ?? 0) + 1; if (rarOf(ODD[i].weight) === 'legend') { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(ODD[i].weight), via: 'dm' }); return { name: ODD[i].name, line: ODD[i].line, n: save.odd[i], color: ODD[i].color }; }, ownedWeapons: ownedWeaponIds(), equippedWeapon: weaponNow(), setEquippedWeapon: (id) => { if (!isWeaponId(id) || !ownsWeapon(id)) return; save.shop.equipped.weapon = id; persist(); },     grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); track('dm_reward', { amount: n, via, mode: via === 'dm-horde' ? 'horde' : 'ffa', money: save.money }); },
+  openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })(), grantOdd: (i) => { if (!Number.isInteger(i) || i < 0 || i >= ODD.length || ODD[i].limited) return null; save.odd[i] = (save.odd[i] ?? 0) + 1; if (rarOf(ODD[i].weight) === 'legend') { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(ODD[i].weight), via: 'dm' }); return { name: ODD[i].name, line: ODD[i].line, n: save.odd[i], color: ODD[i].color }; }, ownedWeapons: ownedWeaponIds(), equippedWeapon: weaponNow(), setEquippedWeapon: (id) => { if (!isWeaponId(id) || !ownsWeapon(id)) return; save.shop.equipped.weapon = id; persist(); },     grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); Social.addPlayIncome(n); track('dm_reward', { amount: n, via, mode: via === 'dm-horde' ? 'horde' : 'ffa', money: save.money }); },
     reportMatchStart: (m) => {
       statsSid = crypto.randomUUID?.() ?? statsId + '-dm-' + Date.now();
       track('dm_start', { item: 'dm-' + m, mode: m });
@@ -3798,7 +3812,7 @@ function frameBody() {
   const now = performance.now();
   const paused = isPaused();
   // 選單／暫停約 15fps；遊玩一律上限 60fps（高更新率手機不再跑 90／120 幀發燙）
-  const minMs = (state !== 'play' || paused) ? 1000 / 15 : 1000 / 60;
+  const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15 : 1000 / 60;
   const since = now - lastDrawAt;
   if (since < minMs - 1.5) { scheduleFrame(); return; }
   // 餘數回扣：90Hz 等非整數倍螢幕平均仍接近 60fps
@@ -3830,7 +3844,8 @@ function frameBody() {
   let warnNpc: Npc | null = null;
   if (state === 'play') {
     // 廣場休閒：不倒數、不自動收工
-    if (!tut && !plazaMode) { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
+    if (!tut && !plazaMode && !roomPlay) { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
+    if (roomPlay) roomSyncScore();
     hp = Math.min(100, hp + dt / 6 * medM('regen')); tickMeds(dt);
     if (phase === 'seam') {
       rotTipTick(rdt); if (rotKey) rotTipTouch(); rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
@@ -4127,6 +4142,44 @@ initTutorial({
 });
 
 $('oTut').onclick = () => { const run = () => enterWorkShed(() => tutStart()); if (!save.tutDone) ensureNameThen(run); else run(); };
+bindRoom({
+  id: statsId,
+  nick: () => myName(),
+  toast: (t, c) => toast(t, c),
+  audio: () => audio(),
+  canEnter: () => state === 'menu' && !tut && !isPlazaActive() && !isDeathmatchActive() && !isRoomActive(),
+  enterScene: (scene, then) => {
+    roomLoc = scene; updSky(); applyCrew();
+    enterWorkShed(() => { state = 'menu'; syncShiftUi(); then(); });
+  },
+  applyScene: (scene) => { if (roomLoc !== scene) { roomLoc = scene; updSky(); applyCrew(); } },
+  startPlay: () => {
+    if (state === 'play') return;
+    roomPlay = true; evRun = null; shiftLen = 24 * 3600;
+    $('result').classList.remove('show');
+    startDay();
+    on('quitBtn', false);
+  },
+  finishPlay: () => {
+    if (state === 'play') { endReason = 'time'; endDay(); }
+    return { earn: Math.max(0, lastPay.earn), count, durSec: Math.max(1, Math.round(shiftLen - Math.max(0, timeLeft))) };
+  },
+  getCount: () => count,
+  getEarn: () => Math.max(0, meatPay + perfects * eco.perfectPay + bowlBonus - penalty),
+  grantPayout: (n) => {
+    const v = Math.max(0, Math.floor(n));
+    lastPay.earn = v;
+    if (v > 0) { save.money += v; persist(); }
+    track('room_reward', { amount: v, money: save.money });
+    toast(`好友房結算 +$${v}（身上 $${save.money}）`, '#9be37a');
+  },
+  leaveScene: () => {
+    if (state === 'play') { endReason = 'quit'; endDay(); }
+    $('result').classList.remove('show');
+    roomPlay = false;
+    returnToMainMenu(() => { roomLoc = null; shiftLen = SHIFT; updSky(); applyCrew(); });
+  },
+});
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
   label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : k === 'odd' ? `開到「${ODD[i]?.name ?? '奇物'}」` : k === 'ach' ? `達成金牌成就「${ACHS[i]?.n ?? '成就'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！`, title: () => achTitle(), foil: () => gearOn('nameFrame') });

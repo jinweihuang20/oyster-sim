@@ -89,6 +89,17 @@ let board = 'income', view: 'daily' | 'weekly' = 'daily';
 export function submit(s: { income?: number; oysters?: number; pearls?: number; dmKills?: number; dmWaves?: number }) {
   return post('/score', { scores: s }).then(() => { lastRank = 0; checkPassed(); });
 }
+
+/** 客戶端玩法收入（工寮／廣場剝蚵、死鬥獎金）累加到今日收入。伺服器發放的送座位／好友房不要走這裡，以免重覆入帳。 */
+export function addPlayIncome(amount: number, extra?: { oysters?: number; pearls?: number }) {
+  const n = Math.max(0, Math.floor(amount));
+  const td = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  let inc = 0;
+  try { const o = JSON.parse(D.LS.getItem('oyster-lb-day') || '{}'); inc = o.d === td ? o.v : 0; } catch { /* ignore */ }
+  inc += n;
+  try { D.LS.setItem('oyster-lb-day', JSON.stringify({ d: td, v: inc })); } catch { /* ignore */ }
+  return submit({ income: inc, ...extra });
+}
 let lastRank = 0;
 async function checkPassed() {
   const r = await get(`/top?board=income&view=daily&n=50&me=${D.id}${tq()}`);
