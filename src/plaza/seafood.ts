@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import {
-  WALK_BOUND, CAFE_OPENING, SEAFOOD_BUILDING, SEAFOOD_ARCADE_X, SEAFOOD_PILE_ID, SEAFOOD_SEAT_COUNT,
+  WALK_BOUND, CAFE_OPENING, SEAFOOD_BUILDING, SEAFOOD_ARCADE_X, SEAFOOD_PILE_ID, SEAFOOD_SEAT_COUNT, HQ_SEAT_SLOT,
   SEAFOOD_TABLE_X, SEAFOOD_TABLE_Z, SEAFOOD_TABLE_RADIUS, SEAFOOD_PROPS, seafoodColumnZ, seatPose, seatKey,
 } from './layout';
 import { CHAIR_SEAT_Y } from './props';
@@ -365,6 +365,28 @@ export function makePlazaSeafood(
       false,
     );
     seatPads.set(seatKey(SEAFOOD_PILE_ID, s), pad);
+  }
+  {
+    // 競選總部門口：一張可坐的白色塑膠椅（朝西，椅背在東側）
+    const pose = seatPose(SEAFOOD_PILE_ID, HQ_SEAT_SLOT);
+    const g = new THREE.Group();
+    g.position.set(pose.pos.x, 0, pose.pos.z);
+    g.rotation.y = pose.yaw;
+    root.add(g);
+    const plastic = M(0xf2f2ee, { roughness: 0.6 });
+    add(rboxEnv(0.42, 0.04, 0.42, 0.12), plastic, [0, CHAIR_SEAT_Y - 0.02, 0], g, true);
+    add(rboxEnv(0.42, 0.4, 0.04, 0.12), plastic, [0, CHAIR_SEAT_Y + 0.22, 0.2], g, true);
+    for (const [dx, dz] of [[-0.18, -0.18], [-0.18, 0.18], [0.18, -0.18], [0.18, 0.18]] as const) {
+      add(new THREE.BoxGeometry(0.04, CHAIR_SEAT_Y - 0.04, 0.04), plastic, [dx, (CHAIR_SEAT_Y - 0.04) / 2, dz], g, false);
+    }
+    const pad = add(
+      new THREE.CylinderGeometry(0.28, 0.28, 0.025, 16),
+      M(0x5a9ad0, { transparent: true, opacity: 0.32, roughness: 0.2 }),
+      [0, 0.015, 0],
+      g,
+      false,
+    );
+    seatPads.set(seatKey(SEAFOOD_PILE_ID, HQ_SEAT_SLOT), pad);
   }
 
   return {
