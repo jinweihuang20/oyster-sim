@@ -1811,7 +1811,13 @@ body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!importan
   min-height:40px;padding:6px 10px;border:1.5px solid rgba(255,255,255,.35);border-radius:8px;
   background:rgba(16,24,32,.45);color:#f4f6f8;font-weight:800;backdrop-filter:blur(8px)
 }
-.rmScene.on,.rmMode.on,button.rmPri{background:#2a5a86;border-color:#2a5a86;color:#fff}
+.rmScene.on,.rmMode.on,button.rmPri,
+#roomModal button.rmScene.on,#roomModal button.rmMode.on,#roomModal button.rmPri,
+#roomLayer button.rmScene.on,#roomLayer button.rmMode.on,#roomLayer button.rmPri{
+  background:#2a5a86;border-color:#9cc3e6;color:#fff;box-shadow:0 0 0 2px rgba(156,195,230,.45)
+}
+#roomModal button.rmScene.on::before,#roomModal button.rmMode.on::before,
+#roomLayer button.rmScene.on::before,#roomLayer button.rmMode.on::before{content:'\2713';margin-right:4px;font-weight:900}
 #roomLayer{position:fixed;z-index:9200;top:calc(var(--sa-top) + 8px);left:calc(var(--sa-left) + 8px);right:auto;bottom:auto;display:none;pointer-events:none}
 #roomLayer.show{display:block}
 #roomLayer .rmHud{pointer-events:auto;width:min(92vw,360px)}
