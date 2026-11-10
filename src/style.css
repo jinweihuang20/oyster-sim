@@ -1784,7 +1784,7 @@ body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!importan
 }
 #locPick .loc.locRoom .ln{font-weight:900;letter-spacing:.03em;text-shadow:1px 1px 0 rgba(0,0,0,.35)}
 #locPick .loc.locRoom small.ld{color:rgba(255,253,247,.9);font-weight:700}
-#locPick .loc.locRoom .rmBtns{display:flex;gap:6px;margin-top:8px}
+#locPick .loc.locRoom .rmBtns{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 #locPick .loc.locRoom .rmBtns button{
   flex:1;min-height:40px;margin:0;padding:6px 8px;border:1.5px solid rgba(255,255,255,.45);
   border-radius:6px;background:rgba(16,24,32,.45);color:#fff;font-weight:800;backdrop-filter:blur(8px)
