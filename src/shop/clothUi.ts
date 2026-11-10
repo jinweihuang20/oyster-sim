@@ -154,6 +154,19 @@ export function eqSvg(e: Eq, w = 72, grey = false) {
 function eqIcon(e: Eq, w = 72, grey = false) {
   return `<span class="eqThumb" data-eqthumb="${e.id}">${eqSvg(e, w, grey)}</span>`;
 }
+/** 空欄／不穿：淡淡的部位線條輪廓，不畫半身 */
+export function eqSlotOutline(slot: Slot, w = 56) {
+  const s = '#2a3440';
+  const o = `fill="none" stroke="${s}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"`;
+  const P: Record<Slot, string> = {
+    head: `<path d="M16 44Q36 10 56 44" ${o}/><path d="M10 44H62" ${o}/>`,
+    body: `<path d="M22 12L10 22l6 10 6-4v28h28V28l6 4 6-10-12-10-6 6H28Z" ${o}/>`,
+    hand: `<rect x="10" y="20" width="38" height="20" rx="7" ${o}/><path d="M48 24h10a6 6 0 0 1 0 12H48" ${o}/>`,
+    legs: `<path d="M22 10h28l4 46H40l-4-28-4 28H18Z" ${o}/>`,
+    feet: `<path d="M12 42q0-14 16-14h12q16 4 22 14v6H12Z" ${o}/>`,
+  };
+  return `<svg class="slv" viewBox="0 0 72 60" width="${w}" height="${Math.round(w * 60 / 72)}" aria-hidden="true">${P[slot]}</svg>`;
+}
 // 全身人形（裝備面板與分享卡共用的配色）
 export function figSvg() {
   const k = '#1b1b1b', SK = '#e8b890', H = equipNow('head'), A = equipNow('hand'), B = equipNow('body'), L = equipNow('legs'), F = equipNow('feet');
@@ -223,13 +236,21 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
       : (legs[L.id] ?? legs.lg_basic);
   return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${arm(50, 34)}${arm(110, 126)}${legsDraw}${body[B.id] ?? body.bd_basic}${face}${hd[H.id] ?? ''}${feet[F.id] ?? feet.ft_basic}</svg>`;
 }
-// 裝備面板 v2：場景＋木牌部位卡＋加成看板＋套裝收集
-// ax/ay：僅首幀佔位；實際圓圈／線由 equipPreview 投影 3D（頭＝帽子中心），不再用 ay 去拉人物高度
-const EQ_CARD: Record<Slot, { side: 'l' | 'r'; top: number; ax: number; ay: number }> = {
-  head: { side: 'l', top: 2, ax: 80, ay: 36 }, hand: { side: 'l', top: 34, ax: 40, ay: 170 }, feet: { side: 'l', top: 66, ax: 70, ay: 270 },
-  body: { side: 'r', top: 18, ax: 98, ay: 122 }, legs: { side: 'r', top: 48, ax: 94, ay: 203 } };
-const EQ_FW = 54.04, EQ_FT = 2, EQ_FH = 86, EQ_CH = 27, EQ_CW = 30;
-const eqAx = (vx: number) => 50 + (vx - 80) / 160 * EQ_FW, eqAy = (vy: number) => EQ_FT + vy / 300 * EQ_FH;
+// 裝備面板：中間大角色＋兩側方格（左：頭／衣服／手，右：褲子／鞋子）
+const EQ_LEFT: Slot[] = ['head', 'body', 'hand'];
+const EQ_RIGHT: Slot[] = ['legs', 'feet'];
+let eqListOpen = false;
+
+function slotLabel(s: Slot) { return SLOTS.find(x => x[0] === s)![1]; }
+function eqWornText(e: Eq) { return isNoneId(e.id) || e.price ? e.eff : '基本款，沒有加成'; }
+function eqTileHtml(s: Slot) {
+  const e = equipNow(s), n = slotLabel(s), on = D.getEqPick() === s;
+  const inner = isNoneId(e.id)
+    ? `<span class="eqEmpty">${eqSlotOutline(s)}</span>`
+    : eqIcon(e, 64);
+  const extra = isNoneId(e.id) ? '，目前不穿' : `：${e.n}`;
+  return `<button type="button" class="eqTile${on ? ' on' : ''}" data-slot="${s}" aria-label="${n}${extra}">${inner}</button>`;
+}
 const SVG_SHED = `<svg class="eqShed" viewBox="0 0 300 400" preserveAspectRatio="none" aria-hidden="true"><defs><radialGradient id="eqSpot" cx="50%" cy="48%" r="45%"><stop offset="0" stop-color="#fff6d8" stop-opacity=".95"/><stop offset=".6" stop-color="#ffe9b0" stop-opacity=".35"/><stop offset="1" stop-color="#ffe9b0" stop-opacity="0"/></radialGradient><pattern id="eqMat" width="14" height="10" patternUnits="userSpaceOnUse"><rect width="14" height="10" fill="#c9a865"/><path d="M0 5h14" stroke="#a8864a" stroke-width="1.4"/><path d="M7 0v5M0 5v5M14 5v5" stroke="#b39352" stroke-width="1"/></pattern></defs>
 <rect width="300" height="400" fill="#2c4a63"/><path d="M0 0h300v54L150 30 0 54Z" fill="#5d8fb3"/>${Array.from({ length: 16 }, (_, i) => `<path d="M${i * 20} ${54 - i * 1.6 * (i < 8 ? 1 : 0) - (i >= 8 ? (15 - i) * 1.6 : 0)}V0" stroke="#3f6f92" stroke-width="2"/>`).join('')}<path d="M0 54L150 30 300 54" fill="none" stroke="#16191d" stroke-width="4"/>
 <rect x="20" y="52" width="10" height="280" fill="#6b4a2a" stroke="#16191d" stroke-width="2"/><rect x="270" y="52" width="10" height="280" fill="#6b4a2a" stroke="#16191d" stroke-width="2"/>
@@ -249,16 +270,22 @@ export function eqStats(): string[] {
 }
 export function renderEquip() {
   const sets = setsOn(), st = eqStats(), worn = wornIds();
-  const lines = SLOTS.map(([s]) => { const c = EQ_CARD[s], cx = c.side === 'l' ? EQ_CW : 100 - EQ_CW, cy = c.top + EQ_CH / 2;
-    return `<line data-slot="${s}" x1="${cx}" y1="${cy}" x2="${eqAx(c.ax).toFixed(1)}" y2="${eqAy(c.ay).toFixed(1)}"/><circle data-slot="${s}" cx="${eqAx(c.ax).toFixed(1)}" cy="${eqAy(c.ay).toFixed(1)}" r="1.1"/>`; }).join('');
-  const cards = SLOTS.map(([s, n]) => { const c = EQ_CARD[s], e = equipNow(s);
-    return `<button class="eqCard ${c.side}${D.getEqPick() === s ? ' on' : ''}" data-slot="${s}" style="top:${c.top}%"><span class="eqTag">${n}</span>${eqIcon(e, 44)}<b>${e.n}</b><small>${isNoneId(e.id) || e.price ? e.eff : '基本款，沒有加成'}</small></button>`; }).join('');
-  const hits = SLOTS.map(([s]) => { const c = EQ_CARD[s]; return `<button class="eqHit" data-slot="${s}" aria-label="${SLOTS.find(x => x[0] === s)![1]}" style="left:${eqAx(c.ax)}%;top:${eqAy(c.ay)}%"></button>`; }).join('');
-  const pickName = D.getEqPick() ? SLOTS.find(x => x[0] === D.getEqPick())![1] : '';
+  const pick = D.getEqPick();
+  if (!pick) eqListOpen = false;
+  const hits = SLOTS.map(([s, n]) => `<button type="button" class="eqHit" data-slot="${s}" aria-label="${n}"></button>`).join('');
+  const pickEq = pick ? equipNow(pick) : null;
+  const pickName = pick ? slotLabel(pick) : '';
+  const info = pickEq
+    ? `<div class="eqInfo"><div class="eqInfoT"><small>${pickName}</small><b>${pickEq.n}</b><p>${eqWornText(pickEq)}</p></div>${eqListOpen ? '' : `<button type="button" class="eqInfoGo" data-eqopen="${pick}">換裝</button>`}</div>`
+    : '';
+  const list = pick && eqListOpen
+    ? `<div class="eqList"><div class="eqListT">換${pickName}<small>點一件就換上，換穿免費</small></div>${EQUIP.filter(e => e.slot === pick && eqOwned(e.id)).slice().sort((a, b) => Number(isNoneId(b.id)) - Number(isNoneId(a.id))).map(e => `<button data-eqset="${e.id}" class="${equipNow(e.slot).id === e.id ? 'on' : ''}">${eqIcon(e, 48)}<span><b>${e.n}</b><small>${e.eff}</small></span>${equipNow(e.slot).id === e.id ? '<em>穿著中</em>' : ''}</button>`).join('')}<p class="eqHint">想要更多款式，去服飾店看看。</p></div>`
+    : '';
+  const hint = pick ? '' : '<p class="eqHint">點旁邊的格子或人身上的部位查看與換裝。</p>';
   $('eqBody').innerHTML =
     `<div class="eqBoard"><div class="eqBoardT">目前加成</div>${st.length ? `<div class="eqStats">${st.map(x => { const [a, b] = x.split('|'); return `<div><small>${a}</small><b>${b}</b></div>`; }).join('')}</div>` : '<p class="eqNone">現在穿的都是基本款，還沒有加成。去服飾店挑幾件吧。</p>'}</div>` +
-    `<div class="eqStage">${SVG_SHED}<div class="eqFigW" id="eqFigW"></div><svg class="eqLines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${hits}${cards}</div>` +
-    (D.getEqPick() ? `<div class="eqList"><div class="eqListT">換${pickName}<small>點一件就換上，換穿免費</small></div>${EQUIP.filter(e => e.slot === D.getEqPick() && eqOwned(e.id)).slice().sort((a, b) => Number(isNoneId(b.id)) - Number(isNoneId(a.id))).map(e => `<button data-eqset="${e.id}" class="${equipNow(e.slot).id === e.id ? 'on' : ''}">${eqIcon(e, 48)}<span><b>${e.n}</b><small>${e.eff}</small></span>${equipNow(e.slot).id === e.id ? '<em>穿著中</em>' : ''}</button>`).join('')}<p class="eqHint">想要更多款式，去服飾店看看。</p></div>` : '<p class="eqHint">點人身上的部位或旁邊的木牌來換裝。</p>') +
+    `<div class="eqStage">${SVG_SHED}<div class="eqCol l">${EQ_LEFT.map(eqTileHtml).join('')}</div><div class="eqFigW" id="eqFigW"></div><div class="eqCol r">${EQ_RIGHT.map(eqTileHtml).join('')}</div>${hits}</div>` +
+    info + list + hint +
     `<div class="eqSecT">套裝收集</div><div class="eqSets">${SETS.map(s => { const done = sets.includes(s), have = s.need.filter(i => eqOwned(i)).length;
       const full = have === s.need.length; return `<div class="eqSet${done ? ' done' : ''}${full ? ' full' : ''}"${full ? ` data-setid="${s.id}" role="button"` : ''}><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqSvg(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}${full ? `<em class="eqSetGo"><i class="ic ${done ? 'ic-check' : 'ic-hand'}"></i> ${done ? '穿著中' : '一鍵換上'}</em>` : ''}</div>`; }).join('')}</div>` +
     `<div id="eqShareOut"></div><p class="eqHint">分享到 Discord 有機會拿神秘好禮</p><div class="eqDock"><button id="eqShare"><i class="ic ic-send"></i>分享穿搭</button><button id="eqShop"><i class="ic ic-shop"></i>去服飾店</button></div>`;
@@ -266,7 +293,17 @@ export function renderEquip() {
     head: equipNow('head').id, hand: equipNow('hand').id,
     body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
   });
-  $('eqBody').querySelectorAll('button[data-slot]').forEach(b => (b as HTMLButtonElement).onclick = () => { const s = b.getAttribute('data-slot') as Slot; D.setEqPick(D.getEqPick() === s ? null : s); renderEquip(); if (D.getEqPick()) $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
+  const pickSlot = (s: Slot) => {
+    if (D.getEqPick() !== s) { D.setEqPick(s); eqListOpen = false; }
+    else if (!eqListOpen) eqListOpen = true;
+    else { D.setEqPick(null); eqListOpen = false; }
+    renderEquip();
+    if (eqListOpen) $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    else if (D.getEqPick()) $('eqBody').querySelector('.eqInfo')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+  $('eqBody').querySelectorAll('button[data-slot]').forEach(b => (b as HTMLButtonElement).onclick = () => pickSlot(b.getAttribute('data-slot') as Slot));
+  const go = $('eqBody').querySelector<HTMLButtonElement>('.eqInfoGo');
+  if (go) go.onclick = () => { eqListOpen = true; renderEquip(); $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
   $('eqBody').querySelectorAll<HTMLElement>('.eqSet[data-setid]').forEach(el => el.onclick = () => { const st = SETS.find(x => x.id === el.dataset.setid); if (st) askSet(st); });
   $('eqBody').querySelectorAll('button[data-eqset]').forEach(b => (b as HTMLButtonElement).onclick = () => { const e = EQUIP.find(x => x.id === b.getAttribute('data-eqset'))!; setEquip(e.slot, e.id); D.persist(); applySleeve(); D.applyOutfit3(); renderEquip(); });
   ($('eqShare') as HTMLButtonElement).onclick = shareOutfit;

@@ -144,16 +144,6 @@ function updateGuideDom() {
     if (!p) continue;
     const hit = stage.querySelector<HTMLElement>(`.eqHit[data-slot="${s}"]`);
     if (hit) { hit.style.left = `${p.x}%`; hit.style.top = `${p.y}%`; }
-    const line = stage.querySelector(`.eqLines line[data-slot="${s}"]`);
-    const circ = stage.querySelector(`.eqLines circle[data-slot="${s}"]`);
-    if (line) {
-      line.setAttribute('x2', p.x.toFixed(2));
-      line.setAttribute('y2', p.y.toFixed(2));
-    }
-    if (circ) {
-      circ.setAttribute('cx', p.x.toFixed(2));
-      circ.setAttribute('cy', p.y.toFixed(2));
-    }
   }
 }
 
