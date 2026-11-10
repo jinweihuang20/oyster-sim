@@ -1629,5 +1629,16 @@ body:is(.plazaMode,.plazaRoam) :is(#shop,#dex,#equip).show{z-index:9600!importan
 .flagShop .flagMsg{min-height:1.3em;margin:6px 0 4px;font-size:13px;font-weight:700}
 .flagShop .flagMsg.ok{color:#9be37a}
 .flagShop .flagMsg.bad{color:#ffb08a}
-#flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 132px)!important;min-width:84px!important}
-@media (pointer:coarse),(max-width:900px){body.plazaRoam #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 126px)!important}}
+/* 插旗／收旗收進「動作」：展開後排在跳／蹲那一列的左邊 */
+body:not(.poseOpen) #flagBtn.on,body:not(.poseOpen) #flagPullBtn.on{display:none!important}
+body.poseOpen #flagBtn.on,body.poseOpen #flagPullBtn.on{display:flex!important;right:calc(var(--sa-right,0px) + 116px)!important;min-width:96px!important;z-index:9010}
+body.poseOpen #flagBtn.on{bottom:calc(var(--sa-bottom,0px) + 132px)!important}
+body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!important}
+@media (pointer:fine){
+  body.plazaRoam.poseOpen #flagBtn.on{bottom:calc(var(--sa-bottom,0px) + 126px)!important}
+  body.plazaRoam.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 182px)!important}
+}
+@media (pointer:coarse) and (orientation:landscape){
+  body.poseOpen #flagBtn.on{bottom:calc(var(--sa-bottom,0px) + 110px)!important}
+  body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 162px)!important}
+}
