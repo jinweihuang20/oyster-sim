@@ -1344,7 +1344,7 @@ function hashPid(pid: string) {
       if (isNpc) {
         if (aber) dressPlazaAber(rig);
         else {
-          dressPlazaAma(rig, pickAmaLook(pid));
+          dressPlazaAma(rig, pickAmaLook(pid), pid);
           applyAmaAppearance(rig);
         }
       } else {

@@ -502,7 +502,6 @@ function applySeatWishEnd(e: PlazaSeatWishEnd) {
     const st = achS().st;
     const tot = Math.max(st.seatdel ?? 0, e.total || 0, (st.seatdel ?? 0) + 1);
     st.seatdel = tot;
-    if (e.fast) st.seatfast = Math.max(st.seatfast ?? 0, (st.seatfast ?? 0) + 1);
     achCheck();
     deps?.persist?.();
     deps?.track?.('seat_wish', { pay, capped: !!e.capped, total: tot, fast: !!e.fast });

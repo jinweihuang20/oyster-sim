@@ -75,6 +75,17 @@ export function pickAmaLook(pid: string): AmaFarmLook {
   return AMA_LOOKS[Math.abs(hashPid(pid)) % AMA_LOOKS.length];
 }
 
+/** 廣場阿婆固定三隻穿比基尼（pid 對齊後端 npc-pXX-sY） */
+export const AMA_BIKINI_PIDS = new Set([
+  'npc-p01-s4',
+  'npc-p04-s5',
+  'npc-p13-s4',
+]);
+
+export function amaWearsBikini(pid?: string | null) {
+  return !!pid && AMA_BIKINI_PIDS.has(pid);
+}
+
 export function amaShirtHex(look: AmaFarmLook): number {
   return parseInt(AMA_FLORALS[look.pal % AMA_FLORALS.length].base.slice(1), 16);
 }
@@ -214,8 +225,85 @@ function clearHat(hat: THREE.Group) {
   }
 }
 
-/** 套花布衫、袖套、白髮包髻；帽子較少且讓髮髻露在後面 */
-export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook) {
+function paintAmaHair(rig: PlayerRig, ama: AmaFarmLook) {
+  const mats = rig.outfitMats;
+  if (!mats) return;
+  for (const m of mats.hair) {
+    m.map = null;
+    m.color.setHex(ama.hair);
+    m.emissive.setHex(0);
+    m.needsUpdate = true;
+  }
+}
+
+function ensureAmaBun(rig: PlayerRig, ama: AmaFarmLook) {
+  if (rig.head.userData.amaBun) return;
+  const bunM = getHairMat(ama.hair);
+  if (!sharedBunGeo) sharedBunGeo = new THREE.SphereGeometry(0.085, 8, 6);
+  if (!sharedBunBaseGeo) sharedBunBaseGeo = new THREE.SphereGeometry(0.055, 8, 6);
+  const base = new THREE.Mesh(sharedBunBaseGeo, bunM);
+  const bun = new THREE.Mesh(sharedBunGeo, bunM);
+  // +Z＝後腦；斗笠再往後、往下，避免被帽緣吃掉
+  const back = ama.head === 'hd_hat' ? 0.175 : 0.155;
+  const by = ama.head === 'hd_hat' ? 0.035 : 0.085;
+  base.position.set(0, by - 0.01, back);
+  base.scale.set(1.2, 0.52, 1.15);
+  bun.position.set(0, by + 0.03, back + 0.01);
+  rig.head.add(base);
+  rig.head.add(bun);
+  rig.head.userData.amaBun = 1;
+}
+
+function dressAmaHat(rig: PlayerRig, ama: AmaFarmLook) {
+  if (!rig.hatG) return;
+  if (ama.head === 'none') {
+    clearHat(rig.hatG);
+    rig.hatG.position.set(0, 0, 0);
+    return;
+  }
+  const tint = new THREE.Color(ama.headTint);
+  rig.hatG.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
+    if (mesh.isMesh && mat?.color) mat.color.copy(tint);
+  });
+  // 帽子略往臉側挪，讓後腦白髮包髻露出
+  if (ama.head === 'hd_hat') rig.hatG.position.set(0, 0.01, -0.05);
+  else if (ama.head === 'hd_fisher') rig.hatG.position.set(0, 0, -0.04);
+  else {
+    rig.hatG.position.set(0, 0, -0.05);
+    const scarf = rig.hatG.children[0] as THREE.Mesh | undefined;
+    if (scarf) scarf.scale.set(1, 1, 0.72);
+    if (ama.head === 'hd_basic' && !rig.hatG.userData.amaKnot) {
+      const knotM = getSleeveMat({ ...ama, sleeve: ama.headTint, sleeveCheck: undefined });
+      const knot = new THREE.Mesh(rboxEnv(0.08, 0.06, 0.1), knotM);
+      knot.position.set(0.14, 0.12, 0.02);
+      knot.rotation.z = 0.4;
+      rig.hatG.add(knot);
+      rig.hatG.userData.amaKnot = 1;
+    }
+  }
+}
+
+/** 套花布衫、袖套、白髮包髻；帽子較少且讓髮髻露在後面。少數 pid 改穿比基尼。 */
+export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook, pid?: string) {
+  if (amaWearsBikini(pid)) {
+    // 比基尼本體由 applyOutfitToRig 建；勿 clearOutfitDetails
+    applyOutfitToRig(rig, {
+      head: ama.head === 'none' ? 'hd_none' : ama.head,
+      hand: 'hn_basic',
+      body: 'bd_bikini',
+      legs: 'lg_none',
+      feet: 'ft_basic',
+    });
+    paintAmaHair(rig, ama);
+    dressAmaHat(rig, ama);
+    ensureAmaBun(rig, ama);
+    rig.head.position.set(0, AMA_HEAD_Y, AMA_HEAD_FORWARD);
+    applyAmaScale(rig);
+    return;
+  }
+
   const pal = AMA_FLORALS[ama.pal % AMA_FLORALS.length];
   applyOutfitToRig(rig, {
     head: ama.head === 'none' ? 'hd_basic' : ama.head,
@@ -234,12 +322,7 @@ export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook) {
   mats.body[0] = flor;
   if (mats.sleeve[0]) mats.sleeve[0] = flor;
 
-  for (const m of mats.hair) {
-    m.map = null;
-    m.color.setHex(ama.hair);
-    m.emissive.setHex(0);
-    m.needsUpdate = true;
-  }
+  paintAmaHair(rig, ama);
 
   if (ama.legs === 'lg_basic') {
     for (const m of mats.legs) {
@@ -262,35 +345,7 @@ export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook) {
     }
   }
 
-  if (rig.hatG) {
-    if (ama.head === 'none') {
-      clearHat(rig.hatG);
-      rig.hatG.position.set(0, 0, 0);
-    } else {
-      const tint = new THREE.Color(ama.headTint);
-      rig.hatG.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
-        if (mesh.isMesh && mat?.color) mat.color.copy(tint);
-      });
-      // 帽子略往臉側挪，讓後腦白髮包髻露出
-      if (ama.head === 'hd_hat') rig.hatG.position.set(0, 0.01, -0.05);
-      else if (ama.head === 'hd_fisher') rig.hatG.position.set(0, 0, -0.04);
-      else {
-        rig.hatG.position.set(0, 0, -0.05);
-        const scarf = rig.hatG.children[0] as THREE.Mesh | undefined;
-        if (scarf) scarf.scale.set(1, 1, 0.72);
-        if (ama.head === 'hd_basic' && !rig.hatG.userData.amaKnot) {
-          const knotM = getSleeveMat({ ...ama, sleeve: ama.headTint, sleeveCheck: undefined });
-          const knot = new THREE.Mesh(rboxEnv(0.08, 0.06, 0.1), knotM);
-          knot.position.set(0.14, 0.12, 0.02);
-          knot.rotation.z = 0.4;
-          rig.hatG.add(knot);
-          rig.hatG.userData.amaKnot = 1;
-        }
-      }
-    }
-  }
+  dressAmaHat(rig, ama);
 
   if (ama.apron && !rig.torso.userData.amaApron) {
     if (!sharedApronM) sharedApronM = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.92 });
@@ -310,22 +365,7 @@ export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook) {
     rig.torso.userData.amaApron = 1;
   }
 
-  if (!rig.head.userData.amaBun) {
-    const bunM = getHairMat(ama.hair);
-    if (!sharedBunGeo) sharedBunGeo = new THREE.SphereGeometry(0.085, 8, 6);
-    if (!sharedBunBaseGeo) sharedBunBaseGeo = new THREE.SphereGeometry(0.055, 8, 6);
-    const base = new THREE.Mesh(sharedBunBaseGeo, bunM);
-    const bun = new THREE.Mesh(sharedBunGeo, bunM);
-    // +Z＝後腦；斗笠再往後、往下，避免被帽緣吃掉
-    const back = ama.head === 'hd_hat' ? 0.175 : 0.155;
-    const by = ama.head === 'hd_hat' ? 0.035 : 0.085;
-    base.position.set(0, by - 0.01, back);
-    base.scale.set(1.2, 0.52, 1.15);
-    bun.position.set(0, by + 0.03, back + 0.01);
-    rig.head.add(base);
-    rig.head.add(bun);
-    rig.head.userData.amaBun = 1;
-  }
+  ensureAmaBun(rig, ama);
 
   if (!rig.lowerL.userData.amaSleeve) {
     if (!sharedSleeveGeo) sharedSleeveGeo = rboxEnv(0.112, 0.175, 0.112);

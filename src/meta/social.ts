@@ -89,6 +89,17 @@ let board = 'income', view: 'daily' | 'weekly' = 'daily';
 export function submit(s: { income?: number; oysters?: number; pearls?: number; dmKills?: number; dmWaves?: number }) {
   return post('/score', { scores: s }).then(() => { lastRank = 0; checkPassed(); });
 }
+
+/** 客戶端玩法收入（工寮／廣場剝蚵、死鬥獎金）累加到今日收入。伺服器發放的送座位／好友房不要走這裡，以免重覆入帳。 */
+export function addPlayIncome(amount: number, extra?: { oysters?: number; pearls?: number }) {
+  const n = Math.max(0, Math.floor(amount));
+  const td = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  let inc = 0;
+  try { const o = JSON.parse(D.LS.getItem('oyster-lb-day') || '{}'); inc = o.d === td ? o.v : 0; } catch { /* ignore */ }
+  inc += n;
+  try { D.LS.setItem('oyster-lb-day', JSON.stringify({ d: td, v: inc })); } catch { /* ignore */ }
+  return submit({ income: inc, ...extra });
+}
 let lastRank = 0;
 async function checkPassed() {
   const r = await get(`/top?board=income&view=daily&n=50&me=${D.id}${tq()}`);
@@ -118,7 +129,10 @@ async function render() {
   if (!r) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; return; }
   const unit = BOARDS.find(b => b[0] === board)![2];
   const foilOn = (x: any) => !!(x.foil || (x.me && D.foil?.()));
-  const nameInner = (x: any) => `${x.atitle ? `<em class="lbA">${esc(x.atitle)}</em>` : ''}<b>${esc(x.nick)}</b><small>#${esc(x.tag)}</small>`;
+  const nameInner = (x: any) => {
+    const at = x.atitle ? `<em class="lbAt">${esc(x.atitle)}</em>` : '';
+    return `<span class="lbWho">${at}<small class="lbId">#${esc(x.tag)}</small></span><b class="lbNick">${esc(x.nick)}</b>`;
+  };
   const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
     (x.me ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>` : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span>`) + '</div>';
   const rows = r.rows as any[];

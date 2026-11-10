@@ -14,6 +14,10 @@ export type Save = {
   namePrompted?: number; tpv?: number; legendDry?: number; legendN?: number;
   /** 上次離開廣場的站位（含坐著離開時記住的椅旁站點） */
   plazaSpawn?: { x: number; z: number; yaw: number; pileId?: number; slot?: number };
+  /** 已成功進過廣場（舊存檔有 plazaSpawn 也會補上） */
+  plazaVisited?: number;
+  /** 教學結束後的廣場導引已顯示過 */
+  plazaGuideSeen?: number;
 };
 
 export const START_MONEY = 10000;
@@ -74,6 +78,8 @@ export function loadSave(LS: SaveStorage): Save {
       if (pileId >= 0 && slot >= 0) { out.plazaSpawn.pileId = pileId; out.plazaSpawn.slot = slot; }
     }
   }
+  if (num(raw.plazaVisited) || out.plazaSpawn) out.plazaVisited = 1;
+  if (num(raw.plazaGuideSeen)) out.plazaGuideSeen = 1;
   return out;
 }
 

@@ -36,7 +36,7 @@ export function bootQuiet() {
 
 export function menuModalBusy() {
   return D.getState() === 'play' || D.isTut() || !$('overlay').classList.contains('show')
-    || !!document.getElementById('giftMsg') || !!document.getElementById('newMsg') || !!document.getElementById('featMsg') || !!document.getElementById('svMsg')
+    || !!document.getElementById('giftMsg') || !!document.getElementById('newMsg') || !!document.getElementById('featMsg') || !!document.getElementById('svMsg') || !!document.getElementById('plazaGuide')
     || $('gift').classList.contains('show') || !!document.querySelector('.panel.show:not(#overlay)');
 }
 

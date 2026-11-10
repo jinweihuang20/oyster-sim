@@ -68,10 +68,7 @@ export const ACHS: AchDef[] = [
   { id: 'radio', cat: 'travel', n: '收音機迷', d: '聽過收音機的不同電台', t: [1, 2, 3], v: () => achS().radio.length, unit: '台' },
   { id: 'night', cat: 'travel', n: '夜貓子', d: '上夜班', t: [1, 10, 50], v: () => AS('night'), hint: '天黑了還在剝？', unit: '工' },
   { id: 'temp', cat: 'travel', n: '臨時工', d: '做臨時工', t: [1, 10, 50], v: () => AS('temp'), unit: '工' },
-  { id: 'seatnbr', cat: 'travel', n: '熱心好鄰居', d: '在廣場把想換位子的鄰居送到指定座位', t: [1], v: () => AS('seatdel') },
-  { id: 'seatking', cat: 'travel', n: '廣場跑腿王', d: '在廣場累積送到指定座位 50 次', t: [50], v: () => AS('seatdel'), unit: '次' },
-  { id: 'seatkin', cat: 'travel', n: '阿婆的乾孫', d: '在廣場累積送到指定座位 200 次', t: [200], v: () => AS('seatdel'), unit: '次' },
-  { id: 'seatfast', cat: 'travel', n: '使命必達', d: '心願出現後 60 秒內把鄰居送到指定座位', t: [1], v: () => AS('seatfast') },
+  { id: 'seatdel', cat: 'travel', n: '送座位', d: '在廣場把想換位子的鄰居送到指定座位', t: [20, 100, 200], v: () => AS('seatdel'), unit: '次' },
   { id: 'dex', cat: 'collect', n: '圖鑑收集', d: '圖鑑收集進度（不含活動限定）', t: [25, 50, 100], v: dexPct, unit: '%' },
   { id: 'white', cat: 'collect', n: '白珍珠', d: '累積找到白珍珠', t: [1, 50, 500], v: () => H.save.dex[0], unit: '顆' },
   { id: 'pink', cat: 'collect', n: '粉紅珍珠', d: '累積找到粉紅珍珠', t: [1, 20, 200], v: () => H.save.dex[1], unit: '顆' },
@@ -110,6 +107,7 @@ const ACH_TITLES: { n: string; d: string; ok: () => boolean }[] = [
   { n: '雜貨店股東', d: '「雜貨店常客」金牌', ok: () => (achS().got.owned ?? 0) >= 3 },
   { n: '廣場炸彈客', d: '「廣場飛彈手」金牌', ok: () => (achS().got.pzmoon ?? 0) >= 3 },
   { n: '活動常客', d: '「活動常客」銀牌', ok: () => (achS().got.ev ?? 0) >= 2 },
+  { n: '阿罵的乖孫', d: '「送座位」金牌', ok: () => (achS().got.seatdel ?? 0) >= 3 },
 ];
 export const achTitle = () => { const t = achS().title; return t && ACH_TITLES.some(x => x.n === t && x.ok()) ? t : ''; };
 export const achAdd = (list: 'locs' | 'seats' | 'radio' | 'sets', id: string) => { const a = achS()[list]; if (!a.includes(id)) a.push(id); };
@@ -131,6 +129,7 @@ export function clearAchShiftGot() { achShiftGot = []; }
 export function pushAchShiftGot(s: string) { achShiftGot.push(s); }
 export function achCheck(retro = false) {
   const A = achS(); let gotN = 0, cash = 0;
+  if (A.fresh.some(id => !ACHS.some(a => a.id === id))) A.fresh = A.fresh.filter(id => ACHS.some(a => a.id === id));
   for (const s of H.setsOn()) achAdd('sets', s.id);
   A.st.streak = Math.max(A.st.streak ?? 0, H.save.streakDay ?? 0);
   ACHS.forEach((a, idx) => {

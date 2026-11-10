@@ -44,6 +44,7 @@ import {
   initPersist, persist, initDaily, renderDaily, openDaily, claimDaily, checkReturn,
   initGifts, checkGifts, giftAlert, giftBadge, giftMsg, giftLabel, applyGift, renderGifts,
 } from './meta';
+import { ROOM_ENABLED, bindRoom, openRoomCreate, openRoomJoin, closeRoom, isRoomActive, roomSyncScore, roomRemainSec, currentRoomSnap, roomTick, roomTrySit, roomStandWalk, roomNearPrompt, roomSeated, roomWalkBodies } from './room';
 import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
 import {
@@ -478,7 +479,9 @@ initAudio({
 (window as any).__mus = musDebug;
 
 // ---------- 難度、珍珠、奇物、存檔 ----------
-const locNow = () => LOCS.find(l => l.id === save.loc && (l.need === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
+/** 好友房：房間指定場景（不看自己有沒有解鎖） */
+let roomLoc: string | null = null, roomPlay = false;
+const locNow = () => (roomLoc ? LOCS.find(l => l.id === roomLoc) : undefined) ?? LOCS.find(l => l.id === save.loc && (l.need === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
 const locW = () => locNow().w;
 const RAR = [
   { name: '白珍珠', color: 0xf4f1ea, css: '#f4f1ea', w: 70, price: 200, emo: '⚪', tease: '最常見的珍珠，多剝幾顆就有' },
@@ -1081,8 +1084,9 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   nightShift = isNight(); updSky();
   $('nightTag').style.display = nightShift && !plazaMode ? '' : 'none';
   if (nightShift && !plazaMode) later(1.5, () => toast(`🌙 夜班上工！這一工收入 +${Math.round(eco.nightMult * 100)}%`, '#b8c8ff'));
-  moonReset(); npcs.forEach(dressAma); applyCrew();
-  if (walking && !plazaMode) { setWalking(false); on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
+  if (isRoomActive()) { npcs.length = 0; ALL_NPCS.forEach(n => { n.g.visible = false; n.tag.sprite.visible = false; n.bubble.sprite.visible = false; }); stools.forEach(g => { g.visible = false; if (g.userData.tag) g.userData.tag.visible = false; }); }
+  else { moonReset(); npcs.forEach(dressAma); applyCrew(); }
+  if (walking && !plazaMode && !isRoomActive()) { setWalking(false); on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; syncShiftUi(); clearAchShiftGot(); handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   if (plazaMode && !plazaPlayAt) plazaPlayAt = performance.now();
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now();
@@ -1095,7 +1099,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   plazaStealBanUntil = 0; plazaStealCatches = 0; plazaStealPairCd.clear(); stopPlazaSteal();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
-  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); applySleeve(); drawMeds(); clearBasinOysters(); fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
+  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); applySleeve(); drawMeds(); clearBasinOysters(); fillBasin(false); if (!(isRoomActive() && walking)) goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
 }
 /** HUD dirty：避免每幀寫 DOM／innerHTML 觸發強制重排 */
 const hudPrev = { hpW: '', hpPct: '', timerLab: '', timer: '', count: -1, pearls: -1, stats: '' };
@@ -1105,10 +1109,12 @@ function updHud() {
   const hpPct = String(Math.round(hp));
   if (hudPrev.hpPct !== hpPct) { hudPrev.hpPct = hpPct; const hpEl = document.getElementById('hpPct'); if (hpEl) hpEl.textContent = hpPct; }
   const timerLab = $('timer').previousElementSibling as HTMLElement | null;
-  const labTxt = plazaMode ? '模式' : '剩餘';
+  const labTxt = plazaMode || (roomPlay && currentRoomSnap()?.endMode !== 'timed') ? '模式' : '剩餘';
   if (timerLab && hudPrev.timerLab !== labTxt) { hudPrev.timerLab = labTxt; timerLab.textContent = labTxt; }
   const timerTxt = plazaMode
     ? '休閒'
+    : roomPlay
+    ? (currentRoomSnap()?.endMode === 'timed' ? (() => { const s = roomRemainSec(); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; })() : '好友房')
     : (() => { const s = Math.max(0, Math.ceil(timeLeft)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; })();
   if (hudPrev.timer !== timerTxt) { hudPrev.timer = timerTxt; $('timer').textContent = timerTxt; }
   if (hudPrev.count !== count) { hudPrev.count = count; $('count').innerHTML = `<i class="ic ic-oyster"></i> ${count}`; }
@@ -2077,7 +2083,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= eco.workedMinCount, queen = all[0].me && !temp && worked;
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
   const titles: string[] = []; let bonus = 0;
-  if (!plazaMode) {
+  if (!plazaMode && !roomPlay) {
     if (thrown === 0 && !temp && worked) { titles.push(`🕊 和平${esc(myName())}（+$${eco.peaceBonus}）`); bonus = eco.peaceBonus; }
     if (worked && shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
     if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
@@ -2090,19 +2096,23 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     ? Math.max(1, Math.round((performance.now() - plazaPlayAt) / 1000))
     : Math.round(shiftLen - Math.max(0, timeLeft));
   const seatLabel = plazaMode ? (() => { const s = plazaMySeat(); return s ? `p${s.pileId}s${s.slot}` : 'plaza'; })() : (save.seat ?? 'door');
-  if (!plazaMode) save.days++;
-  tickTrial(); autoUnlock(); save.best = Math.max(save.best, count); if (queen && !plazaMode) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
+  if (!plazaMode && !roomPlay) save.days++;
+  tickTrial(); autoUnlock(); save.best = Math.max(save.best, count); if (queen && !plazaMode && !roomPlay) { save.queen++; titles.unshift('👑 今日剝蚵冠軍'); }
   const L = save.life; L.opened += opened; L.inBowl += count; L.missed += missed; L.wasteShells += wasteShells; L.cracked += cracked; L.perfects += perfects; L.abandoned += abandoned; L.stabs += stabs; L.steals += steals; L.caught += caught; L.meatHits += meatHits; L.shellHits += shellHits; L.hitsTaken += hitsTaken; L.blocks += blocks; L.reflects += reflects; L.lost += lost;
-  if (!plazaMode) {
+  if (!plazaMode && !roomPlay) {
     for (const tt of titles) { const k = tt.replace(/（.*）/, ''); save.titles[k] = (save.titles[k] ?? 0) + 1; }
     achShift({ worked, temp, waste, cracked, steals, caught, hitsTaken, thrown, ev, evDone, evEarly, cnt: count });
   }
   const evHtml = ev ? evFinish(ev, evDone, evEarly) : '';
   const creditLocal = () => {
     save.money += lastPay.earn; persist();
-    if (!tut && !SHOT) { const td = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); let inc = 0; try { const o = JSON.parse(LS.getItem('oyster-lb-day') || '{}'); inc = o.d === td ? o.v : 0; } catch { } inc += Math.max(0, lastPay.earn); try { LS.setItem('oyster-lb-day', JSON.stringify({ d: td, v: inc })); } catch { } Social.submit({ income: inc, oysters: count, pearls: save.dex.reduce((a, b) => a + b, 0) }); }
+    if (!tut && !SHOT) Social.addPlayIncome(Math.max(0, lastPay.earn), { oysters: count, pearls: save.dex.reduce((a, b) => a + b, 0) });
   };
-  if (plazaMode) {
+  if (roomPlay) {
+    persist();
+    plazaPayWait = null;
+    track('room_end', { loc: locNow().id, item: 'room', count, earn, dur: durSec, reason: endReason });
+  } else if (plazaMode) {
     persist();
     track('plaza_end', { loc: locNow().id, item: 'plaza', count, opened, missed, perfects, cracked, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, dur: durSec, seat: seatLabel, reason: handPain ? 'hand' : endReason, dstat: dstatStr(), mode: 'plaza' });
     plazaPayWait = plazaReportEarn(earn, count, durSec).then(payout => {
@@ -2154,7 +2164,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
       if (b) b.disabled = false;
     });
   }
-  $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); if (ac) SFX.endJingle(queen && !handPain && !plazaMode);
+  if (!roomPlay) $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); if (ac) SFX.endJingle(queen && !handPain && !plazaMode);
 }
 function revealPearl(r: number) { react3('cheer');
   sleeveGold(); dayPearls.push(r); save.dex[r]++; if (r === 3) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
@@ -2415,11 +2425,12 @@ window.addEventListener('keydown', e => {
   }
   if (state !== 'play') return; audio().resume();
   if (walking) {
-    if (e.code === 'Space' && plazaMode) { e.preventDefault(); if (!e.repeat) plazaJump(); return; }
-    if ((e.code === 'KeyC' || e.code === 'KeyZ') && plazaMode) { if (!e.repeat) plazaPose(e.code === 'KeyC' ? 'crouch' : 'lie'); return; }
+    if (e.code === 'Space' && (plazaMode || isRoomActive())) { e.preventDefault(); if (!e.repeat) plazaJump(); return; }
+    if ((e.code === 'KeyC' || e.code === 'KeyZ') && (plazaMode || isRoomActive())) { if (!e.repeat) plazaPose(e.code === 'KeyC' ? 'crouch' : 'lie'); return; }
     walkKeys.add(e.code);
     if (e.code === 'KeyE') {
       if (plazaMode) void plazaTrySit();
+      else if (isRoomActive()) void roomTrySit();
       else if (nearSeat) sitDown(nearSeat.id);
     }
     return;
@@ -2460,6 +2471,7 @@ btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (
 $('bmStay').onclick = () => $('backMenu').classList.remove('show');
 $('bmGo').onclick = () => { void (async () => {
   $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return;
+  if (isRoomActive()) { await closeRoom(true); return; }
   const wasPlaza = plazaMode;
   if (wasPlaza && !plazaShiftStarted()) {
     returnToMainMenu(async () => {
@@ -2488,7 +2500,7 @@ $('bmGo').onclick = () => { void (async () => {
     },
   });
 })(); };
-$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (plazaMode) void plazaTrySit(); else if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('puffBtn', startPuff, endPuff); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('puffBtn').addEventListener(ev, endPuff); addEventListener('blur', endPuff); document.addEventListener('visibilitychange', () => { if (document.hidden) endPuff(); }); $('puffBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
+$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (plazaMode) void plazaTrySit(); else if (isRoomActive()) void roomTrySit(); else if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('puffBtn', startPuff, endPuff); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('puffBtn').addEventListener(ev, endPuff); addEventListener('blur', endPuff); document.addEventListener('visibilitychange', () => { if (document.hidden) endPuff(); }); $('puffBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
@@ -2522,6 +2534,7 @@ initWalkSeat({
   $, on, COARSE, clamp,
   getState: () => state, getPhase: () => phase,
   isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaNearSeat, plazaNearPrompt, plazaMySeat, seatPose,
+  isRoomMode: () => isRoomActive(), roomSeated, roomStandWalk, roomWalkBodies, roomNearPrompt,
   setPlazaSeatPropsVisible, oyster, shellGeo, shellTopMat, shellTop, handRig, SEAT, BASIN, BOWL, getBowlR: () => BOWL_R,
   seatGround, seatNow,
   getSeatYaw: () => seatYaw, setSeatYaw: v => { seatYaw = v; },
@@ -2636,7 +2649,10 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   const pzN = plazaOnlineN;
   const pzLive = pzN != null && pzN > 0;
   const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}${pzLive ? ' live' : ''}" data-loc="plaza"><span class="pzTag">多人</span><span class="ln">🦪 蚵仔廣場</span><span class="lm">${pzN != null ? `<i class="pzDot" aria-hidden="true"></i>${pzN} 人在線` : '連線中…'}</span><small>${plazaCur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${plazaCountLabel()}</small></button>`;
-  el.innerHTML = `<div class="locHead">${headTxt}</div><div class="locRow">` + plazaCard + LOCS.map(l => {
+  const roomCard = ROOM_ENABLED
+    ? `<div class="loc locRoom"><span class="pzTag">好友</span><span class="ln">好友房</span><small class="ld">開一間房間，和朋友在同一個場景剝蚵</small><span class="rmBtns"><button type="button" data-room="create">開房間</button><button type="button" data-room="join">加入房間</button></span></div>`
+    : '';
+  el.innerHTML = `<div class="locHead">${headTxt}</div><div class="locRow">` + plazaCard + roomCard + LOCS.map(l => {
     const own = l.need === 0 || save.locs!.includes(l.id), cur = !plazaCur && cl!.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
     if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small>${cur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${l.d}</small></button>`;
@@ -2645,6 +2661,10 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   const mark = (id?: string) => { if (id && !seen.includes(id)) { seen.push(id); persist(); } };
   el.querySelectorAll<HTMLButtonElement>('button.loc').forEach(b => b.addEventListener('click', () => mark(b.dataset.loc || b.dataset.lbuy), { capture: true }));
   requestAnimationFrame(() => el.querySelector('.loc.cur')?.scrollIntoView({ block: 'nearest', inline: 'center' }));
+  if (ROOM_ENABLED) el.querySelectorAll<HTMLButtonElement>('[data-room]').forEach(b => b.onclick = ev => {
+    ev.stopPropagation(); audio();
+    if (b.dataset.room === 'join') openRoomJoin(); else openRoomCreate();
+  });
   el.querySelectorAll<HTMLButtonElement>('[data-loc]').forEach(b => b.onclick = () => {
     save.loc = b.dataset.loc;
     persist(); renderLocs();
@@ -2652,6 +2672,7 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
     syncStartUi();
   });
   syncStartUi();
+  syncPlazaGuideHint();
   void syncPlazaOnlineUi(!!opts?.forcePlazaOnline);
 }
 renderLocs({ forcePlazaOnline: true });
@@ -2910,7 +2931,7 @@ const go = (len: number) => {
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 function launchDeathmatch(mode: DmMode) {
   $('overlay').classList.remove('show');
-  openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })(), grantOdd: (i) => { if (!Number.isInteger(i) || i < 0 || i >= ODD.length || ODD[i].limited) return null; save.odd[i] = (save.odd[i] ?? 0) + 1; if (rarOf(ODD[i].weight) === 'legend') { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(ODD[i].weight), via: 'dm' }); return { name: ODD[i].name, line: ODD[i].line, n: save.odd[i], color: ODD[i].color }; }, ownedWeapons: ownedWeaponIds(), equippedWeapon: weaponNow(), setEquippedWeapon: (id) => { if (!isWeaponId(id) || !ownsWeapon(id)) return; save.shop.equipped.weapon = id; persist(); },     grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); track('dm_reward', { amount: n, via, mode: via === 'dm-horde' ? 'horde' : 'ffa', money: save.money }); },
+  openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })(), grantOdd: (i) => { if (!Number.isInteger(i) || i < 0 || i >= ODD.length || ODD[i].limited) return null; save.odd[i] = (save.odd[i] ?? 0) + 1; if (rarOf(ODD[i].weight) === 'legend') { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(ODD[i].weight), via: 'dm' }); return { name: ODD[i].name, line: ODD[i].line, n: save.odd[i], color: ODD[i].color }; }, ownedWeapons: ownedWeaponIds(), equippedWeapon: weaponNow(), setEquippedWeapon: (id) => { if (!isWeaponId(id) || !ownsWeapon(id)) return; save.shop.equipped.weapon = id; persist(); },     grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); Social.addPlayIncome(n); track('dm_reward', { amount: n, via, mode: via === 'dm-horde' ? 'horde' : 'ffa', money: save.money }); },
     reportMatchStart: (m) => {
       statsSid = crypto.randomUUID?.() ?? statsId + '-dm-' + Date.now();
       track('dm_start', { item: 'dm-' + m, mode: m });
@@ -3542,6 +3563,7 @@ function launchPlaza() {
       if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
       showPlazaLoading(false);
       updHud();
+      markPlazaVisited();
       toast('蚵仔廣場・休閒剝蚵，隨便坐、不趕時間', '#9be37a');
     },
     beginShift: () => {
@@ -3819,7 +3841,7 @@ function frameBody() {
   const now = performance.now();
   const paused = isPaused();
   // 選單／暫停約 15fps；遊玩一律上限 60fps（高更新率手機不再跑 90／120 幀發燙）
-  const minMs = (state !== 'play' || paused) ? 1000 / 15 : 1000 / 60;
+  const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15 : 1000 / 60;
   const since = now - lastDrawAt;
   if (since < minMs - 1.5) { scheduleFrame(); return; }
   // 餘數回扣：90Hz 等非整數倍螢幕平均仍接近 60fps
@@ -3851,7 +3873,9 @@ function frameBody() {
   let warnNpc: Npc | null = null;
   if (state === 'play') {
     // 廣場休閒：不倒數、不自動收工
-    if (!tut && !plazaMode) { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
+    if (!tut && !plazaMode && !roomPlay && !isRoomActive()) { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
+    if (isRoomActive()) roomTick(rdt);
+    if (roomPlay) roomSyncScore();
     hp = Math.min(100, hp + dt / 6 * medM('regen')); tickMeds(dt);
     if (phase === 'seam') {
       rotTipTick(rdt); if (rotKey) rotTipTouch(); rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
@@ -3877,7 +3901,7 @@ function frameBody() {
     if (phase === 'empty' && !(tut && (TUT[tut.i].id === 'empty' || TUT[tut.i].id === 'shell'))) { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
-    on('standBtn', !walking && (!plazaMode || plazaSeated()));
+    on('standBtn', !walking && (!plazaMode || plazaSeated()) && (!isRoomActive() || roomSeated()));
     // 吸菸區／樸子腳坐著：不剝蚵，藏左下臉盆與肉碗
     if (plazaMode && seatRig.visible && document.body.classList.contains('plazaSmokeSit')) setPlazaSeatPropsVisible(false);
     if (smokeSitActive) {
@@ -3889,7 +3913,7 @@ function frameBody() {
       }
     }
     // 電腦廣場隱藏視角鈕（用 V）；手機仍顯示
-    on('camBtn', !plazaMode || COARSE);
+    on('camBtn', !(plazaMode || isRoomActive()) || COARSE);
     if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     if (plazaMode) {
       const banned = performance.now() < plazaStealBanUntil;
@@ -4081,6 +4105,55 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
   renderer.render(scene, viewCam());
   scheduleFrame();
 }
+function plazaGuidePending() {
+  return !!(save.plazaGuideSeen && !save.plazaVisited);
+}
+function markPlazaVisited() {
+  if (save.plazaVisited) { syncPlazaGuideHint(); return; }
+  save.plazaVisited = 1;
+  persist();
+  syncPlazaGuideHint();
+}
+function syncPlazaGuideHint() {
+  const on = plazaGuidePending();
+  document.body.classList.toggle('plazaGuideHint', on);
+  const card = document.querySelector('.locPlaza');
+  if (card) card.classList.toggle('plazaHint', on);
+  const start = $('start');
+  if (start) start.classList.toggle('plazaHint', on && isPlazaPicked());
+}
+function showPlazaGuide() {
+  if (document.getElementById('plazaGuide')) return;
+  save.plazaGuideSeen = 1;
+  persist();
+  const m = document.createElement('div');
+  m.id = 'plazaGuide';
+  m.className = 'giftMsg';
+  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" type="button" aria-label="關閉"></button><b><i class="ic ic-pin"></i> 去廣場看看</b><p class="nmTx">廣場有其他玩家，可以插旗、接送座位任務，要去看看嗎？</p><div class="mbtns"><button class="gmNo" type="button">之後再說</button><button class="gmYes gmPri" type="button">前往廣場</button></div></div>`;
+  const close = (go: boolean) => {
+    m.remove();
+    if (go) {
+      save.loc = 'plaza';
+      persist();
+      renderLocs();
+      syncStartUi();
+      launchPlaza();
+      return;
+    }
+    syncPlazaGuideHint();
+    const card = document.querySelector('.locPlaza');
+    card?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    setTimeout(() => { giftAlert(); svAlert(); featAnnounce(); newAnnounce(); }, 300);
+  };
+  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', () => close(false)));
+  m.querySelector('.gmYes')!.addEventListener('click', () => close(true));
+  document.body.appendChild(m);
+}
+function maybePlazaGuide(first: boolean) {
+  if (!first || save.plazaVisited || save.plazaSpawn || save.plazaGuideSeen) return;
+  showPlazaGuide();
+}
+
 // ---------- 新手教學 ----------
 initTutorial({
   $, on, COARSE, audio, getSave: () => save, persist, track, toast, startDay, syncShiftUi, renderLocs, renderDaily,
@@ -4095,9 +4168,133 @@ initTutorial({
   getMeatHits: () => meatHits, getShellsOut: () => shellsOut, getUmbT: () => umbT,
   getNpcs: () => npcs, windUp, giftAlert, svAlert, featAnnounce, newAnnounce,
   returnToMainMenu,
+  afterTutEnd: first => { maybePlazaGuide(first); },
 });
 
 $('oTut').onclick = () => { const run = () => enterWorkShed(() => tutStart()); if (!save.tutDone) ensureNameThen(run); else run(); };
+let roomYardHidden = false;
+function hideRoomYardExtras(hide: boolean) {
+  roomYardHidden = hide;
+  stools.forEach(g => {
+    g.visible = !hide;
+    if (g.userData.tag) g.userData.tag.visible = !hide;
+  });
+  ALL_NPCS.forEach(n => {
+    n.g.visible = !hide;
+    n.tag.sprite.visible = !hide;
+    n.bubble.sprite.visible = false;
+    if (hide) { n.windup = 0; n.throwCd = 999; }
+  });
+  if (hide) npcs.length = 0;
+}
+function enterRoomWalk(fromSeat: boolean) {
+  oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
+  setWalking(true); handRig.visible = false; setPlazaSeatPropsVisible(false);
+  if (fromSeat) {
+    walkPos.copy(SEAT).setY(1.55);
+    walkPos.x += Math.sin(seatYaw) * 0.55;
+    walkPos.z += Math.cos(seatYaw) * 0.55;
+    tYaw = yaw = seatYaw;
+  } else {
+    walkPos.set(0, 1.55, 3.1);
+    tYaw = yaw = 0;
+  }
+  tPitch = pitch = -0.2;
+  $('diff').textContent = '';
+  on('standBtn', false); on('umbBtn', false); on('medBtn', false); on('stealBtn', false); on('joy', true); on('camBtn', COARSE); on('seatCard', false); on('quitBtn', false);
+  if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
+  hint.textContent = COARSE ? '好友房走走・靠近空位按「坐這裡」，也可抱起鄰居' : 'WASD 走動・E／「坐這裡」坐下・Space 跳躍・C 蹲下・Z 躺下';
+}
+bindRoom({
+  id: statsId,
+  nick: () => myName(),
+  toast: (t, c) => toast(t, c),
+  audio: () => audio(),
+  canEnter: () => state === 'menu' && !tut && !isPlazaActive() && !isDeathmatchActive() && !isRoomActive(),
+  getScene: () => scene,
+  hideYardExtras: hideRoomYardExtras,
+  enterWalk: () => {
+    evRun = null;
+    state = 'play';
+    syncShiftUi();
+    hideRoomYardExtras(true);
+    enterRoomWalk(false);
+    $('overlay').classList.remove('show');
+    updHud();
+  },
+  applySeatPose: (x, z, seatY) => {
+    applyPlazaSeatPose(new THREE.Vector3(x, 0, z), seatY);
+    setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
+    setPlazaSeatPropsVisible(true);
+    handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
+    on('standBtn', true); on('umbBtn', roomPlay); on('medBtn', roomPlay);
+    if (roomPlay) later(0.3, goPick);
+    toast('坐下了', '#9fe0ff'); SFX.pop();
+  },
+  afterStand: () => enterRoomWalk(true),
+  getWalkXZ: () => (walking ? { x: walkPos.x, z: walkPos.z } : { x: SEAT.x, z: SEAT.z }),
+  getYaw: () => (!walking ? seatYaw : (bodyPose === 'lie' ? bodyYaw : yaw)),
+  getLookYaw: () => (walking || tpv ? 0 : yaw),
+  getPitch: () => (tpv ? 0 : pitch),
+  getPhase: () => jumpT > 0 ? 'jump' : bodyPose && walking ? bodyPose : phase,
+  getMoving: () => {
+    if (!walking) return false;
+    if (joy.x * joy.x + joy.y * joy.y > 0.04) return true;
+    for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) return true;
+    return false;
+  },
+  getUmb: () => umbHeld || umbT > 0,
+  getOutfit: () => ({
+    head: equipNow('head').id,
+    hand: equipNow('hand').id,
+    body: equipNow('body').id,
+    legs: equipNow('legs').id,
+    feet: equipNow('feet').id,
+  }),
+  getCosmetics: () => encodeCosmetics({
+    goldSmoke: gearOn('goldPipe'),
+    cushion: gearOn('seatCush'),
+    nameFrame: gearOn('nameFrame'),
+  }),
+  isWalking: () => walking,
+  enterScene: (scene, then) => {
+    roomLoc = scene; updSky();
+    enterWorkShed(() => { state = 'menu'; syncShiftUi(); then(); });
+  },
+  applyScene: (scene) => {
+    if (roomLoc !== scene) { roomLoc = scene; updSky(); }
+    if (roomYardHidden) hideRoomYardExtras(true);
+  },
+  startPlay: () => {
+    if (roomPlay) return;
+    roomPlay = true; evRun = null; shiftLen = 24 * 3600;
+    $('result').classList.remove('show');
+    startDay();
+    on('quitBtn', false);
+    if (walking) { on('umbBtn', false); on('medBtn', false); }
+  },
+  finishPlay: () => {
+    if (state === 'play') { endReason = 'time'; endDay(); }
+    return { earn: Math.max(0, lastPay.earn), count, durSec: Math.max(1, Math.round(shiftLen - Math.max(0, timeLeft))) };
+  },
+  getCount: () => count,
+  getEarn: () => Math.max(0, meatPay + perfects * eco.perfectPay + bowlBonus - penalty),
+  grantPayout: (n) => {
+    const v = Math.max(0, Math.floor(n));
+    lastPay.earn = v;
+    if (v > 0) { save.money += v; persist(); }
+    track('room_reward', { amount: v, money: save.money });
+    toast(`好友房結算 +$${v}（身上 $${save.money}）`, '#9be37a');
+  },
+  leaveScene: () => {
+    const wasPlay = roomPlay;
+    if (wasPlay && state === 'play') { endReason = 'quit'; endDay(); }
+    $('result').classList.remove('show');
+    roomPlay = false;
+    hideRoomYardExtras(false);
+    returnToMainMenu(() => { roomLoc = null; shiftLen = SHIFT; updSky(); applyCrew(); applySeat(save.seat ?? 'door'); });
+  },
+});
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
   label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : k === 'odd' ? `開到「${ODD[i]?.name ?? '奇物'}」` : k === 'ach' ? `達成金牌成就「${ACHS[i]?.n ?? '成就'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！`, title: () => achTitle(), foil: () => gearOn('nameFrame') });
@@ -4911,7 +5108,7 @@ setInterval(() => {
 
 // ── 廣場跳躍（先微蹲再跳；phase "jump" 同步；高度見 plazaJumpHeight）──
 let jumpY = 0, jumpT = 0;
-function plazaJump() { if (!plazaMode || !walking || jumpT > 0 || bodyPose === 'lie') return; if (bodyPose) setBodyPose(''); jumpT = PLAZA_JUMP_DUR; }
+function plazaJump() { if (!(plazaMode || isRoomActive()) || !walking || jumpT > 0 || bodyPose === 'lie') return; if (bodyPose) setBodyPose(''); jumpT = PLAZA_JUMP_DUR; }
 // ── 廣場蹲／躺（走動時才可用；用 phase "crouch"／"lie" 同步）──
 let bodyPose: '' | 'crouch' | 'lie' = '';
 let lastPose: 'crouch' | 'lie' = 'crouch';
@@ -4929,7 +5126,7 @@ function setBodyPose(p: '' | 'crouch' | 'lie') {
   document.getElementById('crouchBtn')?.classList.toggle('act', p === 'crouch');
   document.getElementById('lieBtn')?.classList.toggle('act', p === 'lie');
 }
-function plazaPose(p: 'crouch' | 'lie') { if (!plazaMode || !walking || jumpT > 0) return; setBodyPose(bodyPose === p ? '' : p); }
+function plazaPose(p: 'crouch' | 'lie') { if (!(plazaMode || isRoomActive()) || !walking || jumpT > 0) return; setBodyPose(bodyPose === p ? '' : p); }
 {
   const poseBtn = document.getElementById('poseBtn');
   const setPoseOpen = (v: boolean) => {
@@ -4947,7 +5144,7 @@ function plazaPose(p: 'crouch' | 'lie') { if (!plazaMode || !walking || jumpT > 
   const step = () => {
     const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (jumpT > 0) { jumpT = Math.max(0, jumpT - dt); jumpY = jumpT > 0 ? plazaJumpHeight(PLAZA_JUMP_DUR - jumpT) : 0; }
-    if (!plazaMode || !walking) { jumpT = 0; jumpY = 0; if (bodyPose) setBodyPose(''); }
+    if (!(plazaMode || isRoomActive()) || !walking) { jumpT = 0; jumpY = 0; if (bodyPose) setBodyPose(''); }
     // 躺著時一動（方向鍵／搖桿）就起來
     if (bodyPose === 'lie') { let mv = Math.abs(joy.x) > 0.15 || Math.abs(joy.y) > 0.15; for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) mv = true; if (mv) setBodyPose(''); }
     poseK += ((bodyPose ? 1 : 0) - poseK) * Math.min(1, dt * 10);
