@@ -342,6 +342,8 @@ export function makePlazaHq(
         root.add(flag);
       }
     } else if (p.kind === 'chairs') {
+      // 改成可坐的單張塑膠椅，畫在 seafood.ts（休息座）；這裡只留碰撞
+      continue;
       // 疊放的白色塑膠椅
       const chair = M(0xf2f2ee, { roughness: 0.6 });
       const k = LO ? 3 : 5;

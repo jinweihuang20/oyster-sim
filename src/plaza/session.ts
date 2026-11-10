@@ -174,7 +174,7 @@ export function plazaResolveEnterSpawn() {
     takenSeats: occupiedSeatKeys(),
   });
 }
-const CARRY_DIST = 1.5;
+const CARRY_DIST = 0.95;
 
 function myCarriedNpc(): PlazaPlayer | null {
   const cid = client?.connectionId ?? '';
@@ -1217,7 +1217,9 @@ export function plazaUpdateNear(wx: number, wz: number) {
   }
   if (carryNpcOk) {
     const c = nearestCarryNpc(wx, wz);
-    if (c) {
+    const s0 = c ? nearestFreeSeat(wx, wz, takenSet(true), SIT_DIST) : null;
+    // 空位和阿婆都在範圍內：看哪個比較近
+    if (c && !(s0 && s0.dist < c.dist)) {
       nearCarry = { connId: c.connId, nick: c.nick };
       view?.highlightNear(null);
       return null;

@@ -57,6 +57,10 @@ export const SEAFOOD_TABLE_Z: readonly number[] = [-0.45, 1.5, 3.45];
 export const SEAFOOD_STOOL_OFFSET = 0.55;
 export const SEAFOOD_TABLE_RADIUS = 0.34;
 export const isRestPile = (pileId: number) => pileId === SEAFOOD_PILE_ID;
+/** 競選總部門口那張塑膠椅：掛在休息座 pileId 底下的第 7 個位子（與後端 HqSeatSlot 對齊），朝西 */
+export const HQ_SEAT_SLOT = 6;
+export const HQ_SEAT = { x: 13.68, z: -6.3 } as const;
+export const REST_SEAT_COUNT = SEAFOOD_SEAT_COUNT + 1;
 /** 非蚵堆座位（吸菸區＋休息座）：不開工班、不算容量、不能被偷／丟 */
 export const isLeisurePile = (pileId: number) => isSmokePile(pileId) || isRestPile(pileId);
 export const isSmokePile = (pileId: number) => pileId === SMOKE_PILE_ID || pileId === CAFE_SMOKE_PILE_ID;
@@ -121,7 +125,7 @@ export const TIDAL_FLAT = {
   zMin: -10.2,
   zMax: 10.2,
 } as const;
-export const SIT_DIST = 1.15;
+export const SIT_DIST = 0.8;
 
 /** 4×4 蚵仔堆中心 */
 export function pileCenter(pileId: number, out = new THREE.Vector3()) {
@@ -139,6 +143,11 @@ export const PLAZA_LAMP_XZ: readonly [number, number][] = [
 
 /** 一堆座位：0–3 玩家、4–5 阿婆；皆朝堆心。吸菸區 pileId=SMOKE_PILE_ID。 */
 export function seatPose(pileId: number, slot: number) {
+  if (isRestPile(pileId) && slot === HQ_SEAT_SLOT) {
+    const pos = new THREE.Vector3(HQ_SEAT.x, 0, HQ_SEAT.z);
+    const center = new THREE.Vector3(HQ_SEAT.x - 1, 0, HQ_SEAT.z);
+    return { pos, yaw: Math.PI / 2, center, angle: 0 };
+  }
   if (isRestPile(pileId)) {
     const t = Math.max(0, Math.min(SEAFOOD_TABLE_Z.length - 1, slot >> 1));
     const center = new THREE.Vector3(SEAFOOD_TABLE_X, 0, SEAFOOD_TABLE_Z[t]);
@@ -208,7 +217,7 @@ export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDis
   }
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
   for (let s = 0; s < CAFE_SMOKE_SEAT_COUNT; s++) consider(CAFE_SMOKE_PILE_ID, s);
-  for (let s = 0; s < SEAFOOD_SEAT_COUNT; s++) consider(SEAFOOD_PILE_ID, s);
+  for (let s = 0; s < REST_SEAT_COUNT; s++) consider(SEAFOOD_PILE_ID, s);
   return best;
 }
 
@@ -232,7 +241,7 @@ export function nearestFreePlaceSeat(x: number, z: number, taken: Set<string>, m
   }
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
   for (let s = 0; s < CAFE_SMOKE_SEAT_COUNT; s++) consider(CAFE_SMOKE_PILE_ID, s);
-  for (let s = 0; s < SEAFOOD_SEAT_COUNT; s++) consider(SEAFOOD_PILE_ID, s);
+  for (let s = 0; s < REST_SEAT_COUNT; s++) consider(SEAFOOD_PILE_ID, s);
   return best;
 }
 
