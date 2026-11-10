@@ -58,8 +58,6 @@ function buildHeightGrid(root: THREE.Object3D, skip: (o: THREE.Object3D) => bool
     if ((m as THREE.InstancedMesh).isInstancedMesh) {
       const im = m as THREE.InstancedMesh;
       const mx = new THREE.Matrix4();
-      const dayArr = new Float32Array(im.count * 3);
-      const nigArr = new Float32Array(im.count * 3);
       for (let i = 0; i < im.count; i++) {
         im.getMatrixAt(i, mx);
         v.setFromMatrixPosition(mx);
@@ -131,80 +129,45 @@ function bakedLit(ao0: number, ndl: number, shRaw: number, includeDirect: boolea
   return Math.min(1, Math.max(0.90, ao0 * sh) * 1.05);
 }
 
-/** 吊燈下方／棚底的暖光權重 0–1。tight＝夜間較清楚的光池。 */
-function lampWarm(x: number, y: number, z: number, ny: number, lamps: readonly (readonly [number, number])[], lampY: number, tight: boolean) {
+/** 吊燈下方／棚底的暖光權重 0–1（地面較寬、棚底較窄） */
+function lampWarm(x: number, y: number, z: number, ny: number, lamps: readonly (readonly [number, number])[], lampY: number) {
   let w = 0;
-  const rad = tight ? 4.0 : 4.8;
   for (const [lx, lz] of lamps) {
     const horiz = Math.hypot(x - lx, z - lz);
+    // 地面／桌椅朝上的面：一圈柔光，半徑約 4.8 m，燈與燈之間還有空隙
     if (ny >= -0.15 && y < 2.4) {
-      const u = 1 - horiz / rad;
-      if (u > 0) {
-        const fall = tight ? (u * u * (3 - 2 * u)) ** 2 : u * u;
+      const t = 1 - horiz / 4.8;
+      if (t > 0) {
         const heightFade = y < 0.25 ? 1 : Math.max(0, 1 - y / 2.5);
-        w = Math.max(w, fall * heightFade);
+        w = Math.max(w, t * t * heightFade);
       }
     }
+    // 棚底朝下的面：燈附近一小圈暖光
     if (ny < 0 && y > 3.4) {
-      const t = 1 - Math.hypot(horiz, Math.max(0, lampY - y)) / (tight ? 2.2 : 2.4);
-      if (t > 0) w = Math.max(w, tight ? t * t * t * 0.9 : t * t * 0.85);
+      const t = 1 - Math.hypot(horiz, Math.max(0, lampY - y)) / 2.4;
+      if (t > 0) w = Math.max(w, t * t * 0.85);
     }
   }
   return w;
 }
 
-const DAY_GAIN: [number, number, number] = [0.42, 0.24, 0.06];
-const NIGHT_GAIN_LO: [number, number, number] = [2.4, 1.3, 0.3];
-const NIGHT_GAIN_HI: [number, number, number] = [1.05, 0.58, 0.14];
-
-function applyWarm(lit: number, warm: number, fill: number, gain: [number, number, number], out: Float32Array | THREE.Color, i = 0) {
-  const base = lit * fill;
-  const r = base * (1 + warm * gain[0]);
-  const g = base * (1 + warm * gain[1]);
-  const b = base * (1 + warm * gain[2]);
+function applyWarm(lit: number, warm: number, out: THREE.Color | Float32Array, i = 0) {
+  const r = lit * (1 + warm * 0.42);
+  const g = lit * (1 + warm * 0.24);
+  const b = lit * (1 + warm * 0.06);
   if (out instanceof THREE.Color) out.setRGB(r, g, b);
   else { out[i] = r; out[i + 1] = g; out[i + 2] = b; }
 }
 
-function lerpBakeColors(day: ArrayLike<number>, night: ArrayLike<number>, out: Float32Array, t: number) {
-  const s = 1 - t;
-  for (let i = 0; i < out.length; i++) out[i] = (day[i] as number) * s + (night[i] as number) * t;
-}
-
-/** 在白天／夜間兩套烘焙色之間插值（t=0 白天、t=1 夜晚） */
-export function applyPlazaBakeBlend(root: THREE.Object3D, t: number) {
-  const k = Math.max(0, Math.min(1, t));
-  if (root.userData.bakeNightT === k) return;
-  root.userData.bakeNightT = k;
-  root.traverse(o => {
-    const im = o as THREE.InstancedMesh;
-    if (im.isInstancedMesh && im.instanceColor && im.userData.colorDay && im.userData.colorNight) {
-      lerpBakeColors(im.userData.colorDay as Float32Array, im.userData.colorNight as Float32Array, im.instanceColor.array as Float32Array, k);
-      im.instanceColor.needsUpdate = true;
-      return;
-    }
-    const m = o as THREE.Mesh;
-    if (!m.isMesh || !m.geometry) return;
-    const day = m.geometry.getAttribute('colorDay');
-    const nig = m.geometry.getAttribute('colorNight');
-    const col = m.geometry.getAttribute('color');
-    if (!day || !nig || !col) return;
-    lerpBakeColors(day.array, nig.array, col.array as Float32Array, k);
-    col.needsUpdate = true;
-  });
-}
-
 /**
  * 把靜態場景的環境光遮蔽（與可選的陽光陰影）烤進頂點色／instanceColor。
- * 當成乘法色：1＝全亮。同時寫入白天／夜間兩套頂點色，供 applyPlazaBakeBlend 切換。不會改動態角色。
+ * 當成乘法色：1＝全亮。不會改動態角色。
  */
 export function bakeStaticLighting(root: THREE.Object3D, opts: BakeLightingOpts = {}) {
   const includeDirect = !!opts.includeDirect;
   const lamps = opts.lampXZ ?? [];
   const lampY = opts.lampY ?? 4.1;
   const usePool = !!opts.lampPool && lamps.length > 0;
-  const nightGain = includeDirect ? NIGHT_GAIN_LO : NIGHT_GAIN_HI;
-  const nightFill = includeDirect ? 0.55 : 0.5;
   const skip = (o: THREE.Object3D) => !!(opts.skip?.(o) || skipDefault(o) || o.userData.lightingBaked);
   const sun = (opts.sunDir ?? new THREE.Vector3(-3, 11, -5)).clone().normalize();
   root.updateMatrixWorld(true);
@@ -217,8 +180,6 @@ export function bakeStaticLighting(root: THREE.Object3D, opts: BakeLightingOpts 
     if ((m as THREE.InstancedMesh).isInstancedMesh) {
       const im = m as THREE.InstancedMesh;
       const mx = new THREE.Matrix4();
-      const dayArr = new Float32Array(im.count * 3);
-      const nigArr = new Float32Array(im.count * 3);
       for (let i = 0; i < im.count; i++) {
         im.getMatrixAt(i, mx);
         _p.setFromMatrixPosition(mx);
@@ -226,15 +187,8 @@ export function bakeStaticLighting(root: THREE.Object3D, opts: BakeLightingOpts 
         const ao0 = aoAt(_p.x, _p.y, _p.z, 1, grid);
         const shRaw = includeDirect ? shadowAt(_p.x, _p.y + 0.3, _p.z, sun, grid) : 1;
         const lit = bakedLit(ao0, 1, shRaw, includeDirect);
-        const dayW = usePool ? lampWarm(_p.x, _p.y, _p.z, 1, lamps, lampY, false) : 0;
-        const nigW = usePool ? lampWarm(_p.x, _p.y, _p.z, 1, lamps, lampY, true) : 0;
-        applyWarm(lit, dayW, 1, DAY_GAIN, dayArr, i * 3);
-        applyWarm(lit, nigW, nightFill, nightGain, nigArr, i * 3);
-      }
-      im.userData.colorDay = dayArr;
-      im.userData.colorNight = nigArr;
-      for (let i = 0; i < im.count; i++) {
-        _c.setRGB(dayArr[i * 3], dayArr[i * 3 + 1], dayArr[i * 3 + 2]);
+        const warm = usePool ? lampWarm(_p.x, _p.y, _p.z, 1, lamps, lampY) : 0;
+        applyWarm(lit, warm, _c);
         im.setColorAt(i, _c);
       }
       if (im.instanceColor) im.instanceColor.needsUpdate = true;
@@ -253,8 +207,6 @@ export function bakeStaticLighting(root: THREE.Object3D, opts: BakeLightingOpts 
     if (!geo.getAttribute('normal')) geo.computeVertexNormals();
     const nrm = geo.getAttribute('normal');
     const col = new Float32Array(pos.count * 3);
-    const dayCol = new Float32Array(pos.count * 3);
-    const nigCol = new Float32Array(pos.count * 3);
     m.updateWorldMatrix(true, false);
     const normalMat = new THREE.Matrix3().getNormalMatrix(m.matrixWorld);
     for (let i = 0; i < pos.count; i++) {
@@ -264,15 +216,10 @@ export function bakeStaticLighting(root: THREE.Object3D, opts: BakeLightingOpts 
       const ndl = includeDirect ? _n.dot(sun) : 1;
       const shRaw = includeDirect ? shadowAt(_p.x, _p.y, _p.z, sun, grid) : 1;
       const lit = bakedLit(ao0, ndl, shRaw, includeDirect);
-      const dayW = usePool ? lampWarm(_p.x, _p.y, _p.z, _n.y, lamps, lampY, false) : 0;
-      const nigW = usePool ? lampWarm(_p.x, _p.y, _p.z, _n.y, lamps, lampY, true) : 0;
-      applyWarm(lit, dayW, 1, DAY_GAIN, dayCol, i * 3);
-      applyWarm(lit, nigW, nightFill, nightGain, nigCol, i * 3);
+      const warm = usePool ? lampWarm(_p.x, _p.y, _p.z, _n.y, lamps, lampY) : 0;
+      applyWarm(lit, warm, col, i * 3);
     }
-    col.set(dayCol);
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    geo.setAttribute('colorDay', new THREE.BufferAttribute(dayCol, 3));
-    geo.setAttribute('colorNight', new THREE.BufferAttribute(nigCol, 3));
     const mats = Array.isArray(m.material) ? m.material : [m.material];
     for (const mat of mats) {
       if (!mat) continue;

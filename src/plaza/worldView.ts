@@ -17,8 +17,7 @@ import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, isPlazaAber, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
 import { makeInstancedPlazaChairs, makeInstancedPads, type ChairPose } from './instancedProps';
-import { bakeStaticLighting, applyPlazaBakeBlend } from './bakeLighting';
-import { tickPlazaNight, peekPlazaNightT } from './plazaTime';
+import { bakeStaticLighting } from './bakeLighting';
 import { mergeStaticMeshes, countMeshes } from './mergeStatic';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
@@ -157,7 +156,6 @@ export function createPlazaWorldView(
   bubblesHost: HTMLElement,
   opts: PlazaWorldOpts,
 ): PlazaWorldView {
-  tickPlazaNight(0, true);
   const LO = !!opts.lowDetail;
   const MOBILE = matchMedia('(pointer: coarse)').matches;
   const root = new THREE.Group(); root.name = 'plazaWorld'; scene.add(root);
@@ -334,11 +332,8 @@ export function createPlazaWorldView(
     sunDir: new THREE.Vector3(-3, 11, -5),
     lampXZ: PLAZA_LAMP_XZ,
     lampY: PLAZA_ROOF_Y - 0.55,
-    lampPool: true,
+    lampPool: LO,
   });
-  applyPlazaBakeBlend(root, peekPlazaNightT());
-  bigShed.setNight(peekPlazaNightT());
-
   const allPads = extraPads ? [plazaChairs.pads, extraPads] : [plazaChairs.pads];
   const paintInstancedPads = (taken: Set<string> | null) => {
     for (const api of allPads) {
@@ -583,11 +578,9 @@ export function createPlazaWorldView(
   const roofLamps: THREE.PointLight[] = [];
   // LO：只留一盞動態點光（另一側靠環境光／自發光），一般兩盞對角
   const roofLampXZ = LO ? [PLAZA_LAMP_XZ[0]] : [PLAZA_LAMP_XZ[0], PLAZA_LAMP_XZ[3]];
-  const roofLampDayI = LO ? 14 : 16;
-  const roofLampNightI = LO ? 16 : 30;
-  const _lampCol = new THREE.Color();
+  const roofLampBaseI = LO ? 14 : 16;
   for (const [x, z] of roofLampXZ) {
-    const pl = new THREE.PointLight(0xffe2b8, roofLampDayI, 18, 1.25);
+    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 18 : 18, 1.25);
     pl.position.set(x, PLAZA_ROOF_Y - 0.55, z);
     pl.castShadow = false;
     pl.visible = true;
@@ -1698,16 +1691,8 @@ function hashPid(pid: string) {
     const cx = camera.position.x, cz = camera.position.z;
     const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
     // 燈數固定，只調亮度，不開關 visible（three.js 增減燈會重編著色器）
-    // 省電：吊燈改靠外觀球自發光與烘焙光池，關掉動態點光
-    const nt = tickPlazaNight(dt);
-    applyPlazaBakeBlend(root, nt);
-    bigShed.setNight(nt);
-    for (const pl of roofLamps) {
-      pl.intensity = eco ? 0 : roofLampDayI + (roofLampNightI - roofLampDayI) * nt;
-      pl.color.setHex(0xffe2b8).lerp(_lampCol.setHex(0xffd8a0), nt);
-      pl.distance = 18 - 4 * nt;
-      pl.decay = 1.25 + 0.2 * nt;
-    }
+    // 省電：吊燈改靠外觀球自發光，關掉動態點光
+    for (const pl of roofLamps) pl.intensity = eco ? 0 : roofLampBaseI;
     tickDetailLod(dt, cx, cz);
 
     const k = Math.min(1, dt * 10);
