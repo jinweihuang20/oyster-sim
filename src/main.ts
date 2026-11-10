@@ -48,7 +48,7 @@ import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
 import {
   makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
-  posePlazaSit, posePlazaStand, posePlazaSmokeSit, easeSmokePuff,
+  posePlazaSit, posePlazaStand, posePlazaSmokeSit, easeSmokePuff, placePlazaArmChain,
   clearPlazaSmokeCig, ensurePlazaSmokeCig, getPlazaSmokeCig, posePlazaCarryHold,
   plazaJumpHeight, PLAZA_JUMP_DUR, applyPlazaBodyPose as applyBodyPose, type PlayerRig,
 } from './dm/character';
@@ -1858,8 +1858,10 @@ function resolvePlazaBlocked(e: PlazaShellEvent) {
 /** 本機被砸頭部世界座標（給全場噴血對齊） */
 function plazaSelfBleedPos() {
   const p = new THREE.Vector3();
+  if (tpv && plazaMe) {
+    plazaMe.head.getWorldPosition(p); p.y += 0.08; return p;
+  }
   if (tpv) {
-    if (walking && plazaMe) { plazaMe.head.getWorldPosition(p); p.y += 0.08; return p; }
     meHead.getWorldPosition(p); p.y += 0.08; return p;
   }
   p.copy(camera.position); p.y -= 0.02; return p;
@@ -4013,7 +4015,7 @@ if (SHOT) setTimeout(() => {
         $('shop').scrollTop = 0;
       }
       $('shop').classList.add('show');
-    } if (params.get('p') === 'eq') { eqPick = 'hand'; renderEquip(); $('equip').classList.add('show'); } if (params.get('tpv')) { for (const id of ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots']) { save.shop.owned.push(id); setEquip(EQUIP.find(e => e.id === id)!.slot, id); } setEquip('hand', 'sl_89'); applySleeve(); setTpv(true); if (params.get('tpv') === 'cheer') later(0.5, () => react3('cheer')); }
+    } if (params.get('p') === 'eq') { eqPick = 'hand'; renderEquip(); $('equip').classList.add('show'); } if (params.get('tpv')) { if (!params.get('outfit')) { for (const id of ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots']) { save.shop.owned.push(id); setEquip(EQUIP.find(e => e.id === id)!.slot, id); } setEquip('hand', 'sl_89'); applySleeve(); } setTpv(true); if (params.get('tpv') === 'cheer') later(0.5, () => react3('cheer')); }
   if (params.get('p') === 'name') { save.name = undefined; save.namePrompted = 0; namePrompt(); } }
   if (SHOT === 'settings') $('settings').classList.add('show');
   if (SHOT === 'fb' || SHOT === 'fbdone') { openFb('settings'); if (SHOT === 'fbdone') fbShow(true); }
@@ -4224,7 +4226,7 @@ mesh(new THREE.SphereGeometry(0.16, 10, 8, 0, Math.PI * 2, 0, 1.3), pm.head, [0,
 mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.02, 12), pm.head, [0, 0.06, 0], meHead);
 const meArm = (s: number) => { const p = new THREE.Group(); p.position.set(s * 0.22, 0.84, 0); meTorso.add(p); mesh(rcyl(0.05, 0.045, 0.36, 6), sleeve, [0, -0.12, -0.12], p).rotation.x = 1.1; mesh(crease(new THREE.SphereGeometry(0.05, 6, 5)), pm.skin, [0, -0.2, -0.3], p); return p; };
 const meArmL = meArm(-1), meArmR = meArm(1);
-/** 廣場走動第三人稱：與死鬥／遠端同一套 makePlayerAvatar（工寮仍用 me3） */
+/** 第三人稱本機：與遠端同一套 makePlayerAvatar（廣場與工寮都用這套並套裝備） */
 let plazaMe: PlayerRig | null = null;
 function ensurePlazaMe(): PlayerRig {
   if (plazaMe) return plazaMe;
@@ -4295,10 +4297,10 @@ function camTick(dt: number) {
   if (!tpReady) return;
   const show = tpv && state === 'play';
   const enter = show && !tpWas; tpWas = show;
-  // 廣場第三人稱：走動／坐下都用同一套 makePlayerAvatar（與遠端一致）；工寮仍用 me3
-  const usePlazaMe = show && plazaMode;
+  // 第三人稱一律用廣場同一套 makePlayerAvatar（工寮坐下／走動也套目前穿的衣服）
+  const usePlazaMe = show;
   tpOn = show;
-  me3.visible = show && !usePlazaMe;
+  me3.visible = false;
   if (plazaMe) plazaMe.outer.visible = usePlazaMe;
   umbTick3(dt, show); handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
   if (!show) { if (plazaMe) plazaMe.outer.visible = false; return; }
@@ -4306,7 +4308,7 @@ function camTick(dt: number) {
   meSeatLegs.visible = !walking && !plazaMode; meLegL.visible = meLegR.visible = walking && !plazaMode;
   if (walking) {
     const sp = Math.hypot(walkPos.x - lastWalk.x, walkPos.z - lastWalk.z) / Math.max(dt, 1e-3); lastWalk.copy(walkPos); walkMovingT = sp > 0.3 ? performance.now() : walkMovingT;
-    walkPh += Math.min(sp, 3) * dt * 5; const sw = Math.min(1, sp / 1.2) * Math.sin(walkPh);
+    walkPh += Math.min(sp, 3) * dt * 5;
     handRig.visible = false;
     if (plazaMode) {
       // 廣場：死鬥同款 avatar，腳底 y=0、頭高 ≈1.5；第三人稱鎖俯仰，避免遠端跟著點頭
@@ -4347,13 +4349,30 @@ function camTick(dt: number) {
       { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
       tpCam.updateMatrixWorld(); return;
     }
-    // 工寮：沿用 me3 走路模組
-    me3.position.set(walkPos.x, walkPos.y - 1.55 - 0.4 + jumpY, walkPos.z); me3.rotation.y = yaw; meTorso.position.y = 0.43; meTorso.rotation.x = 0;
-    meLegL.rotation.x = sw * 0.6; meLegR.rotation.x = -sw * 0.6; meArmL.rotation.x = -sw * 0.5; meArmR.rotation.x = sw * 0.5; meArmL.rotation.z = meArmR.rotation.z = 0; meHead.rotation.y = 0;
-    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), gy = walkPos.y - 1.95;
-    const cp = new THREE.Vector3(walkPos.x - fx * 2.9, gy + 2.5, walkPos.z - fz * 2.9);
+    // 工寮走動：與廣場同一套 avatar／裝備
+    const rig = ensurePlazaMe();
+    if (rig.root.position.y !== 0) posePlazaStand(rig);
+    rig.outer.visible = true;
+    rig.outer.position.set(walkPos.x, jumpY, walkPos.z);
+    rig.outer.rotation.order = 'YXZ';
+    rig.outer.rotation.y = yaw;
+    rig.outer.rotation.x = 0;
+    if (jumpT > 0) {
+      posePlazaJump(rig, PLAZA_JUMP_DUR - jumpT);
+      posePlazaHangArms(rig);
+    } else {
+      const amp = Math.min(1, sp / 1.2);
+      const swing = posePlazaWalkCycle(rig, walkPh, Math.max(0.15, amp));
+      if (sp > 0.12) posePlazaWalkSwingArms(rig, swing);
+      else {
+        posePlazaHangArms(rig);
+        rig.torso.rotation.y *= 0.8; rig.torso.rotation.z *= 0.8; rig.torso.rotation.x *= 0.8;
+      }
+    }
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    const cp = new THREE.Vector3(walkPos.x - fx * 2.9, jumpY + 2.5, walkPos.z - fz * 2.9);
     if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
-    { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, gy + 0.9, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
+    { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, jumpY + 0.9, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
     { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     tpCam.updateMatrixWorld(); return;
   }
@@ -4397,11 +4416,26 @@ function camTick(dt: number) {
     tpCam.lookAt(tpLook); tpCam.updateMatrixWorld();
     return;
   }
-  // 工寮坐下：沿用 me3（走動亦同套）
-  me3.position.set(SEAT.x, SEAT.y - 1.02, SEAT.z); me3.rotation.y = seatYaw;
-  meArmL.rotation.x = meArmR.rotation.x = -up * 2.4; meArmL.rotation.z = -up * 0.3; meArmR.rotation.z = up * 0.3;
-  meTorso.rotation.x = ouchT > 0 ? Math.sin(ouchT / 0.6 * Math.PI) * 0.35 : 0; meTorso.position.y = up * 0.06;
-  meHead.rotation.y = yaw * 0.6; meTorso.position.y = Math.max(meTorso.position.y, 0);
+  // 工寮坐下：與廣場同一套 avatar，套目前穿的衣服
+  const rig = ensurePlazaMe();
+  rig.outer.visible = true;
+  rig.outer.position.set(SEAT.x, 0, SEAT.z);
+  rig.outer.rotation.order = 'YXZ';
+  rig.outer.rotation.set(0, seatYaw, 0);
+  posePlazaSit(rig);
+  if (ouchT > 0) rig.torso.rotation.x += Math.sin(ouchT / 0.6 * Math.PI) * 0.35;
+  if (up > 0.01) {
+    rig.torso.position.y += up * 0.06;
+    const cheer = (upper: THREE.Group, lower: THREE.Group, side: number) => {
+      const shx = side * 0.22, shy = 0.30, shz = 0;
+      const elx = shx + side * 0.08, ely = shy + 0.1 * up, elz = -0.12;
+      const wrx = elx + side * 0.04, wry = ely + 0.32 * up, wrz = elz + 0.08 * up;
+      placePlazaArmChain(upper, lower, shx, shy, shz, elx, ely, elz, wrx, wry, wrz);
+    };
+    cheer(rig.upperL, rig.lowerL, -1);
+    cheer(rig.upperR, rig.lowerR, 1);
+  }
+  rig.head.rotation.y = yaw * 0.6;
   const h = seatYaw + yaw * 0.35, fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
   {
     // 工寮：從背後斜 3/4 看，人在畫面中下、全身入鏡
@@ -4585,8 +4619,8 @@ function umbHit3(at: THREE.Vector3) {
 }
 function umbTick3(dt: number, show: boolean) {
   if (!umb3Ready) return;
-  // 廣場第三人稱（走／坐）傘掛 plazaMe；工寮掛 me3
-  if (show && plazaMode) {
+  // 第三人稱傘一律掛 plazaMe（工寮／廣場同一套）
+  if (show) {
     const host = ensurePlazaMe().outer;
     if (umb3.parent !== host) host.add(umb3);
   } else if (umb3.parent !== me3) me3.add(umb3);
@@ -4600,7 +4634,7 @@ function umbTick3(dt: number, show: boolean) {
   // 傘面像真的傘一樣從收起的細長往外撐開
   const o = umb3Open, e = 1 - Math.pow(1 - o, 3); umb3Can.scale.set(0.12 + 0.88 * e, 1.6 - 0.6 * e, 0.12 + 0.88 * e);
   const j = umb3Jolt > 0 ? Math.sin(umb3Jolt * 60) * umb3Jolt * 1.2 : 0;
-  const st = walking ? (plazaMode ? 0 : 0.43) : 0;
+  const st = 0;
   // 往前開傘：傘面朝前（殼飛來的方向），手往前伸握柄，傘稍微壓低偏右，不擋住手上的蚵仔
   umb3.position.set(0.22, 0.95 + st + 0.05 * e, -0.38 - 0.12 * e + j * 0.12); umb3.rotation.set(-1.15 * e - 0.2 - j, 0, -0.18 + j * 0.5);
 }
