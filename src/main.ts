@@ -1435,7 +1435,7 @@ initYardShop({
   onFlagChange: () => plazaRefreshFlagUi(),
   setFlagText: (text) => plazaTrySetFlagText(text),
   showFlag: (on) => on ? plazaTryShowFlag() : plazaTryRemoveFlag(),
-  upgradeFlag: (track) => plazaTryUpgradeFlag(track),
+  upgradeFlag: (track, from) => plazaTryUpgradeFlag(track, from),
   selectFlag: (track, level) => plazaTrySelectFlag(track, level),
   clearBowlMeat: () => { if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; } },
   renderClothShop,

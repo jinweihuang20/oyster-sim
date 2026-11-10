@@ -38,7 +38,7 @@ export type YardShopDeps = {
   onFlagChange?: () => void;
   showFlag?: (on: boolean) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   setFlagText?: (text: string) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
-  upgradeFlag?: (track: FlagTrack) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
+  upgradeFlag?: (track: FlagTrack, from?: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   selectFlag?: (track: FlagTrack, level: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   clearBowlMeat: () => void;
   renderClothShop: () => void;
@@ -290,6 +290,8 @@ export function renderShop() {
 
 
 const LOCK_IC = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+let flagMineCache: PlazaFlagState | null = null;
+let flagUpBusy = false;
 let flagPv: FlagPreviewState = { color: 0, size: 0, fx: 0, text: '', nick: '' };
 
 function flagPvRow(label: string, track: FlagTrack, opts: { lv: number; n: string }[], unlocked: number, selected: number) {
@@ -327,8 +329,10 @@ function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
       return `<button type="button" class="flagChip${on ? ' on' : ''}" data-fsel="${track}" data-lv="${o.lv}"${on ? ' aria-current="true"' : ''}>${D.esc(o.n)}</button>`;
     }).join('');
     const nxt = nextFlagItem(track, unlocked);
-    const buy = nxt
-      ? `<button data-fup="${track}" ${save.money >= px(nxt.id, nxt.price) ? '' : 'disabled'}>解鎖 ${D.esc(nxt.n.replace(/^旗幟[^：]*：/, ''))} ${pxHtml(nxt.id, nxt.price)}</button>${pxCd(nxt.id)}`
+    const buy = !mine
+      ? '<button disabled>讀取等級中…</button>'
+      : nxt
+      ? `<button data-fup="${track}" ${save.money >= px(nxt.id, nxt.price) && !flagUpBusy ? '' : 'disabled'}>解鎖 ${D.esc(nxt.n.replace(/^旗幟[^：]*：/, ''))} ${pxHtml(nxt.id, nxt.price)}</button>${pxCd(nxt.id)}`
       : '<span class="flagMax">已全部解鎖</span>';
     return `<div class="flagTrack"><div class="flagTrackHd">${label}</div><div class="flagChips">${chips}</div>${buy}</div>`;
   };
@@ -425,28 +429,40 @@ function bindFlagShop(mine: PlazaFlagState | null) {
   box.querySelectorAll<HTMLButtonElement>('button[data-fup]').forEach(b => {
     b.onclick = async () => {
       const track = b.getAttribute('data-fup') as FlagTrack | null;
-      if (!track) return;
-      const lv = track === 'color' ? (mine?.color ?? 0) : track === 'size' ? (mine?.size ?? 0) : (mine?.fx ?? 0);
+      if (!track || !mine || flagUpBusy) return; // 還沒讀到真實等級前不給買
+      const lv = track === 'color' ? mine.color : track === 'size' ? mine.size : mine.fx;
       const item = nextFlagItem(track, lv);
       if (!item) { D.toast(FLAG_ERR_ZH.max, '#ffb08a'); return; }
-      const pr = await payFor(item.id, item.price, item.n);
-      if (pr == null) return;
-      const save = D.getSave();
-      save.money -= pr;
-      D.persist();
-      let r = D.upgradeFlag ? await D.upgradeFlag(track) : null;
-      if (!r || r.err === 'no_conn') r = await postFlagUpgrade(D.getPlayerId(), track);
-      if (!r.ok) {
-        save.money += pr;
+      flagUpBusy = true;
+      box.querySelectorAll<HTMLButtonElement>('button[data-fup]').forEach(x => { x.disabled = true; });
+      try {
+        const pr = await payFor(item.id, item.price, item.n);
+        if (pr == null) return;
+        const save = D.getSave();
+        save.money -= pr;
         D.persist();
-        D.toast(flagErrText(r.err), '#ffb08a');
+        let r: { ok: boolean; err?: string; mine?: PlazaFlagState | null } | null = null;
+        try {
+          r = D.upgradeFlag ? await D.upgradeFlag(track, lv) : null;
+          if (!r || r.err === 'no_conn') r = await postFlagUpgrade(D.getPlayerId(), track, lv);
+        } catch {
+          r = { ok: false, err: 'offline' };
+        }
+        if (!r.ok) {
+          D.getSave().money += pr; // 沒升級成功一律退錢
+          D.persist();
+          if (r.mine) flagMineCache = r.mine;
+          D.toast(r.err === 'stale' ? FLAG_ERR_ZH.stale : flagErrText(r.err) + '，錢已退回', '#ffb08a');
+          return;
+        }
+        if (r.mine) flagMineCache = r.mine;
+        D.track('buy', { item: item.id, price: pr });
+        if (D.getAc()) D.SFX.jingle();
+        D.toast(`${item.n} 升級好了`, '#9be37a');
+      } finally {
+        flagUpBusy = false;
         renderShop();
-        return;
       }
-      D.track('buy', { item: item.id, price: pr });
-      if (D.getAc()) D.SFX.jingle();
-      D.toast(`${item.n} 升級好了`, '#9be37a');
-      renderShop();
     };
   });
 }
@@ -494,14 +510,19 @@ function bindFlagPreview(mine: PlazaFlagState | null) {
 function renderFlagShop(prefetched?: PlazaFlagState | null) {
   const own = D.getSave().shop.owned.includes(FLAG_ITEM.id);
   const existing = document.getElementById('flagShop');
-  const html = flagShopHtml(prefetched ?? null, own);
+  if (prefetched) flagMineCache = prefetched;
+  const cur = prefetched ?? flagMineCache;
+  const html = flagShopHtml(cur, own);
   if (existing) existing.outerHTML = html;
   else $('shopList').insertAdjacentHTML('beforeend', html);
-  bindFlagShop(prefetched ?? null);
+  bindFlagShop(cur);
   if (own && prefetched === undefined) {
     const pid = D.getPlayerId();
     const seq = shopRenderSeq;
     void fetchFlagSnapshot(pid).then(r => {
+      // 伺服器還沒有這個人的旗資料＝全部 0 級
+      const mine0 = r.mine ?? ({ color: 0, size: 0, fx: 0, colorSel: 0, sizeSel: 0, fxSel: 0, planted: false, text: '' } as unknown as PlazaFlagState);
+      if (r.ok) { r.mine = mine0; flagMineCache = mine0; }
       if (seq !== shopRenderSeq || !r.ok) return; // 商店已重畫過，舊的回應不要蓋新畫面
       const box = document.getElementById('flagShop');
       if (!box || !box.parentElement) return;
