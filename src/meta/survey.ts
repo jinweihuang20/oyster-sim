@@ -101,7 +101,7 @@ export function svAlert() {
   if (svPrompted || !alertable.length) return;
   if (H.bootQuiet()) return; // 新人先完成教學再提示問卷（入口仍在主畫面）
   if (H.state === 'play' || H.tut || !H.$('overlay').classList.contains('show')) return;
-  if (document.getElementById('giftMsg') || document.getElementById('newMsg') || document.getElementById('featMsg') || document.getElementById('svMsg') || H.$('sv').classList.contains('show')) return;
+  if (document.getElementById('giftMsg') || document.getElementById('newMsg') || document.getElementById('featMsg') || document.getElementById('svMsg') || document.getElementById('plazaGuide') || H.$('sv').classList.contains('show')) return;
   svPrompted = true;
   const m = document.createElement('div'); m.id = 'svMsg'; m.className = 'giftMsg';
   m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-chat"></i> 有未填寫的問卷</b>` +

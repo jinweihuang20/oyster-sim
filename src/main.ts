@@ -2630,6 +2630,7 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
     syncStartUi();
   });
   syncStartUi();
+  syncPlazaGuideHint();
   void syncPlazaOnlineUi(!!opts?.forcePlazaOnline);
 }
 renderLocs({ forcePlazaOnline: true });
@@ -3519,6 +3520,7 @@ function launchPlaza() {
       if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
       showPlazaLoading(false);
       updHud();
+      markPlazaVisited();
       toast('蚵仔廣場・休閒剝蚵，隨便坐、不趕時間', '#9be37a');
     },
     beginShift: () => {
@@ -4058,6 +4060,55 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
   renderer.render(scene, viewCam());
   scheduleFrame();
 }
+function plazaGuidePending() {
+  return !!(save.plazaGuideSeen && !save.plazaVisited);
+}
+function markPlazaVisited() {
+  if (save.plazaVisited) { syncPlazaGuideHint(); return; }
+  save.plazaVisited = 1;
+  persist();
+  syncPlazaGuideHint();
+}
+function syncPlazaGuideHint() {
+  const on = plazaGuidePending();
+  document.body.classList.toggle('plazaGuideHint', on);
+  const card = document.querySelector('.locPlaza');
+  if (card) card.classList.toggle('plazaHint', on);
+  const start = $('start');
+  if (start) start.classList.toggle('plazaHint', on && isPlazaPicked());
+}
+function showPlazaGuide() {
+  if (document.getElementById('plazaGuide')) return;
+  save.plazaGuideSeen = 1;
+  persist();
+  const m = document.createElement('div');
+  m.id = 'plazaGuide';
+  m.className = 'giftMsg';
+  m.innerHTML = `<div class="rdGot gmBox"><button class="gmX" type="button" aria-label="關閉"></button><b><i class="ic ic-pin"></i> 去廣場看看</b><p class="nmTx">廣場有其他玩家，可以插旗、接送座位任務，要去看看嗎？</p><div class="mbtns"><button class="gmNo" type="button">之後再說</button><button class="gmYes gmPri" type="button">前往廣場</button></div></div>`;
+  const close = (go: boolean) => {
+    m.remove();
+    if (go) {
+      save.loc = 'plaza';
+      persist();
+      renderLocs();
+      syncStartUi();
+      launchPlaza();
+      return;
+    }
+    syncPlazaGuideHint();
+    const card = document.querySelector('.locPlaza');
+    card?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    setTimeout(() => { giftAlert(); svAlert(); featAnnounce(); newAnnounce(); }, 300);
+  };
+  m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', () => close(false)));
+  m.querySelector('.gmYes')!.addEventListener('click', () => close(true));
+  document.body.appendChild(m);
+}
+function maybePlazaGuide(first: boolean) {
+  if (!first || save.plazaVisited || save.plazaSpawn || save.plazaGuideSeen) return;
+  showPlazaGuide();
+}
+
 // ---------- 新手教學 ----------
 initTutorial({
   $, on, COARSE, audio, getSave: () => save, persist, track, toast, startDay, syncShiftUi, renderLocs, renderDaily,
@@ -4072,6 +4123,7 @@ initTutorial({
   getMeatHits: () => meatHits, getShellsOut: () => shellsOut, getUmbT: () => umbT,
   getNpcs: () => npcs, windUp, giftAlert, svAlert, featAnnounce, newAnnounce,
   returnToMainMenu,
+  afterTutEnd: first => { maybePlazaGuide(first); },
 });
 
 $('oTut').onclick = () => { const run = () => enterWorkShed(() => tutStart()); if (!save.tutDone) ensureNameThen(run); else run(); };

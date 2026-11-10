@@ -52,7 +52,7 @@ export function giftAlert() {
   const n = giftNew(), h = document.getElementById('giftHud');
   if (h) h.style.display = D.getState() === 'play' && n.length ? '' : 'none';
   if (D.bootQuiet()) return;
-  if (!n.length || D.getState() === 'play' || D.isTut() || document.getElementById('giftMsg') || document.getElementById('newMsg') || document.getElementById('featMsg') || document.getElementById('svMsg') || $('gift').classList.contains('show')) return;
+  if (!n.length || D.getState() === 'play' || D.isTut() || document.getElementById('giftMsg') || document.getElementById('newMsg') || document.getElementById('featMsg') || document.getElementById('svMsg') || document.getElementById('plazaGuide') || $('gift').classList.contains('show')) return;
   for (const g of n) giftSeen.push(String(g.id));
   while (giftSeen.length > 200) giftSeen.shift();
   try { D.LS.setItem('giftSeen', JSON.stringify(giftSeen)); } catch { /* 忽略 */ }

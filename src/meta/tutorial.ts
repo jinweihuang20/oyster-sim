@@ -63,6 +63,8 @@ export type TutorialDeps = {
   newAnnounce: () => void;
   /** 回主畫面轉場（蓋住場景再開 overlay） */
   returnToMainMenu: (work?: () => void | Promise<void>, opts?: { then?: () => void }) => void;
+  /** 第一次完成／跳過教學、已回到主畫面後 */
+  afterTutEnd?: (first: boolean) => void;
 };
 
 let D: TutorialDeps;
@@ -150,6 +152,7 @@ export function tutStart() {
 export function tutEnd(done: boolean) {
   if (!tut) return; const st = TUT[tut.i].id; tut = null;
   D.track(done ? 'tutorial_complete' : 'tutorial_skip', { step: st });
+  const first = !D.getSave().tutDone;
   D.getSave().tutDone = 1; D.persist();
   tutHi.forEach(id => D.$(id).classList.remove('tutHi')); tutHi = [];
   document.body.classList.remove('tutOn'); D.on('tut', false);
@@ -165,7 +168,7 @@ export function tutEnd(done: boolean) {
   if (done) D.toast('出師了！去剝蚵仔賺錢吧～', '#9be37a');
   D.renderDaily();
   D.returnToMainMenu(undefined, {
-    then: () => { setTimeout(() => { D.giftAlert(); D.svAlert(); D.featAnnounce(); D.newAnnounce(); }, 400); },
+    then: () => { setTimeout(() => { D.afterTutEnd?.(first); D.giftAlert(); D.svAlert(); D.featAnnounce(); D.newAnnounce(); }, 400); },
   });
 }
 
