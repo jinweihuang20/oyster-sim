@@ -38,7 +38,6 @@ export const EQUIP_VIS: EquipVis[] = [
   { slot: 'body', id: 'bd_boss', base: '#1e2a3a', pat: 'tattoo' },
   { slot: 'body', id: 'bd_sequin', base: '#b84ad8', pat: 'neon' },
   { slot: 'body', id: 'bd_bikini', base: '#e84a5c', pat: 'flower' },
-  { slot: 'body', id: 'bd_nude', base: '#e8bc98', pat: 'plain' },
   { slot: 'legs', id: 'lg_basic', base: '#4a4a52', pat: 'plain' },
   { slot: 'legs', id: 'lg_rain', base: '#ffd21a', pat: 'rain' },
   { slot: 'legs', id: 'lg_flower', base: '#e86a8a', pat: 'flower' },
@@ -47,6 +46,11 @@ export const EQUIP_VIS: EquipVis[] = [
   { slot: 'feet', id: 'ft_boots', base: '#ffd21a', pat: 'plain' },
   { slot: 'feet', id: 'ft_work', base: '#6a4a2a', pat: 'plain' },
   { slot: 'feet', id: 'ft_gold', base: '#e8b830', pat: 'plain' },
+  { slot: 'head', id: 'hd_none', base: '#e8bc98', pat: 'plain' },
+  { slot: 'hand', id: 'hn_none', base: '#e8bc98', pat: 'plain' },
+  { slot: 'body', id: 'bd_none', base: '#e8bc98', pat: 'plain' },
+  { slot: 'legs', id: 'lg_none', base: '#e8bc98', pat: 'plain' },
+  { slot: 'feet', id: 'ft_none', base: '#e8bc98', pat: 'plain' },
 ];
 
 const BY_ID = new Map(EQUIP_VIS.map(e => [e.id, e]));
@@ -54,9 +58,23 @@ const DEFAULTS: OutfitIds = {
   head: 'hd_basic', hand: 'hn_basic', body: 'bd_basic', legs: 'lg_basic', feet: 'ft_basic',
 };
 
+const NONE_OF: OutfitIds = { head: 'hd_none', hand: 'hn_none', body: 'bd_none', legs: 'lg_none', feet: 'ft_none' };
+
+function aliasEquipId(slot: keyof OutfitIds, id?: string) {
+  if (!id) return id;
+  if (id === 'none') return NONE_OF[slot];
+  if (slot === 'body' && id === 'bd_nude') return 'bd_none';
+  return id;
+}
+
+export function isNoneId(id?: string | null) {
+  return !!id && (id === 'none' || id.endsWith('_none'));
+}
+
 export function normalizeOutfitIds(raw?: Partial<OutfitIds> | null): OutfitIds {
   const pick = (slot: keyof OutfitIds, id?: string) => {
-    const e = id ? BY_ID.get(id) : undefined;
+    const mapped = aliasEquipId(slot, id);
+    const e = mapped ? BY_ID.get(mapped) : undefined;
     return e && e.slot === slot ? e.id : DEFAULTS[slot];
   };
   return {
@@ -91,7 +109,7 @@ const REPEAT: Record<string, [number, number]> = {
   lg_basic: [1, 3],
   bd_vest: [1, 1],
   bd_bikini: [1, 1],
-  bd_nude: [1, 1],
+  bd_none: [1, 1],
 };
 
 function wrapDot(g: CanvasRenderingContext2D, x: number, y: number, r: number, col: string, W: number, H: number) {
@@ -310,6 +328,14 @@ function drawNudeTape(g: CanvasRenderingContext2D, W: number, H: number) {
   xAt(W * 0.66, H * 0.38, 13);
 }
 
+function drawUnderwear(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#e8bc98'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#d8d0c4';
+  g.fillRect(0, 0, W, H * 0.38);
+  g.fillStyle = '#eee8dc';
+  g.fillRect(0, 0, W, 10);
+}
+
 function drawPlainShade(g: CanvasRenderingContext2D, base: string, W: number, H: number) {
   g.fillStyle = base; g.fillRect(0, 0, W, H);
   g.fillStyle = 'rgba(255,255,255,.08)';
@@ -345,8 +371,14 @@ export function paintEquipCanvas(g: CanvasRenderingContext2D, e: EquipVis, W: nu
       drawSequin(g, W, H); return;
     case 'bd_bikini':
       drawBikiniCloth(g, W, H); return;
-    case 'bd_nude':
+    case 'bd_none':
       drawNudeTape(g, W, H); return;
+    case 'lg_none':
+      drawUnderwear(g, W, H); return;
+    case 'hd_none':
+    case 'hn_none':
+    case 'ft_none':
+      drawPlainShade(g, '#e8bc98', W, H); return;
     case 'bd_basic':
       drawWornTee(g, W, H); return;
     case 'lg_basic':
@@ -422,7 +454,10 @@ function paintFeet(mats: NonNullable<PlayerRig['outfitMats']>, feet: EquipVis) {
   const shoe = mats.feet[0];
   const sole = mats.feet[1];
   if (!shoe || !sole) return;
-  if (feet.id === 'ft_basic') {
+  if (feet.id === 'ft_none') {
+    paintSolid(shoe, '#e8bc98');
+    paintSolid(sole, '#e8bc98');
+  } else if (feet.id === 'ft_basic') {
     paintSolid(shoe, '#f2f2ee');
     paintSolid(sole, '#e4dfd4');
   } else if (feet.id === 'ft_gold') {
@@ -525,6 +560,7 @@ function clearHat(hat: THREE.Group) {
 
 function buildHat(hat: THREE.Group, head: EquipVis) {
   clearHat(hat);
+  if (head.id === 'hd_none') return;
   const addH = (
     geo: THREE.BufferGeometry,
     mat: THREE.Material,
@@ -667,8 +703,8 @@ function buildBodyDetails(rig: PlayerRig, body: EquipVis) {
     lift(add(g, G('bik-tie', () => rbox(0.06, 0.045, 0.045)), flor, [0.235, -0.16, 0]));
     lift(add(g, G('bik-tie2', () => rbox(0.028, 0.07, 0.024)), white, [-0.26, -0.185, 0]));
     lift(add(g, G('bik-tie2', () => rbox(0.028, 0.07, 0.024)), white, [0.26, -0.185, 0]));
-  } else if (body.id === 'bd_nude') {
-    // 膚色軀幹上的 X 字胸貼：往前凸出一點，避免跟身體貼在一起閃面
+  } else if (body.id === 'bd_none') {
+    // 衣服不穿：膚色軀幹上的 X 字胸貼（沿用原本裸體外觀）
     const tape = solid(0x2a2a2a, 'nude-x', { roughness: 0.88, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     const strip = G('nude-x', () => rbox(0.088, 0.02, 0.022));
     const lift = (m: THREE.Mesh) => { m.renderOrder = 3; };
@@ -764,6 +800,17 @@ function buildFeetDetails(rig: PlayerRig, feet: EquipVis) {
   }
 }
 
+function addUnderwear(rig: PlayerRig) {
+  const g = rig.torso ? (rig.torso.userData[DET.body] as THREE.Group | undefined) ?? ensureDet(rig.torso, DET.body) : undefined;
+  if (!g) return;
+  const cloth = SM('undies', 0xd8d0c4, { roughness: 0.86 });
+  const wb = SM('undies-wb', 0xeee8dc, { roughness: 0.84 });
+  const lift = (m: THREE.Mesh) => { m.renderOrder = 2; };
+  lift(add(g, G('und-bot', () => rbox(0.42, 0.095, 0.26)), cloth, [0, -0.162, 0]));
+  lift(add(g, G('und-front', () => rbox(0.15, 0.05, 0.05)), cloth, [0, -0.208, -0.122]));
+  lift(add(g, G('und-wb', () => rbox(0.435, 0.024, 0.27)), wb, [0, -0.112, 0]));
+}
+
 /**
  * 把五件裝備套到 PlayerRig（廣場遠端／本機 plazaMe／可選死鬥）。
  * 需 rig 建好時帶 outfitMats／hatG（makePlayerAvatar 已建）。
@@ -778,17 +825,20 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   const legs = BY_ID.get(o.legs)!;
   const feet = BY_ID.get(o.feet)!;
   const SKIN_HEX = '#e8bc98';
+  const shirtless = body.id === 'bd_bikini' || body.id === 'bd_none';
   if (body.id === 'bd_bikini') {
     for (const m of mats.body) paintSolid(m, SKIN_HEX);
     for (const m of mats.legs) paintSolid(m, SKIN_HEX);
-  } else if (body.id === 'bd_nude') {
+  } else if (body.id === 'bd_none') {
     for (const m of mats.body) paintSolid(m, SKIN_HEX);
-    for (const m of mats.legs) paintMat(m, legs);
+    if (legs.id === 'lg_none') for (const m of mats.legs) paintSolid(m, SKIN_HEX);
+    else for (const m of mats.legs) paintMat(m, legs);
   } else {
     for (const m of mats.body) paintMat(m, body);
-    for (const m of mats.legs) paintMat(m, legs);
+    if (legs.id === 'lg_none') for (const m of mats.legs) paintSolid(m, SKIN_HEX);
+    else for (const m of mats.legs) paintMat(m, legs);
   }
-  const bareArms = (body.id === 'bd_bikini' || body.id === 'bd_nude') && hand.id === 'hn_basic';
+  const bareArms = hand.id === 'hn_none' || (shirtless && hand.id === 'hn_basic');
   if (bareArms) {
     for (const m of mats.sleeve) paintSolid(m, SKIN_HEX);
     for (const arm of [rig.lowerL, rig.lowerR]) if (arm) ensureDet(arm, DET.sleeve);
@@ -808,10 +858,14 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
     // 比基尼會把腿畫成膚色並自帶下身，清掉原本褲袋以免浮在皮膚上
     for (const leg of [rig.legL, rig.legR]) if (leg) ensureDet(leg, DET.leg);
     for (const shin of [rig.shinL, rig.shinR]) if (shin) ensureDet(shin, DET.shin);
+  } else if (legs.id === 'lg_none') {
+    for (const leg of [rig.legL, rig.legR]) if (leg) ensureDet(leg, DET.leg);
+    for (const shin of [rig.shinL, rig.shinR]) if (shin) ensureDet(shin, DET.shin);
+    addUnderwear(rig);
   } else {
     buildLegDetails(rig, legs);
   }
-  buildFeetDetails(rig, feet);
+  if (feet.id !== 'ft_none') buildFeetDetails(rig, feet);
   rig.outfitKey = outfitKey(o);
   return o;
 }

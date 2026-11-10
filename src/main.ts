@@ -4228,7 +4228,32 @@ function ensurePlazaMe(): PlayerRig {
 }
 let tpv = false, cheerT = 0, ouchT = 0;
 function applyOutfit3() {
-  for (const s of ['head', 'body', 'legs', 'feet'] as const) { const e = equipNow(s), m = pm[s]; m.map?.dispose(); m.map = eqTex(e); m.map.repeat.set(1, 1); m.color.set(0xffffff); m.emissive.set(e.pat === 'neon' ? 0x3a1a50 : 0); m.needsUpdate = true; }
+  for (const s of ['head', 'body', 'legs', 'feet'] as const) {
+    const e = equipNow(s), m = pm[s];
+    m.map?.dispose();
+    if (e.id.endsWith('_none')) {
+      if (s === 'body') {
+        m.map = eqTex(e);
+        m.map.repeat.set(1, 1);
+        m.color.set(0xffffff);
+      } else {
+        m.map = null;
+        m.color.set('#e8bc98');
+      }
+      m.emissive.set(0);
+    } else {
+      m.map = eqTex(e);
+      m.map.repeat.set(1, 1);
+      m.color.set(0xffffff);
+      m.emissive.set(e.pat === 'neon' ? 0x3a1a50 : 0);
+    }
+    m.needsUpdate = true;
+  }
+  const hatOn = !equipNow('head').id.endsWith('_none');
+  meHead.traverse(obj => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh && mesh.material === pm.head) mesh.visible = hatOn;
+  });
   // 廣場本機第三人稱 avatar 同步服飾
   const outfit = {
     head: equipNow('head').id, hand: equipNow('hand').id,
