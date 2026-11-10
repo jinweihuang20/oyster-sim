@@ -1832,7 +1832,7 @@ body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!importan
 #roomLayer .rmList li small{opacity:.85;font-size:12px}
 #roomLayer .rmList button{min-height:32px;padding:2px 8px;font-size:12px}
 #roomLayer .rmEdit{margin:8px 0;font-size:13px}
-#roomLayer .rmWait{margin:0;font-size:13px;color:#d5dce4}
+#roomLayer .rmWait{margin:4px 0;font-size:13px;color:#d5dce4}
 body.roomPlay #roomLayer{top:auto;bottom:calc(var(--sa-bottom) + 8px);left:calc(var(--sa-left) + 8px)}
 body.roomPlay #roomLayer .rmHud{padding:8px 10px;width:min(92vw,320px)}
 body.roomPlay #roomLayer .rmList li button,body.roomPlay .rmEdit{display:none}
@@ -1841,3 +1841,4 @@ body.roomResults #roomLayer .rmHud{width:min(92vw,420px)}
 body.roomMode #overlay,body.roomMode #shedLoad{display:none!important}
 input[type=range]#rmSeats,input[type=range]#rmDur,input[type=range]#rmGoal,
 input[type=range]#rmEdSeats,input[type=range]#rmEdDur,input[type=range]#rmEdGoal{width:100%}
+#roomLayer button:disabled{opacity:.45;cursor:not-allowed}

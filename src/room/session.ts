@@ -292,7 +292,7 @@ function renderHud(s: RoomSnap) {
   const playBtns = s.phase === 'play' && host && s.endMode === 'untimed'
     ? `<button type="button" class="rmPri" id="rmEnd">結束本局</button>` : '';
   const lobbyBtns = s.phase === 'lobby'
-    ? `<button type="button" class="rmPri" id="rmReady">${me?.ready ? '取消準備' : '準備'}</button>${host ? `<button type="button" id="rmStart">開始</button>` : ''}`
+    ? `<button type="button" class="rmPri" id="rmReady">${me?.ready ? '取消準備' : '準備'}</button>${host ? `<button type="button" id="rmStart"${s.players.length < 2 ? ' disabled' : ''}>開始</button>` : ''}`
     : '';
   const resBtns = s.phase === 'results'
     ? `${host ? `<button type="button" class="rmPri" id="rmAgain">再來一局</button>` : '<p class="rmWait">等房主再來一局</p>'}<button type="button" id="rmLeaveRes">離開</button>`
@@ -301,6 +301,7 @@ function renderHud(s: RoomSnap) {
     <div class="rmHead"><b>好友房 ${esc(s.code)}</b><small>${esc(roomSceneName(s.scene))}・${s.players.length}/${s.seats} 人・${esc(modeTxt)}${s.phase === 'play' && s.endMode === 'timed' ? `・<span id="rmRemain">剩 ${s.remainSec} 秒</span>` : ''}${countTxt ? '・' + countTxt : ''}</small></div>
     ${s.phase === 'countdown' ? `<div class="rmCount">${Math.max(1, s.remainSec)}</div>` : ''}
     <ul class="rmList">${list}</ul>
+    ${s.phase === 'lobby' && s.players.length < 2 ? `<p class="rmWait">至少要 2 人才能開始，把房間代碼 ${esc(s.code)} 傳給朋友吧</p>` : ''}
     ${edit}
     <div class="rmActs">${lobbyBtns}${playBtns}${resBtns}${s.phase !== 'results' ? `<button type="button" id="rmLeave">離開房間</button>` : ''}</div>
   </div>`;

@@ -81,6 +81,7 @@ export function roomZhErr(err?: string) {
     case 'not_lobby': return '現在不能這樣做';
     case 'not_host': return '只有房主可以做';
     case 'not_ready': return '大家還沒準備好';
+    case 'need_players': return '至少要 2 人才能開始';
     case 'not_play': return '這一局還沒開始';
     case 'not_results': return '還在進行中';
     case 'no_player': return '找不到這個人';
