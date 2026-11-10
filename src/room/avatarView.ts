@@ -7,6 +7,7 @@ import {
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
+import { applyAvatarDistanceLod, syncAvatarLod } from '../world/avatarLod';
 import { roomPhysicalSeats, roomSeatPose } from './seats';
 import type { RoomBody } from './types';
 
@@ -89,6 +90,7 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
       applyOutfitToRig(rig, normalizeOutfitIds({
         head: b.head, hand: b.hand, body: b.body, legs: b.legs, feet: b.feet,
       }));
+      syncAvatarLod(rig);
     }
     root.add(rig.outer);
     const tag = makeWorldLabel(b.isNpc ? b.nick : `${b.nick}${b.tag ? ' #' + b.tag : ''}`, 'name', { worldH: 0.28, nameTone: b.isNpc ? 'npc' : 'player' });
@@ -117,7 +119,7 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
     r.tx = b.x; r.tz = b.z; r.tyaw = b.yaw; r.tLookYaw = b.lookYaw;
     if (!b.isNpc) {
       const next = normalizeOutfitIds({ head: b.head, hand: b.hand, body: b.body, legs: b.legs, feet: b.feet });
-      if (r.rig.outfitKey !== outfitKey(next)) applyOutfitToRig(r.rig, next);
+      if (r.rig.outfitKey !== outfitKey(next)) { applyOutfitToRig(r.rig, next); syncAvatarLod(r.rig); }
     }
     const label = b.isNpc ? `${b.nick}${b.seated && b.meat ? '・' + b.meat + ' 顆' : ''}` : `${b.nick}${b.tag ? ' #' + b.tag : ''}${b.meat ? '・' + b.meat + ' 顆' : ''}`;
     r.tag.setText(label);
@@ -170,7 +172,9 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
     }
   }
 
-  function tick(dt: number) {
+  const MOBILE = matchMedia('(pointer: coarse)').matches;
+
+  function tick(dt: number, from?: { x: number; z: number }) {
     const t = performance.now() / 1000;
     for (const r of remotes.values()) {
       const k = Math.min(1, dt * 10);
@@ -191,6 +195,7 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
       if (r.rig.head) r.rig.head.rotation.y = r.lookYaw;
       r.tag.sprite.position.set(r.x, (r.seated ? 1.55 : 1.85) + (r.carriedBy ? 0.35 : 0), r.z);
       r.tag.sprite.visible = true;
+      if (from) applyAvatarDistanceLod(r.rig, Math.hypot(r.x - from.x, r.z - from.z), MOBILE);
     }
   }
 

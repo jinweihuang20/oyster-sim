@@ -56,7 +56,7 @@ import {
 import { makeMeshHelpers } from './dm/mesh';
 import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaSetSelfBody, plazaReportEarn, plazaMySeat, plazaShiftStarted,
-  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated,
+  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
@@ -427,7 +427,7 @@ function applyPlazaShadowMode() {
 /** 熱切省電：關陰影、降 DPR；antialias／precision 僅啟動時套用 */
 function applyEcoGfx() {
   // 省電：手機約 1.25×、桌面約 1.5×；一般最多 2×
-  const dprCap = mix.eco ? (COARSE ? 1.25 : 1.5) : 2;
+  const dprCap = COARSE ? (mix.eco ? 1.25 : 1.5) : (mix.eco ? 1.5 : 2);
   renderer.setPixelRatio(Math.min(devicePixelRatio, dprCap));
   renderer.shadowMap.enabled = !mix.eco;
   renderer.shadowMap.type = mix.eco ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
@@ -3773,7 +3773,7 @@ function tpFovFor(mode: 'walk' | 'plazaSit' | 'shedSit') {
 function resize() {
   const { w, h } = viewSize();
   // 回前景時 DPR 偶爾變；與省電上限對齊
-  const dprCap = mix.eco ? (COARSE ? 1.25 : 1.5) : 2;
+  const dprCap = COARSE ? (mix.eco ? 1.25 : 1.5) : (mix.eco ? 1.5 : 2);
   const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
   if (Math.abs(renderer.getPixelRatio() - dpr) > 1e-3) renderer.setPixelRatio(dpr);
   const bufW = renderer.domElement.width, bufH = renderer.domElement.height;
@@ -3817,17 +3817,49 @@ const isPaused = () => state === 'play' && (document.hidden || panelOpen() || $(
 let frameErr = 0;
 let frameSleeping = false;
 let lastDrawAt = 0;
+/** 手機最近一次操作時間；有輸入時維持 60fps，靜止約 1.5 秒後改 30fps */
+let lastInteractAt = 0;
+let mobilePtrHeld = 0;
+function noteInteract(immediate = false) {
+  lastInteractAt = performance.now();
+  if (immediate) lastDrawAt = 0;
+}
+function mobileBusy(now: number) {
+  if (now - lastInteractAt < 1500 || mobilePtrHeld > 0) return true;
+  if (flHeld || flRet > 0 || Math.abs(flYaw) > 0.002) return true;
+  if (down || holding || puffHeld || umbHeld) return true;
+  if (joy.x * joy.x + joy.y * joy.y > 0.01) return true;
+  for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) return true;
+  if (walking && walkMotion.spd > 0.08) return true;
+  if (jumpT > 0 || plazaCarrying() || plazaSittingBusy()) return true;
+  if (Math.abs(tYaw - yaw) > 0.002 || Math.abs(tPitch - pitch) > 0.002) return true;
+  // 翹殼滑桿／轉殼等短節奏：畫面需保持流暢，不能等到手指按下才升回 60
+  if (phase === 'twist' || phase === 'crab' || phase === 'seam' || phase === 'scoop') return true;
+  return false;
+}
 function scheduleFrame() {
   if (document.hidden) { frameSleeping = true; return; }
   frameSleeping = false;
   requestAnimationFrame(frame);
 }
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) {
+  if (document.hidden) mobilePtrHeld = 0;
+  else {
     fixViewport();
     if (frameSleeping) { clock.getDelta(); lastDrawAt = 0; scheduleFrame(); }
   }
 });
+if (COARSE) {
+  addEventListener('pointerdown', () => { mobilePtrHeld++; noteInteract(true); }, { capture: true });
+  addEventListener('pointerup', () => { mobilePtrHeld = Math.max(0, mobilePtrHeld - 1); noteInteract(false); }, { capture: true });
+  addEventListener('pointercancel', () => { mobilePtrHeld = Math.max(0, mobilePtrHeld - 1); noteInteract(false); }, { capture: true });
+  addEventListener('pointermove', e => { if (mobilePtrHeld > 0 || e.buttons) noteInteract(false); }, { capture: true });
+  addEventListener('keydown', () => noteInteract(true), { capture: true });
+  addEventListener('keyup', () => noteInteract(false), { capture: true });
+  addEventListener('orientationchange', () => noteInteract(true));
+  addEventListener('resize', () => noteInteract(true));
+  addEventListener('blur', () => { mobilePtrHeld = 0; });
+}
 // 主迴圈出錯也不能停：停了計時、暫停、預警都會卡住
 function frame() { try { frameBody(); } catch (e) { if (frameErr++ < 3) console.error('frame', e); scheduleFrame(); } }
 function frameBody() {
@@ -3841,8 +3873,9 @@ function frameBody() {
   }
   const now = performance.now();
   const paused = isPaused();
-  // 選單／暫停約 15fps；遊玩一律上限 60fps（高更新率手機不再跑 90／120 幀發燙）
-  const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15 : 1000 / 60;
+  // 選單／暫停約 15fps；桌機遊玩 60fps。手機有操作／自身在動時 60fps，靜止 1.5 秒後 30fps 降溫
+  const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15
+    : (COARSE && !mobileBusy(now) ? 1000 / 30 : 1000 / 60);
   const since = now - lastDrawAt;
   if (since < minMs - 1.5) { scheduleFrame(); return; }
   // 餘數回扣：90Hz 等非整數倍螢幕平均仍接近 60fps

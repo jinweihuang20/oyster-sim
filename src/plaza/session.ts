@@ -132,6 +132,7 @@ let chatPeekTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const isPlazaActive = () => active;
 export const plazaSeated = () => seated;
+export const plazaSittingBusy = () => sittingBusy;
 export const plazaShiftStarted = () => shiftStarted;
 export function plazaMySeat() { return myPile != null && mySlot != null ? { pileId: myPile, slot: mySlot } : null; }
 /** @deprecated 對稱邊界；走動請用 plazaWalkRect */

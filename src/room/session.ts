@@ -532,7 +532,7 @@ export async function roomStandWalk() {
 }
 
 export function roomTick(dt: number) {
-  view?.tick(dt);
+  view?.tick(dt, hooks?.getWalkXZ());
   if (!client || !hooks || !snap || snap.phase === 'results') return;
   const now = performance.now();
   if (now - poseAt < 120) return;

@@ -25,6 +25,7 @@ import { makePlazaHq } from './hq';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
+import { applyAvatarDistanceLod, syncAvatarLod, setAvatarLod, isAvatarLodOn } from '../world/avatarLod';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot, PlazaSeatWish } from './types';
 import { plazaDisplayName } from './types';
 import { GOLD_SMOKE_TINT, parseCosmetics } from './cosmetics';
@@ -155,6 +156,7 @@ export function createPlazaWorldView(
   opts: PlazaWorldOpts,
 ): PlazaWorldView {
   const LO = !!opts.lowDetail;
+  const MOBILE = matchMedia('(pointer: coarse)').matches;
   const root = new THREE.Group(); root.name = 'plazaWorld'; scene.add(root);
   const { M, add } = makeMeshHelpers(scene, LO);
   const remotes = new Map<string, Remote>();
@@ -1313,6 +1315,7 @@ function hashPid(pid: string) {
         applyOutfitToRig(rig, normalizeOutfitIds({
           head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
         }));
+        syncAvatarLod(rig);
       }
       root.add(rig.outer);
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
@@ -1419,7 +1422,7 @@ function hashPid(pid: string) {
       const next = normalizeOutfitIds({
         head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
       });
-      if (r.rig.outfitKey !== outfitKey(next)) applyOutfitToRig(r.rig, next);
+      if (r.rig.outfitKey !== outfitKey(next)) { applyOutfitToRig(r.rig, next); syncAvatarLod(r.rig); }
     }
     applyActionPose(r);
     paintOcc();
@@ -1799,6 +1802,7 @@ function hashPid(pid: string) {
       // 省電遠距：隱藏模型（碰撞仍用 x/z）
       if (eco && dist2 > HIDE2 && !rj.mh && (r.phase || '') !== 'moon') r.rig.outer.visible = false;
       else if (!(eco && dist2 > HIDE2) && !rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
+      applyAvatarDistanceLod(r.rig, Math.sqrt(dist2), MOBILE);
       r.rig.outer.updateMatrixWorld(true);
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       r.tag.sprite.visible = show;
@@ -1836,14 +1840,18 @@ function hashPid(pid: string) {
       for (const c of wishMarks.children) c.scale.setScalar(pulse);
     }
     grill.tick(t);
-    flags.tick(dt, camera);
     const tSec = t * 0.001;
-    // 省電：炭火約 15Hz，且只動鏡頭附近
-    fireThrottle += dt;
-    const runFire = !eco || fireThrottle >= 1 / 15;
-    if (runFire) {
-      const fdt = eco ? fireThrottle : dt;
-      fireThrottle = 0;
+    // 手機／省電：煙、咖啡、旗幟約 15Hz；桌機非省電仍每幀
+    const throttleFx = MOBILE || eco;
+    let runFx = true;
+    let fdt = dt;
+    if (throttleFx) {
+      fireThrottle += dt;
+      runFx = fireThrottle >= 1 / 15;
+      fdt = fireThrottle;
+      if (runFx) fireThrottle = 0;
+    }
+    if (runFx) {
       for (const f of fireFx) {
         f.group.getWorldPosition(_firePos);
         const fd2 = (_firePos.x - cx) * (_firePos.x - cx) + (_firePos.z - cz) * (_firePos.z - cz);
@@ -1853,13 +1861,13 @@ function hashPid(pid: string) {
       ambiance.tick(tSec, fdt);
       smokeArea.tick(tSec, fdt);
       cafe.tick(tSec, fdt);
-    } else {
-      // 吸菸薄煙仍低頻更新
-      smokeArea.tick(tSec, dt);
-      cafe.tick(tSec, dt);
+      flags.tick(fdt, camera);
+      if (!eco) bigShed.tick(fdt);
+      tickRemoteExhales(fdt);
     }
-    tickRemoteExhales(dt);
     // 遠端吸菸：手持菸（掛腕）＋菸頭薄煙；不再用頭側飄煙以免看起來沒拿菸
+    type SmokeJob = { r: Remote; cig: NonNullable<ReturnType<typeof getPlazaSmokeCig>>; dist2: number; aber: boolean };
+    const smokeJobs: SmokeJob[] = [];
     for (const r of remotes.values()) {
       const wantSeat = r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke');
       const wantAber = isAberRemote(r) && !r.carriedBy && (r.phase || '') !== 'carried' && (r.phase || '') !== 'moon'
@@ -1871,14 +1879,24 @@ function hashPid(pid: string) {
         const cig = getPlazaSmokeCig(r.rig);
         if (cig) {
           cig.setSmokeTint(!r.isNpc && parseCosmetics(r.cosmetics).goldSmoke ? GOLD_SMOKE_TINT : undefined);
-          cig.tick(tSec, dt);
-          if (wantAber && !LO) tickAberAshes(r, cig, dt);
+          const dx = r.x - cx, dz = r.z - cz;
+          smokeJobs.push({ r, cig, dist2: dx * dx + dz * dz, aber: wantAber && !LO });
+          if (isAvatarLodOn(r.rig)) setAvatarLod(r.rig, true);
         }
       } else {
         clearPlazaSmokeCig(r.rig);
       }
       // 舊頭側煙：隱藏（保留物件以免重配額抖動；離場 destroy 會清）
       if (r.cigSmoke) r.cigSmoke.group.visible = false;
+    }
+    if (runFx) {
+      smokeJobs.sort((a, b) => a.dist2 - b.dist2);
+      const cap = MOBILE ? 4 : smokeJobs.length;
+      for (let i = 0; i < smokeJobs.length && i < cap; i++) {
+        const s = smokeJobs[i];
+        s.cig.tick(tSec, fdt);
+        if (s.aber) tickAberAshes(s.r, s.cig, fdt);
+      }
     }
     // 本機第三人稱 avatar 的菸由 main plazaMe 掛載；此處 selfCig 僅作後備薄煙，坐下吸菸時關掉避免重複
     if (selfCig) {
@@ -1890,19 +1908,20 @@ function hashPid(pid: string) {
           headY,
           selfZ - Math.cos(selfYaw) * 0.12 - Math.sin(selfYaw) * 0.08,
         );
-        selfCig.tick(tSec, dt);
+        if (runFx) selfCig.tick(tSec, fdt);
       }
     }
-    if (!eco) bigShed.tick(dt);
     for (const k of stallKeepers) {
+      const dx = k.rig.outer.position.x - cx, dz = k.rig.outer.position.z - cz;
+      const kd2 = dx * dx + dz * dz;
       if (eco) {
-        const dx = k.rig.outer.position.x - cx, dz = k.rig.outer.position.z - cz;
-        const kd2 = dx * dx + dz * dz; k.rig.outer.visible = kd2 <= HIDE2; if (kd2 > FAR2) continue;
+        k.rig.outer.visible = kd2 <= HIDE2; if (kd2 > FAR2) continue;
         k.rig.outer.visible = true;
       }
       k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15;
       if (!eco) posePlazaStallKeeper(k.rig, tSec, k.ph);
       applyAmaAppearance(k.rig);
+      applyAvatarDistanceLod(k.rig, Math.sqrt(kd2), MOBILE);
       tickKeeperBubble(k, tSec);
     }
     let serverAber = false;
