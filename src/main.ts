@@ -4000,7 +4000,20 @@ if (SHOT) setTimeout(() => {
   if (SHOT === 'seat') { applySeat(params.get('s') || 'corner'); goPick(); }
   if (SHOT === 'walk') { later(0.1, () => { standUp(); walkPos.set(-1.1, 1.55, -2.35); tYaw = yaw = 3.09; tPitch = pitch = -0.5; }); }
   if (SHOT === 'dex') { renderDex(); $('dex').classList.add('show'); }
-  if (SHOT === 'sleeves') { save.money = 20000; const sid = params.get('s') || 'sl_dragon'; for (const id of ['sl_flower', sid, 'hd_crown', 'bd_vest', 'ft_gold']) save.shop.owned.push(id); setEquip('hand', sid); if (params.get('set')) { setEquip('head', 'hd_crown'); setEquip('body', 'bd_vest'); setEquip('feet', 'ft_gold'); } applySleeve(); { const of = params.get('outfit'); if (of) { for (const id of of.split(',')) { const e = EQUIP.find(q => q.id === id); if (e) { save.shop.owned.push(id); setEquip(e.slot, id); } } applySleeve(); } } if (params.get('p') === 'shop') { renderShop(); $('shop').classList.add('show'); } if (params.get('p') === 'eq') { eqPick = 'hand'; renderEquip(); $('equip').classList.add('show'); } if (params.get('tpv')) { for (const id of ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots']) { save.shop.owned.push(id); setEquip(EQUIP.find(e => e.id === id)!.slot, id); } setEquip('hand', 'sl_89'); applySleeve(); setTpv(true); if (params.get('tpv') === 'cheer') later(0.5, () => react3('cheer')); }
+  if (SHOT === 'sleeves') { save.money = 20000; const sid = params.get('s') || 'sl_dragon'; for (const id of ['sl_flower', sid, 'hd_crown', 'bd_vest', 'ft_gold']) save.shop.owned.push(id); setEquip('hand', sid); if (params.get('set')) { setEquip('head', 'hd_crown'); setEquip('body', 'bd_vest'); setEquip('feet', 'ft_gold'); } applySleeve(); { const of = params.get('outfit'); if (of) { for (const id of of.split(',')) { const e = EQUIP.find(q => q.id === id); if (e) { save.shop.owned.push(id); setEquip(e.slot, id); } } applySleeve(); } } if (params.get('p') === 'shop') {
+      const ctab = params.get('ctab');
+      if (ctab === 'head' || ctab === 'hand' || ctab === 'body' || ctab === 'legs' || ctab === 'feet') clothTab = ctab;
+      renderShop();
+      const gs = Array.from(document.querySelectorAll<HTMLElement>('#shopList .stab'));
+      const i = gs.findIndex(g => g.querySelector('.slGrid'));
+      if (i >= 0) {
+        shopTab = i;
+        gs.forEach((g, idx) => { g.style.display = idx === i ? '' : 'none'; });
+        document.querySelectorAll('#shopTabs button').forEach((b, idx) => b.classList.toggle('on', idx === i));
+        $('shop').scrollTop = 0;
+      }
+      $('shop').classList.add('show');
+    } if (params.get('p') === 'eq') { eqPick = 'hand'; renderEquip(); $('equip').classList.add('show'); } if (params.get('tpv')) { for (const id of ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots']) { save.shop.owned.push(id); setEquip(EQUIP.find(e => e.id === id)!.slot, id); } setEquip('hand', 'sl_89'); applySleeve(); setTpv(true); if (params.get('tpv') === 'cheer') later(0.5, () => react3('cheer')); }
   if (params.get('p') === 'name') { save.name = undefined; save.namePrompted = 0; namePrompt(); } }
   if (SHOT === 'settings') $('settings').classList.add('show');
   if (SHOT === 'fb' || SHOT === 'fbdone') { openFb('settings'); if (SHOT === 'fbdone') fbShow(true); }
