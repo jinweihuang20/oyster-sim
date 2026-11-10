@@ -4619,7 +4619,12 @@ function camTick(dt: number) {
   me3.visible = false;
   if (plazaMe) plazaMe.outer.visible = usePlazaMe;
   umbTick3(dt, show); handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
-  if (!show) { if (plazaMe) plazaMe.outer.visible = false; return; }
+  if (!show) {
+    if (plazaMe) plazaMe.outer.visible = false;
+    // 第三人稱坐下／走動會把第一人稱手藏起來；切回第一人稱且仍坐著時要恢復，否則剝蚵雙手會消失。走動本來就沒有第一人稱手。
+    if (!walking) handRig.visible = true;
+    return;
+  }
   const kk = enter ? 1 : 1 - Math.exp(-5 * dt);
   meSeatLegs.visible = !walking && !plazaMode; meLegL.visible = meLegR.visible = walking && !plazaMode;
   if (walking) {
