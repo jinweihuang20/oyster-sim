@@ -321,7 +321,15 @@ export class PlazaClient {
 
   async setCosmetics(cosmetics: string) {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return;
-    try { await this.conn.invoke('SetCosmetics', cosmetics || ''); } catch { /* 舊伺服器沒這個方法 */ }
+    // 伺服器對換裝有 200ms 節流，緊接在 SetOutfit 後會被擋；被擋就等一下再送
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r: any = await this.conn.invoke('SetCosmetics', cosmetics || '');
+        if (r?.ok !== false || r?.err !== 'slow') return;
+      } catch { return; /* 舊伺服器沒這個方法 */ }
+      await new Promise(res => setTimeout(res, 300));
+      if (this.conn?.state !== signalR.HubConnectionState.Connected) return;
+    }
   }
 
   async setPhase(phase: string, count: number) {
