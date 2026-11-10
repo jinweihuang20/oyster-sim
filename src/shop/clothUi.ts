@@ -249,13 +249,73 @@ function eqTileHtml(s: Slot) {
     ? `<span class="eqEmpty">${eqSlotOutline(s)}</span>`
     : eqIcon(e, 64);
   const extra = isNoneId(e.id) ? '，目前不穿' : `：${e.n}`;
-  return `<button type="button" class="eqTile${on ? ' on' : ''}" data-slot="${s}" aria-label="${n}${extra}">${inner}</button>`;
+  return `<button type="button" class="eqTile${on ? ' on' : ''}${isNoneId(e.id) ? ' empty' : ''}" data-slot="${s}" aria-label="${n}${extra}">${inner}</button>`;
 }
-const SVG_SHED = `<svg class="eqShed" viewBox="0 0 300 400" preserveAspectRatio="none" aria-hidden="true"><defs><radialGradient id="eqSpot" cx="50%" cy="48%" r="45%"><stop offset="0" stop-color="#fff6d8" stop-opacity=".95"/><stop offset=".6" stop-color="#ffe9b0" stop-opacity=".35"/><stop offset="1" stop-color="#ffe9b0" stop-opacity="0"/></radialGradient><pattern id="eqMat" width="14" height="10" patternUnits="userSpaceOnUse"><rect width="14" height="10" fill="#c9a865"/><path d="M0 5h14" stroke="#a8864a" stroke-width="1.4"/><path d="M7 0v5M0 5v5M14 5v5" stroke="#b39352" stroke-width="1"/></pattern></defs>
-<rect width="300" height="400" fill="#2c4a63"/><path d="M0 0h300v54L150 30 0 54Z" fill="#5d8fb3"/>${Array.from({ length: 16 }, (_, i) => `<path d="M${i * 20} ${54 - i * 1.6 * (i < 8 ? 1 : 0) - (i >= 8 ? (15 - i) * 1.6 : 0)}V0" stroke="#3f6f92" stroke-width="2"/>`).join('')}<path d="M0 54L150 30 300 54" fill="none" stroke="#16191d" stroke-width="4"/>
-<rect x="20" y="52" width="10" height="280" fill="#6b4a2a" stroke="#16191d" stroke-width="2"/><rect x="270" y="52" width="10" height="280" fill="#6b4a2a" stroke="#16191d" stroke-width="2"/>
-${[46, 76, 224, 254].map((x, j) => `<path d="M${x} 50V${120 + j % 2 * 30}" stroke="#d9c9a0" stroke-width="1.5"/>${[0, 1, 2, 3].map(k => `<ellipse cx="${x + (k % 2 ? 4 : -4)}" cy="${66 + k * 16 + j % 2 * 6}" rx="6" ry="4" fill="#9aa39a" stroke="#16191d" stroke-width="1.5"/>`).join('')}`).join('')}
-<rect width="300" height="400" fill="url(#eqSpot)"/><path d="M0 330L300 330 300 400 0 400Z" fill="url(#eqMat)"/><path d="M0 330H300" stroke="#16191d" stroke-width="3"/><ellipse cx="150" cy="350" rx="70" ry="10" fill="#000" opacity=".25"/></svg>`;
+const SVG_SHED = `<svg class="eqShed" viewBox="0 0 300 400" preserveAspectRatio="none" aria-hidden="true"><defs>
+<pattern id="eqStCorr" width="12" height="40" patternUnits="userSpaceOnUse">
+<rect width="12" height="40" fill="#514940"/>
+<rect width="4.2" height="40" fill="#635c52"/>
+<rect x="4.2" width="2.2" height="40" fill="#3a3530"/>
+<rect x="6.4" width="5.6" height="40" fill="#575047"/>
+<path d="M1.1 0V40" stroke="#7a7368" stroke-width=".55" opacity=".45"/>
+<path d="M10.6 0V40" stroke="#2c2824" stroke-width=".5" opacity=".35"/>
+</pattern>
+<pattern id="eqStGrain" width="64" height="64" patternUnits="userSpaceOnUse">
+<filter id="eqStGn" x="0" y="0" width="100%" height="100%">
+<feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="4"/>
+<feColorMatrix type="matrix" values="0 0 0 0 .18  0 0 0 0 .16  0 0 0 0 .13  0 0 0 .55 0"/>
+</filter>
+<rect width="64" height="64" filter="url(#eqStGn)"/>
+</pattern>
+<pattern id="eqStFloor" width="300" height="20" patternUnits="userSpaceOnUse">
+<rect width="300" height="10" fill="#9a7d50"/>
+<rect y="10" width="300" height="10" fill="#8b7046"/>
+<path d="M0 9.65H300" stroke="#5a4428" stroke-width=".85"/>
+<path d="M0 19.65H300" stroke="#5a4428" stroke-width=".85"/>
+<path d="M96 0V10M214 0V10" stroke="#6a5030" stroke-width=".7" opacity=".5"/>
+<path d="M38 10V20M168 10V20M272 10V20" stroke="#6a5030" stroke-width=".7" opacity=".5"/>
+</pattern>
+<pattern id="eqStFlGrain" width="80" height="28" patternUnits="userSpaceOnUse">
+<filter id="eqStFg" x="0" y="0" width="100%" height="100%">
+<feTurbulence type="fractalNoise" baseFrequency=".03 .55" numOctaves="2" seed="7"/>
+<feColorMatrix type="matrix" values="0 0 0 0 .42  0 0 0 0 .3  0 0 0 0 .14  0 0 0 .32 0"/>
+</filter>
+<rect width="80" height="28" filter="url(#eqStFg)"/>
+</pattern>
+<linearGradient id="eqStTop" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#f2e4c4" stop-opacity=".2"/>
+<stop offset=".28" stop-color="#d8c8a4" stop-opacity=".06"/>
+<stop offset="1" stop-color="#000" stop-opacity="0"/>
+</linearGradient>
+<radialGradient id="eqStSpot" cx="50%" cy="40%" r="50%">
+<stop offset="0" stop-color="#fff6d8" stop-opacity=".4"/>
+<stop offset=".42" stop-color="#e8d2a4" stop-opacity=".12"/>
+<stop offset="1" stop-color="#000" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="eqStVig" cx="50%" cy="46%" r="74%">
+<stop offset=".52" stop-color="#000" stop-opacity="0"/>
+<stop offset="1" stop-color="#1a1612" stop-opacity=".5"/>
+</radialGradient>
+<radialGradient id="eqStShade" cx="50%" cy="50%" r="50%">
+<stop offset="0" stop-color="#000" stop-opacity=".4"/>
+<stop offset="1" stop-color="#000" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<rect width="300" height="324" fill="url(#eqStCorr)"/>
+<rect width="300" height="324" fill="url(#eqStGrain)" opacity=".42"/>
+<path d="M0 118H300" stroke="#2a2622" stroke-width="1" opacity=".22"/>
+<path d="M0 214H300" stroke="#2a2622" stroke-width="1" opacity=".22"/>
+<rect width="300" height="20" fill="#3c352e"/>
+<rect y="16" width="300" height="6" fill="#2a241f"/>
+<path d="M0 20H300" stroke="#1e1a16" stroke-width="1.5"/>
+<rect y="322" width="300" height="78" fill="url(#eqStFloor)"/>
+<rect y="322" width="300" height="78" fill="url(#eqStFlGrain)" opacity=".5"/>
+<path d="M0 322H300" stroke="#2a2218" stroke-width="3"/>
+<ellipse cx="150" cy="356" rx="66" ry="12" fill="url(#eqStShade)"/>
+<rect width="300" height="324" fill="url(#eqStTop)"/>
+<rect width="300" height="400" fill="url(#eqStSpot)"/>
+<rect width="300" height="400" fill="url(#eqStVig)"/>
+</svg>`;
 export function eqStats(): string[] {
   const f = fxAll(), pc = (v: number) => Math.round(v * 100), out: string[] = [];
   if (f.pearl > 1.0001) out.push(`珍珠率|+${pc(f.pearl - 1)}%`);
