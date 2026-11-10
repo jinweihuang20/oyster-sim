@@ -35,6 +35,7 @@ export function buildCatalog(src, version = '', oddSrc = src, wpnSrc = '') {
   ev(src, 'BOWLS').forEach(b => items.push({ id: b.id, key: b.id === 'wide' ? 'bowl-wide' : b.id, name: b.n, category: 'basin', price: b.price, limited: false }));
   ev(src, 'GEAR').forEach(g => items.push({ id: g.id, name: g.n.replace(/^\S+\s/, ''), category: 'tool', price: g.price, limited: false }));
   ev(src, 'COSMETICS').forEach(g => items.push({ id: g.id, name: g.n, category: 'tool', price: g.price, limited: false }));
+  ev(src, 'FLAG_PRICE_ITEMS').forEach(g => items.push({ id: g.id, name: g.n, category: 'tool', price: g.price, limited: false }));
   ev(src, 'MEDS').forEach(m => items.push({ id: 'med-' + m.id, name: m.n, emo: m.emo, category: 'med', price: m.price, limited: false }));
   ev(src, 'ITEMS').forEach(m => items.push({ id: 'item-' + m.id, name: m.n, category: 'item', price: m.price, limited: false }));
   ev(src, 'EQUIP').forEach(e => items.push({ id: e.id, name: e.n, category: SLOT_CAT[e.slot] ?? 'equip', price: e.price, limited: false }));
@@ -53,6 +54,7 @@ export function buildCatalog(src, version = '', oddSrc = src, wpnSrc = '') {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8')
     + '\n' + readFileSync(new URL('../src/shop/yardShop.ts', import.meta.url), 'utf8')
+    + '\n' + readFileSync(new URL('../src/plaza/flags.ts', import.meta.url), 'utf8')
     + '\n' + readFileSync(new URL('../src/shop/meds.ts', import.meta.url), 'utf8')
     + '\n' + readFileSync(new URL('../src/shop/shopEquip.ts', import.meta.url), 'utf8')
     + '\n' + readFileSync(new URL('../src/world/locs.ts', import.meta.url), 'utf8');

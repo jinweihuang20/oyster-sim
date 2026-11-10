@@ -6,6 +6,11 @@ import {
   type WeaponId,
 } from '../deathmatch';
 import type * as THREE from 'three';
+import {
+  FLAG_ERR_ZH, FLAG_ITEM, FLAG_TEXT_MAX,
+  clipFlagText, fetchFlagSnapshot, flagColorOf, flagErrText, flagFxOf, flagSizeOf, nextFlagItem,
+  postFlagText, postFlagUpgrade, type FlagTrack, type PlazaFlagState,
+} from '../plaza/flags';
 
 export type Knife = { id: string; n: string; price: number; green: number; speed: number; steps: number; stab: number; seam: number; luck: number; blade: number; desc: string };
 export type Umb = { id: string; n: string; price: number; open: number; dur: number; perf: number; cover: number; reflect: number; look: string; size: number; desc: string };
@@ -25,6 +30,12 @@ export type YardShopDeps = {
   drawRadio: () => void;
   /** 廣場外觀開關後同步（金煙／坐墊／名牌框） */
   onCosmeticsChange?: () => void;
+  getPlayerId: () => string;
+  getNick: () => string;
+  toast: (t: string, c?: string) => void;
+  onFlagChange?: () => void;
+  setFlagText?: (text: string) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
+  upgradeFlag?: (track: FlagTrack) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   clearBowlMeat: () => void;
   renderClothShop: () => void;
   renderMedShop: () => void;
@@ -209,6 +220,7 @@ export function renderShop() {
     else save.gear[id] = !gearOn(id);
     D.persist(); renderShop(); D.onCosmeticsChange?.();
   });
+  renderFlagShop();
   const cw = weaponNow();
   $('shopList').insertAdjacentHTML('beforeend', `<h3><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg> 槍枝</h3><p style="font-size:12px;opacity:.8"><b style="color:#d9952b">點整列可預覽 3D 模型</b>（進去後拖曳旋轉）；買了才能在死鬥裡裝備；${WEAPON_DEFS.oysterGun.name}開局就送。${import.meta.env.DEV ? '（開發模式：全部已解鎖）' : ''}</p><table class="kt"><tr><th>槍</th><th>傷害</th><th>彈匣</th><th>射速</th><th>彈速</th><th></th></tr>` + shopWeapons().map(w => {
     const own = ownsWeapon(w.id);
@@ -262,4 +274,104 @@ export function renderShop() {
   D.renderClothShop(); D.renderMedShop(); D.renderItemShop(); D.shopTabs(); D.newDecor();
 }
 
+
+const FLAG_IC = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 21V4"/><path d="M6 4h11l-2.2 3.6L17 11H6"/></svg>';
+
+function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
+  const save = D.getSave();
+  if (!own) {
+    const can = save.money >= px(FLAG_ITEM.id, FLAG_ITEM.price);
+    return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">買了可以在廣場插一支自己的旗，寫上最多 ${FLAG_TEXT_MAX} 個字。走到想放的地方按「插旗」，再插一次會搬到新位置。每個人同時只能有一支旗。</p><button data-fbuy ${can ? '' : 'disabled'}>${pxHtml(FLAG_ITEM.id, FLAG_ITEM.price)}</button>${pxCd(FLAG_ITEM.id)}</div>`;
+  }
+  const color = flagColorOf(mine?.color ?? 0);
+  const size = flagSizeOf(mine?.size ?? 0);
+  const fx = flagFxOf(mine?.fx ?? 0);
+  const text = D.esc(mine?.text || '');
+  const trackRow = (label: string, cur: string, track: FlagTrack, lv: number) => {
+    const nxt = nextFlagItem(track, lv);
+    if (!nxt) return `<div class="flagTrack"><span>${label}：<b>${cur}</b></span><span class="flagMax">已到頂</span></div>`;
+    const can = save.money >= px(nxt.id, nxt.price);
+    return `<div class="flagTrack"><span>${label}：<b>${cur}</b></span><button data-fup="${track}" ${can ? '' : 'disabled'}>下一檔 ${D.esc(nxt.n.replace(/^旗幟[^：]*：/, ''))} ${pxHtml(nxt.id, nxt.price)}</button>${pxCd(nxt.id)}</div>`;
+  };
+  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。</p><label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button>${trackRow('顏色', color.n, 'color', color.lv)}${trackRow('尺寸', size.n, 'size', size.lv)}${trackRow('特效', fx.n, 'fx', fx.lv)}</div>`;
+}
+
+function bindFlagShop(mine: PlazaFlagState | null) {
+  const box = document.getElementById('flagShop');
+  if (!box) return;
+  const buy = box.querySelector<HTMLButtonElement>('button[data-fbuy]');
+  if (buy) buy.onclick = async () => {
+    const pr = await payFor(FLAG_ITEM.id, FLAG_ITEM.price, FLAG_ITEM.n);
+    if (pr == null) return;
+    const save = D.getSave();
+    save.money -= pr;
+    save.shop.owned.push(FLAG_ITEM.id);
+    D.track('buy', { item: FLAG_ITEM.id, price: pr });
+    if (D.getAc()) D.SFX.jingle();
+    D.persist();
+    renderShop();
+    D.onFlagChange?.();
+  };
+  const saveBtn = box.querySelector<HTMLButtonElement>('button[data-fsave]');
+  if (saveBtn) saveBtn.onclick = async () => {
+    const inp = box.querySelector<HTMLInputElement>('#flagTextIn');
+    const text = clipFlagText(inp?.value || '');
+    const pid = D.getPlayerId();
+    let r = D.setFlagText ? await D.setFlagText(text) : null;
+    if (!r || r.err === 'no_conn') r = await postFlagText(pid, text);
+    if (!r.ok) { D.toast(flagErrText(r.err), '#ffb08a'); return; }
+    if (D.getAc()) D.SFX.jingle();
+    D.toast('旗上的字已更新', '#9be37a');
+    renderFlagShop(r.mine ?? mine);
+  };
+  box.querySelectorAll<HTMLButtonElement>('button[data-fup]').forEach(b => {
+    b.onclick = async () => {
+      const track = b.getAttribute('data-fup') as FlagTrack | null;
+      if (!track) return;
+      const lv = track === 'color' ? (mine?.color ?? 0) : track === 'size' ? (mine?.size ?? 0) : (mine?.fx ?? 0);
+      const item = nextFlagItem(track, lv);
+      if (!item) { D.toast(FLAG_ERR_ZH.max, '#ffb08a'); return; }
+      const pr = await payFor(item.id, item.price, item.n);
+      if (pr == null) return;
+      const save = D.getSave();
+      save.money -= pr;
+      D.persist();
+      let r = D.upgradeFlag ? await D.upgradeFlag(track) : null;
+      if (!r || r.err === 'no_conn') r = await postFlagUpgrade(D.getPlayerId(), track);
+      if (!r.ok) {
+        save.money += pr;
+        D.persist();
+        D.toast(flagErrText(r.err), '#ffb08a');
+        renderShop();
+        return;
+      }
+      D.track('buy', { item: item.id, price: pr });
+      if (D.getAc()) D.SFX.jingle();
+      D.toast(`${item.n} 升級好了`, '#9be37a');
+      renderShop();
+    };
+  });
+}
+
+function renderFlagShop(prefetched?: PlazaFlagState | null) {
+  const own = D.getSave().shop.owned.includes(FLAG_ITEM.id);
+  const existing = document.getElementById('flagShop');
+  const html = flagShopHtml(prefetched ?? null, own);
+  if (existing) existing.outerHTML = html;
+  else $('shopList').insertAdjacentHTML('beforeend', html);
+  bindFlagShop(prefetched ?? null);
+  if (own && prefetched === undefined) {
+    const pid = D.getPlayerId();
+    void fetchFlagSnapshot(pid).then(r => {
+      if (!document.getElementById('flagShop')) return;
+      if (!r.ok) return;
+      const box = document.getElementById('flagShop');
+      if (!box) return;
+      box.outerHTML = flagShopHtml(r.mine, true);
+      bindFlagShop(r.mine);
+    });
+  }
+}
+
 export const getShopNewIds = () => shopNewIds;
+export { FLAG_PRICE_ITEMS, FLAG_ITEM } from '../plaza/flags';

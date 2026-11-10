@@ -29,7 +29,7 @@ export default defineConfig({
         type: 'asset',
         fileName: 'catalog.json',
         source: JSON.stringify(buildCatalog(
-          readFileSync('src/main.ts', 'utf8') + '\n' + readFileSync('src/shop/yardShop.ts', 'utf8') + '\n' + readFileSync('src/shop/meds.ts', 'utf8') + '\n' + readFileSync('src/shop/shopEquip.ts', 'utf8') + '\n' + readFileSync('src/world/locs.ts', 'utf8'),
+          readFileSync('src/main.ts', 'utf8') + '\n' + readFileSync('src/shop/yardShop.ts', 'utf8') + '\n' + readFileSync('src/plaza/flags.ts', 'utf8') + '\n' + readFileSync('src/shop/meds.ts', 'utf8') + '\n' + readFileSync('src/shop/shopEquip.ts', 'utf8') + '\n' + readFileSync('src/world/locs.ts', 'utf8'),
           VER,
           readFileSync('src/shop/oddities.ts', 'utf8'),
           readFileSync('src/dm/weapons.ts', 'utf8'),

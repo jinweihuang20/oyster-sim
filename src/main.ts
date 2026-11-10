@@ -21,7 +21,7 @@ import {
   syncEqPreview, refreshEqPreview, stopEqPreview, ODD,
   type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS,
   initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop,
-  initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS,
+  initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, FLAG_PRICE_ITEMS,
   gearOn, knifeNow, umbNow, bowlNow,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
@@ -59,6 +59,7 @@ import {
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
   plazaToggleMap, plazaCloseMap, plazaMapIsOpen, seatPose, plazaPushOutfit, plazaPushCosmetics,
+  plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryUpgradeFlag,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
@@ -1427,6 +1428,12 @@ initYardShop({
   applyGloves,
   drawRadio,
   onCosmeticsChange: () => refreshPlazaCosmetics(),
+  getPlayerId: () => statsId,
+  getNick: () => myName(),
+  toast,
+  onFlagChange: () => plazaRefreshFlagUi(),
+  setFlagText: (text) => plazaTrySetFlagText(text),
+  upgradeFlag: (track) => plazaTryUpgradeFlag(track),
   clearBowlMeat: () => { if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; } },
   renderClothShop,
   renderMedShop,
@@ -2518,8 +2525,8 @@ btn('rAch', () => { achFromRes = true; $('result').classList.remove('show'); ach
 const ITEMS = [{ id: 'moon', n: '把你媽的愛送上月球', price: 5000, good: '選一位鄰居，發射飛彈鐵拳把對方送上月球，這一工都不會再出現', bad: '每一工最多用 2 個，下一工對方會回來' }];
 
 // 主選單／雜貨新品／簽到提示／禮物信箱（見 ui/menu、meta/gifts）
-const shopKeys = () => [...KNIVES.filter(k => k.price > 0).map(k => 'knife-' + k.id), ...UMBS.filter(u => u.price > 0).map(u => 'umb-' + u.id), ...BOWLS.filter(b => b.price > 0).map(b => 'bowl-' + b.id), ...GEAR.map(g => 'gear-' + g.id), ...COSMETICS.map(g => 'gear-' + g.id), ...EQUIP.filter(e => e.price > 0).map(e => 'cloth-' + e.id), ...MEDS.map(m => 'med-' + m.id), ...ITEMS.map(i => 'item-' + i.id)];
-const shopName = (k: string) => { const [c, ...r] = k.split('-'); const id = r.join('-'); const L: any[] = c === 'knife' ? KNIVES : c === 'umb' ? UMBS : c === 'bowl' ? BOWLS : c === 'gear' ? [...GEAR, ...COSMETICS] : c === 'cloth' ? EQUIP : c === 'med' ? MEDS : ITEMS; return L.find(x => x.id === id)?.n ?? id; };
+const shopKeys = () => [...KNIVES.filter(k => k.price > 0).map(k => 'knife-' + k.id), ...UMBS.filter(u => u.price > 0).map(u => 'umb-' + u.id), ...BOWLS.filter(b => b.price > 0).map(b => 'bowl-' + b.id), ...GEAR.map(g => 'gear-' + g.id), ...COSMETICS.map(g => 'gear-' + g.id), ...FLAG_PRICE_ITEMS.map(g => 'gear-' + g.id), ...EQUIP.filter(e => e.price > 0).map(e => 'cloth-' + e.id), ...MEDS.map(m => 'med-' + m.id), ...ITEMS.map(i => 'item-' + i.id)];
+const shopName = (k: string) => { const [c, ...r] = k.split('-'); const id = r.join('-'); const L: any[] = c === 'knife' ? KNIVES : c === 'umb' ? UMBS : c === 'bowl' ? BOWLS : c === 'gear' ? [...GEAR, ...COSMETICS, ...FLAG_PRICE_ITEMS] : c === 'cloth' ? EQUIP : c === 'med' ? MEDS : ITEMS; return L.find(x => x.id === id)?.n ?? id; };
 let shopTab = 0;
 initMenu({
   getState: () => state,
@@ -3271,6 +3278,7 @@ function launchPlaza() {
       cushion: gearOn('seatCush'),
       nameFrame: gearOn('nameFrame'),
     }),
+    ownsFlag: () => save.shop.owned.includes('plazaFlag'),
     getMoving: () => {
       if (!walking) return false;
       if (joy.x * joy.x + joy.y * joy.y > 0.04) return true;

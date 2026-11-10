@@ -28,6 +28,8 @@ import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 import { plazaDisplayName } from './types';
 import { GOLD_SMOKE_TINT, parseCosmetics } from './cosmetics';
+import { createPlazaFlagView } from './flagView';
+import type { PlazaFlagState } from './flags';
 
 type Remote = {
   /** Map key＝pid（同一人只留一具模型，重連換 connId 不複製） */
@@ -120,6 +122,7 @@ export type PlazaWorldView = {
   hitPile: (raycaster: THREE.Raycaster) => number | null;
   /** 共烤網上蚵仔 */
   grill: PlazaGrillView;
+  syncFlags: (list: PlazaFlagState[]) => void;
   /** 坐下遠端玩家的瞄準點（丟殼／偷肉） */
   aimTargets: (leisureNpc?: boolean) => PlazaAimTarget[];
   /** 走動碰撞用：遠端 `[x, z, radius, isLie]`；isLie=1 時跳躍夠高可越过 */
@@ -520,6 +523,7 @@ export function createPlazaWorldView(
 
   // 南排共烤：伺服器同步的烤網上蚵仔
   const grill = createGrillView(root);
+  const flags = createPlazaFlagView(root);
 
   // 只留對角兩盞真正的吊燈（外觀四盞都還在）；招牌／攤位／炭火改自發光，避免每幀開關燈害著色器重編
   const plazaLights: THREE.PointLight[] = [];
@@ -1728,6 +1732,7 @@ function hashPid(pid: string) {
       selfBubble.sprite.visible = true;
     } else if (selfBubble.sprite.visible) selfBubble.sprite.visible = false;
     grill.tick(t);
+    flags.tick(dt, camera);
     const tSec = t * 0.001;
     // 省電：炭火約 15Hz，且只動鏡頭附近
     fireThrottle += dt;
@@ -1834,6 +1839,7 @@ function hashPid(pid: string) {
     try { smokeNpc.tag.dispose(); } catch { /* */ }
     for (const r of [...remotes.values()]) destroyRemote(r);
     remotes.clear();
+    flags.dispose();
     grill.dispose();
     for (const f of fireFx) f.dispose();
     fireFx.length = 0;
@@ -1861,7 +1867,7 @@ function hashPid(pid: string) {
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfCushion, playThrowFx, applyRemotePuff, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfCushion, playThrowFx, applyRemotePuff, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {
