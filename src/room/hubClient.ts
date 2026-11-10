@@ -1,5 +1,5 @@
 import * as signalR from '@microsoft/signalr';
-import { normSnap, type RoomSnap } from './types';
+import { normBody, normSnap, type RoomBody, type RoomSnap } from './types';
 
 const DEFAULT_HUB = 'https://game-status.gwtech.org/hubs/room';
 
@@ -14,6 +14,8 @@ export function roomHubUrl() {
 
 export type RoomHubHandlers = {
   onState?: (snap: RoomSnap) => void;
+  onPose?: (body: RoomBody) => void;
+  onPoses?: (bodies: RoomBody[]) => void;
   onKicked?: () => void;
   onClose?: (err?: string) => void;
 };
@@ -36,6 +38,14 @@ export class RoomClient {
       const snap = normSnap(s);
       if (snap) this.handlers.onState?.(snap);
     });
+    conn.on('Pose', (p) => {
+      const b = normBody(p);
+      if (b.pid || b.connId) this.handlers.onPose?.(b);
+    });
+    conn.on('Poses', (list) => {
+      const bodies = Array.isArray(list) ? list.map(normBody) : [];
+      this.handlers.onPoses?.(bodies);
+    });
     conn.on('Kicked', () => this.handlers.onKicked?.());
     conn.onclose(err => this.handlers.onClose?.(err?.message));
     this.conn = conn;
@@ -53,8 +63,8 @@ export class RoomClient {
     }
   }
 
-  create(pid: string, nick: string, scene: string, seats: number, endMode: string, durationSec: number, goalMeat: number) {
-    return this.inv('Create', pid, nick, scene, seats, endMode, durationSec, goalMeat);
+  create(pid: string, nick: string, scene: string, seats: number, endMode: string, durationSec: number, goalMeat: number, npcCount: number) {
+    return this.inv('Create', pid, nick, scene, seats, endMode, durationSec, goalMeat, npcCount);
   }
   join(pid: string, nick: string, code: string) { return this.inv('Join', pid, nick, code); }
   leave() { return this.inv('Leave'); }
@@ -63,9 +73,20 @@ export class RoomClient {
   endMatch() { return this.inv('EndMatch'); }
   kick(pid: string) { return this.inv('Kick', pid); }
   transfer(pid: string) { return this.inv('Transfer', pid); }
-  edit(scene: string, seats: number, endMode: string, durationSec: number, goalMeat: number) {
-    return this.inv('Edit', scene, seats, endMode, durationSec, goalMeat);
+  edit(scene: string, seats: number, endMode: string, durationSec: number, goalMeat: number, npcCount: number) {
+    return this.inv('Edit', scene, seats, endMode, durationSec, goalMeat, npcCount);
   }
+  sync(x: number, z: number, yaw: number, phase: string, count: number, moving: boolean, umb: boolean, lookYaw: number, pitch: number) {
+    return this.inv('Sync', x, z, yaw, phase, count, moving, umb, lookYaw, pitch);
+  }
+  claimSeat(slot: number) { return this.inv('ClaimSeat', slot); }
+  leaveSeat() { return this.inv('LeaveSeat'); }
+  setOutfit(head: string, hand: string, body: string, legs: string, feet: string) {
+    return this.inv('SetOutfit', head, hand, body, legs, feet);
+  }
+  setCosmetics(cosmetics: string) { return this.inv('SetCosmetics', cosmetics); }
+  carryNpc(npcConnId: string) { return this.inv('CarryNpc', npcConnId); }
+  placeNpc(npcConnId: string, slot: number) { return this.inv('PlaceNpc', npcConnId, slot); }
   syncScore(meat: number, rawEarn: number) { return this.inv('SyncScore', meat, rawEarn); }
   rematch() { return this.inv('Rematch'); }
   reportEarn(rawEarn: number, oysters: number, durationSec: number) {

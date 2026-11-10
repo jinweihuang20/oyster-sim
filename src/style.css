@@ -1818,27 +1818,41 @@ body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!importan
 }
 #roomModal button.rmScene.on::before,#roomModal button.rmMode.on::before,
 #roomLayer button.rmScene.on::before,#roomLayer button.rmMode.on::before{content:'\2713';margin-right:4px;font-weight:900}
-#roomLayer{position:fixed;z-index:9200;top:calc(var(--sa-top) + 8px);left:calc(var(--sa-left) + 8px);right:auto;bottom:auto;display:none;pointer-events:none}
+#roomLayer{position:fixed;z-index:9050;top:calc(var(--sa-top) + 8px);left:50%;transform:translateX(-50%);width:min(96vw,420px);right:auto;bottom:auto;display:none;pointer-events:none}
 #roomLayer.show{display:block}
-#roomLayer .rmHud{pointer-events:auto;width:min(92vw,360px)}
-#roomLayer .rmHead{margin-bottom:8px}
-#roomLayer .rmHead b{display:block;font-size:18px;letter-spacing:.06em}
-#roomLayer .rmHead small{color:#d5dce4}
-#roomLayer .rmCount{font-size:64px;font-weight:900;text-align:center;line-height:1;margin:8px 0;color:#fff}
-#roomLayer .rmList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+#roomLayer .rmHud{pointer-events:auto;width:100%;padding:0;overflow:hidden}
+#roomLayer .rmHead{display:flex;align-items:center;gap:8px;width:100%;text-align:left;margin:0;padding:6px 10px;min-height:44px;border:none;border-radius:0;background:transparent;color:inherit;box-shadow:none}
+#roomLayer .rmHeadMain{flex:1;min-width:0}
+#roomLayer .rmHeadMain b{display:block;font-size:15px;letter-spacing:.04em}
+#roomLayer .rmHeadMain small{display:block;color:#d5dce4;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#roomLayer .rmLive{flex:0 1 46%;font-size:11px;font-weight:800;color:#ffe08a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#roomLayer .rmChev{width:8px;height:8px;border-right:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(45deg);flex:none;opacity:.8;margin-top:-4px}
+#roomLayer.rmOpen .rmChev{transform:rotate(-135deg);margin-top:4px}
+#roomLayer:not(.rmOpen) .rmDetail{display:none}
+#roomLayer .rmDetail{padding:0 10px 10px}
+#roomLayer .rmCount{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);font-size:72px;font-weight:900;line-height:1;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.45);pointer-events:none;z-index:9060}
+#roomLayer .rmList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:min(40vh,280px);overflow:auto}
 #roomLayer .rmList li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding:6px 8px;border:1px solid rgba(255,255,255,.2);border-radius:6px}
 #roomLayer .rmList li.me{border-color:#ffe08a}
+#roomLayer .rmList li.npc{opacity:.95}
 #roomLayer .rmList li b{font-size:14px}
 #roomLayer .rmList li small{opacity:.85;font-size:12px}
 #roomLayer .rmList button{min-height:32px;padding:2px 8px;font-size:12px}
 #roomLayer .rmEdit{margin:8px 0;font-size:13px}
-#roomLayer .rmWait{margin:4px 0;font-size:13px;color:#d5dce4}
-body.roomPlay #roomLayer{top:auto;bottom:calc(var(--sa-bottom) + 8px);left:calc(var(--sa-left) + 8px)}
-body.roomPlay #roomLayer .rmHud{padding:8px 10px;width:min(92vw,320px)}
-body.roomPlay #roomLayer .rmList li button,body.roomPlay .rmEdit{display:none}
-body.roomResults #roomLayer{inset:0;display:flex;align-items:center;justify-content:center;background:rgba(8,12,18,.45);top:0;left:0;right:0;bottom:0}
-body.roomResults #roomLayer .rmHud{width:min(92vw,420px)}
+#roomLayer .rmWait,.rmHint{margin:4px 0;font-size:12px;color:#d5dce4}
+body.roomPlay #roomLayer{top:calc(var(--sa-top) + 8px);bottom:auto;left:50%;transform:translateX(-50%);width:min(96vw,420px)}
+body.roomPlay #roomLayer .rmHud{padding:0;width:100%}
+body.roomResults #roomLayer{inset:0;transform:none;left:0;top:0;width:auto;display:flex;align-items:center;justify-content:center;background:rgba(8,12,18,.45)}
+body.roomResults #roomLayer .rmHud{width:min(92vw,420px);padding:12px 14px}
+body.roomResults #roomLayer .rmChev{display:none}
+body.roomResults #roomLayer .rmDetail{display:block}
 body.roomMode #overlay,body.roomMode #shedLoad{display:none!important}
-input[type=range]#rmSeats,input[type=range]#rmDur,input[type=range]#rmGoal,
-input[type=range]#rmEdSeats,input[type=range]#rmEdDur,input[type=range]#rmEdGoal{width:100%}
+body.roomLobby #gauge,body.roomLobby #diff,body.roomLobby #throwBtn,body.roomLobby #umbBtn,body.roomLobby #stealBtn,body.roomLobby #radioBtn{visibility:hidden!important;pointer-events:none!important}
+input[type=range]#rmSeats,input[type=range]#rmDur,input[type=range]#rmGoal,input[type=range]#rmNpcs,
+input[type=range]#rmEdSeats,input[type=range]#rmEdDur,input[type=range]#rmEdGoal,input[type=range]#rmEdNpcs{width:100%}
 #roomLayer button:disabled{opacity:.45;cursor:not-allowed}
+@media (orientation:landscape) and (max-height:500px){
+  #roomLayer{width:min(92vw,380px)}
+  #roomLayer .rmHead{min-height:36px;padding:4px 8px}
+  #roomLayer .rmList{max-height:min(36vh,160px)}
+}

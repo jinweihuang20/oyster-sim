@@ -44,7 +44,7 @@ import {
   initPersist, persist, initDaily, renderDaily, openDaily, claimDaily, checkReturn,
   initGifts, checkGifts, giftAlert, giftBadge, giftMsg, giftLabel, applyGift, renderGifts,
 } from './meta';
-import { bindRoom, openRoomCreate, openRoomJoin, closeRoom, isRoomActive, roomSyncScore, roomRemainSec, currentRoomSnap } from './room';
+import { bindRoom, openRoomCreate, openRoomJoin, closeRoom, isRoomActive, roomSyncScore, roomRemainSec, currentRoomSnap, roomTick, roomTrySit, roomStandWalk, roomNearPrompt, roomSeated, roomWalkBodies } from './room';
 import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
 import {
@@ -1084,8 +1084,9 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   nightShift = isNight(); updSky();
   $('nightTag').style.display = nightShift && !plazaMode ? '' : 'none';
   if (nightShift && !plazaMode) later(1.5, () => toast(`🌙 夜班上工！這一工收入 +${Math.round(eco.nightMult * 100)}%`, '#b8c8ff'));
-  moonReset(); npcs.forEach(dressAma); applyCrew();
-  if (walking && !plazaMode) { setWalking(false); on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
+  if (isRoomActive()) { npcs.length = 0; ALL_NPCS.forEach(n => { n.g.visible = false; n.tag.sprite.visible = false; n.bubble.sprite.visible = false; }); stools.forEach(g => { g.visible = false; if (g.userData.tag) g.userData.tag.visible = false; }); }
+  else { moonReset(); npcs.forEach(dressAma); applyCrew(); }
+  if (walking && !plazaMode && !isRoomActive()) { setWalking(false); on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; syncShiftUi(); clearAchShiftGot(); handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   if (plazaMode && !plazaPlayAt) plazaPlayAt = performance.now();
   statsSid = crypto.randomUUID?.() ?? statsId + '-' + Date.now();
@@ -1098,7 +1099,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   plazaStealBanUntil = 0; plazaStealCatches = 0; plazaStealPairCd.clear(); stopPlazaSteal();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
-  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); applySleeve(); drawMeds(); clearBasinOysters(); fillBasin(false); goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
+  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); applySleeve(); drawMeds(); clearBasinOysters(); fillBasin(false); if (!(isRoomActive() && walking)) goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
 }
 /** HUD dirty：避免每幀寫 DOM／innerHTML 觸發強制重排 */
 const hudPrev = { hpW: '', hpPct: '', timerLab: '', timer: '', count: -1, pearls: -1, stats: '' };
@@ -2424,11 +2425,12 @@ window.addEventListener('keydown', e => {
   }
   if (state !== 'play') return; audio().resume();
   if (walking) {
-    if (e.code === 'Space' && plazaMode) { e.preventDefault(); if (!e.repeat) plazaJump(); return; }
-    if ((e.code === 'KeyC' || e.code === 'KeyZ') && plazaMode) { if (!e.repeat) plazaPose(e.code === 'KeyC' ? 'crouch' : 'lie'); return; }
+    if (e.code === 'Space' && (plazaMode || isRoomActive())) { e.preventDefault(); if (!e.repeat) plazaJump(); return; }
+    if ((e.code === 'KeyC' || e.code === 'KeyZ') && (plazaMode || isRoomActive())) { if (!e.repeat) plazaPose(e.code === 'KeyC' ? 'crouch' : 'lie'); return; }
     walkKeys.add(e.code);
     if (e.code === 'KeyE') {
       if (plazaMode) void plazaTrySit();
+      else if (isRoomActive()) void roomTrySit();
       else if (nearSeat) sitDown(nearSeat.id);
     }
     return;
@@ -2469,6 +2471,7 @@ btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (
 $('bmStay').onclick = () => $('backMenu').classList.remove('show');
 $('bmGo').onclick = () => { void (async () => {
   $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return;
+  if (isRoomActive()) { await closeRoom(true); return; }
   const wasPlaza = plazaMode;
   if (wasPlaza && !plazaShiftStarted()) {
     returnToMainMenu(async () => {
@@ -2497,7 +2500,7 @@ $('bmGo').onclick = () => { void (async () => {
     },
   });
 })(); };
-$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (plazaMode) void plazaTrySit(); else if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('puffBtn', startPuff, endPuff); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('puffBtn').addEventListener(ev, endPuff); addEventListener('blur', endPuff); document.addEventListener('visibilitychange', () => { if (document.hidden) endPuff(); }); $('puffBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
+$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (plazaMode) void plazaTrySit(); else if (isRoomActive()) void roomTrySit(); else if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('puffBtn', startPuff, endPuff); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('puffBtn').addEventListener(ev, endPuff); addEventListener('blur', endPuff); document.addEventListener('visibilitychange', () => { if (document.hidden) endPuff(); }); $('puffBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
@@ -2531,6 +2534,7 @@ initWalkSeat({
   $, on, COARSE, clamp,
   getState: () => state, getPhase: () => phase,
   isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaNearSeat, plazaNearPrompt, plazaMySeat, seatPose,
+  isRoomMode: () => isRoomActive(), roomSeated, roomStandWalk, roomWalkBodies, roomNearPrompt,
   setPlazaSeatPropsVisible, oyster, shellGeo, shellTopMat, shellTop, handRig, SEAT, BASIN, BOWL, getBowlR: () => BOWL_R,
   seatGround, seatNow,
   getSeatYaw: () => seatYaw, setSeatYaw: v => { seatYaw = v; },
@@ -3867,7 +3871,8 @@ function frameBody() {
   let warnNpc: Npc | null = null;
   if (state === 'play') {
     // 廣場休閒：不倒數、不自動收工
-    if (!tut && !plazaMode && !roomPlay) { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
+    if (!tut && !plazaMode && !roomPlay && !isRoomActive()) { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
+    if (isRoomActive()) roomTick(rdt);
     if (roomPlay) roomSyncScore();
     hp = Math.min(100, hp + dt / 6 * medM('regen')); tickMeds(dt);
     if (phase === 'seam') {
@@ -3894,7 +3899,7 @@ function frameBody() {
     if (phase === 'empty' && !(tut && (TUT[tut.i].id === 'empty' || TUT[tut.i].id === 'shell'))) { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
-    on('standBtn', !walking && (!plazaMode || plazaSeated()));
+    on('standBtn', !walking && (!plazaMode || plazaSeated()) && (!isRoomActive() || roomSeated()));
     // 吸菸區／樸子腳坐著：不剝蚵，藏左下臉盆與肉碗
     if (plazaMode && seatRig.visible && document.body.classList.contains('plazaSmokeSit')) setPlazaSeatPropsVisible(false);
     if (smokeSitActive) {
@@ -3906,7 +3911,7 @@ function frameBody() {
       }
     }
     // 電腦廣場隱藏視角鈕（用 V）；手機仍顯示
-    on('camBtn', !plazaMode || COARSE);
+    on('camBtn', !(plazaMode || isRoomActive()) || COARSE);
     if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     if (plazaMode) {
       const banned = performance.now() < plazaStealBanUntil;
@@ -4165,23 +4170,106 @@ initTutorial({
 });
 
 $('oTut').onclick = () => { const run = () => enterWorkShed(() => tutStart()); if (!save.tutDone) ensureNameThen(run); else run(); };
+let roomYardHidden = false;
+function hideRoomYardExtras(hide: boolean) {
+  roomYardHidden = hide;
+  stools.forEach(g => {
+    g.visible = !hide;
+    if (g.userData.tag) g.userData.tag.visible = !hide;
+  });
+  ALL_NPCS.forEach(n => {
+    n.g.visible = !hide;
+    n.tag.sprite.visible = !hide;
+    n.bubble.sprite.visible = false;
+    if (hide) { n.windup = 0; n.throwCd = 999; }
+  });
+  if (hide) npcs.length = 0;
+}
+function enterRoomWalk(fromSeat: boolean) {
+  oyster.visible = false; progress = 0; combo = 0; tension = 0; shellTop.rotation.z = 0; rotKey = 0; stopSteal(); setPhase('busy');
+  setWalking(true); handRig.visible = false; setPlazaSeatPropsVisible(false);
+  if (fromSeat) {
+    walkPos.copy(SEAT).setY(1.55);
+    walkPos.x += Math.sin(seatYaw) * 0.55;
+    walkPos.z += Math.cos(seatYaw) * 0.55;
+    tYaw = yaw = seatYaw;
+  } else {
+    walkPos.set(0, 1.55, 3.1);
+    tYaw = yaw = 0;
+  }
+  tPitch = pitch = -0.2;
+  $('diff').textContent = '';
+  on('standBtn', false); on('umbBtn', false); on('medBtn', false); on('stealBtn', false); on('joy', true); on('camBtn', COARSE); on('seatCard', false); on('quitBtn', false);
+  if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
+  hint.textContent = COARSE ? '好友房走走・靠近空位按「坐這裡」，也可抱起鄰居' : 'WASD 走動・E／「坐這裡」坐下・Space 跳躍・C 蹲下・Z 躺下';
+}
 bindRoom({
   id: statsId,
   nick: () => myName(),
   toast: (t, c) => toast(t, c),
   audio: () => audio(),
   canEnter: () => state === 'menu' && !tut && !isPlazaActive() && !isDeathmatchActive() && !isRoomActive(),
+  getScene: () => scene,
+  hideYardExtras: hideRoomYardExtras,
+  enterWalk: () => {
+    evRun = null;
+    state = 'play';
+    syncShiftUi();
+    hideRoomYardExtras(true);
+    enterRoomWalk(false);
+    $('overlay').classList.remove('show');
+    updHud();
+  },
+  applySeatPose: (x, z, seatY) => {
+    applyPlazaSeatPose(new THREE.Vector3(x, 0, z), seatY);
+    setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
+    setPlazaSeatPropsVisible(true);
+    handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
+    on('standBtn', true); on('umbBtn', roomPlay); on('medBtn', roomPlay);
+    if (roomPlay) later(0.3, goPick);
+    toast('坐下了', '#9fe0ff'); SFX.pop();
+  },
+  afterStand: () => enterRoomWalk(true),
+  getWalkXZ: () => (walking ? { x: walkPos.x, z: walkPos.z } : { x: SEAT.x, z: SEAT.z }),
+  getYaw: () => (!walking ? seatYaw : (bodyPose === 'lie' ? bodyYaw : yaw)),
+  getLookYaw: () => (walking || tpv ? 0 : yaw),
+  getPitch: () => (tpv ? 0 : pitch),
+  getPhase: () => jumpT > 0 ? 'jump' : bodyPose && walking ? bodyPose : phase,
+  getMoving: () => {
+    if (!walking) return false;
+    if (joy.x * joy.x + joy.y * joy.y > 0.04) return true;
+    for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) return true;
+    return false;
+  },
+  getUmb: () => umbHeld || umbT > 0,
+  getOutfit: () => ({
+    head: equipNow('head').id,
+    hand: equipNow('hand').id,
+    body: equipNow('body').id,
+    legs: equipNow('legs').id,
+    feet: equipNow('feet').id,
+  }),
+  getCosmetics: () => encodeCosmetics({
+    goldSmoke: gearOn('goldPipe'),
+    cushion: gearOn('seatCush'),
+    nameFrame: gearOn('nameFrame'),
+  }),
+  isWalking: () => walking,
   enterScene: (scene, then) => {
-    roomLoc = scene; updSky(); applyCrew();
+    roomLoc = scene; updSky();
     enterWorkShed(() => { state = 'menu'; syncShiftUi(); then(); });
   },
-  applyScene: (scene) => { if (roomLoc !== scene) { roomLoc = scene; updSky(); applyCrew(); } },
+  applyScene: (scene) => {
+    if (roomLoc !== scene) { roomLoc = scene; updSky(); }
+    if (roomYardHidden) hideRoomYardExtras(true);
+  },
   startPlay: () => {
-    if (state === 'play') return;
+    if (roomPlay) return;
     roomPlay = true; evRun = null; shiftLen = 24 * 3600;
     $('result').classList.remove('show');
     startDay();
     on('quitBtn', false);
+    if (walking) { on('umbBtn', false); on('medBtn', false); }
   },
   finishPlay: () => {
     if (state === 'play') { endReason = 'time'; endDay(); }
@@ -4197,10 +4285,12 @@ bindRoom({
     toast(`好友房結算 +$${v}（身上 $${save.money}）`, '#9be37a');
   },
   leaveScene: () => {
-    if (state === 'play') { endReason = 'quit'; endDay(); }
+    const wasPlay = roomPlay;
+    if (wasPlay && state === 'play') { endReason = 'quit'; endDay(); }
     $('result').classList.remove('show');
     roomPlay = false;
-    returnToMainMenu(() => { roomLoc = null; shiftLen = SHIFT; updSky(); applyCrew(); });
+    hideRoomYardExtras(false);
+    returnToMainMenu(() => { roomLoc = null; shiftLen = SHIFT; updSky(); applyCrew(); applySeat(save.seat ?? 'door'); });
   },
 });
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
@@ -5016,7 +5106,7 @@ setInterval(() => {
 
 // ── 廣場跳躍（先微蹲再跳；phase "jump" 同步；高度見 plazaJumpHeight）──
 let jumpY = 0, jumpT = 0;
-function plazaJump() { if (!plazaMode || !walking || jumpT > 0 || bodyPose === 'lie') return; if (bodyPose) setBodyPose(''); jumpT = PLAZA_JUMP_DUR; }
+function plazaJump() { if (!(plazaMode || isRoomActive()) || !walking || jumpT > 0 || bodyPose === 'lie') return; if (bodyPose) setBodyPose(''); jumpT = PLAZA_JUMP_DUR; }
 // ── 廣場蹲／躺（走動時才可用；用 phase "crouch"／"lie" 同步）──
 let bodyPose: '' | 'crouch' | 'lie' = '';
 let lastPose: 'crouch' | 'lie' = 'crouch';
@@ -5034,7 +5124,7 @@ function setBodyPose(p: '' | 'crouch' | 'lie') {
   document.getElementById('crouchBtn')?.classList.toggle('act', p === 'crouch');
   document.getElementById('lieBtn')?.classList.toggle('act', p === 'lie');
 }
-function plazaPose(p: 'crouch' | 'lie') { if (!plazaMode || !walking || jumpT > 0) return; setBodyPose(bodyPose === p ? '' : p); }
+function plazaPose(p: 'crouch' | 'lie') { if (!(plazaMode || isRoomActive()) || !walking || jumpT > 0) return; setBodyPose(bodyPose === p ? '' : p); }
 {
   const poseBtn = document.getElementById('poseBtn');
   const setPoseOpen = (v: boolean) => {
@@ -5052,7 +5142,7 @@ function plazaPose(p: 'crouch' | 'lie') { if (!plazaMode || !walking || jumpT > 
   const step = () => {
     const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (jumpT > 0) { jumpT = Math.max(0, jumpT - dt); jumpY = jumpT > 0 ? plazaJumpHeight(PLAZA_JUMP_DUR - jumpT) : 0; }
-    if (!plazaMode || !walking) { jumpT = 0; jumpY = 0; if (bodyPose) setBodyPose(''); }
+    if (!(plazaMode || isRoomActive()) || !walking) { jumpT = 0; jumpY = 0; if (bodyPose) setBodyPose(''); }
     // 躺著時一動（方向鍵／搖桿）就起來
     if (bodyPose === 'lie') { let mv = Math.abs(joy.x) > 0.15 || Math.abs(joy.y) > 0.15; for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) mv = true; if (mv) setBodyPose(''); }
     poseK += ((bodyPose ? 1 : 0) - poseK) * Math.min(1, dt * 10);

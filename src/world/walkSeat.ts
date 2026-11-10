@@ -23,6 +23,11 @@ export type WalkSeatDeps = {
   plazaWalkClamp?: (p: { x: number; z: number }) => void;
   plazaNearSeat: () => { pileId: number; slot: number } | null;
   plazaNearPrompt?: () => { kind: 'sit' | 'carry' | 'place'; info: string; btn: string; pileId?: number; slot?: number } | null;
+  isRoomMode?: () => boolean;
+  roomSeated?: () => boolean;
+  roomStandWalk?: () => void;
+  roomWalkBodies?: () => [number, number, number, number][];
+  roomNearPrompt?: () => { kind: 'sit' | 'carry' | 'place'; info: string; btn: string; slot?: number; npcConnId?: string } | null;
   plazaMySeat: () => { pileId: number; slot: number } | null;
   seatPose: (pileId: number, slot: number) => { pos: THREE.Vector3; yaw: number };
   setPlazaSeatPropsVisible: (v: boolean) => void;
@@ -106,6 +111,7 @@ export function clearWalkInput() {
 export function standUp() {
   if (D.getState() !== 'play' || walking) return;
   if (D.isPlazaMode() && D.plazaSeated()) { void D.plazaStandWalk(); return; }
+  if (D.isRoomMode?.() && D.roomSeated?.()) { void D.roomStandWalk?.(); return; }
   if (['seam', 'twist', 'crab', 'aim', 'empty'].includes(D.getPhase())) {
     D.bumpAbandoned();
     const sh = new THREE.Mesh(D.shellGeo, D.shellTopMat);
@@ -163,15 +169,18 @@ export function walkStep(dt: number) {
   const k = (c: string) => walkKeys.has(c) ? 1 : 0;
   let f = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - joy.y, r = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + joy.x;
   const l = Math.hypot(f, r); if (l > 1) { f /= l; r /= l; }
-  const moveSp = (D.isPlazaMode() ? 3.0 : 1.7) * walkTune.mul;
+  const room = !!D.isRoomMode?.();
+  const moveSp = (D.isPlazaMode() ? 3.0 : room ? 2.0 : 1.7) * walkTune.mul;
   walkMotion.spd = l * moveSp; walkMotion.strafe = r * moveSp;
   const yaw = D.getYaw();
   const prevX = walkPos.x, prevZ = walkPos.z;
   const sp = moveSp * dt; walkPos.x += (-Math.sin(yaw) * f + Math.cos(yaw) * r) * sp; walkPos.z += (-Math.cos(yaw) * f - Math.sin(yaw) * r) * sp;
   const obs: [number, number, number][] = D.isPlazaMode()
     ? [...D.plazaPileObs()]
-    : [[0, 0, 1.15], [D.BASIN.x, D.BASIN.z, 0.42], [D.BOWL.x, D.BOWL.z, D.getBowlR() + 0.12], [2.6, 2.6, 0.75], [2.9, -2.5, 0.35], [3.1, -1.9, 0.35], [-2.9, 2.6, 0.35], [3.0, 0.5, 0.3], [-3.0, 0.2, 0.3]];
-  if (!D.isPlazaMode()) {
+    : room
+      ? [[0, 0, 1.15]]
+      : [[0, 0, 1.15], [D.BASIN.x, D.BASIN.z, 0.42], [D.BOWL.x, D.BOWL.z, D.getBowlR() + 0.12], [2.6, 2.6, 0.75], [2.9, -2.5, 0.35], [3.1, -1.9, 0.35], [-2.9, 2.6, 0.35], [3.0, 0.5, 0.3], [-3.0, 0.2, 0.3]];
+  if (!D.isPlazaMode() && !room) {
     D.getNpcs().forEach(n => obs.push([n.g.position.x, n.g.position.z, 0.5]));
     D.stools.forEach(g => obs.push([g.position.x, g.position.z, 0.28]));
   }
@@ -181,9 +190,10 @@ export function walkStep(dt: number) {
     if (d < rr + 0.2 && d > 1e-4) { walkPos.x = x + dx / d * (rr + 0.2); walkPos.z = z + dz / d * (rr + 0.2); }
   }
   // 玩家之間：擋路但不推擠；站／蹲跳躍仍擋，躺著夠高可越过
-  if (D.isPlazaMode()) {
+  if (D.isPlazaMode() || room) {
     const clearLie = D.getJumpY() >= 0.32;
-    for (const [x, z, rr, isLie] of D.plazaWalkBodies()) {
+    const others = D.isPlazaMode() ? D.plazaWalkBodies() : (D.roomWalkBodies?.() ?? []);
+    for (const [x, z, rr, isLie] of others) {
       if (isLie && clearLie) continue;
       const dx = walkPos.x - x, dz = walkPos.z - z, d = Math.hypot(dx, dz);
       const minD = rr + 0.2;
@@ -193,7 +203,7 @@ export function walkStep(dt: number) {
       if (!(pd < minD && d + 1e-8 >= pd)) { walkPos.x = prevX; walkPos.z = prevZ; break; }
     }
   }
-  if (!D.isPlazaMode() && walkPos.z < -2.55 && walkPos.x < -1.3) walkPos.z = -2.55;
+  if (!D.isPlazaMode() && !room && walkPos.z < -2.55 && walkPos.x < -1.3) walkPos.z = -2.55;
   if (D.isPlazaMode() && D.plazaWalkRect) {
     const b = D.plazaWalkRect();
     walkPos.x = D.clamp(walkPos.x, b.minX, b.maxX);
@@ -225,6 +235,20 @@ export function walkStep(dt: number) {
         ? `樸子腳・座 ${n.slot + 1}`
         : `第 ${n.pileId + 1} 堆・座 ${n.slot + 1}`;
       if (btn) btn.innerHTML = `<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>`;
+    } else if (btn) {
+      btn.innerHTML = `<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>`;
+    }
+    return;
+  }
+  if (room) {
+    nearSeat = null; D.stools.forEach(g => { g.visible = false; if (g.userData.tag) g.userData.tag.visible = false; });
+    const prompt = D.roomNearPrompt?.();
+    D.on('seatCard', !!prompt);
+    D.$('seatCard').classList.add('mini');
+    const btn = D.$('sitBtn');
+    if (prompt) {
+      D.$('seatInfo').textContent = prompt.info;
+      if (btn) btn.innerHTML = `<i class="ic ic-chair"></i> ${prompt.btn}<span class="key"> (E)</span>`;
     } else if (btn) {
       btn.innerHTML = `<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>`;
     }

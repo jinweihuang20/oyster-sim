@@ -4,6 +4,18 @@ export type RoomEndMode = 'untimed' | 'timed' | 'goal';
 export type RoomPlayer = {
   pid: string; nick: string; tag: string; host: boolean; ready: boolean;
   seat: number; meat: number; earn: number; payout: number; settled: boolean;
+  isNpc?: boolean;
+};
+
+export type RoomBody = {
+  connId: string; pid: string; nick: string; tag: string;
+  host: boolean; ready: boolean; isNpc: boolean;
+  seat: number; meat: number; earn: number; payout: number; settled: boolean;
+  phase: string; x: number; z: number; yaw: number;
+  seated: boolean; moving: boolean; umb: boolean;
+  lookYaw: number; pitch: number;
+  head: string; hand: string; body: string; legs: string; feet: string;
+  carriedBy: string; cosmetics: string;
 };
 
 export type RoomSnap = {
@@ -11,6 +23,7 @@ export type RoomSnap = {
   durationSec: number; goalMeat: number; phase: RoomPhase;
   phaseAt: number; playAt: number; remainSec: number;
   hostPid: string; players: RoomPlayer[];
+  npcCount: number; npcs: RoomBody[]; bodies: RoomBody[];
 };
 
 export const ROOM_SCENES: { id: string; n: string }[] = [
@@ -46,6 +59,40 @@ export function normPlayer(p: any): RoomPlayer {
     earn: num(p?.earn ?? p?.Earn),
     payout: num(p?.payout ?? p?.Payout),
     settled: bool(p?.settled ?? p?.Settled),
+    isNpc: bool(p?.isNpc ?? p?.IsNpc),
+  };
+}
+
+export function normBody(p: any): RoomBody {
+  return {
+    connId: str(p?.connId ?? p?.ConnId),
+    pid: str(p?.pid ?? p?.Pid),
+    nick: str(p?.nick ?? p?.Nick) || '剝蚵人',
+    tag: str(p?.tag ?? p?.Tag),
+    host: bool(p?.host ?? p?.Host),
+    ready: bool(p?.ready ?? p?.Ready),
+    isNpc: bool(p?.isNpc ?? p?.IsNpc),
+    seat: num(p?.seat ?? p?.Seat),
+    meat: num(p?.meat ?? p?.Meat),
+    earn: num(p?.earn ?? p?.Earn),
+    payout: num(p?.payout ?? p?.Payout),
+    settled: bool(p?.settled ?? p?.Settled),
+    phase: str(p?.phase ?? p?.Phase) || 'idle',
+    x: num(p?.x ?? p?.X),
+    z: num(p?.z ?? p?.Z),
+    yaw: num(p?.yaw ?? p?.Yaw),
+    seated: bool(p?.seated ?? p?.Seated) || num(p?.seat ?? p?.Seat) >= 0,
+    moving: bool(p?.moving ?? p?.Moving),
+    umb: bool(p?.umb ?? p?.Umb),
+    lookYaw: num(p?.lookYaw ?? p?.LookYaw),
+    pitch: num(p?.pitch ?? p?.Pitch),
+    head: str(p?.head ?? p?.Head) || 'hd_basic',
+    hand: str(p?.hand ?? p?.Hand) || 'hn_basic',
+    body: str(p?.body ?? p?.Body) || 'bd_basic',
+    legs: str(p?.legs ?? p?.Legs) || 'lg_basic',
+    feet: str(p?.feet ?? p?.Feet) || 'ft_basic',
+    carriedBy: str(p?.carriedBy ?? p?.CarriedBy),
+    cosmetics: str(p?.cosmetics ?? p?.Cosmetics),
   };
 }
 
@@ -66,6 +113,9 @@ export function normSnap(s: any): RoomSnap | null {
     remainSec: num(s.remainSec ?? s.RemainSec),
     hostPid: str(s.hostPid ?? s.HostPid),
     players: Array.isArray(s.players ?? s.Players) ? (s.players ?? s.Players).map(normPlayer) : [],
+    npcCount: num(s.npcCount ?? s.NpcCount) || 0,
+    npcs: Array.isArray(s.npcs ?? s.Npcs) ? (s.npcs ?? s.Npcs).map(normBody) : [],
+    bodies: Array.isArray(s.bodies ?? s.Bodies) ? (s.bodies ?? s.Bodies).map(normBody) : [],
   };
 }
 
@@ -82,6 +132,15 @@ export function roomZhErr(err?: string) {
     case 'not_host': return '只有房主可以做';
     case 'not_ready': return '大家還沒準備好';
     case 'need_players': return '至少要 2 人才能開始';
+    case 'bad_npcs': return '鄰居人數要 0 到 4 人';
+    case 'bad_seat': return '這個位子坐不下';
+    case 'taken': return '這個位子有人了';
+    case 'carrying': return '先把抱著的人放下';
+    case 'already_carry': return '一次只能抱一位';
+    case 'notnpc': return '只能抱鄰居';
+    case 'seated': return '請先站起來再抱';
+    case 'far': return '再靠近一點才能抱';
+    case 'notcarrier': return '你沒有抱這個人';
     case 'not_play': return '這一局還沒開始';
     case 'not_results': return '還在進行中';
     case 'no_player': return '找不到這個人';
