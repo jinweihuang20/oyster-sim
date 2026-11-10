@@ -356,7 +356,10 @@ function bindFlagShop(mine: PlazaFlagState | null) {
         D.toast(r.err === 'nosup' ? '這台伺服器還沒開放挑選旗幟樣式' : flagErrText(r.err), '#ffb08a');
         return;
       }
-      renderFlagShop(r.mine ?? mine);
+      const next: any = r.mine ? { ...r.mine } : { ...(mine ?? {}) };
+      if (track === 'color') next.colorSel = lv; else if (track === 'size') next.sizeSel = lv; else next.fxSel = lv;
+      renderFlagShop(next);
+      D.toast('已換成「' + (b.textContent || '').trim() + '」', '#9fd0a8');
     };
   });
   box.querySelectorAll<HTMLButtonElement>('button[data-fup]').forEach(b => {

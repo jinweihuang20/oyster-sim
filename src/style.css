@@ -1620,3 +1620,7 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
 
 /* 廣場裡開商店／圖鑑／裝備要蓋過廣場名牌、HUD 與按鈕 */
 body:is(.plazaMode,.plazaRoam) :is(#shop,#dex,#equip).show{z-index:9600!important}
+/* 旗幟樣式：選中的要一眼看得出來 */
+#shop .flagShop .flagChip{min-height:34px!important;min-width:0!important;opacity:.78}
+#shop .flagShop .flagChip.on{opacity:1;background:#2a5a86!important;border-color:#e9d9a8!important;color:#fff!important;font-weight:700;box-shadow:0 0 0 2px rgba(233,217,168,.55),0 2px 8px rgba(0,0,0,.25)!important;padding-left:24px!important;position:relative}
+#shop .flagShop .flagChip.on::before{content:"";position:absolute;left:10px;top:50%;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:translate(0,-60%) rotate(45deg)}
