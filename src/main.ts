@@ -1440,6 +1440,7 @@ initYardShop({
   renderMedShop,
   renderItemShop: () => renderItemShop(),
   shopTabs: () => shopTabs(),
+  getShopTab: () => shopTab,
   newDecor: () => newDecor(),
   shellGeos: SHELL_GEOS,
   pileMat,

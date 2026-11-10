@@ -1626,3 +1626,6 @@ body:is(.plazaMode,.plazaRoam) :is(#shop,#dex,#equip).show{z-index:9600!importan
 #shop .flagShop .flagChip.on::before{content:"";position:absolute;left:10px;top:50%;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:translate(0,-60%) rotate(45deg)}
 /* 提示訊息永遠在最上層（蓋過商店、圖鑑、設定等視窗） */
 #toast{z-index:13500!important}
+.flagShop .flagMsg{min-height:1.3em;margin:6px 0 4px;font-size:13px;font-weight:700}
+.flagShop .flagMsg.ok{color:#9be37a}
+.flagShop .flagMsg.bad{color:#ffb08a}
