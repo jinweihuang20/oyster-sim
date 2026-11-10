@@ -4585,6 +4585,7 @@ function ensurePlazaMe(): PlayerRig {
     body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
   });
   posePlazaHangArms(plazaMe);
+  plazaMe.outer.userData.noAvatarLod = true;
   plazaMe.outer.visible = false;
   scene.add(plazaMe.outer);
   return plazaMe;

@@ -151,8 +151,12 @@ export function syncAvatarLod(rig: PlayerRig) {
   captureAndHide(rig);
 }
 
-/** 遠距用滯後切換；enabled=false 時強制回完整模型 */
+/** 遠距用滯後切換；enabled=false 時強制回完整模型。本機角色請設 outer.userData.noAvatarLod。 */
 export function applyAvatarDistanceLod(rig: PlayerRig, dist: number, enabled: boolean) {
+  if (rig.outer.userData.noAvatarLod) {
+    if (getState(rig)?.on) setAvatarLod(rig, false);
+    return;
+  }
   if (!enabled) {
     if (getState(rig)?.on) setAvatarLod(rig, false);
     return;

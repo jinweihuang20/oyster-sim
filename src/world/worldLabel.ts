@@ -213,12 +213,15 @@ export const LOCAL_AVATAR_LAYER = 3;
 
 export function markLocalAvatarLayer(root: THREE.Object3D | null | undefined) {
   if (!root) return;
-  root.traverse(o => { o.layers.enable(LOCAL_AVATAR_LAYER); });
+  root.traverse(o => { o.layers.set(LOCAL_AVATAR_LAYER); });
 }
 
 /**
- * 先畫場景與名牌（名牌不跟牆比深度），再只畫本機角色。
- * 不清除深度，所以牆仍會擋住自己；名牌沒寫深度，自己的頭／帽／身體會蓋住後面的名牌。
+ * 第一趟不畫本機角色（只放在 LOCAL_AVATAR_LAYER），先畫世界與名牌。
+ * 第二趟不清顏色／深度，用一般 LessEqual 只畫本機角色：
+ * 牆的深度仍在，會擋住自己；名牌沒寫深度，自己的頭／帽／身體會蓋住後面的名牌。
+ * 不改 depthFunc＝Equal：iOS 等行動 GPU 深度精度較粗時 Equal 會幾乎全失敗，角色只剩少數網格（例如雨鞋）。
+ * 角色只畫一趟，也不會再出現小腿與鞋互搶深度的問題。
  */
 export function renderSceneWithLocalAvatarOnTop(
   renderer: THREE.WebGLRenderer,
@@ -226,10 +229,15 @@ export function renderSceneWithLocalAvatarOnTop(
   camera: THREE.Camera,
   localRoot?: THREE.Object3D | null,
 ) {
-  renderer.render(scene, camera);
-  if (!localRoot?.visible) return;
-  markLocalAvatarLayer(localRoot);
-  scene.traverse(o => { if ((o as THREE.Light).isLight) o.layers.enable(LOCAL_AVATAR_LAYER); });
+  const prevObjLayers: { obj: THREE.Object3D; mask: number }[] = [];
+  const hasLocal = !!localRoot?.visible;
+  if (hasLocal) {
+    localRoot.traverse(o => {
+      prevObjLayers.push({ obj: o, mask: o.layers.mask });
+      o.layers.set(LOCAL_AVATAR_LAYER);
+    });
+    scene.traverse(o => { if ((o as THREE.Light).isLight) o.layers.enable(LOCAL_AVATAR_LAYER); });
+  }
   const prevMask = camera.layers.mask;
   const prevAuto = renderer.autoClear;
   const prevAutoColor = renderer.autoClearColor;
@@ -237,30 +245,20 @@ export function renderSceneWithLocalAvatarOnTop(
   const prevAutoStencil = renderer.autoClearStencil;
   const prevShadow = renderer.shadowMap.enabled;
   const prevBg = scene.background;
-  // Three.js 只要 scene.background 是 Color，即使 autoClear=false 也會 forceClear 整張畫布（含深度），世界就會被清掉只剩本機角色
-  renderer.autoClear = false;
-  renderer.autoClearColor = false;
-  renderer.autoClearDepth = false;
-  renderer.autoClearStencil = false;
-  renderer.shadowMap.enabled = false;
-  scene.background = null;
-  camera.layers.set(LOCAL_AVATAR_LAYER);
-  // LessEqual 再畫一次時，幾乎貼在一起的小腿與雨鞋會互搶深度，膚色腿會蓋過鞋面；改 Equal 只重塗第一趟已寫入的角色像素，名牌沒寫深度故仍會被自己擋住
-  const prevDepthFn: { mat: THREE.Material; fn: THREE.DepthModes }[] = [];
-  localRoot.traverse(o => {
-    const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    for (const mat of mats) {
-      if (!mat) continue;
-      prevDepthFn.push({ mat, fn: mat.depthFunc });
-      mat.depthFunc = THREE.EqualDepth;
-    }
-  });
   try {
     renderer.render(scene, camera);
+    if (!hasLocal) return;
+    // Three.js 只要 scene.background 是 Color，即使 autoClear=false 也會 forceClear 整張畫布（含深度），世界就會被清掉只剩本機角色
+    renderer.autoClear = false;
+    renderer.autoClearColor = false;
+    renderer.autoClearDepth = false;
+    renderer.autoClearStencil = false;
+    renderer.shadowMap.enabled = false;
+    scene.background = null;
+    camera.layers.set(LOCAL_AVATAR_LAYER);
+    renderer.render(scene, camera);
   } finally {
-    for (const { mat, fn } of prevDepthFn) mat.depthFunc = fn;
+    for (const { obj, mask } of prevObjLayers) obj.layers.mask = mask;
     camera.layers.mask = prevMask;
     renderer.autoClear = prevAuto;
     renderer.autoClearColor = prevAutoColor;
