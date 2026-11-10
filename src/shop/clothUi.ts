@@ -113,7 +113,9 @@ export function eqSvg(e: Eq, w = 72, grey = false) {
     bd_rain: `<path d="M24 8L8 22l6 8 6-4v32h32V26l6 4 6-8L48 8l-12 10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M36 18V58" stroke="${s}" stroke-width="2"/>`,
     ft_boots: `<path d="M18 8h18v28q16 2 22 10v6H18Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
     ft_work: `<path d="M16 18h20v14q18 2 22 12v8H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 24h10M22 30h10" stroke="#e8d8a8" stroke-width="2"/>`,
-    lg_flower: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="26" cy="22" r="3" fill="#fff3c8"/><circle cx="46" cy="36" r="3" fill="#fff3c8"/>` };
+    lg_flower: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="26" cy="22" r="3" fill="#fff3c8"/><circle cx="46" cy="36" r="3" fill="#fff3c8"/>`,
+    bd_bikini: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="#e8bc98" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M24 26q6-2 10 6h-12Z" fill="${grey ? '#c4c4c4' : '#e84a5c'}" stroke="${s}" stroke-width="1.6"/><path d="M48 26q-6-2-10 6h12Z" fill="${grey ? '#c4c4c4' : '#e84a5c'}" stroke="${s}" stroke-width="1.6"/><path d="M30 22L36 12L42 22" fill="none" stroke="#fff6ee" stroke-width="2"/><path d="M24 50h24l-3 8H27Z" fill="${grey ? '#c4c4c4' : '#e84a5c'}" stroke="${s}" stroke-width="1.6"/>`,
+    bd_nude: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="#e8bc98" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M26 28l8 8M34 28l-8 8M40 28l8 8M48 28l-8 8" stroke="${grey ? '#888' : '#2a2a2a'}" stroke-width="2.6" stroke-linecap="round"/>` };
   // iOS WebKit：多個同名 clipPath id 會解析到第一個（可能在隱藏元素裡），每個實例改用唯一 id
   const u = `_${++eqSvgN}`;
   let body = (ID[e.id] ?? P[e.slot]).replace(/id="(c_[a-z0-9_]+)"/g, `id="$1${u}"`).replace(/url\(#(c_[a-z0-9_]+)\)/g, `url(#$1${u})`);
@@ -150,7 +152,9 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     bd_rain: `<path d="${T}" fill="#ffd21a" ${ol}/><path d="M80 92V182" stroke="${k}" stroke-width="2"/>${[110, 130, 150, 170].map(y => `<circle cx="80" cy="${y}" r="2.5" fill="#fff" stroke="${k}" stroke-width="1.5"/>`).join('')}<path d="M56 100l4 70" stroke="#fffbe0" stroke-width="3" opacity=".8"/>`,
     bd_vest: `<path d="${T}" fill="#f2efe4" ${ol}/><path d="M52 92h18l-2 90H52Z M108 92H90l2 90h16Z" fill="#c82a2a" stroke="${k}" stroke-width="2.5" stroke-linejoin="round"/><path d="M70 92l-2 90M90 92l2 90" stroke="#ffd25a" stroke-width="3"/><path d="M56 150h8M96 150h8" stroke="#ffd25a" stroke-width="2"/>`,
     bd_boss: `<path d="${T}" fill="#1e2a3a" ${ol}/><path d="M66 90l14 14 14-14" fill="#2e3e52" stroke="${k}" stroke-width="2.5"/><path d="M80 104V182" stroke="#c8c8c8" stroke-width="2.5" stroke-dasharray="2 2"/><rect x="58" y="140" width="14" height="12" fill="none" stroke="#c8c8c8" stroke-width="2"/><rect x="88" y="140" width="14" height="12" fill="none" stroke="#c8c8c8" stroke-width="2"/>`,
-    bd_sequin: `<path d="${T}" fill="url(#pSeq)" ${ol}/><path d="M64 92q16 16 32 0" fill="none" stroke="#ffd25a" stroke-width="3"/>` };
+    bd_sequin: `<path d="${T}" fill="url(#pSeq)" ${ol}/><path d="M64 92q16 16 32 0" fill="none" stroke="#ffd25a" stroke-width="3"/>`,
+    bd_bikini: `<path d="${T}" fill="${SK}" ${ol}/><path d="M58 126q10-6 16 8H56Z" fill="#e84a5c" ${ol}/><path d="M102 126q-10-6-16 8h18Z" fill="#e84a5c" ${ol}/><path d="M68 122L80 100L92 122" fill="none" stroke="#fff6ee" stroke-width="3" stroke-linecap="round"/><path d="M56 168h48l-6 16H62Z" fill="#e84a5c" ${ol}/>`,
+    bd_nude: `<path d="${T}" fill="${SK}" ${ol}/><path d="M62 126l10 10M72 126l-10 10M88 126l10 10M98 126l-10 10" fill="none" stroke="#2a2a2a" stroke-width="3.4" stroke-linecap="round"/>` };
   const hood = B.id === 'bd_rain' ? `<path d="M50 92Q48 34 80 30Q112 34 110 92Z" fill="#ffd21a" ${ol}/>` : '';
   // ---- 褲子 ----
   const P = 'M54 182h52l6 86H86l-6-60-6 60H48Z';
@@ -176,7 +180,10 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     hd_crown: `<path d="M58 54L60 28L70 40L80 22L90 40L100 28L102 54Z" fill="#e8b830" ${ol}/><path d="M58 54H102" stroke="#b8862a" stroke-width="4"/><circle cx="80" cy="44" r="4" fill="#c82a2a" stroke="${k}" stroke-width="1.5"/><circle cx="66" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="94" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="80" cy="22" r="2.5" fill="#fff6dc" stroke="${k}"/>` };
   const face = `<circle cx="80" cy="66" r="24" fill="${SK}" ${ol}/><circle cx="71" cy="66" r="2.6" fill="${k}"/><circle cx="89" cy="66" r="2.6" fill="${k}"/><path d="M73 76q7 6 14 0" fill="none" stroke="${k}" stroke-width="2.2" stroke-linecap="round"/><circle cx="66" cy="73" r="3" fill="#f0a090" opacity=".7"/><circle cx="94" cy="73" r="3" fill="#f0a090" opacity=".7"/>`;
   void PF;
-  return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${arm(50, 34)}${arm(110, 126)}${legs[L.id] ?? legs.lg_basic}${body[B.id] ?? body.bd_basic}${face}${hd[H.id] ?? hd.hd_basic}${feet[F.id] ?? feet.ft_basic}</svg>`;
+  const legsDraw = B.id === 'bd_bikini'
+    ? `<path d="${P}" fill="${SK}" ${ol}/><path d="M56 182h48l-4 20H60Z" fill="#e84a5c" ${ol}/>`
+    : (legs[L.id] ?? legs.lg_basic);
+  return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${arm(50, 34)}${arm(110, 126)}${legsDraw}${body[B.id] ?? body.bd_basic}${face}${hd[H.id] ?? hd.hd_basic}${feet[F.id] ?? feet.ft_basic}</svg>`;
 }
 // 裝備面板 v2：場景＋木牌部位卡＋加成看板＋套裝收集
 // ax/ay：僅首幀佔位；實際圓圈／線由 equipPreview 投影 3D（頭＝帽子中心），不再用 ay 去拉人物高度
