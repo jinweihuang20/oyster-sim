@@ -18,9 +18,9 @@ export function rbox(w: number, h: number, d: number, segments = 2, radiusRatio 
   return toCreasedNormals(new RoundedBoxGeometry(w, h, d, segments, radius));
 }
 
-/** NPC 人物：純方塊降面（玩家請用 rbox） */
+/** NPC 人物：與玩家一樣用圓角方塊 */
 export function rboxNpc(w: number, h: number, d: number): BufferGeometry {
-  return new THREE.BoxGeometry(w, h, d);
+  return rbox(w, h, d);
 }
 
 /** 場景道具：一般 1 段圓角；手機／省電改純方塊降面（人物請用 rbox／rboxNpc） */

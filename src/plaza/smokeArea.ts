@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import type { MatFn } from '../dm/weapons';
 import { rboxEnv, rcyl } from '../core/geo';
 import { SMOKE_CENTER, SMOKE_SEAT_COUNT, SMOKE_PILE_ID, SMOKE_ABER_SLOT, SMOKE_ASHTRAY_XZ, SMOKE_ASHTRAY_TOP_Y, seatPose, seatKey, plazaSmokeObstacles, smokeNpcSeatPose } from './layout';
-import { makePlazaChair } from './props';
 import { makeCigSmoke, type CharcoalFireFx } from './fireFx';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
@@ -89,6 +88,7 @@ export function makePlazaSmokeArea(
 ): {
   group: THREE.Group;
   seatPads: Map<string, THREE.Mesh>;
+  chairPoses: { x: number; z: number; yaw: number; key: string }[];
   obstacles: [number, number, number][];
   ambientSmoke: CharcoalFireFx;
   tick: (tSec: number, dt: number) => void;
@@ -98,6 +98,7 @@ export function makePlazaSmokeArea(
   const { x: cx, z: cz } = SMOKE_CENTER;
   const segs = lowDetail ? 5 : 8;
   const seatPads = new Map<string, THREE.Mesh>();
+  const chairPoses: { x: number; z: number; yaw: number; key: string }[] = [];
 
   // 地面虛線框＋accent 邊
   {
@@ -179,19 +180,14 @@ export function makePlazaSmokeArea(
     root.add(sign);
   }
 
-  // 座位（塑膠圓凳，朝區心）；僅 0..SMOKE_SEAT_COUNT-1 可坐
+  // 座位（塑膠圓凳，朝區心）；幾何由世界層 InstancedMesh 一次畫完
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) {
     const pose = seatPose(SMOKE_PILE_ID, s);
-    const { group, pad } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
-    root.add(group);
-    seatPads.set(seatKey(SMOKE_PILE_ID, s), pad);
+    chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(SMOKE_PILE_ID, s) });
   }
-  // 阿伯專用椅：進 seatPads 才能在放下時高亮，但不列入玩家 nearestFreeSeat
   {
     const pose = smokeNpcSeatPose();
-    const { group, pad } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
-    root.add(group);
-    seatPads.set(seatKey(SMOKE_PILE_ID, SMOKE_ABER_SLOT), pad);
+    chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(SMOKE_PILE_ID, SMOKE_ABER_SLOT) });
   }
 
   // 區內淡煙氣氛
@@ -202,6 +198,7 @@ export function makePlazaSmokeArea(
   return {
     group: root,
     seatPads,
+    chairPoses,
     obstacles: plazaSmokeObstacles(),
     ambientSmoke,
     tick: (tSec, dt) => ambientSmoke.tick(tSec, dt),

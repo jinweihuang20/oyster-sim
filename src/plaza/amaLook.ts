@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { rboxEnv } from '../core/geo';
 import { applyOutfitToRig, clearOutfitDetails } from '../shop/equipVisual';
 import type { PlayerRig } from '../dm/character';
+import { rebuildAvatarMerged } from '../dm/avatarMerge';
 
 /** 比玩家略矮、骨架略小 */
 export const AMA_SCALE = 0.88;
@@ -301,6 +302,7 @@ export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook, pid?: string) {
     ensureAmaBun(rig, ama);
     rig.head.position.set(0, AMA_HEAD_Y, AMA_HEAD_FORWARD);
     applyAmaScale(rig);
+    rebuildAvatarMerged(rig);
     return;
   }
 
@@ -381,6 +383,7 @@ export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook, pid?: string) {
 
   rig.head.position.set(0, AMA_HEAD_Y, AMA_HEAD_FORWARD);
   applyAmaScale(rig);
+  rebuildAvatarMerged(rig);
 }
 
 /** 吸菸區阿伯：老年男性，不套阿婆花布／包髻 */
@@ -421,6 +424,7 @@ export function dressPlazaAber(rig: PlayerRig) {
     m.color.setHex(0x3a3a48);
     m.needsUpdate = true;
   }
+  rebuildAvatarMerged(rig);
 }
 
 export function applyAmaScale(rig: PlayerRig) {

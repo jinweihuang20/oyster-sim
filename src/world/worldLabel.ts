@@ -30,7 +30,7 @@ export type WorldLabelNameTone = 'player' | 'npc';
 
 export type WorldLabelOpts = {
   worldH?: number;
-  /** 預設關閉深度測試，名牌／對話框永遠畫在人物前面；傳 true 才依深度被擋住 */
+  /** 預設關閉深度測試，避免被牆、攤位擋住；本機角色會在主畫面之後再畫一次蓋住名牌 */
   depthTest?: boolean;
   /** 真人／NPC 樣式（名牌與泡泡皆用） */
   nameTone?: WorldLabelNameTone;
@@ -67,10 +67,11 @@ export function makeWorldLabel(
     depthTest,
     depthWrite: false,
     sizeAttenuation: true,
+    toneMapped: false,
   });
   const sprite = new THREE.Sprite(mat);
   sprite.center.set(0.5, 0);
-  // 高於人物配件／衣服（equipVisual 會把 mesh 提到 2～3），避免第三人稱自己的頭身蓋住別人的名牌與對話框
+  // 不寫深度；與場景的遮擋改由本機角色第二趟上色處理
   sprite.renderOrder = kind === 'bubble' ? 31 : 30;
   let text = '';
   let opacity = 1;
@@ -206,4 +207,65 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.arcTo(x, y + h, x, y, rr);
   ctx.arcTo(x, y, x + w, y, rr);
   ctx.closePath();
+}
+
+/** 本機第三人稱角色專用圖層：主畫面（含名牌）畫完後再畫一次，蓋住疊在自己身上的名牌 */
+export const LOCAL_AVATAR_LAYER = 3;
+
+export function markLocalAvatarLayer(root: THREE.Object3D | null | undefined) {
+  if (!root) return;
+  root.traverse(o => { o.layers.set(LOCAL_AVATAR_LAYER); });
+}
+
+/**
+ * 第一趟不畫本機角色（只放在 LOCAL_AVATAR_LAYER），先畫世界與名牌。
+ * 第二趟不清顏色／深度，用一般 LessEqual 只畫本機角色：
+ * 牆的深度仍在，會擋住自己；名牌沒寫深度，自己的頭／帽／身體會蓋住後面的名牌。
+ * 不改 depthFunc＝Equal：iOS 等行動 GPU 深度精度較粗時 Equal 會幾乎全失敗，角色只剩少數網格（例如雨鞋）。
+ * 角色只畫一趟，也不會再出現小腿與鞋互搶深度的問題。
+ */
+export function renderSceneWithLocalAvatarOnTop(
+  renderer: THREE.WebGLRenderer,
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+  localRoot?: THREE.Object3D | null,
+) {
+  const prevObjLayers: { obj: THREE.Object3D; mask: number }[] = [];
+  const hasLocal = !!localRoot?.visible;
+  if (hasLocal) {
+    localRoot.traverse(o => {
+      prevObjLayers.push({ obj: o, mask: o.layers.mask });
+      o.layers.set(LOCAL_AVATAR_LAYER);
+    });
+    scene.traverse(o => { if ((o as THREE.Light).isLight) o.layers.enable(LOCAL_AVATAR_LAYER); });
+  }
+  const prevMask = camera.layers.mask;
+  const prevAuto = renderer.autoClear;
+  const prevAutoColor = renderer.autoClearColor;
+  const prevAutoDepth = renderer.autoClearDepth;
+  const prevAutoStencil = renderer.autoClearStencil;
+  const prevShadow = renderer.shadowMap.enabled;
+  const prevBg = scene.background;
+  try {
+    renderer.render(scene, camera);
+    if (!hasLocal) return;
+    // Three.js 只要 scene.background 是 Color，即使 autoClear=false 也會 forceClear 整張畫布（含深度），世界就會被清掉只剩本機角色
+    renderer.autoClear = false;
+    renderer.autoClearColor = false;
+    renderer.autoClearDepth = false;
+    renderer.autoClearStencil = false;
+    renderer.shadowMap.enabled = false;
+    scene.background = null;
+    camera.layers.set(LOCAL_AVATAR_LAYER);
+    renderer.render(scene, camera);
+  } finally {
+    for (const { obj, mask } of prevObjLayers) obj.layers.mask = mask;
+    camera.layers.mask = prevMask;
+    renderer.autoClear = prevAuto;
+    renderer.autoClearColor = prevAutoColor;
+    renderer.autoClearDepth = prevAutoDepth;
+    renderer.autoClearStencil = prevAutoStencil;
+    renderer.shadowMap.enabled = prevShadow;
+    scene.background = prevBg;
+  }
 }

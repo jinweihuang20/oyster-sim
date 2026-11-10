@@ -15,7 +15,9 @@ import {
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, isPlazaAber, type PlazaSeatRef } from './layout';
-import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
+import { makeYardLikePile, makePlazaGrill, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
+import { makeInstancedPlazaChairs, makeInstancedPads, type ChairPose } from './instancedProps';
+import { bakeStaticLighting } from './bakeLighting';
 import { mergeStaticMeshes, countMeshes } from './mergeStatic';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
@@ -155,6 +157,7 @@ export function createPlazaWorldView(
   opts: PlazaWorldOpts,
 ): PlazaWorldView {
   const LO = !!opts.lowDetail;
+  const MOBILE = matchMedia('(pointer: coarse)').matches;
   const root = new THREE.Group(); root.name = 'plazaWorld'; scene.add(root);
   const { M, add } = makeMeshHelpers(scene, LO);
   const remotes = new Map<string, Remote>();
@@ -163,7 +166,9 @@ export function createPlazaWorldView(
   const chairsRoot = new THREE.Group();
   chairsRoot.name = 'plazaChairs';
   root.add(chairsRoot);
+  const chairPoses: ChairPose[] = [];
   let nearKey: string | null = null;
+  let padTaken = new Set<string>();
   const cushions = new Map<string, THREE.Group>();
   function makeSeatCushion() {
     const g = new THREE.Group();
@@ -225,7 +230,8 @@ export function createPlazaWorldView(
       metalness: 0.02,
       color: 0xffffff,
     });
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(WALK_BOUND * 2.4, WALK_BOUND * 2.4), floorMat);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(WALK_BOUND * 2.4, WALK_BOUND * 2.4, LO ? 36 : 48, LO ? 36 : 48), floorMat);
+  floor.name = 'plazaFloor';
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0.002;
   floor.receiveShadow = !LO;
@@ -248,9 +254,7 @@ export function createPlazaWorldView(
     const seatN = SLOTS_PER_PILE + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
     for (let s = 0; s < seatN; s++) {
       const pose = seatPose(i, s);
-      const { group, pad } = makePlazaChair(pose.pos.x, pose.pos.z, pose.yaw, M, add);
-      chairsRoot.add(group);
-      seatMeshes.set(seatKey(i, s), pad);
+      chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(i, s) });
     }
   }
 
@@ -266,6 +270,7 @@ export function createPlazaWorldView(
   const smokeArea = makePlazaSmokeArea(M, add, LO);
   root.add(smokeArea.group);
   for (const [k, pad] of smokeArea.seatPads) seatMeshes.set(k, pad);
+  chairPoses.push(...smokeArea.chairPoses);
 
   // 東南角多那芝咖啡外觀＋門口吸菸區（座位 pileId=CAFE_SMOKE_PILE_ID）
   const cafe = makePlazaCafe(M, add, LO);
@@ -280,6 +285,9 @@ export function createPlazaWorldView(
   // 樸子腳北側「聯合競選總部」組合屋外觀（無座位、無點光）
   const hq = makePlazaHq(M, add, LO);
   root.add(hq.group);
+
+  const plazaChairs = makeInstancedPlazaChairs(chairPoses, M, LO);
+  chairsRoot.add(plazaChairs.group);
 
   // 合併靜態桌椅／棚架／攤位（略過選位墊、炭火、吊扇、薄煙；店面小零件留給遠景 LOD）
   const padSet = new Set<THREE.Object3D>([...seatMeshes.values()]);
@@ -302,6 +310,39 @@ export function createPlazaWorldView(
   mergeStaticMeshes(seafood.group, { skip: skipMerge, name: 'seafoodMerged' });
   mergeStaticMeshes(hq.group, { skip: skipMerge, name: 'hqMerged' });
   root.userData.mergeStats = { meshesBefore: meshBefore, meshesAfter: countMeshes(root) };
+
+  root.updateMatrixWorld(true);
+  const extraPadPoses: ChairPose[] = [];
+  const _padW = new THREE.Vector3();
+  const _padE = new THREE.Euler();
+  const _padQ = new THREE.Quaternion();
+  const _padS = new THREE.Vector3();
+  for (const [key, mesh] of [...seatMeshes]) {
+    mesh.updateWorldMatrix(true, false);
+    mesh.matrixWorld.decompose(_padW, _padQ, _padS);
+    _padE.setFromQuaternion(_padQ, 'YXZ');
+    extraPadPoses.push({ x: _padW.x, z: _padW.z, yaw: _padE.y, key });
+    mesh.removeFromParent();
+    seatMeshes.delete(key);
+  }
+  const extraPads = extraPadPoses.length ? makeInstancedPads(extraPadPoses, M, LO) : null;
+  if (extraPads) root.add(extraPads.mesh);
+  bakeStaticLighting(root, {
+    includeDirect: LO,
+    sunDir: new THREE.Vector3(-3, 11, -5),
+    lampXZ: PLAZA_LAMP_XZ,
+    lampY: PLAZA_ROOF_Y - 0.55,
+    lampPool: true,
+  });
+  const allPads = extraPads ? [plazaChairs.pads, extraPads] : [plazaChairs.pads];
+  const paintInstancedPads = (taken: Set<string> | null) => {
+    for (const api of allPads) {
+      for (const k of api.keys()) {
+        api.setPad(k, { busy: taken ? taken.has(k) : false, highlight: nearKey != null && k === nearKey });
+      }
+      api.apply();
+    }
+  };
 
   // 遠景細節裁切：建築小零件（窗框、桌上小物、菸蒂…）與貼圖招牌，鏡頭離建築夠遠就不畫
   type DetailLod = { box: THREE.Box3; small: THREE.Object3D[]; signs: THREE.Object3D[]; smallOn: boolean; signOn: boolean };
@@ -532,15 +573,13 @@ export function createPlazaWorldView(
   const grill = createGrillView(root);
   const flags = createPlazaFlagView(root);
 
-  // 只留對角兩盞真正的吊燈（外觀四盞都還在）；招牌／攤位／炭火改自發光，避免每幀開關燈害著色器重編
+  // 一盞真正的點光源放在廣場正中央、高掛屋頂下，照亮整個廣場；四盞吊燈外觀靠自發光＋烘焙暖光
   const plazaLights: THREE.PointLight[] = [];
   const roofLamps: THREE.PointLight[] = [];
-  // LO：只留一盞動態點光（另一側靠環境光／自發光），一般兩盞對角
-  const roofLampXZ = LO ? [PLAZA_LAMP_XZ[0]] : [PLAZA_LAMP_XZ[0], PLAZA_LAMP_XZ[3]];
-  const roofLampBaseI = LO ? 12 : 11;
-  for (const [x, z] of roofLampXZ) {
-    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 18 : 16, 1.35);
-    pl.position.set(x, PLAZA_ROOF_Y - 0.55, z);
+  const roofLampBaseI = LO ? 9 : 10;
+  {
+    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, 26, 0.7);
+    pl.position.set(0, PLAZA_ROOF_Y - 0.35, 0);
     pl.castShadow = false;
     pl.visible = true;
     root.add(pl);
@@ -657,7 +696,7 @@ function hashPid(pid: string) {
 
   void bubblesHost;
 
-  const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: 0.36, depthTest: false });
+  const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: 0.36 });
   selfBubble.sprite.visible = false;
   root.add(selfBubble.sprite);
   let selfBubUntil = 0;
@@ -669,7 +708,6 @@ function hashPid(pid: string) {
   function ensureTag(nick: string, isNpc = false) {
     const tag = makeWorldLabel(nick, 'name', {
       worldH: 0.24,
-      depthTest: false,
       nameTone: isNpc ? 'npc' : 'player',
     });
     tag.sprite.visible = false;
@@ -692,7 +730,7 @@ function hashPid(pid: string) {
   }
 
   function ensureBubble(isNpc = false) {
-    const el = makeWorldLabel(' ', 'bubble', { worldH: 0.36, depthTest: false, nameTone: isNpc ? 'npc' : 'player' });
+    const el = makeWorldLabel(' ', 'bubble', { worldH: 0.36, nameTone: isNpc ? 'npc' : 'player' });
     el.sprite.visible = false;
     root.add(el.sprite);
     return el;
@@ -706,6 +744,7 @@ function hashPid(pid: string) {
   /** 遠端雨傘：跟本機一樣「往前開」擋殼，不是頭頂撐雨 */
   function makeRemoteUmb() {
     const g = new THREE.Group();
+    g.userData.noMerge = true;
     g.visible = false;
     const pole = new THREE.Mesh(
       new THREE.CylinderGeometry(0.012, 0.012, 0.72, LO ? 4 : 5),
@@ -747,6 +786,7 @@ function hashPid(pid: string) {
   /** 簡易蚵仔刀＋蚵仔（遠端剝殼手持） */
   function makeRemoteHold(): { knife: THREE.Group; oyster: THREE.Group } {
     const knife = new THREE.Group();
+    knife.userData.noMerge = true;
     knife.visible = false;
     const wood = LO ? new THREE.MeshLambertMaterial({ color: 0x7a4a20 }) : new THREE.MeshStandardMaterial({ color: 0x7a4a20, roughness: 0.85 });
     const steel = LO ? new THREE.MeshLambertMaterial({ color: 0xd0d0d8 }) : new THREE.MeshStandardMaterial({ color: 0xd0d0d8, metalness: 0.7, roughness: 0.3 });
@@ -758,6 +798,7 @@ function hashPid(pid: string) {
     knife.add(blade);
 
     const oyster = new THREE.Group();
+    oyster.userData.noMerge = true;
     oyster.visible = false;
     const shellCol = LO
       ? new THREE.MeshLambertMaterial({ color: 0xe0dcd8 })
@@ -799,6 +840,7 @@ function hashPid(pid: string) {
   /** 坐下面前：紅臉盆＋裝肉碗（貼蚵堆坡面，renderOrder 高於殼堆） */
   function makeRemoteProps(): { props: THREE.Group; bowlNode: THREE.Object3D; meatRoot: THREE.Group } {
     const props = new THREE.Group();
+    props.userData.noMerge = true;
     props.visible = false;
     const markTop = (o: THREE.Object3D) => {
       o.traverse(x => {
@@ -1627,23 +1669,13 @@ function hashPid(pid: string) {
     const taken = new Set<string>();
     if (snap) for (const p of snap.players) { if (p.seated && p.pileId >= 0) taken.add(seatKey(p.pileId, p.slot)); }
     else for (const r of remotes.values()) { if (r.seated && r.pileId >= 0) taken.add(seatKey(r.pileId, r.slot)); }
-    for (const [k, m] of seatMeshes) {
-      const mat = m.material as THREE.MeshStandardMaterial;
-      const busy = taken.has(k);
-      mat.color.setHex(busy ? 0xc45c26 : 0x5a9ad0);
-      mat.opacity = busy ? 0.55 : 0.28;
-    }
+    padTaken = taken;
+    paintInstancedPads(taken);
   }
 
   function highlight(pileId: number | null, slot: number | null) {
     nearKey = pileId != null && slot != null ? seatKey(pileId, slot) : null;
-    for (const [k, m] of seatMeshes) {
-      const mat = m.material as THREE.MeshStandardMaterial;
-      if (!mat.emissive) continue;
-      const mine = nearKey != null && k === nearKey;
-      mat.emissive.setHex(mine ? 0x336610 : 0x000000);
-      if (mine) mat.opacity = 0.75;
-    }
+    paintInstancedPads(padTaken);
   }
 
   function highlightNear(seat: PlazaSeatRef | null) {
@@ -1658,7 +1690,7 @@ function hashPid(pid: string) {
     const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
     // 燈數固定，只調亮度，不開關 visible（three.js 增減燈會重編著色器）
     // 省電：吊燈改靠外觀球自發光，關掉動態點光
-    for (const pl of roofLamps) pl.intensity = eco ? 0 : roofLampBaseI;
+    for (const pl of roofLamps) pl.intensity = roofLampBaseI;
     tickDetailLod(dt, cx, cz);
 
     const k = Math.min(1, dt * 10);
@@ -1837,14 +1869,18 @@ function hashPid(pid: string) {
       for (const c of wishMarks.children) c.scale.setScalar(pulse);
     }
     grill.tick(t);
-    flags.tick(dt, camera);
     const tSec = t * 0.001;
-    // 省電：炭火約 15Hz，且只動鏡頭附近
-    fireThrottle += dt;
-    const runFire = !eco || fireThrottle >= 1 / 15;
-    if (runFire) {
-      const fdt = eco ? fireThrottle : dt;
-      fireThrottle = 0;
+    // 手機／省電：煙、咖啡、旗幟約 15Hz；桌機非省電仍每幀
+    const throttleFx = MOBILE || eco;
+    let runFx = true;
+    let fdt = dt;
+    if (throttleFx) {
+      fireThrottle += dt;
+      runFx = fireThrottle >= 1 / 15;
+      fdt = fireThrottle;
+      if (runFx) fireThrottle = 0;
+    }
+    if (runFx) {
       for (const f of fireFx) {
         f.group.getWorldPosition(_firePos);
         const fd2 = (_firePos.x - cx) * (_firePos.x - cx) + (_firePos.z - cz) * (_firePos.z - cz);
@@ -1854,13 +1890,13 @@ function hashPid(pid: string) {
       ambiance.tick(tSec, fdt);
       smokeArea.tick(tSec, fdt);
       cafe.tick(tSec, fdt);
-    } else {
-      // 吸菸薄煙仍低頻更新
-      smokeArea.tick(tSec, dt);
-      cafe.tick(tSec, dt);
+      flags.tick(fdt, camera);
+      if (!eco) bigShed.tick(fdt);
+      tickRemoteExhales(fdt);
     }
-    tickRemoteExhales(dt);
     // 遠端吸菸：手持菸（掛腕）＋菸頭薄煙；不再用頭側飄煙以免看起來沒拿菸
+    type SmokeJob = { r: Remote; cig: NonNullable<ReturnType<typeof getPlazaSmokeCig>>; dist2: number; aber: boolean };
+    const smokeJobs: SmokeJob[] = [];
     for (const r of remotes.values()) {
       const wantSeat = r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke');
       const wantAber = isAberRemote(r) && !r.carriedBy && (r.phase || '') !== 'carried' && (r.phase || '') !== 'moon'
@@ -1872,14 +1908,23 @@ function hashPid(pid: string) {
         const cig = getPlazaSmokeCig(r.rig);
         if (cig) {
           cig.setSmokeTint(!r.isNpc && parseCosmetics(r.cosmetics).goldSmoke ? GOLD_SMOKE_TINT : undefined);
-          cig.tick(tSec, dt);
-          if (wantAber && !LO) tickAberAshes(r, cig, dt);
+          const dx = r.x - cx, dz = r.z - cz;
+          smokeJobs.push({ r, cig, dist2: dx * dx + dz * dz, aber: wantAber && !LO });
         }
       } else {
         clearPlazaSmokeCig(r.rig);
       }
       // 舊頭側煙：隱藏（保留物件以免重配額抖動；離場 destroy 會清）
       if (r.cigSmoke) r.cigSmoke.group.visible = false;
+    }
+    if (runFx) {
+      smokeJobs.sort((a, b) => a.dist2 - b.dist2);
+      const cap = MOBILE ? 4 : smokeJobs.length;
+      for (let i = 0; i < smokeJobs.length && i < cap; i++) {
+        const s = smokeJobs[i];
+        s.cig.tick(tSec, fdt);
+        if (s.aber) tickAberAshes(s.r, s.cig, fdt);
+      }
     }
     // 本機第三人稱 avatar 的菸由 main plazaMe 掛載；此處 selfCig 僅作後備薄煙，坐下吸菸時關掉避免重複
     if (selfCig) {
@@ -1891,14 +1936,14 @@ function hashPid(pid: string) {
           headY,
           selfZ - Math.cos(selfYaw) * 0.12 - Math.sin(selfYaw) * 0.08,
         );
-        selfCig.tick(tSec, dt);
+        if (runFx) selfCig.tick(tSec, fdt);
       }
     }
-    if (!eco) bigShed.tick(dt);
     for (const k of stallKeepers) {
+      const dx = k.rig.outer.position.x - cx, dz = k.rig.outer.position.z - cz;
+      const kd2 = dx * dx + dz * dz;
       if (eco) {
-        const dx = k.rig.outer.position.x - cx, dz = k.rig.outer.position.z - cz;
-        const kd2 = dx * dx + dz * dz; k.rig.outer.visible = kd2 <= HIDE2; if (kd2 > FAR2) continue;
+        k.rig.outer.visible = kd2 <= HIDE2; if (kd2 > FAR2) continue;
         k.rig.outer.visible = true;
       }
       k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15;

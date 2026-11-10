@@ -15,7 +15,7 @@ import {
   initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
   setWalking, setNearSeat, clearWalkInput,
-  makeWorldLabel, type WorldLabel,
+  makeWorldLabel, renderSceneWithLocalAvatarOnTop, type WorldLabel,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
 import {
@@ -56,7 +56,7 @@ import {
 import { makeMeshHelpers } from './dm/mesh';
 import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaSetSelfBody, plazaReportEarn, plazaMySeat, plazaShiftStarted,
-  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated,
+  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
@@ -68,6 +68,7 @@ import {
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
 import { GOLD_SMOKE_TINT, encodeCosmetics } from './plaza/cosmetics';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
+import { registerBrightRenderer, setSceneBrightness, clampBright, BRIGHT_DEF } from './world/sceneBrightness';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
   $, on, toast, initDomToast, tickToast,
@@ -299,9 +300,9 @@ function makeNpc(d: NpcDef) {
   markBowlDrawOrder(bowlM);
   bowl.y = npcBowlY + 0.05;
   // 掛 scene、每幀對齊頭世界座標（勿掛 head，轉頭會把 +Y 偏移帶歪）
-  const tag = makeWorldLabel(d.name, 'name', { worldH: 0.2, depthTest: false });
+  const tag = makeWorldLabel(d.name, 'name', { worldH: 0.2 });
   tag.sprite.visible = false; scene.add(tag.sprite);
-  const bubble = makeWorldLabel(' ', 'bubble', { worldH: 0.32, depthTest: false });
+  const bubble = makeWorldLabel(' ', 'bubble', { worldH: 0.32 });
   bubble.sprite.visible = false; scene.add(bubble.sprite);
   npcs.push({ ...a, tag, name: d.name, rate: d.rate, chatty: d.chatty, peek: d.peek, count: 0, pause: 0, look: 0, bubble, bubT: 0, lean: 0, cyc: Math.random(), dur: d.rate, ev: 0, mood: 0, angry: 0, distract: 0, turnDir: 1, windup: 0, throwCd: rnd(15, 30), stuck: null, baseY: 0, oy, top, meat, bowl, bowlMeat: [], bowlM });
 }
@@ -405,10 +406,10 @@ const leanFaces: THREE.Group[] = [];
 for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x3a9a6a : 0xe86878, s < 0 ? 0x444444 : 0xc8c8c8).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
-type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean; eco: boolean; rotTip: boolean };
-const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE, rotTip: true };
+type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean; eco: boolean; rotTip: boolean; bright: number };
+const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE, rotTip: true, bright: BRIGHT_DEF };
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
-  const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; return m; })();
+  const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; m.bright = clampBright(m.bright); return m; })();
 /** 廣場陰影不每幀重算（約 4 次／秒）；工寮仍每幀更新 */
 let plazaShadowAcc = 0;
 function applyPlazaShadowMode() {
@@ -427,7 +428,7 @@ function applyPlazaShadowMode() {
 /** 熱切省電：關陰影、降 DPR；antialias／precision 僅啟動時套用 */
 function applyEcoGfx() {
   // 省電：手機約 1.25×、桌面約 1.5×；一般最多 2×
-  const dprCap = mix.eco ? (COARSE ? 1.25 : 1.5) : 2;
+  const dprCap = COARSE ? (mix.eco ? 1.25 : 1.5) : (mix.eco ? 1.5 : 2);
   renderer.setPixelRatio(Math.min(devicePixelRatio, dprCap));
   renderer.shadowMap.enabled = !mix.eco;
   renderer.shadowMap.type = mix.eco ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
@@ -440,6 +441,8 @@ function applyEcoGfx() {
   try { updSky(); } catch { /* 啟動時 sky／mix 尚未就緒 */ }
 }
 applyEcoGfx();
+registerBrightRenderer(renderer);
+setSceneBrightness(mix.bright);
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
 const STATS_URL = 'https://game-status.gwtech.org/e';
 const statsId = (() => { try { let v = LS.getItem('oyster-stats-id'); if (!v) { v = crypto.randomUUID(); LS.setItem('oyster-stats-id', v); } return v; } catch { return 'anon-' + Math.random().toString(36).slice(2, 14); } })();
@@ -3731,6 +3734,12 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
 { const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：降解析・關陰影・簡材質／少燈・降面（重新整理後 AA／精度／GPU／網格才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU／網格才會變）', '#9be37a'); }; }
+{ const el = $('v_bright') as HTMLInputElement; const pct = $('v_brightPct'); const syncBrightUi = () => { el.value = String(Math.round(mix.bright * 100)); pct.textContent = `${Math.round(mix.bright * 100)}%`; };
+  const applyBright = (n: number, save: boolean) => { mix.bright = setSceneBrightness(n); syncBrightUi(); if (save) applyMix(); };
+  syncBrightUi();
+  el.oninput = () => applyBright(Number(el.value) / 100, true);
+  $('v_brightReset').onclick = () => applyBright(BRIGHT_DEF, true);
+}
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => $('dex').classList.remove('show');
 
@@ -3773,7 +3782,7 @@ function tpFovFor(mode: 'walk' | 'plazaSit' | 'shedSit') {
 function resize() {
   const { w, h } = viewSize();
   // 回前景時 DPR 偶爾變；與省電上限對齊
-  const dprCap = mix.eco ? (COARSE ? 1.25 : 1.5) : 2;
+  const dprCap = COARSE ? (mix.eco ? 1.25 : 1.5) : (mix.eco ? 1.5 : 2);
   const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
   if (Math.abs(renderer.getPixelRatio() - dpr) > 1e-3) renderer.setPixelRatio(dpr);
   const bufW = renderer.domElement.width, bufH = renderer.domElement.height;
@@ -3817,17 +3826,49 @@ const isPaused = () => state === 'play' && (document.hidden || panelOpen() || $(
 let frameErr = 0;
 let frameSleeping = false;
 let lastDrawAt = 0;
+/** 手機最近一次操作時間；有輸入時維持 60fps，靜止約 1.5 秒後改 30fps */
+let lastInteractAt = 0;
+let mobilePtrHeld = 0;
+function noteInteract(immediate = false) {
+  lastInteractAt = performance.now();
+  if (immediate) lastDrawAt = 0;
+}
+function mobileBusy(now: number) {
+  if (now - lastInteractAt < 1500 || mobilePtrHeld > 0) return true;
+  if (flHeld || flRet > 0 || Math.abs(flYaw) > 0.002) return true;
+  if (down || holding || puffHeld || umbHeld) return true;
+  if (joy.x * joy.x + joy.y * joy.y > 0.01) return true;
+  for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) return true;
+  if (walking && walkMotion.spd > 0.08) return true;
+  if (jumpT > 0 || plazaCarrying() || plazaSittingBusy()) return true;
+  if (Math.abs(tYaw - yaw) > 0.002 || Math.abs(tPitch - pitch) > 0.002) return true;
+  // 翹殼滑桿／轉殼等短節奏：畫面需保持流暢，不能等到手指按下才升回 60
+  if (phase === 'twist' || phase === 'crab' || phase === 'seam' || phase === 'scoop') return true;
+  return false;
+}
 function scheduleFrame() {
   if (document.hidden) { frameSleeping = true; return; }
   frameSleeping = false;
   requestAnimationFrame(frame);
 }
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) {
+  if (document.hidden) mobilePtrHeld = 0;
+  else {
     fixViewport();
     if (frameSleeping) { clock.getDelta(); lastDrawAt = 0; scheduleFrame(); }
   }
 });
+if (COARSE) {
+  addEventListener('pointerdown', () => { mobilePtrHeld++; noteInteract(true); }, { capture: true });
+  addEventListener('pointerup', () => { mobilePtrHeld = Math.max(0, mobilePtrHeld - 1); noteInteract(false); }, { capture: true });
+  addEventListener('pointercancel', () => { mobilePtrHeld = Math.max(0, mobilePtrHeld - 1); noteInteract(false); }, { capture: true });
+  addEventListener('pointermove', e => { if (mobilePtrHeld > 0 || e.buttons) noteInteract(false); }, { capture: true });
+  addEventListener('keydown', () => noteInteract(true), { capture: true });
+  addEventListener('keyup', () => noteInteract(false), { capture: true });
+  addEventListener('orientationchange', () => noteInteract(true));
+  addEventListener('resize', () => noteInteract(true));
+  addEventListener('blur', () => { mobilePtrHeld = 0; });
+}
 // 主迴圈出錯也不能停：停了計時、暫停、預警都會卡住
 function frame() { try { frameBody(); } catch (e) { if (frameErr++ < 3) console.error('frame', e); scheduleFrame(); } }
 function frameBody() {
@@ -3841,8 +3882,9 @@ function frameBody() {
   }
   const now = performance.now();
   const paused = isPaused();
-  // 選單／暫停約 15fps；遊玩一律上限 60fps（高更新率手機不再跑 90／120 幀發燙）
-  const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15 : 1000 / 60;
+  // 選單／暫停約 15fps；桌機遊玩 60fps。手機有操作／自身在動時 60fps，靜止 1.5 秒後 30fps 降溫
+  const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15
+    : (COARSE && !mobileBusy(now) ? 1000 / 30 : 1000 / 60);
   const since = now - lastDrawAt;
   if (since < minMs - 1.5) { scheduleFrame(); return; }
   // 餘數回扣：90Hz 等非整數倍螢幕平均仍接近 60fps
@@ -3852,7 +3894,7 @@ function frameBody() {
   if (paused) {
     clock.getDelta(); if (!pauseAt) { pauseAt = now; holding = false; stopSteal(); closeUmbrella(); down = null; flRelease(); joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
     skyDome.tick(viewCam(), now / 1000);
-    renderer.render(scene, viewCam()); scheduleFrame(); return;
+    renderSceneWithLocalAvatarOnTop(renderer, scene, viewCam(), plazaMe?.outer); scheduleFrame(); return;
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
   const rdt = Math.min(clock.getDelta(), 0.05);
@@ -4103,7 +4145,7 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     ? 0
     : (mix.eco ? 18 : 26) + Math.sin(t * 1.3) * (mix.eco ? 0.5 : 1.0);
   skyDome.tick(viewCam(), t);
-  renderer.render(scene, viewCam());
+  renderSceneWithLocalAvatarOnTop(renderer, scene, viewCam(), plazaMe?.outer);
   scheduleFrame();
 }
 function plazaGuidePending() {

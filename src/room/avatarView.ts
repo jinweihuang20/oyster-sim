@@ -91,7 +91,7 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
       }));
     }
     root.add(rig.outer);
-    const tag = makeWorldLabel(b.isNpc ? b.nick : `${b.nick}${b.tag ? ' #' + b.tag : ''}`, 'name', { worldH: 0.28, depthTest: false, nameTone: b.isNpc ? 'npc' : 'player' });
+    const tag = makeWorldLabel(b.isNpc ? b.nick : `${b.nick}${b.tag ? ' #' + b.tag : ''}`, 'name', { worldH: 0.28, nameTone: b.isNpc ? 'npc' : 'player' });
     root.add(tag.sprite);
     r = {
       key, connId: b.connId, pid: b.pid, rig, tag, isNpc: b.isNpc,

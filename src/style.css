@@ -1859,3 +1859,12 @@ input[type=range]#rmEdSeats,input[type=range]#rmEdDur,input[type=range]#rmEdGoal
   #roomLayer .rmHead{min-height:36px;padding:4px 8px}
   #roomLayer .rmList{max-height:min(36vh,160px)}
 }
+
+/* 設定：畫面亮度 */
+#settings .setBody .brightRow{display:grid!important;grid-template-columns:1fr 58%;align-items:center;column-gap:12px;width:auto!important;min-height:44px!important;margin:0!important;padding:4px 0!important;font-size:15px!important;box-sizing:border-box}
+#settings .brightCtl{display:flex;align-items:center;gap:8px;min-width:0}
+#settings .brightCtl input[type=range]{flex:1;min-width:0;width:auto!important;accent-color:#2a5a86}
+#settings #v_brightPct{flex:none;font-weight:800;color:#2a5a86;min-width:3.4em;text-align:right;font-variant-numeric:tabular-nums}
+#settings #v_brightReset{flex:none;margin:0!important;padding:0 8px!important;min-height:36px!important;height:36px;min-width:0!important;width:auto!important;font-size:13px!important;font-weight:800;color:#2a5a86;background:transparent;border:2px solid #2a5a86;border-radius:8px;white-space:nowrap}
+#settings #v_brightReset:hover{background:#2a5a8614}
+#settings #v_brightReset .ic{color:#2a5a86}
