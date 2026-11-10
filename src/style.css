@@ -1504,8 +1504,8 @@ body #shopTabs button.hasNew:not(.on){box-shadow:inset 0 0 0 2px #ff5a3a!importa
 #poseBtn .key,#jumpBtn .key,#crouchBtn .key,#lieBtn .key{display:none}
 #poseBtn.on{bottom:calc(var(--sa-bottom,0px) + 76px)!important}
 #poseBtn.open{background:rgba(42,90,134,.72)!important}
-#flagBtn{display:none}
-#flagBtn.on{
+#flagBtn,#flagPullBtn{display:none}
+#flagBtn.on,#flagPullBtn.on{
   position:fixed!important;right:calc(var(--sa-right,0px) + 116px)!important;left:auto!important;top:auto!important;
   bottom:calc(var(--sa-bottom,0px) + 76px)!important;
   min-width:96px!important;height:48px!important;min-height:48px!important;padding:0 14px!important;margin:0!important;
@@ -1515,8 +1515,8 @@ body #shopTabs button.hasNew:not(.on){box-shadow:inset 0 0 0 2px #ff5a3a!importa
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 2px 8px rgba(0,0,0,.2);
   z-index:30;pointer-events:auto
 }
-#flagBtn.on:active{background:rgba(28,32,38,.75)!important}
-#flagBtn .ic{flex:0 0 auto}
+#flagBtn.on:active,#flagPullBtn.on:active{background:rgba(28,32,38,.75)!important}
+#flagBtn .ic,#flagPullBtn .ic{flex:0 0 auto}
 .flagShop{margin:12px 0 8px;padding:12px 14px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(22,28,36,.32)}
 .flagShop .flagLead{margin:6px 0 10px;font-size:13px;line-height:1.45;opacity:.88}
 .flagShop .flagLbl{display:block;margin:8px 0 6px;font-size:13px}
@@ -1542,7 +1542,7 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
     bottom:calc(var(--sa-bottom,0px) + 70px)!important;
     z-index:9010;
   }
-  body.plazaRoam #flagBtn.on{
+  body.plazaRoam #flagBtn.on,body.plazaRoam #flagPullBtn.on{
     display:flex!important;
     bottom:calc(var(--sa-bottom,0px) + 70px)!important;
     right:calc(var(--sa-right,0px) + 116px)!important;
@@ -1629,3 +1629,5 @@ body:is(.plazaMode,.plazaRoam) :is(#shop,#dex,#equip).show{z-index:9600!importan
 .flagShop .flagMsg{min-height:1.3em;margin:6px 0 4px;font-size:13px;font-weight:700}
 .flagShop .flagMsg.ok{color:#9be37a}
 .flagShop .flagMsg.bad{color:#ffb08a}
+#flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 132px)!important;min-width:84px!important}
+@media (pointer:coarse),(max-width:900px){body.plazaRoam #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 126px)!important}}

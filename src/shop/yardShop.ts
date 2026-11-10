@@ -35,6 +35,7 @@ export type YardShopDeps = {
   toast: (t: string, c?: string) => void;
   getShopTab: () => number;
   onFlagChange?: () => void;
+  showFlag?: (on: boolean) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   setFlagText?: (text: string) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   upgradeFlag?: (track: FlagTrack) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   selectFlag?: (track: FlagTrack, level: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
@@ -313,7 +314,7 @@ function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
       : '<span class="flagMax">已全部解鎖</span>';
     return `<div class="flagTrack"><div class="flagTrackHd">${label}</div><div class="flagChips">${chips}</div>${buy}</div>`;
   };
-  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選。</p><label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button><div id="flagTextMsg" class="flagMsg" role="status" aria-live="polite"></div>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
+  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選。</p><label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button><div id="flagTextMsg" class="flagMsg" role="status" aria-live="polite"></div><div class="flagTrack"><div class="flagTrackHd">在廣場顯示</div><div class="flagChips"><button type="button" class="flagChip${mine?.planted ? ' on' : ''}" data-fshow="1"${mine?.planted ? ' aria-current="true"' : ''}>顯示</button><button type="button" class="flagChip${mine && !mine.planted ? ' on' : ''}" data-fshow="0"${mine && !mine.planted ? ' aria-current="true"' : ''}>收起</button></div></div>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
 }
 
 function bindFlagShop(mine: PlazaFlagState | null) {
@@ -332,6 +333,22 @@ function bindFlagShop(mine: PlazaFlagState | null) {
     renderShop();
     D.onFlagChange?.();
   };
+  box.querySelectorAll<HTMLButtonElement>('button[data-fshow]').forEach(b => b.onclick = async () => {
+    if (b.disabled || b.classList.contains('on')) return;
+    const on = b.dataset.fshow === '1';
+    if (!D.showFlag) return;
+    b.disabled = true;
+    try {
+      const r = await D.showFlag(on);
+      if (!r.ok) {
+        const m: Record<string, string> = { no_conn: '要在廣場裡才能切換旗子顯示', never_planted: '還沒插過旗，先到廣場按「插旗」', not_planted: '旗子已經是收起來的', nosup: '這台伺服器還沒開放這個功能' };
+        D.toast(m[r.err || ''] ?? flagErrText(r.err), '#ffb08a');
+        return;
+      }
+      D.toast(on ? '旗子插回原本的位置了' : '旗子收起來了，文字和升級都會保留', '#9be37a');
+      renderFlagShop(r.mine ?? mine);
+    } finally { if (b.isConnected) b.disabled = false; }
+  });
   const saveBtn = box.querySelector<HTMLButtonElement>('button[data-fsave]');
   const flagMsg = (t: string, ok: boolean) => {
     const el = document.getElementById('flagTextMsg');

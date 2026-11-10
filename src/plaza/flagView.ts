@@ -67,8 +67,9 @@ function paintFlag(canvas: HTMLCanvasElement, text: string, colorLv: number, nic
     }
     ctx.globalAlpha = 1;
   }
-  const t = (text || '').trim();
   const nm = (nick || '').trim().slice(0, 16);
+  let t = (text || '').trim();
+  if (t && nm && nm.startsWith(t)) t = ''; // 舊旗面預設文字就是名字，不要重複寫兩次
   const font = (px: number, w = 700) => `${w} ${px}px "Noto Sans TC","PingFang TC","Microsoft JhengHei","Noto Sans CJK TC",sans-serif`;
   ctx.fillStyle = hexCss(spec.text);
   ctx.textAlign = 'center';
