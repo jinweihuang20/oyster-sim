@@ -53,7 +53,7 @@ import {
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
 import {
-  openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaReportEarn, plazaMySeat, plazaShiftStarted,
+  openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaSetSelfBody, plazaReportEarn, plazaMySeat, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
@@ -3828,6 +3828,7 @@ function frameBody() {
     }
     updHud();
   }
+  if (plazaMode) plazaSetSelfBody(walking ? lastPose : '', walking ? poseK : 0, walking ? jumpY : 0);
   tickPlaza(rdt);
   const pw = plazaWarnTick(rdt);
   // ⚠ 方向提示

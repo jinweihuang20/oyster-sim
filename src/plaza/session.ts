@@ -1452,6 +1452,9 @@ export function plazaToggleMap() {
   refreshPlazaMap();
 }
 
+/** 自己蹲／躺／跳的程度，給抱著的阿婆調高度 */
+export function plazaSetSelfBody(pz: string, pk: number, jy: number) { view?.setSelfBody(pz, pk, jy); }
+
 export function tickPlaza(dt: number) {
   if (!active || !deps) return;
   const p = deps.getWalkXZ();
