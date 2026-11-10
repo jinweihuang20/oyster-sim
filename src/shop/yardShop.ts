@@ -334,7 +334,11 @@ function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
       : nxt
       ? `<button data-fup="${track}" ${save.money >= px(nxt.id, nxt.price) && !flagUpBusy ? '' : 'disabled'}>解鎖 ${D.esc(nxt.n.replace(/^旗幟[^：]*：/, ''))} ${pxHtml(nxt.id, nxt.price)}</button>${pxCd(nxt.id)}`
       : '<span class="flagMax">已全部解鎖</span>';
-    return `<div class="flagTrack"><div class="flagTrackHd">${label}</div><div class="flagChips">${chips}</div>${buy}</div>`;
+    // 已解鎖更高級但廣場上選的是較低的：講清楚，免得以為買了沒效又重買
+    const hiN = opts.find(o => o.lv === unlocked)?.n ?? '';
+    const selN = opts.find(o => o.lv === selected)?.n ?? '';
+    const gap = mine && selected < unlocked ? `<div class="flagSelHint">廣場上目前用的是「${D.esc(selN)}」，你已經解鎖「${D.esc(hiN)}」，點上面的「${D.esc(hiN)}」就會換上（不用再買）</div>` : '';
+    return `<div class="flagTrack"><div class="flagTrackHd">${label}</div><div class="flagChips">${chips}</div>${gap}${buy}</div>`;
   };
   return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選；有鎖頭的可以先點來試看。</p>${flagPvHtml('目前的樣子')}<label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button><div id="flagTextMsg" class="flagMsg" role="status" aria-live="polite"></div><div class="flagTrack"><div class="flagTrackHd">在廣場顯示</div><div class="flagChips"><button type="button" class="flagChip${mine?.planted ? ' on' : ''}" data-fshow="1"${mine?.planted ? ' aria-current="true"' : ''}>顯示</button><button type="button" class="flagChip${mine && !mine.planted ? ' on' : ''}" data-fshow="0"${mine && !mine.planted ? ' aria-current="true"' : ''}>收起</button></div></div>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
 }
@@ -417,7 +421,7 @@ function bindFlagShop(mine: PlazaFlagState | null) {
       let r = D.selectFlag ? await D.selectFlag(track, lv) : null;
       if (!r || r.err === 'no_conn') r = await postFlagSelect(D.getPlayerId(), track, lv);
       if (!r.ok) {
-        D.toast(r.err === 'nosup' ? '這台伺服器還沒開放挑選旗幟樣式' : flagErrText(r.err), '#ffb08a');
+        D.toast(r.err === 'nosup' ? '這台伺服器還沒開放挑選旗幟樣式' : r.err === 'grow' ? '換成這個尺寸會跟隔壁的旗太近，先到廣場把旗插到空一點的地方再換（已解鎖，不用再買）' : flagErrText(r.err), '#ffb08a');
         return;
       }
       const next: any = r.mine ? { ...r.mine } : { ...(mine ?? {}) };

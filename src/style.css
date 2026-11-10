@@ -1663,3 +1663,5 @@ body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!importan
 .qtyBox .qtyIn{width:2.6em;min-width:0;text-align:center;border:0;background:transparent;font:inherit;font-size:14px;font-weight:700;color:#1f2a35;padding:0;outline:none}
 .qtyBox:focus-within{border-color:#2a5a86}
 #shop .qtyBox .qtyIn{border:0!important;box-shadow:none!important;background:transparent!important;height:28px;margin:0!important;border-radius:0!important}
+
+#shop .flagSelHint { margin: 4px 0 6px; padding: 6px 8px; font-size: 12px; line-height: 1.5; color: #f3e2b0; border: 1px solid rgba(243,226,176,.35); border-radius: 6px; background: rgba(42,90,134,.18); }
