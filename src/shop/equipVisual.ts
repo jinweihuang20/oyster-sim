@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { rbox, rcyl, crease } from '../core/geo';
 import type { PlayerRig } from '../dm/character';
+import { rebuildAvatarMerged } from '../dm/avatarMerge';
 
 /** 服飾視覺（與 main EQUIP id 對齊；只負責外觀） */
 export type EquipVis = {
@@ -871,5 +872,6 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   }
   if (feet.id !== 'ft_none') buildFeetDetails(rig, feet);
   rig.outfitKey = outfitKey(o);
+  rebuildAvatarMerged(rig);
   return o;
 }

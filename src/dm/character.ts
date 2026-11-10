@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { MatFn, MeshAdd } from './weapons';
 import { rbox, rboxNpc } from '../core/geo';
 import { makeAvatarCigarette, type FpCigarette } from '../plaza/fireFx';
+import { rebuildAvatarMerged, NO_MERGE } from './avatarMerge';
 
 const SKIN = 0xe8bc98;
 
@@ -180,6 +181,7 @@ export function makePlayerAvatar(
     },
   };
   syncHoldArms(rig, 0);
+  rebuildAvatarMerged(rig);
   return rig;
 }
 
@@ -541,6 +543,7 @@ export function ensurePlazaSmokeCig(rig: PlayerRig, lowDetail = false, attach: P
     return cig;
   }
   cig = makeAvatarCigarette({ lowDetail });
+  cig.group.userData[NO_MERGE] = true;
   parent.add(cig.group);
   storePlazaSmokeCig(rig, cig);
   orientPlazaSmokeCig(cig, attach);

@@ -706,6 +706,7 @@ function hashPid(pid: string) {
   /** 遠端雨傘：跟本機一樣「往前開」擋殼，不是頭頂撐雨 */
   function makeRemoteUmb() {
     const g = new THREE.Group();
+    g.userData.noMerge = true;
     g.visible = false;
     const pole = new THREE.Mesh(
       new THREE.CylinderGeometry(0.012, 0.012, 0.72, LO ? 4 : 5),
@@ -747,6 +748,7 @@ function hashPid(pid: string) {
   /** 簡易蚵仔刀＋蚵仔（遠端剝殼手持） */
   function makeRemoteHold(): { knife: THREE.Group; oyster: THREE.Group } {
     const knife = new THREE.Group();
+    knife.userData.noMerge = true;
     knife.visible = false;
     const wood = LO ? new THREE.MeshLambertMaterial({ color: 0x7a4a20 }) : new THREE.MeshStandardMaterial({ color: 0x7a4a20, roughness: 0.85 });
     const steel = LO ? new THREE.MeshLambertMaterial({ color: 0xd0d0d8 }) : new THREE.MeshStandardMaterial({ color: 0xd0d0d8, metalness: 0.7, roughness: 0.3 });
@@ -758,6 +760,7 @@ function hashPid(pid: string) {
     knife.add(blade);
 
     const oyster = new THREE.Group();
+    oyster.userData.noMerge = true;
     oyster.visible = false;
     const shellCol = LO
       ? new THREE.MeshLambertMaterial({ color: 0xe0dcd8 })
@@ -799,6 +802,7 @@ function hashPid(pid: string) {
   /** 坐下面前：紅臉盆＋裝肉碗（貼蚵堆坡面，renderOrder 高於殼堆） */
   function makeRemoteProps(): { props: THREE.Group; bowlNode: THREE.Object3D; meatRoot: THREE.Group } {
     const props = new THREE.Group();
+    props.userData.noMerge = true;
     props.visible = false;
     const markTop = (o: THREE.Object3D) => {
       o.traverse(x => {
