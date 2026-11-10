@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { rboxEnv } from '../core/geo';
-import { applyOutfitToRig } from '../shop/equipVisual';
+import { applyOutfitToRig, clearOutfitDetails } from '../shop/equipVisual';
 import type { PlayerRig } from '../dm/character';
 
 /** 比玩家略矮、骨架略小 */
@@ -224,6 +224,7 @@ export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook) {
     legs: ama.legs,
     feet: ama.feet,
   });
+  clearOutfitDetails(rig);
   const mats = rig.outfitMats;
   if (!mats) return;
 
@@ -351,6 +352,11 @@ export function dressPlazaAber(rig: PlayerRig) {
     legs: 'lg_basic',
     feet: 'ft_basic',
   });
+  clearOutfitDetails(rig);
+  if (rig.hatG) {
+    clearHat(rig.hatG);
+    rig.hatG.position.set(0, 0, 0);
+  }
   const mats = rig.outfitMats;
   if (!mats) return;
   for (const m of mats.body) {

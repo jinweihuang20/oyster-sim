@@ -1665,3 +1665,48 @@ body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!importan
 #shop .qtyBox .qtyIn{border:0!important;box-shadow:none!important;background:transparent!important;height:28px;margin:0!important;border-radius:0!important}
 
 #shop .flagSelHint { margin: 4px 0 6px; padding: 6px 8px; font-size: 12px; line-height: 1.5; color: #f3e2b0; border: 1px solid rgba(243,226,176,.35); border-radius: 6px; background: rgba(42,90,134,.18); }
+
+
+/* ===== 服飾店試穿彈窗 ===== */
+#shop .slPeek{
+  display:flex;flex-direction:column;align-items:center;gap:4px;width:100%;
+  background:transparent!important;border:0!important;box-shadow:none!important;
+  color:inherit!important;text-shadow:none!important;min-height:0!important;
+  padding:4px 2px!important;margin:0!important;border-radius:8px!important;
+  cursor:pointer;transform:none!important;
+}
+#shop .slPeek:active{transform:none!important;background:rgba(42,90,134,.10)!important}
+#shop .slPeek .slv{pointer-events:none}
+#shop .slPeek b{font-weight:800}
+#shop .slPeekT{font-size:11px;font-style:normal;font-weight:700;color:#2a5a86;opacity:.88;letter-spacing:0}
+.clothTry{position:fixed;inset:0;z-index:14000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(10,14,20,.55)}
+.clothTryBox{
+  position:relative;width:min(92vw,380px);
+  background:rgba(22,28,36,.72);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);
+  border:1px solid rgba(255,255,255,.18);border-radius:16px;
+  box-shadow:0 8px 28px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.10);
+  color:#f2f4f7;padding:16px 14px 14px;
+}
+.clothTryX{
+  position:absolute;top:10px;right:10px;width:36px;height:36px;padding:0;margin:0;
+  display:flex;align-items:center;justify-content:center;border-radius:50%;
+  background:rgba(255,255,255,.10)!important;color:#f2f4f7!important;
+  border:1px solid rgba(255,255,255,.22)!important;box-shadow:none!important;
+  text-shadow:none!important;
+}
+.clothTryX:active{background:rgba(255,255,255,.20)!important}
+.clothTryX svg{display:block}
+.clothTryHd{padding-right:44px;margin-bottom:8px}
+.clothTryHd b{display:block;font-size:17px;font-weight:800;line-height:1.3}
+.clothTryHd small{display:block;margin-top:4px;font-size:13px;line-height:1.45;opacity:.82}
+.clothTryStage{
+  width:100%;aspect-ratio:3/4;border-radius:12px;overflow:hidden;
+  background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.10);
+  touch-action:none;cursor:grab;
+}
+.clothTryCvs{width:100%;height:100%;display:block;touch-action:none}
+.clothTryHint{margin:8px 0 0;font-size:12px;opacity:.78;text-align:center}
+.clothTryAct{margin-top:10px}
+.clothTryAct button{width:100%;min-height:42px;background:#2a5a86!important;color:#fff!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:10px!important;box-shadow:0 2px 8px rgba(0,0,0,.22)!important;font-weight:800}
+.clothTryAct button:disabled{opacity:.55}

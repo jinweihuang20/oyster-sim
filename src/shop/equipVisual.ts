@@ -70,33 +70,276 @@ export function outfitKey(o: OutfitIds) {
   return `${o.head}|${o.hand}|${o.body}|${o.legs}|${o.feet}`;
 }
 
-function patDraw(g: CanvasRenderingContext2D, e: EquipVis, W: number, H: number) {
-  g.fillStyle = e.base; g.fillRect(0, 0, W, H);
-  const dot = (x: number, y: number, r: number, col: string) => {
-    g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+const REPEAT: Record<string, [number, number]> = {
+  hd_basic: [2, 2],
+  sl_flower: [2, 2],
+  lg_flower: [2, 3],
+  sl_dragon: [1, 2],
+  sl_89: [1, 2],
+  bd_sequin: [3, 4],
+  sl_neon: [1, 3],
+  bd_boss: [1, 2],
+  bd_rain: [1, 2],
+  sl_rain: [1, 2],
+  lg_rain: [1, 2],
+  sl_camo: [2, 2],
+  lg_camo: [2, 3],
+  hn_basic: [1, 3],
+  bd_basic: [1, 2],
+  lg_basic: [1, 3],
+  bd_vest: [1, 1],
+};
+
+function wrapDot(g: CanvasRenderingContext2D, x: number, y: number, r: number, col: string, W: number, H: number) {
+  g.fillStyle = col;
+  for (const ox of [-W, 0, W]) {
+    for (const oy of [-H, 0, H]) {
+      const px = x + ox, py = y + oy;
+      if (px < -r || py < -r || px > W + r || py > H + r) continue;
+      g.beginPath(); g.arc(px, py, r, 0, 7); g.fill();
+    }
+  }
+}
+
+function drawFlower(g: CanvasRenderingContext2D, x: number, y: number, s: number, petal: string, center: string, W: number, H: number) {
+  for (let k = 0; k < 5; k++) {
+    const a = k * 1.256637;
+    wrapDot(g, x + Math.cos(a) * s, y + Math.sin(a) * s, s * 0.52, petal, W, H);
+  }
+  wrapDot(g, x, y, s * 0.36, center, W, H);
+}
+
+function drawFloral(g: CanvasRenderingContext2D, base: string, W: number, H: number) {
+  g.fillStyle = base; g.fillRect(0, 0, W, H);
+  const petals = ['#fff3c8', '#ffe8d4', '#fff8e8'];
+  const centers = ['#2f7a38', '#d8a020', '#c04040'];
+  for (let i = 0; i < 18; i++) {
+    const x = (i * 47 + 18) % W;
+    const y = (i * 71 + 22) % H;
+    const s = 4.2 + (i % 3) * 1.3;
+    drawFlower(g, x, y, s, petals[i % 3], centers[i % 3], W, H);
+  }
+  g.fillStyle = 'rgba(50,110,50,.55)';
+  for (let i = 0; i < 12; i++) {
+    const x = (i * 53 + 8) % W, y = (i * 41 + 30) % H;
+    g.beginPath(); g.ellipse(x, y, 3.2, 1.4, i * 0.7, 0, 7); g.fill();
+  }
+}
+
+function drawBamboo(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#d8b46a'; g.fillRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 10) {
+    g.fillStyle = y % 20 === 0 ? '#c4a05a' : '#e0c078';
+    g.fillRect(0, y, W, 6);
+    g.fillStyle = '#8a6a2a';
+    g.fillRect(0, y + 6, W, 1);
+  }
+  g.strokeStyle = 'rgba(90,70,30,.35)';
+  g.lineWidth = 1;
+  for (let x = 0; x < W; x += 16) {
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 8, H); g.stroke();
+  }
+}
+
+function drawRain(g: CanvasRenderingContext2D, base: string, W: number, H: number) {
+  g.fillStyle = base; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(255,251,224,.22)';
+  g.fillRect(0, 0, W * 0.18, H);
+  g.strokeStyle = 'rgba(180,140,20,.55)';
+  g.lineWidth = 2;
+  for (let y = 16; y < H; y += 28) {
+    g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+  }
+  g.fillStyle = '#e8e6d8';
+  g.fillRect(0, H * 0.42, W, 7);
+  g.fillStyle = 'rgba(255,255,255,.35)';
+  g.fillRect(0, H * 0.42 + 2, W, 2);
+}
+
+function drawCamo(g: CanvasRenderingContext2D, base: string, W: number, H: number) {
+  g.fillStyle = base; g.fillRect(0, 0, W, H);
+  const cols = ['#2e3a1e', '#3e5228', '#8a7a4a', '#6a5a32'];
+  const blob = (x: number, y: number, rx: number, ry: number, col: string, rot: number) => {
+    g.fillStyle = col;
+    g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, 7); g.fill();
   };
-  if (e.pat === 'flower') for (let i = 0; i < 40; i++) {
-    const x = (i * 37) % W, y = (i * 53) % H;
-    for (let k = 0; k < 5; k++) dot(x + Math.cos(k * 1.26) * 5, y + Math.sin(k * 1.26) * 5, 3, '#fff3c8');
-    dot(x, y, 2.5, '#3a8a4a');
+  for (let i = 0; i < 22; i++) {
+    blob((i * 41 + 10) % W, (i * 29 + 14) % H, 14 + (i % 4) * 4, 9 + (i % 3) * 3, cols[i % 4], i * 0.5);
   }
-  if (e.pat === 'rain') {
-    g.strokeStyle = '#fff7a0'; g.lineWidth = 3;
-    for (let y = 10; y < H; y += 30) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+}
+
+function drawNeon(g: CanvasRenderingContext2D, base: string, W: number, H: number) {
+  g.fillStyle = base; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#e8f8f0';
+  g.fillRect(0, H * 0.38, W, 14);
+  g.fillRect(0, H * 0.62, W, 5);
+  g.fillStyle = 'rgba(255,255,255,.28)';
+  g.fillRect(0, 0, W * 0.12, H);
+}
+
+function drawTattoo(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#d9a77a'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#1e2a4a';
+  g.lineWidth = 3;
+  g.beginPath();
+  for (let x = 0; x <= W; x += 4) g.lineTo(x, 28 + Math.sin(x / 11) * 10);
+  g.stroke();
+  g.beginPath();
+  for (let x = 0; x <= W; x += 4) g.lineTo(x, H - 24 + Math.sin(x / 9 + 1) * 8);
+  g.stroke();
+  g.fillStyle = '#b8323a';
+  g.beginPath(); g.arc(40, 56, 11, 0, 7); g.fill();
+  g.fillStyle = '#2a4a2a';
+  g.beginPath(); g.ellipse(48, 64, 10, 4, 0.6, 0, 7); g.fill();
+  g.fillStyle = '#1e2a4a';
+  g.font = 'bold 28px sans-serif';
+  g.fillText('89', 70, 80);
+  g.strokeStyle = '#1e2a4a';
+  g.lineWidth = 2;
+  g.beginPath(); g.arc(96, 100, 18, Math.PI, 2 * Math.PI); g.stroke();
+}
+
+function drawDragon(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#8a1420'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#6e1018';
+  for (let y = 8; y < H; y += 16) {
+    for (let x = (y % 32 === 8 ? 8 : 0); x < W; x += 16) {
+      g.beginPath(); g.arc(x, y, 3.2, 0, 7); g.fill();
+    }
   }
-  if (e.pat === 'camo') for (let i = 0; i < 30; i++) {
-    dot((i * 41) % W, (i * 29) % H, 8 + (i % 3) * 4, ['#2e3a1e', '#8a7a4a', '#3e5228'][i % 3]);
+  g.strokeStyle = '#ffd25a';
+  g.lineWidth = 5;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(8, H * 0.72);
+  g.bezierCurveTo(30, 20, 70, H - 10, 100, 36);
+  g.lineTo(118, 22);
+  g.stroke();
+  g.lineWidth = 2;
+  g.strokeStyle = '#fff3a8';
+  g.beginPath();
+  g.moveTo(10, H * 0.72);
+  g.bezierCurveTo(32, 24, 68, H - 14, 98, 38);
+  g.stroke();
+  g.fillStyle = '#ffd25a';
+  g.beginPath(); g.ellipse(112, 20, 10, 7, -0.5, 0, 7); g.fill();
+  g.fillStyle = '#c82a2a';
+  g.beginPath(); g.arc(116, 18, 2.2, 0, 7); g.fill();
+  g.strokeStyle = '#e8b830';
+  g.lineWidth = 2;
+  for (let i = 0; i < 6; i++) {
+    const t = i / 5;
+    const x = 16 + t * 80;
+    const y = H * 0.72 * (1 - t) + 36 * t + Math.sin(t * 6) * 16;
+    g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 3, y); g.lineTo(x, y + 6); g.stroke();
   }
-  if (e.pat === 'neon') { g.fillStyle = '#ffffff'; for (let y = 20; y < H; y += 40) g.fillRect(0, y, W, 6); }
-  if (e.pat === 'tattoo') {
-    g.strokeStyle = '#1e2a4a'; g.lineWidth = 3;
-    for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(W / 2, H + 12 - i * 22, 40, Math.PI, 2 * Math.PI); g.stroke(); }
-    dot(40, 40, 9, '#b8323a'); dot(90, 80, 9, '#2a5a9a');
+}
+
+function drawSequin(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#8a2cb0'; g.fillRect(0, 0, W, H);
+  const cols = ['#e8b8ff', '#ffd8f8', '#f0c8ff', '#d070e8', '#fff6dc'];
+  const step = 10;
+  for (let y = 4; y < H; y += step) {
+    for (let x = 4 + ((y / step) % 2 === 0 ? 0 : 5); x < W; x += step) {
+      g.fillStyle = cols[(x + y) % cols.length];
+      g.beginPath(); g.arc(x, y, 3.4, 0, 7); g.fill();
+      g.fillStyle = 'rgba(255,255,255,.7)';
+      g.beginPath(); g.arc(x - 1, y - 1.2, 1.1, 0, 7); g.fill();
+    }
   }
-  if (e.pat === 'dragon') {
-    g.strokeStyle = '#ffd25a'; g.lineWidth = 4; g.beginPath();
-    for (let x = 0; x <= W; x += 4) g.lineTo(x, H / 2 + Math.sin(x / 10) * 26);
-    g.stroke();
+}
+
+function drawWornTee(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#e8e4d8'; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(200,180,140,.2)';
+  g.fillRect(0, 0, W, 18);
+  g.fillStyle = 'rgba(170,150,120,.16)';
+  g.beginPath(); g.ellipse(90, 88, 22, 14, 0.4, 0, 7); g.fill();
+  g.strokeStyle = 'rgba(140,130,110,.35)';
+  g.lineWidth = 1;
+  g.beginPath(); g.moveTo(W / 2, 20); g.lineTo(W / 2, H); g.stroke();
+}
+
+function drawWorkPants(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#4a4a52'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#8a8a92';
+  g.lineWidth = 1.4;
+  g.setLineDash([4, 3]);
+  g.beginPath(); g.moveTo(18, 0); g.lineTo(18, H); g.stroke();
+  g.beginPath(); g.moveTo(W - 18, 0); g.lineTo(W - 18, H); g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = 'rgba(90,90,100,.45)';
+  g.fillRect(28, 40, 36, 28);
+  g.strokeStyle = '#2e2e34';
+  g.strokeRect(28, 40, 36, 28);
+}
+
+function drawBoss(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#1e2a3a'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(200,200,210,.12)';
+  g.lineWidth = 1;
+  for (let x = 6; x < W; x += 10) {
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke();
+  }
+}
+
+function drawLeather(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#6a4a2a'; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(40,24,12,.18)';
+  for (let y = 0; y < H; y += 12) g.fillRect(0, y, W, 3);
+}
+
+function drawPlainShade(g: CanvasRenderingContext2D, base: string, W: number, H: number) {
+  g.fillStyle = base; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(255,255,255,.08)';
+  g.fillRect(0, 0, W, 8);
+  g.fillStyle = 'rgba(0,0,0,.08)';
+  g.fillRect(0, H - 10, W, 10);
+}
+
+/** 畫裝備花紋（第一人稱袖套與 3D 貼圖共用） */
+export function paintEquipCanvas(g: CanvasRenderingContext2D, e: EquipVis, W: number, H: number) {
+  switch (e.id) {
+    case 'hd_basic':
+    case 'sl_flower':
+    case 'lg_flower':
+      drawFloral(g, e.base, W, H); return;
+    case 'hd_hat':
+      drawBamboo(g, W, H); return;
+    case 'sl_rain':
+    case 'bd_rain':
+    case 'lg_rain':
+      drawRain(g, e.base, W, H); return;
+    case 'sl_camo':
+    case 'lg_camo':
+      drawCamo(g, e.base, W, H); return;
+    case 'sl_neon':
+      drawNeon(g, e.base, W, H); return;
+    case 'sl_89':
+      drawTattoo(g, W, H); return;
+    case 'sl_dragon':
+    case 'hd_crown':
+      drawDragon(g, W, H); return;
+    case 'bd_sequin':
+      drawSequin(g, W, H); return;
+    case 'bd_basic':
+      drawWornTee(g, W, H); return;
+    case 'lg_basic':
+      drawWorkPants(g, W, H); return;
+    case 'bd_boss':
+      drawBoss(g, W, H); return;
+    case 'ft_work':
+      drawLeather(g, W, H); return;
+    case 'bd_vest':
+    case 'hn_basic':
+    case 'hd_fisher':
+    case 'hd_helmet':
+    case 'ft_basic':
+    case 'ft_boots':
+    case 'ft_gold':
+      drawPlainShade(g, e.base, W, H); return;
+    default:
+      drawPlainShade(g, e.base, W, H);
   }
 }
 
@@ -105,57 +348,364 @@ export function makeEqTexture(e: EquipVis): THREE.CanvasTexture {
   let t = texCache.get(e.id);
   if (t) return t;
   const c = document.createElement('canvas'); c.width = c.height = 128;
-  patDraw(c.getContext('2d')!, e, 128, 128);
+  paintEquipCanvas(c.getContext('2d')!, e, 128, 128);
   t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(2, 3);
+  const rep = REPEAT[e.id] ?? [2, 3];
+  t.repeat.set(rep[0], rep[1]);
   texCache.set(e.id, t);
   return t;
 }
 
+function resetSurf(m: THREE.MeshStandardMaterial) {
+  m.metalness = 0.02;
+  m.roughness = 0.78;
+  m.emissive.setHex(0);
+  m.emissiveIntensity = 0;
+  m.map = null;
+}
+
 function paintMat(m: THREE.MeshStandardMaterial, e: EquipVis) {
+  resetSurf(m);
   m.map = makeEqTexture(e);
   m.color.set(0xffffff);
-  m.emissive.setHex(e.pat === 'neon' ? 0x1a6a40 : 0x000000);
-  m.emissiveIntensity = e.pat === 'neon' ? 0.35 : 0;
+  if (e.id === 'sl_neon') {
+    m.emissive.setHex(0x1a6a40);
+    m.emissiveIntensity = 0.35;
+  } else if (e.id === 'bd_sequin') {
+    m.emissive.setHex(0x4a1a60);
+    m.emissiveIntensity = 0.22;
+    m.roughness = 0.42;
+    m.metalness = 0.18;
+  } else if (e.id === 'sl_dragon' || e.id === 'hd_crown') {
+    m.metalness = 0.12;
+    m.roughness = 0.55;
+  }
   m.needsUpdate = true;
 }
 
-function clearHat(hat: THREE.Group) {
-  while (hat.children.length) {
-    const c = hat.children.pop()!;
-    c.traverse(o => {
-      const mesh = o as THREE.Mesh;
-      if (mesh.geometry) mesh.geometry.dispose();
-    });
+function paintSolid(m: THREE.MeshStandardMaterial, hex: string, extra?: { metal?: number; rough?: number }) {
+  resetSurf(m);
+  m.color.set(hex);
+  if (extra?.metal != null) m.metalness = extra.metal;
+  if (extra?.rough != null) m.roughness = extra.rough;
+  m.needsUpdate = true;
+}
+
+function paintFeet(mats: NonNullable<PlayerRig['outfitMats']>, feet: EquipVis) {
+  const shoe = mats.feet[0];
+  const sole = mats.feet[1];
+  if (!shoe || !sole) return;
+  if (feet.id === 'ft_basic') {
+    paintSolid(shoe, '#f2f2ee');
+    paintSolid(sole, '#e4dfd4');
+  } else if (feet.id === 'ft_gold') {
+    paintSolid(shoe, '#e8c040', { metal: 0.45, rough: 0.35 });
+    paintSolid(sole, '#c9a227', { metal: 0.3, rough: 0.45 });
+  } else if (feet.id === 'ft_boots') {
+    paintMat(shoe, feet);
+    paintSolid(sole, '#c49212');
+  } else if (feet.id === 'ft_work') {
+    paintMat(shoe, feet);
+    paintSolid(sole, '#2a1a10');
+  } else {
+    paintMat(shoe, feet);
+    paintMat(sole, feet);
   }
+}
+
+const geoCache = new Map<string, THREE.BufferGeometry>();
+function G(key: string, make: () => THREE.BufferGeometry) {
+  let g = geoCache.get(key);
+  if (!g) { g = make(); geoCache.set(key, g); }
+  return g;
+}
+
+const matCache = new Map<string, THREE.MeshStandardMaterial>();
+function SM(key: string, color: number | string, extra?: ConstructorParameters<typeof THREE.MeshStandardMaterial>[0]) {
+  const k = `${key}|${color}|${extra?.map ? 'm' : ''}|${extra?.metalness ?? ''}|${extra?.roughness ?? ''}|${extra?.emissive ?? ''}`;
+  let m = matCache.get(k);
+  if (m) return m;
+  m = new THREE.MeshStandardMaterial({
+    color, roughness: 0.75, metalness: 0.04, ...extra,
+  });
+  matCache.set(k, m);
+  return m;
+}
+
+function hex(c: string) { return new THREE.Color(c); }
+
+function clearGroup(g: THREE.Group) {
+  while (g.children.length) g.remove(g.children[g.children.length - 1]);
+}
+
+function ensureDet(parent: THREE.Object3D, key: string): THREE.Group {
+  let g = parent.userData[key] as THREE.Group | undefined;
+  if (!g || g.parent !== parent) {
+    g = new THREE.Group();
+    g.name = key;
+    parent.add(g);
+    parent.userData[key] = g;
+  }
+  clearGroup(g);
+  return g;
+}
+
+const DET = {
+  body: 'eqBodyDet',
+  sleeve: 'eqSleeveDet',
+  leg: 'eqLegDet',
+  shin: 'eqShinDet',
+} as const;
+
+/** 清掉玩家服飾加裝（帽子除外）。阿婆／阿伯套完基本外觀後要呼叫，避免領子、袖套蓋到他們自己的衣服。 */
+export function clearOutfitDetails(rig: PlayerRig) {
+  const pairs: [THREE.Object3D | undefined, string][] = [
+    [rig.torso, DET.body],
+    [rig.lowerL, DET.sleeve],
+    [rig.lowerR, DET.sleeve],
+    [rig.legL, DET.leg],
+    [rig.legR, DET.leg],
+    [rig.shinL, DET.shin],
+    [rig.shinR, DET.shin],
+  ];
+  for (const [p, k] of pairs) {
+    if (!p) continue;
+    const g = p.userData[k] as THREE.Group | undefined;
+    if (g) clearGroup(g);
+  }
+}
+
+function add(
+  parent: THREE.Object3D,
+  geo: THREE.BufferGeometry,
+  mat: THREE.Material,
+  p: [number, number, number],
+  rot?: [number, number, number],
+  cloneMat = false,
+) {
+  const x = new THREE.Mesh(geo, cloneMat ? mat.clone() : mat);
+  x.position.set(...p);
+  if (rot) x.rotation.set(...rot);
+  x.castShadow = false;
+  x.receiveShadow = false;
+  parent.add(x);
+  return x;
+}
+
+function clearHat(hat: THREE.Group) {
+  while (hat.children.length) hat.remove(hat.children[hat.children.length - 1]);
 }
 
 function buildHat(hat: THREE.Group, head: EquipVis) {
   clearHat(hat);
-  const col = new THREE.Color(head.base);
-  const M = (c: THREE.Color) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.75, flatShading: false });
-  const add = (g: THREE.BufferGeometry, m: THREE.Material, p: [number, number, number]) => {
-    const x = new THREE.Mesh(g, m); x.position.set(...p); hat.add(x); return x;
-  };
+  const addH = (
+    geo: THREE.BufferGeometry,
+    mat: THREE.Material,
+    p: [number, number, number],
+    rot?: [number, number, number],
+  ) => add(hat, geo, mat, p, rot, true);
+  const col = hex(head.base);
+  const dark = col.clone().multiplyScalar(0.82);
+  const flowerM = SM('hat-fl', 0xffffff, { map: makeEqTexture(head), roughness: 0.8 });
+  const solid = (c: THREE.Color | number, key: string, extra?: ConstructorParameters<typeof THREE.MeshStandardMaterial>[0]) =>
+    SM(key, typeof c === 'number' ? c : c.getHex(), extra);
+
   if (head.id === 'hd_hat') {
-    add(crease(new THREE.ConeGeometry(0.28, 0.16, 12)), M(col), [0, 0.2, 0]);
+    const straw = solid(col, 'hat-straw', { map: makeEqTexture(head), roughness: 0.88 });
+    const strawD = solid(dark, 'hat-strawD', { roughness: 0.9 });
+    const cord = solid(0x5a4030, 'hat-cord', { roughness: 0.92 });
+    // 第一片寬緣，阿婆會微調 hatG 位置
+    addH(G('douli-brim', () => rcyl(0.40, 0.40, 0.02, 16)), straw, [0, 0.145, 0]);
+    addH(G('douli-cone', () => crease(new THREE.ConeGeometry(0.22, 0.15, 12))), strawD, [0, 0.23, 0]);
+    addH(G('douli-band', () => rcyl(0.15, 0.15, 0.028, 12)), solid(0x5a4030, 'hat-band'), [0, 0.148, 0]);
+    addH(G('cord', () => rbox(0.012, 0.18, 0.012)), cord, [-0.10, 0.04, -0.06], [0.15, 0, 0.32]);
+    addH(G('cord', () => rbox(0.012, 0.18, 0.012)), cord, [0.10, 0.04, -0.06], [0.15, 0, -0.32]);
   } else if (head.id === 'hd_fisher') {
-    add(rcyl(0.16, 0.16, 0.08, 12), M(col), [0, 0.16, 0]);
-    add(rbox(0.16, 0.015, 0.12), M(col.clone().multiplyScalar(0.85)), [0, 0.12, 0.14]);
+    const navy = solid(col, 'fish-navy', { roughness: 0.72 });
+    const navyD = solid(dark, 'fish-navyD', { roughness: 0.74 });
+    addH(G('fish-crown', () => rcyl(0.16, 0.172, 0.12, 12)), navy, [0, 0.185, 0]);
+    addH(G('fish-top', () => rcyl(0.028, 0.028, 0.02, 8)), navyD, [0, 0.252, 0]);
+    addH(G('fish-brim', () => rcyl(0.25, 0.22, 0.028, 14)), navy, [0, 0.118, 0]);
+    addH(G('fish-stitch', () => rcyl(0.178, 0.178, 0.008, 12)), navyD, [0, 0.132, 0]);
+    addH(G('eyelet', () => rcyl(0.012, 0.012, 0.02, 6)), solid(0x1a2a3a, 'eyelet'), [-0.158, 0.195, 0]);
+    addH(G('eyelet', () => rcyl(0.012, 0.012, 0.02, 6)), solid(0x1a2a3a, 'eyelet'), [0.158, 0.195, 0]);
   } else if (head.id === 'hd_helmet') {
-    add(crease(new THREE.SphereGeometry(0.18, 10, 8, 0, Math.PI * 2, 0, 1.4)), M(col), [0, 0.14, 0]);
-    add(rbox(0.22, 0.04, 0.08), M(col.clone().multiplyScalar(0.9)), [0, 0.2, 0]);
+    const yel = solid(col, 'helm', { roughness: 0.45, metalness: 0.08 });
+    const yelD = solid(dark, 'helmD', { roughness: 0.48, metalness: 0.08 });
+    const blk = solid(0x3a3a3a, 'helm-blk', { roughness: 0.7 });
+    addH(G('helm-shell', () => crease(new THREE.SphereGeometry(0.185, 12, 8, 0, Math.PI * 2, 0, 1.35))), yel, [0, 0.145, 0]);
+    addH(G('helm-visor', () => rbox(0.22, 0.022, 0.10)), yel, [0, 0.078, -0.16]);
+    addH(G('helm-ridge', () => rbox(0.05, 0.04, 0.28)), yelD, [0, 0.225, -0.01]);
+    addH(G('helm-slot', () => rbox(0.02, 0.04, 0.055)), blk, [-0.175, 0.15, 0]);
+    addH(G('helm-slot', () => rbox(0.02, 0.04, 0.055)), blk, [0.175, 0.15, 0]);
+    addH(G('helm-sticker', () => rbox(0.08, 0.03, 0.01)), solid(0xf5f0d0, 'helm-st', { roughness: 0.35 }), [0, 0.16, -0.175]);
+    addH(G('helm-strap', () => rbox(0.014, 0.15, 0.014)), blk, [-0.12, 0.02, -0.04], [0.1, 0, 0.35]);
+    addH(G('helm-strap', () => rbox(0.014, 0.15, 0.014)), blk, [0.12, 0.02, -0.04], [0.1, 0, -0.35]);
   } else if (head.id === 'hd_crown') {
-    add(rcyl(0.14, 0.16, 0.1, 10), M(col), [0, 0.18, 0]);
+    const gold = solid(col, 'crown', { roughness: 0.38, metalness: 0.55 });
+    const goldD = solid(dark, 'crownD', { roughness: 0.42, metalness: 0.5 });
+    const red = solid(0xc82a2a, 'crown-red', { roughness: 0.3, metalness: 0.2 });
+    const teal = solid(0x2a8ac8, 'crown-teal', { roughness: 0.3, metalness: 0.2 });
+    addH(G('crown-band', () => rcyl(0.155, 0.16, 0.085, 12)), gold, [0, 0.16, 0]);
+    addH(G('crown-inner', () => rcyl(0.138, 0.138, 0.06, 10)), solid(0x8a1420, 'crown-in'), [0, 0.16, 0]);
     for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2;
-      add(rbox(0.04, 0.1, 0.04), M(col), [Math.sin(a) * 0.14, 0.28, Math.cos(a) * 0.14]);
+      const a = (i / 5) * Math.PI * 2 + Math.PI;
+      const x = Math.sin(a) * 0.145, z = Math.cos(a) * 0.145;
+      addH(G('crown-spike', () => rbox(0.036, 0.13, 0.036)), gold, [x, 0.265, z]);
+      addH(G('crown-tip', () => new THREE.SphereGeometry(0.022, 8, 6)), i === 0 ? red : (i % 2 ? teal : goldD), [x, 0.34, z]);
     }
+    addH(G('crown-jewel', () => new THREE.SphereGeometry(0.03, 8, 6)), red, [0, 0.175, -0.16]);
+    addH(G('crown-tassel', () => rcyl(0.012, 0.008, 0.15, 6)), red, [-0.17, 0.055, 0]);
+    addH(G('crown-tassel', () => rcyl(0.012, 0.008, 0.15, 6)), red, [0.17, 0.055, 0]);
   } else {
-    // 花布頭巾：薄蓋在髮頂
-    add(rbox(0.32, 0.04, 0.32), M(col), [0, 0.16, 0.02]);
+    // 花布頭巾：第一個小孩是頂蓋，阿婆會把它 Z 向縮小以免蓋住髮髻
+    addH(G('scarf-top', () => rbox(0.34, 0.045, 0.28)), flowerM, [0, 0.155, 0.0]);
+    addH(G('scarf-front', () => rbox(0.30, 0.055, 0.055)), flowerM, [0, 0.105, -0.132]);
+    addH(G('scarf-side', () => rbox(0.055, 0.065, 0.22)), flowerM, [-0.15, 0.12, -0.02]);
+    addH(G('scarf-side', () => rbox(0.055, 0.065, 0.22)), flowerM, [0.15, 0.12, -0.02]);
+    const knot = solid(dark, 'scarf-knot', { map: makeEqTexture(head), roughness: 0.8 });
+    addH(G('scarf-knot', () => rbox(0.07, 0.06, 0.07)), knot, [0.16, 0.10, 0.06], [0, 0.3, 0.35]);
+    addH(G('scarf-tail', () => rbox(0.04, 0.14, 0.028)), flowerM, [0.18, 0.01, 0.08], [0.15, 0, 0.4]);
+    addH(G('scarf-tail2', () => rbox(0.032, 0.12, 0.024)), flowerM, [0.15, -0.01, 0.10], [0.1, 0, 0.18]);
+  }
+}
+
+function buildBodyDetails(rig: PlayerRig, body: EquipVis) {
+  const g = ensureDet(rig.torso, DET.body);
+  const base = hex(body.base);
+  const dark = base.clone().multiplyScalar(0.82);
+  const texM = SM(`body-${body.id}`, 0xffffff, { map: makeEqTexture(body), roughness: 0.78 });
+  const solid = (c: number, key: string, extra?: ConstructorParameters<typeof THREE.MeshStandardMaterial>[0]) =>
+    SM(key, c, extra);
+
+  if (body.id === 'bd_basic') {
+    add(g, G('tee-neck', () => rcyl(0.085, 0.092, 0.042, 10)), solid(0xd4cbb8, 'tee-neck', { roughness: 0.86 }), [0, 0.35, 0]);
+    add(g, G('tee-hem', () => rbox(0.39, 0.024, 0.23)), solid(0xd0c8b4, 'tee-hem', { roughness: 0.86 }), [0, -0.112, 0]);
+  } else if (body.id === 'bd_rain') {
+    add(g, G('rain-hood', () => rbox(0.28, 0.15, 0.12)), texM, [0, 0.34, 0.145]);
+    add(g, G('rain-hood2', () => rcyl(0.12, 0.13, 0.08, 10)), texM, [0, 0.40, 0.155], [0.85, 0, 0]);
+    add(g, G('zip', () => rbox(0.018, 0.42, 0.012)), solid(0x3a3a3a, 'zip'), [0, 0.12, -0.118]);
+    add(g, G('zip-pull', () => rbox(0.03, 0.04, 0.02)), solid(0xc8c8c8, 'zip-pull', { metalness: 0.4, roughness: 0.4 }), [0, 0.28, -0.122]);
+    const stripe = solid(0xe8e6d8, 'rain-ref', { roughness: 0.4, metalness: 0.15 });
+    add(g, G('ref-stripe', () => rbox(0.36, 0.028, 0.01)), stripe, [0, 0.22, -0.118]);
+    add(g, G('ref-stripe', () => rbox(0.36, 0.028, 0.01)), stripe, [0, 0.02, -0.118]);
+  } else if (body.id === 'bd_vest') {
+    const cream = solid(0xf2efe4, 'vest-in', { roughness: 0.88 });
+    const gold = solid(0xe8b830, 'vest-gold', { roughness: 0.4, metalness: 0.45 });
+    add(g, G('vest-in', () => rbox(0.145, 0.44, 0.03)), cream, [0, 0.12, -0.118]);
+    add(g, G('vest-trim', () => rbox(0.016, 0.44, 0.016)), gold, [-0.07, 0.12, -0.132]);
+    add(g, G('vest-trim', () => rbox(0.016, 0.44, 0.016)), gold, [0.07, 0.12, -0.132]);
+    add(g, G('vest-waist', () => rbox(0.36, 0.03, 0.02)), gold, [0, -0.06, -0.118]);
+    const btn = G('vest-btn', () => rcyl(0.012, 0.012, 0.01, 6));
+    for (const y of [0.26, 0.14, 0.02, -0.08]) {
+      add(g, btn, gold, [-0.07, y, -0.142]);
+      add(g, btn, gold, [0.07, y, -0.142]);
+    }
+  } else if (body.id === 'bd_boss') {
+    const navy = texM;
+    const navyL = solid(0x2e3e52, 'boss-L', { roughness: 0.7 });
+    const navyD = solid(0x141c28, 'boss-D', { roughness: 0.72 });
+    add(g, G('boss-col', () => rbox(0.12, 0.08, 0.075)), navyL, [-0.08, 0.345, -0.08], [0.22, 0.18, 0.28]);
+    add(g, G('boss-col', () => rbox(0.12, 0.08, 0.075)), navyL, [0.08, 0.345, -0.08], [0.22, -0.18, -0.28]);
+    add(g, G('zip', () => rbox(0.016, 0.40, 0.012)), solid(0xb0b4b8, 'boss-zip', { metalness: 0.45, roughness: 0.4 }), [0, 0.10, -0.118]);
+    add(g, G('boss-pk', () => rbox(0.10, 0.08, 0.03)), navyD, [-0.12, -0.02, -0.125]);
+    add(g, G('boss-flap', () => rbox(0.10, 0.025, 0.035)), navyL, [-0.12, 0.025, -0.128]);
+    add(g, G('boss-pk', () => rbox(0.10, 0.08, 0.03)), navyD, [0.12, -0.02, -0.125]);
+    add(g, G('boss-flap', () => rbox(0.10, 0.025, 0.035)), navyL, [0.12, 0.025, -0.128]);
+    void navy;
+  } else if (body.id === 'bd_sequin') {
+    const gold = solid(0xffd25a, 'seq-gold', { roughness: 0.35, metalness: 0.5 });
+    add(g, G('seq-neck', () => rbox(0.22, 0.02, 0.02)), gold, [0, 0.345, -0.118]);
+    add(g, G('seq-v', () => rbox(0.02, 0.10, 0.02)), gold, [-0.10, 0.30, -0.118], [0, 0, 0.4]);
+    add(g, G('seq-v', () => rbox(0.02, 0.10, 0.02)), gold, [0.10, 0.30, -0.118], [0, 0, -0.4]);
+    add(g, G('seq-waist', () => rbox(0.36, 0.03, 0.015)), gold, [0, -0.04, -0.118]);
+  }
+}
+
+function buildSleeveDetails(rig: PlayerRig, hand: EquipVis) {
+  const texM = SM(`slv-${hand.id}`, 0xffffff, { map: makeEqTexture(hand), roughness: 0.78, emissive: hand.id === 'sl_neon' ? 0x1a6a40 : 0x000000, emissiveIntensity: hand.id === 'sl_neon' ? 0.3 : 0 });
+  const cuffCol =
+    hand.id === 'sl_dragon' ? 0xe8b830 :
+    hand.id === 'sl_neon' ? 0xe8f8f0 :
+    hand.id === 'sl_rain' ? 0xd4a010 :
+    hand.id === 'sl_89' ? 0xc49068 :
+    hand.id === 'hn_basic' ? 0x2a3a62 :
+    new THREE.Color(hand.base).multiplyScalar(0.75).getHex();
+  const cuffM = SM(`cuff-${hand.id}`, cuffCol, {
+    roughness: hand.id === 'sl_dragon' ? 0.4 : 0.82,
+    metalness: hand.id === 'sl_dragon' ? 0.35 : 0.04,
+  });
+  const coverG = G('slv-cover', () => rbox(0.108, 0.20, 0.108));
+  const cuffG = G('slv-cuff', () => rcyl(0.058, 0.055, 0.036, 8));
+  const stripeG = G('slv-stripe', () => rbox(0.02, 0.18, 0.112));
+  for (const arm of [rig.lowerL, rig.lowerR]) {
+    if (!arm) continue;
+    const g = ensureDet(arm, DET.sleeve);
+    add(g, coverG, texM, [0, -0.01, 0]);
+    add(g, cuffG, cuffM, [0, 0.10, 0]);
+    if (hand.id === 'sl_neon') add(g, stripeG, SM('slv-white', 0xe8f8f0), [0.03, -0.01, 0]);
+    if (hand.id === 'sl_rain') add(g, G('slv-ref', () => rbox(0.11, 0.018, 0.11)), SM('slv-ref', 0xe8e6d8, { roughness: 0.4 }), [0, 0.04, 0]);
+  }
+}
+
+function buildLegDetails(rig: PlayerRig, legs: EquipVis) {
+  const darker = new THREE.Color(legs.base).multiplyScalar(0.78).getHex();
+  const pocketM = SM(`leg-pk-${legs.id}`, darker, { roughness: 0.82 });
+  const flapM = SM(`leg-fl-${legs.id}`, new THREE.Color(legs.base).multiplyScalar(0.9).getHex(), { roughness: 0.8 });
+  for (const [leg, side] of [[rig.legL, -1], [rig.legR, 1]] as const) {
+    if (!leg) continue;
+    const g = ensureDet(leg, DET.leg);
+    if (legs.id === 'lg_basic') {
+      add(g, G('wp-pk', () => rbox(0.03, 0.11, 0.08)), pocketM, [side * 0.078, -0.12, 0.01]);
+    } else if (legs.id === 'lg_camo') {
+      add(g, G('cg-pk', () => rbox(0.055, 0.12, 0.08)), pocketM, [side * 0.09, -0.14, 0.02]);
+      add(g, G('cg-flap', () => rbox(0.055, 0.03, 0.08)), flapM, [side * 0.09, -0.07, 0.025]);
+    }
+  }
+  for (const shin of [rig.shinL, rig.shinR]) {
+    if (!shin) continue;
+    const g = ensureDet(shin, DET.shin);
+    if (legs.id === 'lg_rain') {
+      add(g, G('rp-ref', () => rbox(0.14, 0.028, 0.14)), SM('rp-ref', 0xe8e6d8, { roughness: 0.4 }), [0, -0.08, 0]);
+      add(g, G('rp-cuff', () => rcyl(0.075, 0.07, 0.04, 8)), SM('rp-cuff', 0xd4a010, { roughness: 0.8 }), [0, -0.275, 0]);
+    }
+  }
+}
+
+function buildFeetDetails(rig: PlayerRig, feet: EquipVis) {
+  for (const shin of [rig.shinL, rig.shinR]) {
+    if (!shin) continue;
+    const g = shin.userData[DET.shin] as THREE.Group | undefined;
+    const host = g ?? ensureDet(shin, DET.shin);
+    if (feet.id === 'ft_basic' || feet.id === 'ft_gold') {
+      const strapC = feet.id === 'ft_gold' ? 0xe8b830 : 0x2a5ab0;
+      const strap = SM(`slip-${feet.id}`, strapC, {
+        roughness: feet.id === 'ft_gold' ? 0.35 : 0.7,
+        metalness: feet.id === 'ft_gold' ? 0.45 : 0.04,
+      });
+      add(host, G('slip-post', () => rbox(0.03, 0.04, 0.03)), strap, [0, -0.27, -0.10]);
+      add(host, G('slip-a', () => rbox(0.10, 0.018, 0.032)), strap, [-0.04, -0.268, -0.03], [0, 0.45, 0.08]);
+      add(host, G('slip-b', () => rbox(0.10, 0.018, 0.032)), strap, [0.04, -0.268, -0.03], [0, -0.45, -0.08]);
+      if (feet.id === 'ft_gold') {
+        add(host, G('slip-gem', () => rcyl(0.016, 0.016, 0.012, 8)), SM('slip-gem', 0xfff0b0, { metalness: 0.6, roughness: 0.28 }), [0, -0.252, -0.10]);
+      }
+    } else if (feet.id === 'ft_boots') {
+      const yel = SM('boot-yel', 0xffffff, { map: makeEqTexture(feet), roughness: 0.72 });
+      const yelD = SM('boot-yelD', 0xd4a010, { roughness: 0.75 });
+      add(host, G('rboot-shaft', () => rcyl(0.08, 0.085, 0.18, 10)), yel, [0, -0.20, -0.02]);
+      add(host, G('rboot-cuff', () => rcyl(0.09, 0.09, 0.03, 10)), yelD, [0, -0.105, -0.02]);
+    } else if (feet.id === 'ft_work') {
+      const brn = SM('wboot', 0xffffff, { map: makeEqTexture(feet), roughness: 0.8 });
+      const brnD = SM('wbootD', 0x4a3018, { roughness: 0.78 });
+      const lace = SM('wboot-lace', 0xe8d8a8, { roughness: 0.7 });
+      add(host, G('wboot-shaft', () => rcyl(0.075, 0.082, 0.12, 10)), brn, [0, -0.24, -0.02]);
+      add(host, G('wboot-toe', () => rbox(0.145, 0.055, 0.08)), brnD, [0, -0.325, -0.10]);
+      add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.22, -0.09]);
+      add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.248, -0.09]);
+      add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.276, -0.09]);
+    }
   }
 }
 
@@ -175,15 +725,17 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   for (const m of mats.body) paintMat(m, body);
   for (const m of mats.sleeve) paintMat(m, hand);
   for (const m of mats.legs) paintMat(m, legs);
-  for (const m of mats.feet) paintMat(m, feet);
+  paintFeet(mats, feet);
   for (const m of mats.hair) {
-    // 頭髮維持深色；頭巾色由帽子／頭飾表現
+    resetSurf(m);
     m.color.setHex(0x222222);
-    m.map = null;
-    m.emissive.setHex(0);
     m.needsUpdate = true;
   }
   if (rig.hatG) buildHat(rig.hatG, head);
+  buildBodyDetails(rig, body);
+  buildSleeveDetails(rig, hand);
+  buildLegDetails(rig, legs);
+  buildFeetDetails(rig, feet);
   rig.outfitKey = outfitKey(o);
   return o;
 }

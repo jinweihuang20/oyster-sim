@@ -1,7 +1,8 @@
 export { checkCode, REDEEM_MESSAGES } from './redeem';
 export type { RedeemCodeDef } from './redeemCodes';
-export { applyOutfitToRig } from './equipVisual';
+export { applyOutfitToRig, clearOutfitDetails } from './equipVisual';
 export { syncEqPreview, refreshEqPreview, stopEqPreview } from './equipPreview';
+export { openClothTryPreview, closeClothTryPreview } from './tryPreview';
 export { ODD } from './oddities';
 export { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS } from './shopEquip';
 export {

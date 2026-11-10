@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import type { Save } from '../core';
 import { $ } from '../ui';
 import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS } from './shopEquip';
+import { EQUIP_VIS, paintEquipCanvas } from './equipVisual';
+import { openClothTryPreview, closeClothTryPreview } from './tryPreview';
 
 export type ClothUiDeps = {
   getSave: () => Save;
@@ -66,7 +68,18 @@ export function patDraw(g: CanvasRenderingContext2D, e: Eq, W: number, H: number
   if (e.pat === 'tattoo') { g.strokeStyle = '#1e2a4a'; g.lineWidth = 3; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(W / 2, H + 12 - i * 22, 40, Math.PI, 2 * Math.PI); g.stroke(); } dot(40, 40, 9, '#b8323a'); dot(90, 80, 9, '#2a5a9a'); }
   if (e.pat === 'dragon') { g.strokeStyle = '#ffd25a'; g.lineWidth = 4; g.beginPath(); for (let x = 0; x <= W; x += 4) g.lineTo(x, H / 2 + Math.sin(x / 10) * 26); g.stroke(); }
 }
-export function eqTex(e: Eq) { const c = document.createElement('canvas'); c.width = c.height = 128; patDraw(c.getContext('2d')!, e, 128, 128); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 3); return t; }
+export function eqTex(e: Eq) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const vis = EQUIP_VIS.find(x => x.id === e.id);
+  const g = c.getContext('2d')!;
+  if (vis) paintEquipCanvas(g, vis, 128, 128);
+  else { g.fillStyle = e.base; g.fillRect(0, 0, 128, 128); }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 3);
+  return tex;
+}
 export function applySleeve() {
   const s = D.getSleeveTry() ? EQUIP.find(x => x.id === D.getSleeveTry())! : equipNow('hand');
   D.sleeve.map?.dispose(); D.sleeve.map = eqTex(s); D.sleeve.color.set(0xffffff);
@@ -217,14 +230,67 @@ export function renderEquip() {
 export function renderClothShop() {
   if (D.getSleeveTry()) { D.setSleeveTry(null); applySleeve(); }
   const items = EQUIP.filter(e => e.slot === D.getClothTab() && e.price > 0).sort((a, b) => a.price - b.price);
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-hand"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。</p><div class="clTabs">${SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === D.getClothTab() ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
-    return `<div class="slCard${cur ? ' on' : ''}">${eqSvg(s)}<b>${s.n}</b><small>${s.eff}</small>${D.pxCd(s.id)}<div class="slBtns">${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${D.getSave().money < D.px(s.id, s.price) ? 'disabled' : ''}>${D.pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-hand"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。點商品圖片可試穿，還沒買也能看。</p><div class="clTabs">${SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === D.getClothTab() ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
+    return `<div class="slCard${cur ? ' on' : ''}"><button type="button" class="slPeek" data-sltry="${s.id}" aria-label="試穿 ${s.n}">${eqSvg(s)}<b>${s.n}</b><em class="slPeekT">點我看穿著樣子</em></button><small>${s.eff}</small>${D.pxCd(s.id)}<div class="slBtns">${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${D.getSave().money < D.px(s.id, s.price) ? 'disabled' : ''}>${D.pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
   $('shopList').querySelectorAll('button[data-ctab]').forEach(b => (b as HTMLButtonElement).onclick = () => { D.setClothTab(b.getAttribute('data-ctab') as Slot); D.renderShop(); });
   $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = EQUIP.find(x => x.id === id)!;
     if (b.hasAttribute('data-slbuy')) { const pr = await D.payFor(id, s.price, s.n); if (pr == null) return; D.getSave().money -= pr; D.getSave().shop.owned.push(id); D.track('buy', { item: id, price: pr }); if (D.getAc()) D.SFX.jingle(); }
     setEquip(s.slot, id); D.setSleeveTry(null); D.persist(); applySleeve(); D.applyOutfit3(); D.renderShop();
   });
+  $('shopList').querySelectorAll('button[data-sltry]').forEach(b => (b as HTMLButtonElement).onclick = () => {
+    const s = EQUIP.find(x => x.id === b.getAttribute('data-sltry'));
+    if (s) openTryModal(s);
+  });
+}
+
+function closeTryModal() {
+  closeClothTryPreview();
+  document.getElementById('clothTry')?.remove();
+}
+
+function openTryModal(item: Eq) {
+  closeTryModal();
+  const outfit = {
+    head: equipNow('head').id, hand: equipNow('hand').id,
+    body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
+    [item.slot]: item.id,
+  };
+  const own = eqOwned(item.id);
+  const cur = equipNow(item.slot).id === item.id;
+  const act = own
+    ? `<button type="button" data-sleq="${item.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>`
+    : `<button type="button" data-slbuy="${item.id}" ${D.getSave().money < D.px(item.id, item.price) ? 'disabled' : ''}>${D.pxHtml(item.id, item.price, '買 ')}</button>`;
+  const m = document.createElement('div');
+  m.id = 'clothTry';
+  m.className = 'clothTry';
+  m.setAttribute('role', 'dialog');
+  m.setAttribute('aria-modal', 'true');
+  m.setAttribute('aria-label', `試穿 ${item.n}`);
+  m.innerHTML = `<div class="clothTryBox"><button type="button" class="clothTryX" aria-label="關閉"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="clothTryHd"><b>試穿：${item.n}</b><small>${item.eff}</small></div><div class="clothTryStage" id="clothTryStage"></div><p class="clothTryHint">可拖曳轉動看背面。點外面或關閉即可離開。</p><div class="clothTryAct">${act}</div></div>`;
+  document.body.appendChild(m);
+  openClothTryPreview(m.querySelector('#clothTryStage') as HTMLElement, outfit);
+  const close = () => closeTryModal();
+  m.querySelector('.clothTryX')?.addEventListener('click', close);
+  m.addEventListener('click', e => { if (e.target === m) close(); });
+  const buyBtn = m.querySelector<HTMLButtonElement>('button[data-slbuy],button[data-sleq]');
+  if (buyBtn) buyBtn.onclick = async () => {
+    if (buyBtn.hasAttribute('data-slbuy')) {
+      const pr = await D.payFor(item.id, item.price, item.n);
+      if (pr == null) return;
+      D.getSave().money -= pr;
+      D.getSave().shop.owned.push(item.id);
+      D.track('buy', { item: item.id, price: pr });
+      if (D.getAc()) D.SFX.jingle();
+    }
+    setEquip(item.slot, item.id);
+    D.setSleeveTry(null);
+    D.persist();
+    applySleeve();
+    D.applyOutfit3();
+    closeTryModal();
+    D.renderShop();
+  };
 }
 
 // 分享穿搭卡：直接畫在 canvas 上
