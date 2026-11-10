@@ -118,7 +118,10 @@ async function render() {
   if (!r) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; return; }
   const unit = BOARDS.find(b => b[0] === board)![2];
   const foilOn = (x: any) => !!(x.foil || (x.me && D.foil?.()));
-  const nameInner = (x: any) => `${x.atitle ? `<em class="lbA">${esc(x.atitle)}</em>` : ''}<b>${esc(x.nick)}</b><small>#${esc(x.tag)}</small>`;
+  const nameInner = (x: any) => {
+    const at = x.atitle ? `<em class="lbAt">${esc(x.atitle)}</em>` : '';
+    return `<span class="lbWho">${at}<b class="lbNick">${esc(x.nick)}</b></span><small class="lbId">#${esc(x.tag)}</small>`;
+  };
   const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
     (x.me ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>` : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span>`) + '</div>';
   const rows = r.rows as any[];
