@@ -23,6 +23,7 @@ type FlagObj = {
   sparkPos: Float32Array;
   sparkLife: Float32Array;
   text: string;
+  nick: string;
   color: number;
   size: number;
   fx: number;
@@ -38,7 +39,7 @@ function shownColor(f: PlazaFlagState) { return f.colorSel; }
 function shownSize(f: PlazaFlagState) { return f.sizeSel; }
 function shownFx(f: PlazaFlagState) { return f.fxSel; }
 
-function paintFlag(canvas: HTMLCanvasElement, text: string, colorLv: number) {
+function paintFlag(canvas: HTMLCanvasElement, text: string, colorLv: number, nick = '') {
   const spec = flagColorOf(colorLv);
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -67,12 +68,24 @@ function paintFlag(canvas: HTMLCanvasElement, text: string, colorLv: number) {
     ctx.globalAlpha = 1;
   }
   const t = (text || '').trim();
+  const nm = (nick || '').trim().slice(0, 16);
+  const font = (px: number, w = 700) => `${w} ${px}px "Noto Sans TC","PingFang TC","Microsoft JhengHei","Noto Sans CJK TC",sans-serif`;
+  ctx.fillStyle = hexCss(spec.text);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   if (t) {
-    ctx.fillStyle = hexCss(spec.text);
-    ctx.font = '700 32px "Noto Sans TC","PingFang TC","Microsoft JhengHei","Noto Sans CJK TC",sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(t, TEX_W / 2, TEX_H / 2, TEX_W - 24);
+    ctx.font = font(32);
+    ctx.fillText(t, TEX_W / 2, nm ? TEX_H * 0.42 : TEX_H / 2, TEX_W - 24);
+  }
+  if (nm) {
+    // 插旗玩家的名字：有自訂文字時放在下方小字，沒有就置中
+    ctx.globalAlpha = t ? 0.85 : 1;
+    ctx.font = t ? font(19, 600) : font(28);
+    if (t) {
+      ctx.fillRect(TEX_W * 0.3, TEX_H * 0.64, TEX_W * 0.4, 1.5);
+    }
+    ctx.fillText(nm, TEX_W / 2, t ? TEX_H * 0.78 : TEX_H / 2, TEX_W - 32);
+    ctx.globalAlpha = 1;
   }
 }
 
@@ -145,7 +158,7 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
     const canvas = document.createElement('canvas');
     canvas.width = TEX_W;
     canvas.height = TEX_H;
-    paintFlag(canvas, f.text, shownColor(f));
+    paintFlag(canvas, f.text, shownColor(f), f.nick);
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.minFilter = THREE.LinearFilter;
@@ -181,7 +194,7 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
     group.add(base, pole, finial, cloth, pillar, sparks);
     const o: FlagObj = {
       k: f.k, group, cloth, mat, tex, canvas, pillar, sparks, sparkPos, sparkLife,
-      text: f.text, color: shownColor(f), size: shownSize(f), fx: shownFx(f),
+      text: f.text, nick: f.nick, color: shownColor(f), size: shownSize(f), fx: shownFx(f),
       seed: hashSeed(f.k), x: f.x, z: f.z,
     };
     applyPose(o, f);
@@ -194,13 +207,14 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
     o.group.rotation.y = f.yaw;
     const sc = flagSizeOf(shownSize(f)).scale;
     o.group.scale.setScalar(sc);
-    if (o.text !== f.text || o.color !== shownColor(f)) {
-      paintFlag(o.canvas, f.text, shownColor(f));
+    if (o.text !== f.text || o.nick !== f.nick || o.color !== shownColor(f)) {
+      paintFlag(o.canvas, f.text, shownColor(f), f.nick);
       o.tex.needsUpdate = true;
       const spec = flagColorOf(shownColor(f));
       o.mat.emissive.setHex(spec.style === 'foil' || spec.style === 'gradient' ? 0x3a2a10 : 0x000000);
       o.mat.emissiveIntensity = spec.style === 'foil' ? 0.18 : 0;
       o.text = f.text;
+      o.nick = f.nick;
       o.color = shownColor(f);
     }
     o.size = shownSize(f);
