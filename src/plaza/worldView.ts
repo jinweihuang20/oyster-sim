@@ -17,6 +17,7 @@ import { makeMeshHelpers } from '../dm/mesh';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, isPlazaAber, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
 import { makeInstancedPlazaChairs, makeInstancedPads, type ChairPose } from './instancedProps';
+import { bakeStaticLighting } from './bakeLighting';
 import { mergeStaticMeshes, countMeshes } from './mergeStatic';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
@@ -229,7 +230,8 @@ export function createPlazaWorldView(
       metalness: 0.02,
       color: 0xffffff,
     });
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(WALK_BOUND * 2.4, WALK_BOUND * 2.4), floorMat);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(WALK_BOUND * 2.4, WALK_BOUND * 2.4, LO ? 36 : 48, LO ? 36 : 48), floorMat);
+  floor.name = 'plazaFloor';
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0.002;
   floor.receiveShadow = !LO;
@@ -325,6 +327,10 @@ export function createPlazaWorldView(
   }
   const extraPads = extraPadPoses.length ? makeInstancedPads(extraPadPoses, M, LO) : null;
   if (extraPads) root.add(extraPads.mesh);
+  bakeStaticLighting(root, {
+    includeDirect: LO,
+    sunDir: new THREE.Vector3(-3, 11, -5),
+  });
   const allPads = extraPads ? [plazaChairs.pads, extraPads] : [plazaChairs.pads];
   const paintInstancedPads = (taken: Set<string> | null) => {
     for (const api of allPads) {
