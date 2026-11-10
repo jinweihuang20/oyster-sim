@@ -1014,8 +1014,17 @@ async function plantMyFlag() {
   plantBusy = true;
   try {
     const p = deps.getWalkXZ();
-    const text = myFlagText ?? clipFlagText(deps.nick() || '');
-    const r = await client.plantFlag(p.x, p.z, deps.getYaw(), text);
+    // 不帶文字：伺服器會保留已儲存的旗面文字（避免被名字蓋回去）
+    const text = myFlagText ?? '';
+    let r = await client.plantFlag(p.x, p.z, deps.getYaw(), text);
+    if (!r.ok && r.err === 'seated' && !seated) {
+      // 本機已站著但伺服器還記著座位：先釋座、送出目前位置再插一次
+      await client.leaveSeat();
+      const lockLook = deps.getTpv?.() ?? false;
+      await client.sync(p.x, p.z, deps.getYaw(), 'walk', deps.getCount(), false, deps.getUmb(),
+        lockLook ? 0 : (deps.getLookYaw?.() ?? 0), lockLook ? 0 : (deps.getPitch?.() ?? 0));
+      r = await client.plantFlag(p.x, p.z, deps.getYaw(), text);
+    }
     if (!r.ok) { deps.toast(flagErrText(r.err), '#ffb08a'); return; }
     if (r.flag) {
       myFlagText = r.flag.text;
