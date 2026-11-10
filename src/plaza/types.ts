@@ -25,6 +25,8 @@ export type PlazaPlayer = {
   body?: string;
   legs?: string;
   feet?: string;
+  /** 廣場外觀旗標，例如 "goldSmoke,cushion,nameFrame"；舊伺服器沒這個欄位 */
+  cosmetics?: string;
   /** 伺服器阿婆（每堆 2 人），同步同真人 */
   isNpc?: boolean;
   /** 抱起這位阿婆的玩家 connId；空＝沒被抱 */

@@ -9,11 +9,11 @@ export {
 } from './meds';
 
 export {
-  initYardShop, GEAR, KNIVES, UMBS, BOWLS,
+  initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS,
   gearOn, knifeNow, umbNow, bowlNow,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
-  renderShop, getShopNewIds,
+  renderShop, getShopNewIds, FLAG_PRICE_ITEMS, FLAG_ITEM,
   type Knife, type Umb, type Bowl, type YardShopDeps,
 } from './yardShop';
 export {

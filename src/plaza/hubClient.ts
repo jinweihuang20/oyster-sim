@@ -1,5 +1,6 @@
 import * as signalR from '@microsoft/signalr';
 import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent } from './types';
+import { normFlagDto, type PlazaFlagState } from './flags';
 
 export type PlazaHubHandlers = {
   onRoster?: (snap: PlazaSnapshot) => void;
@@ -27,12 +28,13 @@ export type PlazaHubHandlers = {
   onGrillTaken?: (e: PlazaGrillTakenEvent) => void;
   /** 吸菸區「抽一口」同步（其他人） */
   onPlazaPuff?: (e: { connId: string; pid: string; start: boolean; holdMs: number }) => void;
+  onFlagUpsert?: (f: PlazaFlagState) => void;
   /** 連線中斷，開始自動重連 */
   onReconnecting?: (attempt: number) => void;
   /** 底層 socket 重連成功（尚未重新 Join） */
   onSocketReconnected?: () => void;
   /** 重新 Join 成功（含近期聊天／共烤狀態） */
-  onRejoined?: (snap?: PlazaSnapshot, chat?: PlazaChat[], grills?: PlazaGrillOyster[]) => void;
+  onRejoined?: (snap?: PlazaSnapshot, chat?: PlazaChat[], grills?: PlazaGrillOyster[], flags?: PlazaFlagState[]) => void;
   /** 重新 Join 失敗（仍會再試） */
   onRejoinFail?: (err?: string, attempt?: number) => void;
   /** 自動重連耗盡／連線徹底關閉 */
@@ -233,9 +235,12 @@ export class PlazaClient {
         });
       } catch (err) { console.error('PlazaPuff', err); }
     });
+    conn.on('FlagUpsert', (e: any) => {
+      try { this.handlers.onFlagUpsert?.(normFlagDto(e)); } catch (err) { console.error('FlagUpsert', err); }
+    });
   }
 
-  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[]; grills?: PlazaGrillOyster[]; carryNpc?: boolean }> {
+  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[]; grills?: PlazaGrillOyster[]; carryNpc?: boolean; flags?: PlazaFlagState[] }> {
     if (!this.conn) return { ok: false, err: 'no_conn' };
     try {
       const r = await this.conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot; chat?: any[]; grills?: any[] }>('Join', this.pid, this.nick);
@@ -247,7 +252,9 @@ export class PlazaClient {
       const rawG = (r as any).grills ?? (r as any).Grills ?? [];
       const grills = Array.isArray(rawG) ? rawG.map(normGrillOyster) : [];
       const carryNpc = !!(r as any).carryNpc || !!(r as any).CarryNpc;
-      return { ok: true, snap: r.snap, token: this.token, chat, grills, carryNpc };
+      const rawF = (r as any).flags ?? (r as any).Flags;
+      const flags = Array.isArray(rawF) ? rawF.map(normFlagDto) : undefined;
+      return { ok: true, snap: r.snap, token: this.token, chat, grills, carryNpc, flags };
     } catch (e: any) {
       return { ok: false, err: e?.message || 'join_fail' };
     }
@@ -263,7 +270,7 @@ export class PlazaClient {
         this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
         return;
       }
-      this.handlers.onRejoined?.(r.snap, r.chat, r.grills);
+      this.handlers.onRejoined?.(r.snap, r.chat, r.grills, r.flags);
     } finally {
       this.rejoining = false;
     }
@@ -277,7 +284,7 @@ export class PlazaClient {
     if (this.intentionalStop) return { ok: false, err: 'stopped' };
     if (this.connected) {
       const r = await this.joinHub();
-      if (r.ok) { this.handlers.onRejoined?.(r.snap, r.chat, r.grills); return r; }
+      if (r.ok) { this.handlers.onRejoined?.(r.snap, r.chat, r.grills, r.flags); return r; }
       return r;
     }
     this.reconnectAttempt += 1;
@@ -285,7 +292,7 @@ export class PlazaClient {
     const pid = this.pid, nick = this.nick;
     if (!pid) return { ok: false, err: 'no_pid' };
     const r = await this.connect(pid, nick, { keepAttempt: true });
-    if (r.ok) this.handlers.onRejoined?.(r.snap, r.chat, (r as any).grills);
+    if (r.ok) this.handlers.onRejoined?.(r.snap, r.chat, (r as any).grills, (r as any).flags);
     else this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
     return r;
   }
@@ -317,6 +324,19 @@ export class PlazaClient {
   async setOutfit(head: string, hand: string, body: string, legs: string, feet: string) {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return;
     try { await this.conn.invoke('SetOutfit', head, hand, body, legs, feet); } catch { /* ignore */ }
+  }
+
+  async setCosmetics(cosmetics: string) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return;
+    // 伺服器對換裝有 200ms 節流，緊接在 SetOutfit 後會被擋；被擋就等一下再送
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r: any = await this.conn.invoke('SetCosmetics', cosmetics || '');
+        if (r?.ok !== false || r?.err !== 'slow') return;
+      } catch { return; /* 舊伺服器沒這個方法 */ }
+      await new Promise(res => setTimeout(res, 300));
+      if (this.conn?.state !== signalR.HubConnectionState.Connected) return;
+    }
   }
 
   async setPhase(phase: string, count: number) {
@@ -454,4 +474,45 @@ export class PlazaClient {
   }
 
   get connected() { return !!this.conn && this.conn.state === signalR.HubConnectionState.Connected; }
+
+  /** 在腳邊插旗；舊伺服器無此方法時回 nosup，不丟錯 */
+  async plantFlag(x: number, z: number, yaw: number, text: string) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', flag: undefined as PlazaFlagState | undefined };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any }>('PlantFlag', x, z, yaw, text);
+      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined };
+    } catch {
+      return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };
+    }
+  }
+
+  async setFlagText(text: string) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', flag: undefined as PlazaFlagState | undefined };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any }>('SetFlagText', text);
+      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined };
+    } catch {
+      return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };
+    }
+  }
+
+  async upgradeFlag(track: string) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', flag: undefined as PlazaFlagState | undefined };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any }>('UpgradeFlag', track);
+      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined };
+    } catch {
+      return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };
+    }
+  }
+
+  async selectFlag(track: string, level: number) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', flag: undefined as PlazaFlagState | undefined };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any }>('SelectFlag', track, level);
+      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined };
+    } catch {
+      return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };
+    }
+  }
 }

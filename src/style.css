@@ -1067,6 +1067,7 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 #achBan .ic{width:30px;height:30px;background-color:#ffd25a;flex-shrink:0}
 #achBan span{display:flex;flex-direction:column;line-height:1.2}#achBan small{font-size:12px;opacity:.85}#achBan b{font:900 18px var(--sign)}#achBan em{font-style:normal;font-size:13px;color:#ffd25a}
 .lbA,.fdA{font-style:normal;font-size:.8em;font-weight:900;margin-right:4px;padding:0 4px;border:1.5px solid currentColor;border-radius:2px;color:#b8322a;white-space:nowrap}
+.lbFoil{display:inline-flex;align-items:baseline;flex-wrap:wrap;gap:2px 4px;padding:1px 7px 2px;border:1.5px solid #c9a227;box-shadow:inset 0 0 0 1px #ecd27a,0 1px 3px rgba(201,162,39,.22);background:rgba(255,248,220,.38);border-radius:3px}
 .fdA{color:#ffd25a}
 
 #achBan.tap.on{pointer-events:auto;cursor:pointer}
@@ -1503,6 +1504,30 @@ body #shopTabs button.hasNew:not(.on){box-shadow:inset 0 0 0 2px #ff5a3a!importa
 #poseBtn .key,#jumpBtn .key,#crouchBtn .key,#lieBtn .key{display:none}
 #poseBtn.on{bottom:calc(var(--sa-bottom,0px) + 76px)!important}
 #poseBtn.open{background:rgba(42,90,134,.72)!important}
+#flagBtn{display:none}
+#flagBtn.on{
+  position:fixed!important;right:calc(var(--sa-right,0px) + 116px)!important;left:auto!important;top:auto!important;
+  bottom:calc(var(--sa-bottom,0px) + 76px)!important;
+  min-width:96px!important;height:48px!important;min-height:48px!important;padding:0 14px!important;margin:0!important;
+  border-radius:12px!important;display:flex!important;align-items:center;justify-content:center;gap:6px;
+  font-size:16px!important;font-weight:700;color:#fff!important;
+  background:rgba(28,32,38,.55)!important;border:1px solid rgba(255,255,255,.35)!important;
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 2px 8px rgba(0,0,0,.2);
+  z-index:30;pointer-events:auto
+}
+#flagBtn.on:active{background:rgba(28,32,38,.75)!important}
+#flagBtn .ic{flex:0 0 auto}
+.flagShop{margin:12px 0 8px;padding:12px 14px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(22,28,36,.32)}
+.flagShop .flagLead{margin:6px 0 10px;font-size:13px;line-height:1.45;opacity:.88}
+.flagShop .flagLbl{display:block;margin:8px 0 6px;font-size:13px}
+.flagShop .flagIn{display:block;width:min(16em,100%);margin:6px 0 8px;padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.28);background:rgba(16,20,26,.55);color:#f4f0e8}
+.flagShop .flagTrack{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:10px 0;border-top:1px solid rgba(255,255,255,.1)}
+.flagShop .flagTrackHd{font-size:13px;opacity:.92}
+.flagShop .flagChips{display:flex;flex-wrap:wrap;gap:6px}
+.flagShop .flagChip{appearance:none;border:1px solid rgba(255,255,255,.22);background:rgba(18,24,32,.55);color:#f4f0e8;border-radius:999px;padding:5px 11px;font:inherit;font-size:13px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.18)}
+.flagShop .flagChip:hover{border-color:rgba(42,90,134,.7);background:rgba(42,90,134,.22)}
+.flagShop .flagChip.on{border-color:#2a5a86;background:rgba(42,90,134,.38);box-shadow:0 0 0 1px rgba(42,90,134,.45),0 1px 4px rgba(0,0,0,.18)}
+.flagShop .flagMax{opacity:.65;font-size:13px}
 /* 未展開：藏跳／蹲／躺（即使有 .on） */
 #jumpBtn.on,#crouchBtn.on,#lieBtn.on{display:none!important}
 body.poseOpen #jumpBtn.on,body.poseOpen #crouchBtn.on,body.poseOpen #lieBtn.on{display:flex!important}
@@ -1515,6 +1540,12 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
   body.plazaRoam #poseBtn.on{
     display:flex!important;
     bottom:calc(var(--sa-bottom,0px) + 70px)!important;
+    z-index:9010;
+  }
+  body.plazaRoam #flagBtn.on{
+    display:flex!important;
+    bottom:calc(var(--sa-bottom,0px) + 70px)!important;
+    right:calc(var(--sa-right,0px) + 116px)!important;
     z-index:9010;
   }
   body.plazaRoam #jumpBtn.on,body.plazaRoam #crouchBtn.on,body.plazaRoam #lieBtn.on{display:none!important}
@@ -1586,3 +1617,12 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
  #top #pzTopOn svg{width:15px;height:15px}
  body.plazaMode #top,body.plazaRoam #top{top:calc(env(safe-area-inset-top,0px) + 4px)}
 }
+
+/* 廣場裡開商店／圖鑑／裝備要蓋過廣場名牌、HUD 與按鈕 */
+body:is(.plazaMode,.plazaRoam) :is(#shop,#dex,#equip).show{z-index:9600!important}
+/* 旗幟樣式：選中的要一眼看得出來 */
+#shop .flagShop .flagChip{min-height:34px!important;min-width:0!important;opacity:.78}
+#shop .flagShop .flagChip.on{opacity:1;background:#2a5a86!important;border-color:#e9d9a8!important;color:#fff!important;font-weight:700;box-shadow:0 0 0 2px rgba(233,217,168,.55),0 2px 8px rgba(0,0,0,.25)!important;padding-left:24px!important;position:relative}
+#shop .flagShop .flagChip.on::before{content:"";position:absolute;left:10px;top:50%;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:translate(0,-60%) rotate(45deg)}
+/* 提示訊息永遠在最上層（蓋過商店、圖鑑、設定等視窗） */
+#toast{z-index:13500!important}

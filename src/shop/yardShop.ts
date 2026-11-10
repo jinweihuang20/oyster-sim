@@ -6,6 +6,11 @@ import {
   type WeaponId,
 } from '../deathmatch';
 import type * as THREE from 'three';
+import {
+  FLAG_COLORS, FLAG_ERR_ZH, FLAG_FX, FLAG_ITEM, FLAG_SIZES, FLAG_TEXT_MAX,
+  fetchFlagSnapshot, flagErrText, flagTextErr, flagTextSaveNote, nextFlagItem,
+  postFlagSelect, postFlagText, postFlagUpgrade, type FlagTrack, type PlazaFlagState,
+} from '../plaza/flags';
 
 export type Knife = { id: string; n: string; price: number; green: number; speed: number; steps: number; stab: number; seam: number; luck: number; blade: number; desc: string };
 export type Umb = { id: string; n: string; price: number; open: number; dur: number; perf: number; cover: number; reflect: number; look: string; size: number; desc: string };
@@ -23,6 +28,15 @@ export type YardShopDeps = {
   applyBowl: () => void;
   applyGloves: () => void;
   drawRadio: () => void;
+  /** 廣場外觀開關後同步（金煙／坐墊／名牌框） */
+  onCosmeticsChange?: () => void;
+  getPlayerId: () => string;
+  getNick: () => string;
+  toast: (t: string, c?: string) => void;
+  onFlagChange?: () => void;
+  setFlagText?: (text: string) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
+  upgradeFlag?: (track: FlagTrack) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
+  selectFlag?: (track: FlagTrack, level: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   clearBowlMeat: () => void;
   renderClothShop: () => void;
   renderMedShop: () => void;
@@ -40,6 +54,17 @@ export const GEAR = [
   { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
   { id: 'radio', n: '收音機', price: 300, good: '阿婆氣消得快：怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：丟殼預警變晚（⚠ 和提示聲晚一半才出現）' },
   { id: 'glasses', n: '👓 老花眼鏡', price: 200, good: '蚵仔縫更亮更粗、光暈更大；插刀判定範圍 +25%', bad: '看遠有點霧：畫面邊緣微暗' }];
+/** 廣場高單價外觀（永久、可開關；所有權與器具一樣存在本機存檔） */
+export const COSMETICS = [
+  { id: 'goldPipe', n: '金煙菸斗', price: 150000, good: '廣場吐出的煙和菸頭的煙會帶一層溫潤金霧', ic: 'pipe' },
+  { id: 'seatCush', n: '專屬坐墊', price: 150000, good: '坐下時椅面鋪上赤金刺繡坐墊，別人看得到', ic: 'cushion' },
+  { id: 'nameFrame', n: '金箔名牌框', price: 300000, good: '廣場頭頂名牌和全球排行榜的名字加上金箔外框', ic: 'frame' },
+];
+const COS_IC: Record<string, string> = {
+  pipe: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 15h9l3-3 5 1"/><path d="M13 15c0 2.6-2.1 4.5-5 4.5"/></svg>',
+  cushion: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="4" y="6" width="16" height="12" rx="3"/><path d="M8 10l4 4 4-4"/></svg>',
+  frame: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="6" y="8" width="12" height="8" rx="1"/></svg>',
+};
 export const KNIVES: Knife[] = [
   { id: 'basic', luck: 1, n: '舊蚵刀', price: 0, green: 1, speed: 1, steps: 0, stab: 1, seam: 1, blade: 0xd0d0d8, desc: '媽媽留下來的，普普通通' },
   { id: 'dull', luck: 3, n: '便宜鈍刀', price: 20, green: 0.7, speed: 0.85, steps: 0, stab: 1.5, seam: 1, blade: 0x8a8a80, desc: '夜市 20 塊，指針較慢、運氣特別好，但綠區小、很常割到手' },
@@ -47,6 +72,7 @@ export const KNIVES: Knife[] = [
   { id: 'point', luck: 2, n: '尖口刀', price: 200, green: 0.9, speed: 1, steps: -1, stab: 1.6, seam: 1, blade: 0xb0c8e0, desc: '尖尖的一下就進去，少撬一下，運氣較好，但比較危險' },
   { id: 'seam', luck: 0, n: '找縫刀', price: 180, green: 0.9, speed: 1.1, steps: 0, stab: 0.8, seam: 1.6, blade: 0xc8e0b0, desc: '找縫很簡單，撬的時候比較費力' },
   { id: 'master', luck: 4, n: '師傅刀', price: 1200, green: 1.2, speed: 0.95, steps: -1, stab: 0.6, seam: 1.25, blade: 0xffe28a, desc: '老師傅手工，樣樣好，就是貴' },
+  { id: 'harbor', luck: 4, n: '鎮港金刀', price: 200000, green: 1.26, speed: 0.90, steps: -1, stab: 0.57, seam: 1.31, blade: 0xffd24a, desc: '港口老師傅壓箱底的金刀，比師傅刀再利一點點' },
 ];
 export const UMBS: Umb[] = [
   { id: 'stripe', n: '紅白傘', price: 0, open: 0.05, dur: 4, perf: 0.28, cover: 0.95, reflect: 1, look: 'stripe', size: 1, desc: '工寮門口撿到的，各方面都普通好用' },
@@ -54,6 +80,7 @@ export const UMBS: Umb[] = [
   { id: 'fold', n: '自動摺疊傘', price: 160, open: 0, dur: 3, perf: 0.4, cover: 0.8, reflect: 1.2, look: 'navy', size: 0.7, desc: '一按就開，完美反彈時機最寬，但傘面小' },
   { id: 'beach', n: '海灘陽傘', price: 260, open: 0.25, dur: 8, perf: 0.15, cover: 1, reflect: 0.8, look: 'beach', size: 1.3, desc: '又大又能撐很久，但開傘比較慢、完美時機窄' },
   { id: 'temple', n: '廟會涼傘', price: 1500, open: 0.05, dur: 5, perf: 0.35, cover: 1, reflect: 1.6, look: 'temple', size: 1.05, desc: '神明的涼傘，反彈超有力，就是貴' },
+  { id: 'gilt', n: '金箔涼傘', price: 200000, open: 0.048, dur: 5.2, perf: 0.37, cover: 1, reflect: 1.68, look: 'gold', size: 1.08, desc: '廟會金箔糊的涼傘，比廟會涼傘再穩一點' },
 ];
 export const BOWLS: Bowl[] = [
   { id: 'plastic', n: '塑膠臉盆', price: 0, r: 0.17, bounce: 0, dist: 1, perf: 0.10, bonus: 0, h: 0.14, color: 0x4a8ac0, desc: '藍色塑膠盆，普通' },
@@ -182,6 +209,19 @@ export function renderShop() {
     else save.gear[id] = !gearOn(id);
     D.persist(); renderShop(); D.drawRadio(); D.applyGloves();
   });
+  $('shopList').insertAdjacentHTML('beforeend', '<h4 class="shH4"><i class="ic ic-user"></i> 廣場外觀（買了可以開關）</h4><table class="kt">' + COSMETICS.map(g => {
+    const own = D.getSave().shop.owned.includes(g.id), on = gearOn(g.id);
+    const ic = COS_IC[g.ic] || '';
+    return `<tr><td><b>${ic} ${g.n}</b><br><small style="color:#9be37a">${g.good}</small>${pxCd(g.id)}</td><td>${own ? `<button data-ctog="${g.id}">${on ? '使用中' : '沒在用'}</button>` : `<button data-cbuy="${g.id}" ${D.getSave().money < px(g.id, g.price) ? 'disabled' : ''}>${pxHtml(g.id, g.price)}</button>`}</td></tr>`;
+  }).join('') + '</table>');
+  $('shopList').querySelectorAll('button[data-cbuy],button[data-ctog]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
+    const id = b.getAttribute('data-cbuy') || b.getAttribute('data-ctog')!;
+    const g = COSMETICS.find(x => x.id === id)!; const save = D.getSave(); save.gear = save.gear ?? {};
+    if (b.hasAttribute('data-cbuy')) { const pr = await payFor(id, g.price, g.n); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); save.gear[id] = true; D.track('buy', { item: id, price: pr }); if (D.getAc()) D.SFX.jingle(); }
+    else save.gear[id] = !gearOn(id);
+    D.persist(); renderShop(); D.onCosmeticsChange?.();
+  });
+  renderFlagShop();
   const cw = weaponNow();
   $('shopList').insertAdjacentHTML('beforeend', `<h3><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg> 槍枝</h3><p style="font-size:12px;opacity:.8"><b style="color:#d9952b">點整列可預覽 3D 模型</b>（進去後拖曳旋轉）；買了才能在死鬥裡裝備；${WEAPON_DEFS.oysterGun.name}開局就送。${import.meta.env.DEV ? '（開發模式：全部已解鎖）' : ''}</p><table class="kt"><tr><th>槍</th><th>傷害</th><th>彈匣</th><th>射速</th><th>彈速</th><th></th></tr>` + shopWeapons().map(w => {
     const own = ownsWeapon(w.id);
@@ -235,4 +275,141 @@ export function renderShop() {
   D.renderClothShop(); D.renderMedShop(); D.renderItemShop(); D.shopTabs(); D.newDecor();
 }
 
+
+const FLAG_IC = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 21V4"/><path d="M6 4h11l-2.2 3.6L17 11H6"/></svg>';
+
+function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
+  const save = D.getSave();
+  if (!own) {
+    const can = save.money >= px(FLAG_ITEM.id, FLAG_ITEM.price);
+    return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">買了可以在廣場插一支自己的旗，寫上最多 ${FLAG_TEXT_MAX} 個字。走到想放的地方按「插旗」，再插一次會搬到新位置。每個人同時只能有一支旗。</p><button data-fbuy ${can ? '' : 'disabled'}>${pxHtml(FLAG_ITEM.id, FLAG_ITEM.price)}</button>${pxCd(FLAG_ITEM.id)}</div>`;
+  }
+  const unlockedColor = mine?.color ?? 0;
+  const unlockedSize = mine?.size ?? 0;
+  const unlockedFx = mine?.fx ?? 0;
+  const selectedColor = mine?.colorSel ?? unlockedColor;
+  const selectedSize = mine?.sizeSel ?? unlockedSize;
+  const selectedFx = mine?.fxSel ?? unlockedFx;
+  const text = D.esc(mine?.text || '');
+  const trackRow = (label: string, track: FlagTrack, unlocked: number, selected: number, opts: { lv: number; n: string }[]) => {
+    const chips = opts.filter(o => o.lv <= unlocked).map(o => {
+      const on = o.lv === selected;
+      return `<button type="button" class="flagChip${on ? ' on' : ''}" data-fsel="${track}" data-lv="${o.lv}"${on ? ' aria-current="true"' : ''}>${D.esc(o.n)}</button>`;
+    }).join('');
+    const nxt = nextFlagItem(track, unlocked);
+    const buy = nxt
+      ? `<button data-fup="${track}" ${save.money >= px(nxt.id, nxt.price) ? '' : 'disabled'}>解鎖 ${D.esc(nxt.n.replace(/^旗幟[^：]*：/, ''))} ${pxHtml(nxt.id, nxt.price)}</button>${pxCd(nxt.id)}`
+      : '<span class="flagMax">已全部解鎖</span>';
+    return `<div class="flagTrack"><div class="flagTrackHd">${label}</div><div class="flagChips">${chips}</div>${buy}</div>`;
+  };
+  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選。</p><label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
+}
+
+function bindFlagShop(mine: PlazaFlagState | null) {
+  const box = document.getElementById('flagShop');
+  if (!box) return;
+  const buy = box.querySelector<HTMLButtonElement>('button[data-fbuy]');
+  if (buy) buy.onclick = async () => {
+    const pr = await payFor(FLAG_ITEM.id, FLAG_ITEM.price, FLAG_ITEM.n);
+    if (pr == null) return;
+    const save = D.getSave();
+    save.money -= pr;
+    save.shop.owned.push(FLAG_ITEM.id);
+    D.track('buy', { item: FLAG_ITEM.id, price: pr });
+    if (D.getAc()) D.SFX.jingle();
+    D.persist();
+    renderShop();
+    D.onFlagChange?.();
+  };
+  const saveBtn = box.querySelector<HTMLButtonElement>('button[data-fsave]');
+  if (saveBtn) saveBtn.onclick = async () => {
+    if (saveBtn.disabled) return;
+    if (!D.getSave().shop.owned.includes(FLAG_ITEM.id)) { D.toast(flagTextErr('no_flag'), '#ffb08a'); return; }
+    const inp = box.querySelector<HTMLInputElement>('#flagTextIn');
+    const raw = inp?.value ?? '';
+    const pid = D.getPlayerId();
+    saveBtn.disabled = true;
+    try {
+      let r = D.setFlagText ? await D.setFlagText(raw) : null;
+      if (!r || r.err === 'no_conn') r = await postFlagText(pid, raw);
+      if (!r.ok) { D.toast(flagTextErr(r.err), '#ffb08a'); return; }
+      const got = r.mine?.text ?? '';
+      if (inp) inp.value = got;
+      const note = flagTextSaveNote(raw, got);
+      D.toast(note ? `旗幟文字已儲存（${note}）` : '旗幟文字已儲存', '#9be37a');
+      if (D.getAc()) D.SFX.jingle();
+      renderFlagShop(r.mine ?? mine);
+    } finally {
+      if (saveBtn.isConnected) saveBtn.disabled = false;
+    }
+  };
+  box.querySelectorAll<HTMLButtonElement>('button[data-fsel]').forEach(b => {
+    b.onclick = async () => {
+      const track = b.getAttribute('data-fsel') as FlagTrack | null;
+      const lv = Number(b.getAttribute('data-lv'));
+      if (!track || !Number.isFinite(lv)) return;
+      const cur = track === 'color' ? (mine?.colorSel ?? mine?.color ?? 0) : track === 'size' ? (mine?.sizeSel ?? mine?.size ?? 0) : (mine?.fxSel ?? mine?.fx ?? 0);
+      if (lv === cur) return;
+      let r = D.selectFlag ? await D.selectFlag(track, lv) : null;
+      if (!r || r.err === 'no_conn') r = await postFlagSelect(D.getPlayerId(), track, lv);
+      if (!r.ok) {
+        D.toast(r.err === 'nosup' ? '這台伺服器還沒開放挑選旗幟樣式' : flagErrText(r.err), '#ffb08a');
+        return;
+      }
+      const next: any = r.mine ? { ...r.mine } : { ...(mine ?? {}) };
+      if (track === 'color') next.colorSel = lv; else if (track === 'size') next.sizeSel = lv; else next.fxSel = lv;
+      renderFlagShop(next);
+      D.toast('已換成「' + (b.textContent || '').trim() + '」', '#9fd0a8');
+    };
+  });
+  box.querySelectorAll<HTMLButtonElement>('button[data-fup]').forEach(b => {
+    b.onclick = async () => {
+      const track = b.getAttribute('data-fup') as FlagTrack | null;
+      if (!track) return;
+      const lv = track === 'color' ? (mine?.color ?? 0) : track === 'size' ? (mine?.size ?? 0) : (mine?.fx ?? 0);
+      const item = nextFlagItem(track, lv);
+      if (!item) { D.toast(FLAG_ERR_ZH.max, '#ffb08a'); return; }
+      const pr = await payFor(item.id, item.price, item.n);
+      if (pr == null) return;
+      const save = D.getSave();
+      save.money -= pr;
+      D.persist();
+      let r = D.upgradeFlag ? await D.upgradeFlag(track) : null;
+      if (!r || r.err === 'no_conn') r = await postFlagUpgrade(D.getPlayerId(), track);
+      if (!r.ok) {
+        save.money += pr;
+        D.persist();
+        D.toast(flagErrText(r.err), '#ffb08a');
+        renderShop();
+        return;
+      }
+      D.track('buy', { item: item.id, price: pr });
+      if (D.getAc()) D.SFX.jingle();
+      D.toast(`${item.n} 升級好了`, '#9be37a');
+      renderShop();
+    };
+  });
+}
+
+function renderFlagShop(prefetched?: PlazaFlagState | null) {
+  const own = D.getSave().shop.owned.includes(FLAG_ITEM.id);
+  const existing = document.getElementById('flagShop');
+  const html = flagShopHtml(prefetched ?? null, own);
+  if (existing) existing.outerHTML = html;
+  else $('shopList').insertAdjacentHTML('beforeend', html);
+  bindFlagShop(prefetched ?? null);
+  if (own && prefetched === undefined) {
+    const pid = D.getPlayerId();
+    void fetchFlagSnapshot(pid).then(r => {
+      if (!document.getElementById('flagShop')) return;
+      if (!r.ok) return;
+      const box = document.getElementById('flagShop');
+      if (!box) return;
+      box.outerHTML = flagShopHtml(r.mine, true);
+      bindFlagShop(r.mine);
+    });
+  }
+}
+
 export const getShopNewIds = () => shopNewIds;
+export { FLAG_PRICE_ITEMS, FLAG_ITEM } from '../plaza/flags';

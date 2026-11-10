@@ -27,6 +27,9 @@ import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
 import { plazaDisplayName } from './types';
+import { GOLD_SMOKE_TINT, parseCosmetics } from './cosmetics';
+import { createPlazaFlagView } from './flagView';
+import type { PlazaFlagState } from './flags';
 
 type Remote = {
   /** Map key＝pid（同一人只留一具模型，重連換 connId 不複製） */
@@ -72,6 +75,7 @@ type Remote = {
   awaitingPose: boolean;
   isNpc?: boolean;
   carriedBy?: string;
+  cosmetics?: string;
   /** 遠端「抽一口」：舉臂／吸氣／吐煙 */
   puff?: {
     held: boolean;
@@ -118,6 +122,7 @@ export type PlazaWorldView = {
   hitPile: (raycaster: THREE.Raycaster) => number | null;
   /** 共烤網上蚵仔 */
   grill: PlazaGrillView;
+  syncFlags: (list: PlazaFlagState[]) => void;
   /** 坐下遠端玩家的瞄準點（丟殼／偷肉） */
   aimTargets: (leisureNpc?: boolean) => PlazaAimTarget[];
   /** 走動碰撞用：遠端 `[x, z, radius, isLie]`；isLie=1 時跳躍夠高可越过 */
@@ -126,6 +131,7 @@ export type PlazaWorldView = {
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) => void;
   setSelfPose: (x: number, z: number, yaw: number, seated: boolean, smoke?: boolean, connId?: string) => void;
+  setSelfCushion: (on: boolean, pileId: number, slot: number) => void;
   playThrowFx: (connId: string) => void;
   /** 遠端抽一口：start 舉臂吸氣；end 放下並依 holdMs 吐煙 */
   applyRemotePuff: (opts: { connId?: string; pid?: string; start: boolean; holdMs: number }) => void;
@@ -156,6 +162,55 @@ export function createPlazaWorldView(
   chairsRoot.name = 'plazaChairs';
   root.add(chairsRoot);
   let nearKey: string | null = null;
+  const cushions = new Map<string, THREE.Group>();
+  function makeSeatCushion() {
+    const g = new THREE.Group();
+    g.name = 'seatCushion';
+    const fabric = new THREE.MeshStandardMaterial({ color: 0x8a1820, roughness: 0.82, metalness: 0.08 });
+    const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.38, metalness: 0.55, emissive: 0x3a2808, emissiveIntensity: 0.18 });
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.034, 0.38), fabric);
+    g.add(pad);
+    const tw = 0.016, th = 0.01;
+    const rim: [number, number, number, number, number, number][] = [
+      [0.40, th, tw, 0, 0.018, 0.182],
+      [0.40, th, tw, 0, 0.018, -0.182],
+      [tw, th, 0.348, 0.192, 0.018, 0],
+      [tw, th, 0.348, -0.192, 0.018, 0],
+    ];
+    for (const [w, h, d, x, y, z] of rim) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), gold);
+      m.position.set(x, y, z);
+      g.add(m);
+    }
+    const dia = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.008, 0.09), gold);
+    dia.rotation.y = Math.PI / 4;
+    dia.position.y = 0.02;
+    g.add(dia);
+    return g;
+  }
+  function disposeCushion(g: THREE.Group) {
+    root.remove(g);
+    g.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.geometry.dispose();
+      const mat = m.material as THREE.Material | THREE.Material[];
+      if (Array.isArray(mat)) mat.forEach(x => x.dispose());
+      else mat?.dispose();
+    });
+  }
+  function syncCushion(key: string, on: boolean, pileId: number, slot: number) {
+    const existing = cushions.get(key);
+    if (!on || pileId < 0 || slot < 0) {
+      if (existing) { disposeCushion(existing); cushions.delete(key); }
+      return;
+    }
+    const pose = seatPose(pileId, slot);
+    const g = existing ?? makeSeatCushion();
+    if (!existing) { root.add(g); cushions.set(key, g); }
+    g.position.set(pose.pos.x, CHAIR_SEAT_Y + 0.04, pose.pos.z);
+    g.rotation.set(0, pose.yaw, 0);
+  }
 
   // 水泥廣場貼皮（分格對齊蚵堆）
   const floorMaps = makePlazaFloorMaps(LO ? 384 : 512);
@@ -228,7 +283,7 @@ export function createPlazaWorldView(
     if (padSet.has(m)) return true;
     let p: THREE.Object3D | null = m;
     while (p) {
-      if (p.name === 'charcoalFire' || p.name === 'plazaCeilingFan' || p.name === 'cigSmoke') return true;
+      if (p.name === 'charcoalFire' || p.name === 'plazaCeilingFan' || p.name === 'cigSmoke' || p.name === 'seatCushion') return true;
       p = p.parent;
     }
     return false;
@@ -468,6 +523,7 @@ export function createPlazaWorldView(
 
   // 南排共烤：伺服器同步的烤網上蚵仔
   const grill = createGrillView(root);
+  const flags = createPlazaFlagView(root);
 
   // 只留對角兩盞真正的吊燈（外觀四盞都還在）；招牌／攤位／炭火改自發光，避免每幀開關燈害著色器重編
   const plazaLights: THREE.PointLight[] = [];
@@ -1010,7 +1066,8 @@ function hashPid(pid: string) {
     if (holdMs < REMOTE_PUFF_MIN_HOLD_MS || !r.rig?.head) return;
     const strength = Math.min(1, holdMs / 5000);
     const sc = 0.35 + strength * 1.15;
-    const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 6100 + Math.floor(Math.random() * 4000), reach: strength });
+    const gold = !r.isNpc && parseCosmetics(r.cosmetics).goldSmoke;
+    const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 6100 + Math.floor(Math.random() * 4000), reach: strength, tint: gold ? GOLD_SMOKE_TINT : undefined });
     r.rig.head.updateMatrixWorld(true);
     const mouth = r.rig.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
     const yaw = r.rig.outer.rotation.y;
@@ -1273,6 +1330,7 @@ function hashPid(pid: string) {
         awaitingPose,
         isNpc,
         carriedBy: p.carriedBy || '',
+        cosmetics: p.cosmetics || '',
       };
       remotes.set(pid, r);
       r.props.visible = r.seated && !isLeisurePile(r.pileId);
@@ -1309,6 +1367,10 @@ function hashPid(pid: string) {
       const label = r.isNpc ? r.nick : plazaDisplayName(r.nick, r.numTag);
       r.tag.setText(r.seated && !isLeisurePile(r.pileId) ? `${label} · ${r.count}` : label);
     }
+    if (!r.isNpc && p.cosmetics !== undefined) r.cosmetics = p.cosmetics || '';
+    const cos = parseCosmetics(r.cosmetics);
+    r.tag.setNameFrame(!r.isNpc && cos.nameFrame);
+    syncCushion(r.pid || r.key, !r.isNpc && r.seated && cos.cushion, r.pileId, r.slot);
     if (r.carriedBy) {
       r.seated = false;
       r.pileId = -1;
@@ -1375,6 +1437,7 @@ function hashPid(pid: string) {
 
   function destroyRemote(r: Remote) {
     if (r.cigSmoke) { root.remove(r.cigSmoke.group); r.cigSmoke.dispose(); r.cigSmoke = undefined; }
+    syncCushion(r.pid || r.key, false, -1, -1);
     clearPlazaSmokeCig(r.rig);
     root.remove(r.rig.outer); r.tag.dispose(); r.bubble.dispose();
     // 只刪「指向同一具模型」的 key，避免誤刪同 pid 的另一筆
@@ -1448,6 +1511,10 @@ function hashPid(pid: string) {
     }
     return null;
   }
+  function setSelfCushion(on: boolean, pileId: number, slot: number) {
+    syncCushion('__self__', on, pileId, slot);
+  }
+
   function setSelfPose(x: number, z: number, yaw: number, seated: boolean, smoke = false, connId = '') {
     selfX = x; selfZ = z; selfYaw = yaw; selfSeated = seated; selfSmoke = !!(seated && smoke);
     if (connId) selfConnId = connId;
@@ -1665,6 +1732,7 @@ function hashPid(pid: string) {
       selfBubble.sprite.visible = true;
     } else if (selfBubble.sprite.visible) selfBubble.sprite.visible = false;
     grill.tick(t);
+    flags.tick(dt, camera);
     const tSec = t * 0.001;
     // 省電：炭火約 15Hz，且只動鏡頭附近
     fireThrottle += dt;
@@ -1694,7 +1762,10 @@ function hashPid(pid: string) {
       if (want) {
         ensurePlazaSmokeCig(r.rig, LO);
         const cig = getPlazaSmokeCig(r.rig);
-        if (cig) cig.tick(tSec, dt);
+        if (cig) {
+          cig.setSmokeTint(!r.isNpc && parseCosmetics(r.cosmetics).goldSmoke ? GOLD_SMOKE_TINT : undefined);
+          cig.tick(tSec, dt);
+        }
       } else {
         clearPlazaSmokeCig(r.rig);
       }
@@ -1768,6 +1839,7 @@ function hashPid(pid: string) {
     try { smokeNpc.tag.dispose(); } catch { /* */ }
     for (const r of [...remotes.values()]) destroyRemote(r);
     remotes.clear();
+    flags.dispose();
     grill.dispose();
     for (const f of fireFx) f.dispose();
     fireFx.length = 0;
@@ -1776,6 +1848,8 @@ function hashPid(pid: string) {
     seafood.dispose();
     hq.dispose();
     if (selfCig) { root.remove(selfCig.group); selfCig.dispose(); selfCig = null; }
+    for (const g of cushions.values()) disposeCushion(g);
+    cushions.clear();
     for (const pl of plazaLights) { root.remove(pl); pl.dispose(); }
     plazaLights.length = 0;
     selfBubble.dispose();
@@ -1793,7 +1867,7 @@ function hashPid(pid: string) {
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, playThrowFx, applyRemotePuff, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfCushion, playThrowFx, applyRemotePuff, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {

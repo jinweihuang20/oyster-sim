@@ -6,6 +6,8 @@ export type CharcoalFireFx = {
   light: THREE.PointLight | null;
   tick: (tSec: number, dt: number) => void;
   dispose: () => void;
+  /** 菸頭薄煙染色（不給則恢復灰白） */
+  setTint?: (hex?: number) => void;
 };
 
 export type CharcoalFireOpts = {
@@ -347,10 +349,12 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
 /**
  * 薄煙（吸菸區／嘴邊）：無炭火／無光，只循環小煙團。
  */
-export function makeCigSmoke(opts: { count?: number; seed?: number; scale?: number } = {}): CharcoalFireFx {
+export function makeCigSmoke(opts: { count?: number; seed?: number; scale?: number; tint?: number } = {}): CharcoalFireFx {
   const rn = rng(opts.seed ?? 8801);
   const n = Math.max(2, opts.count ?? 5);
   const sc = opts.scale ?? 0.55;
+  const defaultTint = 0x9a9894;
+  let tintHex = opts.tint ?? defaultTint;
   const group = new THREE.Group();
   group.userData.noLod = true; // 自己控制顯示，遠景細節裁切不要碰
   group.name = 'cigSmoke';
@@ -359,7 +363,7 @@ export function makeCigSmoke(opts: { count?: number; seed?: number; scale?: numb
   for (let i = 0; i < n; i++) {
     const mat = smokeMat.clone();
     mat.opacity = 0.16;
-    mat.color.setHex(0x9a9894);
+    mat.color.setHex(tintHex);
     const mesh = new THREE.Mesh(smokeGeo, mat);
     mesh.userData.sharedGeo = true;
     mesh.renderOrder = 2;
@@ -406,6 +410,10 @@ export function makeCigSmoke(opts: { count?: number; seed?: number; scale?: numb
         m.opacity = 0.18 * (1 - u);
       }
     },
+    setTint: (hex?: number) => {
+      tintHex = hex ?? defaultTint;
+      for (const s of smokes) (s.mesh.material as THREE.MeshBasicMaterial).color.setHex(tintHex);
+    },
     dispose: () => {
       for (const s of smokes) {
         const m = s.mesh.material as THREE.Material;
@@ -423,6 +431,8 @@ export type FpCigarette = {
   smoke: CharcoalFireFx;
   /** 額外菸頭亮度（吸一口時拉高） */
   setTipBoost: (v: number) => void;
+  /** 菸頭薄煙染色 */
+  setSmokeTint: (hex?: number) => void;
   tick: (tSec: number, dt: number) => void;
   dispose: () => void;
 };
@@ -468,6 +478,7 @@ export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette
     tip,
     smoke,
     setTipBoost: (v) => { tipBoost = Math.max(0, v); },
+    setSmokeTint: (hex?: number) => { smoke.setTint?.(hex); },
     tick: (tSec, dt) => {
       // 菸頭微微閃爍；吸一口時更亮
       const m = tip.material as THREE.MeshStandardMaterial;
@@ -533,6 +544,7 @@ export function makeAvatarCigarette(opts: { lowDetail?: boolean } = {}): FpCigar
     tip,
     smoke,
     setTipBoost: (v) => { tipBoost = Math.max(0, v); },
+    setSmokeTint: (hex?: number) => { smoke.setTint?.(hex); },
     tick: (tSec, dt) => {
       const m = tip.material as THREE.MeshStandardMaterial;
       m.emissiveIntensity = 0.7 + Math.sin(tSec * 7.5) * 0.18 + tipBoost * (0.9 + Math.sin(tSec * 3.2) * 0.25);
@@ -614,7 +626,7 @@ function getPuffTex(i: number): THREE.Texture {
 
 /** 吐煙：從嘴邊連續噴出一道細煙，前段快、受阻力減速後往上飄、捲動擴散淡出（單次，用完 dispose）。
  *  group 的 -Z 為噴出方向；世界空間使用時請把 group.rotation.y 設成角色朝向。 */
-export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: number; reach?: number } = {}): CharcoalFireFx {
+export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: number; reach?: number; tint?: number } = {}): CharcoalFireFx {
   // reach 0–1：按越久吐越遠（不給則維持原本距離）
   // 按滿約噴到 2 公尺（原本約 0.9）；曲線讓輕點仍然短
   const reachR = opts.reach == null ? 0 : Math.min(1, Math.max(0, opts.reach));
@@ -630,7 +642,7 @@ export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: nu
   const emitDur = opts.reach == null ? 0.3 + 0.35 * Math.min(1, sc) : 0.25 + 0.6 * Math.min(1, Math.max(0, opts.reach));
   for (let i = 0; i < n; i++) {
     const k = i / Math.max(1, n - 1);
-    const mat = new THREE.SpriteMaterial({ map: getPuffTex(i), color: 0xc2c7cd, transparent: true, opacity: 0, depthWrite: false });
+    const mat = new THREE.SpriteMaterial({ map: getPuffTex(i), color: opts.tint ?? 0xc2c7cd, transparent: true, opacity: 0, depthWrite: false });
     const sp = new THREE.Sprite(mat);
     sp.renderOrder = 3;
     sp.visible = false;
@@ -689,9 +701,10 @@ export function makeExhalePuff(opts: { scale?: number; count?: number; seed?: nu
         const fadeIn = Math.min(1, s.age / 0.06);
         const fadeOut = Math.pow(1 - u, 1.4);
         s.mat.opacity = s.peak * fadeIn * fadeOut;
-        // 剛吐出偏藍灰，散開後轉淡灰白
+        // 剛吐出偏藍灰，散開後轉淡灰白；有 tint 時改成溫潤金霧（仍保持可讀、不刺眼）
         const c = s.tone * (0.78 + 0.14 * u);
-        s.mat.color.setRGB(c * 0.97, c, c * 1.04);
+        if (opts.tint != null) s.mat.color.setRGB(c * 1.04, c * 0.90, c * 0.54);
+        else s.mat.color.setRGB(c * 0.97, c, c * 1.04);
       }
     },
     dispose: () => {

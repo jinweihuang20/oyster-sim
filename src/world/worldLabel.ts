@@ -6,6 +6,7 @@ export type WorldLabel = {
   sprite: THREE.Sprite;
   setText: (text: string, force?: boolean) => void;
   setOpacity: (a: number) => void;
+  setNameFrame: (on: boolean) => void;
   dispose: () => void;
 };
 
@@ -72,6 +73,7 @@ export function makeWorldLabel(
   sprite.renderOrder = kind === 'bubble' ? 3 : 2;
   let text = '';
   let opacity = 1;
+  let nameFrame = false;
 
   const redraw = () => {
     const fontPx = kind === 'name' ? 26 : 24;
@@ -100,14 +102,24 @@ export function makeWorldLabel(
         ctx.fill();
         ctx.fillStyle = '#d4d9de';
       } else {
-        // 真人：實底白名牌＋藍細邊＋人像線條圖示
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        // 真人：實底白名牌＋藍細邊＋人像線條圖示；金箔框改金邊＋內線，字色維持深色好讀
+        ctx.fillStyle = nameFrame ? 'rgba(255,252,242,0.82)' : 'rgba(255,255,255,0.7)';
         ctx.fill();
-        ctx.strokeStyle = '#2a5a86';
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
+        if (nameFrame) {
+          ctx.strokeStyle = '#c9a227';
+          ctx.lineWidth = 3.4;
+          ctx.stroke();
+          roundRect(ctx, ox + 3.6, oy + 3.6, w - 7.2, h - 7.2, 7);
+          ctx.strokeStyle = '#ecd27a';
+          ctx.lineWidth = 1.15;
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = '#2a5a86';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
         const ix = ox + padX + 10, iy = oy + h / 2;
-        ctx.strokeStyle = '#2a5a86';
+        ctx.strokeStyle = nameFrame ? '#c9a227' : '#2a5a86';
         ctx.lineWidth = 2.2;
         ctx.beginPath(); ctx.arc(ix, iy - 5, 4.5, 0, Math.PI * 2); ctx.stroke();
         ctx.beginPath(); ctx.arc(ix, iy + 10, 8.5, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
@@ -158,6 +170,12 @@ export function makeWorldLabel(
     text = next;
     redraw();
   };
+  const setNameFrame = (on: boolean) => {
+    const next = !!on && kind === 'name' && nameTone === 'player';
+    if (next === nameFrame) return;
+    nameFrame = next;
+    redraw();
+  };
   const setOpacity = (a: number) => {
     const next = Math.max(0, Math.min(1, a));
     if (Math.abs(next - opacity) < 0.01) {
@@ -175,7 +193,7 @@ export function makeWorldLabel(
   };
 
   setText(initial || ' ', true);
-  return { sprite, setText, setOpacity, dispose };
+  return { sprite, setText, setOpacity, setNameFrame, dispose };
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

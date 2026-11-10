@@ -5,7 +5,8 @@ export {
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillHit, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   tickPlaza, plazaReportEarn, plazaEndCleanup, plazaHideChrome,
-  plazaFocusChat, plazaCloseChat, plazaChatIsOpen, plazaPushOutfit,
+  plazaFocusChat, plazaCloseChat, plazaChatIsOpen, plazaPushOutfit, plazaPushCosmetics,
+  plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryUpgradeFlag, plazaTrySelectFlag,
   plazaToggleMap, plazaCloseMap, plazaMapIsOpen,
   type PlazaDeps,
 } from './session';
