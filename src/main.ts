@@ -3665,6 +3665,7 @@ btn('resMenu', () => {
   });
 });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
+$('eqBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); eqPick = null; openEquip(); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
 $('calBtn').onclick = () => { calTipOff(); openDaily(); }; renderDaily(); calTipCheck(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
