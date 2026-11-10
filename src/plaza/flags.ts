@@ -42,9 +42,9 @@ export const FLAG_COLORS: FlagColorSpec[] = [
 
 /** 尺寸三級；radius 是和其他旗的最小間距半徑 */
 export const FLAG_SIZES: FlagSizeSpec[] = [
-  { lv: 0, n: '小旗', price: 0, scale: 1, radius: 1.6 },
-  { lv: 1, n: '中旗', price: 80000, scale: 1.35, radius: 2.2 },
-  { lv: 2, n: '大旗', price: 180000, scale: 1.75, radius: 2.9 },
+  { lv: 0, n: '小旗', price: 0, scale: 1, radius: 0.8 },
+  { lv: 1, n: '中旗', price: 80000, scale: 1.35, radius: 1.05 },
+  { lv: 2, n: '大旗', price: 180000, scale: 1.75, radius: 1.35 },
 ];
 
 export const FLAG_FX: FlagFxSpec[] = [
