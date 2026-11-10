@@ -6,6 +6,7 @@ import {
   type WeaponId,
 } from '../deathmatch';
 import type * as THREE from 'three';
+import { mountFlagPreview, type FlagPreviewState } from './flagPreview';
 import {
   FLAG_COLORS, FLAG_ERR_ZH, FLAG_FX, FLAG_ITEM, FLAG_SIZES, FLAG_TEXT_MAX,
   fetchFlagSnapshot, flagErrText, flagTextErr, flagTextSaveNote, nextFlagItem,
@@ -288,13 +289,29 @@ export function renderShop() {
 }
 
 
+const LOCK_IC = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+let flagPv: FlagPreviewState = { color: 0, size: 0, fx: 0, text: '', nick: '' };
+
+function flagPvRow(label: string, track: FlagTrack, opts: { lv: number; n: string }[], unlocked: number, selected: number) {
+  const chips = opts.map(o => {
+    const locked = o.lv > unlocked;
+    const on = o.lv === selected;
+    return `<button type="button" class="flagChip${on ? ' on' : ''}${locked ? ' lock' : ''}" data-fpv="${track}" data-lv="${o.lv}" data-locked="${locked ? 1 : 0}">${locked ? LOCK_IC : ''}${D.esc(o.n)}</button>`;
+  }).join('');
+  return `<div class="flagTrack"><div class="flagTrackHd">${label}</div><div class="flagChips">${chips}</div></div>`;
+}
+
+function flagPvHtml(note: string) {
+  return `<div class="flagPv"><canvas id="flagPvCv" width="260" height="200" aria-label="旗幟預覽"></canvas><div id="flagPvNote" class="flagPvNote">${note}</div></div>`;
+}
+
 const FLAG_IC = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 21V4"/><path d="M6 4h11l-2.2 3.6L17 11H6"/></svg>';
 
 function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
   const save = D.getSave();
   if (!own) {
     const can = save.money >= px(FLAG_ITEM.id, FLAG_ITEM.price);
-    return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">買了可以在廣場插一支自己的旗，寫上最多 ${FLAG_TEXT_MAX} 個字。走到想放的地方按「插旗」，再插一次會搬到新位置。每個人同時只能有一支旗。</p><button data-fbuy ${can ? '' : 'disabled'}>${pxHtml(FLAG_ITEM.id, FLAG_ITEM.price)}</button>${pxCd(FLAG_ITEM.id)}</div>`;
+    return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">買了可以在廣場插一支自己的旗，寫上最多 ${FLAG_TEXT_MAX} 個字。走到想放的地方按「插旗」，再插一次會搬到新位置。每個人同時只能有一支旗。</p>${flagPvHtml('點下面的樣式試看插在廣場的樣子')}${flagPvRow('顏色', 'color', FLAG_COLORS, 0, 0)}${flagPvRow('尺寸', 'size', FLAG_SIZES, 0, 0)}${flagPvRow('特效', 'fx', FLAG_FX, 0, 0)}<button data-fbuy ${can ? '' : 'disabled'}>${pxHtml(FLAG_ITEM.id, FLAG_ITEM.price)}</button>${pxCd(FLAG_ITEM.id)}</div>`;
   }
   const unlockedColor = mine?.color ?? 0;
   const unlockedSize = mine?.size ?? 0;
@@ -304,7 +321,8 @@ function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
   const selectedFx = mine?.fxSel ?? unlockedFx;
   const text = D.esc(mine?.text || '');
   const trackRow = (label: string, track: FlagTrack, unlocked: number, selected: number, opts: { lv: number; n: string }[]) => {
-    const chips = opts.filter(o => o.lv <= unlocked).map(o => {
+    const chips = opts.map(o => {
+      if (o.lv > unlocked) return `<button type="button" class="flagChip lock" data-fpv="${track}" data-lv="${o.lv}" data-locked="1" title="還沒解鎖，點一下試看">${LOCK_IC}${D.esc(o.n)}</button>`;
       const on = o.lv === selected;
       return `<button type="button" class="flagChip${on ? ' on' : ''}" data-fsel="${track}" data-lv="${o.lv}"${on ? ' aria-current="true"' : ''}>${D.esc(o.n)}</button>`;
     }).join('');
@@ -314,10 +332,11 @@ function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
       : '<span class="flagMax">已全部解鎖</span>';
     return `<div class="flagTrack"><div class="flagTrackHd">${label}</div><div class="flagChips">${chips}</div>${buy}</div>`;
   };
-  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選。</p><label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button><div id="flagTextMsg" class="flagMsg" role="status" aria-live="polite"></div><div class="flagTrack"><div class="flagTrackHd">在廣場顯示</div><div class="flagChips"><button type="button" class="flagChip${mine?.planted ? ' on' : ''}" data-fshow="1"${mine?.planted ? ' aria-current="true"' : ''}>顯示</button><button type="button" class="flagChip${mine && !mine.planted ? ' on' : ''}" data-fshow="0"${mine && !mine.planted ? ' aria-current="true"' : ''}>收起</button></div></div>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
+  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">已購買。走到廣場想放的地方按「插旗」；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選；有鎖頭的可以先點來試看。</p>${flagPvHtml('目前的樣子')}<label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button><div id="flagTextMsg" class="flagMsg" role="status" aria-live="polite"></div><div class="flagTrack"><div class="flagTrackHd">在廣場顯示</div><div class="flagChips"><button type="button" class="flagChip${mine?.planted ? ' on' : ''}" data-fshow="1"${mine?.planted ? ' aria-current="true"' : ''}>顯示</button><button type="button" class="flagChip${mine && !mine.planted ? ' on' : ''}" data-fshow="0"${mine && !mine.planted ? ' aria-current="true"' : ''}>收起</button></div></div>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
 }
 
 function bindFlagShop(mine: PlazaFlagState | null) {
+  bindFlagPreview(mine);
   const box = document.getElementById('flagShop');
   if (!box) return;
   const buy = box.querySelector<HTMLButtonElement>('button[data-fbuy]');
@@ -430,6 +449,46 @@ function bindFlagShop(mine: PlazaFlagState | null) {
       renderShop();
     };
   });
+}
+
+function bindFlagPreview(mine: PlazaFlagState | null) {
+  const box = document.getElementById('flagShop');
+  const cv = box?.querySelector<HTMLCanvasElement>('#flagPvCv');
+  if (!box || !cv) return;
+  const sel = {
+    color: mine?.colorSel ?? mine?.color ?? 0,
+    size: mine?.sizeSel ?? mine?.size ?? 0,
+    fx: mine?.fxSel ?? mine?.fx ?? 0,
+  };
+  flagPv = { ...sel, text: mine?.text || '', nick: D.getNick() };
+  mountFlagPreview(cv, () => flagPv);
+  const note = box.querySelector<HTMLElement>('#flagPvNote');
+  const baseNote = note?.textContent || '';
+  const refreshNote = () => {
+    if (!note) return;
+    const tried: string[] = [];
+    box.querySelectorAll<HTMLButtonElement>('button[data-fpv].pv').forEach(b => tried.push((b.textContent || '').trim()));
+    note.textContent = tried.length ? '試看中：' + tried.join('、') + '（尚未解鎖）' : baseNote;
+    note.classList.toggle('try', tried.length > 0);
+  };
+  box.querySelectorAll<HTMLButtonElement>('button[data-fpv]').forEach(b => b.onclick = () => {
+    const track = b.dataset.fpv as FlagTrack;
+    const lv = Number(b.dataset.lv);
+    if (!Number.isFinite(lv)) return;
+    const row = b.parentElement;
+    const was = b.classList.contains('pv') || (b.dataset.locked !== '1' && b.classList.contains('on'));
+    row?.querySelectorAll('button').forEach(x => { x.classList.remove('pv'); if (x.hasAttribute('data-fpv')) x.classList.remove('on'); });
+    if (b.dataset.locked === '1' && was) {
+      flagPv = { ...flagPv, [track]: sel[track] }; // 再點一次取消試看
+      row?.querySelector(`button[data-lv="${sel[track]}"]`)?.classList.add('on');
+    } else {
+      flagPv = { ...flagPv, [track]: lv };
+      b.classList.add(b.dataset.locked === '1' ? 'pv' : 'on');
+    }
+    refreshNote();
+  });
+  const textIn = box.querySelector<HTMLInputElement>('#flagTextIn');
+  textIn?.addEventListener('input', () => { flagPv = { ...flagPv, text: textIn.value }; });
 }
 
 function renderFlagShop(prefetched?: PlazaFlagState | null) {

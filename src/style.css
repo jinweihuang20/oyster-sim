@@ -1642,3 +1642,13 @@ body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!importan
   body.poseOpen #flagBtn.on{bottom:calc(var(--sa-bottom,0px) + 110px)!important}
   body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 162px)!important}
 }
+/* 商店旗幟預覽 */
+.flagShop .flagPv{display:flex;flex-direction:column;align-items:center;gap:4px;margin:4px 0 10px;padding:8px 0 6px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:radial-gradient(ellipse at 50% 85%,rgba(42,90,134,.22),rgba(14,18,24,.5) 70%)}
+.flagShop #flagPvCv{width:260px;height:200px;max-width:100%}
+.flagShop .flagPvNote{font-size:12px;opacity:.75;min-height:1.3em;text-align:center;padding:0 8px}
+.flagShop .flagPvNote.try{opacity:1;color:#e8d38a}
+.flagShop .flagChip.lock{opacity:.72;border-style:dashed;display:inline-flex;align-items:center;gap:4px}
+.flagShop .flagChip.lock:hover{opacity:1}
+.flagShop .flagChip.pv{opacity:1;border-style:solid;border-color:#d4af37;background:rgba(212,175,55,.18)}
+#shop .flagShop .flagChip.pv{border:1px solid #d4af37!important;background:rgba(212,175,55,.28)!important;box-shadow:0 0 0 1px rgba(212,175,55,.5)!important;opacity:1}
+#shop .flagShop .flagChip.on:not(.lock){border-color:#2a5a86!important;box-shadow:0 0 0 1px rgba(42,90,134,.55)!important}

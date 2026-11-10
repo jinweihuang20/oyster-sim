@@ -8,8 +8,8 @@ import {
 const WAVE_NEAR = 28;
 const SHIMMER_NEAR = 22;
 const FX3_NEAR = 18;
-const TEX_W = 256;
-const TEX_H = 160;
+export const TEX_W = 256;
+export const TEX_H = 160;
 
 type FlagObj = {
   k: string;
@@ -39,7 +39,7 @@ function shownColor(f: PlazaFlagState) { return f.colorSel; }
 function shownSize(f: PlazaFlagState) { return f.sizeSel; }
 function shownFx(f: PlazaFlagState) { return f.fxSel; }
 
-function paintFlag(canvas: HTMLCanvasElement, text: string, colorLv: number, nick = '') {
+export function paintFlag(canvas: HTMLCanvasElement, text: string, colorLv: number, nick = '') {
   const spec = flagColorOf(colorLv);
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
