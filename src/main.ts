@@ -1,3 +1,4 @@
+import { qtyHtml, bindQty, getQty, resetQty } from './shop/qty';
 import {
   initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl,
   importMove, escapeInApp, type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY,
@@ -2748,10 +2749,17 @@ function moonTick(dt: number) {
 }
 function renderItemShop() {
   const it = ITEMS[0]; const own = save.meds[it.id] ?? 0;
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 道具</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，沒用完的會留著。</p><div class="itemCard"><div class="itemIc">${MOON_SVG}</div><div class="itemTx"><b>${it.n}</b><small style="color:#9be37a">${it.good}</small><small style="color:#ff8a7a">${it.bad}</small><small>持有 ${own}</small>${pxCd('item-' + it.id)}</div><button data-ibuy="${it.id}" ${save.money < px('item-' + it.id, it.price) ? 'disabled' : ''}>${pxHtml('item-' + it.id, it.price)}</button></div>`);
-  $('shopList').querySelectorAll('button[data-ibuy]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
-    const i = ITEMS.find(x => x.id === b.getAttribute('data-ibuy'))!; const pr = await payFor('item-' + i.id, i.price, i.n); if (pr == null) return;
-    save.money -= pr; save.meds[i.id] = (save.meds[i.id] ?? 0) + 1; persist(); track('buy', { item: 'item-' + i.id, price: pr }); if (ac) SFX.jingle(); renderShop(); drawMeds();
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 道具</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，沒用完的會留著。</p><div class="itemCard"><div class="itemIc">${MOON_SVG}</div><div class="itemTx"><b>${it.n}</b><small style="color:#9be37a">${it.good}</small><small style="color:#ff8a7a">${it.bad}</small><small>持有 ${own}</small>${pxCd('item-' + it.id)}</div><div class="buyRow">${qtyHtml('item-' + it.id)}<button data-ibuy="${it.id}" ${save.money < px('item-' + it.id, it.price) ? 'disabled' : ''}>${pxHtml('item-' + it.id, it.price)}</button></div></div>`);
+  $('shopList').querySelectorAll('button[data-ibuy]').forEach(b => {
+    const i = ITEMS.find(x => x.id === b.getAttribute('data-ibuy'))!; const k = 'item-' + i.id;
+    bindQty(b.closest('.itemCard')!, k, () => px(k, i.price), () => save.money, b as HTMLButtonElement);
+    (b as HTMLButtonElement).onclick = async () => {
+      const pr = await payFor(k, i.price, i.n); if (pr == null) return;
+      const n = Math.min(getQty(k), Math.floor(save.money / pr)); if (n < 1) return;
+      save.money -= pr * n; save.meds[i.id] = (save.meds[i.id] ?? 0) + n; persist(); track('buy', { item: k, price: pr * n, qty: n });
+      if (ac) SFX.jingle(); if (n > 1) toast(`買了 ${n} 個${i.n}`, '#9be37a');
+      resetQty(k); renderShop(); drawMeds();
+    };
   });
 }
 (window as any).__moon = { get npcs() { return npcs.map(n => n.name); }, get used() { return moonUsed; }, get aim() { return moonAimOn; }, get fx() { return moonFx.length; }, throwCd: () => npcs.map(n => n.throwCd), windUpAll: () => ALL_NPCS.forEach(n => n.throwCd = 0) };

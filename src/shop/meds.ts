@@ -1,3 +1,4 @@
+import { qtyHtml, bindQty, getQty, resetQty } from './qty';
 export type MedKey = 'green' | 'speed' | 'slip' | 'dmg' | 'regen' | 'grudge';
 export type Med = { id: string; n: string; emo: string; price: number; dur: number; m?: Partial<Record<MedKey, number>>; luck?: number; heal?: number; good: string; bad: string };
 
@@ -114,10 +115,18 @@ export function initMedsUi() {
 
 export function renderMedShop() {
   const $ = D.$, save = D.getSave();
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-pill"></i> 藥品</h3><p class="medIntro">上工時按「藥品/道具」使用；同一種再用會延長時間，收工後效果消失，沒用完的會留著。</p><div class="medGrid">` + MEDS.map(m => `<div class="medCard"><div class="medTop"><b class="medName">${m.emo} ${m.n}</b>${D.pxCd('med-' + m.id)}<span class="medMeta">${m.dur ? `${m.dur} 秒` : '立即'}・持有 ${save.meds[m.id] ?? 0}</span></div><div class="medGood">${m.good}</div><div class="medBad">${m.bad}</div><button class="medBuy" data-mbuy="${m.id}" ${save.money < D.px('med-' + m.id, m.price) ? 'disabled' : ''}>${D.pxHtml('med-' + m.id, m.price)}</button></div>`).join('') + '</div>');
-  $('shopList').querySelectorAll('button[data-mbuy]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-pill"></i> 藥品</h3><p class="medIntro">上工時按「藥品/道具」使用；同一種再用會延長時間，收工後效果消失，沒用完的會留著。</p><div class="medGrid">` + MEDS.map(m => `<div class="medCard"><div class="medTop"><b class="medName">${m.emo} ${m.n}</b>${D.pxCd('med-' + m.id)}<span class="medMeta">${m.dur ? `${m.dur} 秒` : '立即'}・持有 ${save.meds[m.id] ?? 0}</span></div><div class="medGood">${m.good}</div><div class="medBad">${m.bad}</div><div class="buyRow">${qtyHtml('med-' + m.id)}<button class="medBuy" data-mbuy="${m.id}" ${save.money < D.px('med-' + m.id, m.price) ? 'disabled' : ''}>${D.pxHtml('med-' + m.id, m.price)}</button></div></div>`).join('') + '</div>');
+  $('shopList').querySelectorAll('button[data-mbuy]').forEach(b => {
     const m = MEDS.find(x => x.id === b.getAttribute('data-mbuy'))!;
-    const pr = await D.payFor('med-' + m.id, m.price, m.n); if (pr == null) return;
-    save.money -= pr; save.meds[m.id] = (save.meds[m.id] ?? 0) + 1; D.persist(); D.track('buy', { item: 'med-' + m.id, price: pr }); if (D.getAc()) D.SFX.jingle(); D.renderShop(); drawMeds();
+    const k = 'med-' + m.id;
+    bindQty(b.closest('.medCard')!, k, () => D.px(k, m.price), () => D.getSave().money, b as HTMLButtonElement);
+    (b as HTMLButtonElement).onclick = async () => {
+      const pr = await D.payFor(k, m.price, m.n); if (pr == null) return;
+      const n = Math.min(getQty(k), Math.floor(save.money / pr)); if (n < 1) return;
+      save.money -= pr * n; save.meds[m.id] = (save.meds[m.id] ?? 0) + n; D.persist();
+      D.track('buy', { item: k, price: pr * n, qty: n });
+      if (D.getAc()) D.SFX.jingle(); if (n > 1) D.toast(`買了 ${n} 個${m.n}`, '#9be37a');
+      resetQty(k); D.renderShop(); drawMeds();
+    };
   });
 }
