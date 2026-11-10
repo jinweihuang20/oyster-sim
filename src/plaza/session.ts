@@ -3,7 +3,7 @@ import { PlazaClient } from './hubClient';
 import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds, plazaClampWalk, plazaCafeObstacles,
   seatPose, seatKey, nearestFreeSeat, nearestFreePlaceSeat, pileObstacles, pileCenter, randomWalkSpawn, resolveWalkSpawn,
-  isSmokePile, isLeisurePile, isRestPile, plazaSmokeObstacles,
+  isSmokePile, isLeisurePile, isRestPile, plazaSmokeObstacles, isPlazaAber, SMOKE_PILE_ID, SMOKE_ABER_SLOT,
   type PlazaSeatRef, type PlazaSpawnMemory,
 } from './layout';
 import { plazaShedPosts } from './props';
@@ -195,10 +195,15 @@ function checkCarryLost() {
   carryWatchId = '';
   if (carryPlacing) return;
   const p = snap?.players.find((x) => x.connId === id);
-  if (p && (p.phase || '') === 'stand') deps?.toast('抱太久手痠了，阿婆先放在原地站著', '#ffb08a');
+  if (p && (p.phase || '') === 'stand') deps?.toast(`抱太久手痠了，${npcWho(p)}先放在原地站著`, '#ffb08a');
+}
+
+function npcWho(p?: { pid?: string; nick?: string } | null) {
+  return p && isPlazaAber(p) ? '阿伯' : '阿婆';
 }
 
 function seatLabel(pileId: number, slot: number) {
+  if (pileId === SMOKE_PILE_ID && slot === SMOKE_ABER_SLOT) return '吸菸區・阿伯的位子';
   if (pileId === 100) return `吸菸區・座 ${slot + 1}`;
   if (pileId === 101) return `多那芝吸菸區・座 ${slot + 1}`;
   if (pileId === 102) return `樸子腳・座 ${slot + 1}`;
@@ -221,7 +226,7 @@ export function plazaNearPrompt(): PlazaNearPrompt | null {
     return { kind: 'place', info: seatLabel(nearPlace.pileId, nearPlace.slot), btn: '放這裡', pileId: nearPlace.pileId, slot: nearPlace.slot };
   }
   if (carryNpcOk && nearCarry) {
-    return { kind: 'carry', info: `${nearCarry.nick}　站旁邊就能抱起來`, btn: '抱起阿婆' };
+    return { kind: 'carry', info: `${nearCarry.nick}　站旁邊就能抱起來`, btn: nearCarry.nick === '阿伯' ? '抱起阿伯' : '抱起阿婆' };
   }
   if (near) return { kind: 'sit', info: seatLabel(near.pileId, near.slot), btn: '坐這裡', pileId: near.pileId, slot: near.slot };
   return null;
@@ -409,6 +414,20 @@ const ERR_ZH: Record<string, string> = {
 };
 
 export function plazaZhErr(e?: string) { return (e && ERR_ZH[e]) || e || '失敗了'; }
+function zhNpcErr(e: string | undefined, who: string) {
+  const table: Record<string, string> = {
+    carrying: `抱著${who}時不能這樣`,
+    already_carry: '已經抱著一位了',
+    seated: `請先站起來再抱${who}`,
+    notcarrier: '不是你抱著的',
+    carried: `${who}正被抱著`,
+    notnpc: `這不是${who}`,
+    far: `再靠近一點才能抱起${who}`,
+    carry_fail: '抱不起來',
+    place_fail: '放不下',
+  };
+  return (e && table[e]) || plazaZhErr(e);
+}
 function zhErr(e?: string) { return plazaZhErr(e); }
 
 export function openPlaza(D: PlazaDeps) {
@@ -1238,7 +1257,7 @@ async function plazaDoCarry(npcConnId: string): Promise<boolean> {
     const r = await client.carryNpc(npcConnId);
     if (!r.ok) {
       markCarryUnsupported(r.err);
-      deps.toast(zhErr(r.err), '#ff8a7a');
+      deps.toast(zhNpcErr(r.err, nearCarry?.nick === '阿伯' ? '阿伯' : '阿婆'), '#ff8a7a');
       return false;
     }
     deps.toast('抱起來了，靠近空位再放下', '#9be37a');
@@ -1250,18 +1269,19 @@ async function plazaDoPlace(seat: PlazaSeatRef): Promise<boolean> {
   if (!deps || !client?.connected) { deps?.toast('還沒收好連線', '#ffb08a'); return false; }
   const npc = myCarriedNpc();
   if (!npc) { deps.toast('沒有抱著阿婆', '#ffb08a'); return false; }
+  const who = npcWho(npc);
   sittingBusy = true;
   carryPlacing = true;
   try {
     const r = await client.placeNpc(npc.connId, seat.pileId, seat.slot);
     if (!r.ok) {
       markCarryUnsupported(r.err);
-      deps.toast(zhErr(r.err), '#ff8a7a');
+      deps.toast(zhNpcErr(r.err, who), '#ff8a7a');
       if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
       return false;
     }
     if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
-    deps.toast('阿婆坐好了', '#9be37a');
+    deps.toast(`${who}坐好了`, '#9be37a');
     return true;
   } finally { sittingBusy = false; carryPlacing = false; checkCarryLost(); }
 }
@@ -1274,7 +1294,7 @@ export async function plazaTrySit(): Promise<boolean> {
       const n = nearestFreePlaceSeat(deps!.getWalkXZ().x, deps!.getWalkXZ().z, takenSet(true), SIT_DIST);
       return n ? { pileId: n.pileId, slot: n.slot } : null;
     })();
-    if (!seat) { deps.toast('靠近空位再放下阿婆', '#ffb08a'); return false; }
+    if (!seat) { deps.toast(`靠近空位再放下${npcWho(myCarriedNpc())}`, '#ffb08a'); return false; }
     return plazaDoPlace(seat);
   }
   if (carryNpcOk && nearCarry) return plazaDoCarry(nearCarry.connId);

@@ -509,23 +509,46 @@ export function easeSmokePuff(t: number) {
 
 const PLAZA_CIG_UD = 'plazaCig';
 
-/** 吸菸座：把菸掛在右腕（lowerR 腕端）。手骨 handR 在廣場是藏起來的，故不掛 handR。 */
-export function ensurePlazaSmokeCig(rig: PlayerRig, lowDetail = false): FpCigarette {
-  let cig = rig.lowerR.userData[PLAZA_CIG_UD] as FpCigarette | undefined;
+export type PlazaCigAttach = 'hand' | 'mouth';
+
+function cigParent(rig: PlayerRig, attach: PlazaCigAttach) {
+  return attach === 'mouth' && rig.head ? rig.head : rig.lowerR;
+}
+
+function storePlazaSmokeCig(rig: PlayerRig, cig: FpCigarette) {
+  rig.lowerR.userData[PLAZA_CIG_UD] = cig;
+  rig.outer.userData[PLAZA_CIG_UD] = cig;
+}
+
+/** 吸菸：預設掛右腕（lowerR 腕端）。阿伯剝蚵／站著時可改掛嘴邊。手骨 handR 在廣場是藏起來的，故不掛 handR。 */
+export function ensurePlazaSmokeCig(rig: PlayerRig, lowDetail = false, attach: PlazaCigAttach = 'hand'): FpCigarette {
+  let cig = getPlazaSmokeCig(rig);
+  const parent = cigParent(rig, attach);
   if (cig) {
+    if (cig.group.parent !== parent) {
+      try { cig.group.parent?.remove(cig.group); } catch { /* */ }
+      parent.add(cig.group);
+    }
     cig.group.visible = true;
-    orientPlazaSmokeCig(cig);
+    storePlazaSmokeCig(rig, cig);
+    orientPlazaSmokeCig(cig, attach);
     return cig;
   }
   cig = makeAvatarCigarette({ lowDetail });
-  rig.lowerR.add(cig.group);
-  rig.lowerR.userData[PLAZA_CIG_UD] = cig;
-  orientPlazaSmokeCig(cig);
+  parent.add(cig.group);
+  storePlazaSmokeCig(rig, cig);
+  orientPlazaSmokeCig(cig, attach);
   return cig;
 }
 
 /** 濾嘴在指／嘴側、菸頭＋煙朝外（mesh：filter=+Z、tip=-Z） */
-function orientPlazaSmokeCig(cig: FpCigarette) {
+function orientPlazaSmokeCig(cig: FpCigarette, attach: PlazaCigAttach = 'hand') {
+  if (attach === 'mouth') {
+    // 頭座標：嘴約 (0,-0.08,-0.16)；菸頭朝臉前方（-Z）
+    cig.group.position.set(0.012, -0.072, -0.148);
+    cig.group.rotation.set(0.18, 0.08, 0);
+    return;
+  }
   // lowerR +Y＝腕向；菸沿大致 -X／外撇，濾嘴近掌心
   cig.group.position.set(0.05, 0.24, 0.01);
   // 實測：抽到嘴邊時濾嘴朝嘴、菸頭朝外（遠離臉）；休息時菸約水平外撇
@@ -533,15 +556,18 @@ function orientPlazaSmokeCig(cig: FpCigarette) {
 }
 
 export function clearPlazaSmokeCig(rig: PlayerRig) {
-  const cig = rig.lowerR.userData[PLAZA_CIG_UD] as FpCigarette | undefined;
+  const cig = getPlazaSmokeCig(rig);
   if (!cig) return;
-  try { rig.lowerR.remove(cig.group); } catch { /* */ }
+  try { cig.group.parent?.remove(cig.group); } catch { /* */ }
   cig.dispose();
   delete rig.lowerR.userData[PLAZA_CIG_UD];
+  delete rig.outer.userData[PLAZA_CIG_UD];
 }
 
 export function getPlazaSmokeCig(rig: PlayerRig): FpCigarette | null {
-  return (rig.lowerR.userData[PLAZA_CIG_UD] as FpCigarette | undefined) ?? null;
+  return (rig.outer.userData[PLAZA_CIG_UD] as FpCigarette | undefined)
+    ?? (rig.lowerR.userData[PLAZA_CIG_UD] as FpCigarette | undefined)
+    ?? null;
 }
 
 export type SmokeSitPoseOpts = {

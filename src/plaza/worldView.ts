@@ -14,7 +14,7 @@ import {
   PLAZA_SIT_ROOT_Y,
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
-import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, type PlazaSeatRef } from './layout';
+import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, isPlazaAber, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaChair, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
 import { mergeStaticMeshes, countMeshes } from './mergeStatic';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
@@ -1017,7 +1017,10 @@ function hashPid(pid: string) {
 
   function applyRemotePuff(opts: { connId?: string; pid?: string; start: boolean; holdMs: number }) {
     const r = findRemoteForPuff(opts.connId, opts.pid);
-    if (!r || !r.seated || !isSmokePile(r.pileId)) return;
+    if (!r) return;
+    const aberOk = isAberRemote(r) && !r.carriedBy && (r.phase || '') !== 'carried' && (r.phase || '') !== 'moon'
+      && (r.seated || (r.phase || '') === 'stand');
+    if (!(aberOk || (r.seated && isSmokePile(r.pileId)))) return;
     const now = performance.now();
     const holdMs = Math.max(0, Math.min(5000, opts.holdMs | 0));
     if (opts.start) {
@@ -1045,7 +1048,20 @@ function hashPid(pid: string) {
     };
   }
 
-  /** 吸菸座的阿婆：每隔一陣子自己抽一口（純前端，各玩家時間點不同步） */
+  function tickAberAshes(r: Remote, cig: { group: THREE.Object3D }, dt: number) {
+    type Ash = { tick: (dt: number) => boolean; dispose: () => void };
+    const st = ((r as any)._aberAsh ??= { cd: 5 + Math.random() * 4, ashes: [] as Ash[] });
+    st.cd -= dt;
+    if (st.cd <= 0) {
+      st.cd = 6 + Math.random() * 5;
+      st.ashes.push(spawnAshSpeck(cig.group, new THREE.Vector3(0.02, 0.02, -0.2)));
+    }
+    for (let i = st.ashes.length - 1; i >= 0; i--) {
+      if (!st.ashes[i].tick(dt)) { st.ashes[i].dispose(); st.ashes.splice(i, 1); }
+    }
+  }
+
+  /** 吸菸座的阿婆／阿伯：每隔一陣子自己抽一口（純前端，各玩家時間點不同步） */
   function tickNpcAutoPuff(r: Remote) {
     const now = performance.now();
     const st = ((r as any)._npcPuff ??= { next: now + 3000 + Math.random() * 9000, endAt: 0, hold: 0 });
@@ -1078,10 +1094,24 @@ function hashPid(pid: string) {
     remoteExhales.push({ fx, age: 0, life: 3.6, yaw });
   }
 
+  function isAberRemote(r: { pid?: string; nick?: string; isNpc?: boolean }) {
+    return !!r.isNpc && isPlazaAber(r);
+  }
+  function aberLeisureSmoke(r: Remote) {
+    return isAberRemote(r) && r.seated && (isLeisurePile(r.pileId) || (r.phase || '') === 'smoke' || (r.phase || '') === 'rest');
+  }
+  function aberMouthSmoke(r: Remote) {
+    if (!isAberRemote(r)) return false;
+    if (r.carriedBy || (r.phase || '') === 'carried' || (r.phase || '') === 'moon') return false;
+    if (aberLeisureSmoke(r)) return false;
+    return !!r.seated || (r.phase || '') === 'stand';
+  }
   function tickRemotePuff(r: Remote, dt: number) {
     const pf = r.puff;
     if (!pf) return;
-    if (!r.seated || !isSmokePile(r.pileId)) { clearRemotePuff(r); return; }
+    const leisure = (r.seated && isSmokePile(r.pileId)) || aberLeisureSmoke(r);
+    const mouth = aberMouthSmoke(r);
+    if (!leisure && !mouth) { clearRemotePuff(r); return; }
     const now = performance.now();
     if (pf.held && pf.autoEndAt && now >= pf.autoEndAt) {
       // 缺 end：逾時自動放下（不吐煙）
@@ -1103,15 +1133,17 @@ function hashPid(pid: string) {
       spawnRemoteExhale(r, pf.holdMs);
     }
     const inhale = pf.held && pf.animT >= 0.98 ? 1 : (pf.held && pf.animT > 0.7 ? (pf.animT - 0.7) / 0.3 : 0);
-    posePlazaSmokeSit(r.rig, {
-      puffK: easeSmokePuff(pf.animT),
-      inhale,
-      away: pf.awayT,
-    });
-    r.headWorkX = -0.04 - inhale * 0.08;
-    r.knife.visible = false;
-    r.oyster.visible = false;
-    if (!pf.held && pf.animT <= 0.001 && pf.awayT <= 0.001 && pf.exhaled) clearRemotePuff(r);
+    if (leisure) {
+      posePlazaSmokeSit(r.rig, {
+        puffK: easeSmokePuff(pf.animT),
+        inhale,
+        away: pf.awayT,
+      });
+      r.headWorkX = -0.04 - inhale * 0.08;
+      r.knife.visible = false;
+      r.oyster.visible = false;
+    }
+    if (!pf.held && (mouth || (pf.animT <= 0.001 && pf.awayT <= 0.001)) && pf.exhaled) clearRemotePuff(r);
   }
 
   function tickRemoteExhales(dt: number) {
@@ -1154,12 +1186,12 @@ function hashPid(pid: string) {
     if (r.seated) {
       poseSit(r);
       (r as any)._loco = (ph === 'smoke' || isSmokePile(r.pileId)) ? 'smoke' : 'sit';
-      if (ph === 'rest' || isRestPile(r.pileId)) {
+      if ((ph === 'rest' || isRestPile(r.pileId)) && !isAberRemote(r)) {
         // 樸子腳門口純坐：雙手自然垂放，無刀無蚵
         r.knife.visible = false;
         r.oyster.visible = false;
         r.headWorkX = 0;
-      } else if (ph === 'smoke' || isSmokePile(r.pileId)) {
+      } else if (ph === 'smoke' || isSmokePile(r.pileId) || (isAberRemote(r) && (ph === 'rest' || isRestPile(r.pileId)))) {
         // 抽烟 idle：右手近嘴、無刀無蚵；進行中的抽一口由 tickRemotePuff 驅動
         if (!r.puff) posePlazaSmokeSit(r.rig);
         r.knife.visible = false;
@@ -1248,7 +1280,7 @@ function hashPid(pid: string) {
     }
     applyHeadLook(r);
     } finally {
-      if (r.isNpc) applyAmaAppearance(r.rig);
+      if (r.isNpc && !isAberRemote(r)) applyAmaAppearance(r.rig);
     }
   }
 
@@ -1297,11 +1329,15 @@ function hashPid(pid: string) {
     }
     if (!r) {
       const isNpc = !!(p.isNpc || pid.startsWith('npc-'));
+      const aber = isNpc && isPlazaAber(p);
       const look = hashLook(pid, isNpc);
-      const rig = makePlayerAvatar(look, M, add, LO);
+      const rig = makePlayerAvatar(aber ? { shirt: 0x4a6a8a, hair: 0x8a8a8a, pants: 0x3a3a48 } : look, M, add, LO);
       if (isNpc) {
-        dressPlazaAma(rig, pickAmaLook(pid));
-        applyAmaAppearance(rig);
+        if (aber) dressPlazaAber(rig);
+        else {
+          dressPlazaAma(rig, pickAmaLook(pid));
+          applyAmaAppearance(rig);
+        }
       } else {
         applyOutfitToRig(rig, normalizeOutfitIds({
           head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
@@ -1309,7 +1345,7 @@ function hashPid(pid: string) {
       }
       root.add(rig.outer);
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
-      rig.outer.scale.setScalar(isNpc ? AMA_SCALE : AVATAR_SCALE);
+      rig.outer.scale.setScalar(isNpc && !aber ? AMA_SCALE : AVATAR_SCALE);
       const umbMesh = makeRemoteUmb();
       const { props, bowlNode, meatRoot } = makeRemoteProps();
       const { knife, oyster } = makeRemoteHold();
@@ -1321,8 +1357,8 @@ function hashPid(pid: string) {
       const awaitingPose = !p.seated && Math.hypot(x, z) < 0.2;
       r = {
         key: pid, connId: p.connId || '', pid, rig,
-        tag: ensureTag(isNpc ? (p.nick || '阿婆') : plazaDisplayName(p.nick, p.tag), isNpc), bubble: ensureBubble(isNpc), bubUntil: 0,
-        pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick || (isNpc ? '阿婆' : '剝蚵人'),
+        tag: ensureTag(isNpc ? (p.nick || (aber ? '阿伯' : '阿婆')) : plazaDisplayName(p.nick, p.tag), isNpc), bubble: ensureBubble(isNpc), bubUntil: 0,
+        pileId: p.pileId, slot: p.slot, phase: p.phase, count: p.count, nick: p.nick || (isNpc ? (aber ? '阿伯' : '阿婆') : '剝蚵人'),
         numTag: isNpc ? '' : (p.tag || '').replace(/^#/, ''),
         seated: !!p.seated, moving: !!p.moving, umb: !!p.umb, umbMesh,
         props, bowlNode, meatRoot, meatMeshes: [], knife, oyster,
@@ -1440,6 +1476,8 @@ function hashPid(pid: string) {
     if (r.cigSmoke) { root.remove(r.cigSmoke.group); r.cigSmoke.dispose(); r.cigSmoke = undefined; }
     syncCushion(r.pid || r.key, false, -1, -1);
     clearPlazaSmokeCig(r.rig);
+    const ashes = (r as any)._aberAsh?.ashes as { dispose: () => void }[] | undefined;
+    if (ashes) for (const a of ashes) { try { a.dispose(); } catch { /* */ } }
     root.remove(r.rig.outer); r.tag.dispose(); r.bubble.dispose();
     // 只刪「指向同一具模型」的 key，避免誤刪同 pid 的另一筆
     for (const [k, x] of [...remotes]) {
@@ -1661,7 +1699,7 @@ function hashPid(pid: string) {
           r.rig.root.position.y *= 0.8;
           r.rig.torso.rotation.y *= 0.8; r.rig.torso.rotation.z *= 0.8;
           // 阿婆每幀會再疊駝背角；用衰減會越疊越彎成 90 度，站著時直接歸零讓駝背只疊一次
-          r.rig.torso.rotation.x = r.isNpc ? 0 : r.rig.torso.rotation.x * 0.8;
+          r.rig.torso.rotation.x = (r.isNpc && !isAberRemote(r)) ? 0 : r.rig.torso.rotation.x * 0.8;
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
           rj._loco = 'walk';
         }
@@ -1669,14 +1707,14 @@ function hashPid(pid: string) {
           r.throwT -= dt;
           poseThrow(r);
           if (r.throwT <= 0) { r.throwT = 0; applyActionPose(r); }
-        } else if (r.seated && r.puff) {
+        } else if (r.puff && (r.seated || isAberRemote(r))) {
           tickRemotePuff(r, dt);
         }
         applyHeadLook(r);
         if (!r.seated && anyoneCarriedBy(r.connId)) posePlazaCarryHold(r.rig);
       } else if (r.throwT > 0) {
         r.throwT = Math.max(0, r.throwT - dt);
-      } else if (r.seated && r.puff) {
+      } else if (r.puff && (r.seated || isAberRemote(r))) {
         tickRemotePuff(r, dt);
       }
       // 坐下略往前（負＝朝蚵堆），避免後背穿出椅背
@@ -1709,10 +1747,10 @@ function hashPid(pid: string) {
       } else if (!r.seated && anyoneCarriedBy(r.connId)) {
         posePlazaCarryHold(r.rig);
       }
-      if (r.isNpc && r.seated && !(r.carriedBy && (r.phase || '') !== 'moon')) {
+      if (r.isNpc && !isAberRemote(r) && r.seated && !(r.carriedBy && (r.phase || '') !== 'moon')) {
         oy += AMA_SIT_LIFT;
       }
-      if (r.isNpc) applyAmaAppearance(r.rig);
+      if (r.isNpc && !isAberRemote(r)) applyAmaAppearance(r.rig);
       r.rig.outer.position.set(ox, oy, oz);
       r.rig.outer.rotation.order = 'YXZ';
       r.rig.outer.rotation.y = r.yaw;
@@ -1772,14 +1810,18 @@ function hashPid(pid: string) {
     tickRemoteExhales(dt);
     // 遠端吸菸：手持菸（掛腕）＋菸頭薄煙；不再用頭側飄煙以免看起來沒拿菸
     for (const r of remotes.values()) {
-      const want = r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke');
-      if (want && r.isNpc && isSmokePile(r.pileId)) tickNpcAutoPuff(r);
+      const wantSeat = r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke');
+      const wantAber = isAberRemote(r) && !r.carriedBy && (r.phase || '') !== 'carried' && (r.phase || '') !== 'moon'
+        && (r.seated || (r.phase || '') === 'stand');
+      const want = wantSeat || wantAber;
+      if (want && r.isNpc && (isSmokePile(r.pileId) || wantAber)) tickNpcAutoPuff(r);
       if (want) {
-        ensurePlazaSmokeCig(r.rig, LO);
+        ensurePlazaSmokeCig(r.rig, LO, aberMouthSmoke(r) ? 'mouth' : 'hand');
         const cig = getPlazaSmokeCig(r.rig);
         if (cig) {
           cig.setSmokeTint(!r.isNpc && parseCosmetics(r.cosmetics).goldSmoke ? GOLD_SMOKE_TINT : undefined);
           cig.tick(tSec, dt);
+          if (wantAber && !LO) tickAberAshes(r, cig, dt);
         }
       } else {
         clearPlazaSmokeCig(r.rig);
@@ -1812,7 +1854,16 @@ function hashPid(pid: string) {
       applyAmaAppearance(k.rig);
       tickKeeperBubble(k, tSec);
     }
-    tickSmokeNpc(dt, tSec, eco, cx, cz);
+    let serverAber = false;
+    for (const r of remotes.values()) {
+      if (isAberRemote(r)) { serverAber = true; break; }
+    }
+    if (serverAber) {
+      smokeNpc.rig.outer.visible = false;
+      smokeNpc.tag.sprite.visible = false;
+    } else {
+      tickSmokeNpc(dt, tSec, eco, cx, cz);
+    }
   }
 
   /** 站立／蹲／躺／跳躍的遠端：擋路（不推擠）；坐下、尚未現身：不擋；躺＝isLie */

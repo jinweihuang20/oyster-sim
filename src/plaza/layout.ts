@@ -17,6 +17,13 @@ export const pileIsGrill = (pileId: number) => GRILL_PILE_IDS.includes(pileId);
 /** 吸菸區虛擬堆（與後端 PlazaWorld.SmokePileId 對齊） */
 export const SMOKE_PILE_ID = 100;
 export const SMOKE_SEAT_COUNT = 4;
+/** 吸菸區阿伯專用椅（與後端 PlazaWorld.SmokeAberSlot 對齊）；玩家不可坐 */
+export const SMOKE_ABER_SLOT = 4;
+export const PLAZA_ABER_PID = 'npc-aber';
+export const PLAZA_ABER_NICK = '阿伯';
+export function isPlazaAber(p: { pid?: string; nick?: string } | null | undefined) {
+  return !!p && (p.pid === PLAZA_ABER_PID || p.nick === PLAZA_ABER_NICK);
+}
 export const SMOKE_CENTER = { x: -12.0, z: -2.6 } as const;
 /** 東南角多那芝咖啡門口吸菸區（與後端 PlazaWorld.CafeSmokePileId 對齊）：3 桌 × 2 座 */
 export const CAFE_SMOKE_PILE_ID = 101;
@@ -66,7 +73,7 @@ export const isLeisurePile = (pileId: number) => isSmokePile(pileId) || isRestPi
 export const isSmokePile = (pileId: number) => pileId === SMOKE_PILE_ID || pileId === CAFE_SMOKE_PILE_ID;
 export const isCafeSmokePile = (pileId: number) => pileId === CAFE_SMOKE_PILE_ID;
 export const smokeSeatCountOf = (pileId: number) => (pileId === CAFE_SMOKE_PILE_ID ? CAFE_SMOKE_SEAT_COUNT : SMOKE_SEAT_COUNT);
-/** 吸菸區氣氛 NPC 椅（非玩家位；伺服器座位仍 0..SMOKE_SEAT_COUNT-1） */
+/** 吸菸區阿伯椅（非玩家位；伺服器座位 pileId=SMOKE_PILE_ID、slot=SMOKE_ABER_SLOT） */
 /** 南側外緣：離玩家凳／菸灰缸／棚柱皆 ≥~1.6，不擋東側入座 */
 export const SMOKE_NPC_ANGLE = -Math.PI / 2;
 export const SMOKE_NPC_RADIUS = 2.5;
@@ -162,6 +169,7 @@ export function seatPose(pileId: number, slot: number) {
     const yaw = Math.atan2(pos.x - center.x, pos.z - center.z);
     return { pos, yaw, center, angle: 0 };
   }
+  if (pileId === SMOKE_PILE_ID && slot === SMOKE_ABER_SLOT) return smokeNpcSeatPose();
   if (isSmokePile(pileId)) {
     const n = Math.max(1, SMOKE_SEAT_COUNT - 1);
     const a = -0.95 + (slot / n) * 1.9;
@@ -240,6 +248,7 @@ export function nearestFreePlaceSeat(x: number, z: number, taken: Set<string>, m
     }
   }
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
+  consider(SMOKE_PILE_ID, SMOKE_ABER_SLOT);
   for (let s = 0; s < CAFE_SMOKE_SEAT_COUNT; s++) consider(CAFE_SMOKE_PILE_ID, s);
   for (let s = 0; s < REST_SEAT_COUNT; s++) consider(SEAFOOD_PILE_ID, s);
   return best;
