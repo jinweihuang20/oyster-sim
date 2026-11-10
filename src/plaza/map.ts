@@ -13,6 +13,8 @@ export type PlazaMapMarker = {
   seated?: boolean;
 };
 
+export type PlazaMapWishPin = { x: number; z: number; label: string };
+
 /** 地圖世界範圍（含西潮間帶＋北側碼頭） */
 const MAP_MIN_X = -WALK_BOUND_WEST - 0.6;
 const MAP_MAX_X = WALK_BOUND_EAST + 0.6;
@@ -56,10 +58,7 @@ function roundRect(
 }
 
 /** 畫廣場俯視圖：場景示意＋玩家 */
-export function drawPlazaMap(
-  canvas: HTMLCanvasElement,
-  markers: PlazaMapMarker[],
-) {
+export function drawPlazaMap(canvas: HTMLCanvasElement, markers: PlazaMapMarker[], wishes: PlazaMapWishPin[] = []) {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const css = Math.min(canvas.clientWidth || 320, canvas.clientHeight || 320);
   const size = Math.max(220, Math.floor(css * dpr));
@@ -259,7 +258,33 @@ export function drawPlazaMap(
     ctx.fillText('吸菸區', mx, my);
   }
 
+  // 送座位目標
+  for (const w of wishes) {
+    const [mx, my] = to(w.x, w.z);
+    const rad = Math.max(3, size * 0.012);
+    ctx.beginPath();
+    ctx.arc(mx, my, rad + 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(42,90,134,.28)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(mx, my, rad, 0, Math.PI * 2);
+    ctx.fillStyle = '#2a5a86';
+    ctx.fill();
+    ctx.strokeStyle = '#e8f2fa';
+    ctx.lineWidth = Math.max(1, size * 0.002);
+    ctx.stroke();
+    ctx.font = `700 ${Math.max(8, size * 0.022)}px system-ui,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.lineWidth = Math.max(2, size * 0.005);
+    ctx.strokeStyle = 'rgba(10,8,4,.7)';
+    ctx.strokeText(w.label || '送', mx, my - rad - 1);
+    ctx.fillStyle = '#e8f2fa';
+    ctx.fillText(w.label || '送', mx, my - rad - 1);
+  }
+
   // 玩家（別人先、自己後）
+
   const others = markers.filter(m => !m.self);
   const me = markers.find(m => m.self);
   const drawMarker = (m: PlazaMapMarker) => {

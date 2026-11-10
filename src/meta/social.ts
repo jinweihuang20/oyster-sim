@@ -83,6 +83,7 @@ const BOARDS = [
   ['pearls', '珍珠收藏', ''],
   ['dmKills', '死鬥-混戰', ''],
   ['dmWaves', '死鬥-圍毆', ''],
+  ['seat', '送座位', ''],
 ] as const;
 let board = 'income', view: 'daily' | 'weekly' = 'daily';
 export function submit(s: { income?: number; oysters?: number; pearls?: number; dmKills?: number; dmWaves?: number }) {
@@ -102,9 +103,18 @@ async function checkPassed() {
 async function render() {
   const list = $('lbList');
   $('lbTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b as HTMLElement).dataset.b === board));
-  $('lbView').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b as HTMLElement).dataset.v === view));
+  const viewBtns = Array.from($('lbView').querySelectorAll('button') as NodeListOf<HTMLButtonElement>);
+  if (board === 'seat') {
+    const labels = ['今日榜', '總榜'] as const;
+    viewBtns.forEach((b, i) => { b.textContent = labels[i] ?? b.textContent; });
+  } else {
+    const labels = ['今天', '本週'] as const;
+    viewBtns.forEach((b, i) => { b.textContent = labels[i] ?? b.textContent; });
+  }
+  const apiView = board === 'seat' && view === 'weekly' ? 'all' : view;
+  viewBtns.forEach(b => b.classList.toggle('on', b.dataset.v === view));
   list.innerHTML = '<div class="lbEmpty"><i class="ic ic-timer"></i><span>讀取中…</span></div>';
-  const r = await get(`/top?board=${board}&view=${view}&n=20&me=${D.id}${tq()}`);
+  const r = await get(`/top?board=${board}&view=${apiView}&n=20&me=${D.id}${tq()}`);
   if (!r) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; return; }
   const unit = BOARDS.find(b => b[0] === board)![2];
   const foilOn = (x: any) => !!(x.foil || (x.me && D.foil?.()));
@@ -112,7 +122,7 @@ async function render() {
   const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
     (x.me ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>` : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span>`) + '</div>';
   const rows = r.rows as any[];
-  const emptyHint = board.startsWith('dm') ? '死鬥結算後就會出現成績！' : '收工後就會出現你的成績！';
+  const emptyHint = board === 'seat' ? '把鄰居送到指定位子後就會出現成績！' : board.startsWith('dm') ? '死鬥結算後就會出現成績！' : '收工後就會出現你的成績！';
   list.innerHTML = rows.length ? rows.map(row).join('') + (r.mine && !rows.some(x => x.me) ? '<div class="lbGap"></div>' + row(r.mine) : '') : `<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>${emptyHint}</small></span></div>`;
   list.querySelectorAll<HTMLButtonElement>('button[data-k]').forEach(b => b.onclick = async () => {
     b.disabled = true; const ok = await post('/react', { k: b.dataset.k, kind: b.dataset.r });

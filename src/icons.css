@@ -52,3 +52,8 @@
 .ic-up{--i:url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke%3D'black'%20stroke-width%3D'2.2'%20stroke-linecap%3D'square'%3E%3Cpath%20d%3D'M12%2020V5M6%2011l6-6%206%206'%2F%3E%3C%2Fsvg%3E")}
 .ic-down{--i:url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke%3D'black'%20stroke-width%3D'2.2'%20stroke-linecap%3D'square'%3E%3Cpath%20d%3D'M12%204v15M6%2013l6%206%206-6'%2F%3E%3C%2Fsvg%3E")}
 .ic-lie{--i:url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke%3D'black'%20stroke-width%3D'2.2'%20stroke-linecap%3D'square'%3E%3Ccircle%20cx%3D'5.5'%20cy%3D'13'%20r%3D'2.2'%2F%3E%3Cpath%20d%3D'M9%2014h12M3%2018h18'%2F%3E%3C%2Fsvg%3E")}
+
+/* 環視（眼睛線條圖） */
+.ic-eye{--i:url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke%3D'black'%20stroke-width%3D'2.2'%20stroke-linecap%3D'round'%20stroke-linejoin%3D'round'%3E%3Cpath%20d%3D'M2%2012s3.6-7%2010-7%2010%207%2010%207-3.6%207-10%207-10-7-10-7z'%2F%3E%3Ccircle%20cx%3D'12'%20cy%3D'12'%20r%3D'3'%2F%3E%3C%2Fsvg%3E")}
+/* 離開（門） */
+.ic-exit{--i:url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke%3D'black'%20stroke-width%3D'2.2'%20stroke-linecap%3D'square'%20stroke-linejoin%3D'miter'%3E%3Cpath%20d%3D'M14%204h-9v16h9'%2F%3E%3Cpath%20d%3D'M10%2012h11M17%208l4%204-4%204'%2F%3E%3C%2Fsvg%3E")}

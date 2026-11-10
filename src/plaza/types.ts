@@ -125,3 +125,66 @@ export type PlazaAimTarget = {
   head: { x: number; y: number; z: number };
   bowl: { x: number; y: number; z: number };
 };
+
+/** 廣場 NPC 送座位任務 */
+export type PlazaSeatWish = {
+  wishId: string;
+  npcConnId: string;
+  npcPid: string;
+  npcNick: string;
+  pileId: number;
+  slot: number;
+  line: string;
+  startedAt: number;
+  expiresAt: number;
+  carrierConnId?: string;
+  carrierNick?: string;
+};
+
+export type PlazaSeatWishEnd = {
+  wishId: string;
+  npcConnId: string;
+  reason: string;
+  line?: string;
+  carrierConnId?: string;
+  pay?: number;
+  capped?: boolean;
+  total?: number;
+  fast?: boolean;
+};
+
+export function normSeatWish(w: any): PlazaSeatWish | null {
+  if (!w) return null;
+  const wishId = String(w.wishId ?? w.WishId ?? '');
+  const npcConnId = String(w.npcConnId ?? w.NpcConnId ?? '');
+  if (!wishId || !npcConnId) return null;
+  return {
+    wishId, npcConnId,
+    npcPid: String(w.npcPid ?? w.NpcPid ?? ''),
+    npcNick: String(w.npcNick ?? w.NpcNick ?? ''),
+    pileId: Number(w.pileId ?? w.PileId ?? -1),
+    slot: Number(w.slot ?? w.Slot ?? -1),
+    line: String(w.line ?? w.Line ?? ''),
+    startedAt: Number(w.startedAt ?? w.StartedAt ?? 0),
+    expiresAt: Number(w.expiresAt ?? w.ExpiresAt ?? 0),
+    carrierConnId: String(w.carrierConnId ?? w.CarrierConnId ?? ''),
+    carrierNick: String(w.carrierNick ?? w.CarrierNick ?? ''),
+  };
+}
+
+export function normSeatWishEnd(e: any): PlazaSeatWishEnd | null {
+  if (!e) return null;
+  const wishId = String(e.wishId ?? e.WishId ?? '');
+  const npcConnId = String(e.npcConnId ?? e.NpcConnId ?? '');
+  if (!wishId && !npcConnId) return null;
+  return {
+    wishId, npcConnId,
+    reason: String(e.reason ?? e.Reason ?? ''),
+    line: String(e.line ?? e.Line ?? ''),
+    carrierConnId: String(e.carrierConnId ?? e.CarrierConnId ?? ''),
+    pay: Number(e.pay ?? e.Pay ?? 0),
+    capped: !!(e.capped ?? e.Capped),
+    total: Number(e.total ?? e.Total ?? 0),
+    fast: !!(e.fast ?? e.Fast),
+  };
+}

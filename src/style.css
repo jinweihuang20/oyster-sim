@@ -1488,6 +1488,21 @@ body #shopTabs button.hasNew:not(.on){box-shadow:inset 0 0 0 2px #ff5a3a!importa
 #lookTip .ltTxt{padding:5px 12px;border-radius:999px;background:rgba(22,28,36,.6);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:13px;white-space:nowrap}
 @keyframes ltSwipe{0%{transform:translateX(-80px);opacity:0}15%{opacity:1}50%{transform:translateX(80px);opacity:1}65%{opacity:0}100%{transform:translateX(80px);opacity:0}}
 
+
+/* 手機環視鈕：右下動作鈕左側，長按只轉鏡頭 */
+#lookBtn{display:none;position:fixed;right:calc(var(--sa-right,0px) + 12px);bottom:calc(var(--sa-bottom,0px) + 16px);width:48px;height:48px;min-width:48px;min-height:48px;padding:0;margin:0;z-index:30;pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;border-radius:12px;align-items:center;justify-content:center;color:#f2f4f7;background:rgba(22,28,36,.55)!important;border:1px solid rgba(255,255,255,.22)!important;box-shadow:0 4px 14px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.10)!important;-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2)}
+@media (pointer:coarse){
+  #lookBtn.on{display:flex!important}
+  #lookBtn .ic{width:22px;height:22px;background-color:#f2f4f7}
+  #lookBtn:active{background:rgba(22,28,36,.72)!important;transform:scale(.96)}
+  #lookBtn.held,#lookBtn.held:active{background:#2a5a86!important;border-color:rgba(232,246,255,.45)!important;transform:none}
+}
+@media (pointer:coarse) and (orientation:landscape){
+  #lookBtn,#lookBtn.on{width:44px;height:44px;min-width:44px;min-height:44px;border-radius:10px}
+  #lookBtn .ic{width:20px;height:20px}
+}
+@media (pointer:fine){#lookBtn{display:none!important}}
+
 /* 廣場動作：手機只顯示「動作」；展開後才露出跳／蹲／躺 */
 #poseBtn,#jumpBtn,#crouchBtn,#lieBtn{display:none}
 #poseBtn.on,#jumpBtn.on,#crouchBtn.on,#lieBtn.on{
@@ -1535,37 +1550,54 @@ body.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 132px)!important}
 body.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!important}
 body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
 #crouchBtn.act,#lieBtn.act{background:rgba(42,90,134,.72)!important}
-/* 電腦廣場閒逛：動作／藥品叠在「離開廣場」上方，勿蓋住右下離開鈕 */
+/* 電腦廣場閒逛：離開已改到地圖下方，動作／藥品靠右下 */
 @media (pointer:fine){
   body.plazaRoam #poseBtn.on{
     display:flex!important;
-    bottom:calc(var(--sa-bottom,0px) + 70px)!important;
+    bottom:calc(var(--sa-bottom,0px) + 18px)!important;
     z-index:9010;
   }
   body.plazaRoam #flagBtn.on,body.plazaRoam #flagPullBtn.on{
     display:flex!important;
-    bottom:calc(var(--sa-bottom,0px) + 70px)!important;
+    bottom:calc(var(--sa-bottom,0px) + 18px)!important;
     right:calc(var(--sa-right,0px) + 116px)!important;
     z-index:9010;
   }
   body.plazaRoam #jumpBtn.on,body.plazaRoam #crouchBtn.on,body.plazaRoam #lieBtn.on{display:none!important}
   body.plazaRoam.poseOpen #jumpBtn.on,body.plazaRoam.poseOpen #crouchBtn.on,body.plazaRoam.poseOpen #lieBtn.on{display:flex!important}
-  body.plazaRoam.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 126px)!important}
-  body.plazaRoam.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 182px)!important}
-  body.plazaRoam.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 238px)!important}
+  body.plazaRoam.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 74px)!important}
+  body.plazaRoam.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 130px)!important}
+  body.plazaRoam.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 186px)!important}
   body.plazaRoam #medBtn.on{
     position:fixed!important;right:calc(var(--sa-right,0px) + 12px)!important;left:auto!important;top:auto!important;
-    bottom:calc(var(--sa-bottom,0px) + 126px)!important;z-index:9010;
+    bottom:calc(var(--sa-bottom,0px) + 74px)!important;z-index:9010;
     min-width:96px!important;min-height:48px!important;margin:0!important;
   }
-  body.plazaRoam.poseOpen #medBtn.on{bottom:calc(var(--sa-bottom,0px) + 294px)!important}
+  body.plazaRoam.poseOpen #medBtn.on{bottom:calc(var(--sa-bottom,0px) + 242px)!important}
 }
-/* 橫向廣場：離開／動作／藥品往下靠底（視角已移到狀態列） */
+/* 橫向廣場：動作／藥品往下靠底（視角已移到狀態列；離開在地圖下方） */
 @media (pointer:coarse) and (orientation:landscape){
   #poseBtn.on{bottom:calc(var(--sa-bottom,0px) + 58px)!important}
   body.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 110px)!important}
   body.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 162px)!important}
   body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 214px)!important}
+}
+/* 廣場閒逛：右下已無離開鈕，動作列靠底，避免留下空位 */
+@media (pointer:coarse){
+  body.plazaRoam #poseBtn.on{bottom:calc(var(--sa-bottom,0px) + 16px)!important}
+  body.plazaRoam.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 72px)!important}
+  body.plazaRoam.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 128px)!important}
+  body.plazaRoam.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 184px)!important}
+  body.plazaRoam.poseOpen #flagBtn.on{bottom:calc(var(--sa-bottom,0px) + 72px)!important}
+  body.plazaRoam.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 128px)!important}
+}
+@media (pointer:coarse) and (orientation:landscape){
+  body.plazaRoam #poseBtn.on{bottom:calc(var(--sa-bottom,0px) + 10px)!important}
+  body.plazaRoam.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 62px)!important}
+  body.plazaRoam.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 114px)!important}
+  body.plazaRoam.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 166px)!important}
+  body.plazaRoam.poseOpen #flagBtn.on{bottom:calc(var(--sa-bottom,0px) + 62px)!important}
+  body.plazaRoam.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 114px)!important}
 }
 
 #moonAim .maEnd{display:none}#moonAim.pz .maX{display:none}#moonAim.pz .maEnd{display:block;pointer-events:auto;position:absolute;left:0;right:0;top:calc(var(--sa-top) + 168px);margin:0 auto;width:max-content;padding:9px 22px;font-size:16px;font-weight:700;color:#fff;background:rgba(20,26,34,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.35);border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
@@ -1635,8 +1667,8 @@ body.poseOpen #flagBtn.on,body.poseOpen #flagPullBtn.on{display:flex!important;r
 body.poseOpen #flagBtn.on{bottom:calc(var(--sa-bottom,0px) + 132px)!important}
 body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!important}
 @media (pointer:fine){
-  body.plazaRoam.poseOpen #flagBtn.on{bottom:calc(var(--sa-bottom,0px) + 126px)!important}
-  body.plazaRoam.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 182px)!important}
+  body.plazaRoam.poseOpen #flagBtn.on{bottom:calc(var(--sa-bottom,0px) + 74px)!important}
+  body.plazaRoam.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 130px)!important}
 }
 @media (pointer:coarse) and (orientation:landscape){
   body.poseOpen #flagBtn.on{bottom:calc(var(--sa-bottom,0px) + 110px)!important}

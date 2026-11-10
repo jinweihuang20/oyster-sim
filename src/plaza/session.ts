@@ -10,11 +10,12 @@ import { plazaShedPosts } from './props';
 import { plazaStallObstacles } from './ambiance';
 import { buildPlazaMapMarkers, drawPlazaMap } from './map';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
-import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent } from './types';
-import { plazaDisplayName } from './types';
+import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd } from './types';
+import { plazaDisplayName, normSeatWishEnd } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 import { plazaSoftCapClient } from '../core/economy';
 import { myTag } from '../meta/social';
+import { achCheck, achS } from '../meta/achievements';
 import { parseCosmetics } from './cosmetics';
 import { clipFlagText, flagErrText, type PlazaFlagState } from './flags';
 
@@ -82,6 +83,9 @@ export type PlazaDeps = {
   onGrillTaken?: (e: PlazaGrillTakenEvent) => void;
   track: (t: string, d?: Record<string, unknown>) => void;
   onPayout: (clamped: number, meta: { oysters: number; dur: number; raw: number }) => void;
+  /** 廣場任務獎金（送座位等），走跟死鬥一樣的入帳路徑 */
+  grantMoney?: (amount: number, via: string) => void;
+  persist?: () => void;
   onExit: () => void;
   /** 入場時連不上後端：不要進廣場，回主選單 */
   onEnterFail?: (err?: string) => void;
@@ -102,6 +106,8 @@ let ui: HTMLElement | null = null;
 let myPile: number | null = null;
 let mySlot: number | null = null;
 let snap: PlazaSnapshot | null = null;
+let seatWishes: PlazaSeatWish[] = [];
+const paidWishIds = new Set<string>();
 let phaseTimer = 0;
 let deps: PlazaDeps | null = null;
 let seated = false;
@@ -223,10 +229,15 @@ export function plazaNearPrompt(): PlazaNearPrompt | null {
   if (!active || seated) return null;
   if (carryNpcOk && myCarriedNpc()) {
     if (!nearPlace) return null;
-    return { kind: 'place', info: seatLabel(nearPlace.pileId, nearPlace.slot), btn: '放這裡', pileId: nearPlace.pileId, slot: nearPlace.slot };
+    const w = seatWishes.find(x => x.npcConnId === myCarriedNpc()!.connId);
+    const atTarget = !!(w && w.pileId === nearPlace.pileId && w.slot === nearPlace.slot);
+    return { kind: 'place', info: atTarget ? `送到這裡：${seatLabel(nearPlace.pileId, nearPlace.slot)}` : seatLabel(nearPlace.pileId, nearPlace.slot), btn: atTarget ? '送到這裡' : '放這裡', pileId: nearPlace.pileId, slot: nearPlace.slot };
   }
   if (carryNpcOk && nearCarry) {
-    return { kind: 'carry', info: `${nearCarry.nick}　站旁邊就能抱起來`, btn: nearCarry.nick === '阿伯' ? '抱起阿伯' : '抱起阿婆' };
+    const carry = nearCarry;
+    const w = seatWishes.find(x => x.npcConnId === carry.connId);
+    const info = w ? (w.carrierConnId && w.carrierConnId !== plazaConnId() ? '已有人在送' : (w.line || `${carry.nick}　站旁邊就能抱起來`)) : `${carry.nick}　站旁邊就能抱起來`;
+    return { kind: 'carry', info, btn: carry.nick === '阿伯' ? '抱起阿伯' : '抱起阿婆' };
   }
   if (near) return { kind: 'sit', info: seatLabel(near.pileId, near.slot), btn: '坐這裡', pileId: near.pileId, slot: near.slot };
   return null;
@@ -433,7 +444,7 @@ function zhErr(e?: string) { return plazaZhErr(e); }
 export function openPlaza(D: PlazaDeps) {
   if (active) return;
   active = true; seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
-  myPile = null; mySlot = null; snap = null; near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false;
   D.audio();
   client = new PlazaClient();
   view = createPlazaWorldView(D.scene, D.bubbles, {
@@ -456,9 +467,46 @@ async function abortEnter(D: PlazaDeps, err?: string) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
   removeFlagBtn();
   D.onEnterFail?.(err);
+}
+
+
+function applySeatWishes(list: PlazaSeatWish[] | undefined | null) {
+  seatWishes = Array.isArray(list) ? list.slice() : [];
+  view?.setSeatWishes?.(seatWishes, plazaConnId() || '');
+}
+
+function upsertSeatWish(w: PlazaSeatWish) {
+  const i = seatWishes.findIndex(x => x.wishId === w.wishId || x.npcConnId === w.npcConnId);
+  if (i >= 0) seatWishes[i] = w; else seatWishes.push(w);
+  view?.setSeatWishes?.(seatWishes, plazaConnId() || '');
+}
+
+function applySeatWishEnd(e: PlazaSeatWishEnd) {
+  seatWishes = seatWishes.filter(x => x.wishId !== e.wishId && x.npcConnId !== e.npcConnId);
+  view?.setSeatWishes?.(seatWishes, plazaConnId() || '');
+  const me = plazaConnId();
+  if (e.reason === 'done' && e.carrierConnId && me && e.carrierConnId === me && e.wishId && !paidWishIds.has(e.wishId)) {
+    paidWishIds.add(e.wishId);
+    const pay = Math.max(0, Math.floor(e.pay || 0));
+    if (pay > 0) {
+      deps?.grantMoney?.(pay, 'seat-wish');
+      deps?.toast(`送到了，拿到 $${pay.toLocaleString('zh-TW')}`, '#9be37a');
+    } else if (e.capped) {
+      deps?.toast('今日獎金已達上限', '#ffd76a');
+    } else {
+      deps?.toast('送到了', '#9be37a');
+    }
+    const st = achS().st;
+    const tot = Math.max(st.seatdel ?? 0, e.total || 0, (st.seatdel ?? 0) + 1);
+    st.seatdel = tot;
+    if (e.fast) st.seatfast = Math.max(st.seatfast ?? 0, (st.seatfast ?? 0) + 1);
+    achCheck();
+    deps?.persist?.();
+    deps?.track?.('seat_wish', { pay, capped: !!e.capped, total: tot, fast: !!e.fast });
+  }
 }
 
 async function boot(D: PlazaDeps) {
@@ -480,6 +528,7 @@ async function boot(D: PlazaDeps) {
   carryNpcOk = !!(r as any).carryNpc;
   applyJoinFlags((r as any).flags);
   if (snap) view?.syncRoster(snap, D.id);
+  applySeatWishes((r as any).wishes);
   if (r.grills) view?.grill.syncAll(r.grills);
   applyChatHistory(r.chat);
   void plazaPushOutfit();
@@ -538,7 +587,7 @@ function flashNetOk(msg: string) {
   setTimeout(() => { if (!netDown) setNetBanner(null); }, 2200);
 }
 
-async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?: PlazaGrillOyster[], flags?: PlazaFlagState[]) {
+async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?: PlazaGrillOyster[], flags?: PlazaFlagState[], wishes?: PlazaSeatWish[]) {
   if (!deps || !client) return;
   netDown = false;
   clearReconnectTimer();
@@ -549,6 +598,7 @@ async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?
     snap = normalizeSnap(s);
     view?.syncRoster(snap, deps.id);
   }
+  if (wishes) applySeatWishes(wishes);
   if (grills) view?.grill.syncAll(grills);
   applyJoinFlags(flags);
   // 補離線期間錯過的聊天
@@ -620,6 +670,8 @@ function wireClient(D: PlazaDeps) {
       if (!n.text) return;
       view?.showChat({ connId: n.connId || undefined, pid: n.pid || undefined, nick: n.nick, text: n.text });
     },
+    onSeatWish: (w) => { upsertSeatWish(w); },
+    onSeatWishEnd: (e) => { applySeatWishEnd(e); },
     onShellThrow: (e) => { try { D.onShellThrow?.(e); } catch (err) { console.error('onShellThrow', err); } },
     onShellInbound: (e) => { try { D.onShellInbound?.(e); } catch (err) { console.error('onShellInbound', err); } },
     onShellReflectHit: (e) => { try { D.onShellReflectHit?.(e); } catch (err) { console.error('onShellReflectHit', err); } },
@@ -658,7 +710,7 @@ function wireClient(D: PlazaDeps) {
       setNetBanner('連上了，正在回到廣場…');
     },
     onFlagUpsert: (f) => { upsertFlag(f); },
-    onRejoined: (s, chat, grills, flags) => { if (active) void restoreAfterRejoin(s, chat, grills, flags); },
+    onRejoined: (s, chat, grills, flags, wishes) => { if (active) void restoreAfterRejoin(s, chat, grills, flags, wishes); },
     onRejoinFail: (err, attempt) => {
       if (!active) return;
       netDown = true;
@@ -777,11 +829,26 @@ function buildUi() {
 #pzNet.on{display:block}
 #pzNet.ok{background:rgba(20,48,28,.92);border-color:#9be37a;color:#d8ffc8}
 /* 右下：避開上方狀態列、左下搖桿／聊天 */
-#pzX{pointer-events:auto;position:absolute;top:auto;bottom:calc(env(safe-area-inset-bottom) + 18px);right:calc(env(safe-area-inset-right) + 12px);left:auto;min-width:42px;height:44px;padding:0 14px;font-size:14px;z-index:3;background:#d9952b;color:#2a1600;border:0;border-radius:12px;font-weight:800;white-space:nowrap;box-shadow:2px 2px 0 #1b1208}
+/* 離開廣場：跟地圖同一組，排在地圖正下方 */
+#pzLeftFabs{pointer-events:none;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;top:calc(env(safe-area-inset-top) + 118px);bottom:auto;z-index:2;display:flex;flex-direction:column;align-items:stretch;gap:8px}
+#pzLeftFabs>button{pointer-events:auto;position:static;min-width:48px;height:44px;padding:0 12px;border:1.5px solid rgba(232,246,255,.35);border-radius:12px;background:rgba(32,72,96,.48);color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+#pzLeftFabs>button:active{background:rgba(32,72,96,.62)}
+#pzLeftFabs>button .ic{background:currentColor}
 #pzX.hide{display:none}
-@media (pointer:coarse){#pzX{bottom:calc(env(safe-area-inset-bottom) + 16px);right:calc(env(safe-area-inset-right) + 12px);min-height:48px;padding:0 16px;font-size:15px}}
-/* 橫向：視角在狀態列，離開鈕可靠底 */
-@media (pointer:coarse) and (orientation:landscape){#pzX{bottom:calc(env(safe-area-inset-bottom) + 10px);min-height:40px;padding:0 12px;font-size:13px}}
+@media (pointer:fine){#pzLeftFabs{top:calc(env(safe-area-inset-top) + 14px);left:calc(env(safe-area-inset-left) + 10px);z-index:2}#pzLeftFabs>button{height:44px}}
+@media (pointer:coarse) and (orientation:landscape){
+  #pzLeftFabs{top:calc(env(safe-area-inset-top) + 4px);left:calc(env(safe-area-inset-left) + 8px);gap:6px;z-index:2}
+  #pzLeftFabs>button{height:40px;min-width:44px;padding:0 10px;font-size:13px}
+}
+#pzLeaveAsk{display:none;pointer-events:auto;position:absolute;inset:0;z-index:8;align-items:center;justify-content:center;padding:24px;background:rgba(8,10,12,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#pzLeaveAsk.open{display:flex}
+#pzLeaveAsk .pzLeaveBox{width:min(92vw,360px);padding:22px 20px 16px;border-radius:16px;background:rgba(22,28,36,.82);border:1px solid rgba(255,255,255,.22);box-shadow:0 8px 28px rgba(0,0,0,.35);color:#f2f4f7;text-align:center}
+#pzLeaveAsk .pzLeaveBox p{margin:0 0 16px;font-size:17px;font-weight:800}
+#pzLeaveAsk .pzLeaveBtns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+#pzLeaveAsk .pzLeaveBtns button{pointer-events:auto;min-width:96px;min-height:44px;padding:0 16px;border-radius:12px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.10);color:#f2f4f7;font-weight:800;font-size:15px}
+#pzLeaveAsk .pzLeaveBtns #pzLeaveOk{background:rgba(42,90,134,.85);border-color:rgba(232,246,255,.4)}
+#pzLeaveAsk .pzLeaveBtns button:active{background:rgba(255,255,255,.2)}
+#pzLeaveAsk .pzLeaveBtns #pzLeaveOk:active{background:rgba(42,90,134,1)}
 /* 聊天放左側，避開右下雨傘／丟殼／偷 */
 #pzChatFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 168px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
 #pzChatFab .pzBadge{display:none;position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e23b2f;color:#fff;font-size:11px;font-weight:900;line-height:18px;text-align:center;box-shadow:0 1px 0 #1b1208;pointer-events:none}
@@ -793,7 +860,7 @@ function buildUi() {
 #pzChatPeek b{color:#ffd23f;font-weight:900}
 #pzChat{display:none;pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 220px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
 #pzChat.open{display:block}
-/* 電腦：聊天鈕底部與「離開廣場」切齊；視窗／預覽叠在鈕上方 */
+/* 電腦：聊天鈕靠左下；視窗／預覽叠在鈕上方（離開已改到地圖下方） */
 @media (pointer:fine){
   #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 18px);height:44px}
   #pzChatPeek{bottom:calc(env(safe-area-inset-bottom) + 70px)}
@@ -821,13 +888,7 @@ function buildUi() {
 /* 左上：狀態列（#top／#stats）下方 */
 /* z-index 低於聊天／離開；狀態列另在 style.css 抬到 plazaRoot 之上 */
 /* 直向手機：狀態列下方；桌面／橫向：與 #top 同一列左側（地圖-狀態列） */
-#pzMapFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;top:calc(env(safe-area-inset-top) + 118px);bottom:auto;z-index:1;min-width:48px;height:44px;padding:0 12px;border:1.5px solid rgba(232,246,255,.35);border-radius:12px;background:rgba(32,72,96,.48);color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-#pzMapFab:active{background:rgba(32,72,96,.62)}
-#pzMapFab .ic{background:currentColor}
-@media (pointer:fine){#pzMapFab{top:calc(env(safe-area-inset-top) + 14px);left:calc(env(safe-area-inset-left) + 10px);height:44px;z-index:2}}
-@media (pointer:coarse) and (orientation:landscape){
-  #pzMapFab{top:calc(env(safe-area-inset-top) + 4px);left:calc(env(safe-area-inset-left) + 8px);height:40px;min-width:44px;padding:0 10px;font-size:13px;z-index:2}
-}
+/* 地圖／離開樣式見 #pzLeftFabs */
 #pzMap{display:none;pointer-events:auto;position:absolute;inset:0;z-index:6;background:rgba(8,10,12,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px)}
 #pzMap.open{display:flex;flex-direction:column;gap:10px}
 #pzMapHd{display:flex;align-items:center;justify-content:space-between;gap:10px;width:min(92vw,420px);color:#ffe6b0;font-weight:900;font-size:16px}
@@ -848,10 +909,21 @@ function buildUi() {
   }
 }
 </style>
-<button id="pzX" type="button" aria-label="離開廣場">離開廣場</button>
+<div id="pzLeftFabs">
+<button id="pzMapFab" type="button" aria-label="地圖"><i class="ic ic-pin"></i> 地圖<span class="key"> (M)</span></button>
+<button id="pzX" type="button" aria-label="離開廣場"><i class="ic ic-exit"></i> 離開</button>
+</div>
+<div id="pzLeaveAsk" role="dialog" aria-modal="true" aria-label="確定離開廣場？">
+  <div class="pzLeaveBox">
+    <p>確定離開廣場？</p>
+    <div class="pzLeaveBtns">
+      <button id="pzLeaveOk" type="button">確定</button>
+      <button id="pzLeaveNo" type="button">取消</button>
+    </div>
+  </div>
+</div>
 <div id="pzHud">準備中…</div>
 <div id="pzNet" role="status" aria-live="polite"></div>
-<button id="pzMapFab" type="button" aria-label="地圖"><i class="ic ic-pin"></i> 地圖<span class="key"> (M)</span></button>
 <button id="pzChatFab" type="button" aria-label="聊天">聊天<span class="key"> (ENTER)</span><span class="pzBadge" aria-hidden="true">0</span></button>
 <button id="pzChatPeek" type="button" aria-label="打開聊天"></button>
 <div id="pzChat">
@@ -871,9 +943,14 @@ function buildUi() {
   </div>
 </div>`;
   document.body.appendChild(ui);
-  ui.querySelector('#pzX')!.addEventListener('click', () => {
-    if (shiftStarted) deps?.onExit();
-    else { const exit = deps?.onExit; void closePlaza(true).then(() => exit?.()); }
+  ui.querySelector('#pzX')!.addEventListener('click', () => plazaAskLeave());
+  ui.querySelector('#pzLeaveNo')!.addEventListener('click', () => plazaCloseLeaveAsk());
+  ui.querySelector('#pzLeaveOk')!.addEventListener('click', () => {
+    plazaCloseLeaveAsk();
+    plazaLeaveNow();
+  });
+  ui.querySelector('#pzLeaveAsk')!.addEventListener('click', (e) => {
+    if (e.target === ui!.querySelector('#pzLeaveAsk')) plazaCloseLeaveAsk();
   });
   const chat = ui.querySelector('#pzChat') as HTMLElement;
   const fab = ui.querySelector('#pzChatFab') as HTMLElement;
@@ -1257,7 +1334,8 @@ async function plazaDoCarry(npcConnId: string): Promise<boolean> {
     const r = await client.carryNpc(npcConnId);
     if (!r.ok) {
       markCarryUnsupported(r.err);
-      deps.toast(zhNpcErr(r.err, nearCarry?.nick === '阿伯' ? '阿伯' : '阿婆'), '#ff8a7a');
+      const who = nearCarry?.nick === '阿伯' ? '阿伯' : '阿婆';
+      deps.toast(r.err === 'taken' ? '已有人在送' : zhNpcErr(r.err, who), '#ff8a7a');
       return false;
     }
     deps.toast('抱起來了，靠近空位再放下', '#9be37a');
@@ -1281,7 +1359,9 @@ async function plazaDoPlace(seat: PlazaSeatRef): Promise<boolean> {
       return false;
     }
     if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
-    deps.toast(`${who}坐好了`, '#9be37a');
+    const deliver = normSeatWishEnd((r as any).deliver);
+    if (deliver) applySeatWishEnd(deliver);
+    else deps.toast(`${who}坐好了`, '#9be37a');
     return true;
   } finally { sittingBusy = false; carryPlacing = false; checkCarryLost(); }
 }
@@ -1455,11 +1535,32 @@ function refreshPlazaMap() {
     seated,
     nick: deps.nick(),
   });
-  drawPlazaMap(cvs, markers);
+  const wishPins = seatWishes.map(w => {
+    const pose = seatPose(w.pileId, w.slot);
+    const who = (w.npcNick || '阿婆').slice(0, 2);
+    return { x: pose.pos.x, z: pose.pos.z, label: who };
+  });
+  drawPlazaMap(cvs, markers, wishPins);
 }
 
 export function plazaMapIsOpen() {
   return !!ui?.querySelector('#pzMap')?.classList.contains('open');
+}
+export function plazaLeaveAskIsOpen() {
+  return !!ui?.querySelector('#pzLeaveAsk')?.classList.contains('open');
+}
+export function plazaCloseLeaveAsk() {
+  ui?.querySelector('#pzLeaveAsk')?.classList.remove('open');
+}
+function plazaAskLeave() {
+  if (!ui) return;
+  plazaCloseMap();
+  plazaCloseChat();
+  ui.querySelector('#pzLeaveAsk')?.classList.add('open');
+}
+function plazaLeaveNow() {
+  if (shiftStarted) deps?.onExit();
+  else { const exit = deps?.onExit; void closePlaza(true).then(() => exit?.()); }
 }
 export function plazaCloseMap() {
   ui?.querySelector('#pzMap')?.classList.remove('open');
@@ -1513,7 +1614,7 @@ export function tickPlaza(dt: number) {
 /** 收工／結算時藏廣場 UI（離開鈕、聊天、地圖），避免擋結果面板 */
 export function plazaHideChrome(hide = true) {
   if (!ui) return;
-  if (hide) plazaCloseMap();
+  if (hide) { plazaCloseMap(); plazaCloseLeaveAsk(); }
   ui.style.display = hide ? 'none' : '';
 }
 
@@ -1558,7 +1659,7 @@ export async function closePlaza(leaveSeat = true) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; deps = null; near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
   if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null, tag: myTag() });
 }
