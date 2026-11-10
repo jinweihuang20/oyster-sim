@@ -1652,3 +1652,14 @@ body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!importan
 .flagShop .flagChip.pv{opacity:1;border-style:solid;border-color:#d4af37;background:rgba(212,175,55,.18)}
 #shop .flagShop .flagChip.pv{border:1px solid #d4af37!important;background:rgba(212,175,55,.28)!important;box-shadow:0 0 0 1px rgba(212,175,55,.5)!important;opacity:1}
 #shop .flagShop .flagChip.on:not(.lock){border-color:#2a5a86!important;box-shadow:0 0 0 1px rgba(42,90,134,.55)!important}
+/* 購買數量元件 */
+.buyRow{display:flex;flex-direction:column;align-items:stretch;gap:6px;flex:0 0 auto}
+.medCard .buyRow{grid-area:buy}
+.itemCard .buyRow{margin-left:auto}
+.qtyBox{display:flex;align-items:center;justify-content:space-between;gap:2px;border:1px solid rgba(31,42,54,.18);border-radius:999px;background:rgba(255,255,255,.7);padding:2px;box-shadow:0 1px 3px rgba(20,30,45,.06)}
+#shop .qtyBox .qtyBtn{min-width:0!important;min-height:0!important;width:28px;height:28px;padding:0!important;margin:0!important;border:0!important;border-radius:999px!important;background:transparent!important;color:#2a5a86!important;box-shadow:none!important;display:flex;align-items:center;justify-content:center;cursor:pointer}
+#shop .qtyBox .qtyBtn:hover:not(:disabled){background:rgba(42,90,134,.12)!important}
+#shop .qtyBox .qtyBtn:disabled{opacity:.3;cursor:default}
+.qtyBox .qtyIn{width:2.6em;min-width:0;text-align:center;border:0;background:transparent;font:inherit;font-size:14px;font-weight:700;color:#1f2a35;padding:0;outline:none}
+.qtyBox:focus-within{border-color:#2a5a86}
+#shop .qtyBox .qtyIn{border:0!important;box-shadow:none!important;background:transparent!important;height:28px;margin:0!important;border-radius:0!important}
