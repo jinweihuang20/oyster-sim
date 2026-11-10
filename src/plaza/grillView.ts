@@ -94,7 +94,7 @@ export function createGrillView(parent: THREE.Object3D) {
       hint.sprite.position.set(0, 0.2, 0);
       hint.sprite.center.set(0.5, 0);
       hint.sprite.visible = false;
-      hint.sprite.renderOrder = 10;
+      hint.sprite.renderOrder = 32;
       hint.sprite.userData.grillOysterId = o.id;
       grp.add(hint.sprite);
       root.add(grp);

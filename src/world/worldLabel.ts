@@ -30,7 +30,7 @@ export type WorldLabelNameTone = 'player' | 'npc';
 
 export type WorldLabelOpts = {
   worldH?: number;
-  /** 廣場人名等需蓋過場景時關深度測試（等同舊 DOM 疊層） */
+  /** 預設關閉深度測試，名牌／對話框永遠畫在人物前面；傳 true 才依深度被擋住 */
   depthTest?: boolean;
   /** 真人／NPC 樣式（名牌與泡泡皆用） */
   nameTone?: WorldLabelNameTone;
@@ -46,7 +46,7 @@ export function makeWorldLabel(
 ): WorldLabel {
   const opts: WorldLabelOpts = typeof worldHOrOpts === 'number' ? { worldH: worldHOrOpts } : worldHOrOpts;
   const worldH = opts.worldH ?? (kind === 'name' ? 0.2 : 0.3);
-  const depthTest = opts.depthTest !== false;
+  const depthTest = opts.depthTest === true;
   const nameTone: WorldLabelNameTone = opts.nameTone === 'npc' ? 'npc' : 'player';
   // 固定畫布尺寸：避免改 canvas.width 導致 WebGL 貼圖卡住舊畫面
   const dpr = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 2);
@@ -70,7 +70,8 @@ export function makeWorldLabel(
   });
   const sprite = new THREE.Sprite(mat);
   sprite.center.set(0.5, 0);
-  sprite.renderOrder = kind === 'bubble' ? 3 : 2;
+  // 高於人物配件／衣服（equipVisual 會把 mesh 提到 2～3），避免第三人稱自己的頭身蓋住別人的名牌與對話框
+  sprite.renderOrder = kind === 'bubble' ? 31 : 30;
   let text = '';
   let opacity = 1;
   let nameFrame = false;
