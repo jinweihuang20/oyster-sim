@@ -259,7 +259,9 @@ export function armBurst(w: Weapon) {
 export const weaponList = (): WeaponDef[] => Object.values(WEAPON_DEFS);
 export const shopWeapons = (): WeaponDef[] => weaponList().filter(w => w.inShop);
 
-export type MatFn = (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => THREE.MeshStandardMaterial;
+/** 廣場／死鬥環境材質；LO 可能是 Lambert */
+export type SurfMat = THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+export type MatFn = (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => SurfMat;
 export type MeshAdd = (
   g: THREE.BufferGeometry,
   m: THREE.Material,

@@ -1,7 +1,7 @@
 import { HQ_SEAT_SLOT } from './plaza/layout';
 import { qtyHtml, bindQty, getQty, resetQty } from './shop/qty';
 import {
-  initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl,
+  initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl, setGeoLowDetail,
   importMove, escapeInApp, type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY,
   defaultSave, loadSave as loadSaveFrom, writeSave, todayKey, dayDiff, installNoZoom,
   eco, fetchEconomy, syncEconomyTables,
@@ -16,7 +16,7 @@ import {
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
   setWalking, setNearSeat, clearWalkInput,
   makeWorldLabel, type WorldLabel,
-  initYardScene, shedAnim, applyShedLook, showLand, getShedG,
+  initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
 import {
   checkCode, REDEEM_MESSAGES, type RedeemCodeDef, applyOutfitToRig,
@@ -109,6 +109,8 @@ const bootEco = (() => {
   try { const raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; if (typeof raw.eco === 'boolean') return raw.eco; } catch { /* */ }
   return COARSE;
 })();
+// 手機／省電：方塊取代圓角、圓柱少段（需在建場景幾何前）
+setGeoLowDetail(bootEco || COARSE);
 const canvas = $('c') as HTMLCanvasElement;
 // 移動端／省電：mediump、關 AA、low-power GPU；一般 high-performance（powerPreference 僅建 renderer 時生效）
 const renderer = new THREE.WebGLRenderer({
@@ -134,7 +136,15 @@ function viewCam() { return tpOn ? tpCam : camera; }
 const SEAT0 = new THREE.Vector3(0, 1.05, 2.0), SEAT = SEAT0.clone();
 camera.position.copy(SEAT);
 
-const mat = (c: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.78, flatShading: false, ...o });
+type SurfMat = THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+const mat = (c: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}): SurfMat => {
+  if (bootEco || COARSE) {
+    const rest = { ...o } as Record<string, unknown>;
+    for (const k of ['roughness', 'metalness', 'flatShading', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'bumpMap', 'displacementMap', 'envMap', 'envMapIntensity']) delete rest[k];
+    return new THREE.MeshLambertMaterial({ color: c, ...rest });
+  }
+  return new THREE.MeshStandardMaterial({ color: c, roughness: 0.78, flatShading: false, ...o });
+};
 function mesh(g: THREE.BufferGeometry, m: THREE.Material, p?: [number, number, number], parent: THREE.Object3D = scene) {
   const x = new THREE.Mesh(g, m); if (p) x.position.set(...p); x.castShadow = true; x.receiveShadow = parent === scene; parent.add(x); return x;
 }
@@ -146,9 +156,11 @@ const sun = new THREE.DirectionalLight(0xffe8c4, 1.15); sun.position.set(-3, 11,
 const lamp = new THREE.PointLight(0xffe8c8, 14, 10, 1.6); lamp.position.set(0, 2.55, 0); lamp.castShadow = true; lamp.shadow.bias = -0.003; lamp.shadow.normalBias = 0.03; lamp.shadow.mapSize.set(bootEco ? 512 : 1024, bootEco ? 512 : 1024); scene.add(lamp);
 const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff4dc });
 const yardFloor = makeYardFloorMaps(matchMedia('(pointer: coarse)').matches ? 256 : 384);
-const ground = mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({
-  map: yardFloor.map, roughnessMap: yardFloor.rough, color: 0xd8d2c4, roughness: 0.92, metalness: 0.02,
-})); ground.rotation.x = -Math.PI / 2; // 水泥地（貼皮）
+const ground = mesh(new THREE.PlaneGeometry(14, 14), bootEco || COARSE
+  ? new THREE.MeshLambertMaterial({ map: yardFloor.map, color: 0xd8d2c4 })
+  : new THREE.MeshStandardMaterial({
+    map: yardFloor.map, roughnessMap: yardFloor.rough, color: 0xd8d2c4, roughness: 0.92, metalness: 0.02,
+  })); ground.rotation.x = -Math.PI / 2; // 水泥地（貼皮）
 // 柱仔頂的指針時鐘（跟著裝置時間）
 const clockG = new THREE.Group(); clockG.position.set(3.5, 2.35, -3.5); scene.add(clockG); clockG.lookAt(0, 2.0, 2.0); clockG.translateZ(0.09);
 mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 24), mat(0x6a4a2a), [0, 0, -0.02], clockG).rotation.x = Math.PI / 2;
@@ -161,7 +173,9 @@ function updClock() { const d = new Date(), sec = d.getSeconds(), m = d.getMinut
 updClock(); setInterval(updClock, 1000);
 // 港口：碼頭、水、漁船（工寮用；進廣場會藏起，改用廣場北側碼頭船）
 const harborDock = mesh(rboxEnv(14, 0.3, 3), mat(0x8a9088), [0, -0.15, -5.8]);
-const water = mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x4a98b8, roughness: 0.24, metalness: 0.18 }), [0, -0.5, -27]); water.rotation.x = -Math.PI / 2;
+const water = mesh(new THREE.PlaneGeometry(80, 40), bootEco || COARSE
+  ? new THREE.MeshLambertMaterial({ color: 0x4a98b8 })
+  : new THREE.MeshStandardMaterial({ color: 0x4a98b8, roughness: 0.24, metalness: 0.18 }), [0, -0.5, -27]); water.rotation.x = -Math.PI / 2;
 const skyDome = createSkyDome({ radius: 46, lo: matchMedia('(pointer: coarse)').matches || matchMedia('(max-width: 900px)').matches });
 scene.add(skyDome.mesh);
 const boats: THREE.Group[] = [];
@@ -183,7 +197,7 @@ const shellGeo = SHELL_GEOS[0], halfGeo = HALF_GEOS[0];
 const shellMat = shellM(0xe8e4e0);
 // 點擊撈蚵用：必須保留 mesh 參考（crease 後不再是 ConeGeometry，不能事後 find）
 const pileHit = mesh(crease(new THREE.ConeGeometry(0.9, 0.55, 10)), mat(0x7a8ca0, { roughness: 0.95, emissive: 0x0a1018, emissiveIntensity: 0.12 }), [0, 0.27, 0]);
-const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo, pileMat, 260); pile.castShadow = true; pile.renderOrder = 0;
+const pileMat = shellM(0xffffff); const pile = new THREE.InstancedMesh(shellGeo, pileMat, 260); pile.castShadow = !bootEco; pile.renderOrder = 0;
 { const d = new THREE.Object3D(); for (let i = 0; i < 260; i++) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 1.0, h = Math.max(0, 0.55 * (1 - r / 0.95)); d.position.set(Math.cos(a) * r, h + 0.03, Math.sin(a) * r); d.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); d.updateMatrix(); pile.setMatrixAt(i, d.matrix); pile.setColorAt(i, new THREE.Color(greyPick())); } }
 scene.add(pile);
 const pileSpot = () => { const a = Math.random() * 6.28, r = rnd(0.2, 0.7); return new THREE.Vector3(Math.cos(a) * r, 0.5 * (1 - r) + 0.05, Math.sin(a) * r); };
@@ -328,7 +342,14 @@ const handRig = new THREE.Group(); camera.add(handRig);
 const sleeve = mat(0x3a5a8a), shirtCuff = mat(0xe8e4d8);
 const handSkin = mat(skin), cuffMat = mat(0x3a6fc0); cuffMat.visible = false;
 const fingerMeshes: THREE.Mesh[] = [];
-function applyGloves() { const g = gearOn('glove'); handSkin.color.set(g ? 0xe8e4d8 : skin); handSkin.roughness = g ? 1 : 0.85; cuffMat.visible = g; fingerMeshes.forEach(f => f.scale.set(g ? 1.25 : 1, g ? 1.2 : 1, g ? 1.05 : 1)); applyGlasses(); }
+function applyGloves() {
+  const g = gearOn('glove');
+  handSkin.color.set(g ? 0xe8e4d8 : skin);
+  if (handSkin instanceof THREE.MeshStandardMaterial) handSkin.roughness = g ? 1 : 0.85;
+  cuffMat.visible = g;
+  fingerMeshes.forEach(f => f.scale.set(g ? 1.25 : 1, g ? 1.2 : 1, g ? 1.05 : 1));
+  applyGlasses();
+}
 function applyGlasses() { const g = gearOn('glasses'); (seamMark.material as THREE.MeshBasicMaterial).color.set(g ? 0xe8a050 : 0x7a4a1e); seamMark.scale.setScalar(g ? 1.7 : 1); seamGlow.scale.setScalar(g ? 1.6 : 1); document.getElementById('vign')?.classList.toggle('on', g && state === 'play'); }
 function makeHand(s: number) {
   const h = new THREE.Group();
@@ -416,6 +437,7 @@ function applyEcoGfx() {
   lamp.shadow.map?.dispose();
   lamp.shadow.map = null;
   applyPlazaShadowMode();
+  try { updSky(); } catch { /* 啟動時 sky／mix 尚未就緒 */ }
 }
 applyEcoGfx();
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
@@ -987,7 +1009,7 @@ function updSky() {
   const horizon = _c1.setHex(skyHex).lerp(_c2.setHex(night ? 0x1a2838 : 0xe4f0f8), 0.5).getHex();
   skyDome.setColors(zenith, horizon, L(2));
   skyDome.setSun(_skySun.copy(sun.position).normalize(), Math.min(1.15, sun.intensity / 1.15));
-  skyDome.setClouds(night ? 0.1 : dawnDusk ? 0.38 : 0.56);
+  skyDome.setClouds(mix.eco ? 0 : night ? 0.1 : dawnDusk ? 0.38 : 0.56);
   try { applyShedLook(); } catch { /* 尚未初始化 */ }
   refreshEconomyLabels();
 }
@@ -2924,8 +2946,9 @@ function plazaHideYard(hide: boolean) {
   if (hide) {
     plazaHomeHide = [];
     const baseCone = typeof pileHit !== 'undefined' ? pileHit : null;
-    // 工寮木柱／厝頂／時鐘／碼頭漁船也藏：否則穿廣場走道；廣場改用北側碼頭船
-    for (const o of [pile, ground, baseCone, getShedG(), clockG, harborDock, ...boats, ...stools, ...ALL_NPCS.map(n => n.g)]) {
+    const landGs = Object.values(LAND);
+    // 工寮木柱／厝頂／時鐘／碼頭漁船／水體／地標也藏：否則穿廣場走道；廣場改用北側碼頭船
+    for (const o of [pile, ground, water, baseCone, getShedG(), clockG, harborDock, ...boats, ...landGs, ...stools, ...ALL_NPCS.map(n => n.g)]) {
       if (!o || (o as any).__plazaHid) continue;
       (o as any).__plazaHid = o.visible; o.visible = false; plazaHomeHide.push(o);
     }
@@ -3700,7 +3723,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
-{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：降解析・關陰影・廣場簡化（重新整理後 AA／精度／GPU 才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU 才會變）', '#9be37a'); }; }
+{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：降解析・關陰影・簡材質／少燈・降面（重新整理後 AA／精度／GPU／網格才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU／網格才會變）', '#9be37a'); }; }
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => $('dex').classList.remove('show');
 
@@ -4067,10 +4090,10 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
   camera.rotation.set(camPitch, yaw + flYaw + (walking ? 0 : seatYaw), camRoll);
   camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
-  // 廣場改靠四象限吊燈照明；中央主燈改弱補光，避免只亮中間
+  // 廣場關掉工寮中央點光（棚頂吊燈／環境光夠）；工寮內省電再壓亮度
   lamp.intensity = plazaMode
-    ? 5.2 + Math.sin(t * 1.3) * 0.35
-    : 26 + Math.sin(t * 1.3) * 1.0;
+    ? 0
+    : (mix.eco ? 18 : 26) + Math.sin(t * 1.3) * (mix.eco ? 0.5 : 1.0);
   skyDome.tick(viewCam(), t);
   renderer.render(scene, viewCam());
   scheduleFrame();

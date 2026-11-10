@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { MatFn } from '../dm/weapons';
 import { rboxEnv, rcyl } from '../core/geo';
 import {
   WALK_BOUND, CAFE_SMOKE_PILE_ID, CAFE_SMOKE_SEAT_COUNT, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_TABLE_RADIUS,
@@ -8,7 +9,6 @@ import { CHAIR_SEAT_Y } from './props';
 import { makeSmokeLabelTexture, makeCigButts } from './smokeArea';
 import { makeCigSmoke, type CharcoalFireFx } from './fireFx';
 
-type MatFn = (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial;
 type AddFn = (
   geo: THREE.BufferGeometry,
   mat: THREE.Material,
@@ -175,7 +175,9 @@ export function makePlazaCafe(
   const plinth = M(0xa9a08e, { roughness: 0.92 });
   const dark = M(0x262a2e, { roughness: 0.55, metalness: 0.35 });
   const metal = M(0x5c6268, { roughness: 0.45, metalness: 0.55 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x2a3238, roughness: 0.08, metalness: 0.7, transparent: true, opacity: 0.32, depthWrite: false });
+  const glass = LO
+    ? new THREE.MeshBasicMaterial({ color: 0x2a3238, transparent: true, opacity: 0.32, depthWrite: false })
+    : new THREE.MeshStandardMaterial({ color: 0x2a3238, roughness: 0.08, metalness: 0.7, transparent: true, opacity: 0.32, depthWrite: false });
 
   // 女兒牆壓頂＋屋頂設備
   add(rboxEnv(W + 0.24, 0.16, D + 0.24, 0.05), trim, [(B.x0 + B.x1) / 2, B.h + 0.08, cz], root, false);

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
+import type { MatFn } from '../dm/weapons';
 import { rboxEnv, rcyl } from '../core/geo';
 import { HQ_BUILDING, HQ_PROPS, SEAFOOD_BUILDING } from './layout';
 
-type MatFn = (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial;
 type AddFn = (
   geo: THREE.BufferGeometry,
   mat: THREE.Material,

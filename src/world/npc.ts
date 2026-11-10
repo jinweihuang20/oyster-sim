@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { rbox, crease, rcyl } from '../core/geo';
+import { rboxNpc, crease, rcyl } from '../core/geo';
 
 export type NpcMeshDeps = {
-  mat: (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => THREE.MeshStandardMaterial;
+  mat: (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
   mesh: (g: THREE.BufferGeometry, m: THREE.Material, p?: [number, number, number], parent?: THREE.Object3D) => THREE.Mesh;
   skin: number;
 };
@@ -13,11 +13,11 @@ export function makeAma(top: number, hair: number, D: NpcMeshDeps) {
   const g = new THREE.Group();
   mesh(rcyl(0.17, 0.17, 0.3, 8), mat(0xd45a4a), [0, 0.15, 0.05], g);
   const body = mesh(rcyl(0.2, 0.3, 0.55, 8), mat(top), [0, 0.6, 0], g);
-  const pants = mat(0x3a5068); mesh(rbox(0.42, 0.14, 0.45), pants, [0, 0.35, -0.15], g);
+  const pants = mat(0x3a5068); mesh(rboxNpc(0.42, 0.14, 0.45), pants, [0, 0.35, -0.15], g);
   const shinG = rcyl(0.055, 0.045, 0.3, 6), sole = mat(0xf6f2ea), strap = mat(0x3a6fc0);
   for (const sx of [-0.1, 0.1]) {
     mesh(shinG, pants, [sx, 0.17, -0.34], g); mesh(rcyl(0.04, 0.04, 0.05, 6), mat(skin), [sx, 0.04, -0.35], g);
-    mesh(rbox(0.09, 0.02, 0.2), sole, [sx, 0.01, -0.4], g); mesh(rbox(0.095, 0.03, 0.035), strap, [sx, 0.035, -0.45], g);
+    mesh(rboxNpc(0.09, 0.02, 0.2), sole, [sx, 0.01, -0.4], g); mesh(rboxNpc(0.095, 0.03, 0.035), strap, [sx, 0.035, -0.45], g);
     mesh(crease(new THREE.SphereGeometry(0.035, 6, 4, 0, Math.PI * 2, 0, 1.6)), mat(skin), [sx, 0.025, -0.47], g);
   }
   const head = new THREE.Group(); head.position.set(0, 1.02, 0); g.add(head);
@@ -25,7 +25,7 @@ export function makeAma(top: number, hair: number, D: NpcMeshDeps) {
   mesh(crease(new THREE.SphereGeometry(0.155, 10, 8, 0, Math.PI * 2, 0, 1.4)), mat(hair), [0, 0.02, 0.02], head);
   mesh(crease(new THREE.SphereGeometry(0.07, 8, 6)), mat(hair), [0, 0.1, 0.13], head);
   for (const s of [-1, 1]) mesh(crease(new THREE.SphereGeometry(0.018, 6, 4)), mat(0x222222), [s * 0.05, 0.02, -0.14], head);
-  mesh(rbox(0.06, 0.012, 0.01), mat(0xa04040), [0, -0.06, -0.145], head);
+  mesh(rboxNpc(0.06, 0.012, 0.01), mat(0xa04040), [0, -0.06, -0.145], head);
   const arm = (s: number) => {
     const p = new THREE.Group(); p.position.set(s * 0.2, 0.8, -0.02); g.add(p);
     mesh(rcyl(0.045, 0.04, 0.38, 6), mat(top), [0, -0.12, -0.12], p).rotation.x = 1.1;

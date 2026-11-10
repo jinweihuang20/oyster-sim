@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { MatFn } from '../dm/weapons';
 import { rboxEnv, rcyl } from '../core/geo';
 import {
   WALK_BOUND, CAFE_OPENING, SEAFOOD_BUILDING, SEAFOOD_ARCADE_X, SEAFOOD_PILE_ID, SEAFOOD_SEAT_COUNT, HQ_SEAT_SLOT,
@@ -6,7 +7,6 @@ import {
 } from './layout';
 import { CHAIR_SEAT_Y } from './props';
 
-type MatFn = (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial;
 type AddFn = (
   geo: THREE.BufferGeometry,
   mat: THREE.Material,
@@ -199,7 +199,9 @@ export function makePlazaSeafood(
   const red = M(0xb8322a, { roughness: 0.5, metalness: 0.4 });
   const dark = M(0x2b2f33, { roughness: 0.55, metalness: 0.35 });
   const white = M(0xeeeae2, { roughness: 0.8 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x2a3238, roughness: 0.08, metalness: 0.7, transparent: true, opacity: 0.3, depthWrite: false });
+  const glass = LO
+    ? new THREE.MeshBasicMaterial({ color: 0x2a3238, transparent: true, opacity: 0.3, depthWrite: false })
+    : new THREE.MeshStandardMaterial({ color: 0x2a3238, roughness: 0.08, metalness: 0.7, transparent: true, opacity: 0.3, depthWrite: false });
 
   const facadePlane = (w: number, h: number, mat: THREE.Material, x: number, y: number, z: number) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
@@ -294,7 +296,9 @@ export function makePlazaSeafood(
       add(rboxEnv(0.48, 0.55, 0.6, 0.03), dark, [p.x, 0.275, p.z], root, true);
       const tank = new THREE.Mesh(
         new THREE.BoxGeometry(0.46, 0.48, 0.58),
-        new THREE.MeshStandardMaterial({ color: 0x8fb4b8, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.45, depthWrite: false }),
+        LO
+          ? new THREE.MeshBasicMaterial({ color: 0x6a90a0, transparent: true, opacity: 0.55, depthWrite: false })
+          : new THREE.MeshStandardMaterial({ color: 0x8fb4b8, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.45, depthWrite: false }),
       );
       tank.position.set(p.x, 0.8, p.z);
       root.add(tank);

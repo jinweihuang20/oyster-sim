@@ -3,8 +3,13 @@ import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.j
 import type { BufferGeometry } from 'three';
 import * as THREE from 'three';
 
+/** 手機／省電：方塊取代圓角、圓柱少段，降面數 */
+let geoLo = false;
+export function setGeoLowDetail(on: boolean) { geoLo = !!on; }
+export function geoLowDetail() { return geoLo; }
+
 /**
- * 圓角方塊：尺寸／比例不變，僅替換 BoxGeometry 並自動平滑折角法線。
+ * 圓角方塊（本機／遠端玩家）：一律保留圓角。
  * segments 低以保持 low-poly 體量、不重算骨架。
  */
 export function rbox(w: number, h: number, d: number, segments = 2, radiusRatio = 0.14): BufferGeometry {
@@ -13,8 +18,14 @@ export function rbox(w: number, h: number, d: number, segments = 2, radiusRatio 
   return toCreasedNormals(new RoundedBoxGeometry(w, h, d, segments, radius));
 }
 
-/** 場景道具：1 段圓角，大量環境物件較輕；比例同 rbox */
+/** NPC 人物：純方塊降面（玩家請用 rbox） */
+export function rboxNpc(w: number, h: number, d: number): BufferGeometry {
+  return new THREE.BoxGeometry(w, h, d);
+}
+
+/** 場景道具：一般 1 段圓角；手機／省電改純方塊降面（人物請用 rbox／rboxNpc） */
 export function rboxEnv(w: number, h: number, d: number, radiusRatio = 0.13): BufferGeometry {
+  if (geoLo) return new THREE.BoxGeometry(w, h, d);
   return rbox(w, h, d, 1, radiusRatio);
 }
 
@@ -27,5 +38,6 @@ export function rcyl(
   rt: number, rb: number, h: number, seg = 8,
   openEnded = false,
 ): BufferGeometry {
-  return crease(new THREE.CylinderGeometry(rt, rb, h, seg, 1, openEnded));
+  const s = geoLo ? Math.min(seg, 5) : seg;
+  return crease(new THREE.CylinderGeometry(rt, rb, h, s, 1, openEnded));
 }

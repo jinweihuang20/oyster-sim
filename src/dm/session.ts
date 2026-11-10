@@ -282,7 +282,7 @@ ${isTouch
   }
   // 第三人稱玩家模型（未來＝其他玩家）；本機仍用第一人稱
   function makeBot(look: { shirt: number; hair: number; pants?: number }) {
-    const a = makePlayerAvatar(look, M, add, LO);
+    const a = makePlayerAvatar(look, M, add, LO, true);
     if (!LO) a.outer.traverse(o => { (o as THREE.Mesh).castShadow = true; });
     scene.add(a.outer);
     return { outer: a.outer, rig: a };

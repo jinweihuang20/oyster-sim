@@ -27,8 +27,8 @@ export type ClothUiDeps = {
   myName: () => string;
   statsId: string;
   COARSE: boolean;
-  sleeve: THREE.MeshStandardMaterial;
-  shirtCuff: THREE.MeshStandardMaterial;
+  sleeve: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+  shirtCuff: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
   getEqFromRes: () => boolean;
   setEqFromRes: (v: boolean) => void;
   isEvRun: () => boolean;

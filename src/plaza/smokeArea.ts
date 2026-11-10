@@ -1,11 +1,11 @@
 import * as THREE from 'three';
+import type { MatFn } from '../dm/weapons';
 import { rboxEnv, rcyl } from '../core/geo';
 import { SMOKE_CENTER, SMOKE_SEAT_COUNT, SMOKE_PILE_ID, SMOKE_ABER_SLOT, SMOKE_ASHTRAY_XZ, SMOKE_ASHTRAY_TOP_Y, seatPose, seatKey, plazaSmokeObstacles, smokeNpcSeatPose } from './layout';
 import { makePlazaChair } from './props';
 import { makeCigSmoke, type CharcoalFireFx } from './fireFx';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-type MatFn = (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial;
 type AddFn = (
   geo: THREE.BufferGeometry,
   mat: THREE.Material,
