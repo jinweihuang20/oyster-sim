@@ -330,6 +330,9 @@ export function createPlazaWorldView(
   bakeStaticLighting(root, {
     includeDirect: LO,
     sunDir: new THREE.Vector3(-3, 11, -5),
+    lampXZ: PLAZA_LAMP_XZ,
+    lampY: PLAZA_ROOF_Y - 0.55,
+    lampPool: LO,
   });
   const allPads = extraPads ? [plazaChairs.pads, extraPads] : [plazaChairs.pads];
   const paintInstancedPads = (taken: Set<string> | null) => {
@@ -575,9 +578,9 @@ export function createPlazaWorldView(
   const roofLamps: THREE.PointLight[] = [];
   // LO：只留一盞動態點光（另一側靠環境光／自發光），一般兩盞對角
   const roofLampXZ = LO ? [PLAZA_LAMP_XZ[0]] : [PLAZA_LAMP_XZ[0], PLAZA_LAMP_XZ[3]];
-  const roofLampBaseI = LO ? 12 : 11;
+  const roofLampBaseI = LO ? 14 : 16;
   for (const [x, z] of roofLampXZ) {
-    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 18 : 16, 1.35);
+    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 18 : 18, 1.25);
     pl.position.set(x, PLAZA_ROOF_Y - 0.55, z);
     pl.castShadow = false;
     pl.visible = true;

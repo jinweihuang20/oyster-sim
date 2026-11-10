@@ -486,11 +486,51 @@ export function makePlazaBigShed(
   }
 
   // 吊燈外觀：四堆一盞（與 PLAZA_LAMP_XZ／實際 PointLight 對齊）
+  // 燈泡＋燈罩＋加法光暈都是自發光／Sprite，省電關點光時燈看起來仍亮，不加即時光源
   {
-    const glow = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
+    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff8e8 });
+    const shadeMat = new THREE.MeshBasicMaterial({ color: 0xffe3b0, side: THREE.DoubleSide });
+    const glowCv = document.createElement('canvas');
+    glowCv.width = glowCv.height = 64;
+    {
+      const c = glowCv.getContext('2d')!;
+      const gr = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(255,250,235,1)');
+      gr.addColorStop(0.22, 'rgba(255,230,180,0.7)');
+      gr.addColorStop(0.55, 'rgba(255,200,120,0.22)');
+      gr.addColorStop(1, 'rgba(255,180,80,0)');
+      c.fillStyle = gr;
+      c.fillRect(0, 0, 64, 64);
+    }
+    const glowMap = new THREE.CanvasTexture(glowCv);
+    glowMap.colorSpace = THREE.SRGBColorSpace;
+    glowMap.needsUpdate = true;
+    const glowMat = new THREE.SpriteMaterial({
+      map: glowMap,
+      color: 0xfff2d4,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      opacity: lowDetail ? 0.95 : 0.8,
+    });
+    const bulbSegs = lowDetail ? 8 : 10;
     for (const [x, z] of PLAZA_LAMP_XZ) {
-      add(new THREE.SphereGeometry(lowDetail ? 0.07 : 0.09, lowDetail ? 6 : 8, lowDetail ? 5 : 6), glow, [x, roofY - 0.55, z], g, false);
+      const y = roofY - 0.55;
+      add(new THREE.SphereGeometry(lowDetail ? 0.11 : 0.13, bulbSegs, lowDetail ? 6 : 8), bulbMat, [x, y, z], g, false);
+      add(
+        new THREE.CylinderGeometry(lowDetail ? 0.05 : 0.06, lowDetail ? 0.14 : 0.16, 0.08, lowDetail ? 6 : 8, 1, true),
+        shadeMat,
+        [x, y + 0.07, z],
+        g,
+        false,
+      );
       add(rcyl(0.008, 0.008, 0.5, 4), M(0x111111), [x, roofY - 0.25, z], g, false);
+      const halo = new THREE.Sprite(glowMat);
+      // 扁一點、略往下，避免光暈碰到厝頂被深度測試吃掉
+      halo.position.set(x, y - 0.04, z);
+      halo.scale.set(lowDetail ? 1.5 : 1.7, lowDetail ? 0.72 : 0.82, 1);
+      halo.renderOrder = 2;
+      g.add(halo);
     }
   }
 

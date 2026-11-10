@@ -5,6 +5,10 @@ export type BakeLightingOpts = {
   sunDir?: THREE.Vector3;
   /** 是否把直射陰影也烤進去（手機／省電建議開；桌機即時陰影請關以免雙重） */
   includeDirect?: boolean;
+  /** 吊燈水平位置；開啟 lampPool 時在燈下烤一圈暖光（手機省電關點光時仍看得到） */
+  lampXZ?: readonly (readonly [number, number])[];
+  lampY?: number;
+  lampPool?: boolean;
   skip?: (o: THREE.Object3D) => boolean;
 };
 
@@ -125,12 +129,45 @@ function bakedLit(ao0: number, ndl: number, shRaw: number, includeDirect: boolea
   return Math.min(1, Math.max(0.90, ao0 * sh) * 1.05);
 }
 
+/** 吊燈下方／棚底的暖光權重 0–1（地面較寬、棚底較窄） */
+function lampWarm(x: number, y: number, z: number, ny: number, lamps: readonly (readonly [number, number])[], lampY: number) {
+  let w = 0;
+  for (const [lx, lz] of lamps) {
+    const horiz = Math.hypot(x - lx, z - lz);
+    // 地面／桌椅朝上的面：一圈柔光，半徑約 4.8 m，燈與燈之間還有空隙
+    if (ny >= -0.15 && y < 2.4) {
+      const t = 1 - horiz / 4.8;
+      if (t > 0) {
+        const heightFade = y < 0.25 ? 1 : Math.max(0, 1 - y / 2.5);
+        w = Math.max(w, t * t * heightFade);
+      }
+    }
+    // 棚底朝下的面：燈附近一小圈暖光
+    if (ny < 0 && y > 3.4) {
+      const t = 1 - Math.hypot(horiz, Math.max(0, lampY - y)) / 2.4;
+      if (t > 0) w = Math.max(w, t * t * 0.85);
+    }
+  }
+  return w;
+}
+
+function applyWarm(lit: number, warm: number, out: THREE.Color | Float32Array, i = 0) {
+  const r = lit * (1 + warm * 0.42);
+  const g = lit * (1 + warm * 0.24);
+  const b = lit * (1 + warm * 0.06);
+  if (out instanceof THREE.Color) out.setRGB(r, g, b);
+  else { out[i] = r; out[i + 1] = g; out[i + 2] = b; }
+}
+
 /**
  * 把靜態場景的環境光遮蔽（與可選的陽光陰影）烤進頂點色／instanceColor。
  * 當成乘法色：1＝全亮。不會改動態角色。
  */
 export function bakeStaticLighting(root: THREE.Object3D, opts: BakeLightingOpts = {}) {
   const includeDirect = !!opts.includeDirect;
+  const lamps = opts.lampXZ ?? [];
+  const lampY = opts.lampY ?? 4.1;
+  const usePool = !!opts.lampPool && lamps.length > 0;
   const skip = (o: THREE.Object3D) => !!(opts.skip?.(o) || skipDefault(o) || o.userData.lightingBaked);
   const sun = (opts.sunDir ?? new THREE.Vector3(-3, 11, -5)).clone().normalize();
   root.updateMatrixWorld(true);
@@ -150,7 +187,8 @@ export function bakeStaticLighting(root: THREE.Object3D, opts: BakeLightingOpts 
         const ao0 = aoAt(_p.x, _p.y, _p.z, 1, grid);
         const shRaw = includeDirect ? shadowAt(_p.x, _p.y + 0.3, _p.z, sun, grid) : 1;
         const lit = bakedLit(ao0, 1, shRaw, includeDirect);
-        _c.setRGB(lit, lit, lit);
+        const warm = usePool ? lampWarm(_p.x, _p.y, _p.z, 1, lamps, lampY) : 0;
+        applyWarm(lit, warm, _c);
         im.setColorAt(i, _c);
       }
       if (im.instanceColor) im.instanceColor.needsUpdate = true;
@@ -178,9 +216,8 @@ export function bakeStaticLighting(root: THREE.Object3D, opts: BakeLightingOpts 
       const ndl = includeDirect ? _n.dot(sun) : 1;
       const shRaw = includeDirect ? shadowAt(_p.x, _p.y, _p.z, sun, grid) : 1;
       const lit = bakedLit(ao0, ndl, shRaw, includeDirect);
-      col[i * 3] = lit;
-      col[i * 3 + 1] = lit;
-      col[i * 3 + 2] = lit;
+      const warm = usePool ? lampWarm(_p.x, _p.y, _p.z, _n.y, lamps, lampY) : 0;
+      applyWarm(lit, warm, col, i * 3);
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     const mats = Array.isArray(m.material) ? m.material : [m.material];
