@@ -1016,6 +1016,15 @@ async function pullMyFlag() {
   } finally { pullBusy = false; }
 }
 
+export async function plazaTryShowFlag() {
+  if (client?.connected) {
+    const r = await client.showFlag();
+    if (r.ok && r.flag) upsertFlag(r.flag);
+    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null };
+  }
+  return { ok: false as const, err: 'no_conn', mine: null };
+}
+
 export async function plazaTryRemoveFlag() {
   if (client?.connected) {
     const r = await client.removeFlag();

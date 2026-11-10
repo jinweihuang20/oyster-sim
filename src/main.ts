@@ -59,7 +59,7 @@ import {
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
   plazaToggleMap, plazaCloseMap, plazaMapIsOpen, seatPose, plazaPushOutfit, plazaPushCosmetics,
-  plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryUpgradeFlag, plazaTrySelectFlag,
+  plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryShowFlag, plazaTryRemoveFlag, plazaTryUpgradeFlag, plazaTrySelectFlag,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
@@ -1433,6 +1433,7 @@ initYardShop({
   toast,
   onFlagChange: () => plazaRefreshFlagUi(),
   setFlagText: (text) => plazaTrySetFlagText(text),
+  showFlag: (on) => on ? plazaTryShowFlag() : plazaTryRemoveFlag(),
   upgradeFlag: (track) => plazaTryUpgradeFlag(track),
   selectFlag: (track, level) => plazaTrySelectFlag(track, level),
   clearBowlMeat: () => { if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; } },

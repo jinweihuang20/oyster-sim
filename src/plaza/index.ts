@@ -6,7 +6,7 @@ export {
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillHit, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   tickPlaza, plazaReportEarn, plazaEndCleanup, plazaHideChrome,
   plazaFocusChat, plazaCloseChat, plazaChatIsOpen, plazaPushOutfit, plazaPushCosmetics,
-  plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryUpgradeFlag, plazaTrySelectFlag,
+  plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryShowFlag, plazaTryRemoveFlag, plazaTryUpgradeFlag, plazaTrySelectFlag,
   plazaToggleMap, plazaCloseMap, plazaMapIsOpen,
   type PlazaDeps,
 } from './session';
