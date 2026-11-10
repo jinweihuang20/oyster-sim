@@ -5,7 +5,7 @@ import { rboxEnv, rcyl } from '../core';
 export type YardSceneDeps = {
   scene: THREE.Scene;
   mesh: (g: THREE.BufferGeometry, m: THREE.Material, p?: [number, number, number], parent?: THREE.Object3D) => THREE.Mesh;
-  mat: (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => THREE.MeshStandardMaterial;
+  mat: (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
   locNow: () => { id: string };
   ground: THREE.Mesh;
   hemi: THREE.HemisphereLight;
@@ -212,4 +212,9 @@ const CREW: Record<string, Crew[]> = {
   budai: [{ name: '鹽田阿公', hair: 0xeeeeee, look: 'agong', pal: [0xf0f0f0, 0xc8c8c0, 0x6a6a5a] }, { name: '大廠組長大姐', hair: 0x1a1a1a, look: 'dajie', pal: [0x3a7a5a, 0x2a5a4a, 0xe8e8d8] }, { name: '老師傅阿伯', hair: 0x666666, look: 'fisher', pal: [0x4a4a5a, 0x5a5a6a, 0x7a6a4a] }],
 };
 const crewHats: THREE.Object3D[] = [];
-export function showLand() { const id = D.locNow().id; for (const k in LAND) LAND[k].visible = k === id; (D.water.material as THREE.MeshStandardMaterial).color.setHex(WATER_C[id] ?? 0x3a4a6a); }
+export function showLand() {
+  const id = D.locNow().id;
+  for (const k in LAND) LAND[k].visible = k === id;
+  const wm = D.water.material as THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+  wm.color.setHex(WATER_C[id] ?? 0x3a4a6a);
+}

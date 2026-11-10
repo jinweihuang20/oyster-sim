@@ -1,8 +1,8 @@
 import * as THREE from 'three';
+import type { MatFn } from '../dm/weapons';
 import { rboxEnv, rcyl } from '../core/geo';
 import { TIDAL_FLAT } from './layout';
 
-type MatFn = (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial;
 type AddFn = (
   geo: THREE.BufferGeometry,
   mat: THREE.Material,
@@ -56,7 +56,7 @@ export function makePlazaTidalFlat(
   // 水底泥
   add(rboxEnv(waterW * 0.98, 0.03, depth * 0.96), M(0x3a3020, { roughness: 1 }), [waterX, -0.08, cz], g, false);
 
-  // 養殖竹架／插竿（幾排，之後可當掛點）
+  // 養殖竹架／插竿：直竿＋橫竿 InstancedMesh，少 draw call
   const bamboo = M(0x8a6a38, { roughness: 0.88 });
   const rope = M(0xc8b070, { roughness: 0.8 });
   const segs = lowDetail ? 4 : 6;
@@ -64,6 +64,10 @@ export function makePlazaTidalFlat(
   const polesPerRow = lowDetail ? 5 : 7;
   const rowX0 = xInner - 2.2;
   const rowGap = (mudW - 3.2) / Math.max(1, rows - 1);
+  type PoleSpec = { x: number; y: number; z: number; h: number; rx?: number; rz?: number };
+  const uprights: PoleSpec[] = [];
+  const beams: PoleSpec[] = [];
+  const hangAt: { x: number; y: number; z: number }[] = [];
   for (let r = 0; r < rows; r++) {
     const rx = rowX0 - r * rowGap;
     const z0 = zMin + 1.6;
@@ -72,20 +76,44 @@ export function makePlazaTidalFlat(
       const t = i / Math.max(1, polesPerRow - 1);
       const pz = z0 + (z1 - z0) * t;
       const h = 1.15 + (i % 3) * 0.08;
-      add(rcyl(0.035, 0.04, h, segs), bamboo, [rx, h * 0.5, pz], g, true);
-      add(rcyl(0.035, 0.04, h, segs), bamboo, [rx - 1.1, h * 0.5, pz], g, true);
-      // 橫竿
-      const beam = add(rcyl(0.028, 0.028, 1.15, 4), bamboo, [rx - 0.55, h * 0.78, pz], g, false);
-      beam.rotation.z = Math.PI / 2;
-      // 垂掛繩／蚵串示意
+      uprights.push({ x: rx, y: h * 0.5, z: pz, h });
+      uprights.push({ x: rx - 1.1, y: h * 0.5, z: pz, h });
+      beams.push({ x: rx - 0.55, y: h * 0.78, z: pz, h: 1.15, rz: Math.PI / 2 });
       if (!lowDetail || i % 2 === 0) {
-        add(rcyl(0.012, 0.012, 0.35, 3), rope, [rx - 0.25, h * 0.55, pz], g, false);
-        add(rcyl(0.012, 0.012, 0.35, 3), rope, [rx - 0.85, h * 0.55, pz], g, false);
-        const shell = M(0xb8a888, { roughness: 0.75 });
-        add(rboxEnv(0.08, 0.04, 0.06), shell, [rx - 0.25, h * 0.35, pz], g, false);
-        add(rboxEnv(0.08, 0.04, 0.06), shell, [rx - 0.85, h * 0.35, pz], g, false);
+        hangAt.push({ x: rx - 0.25, y: h, z: pz }, { x: rx - 0.85, y: h, z: pz });
       }
     }
+  }
+  const poleGeo = rcyl(0.037, 0.042, 1, segs);
+  const beamGeo = rcyl(0.028, 0.028, 1, 4);
+  const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3();
+  const _e = new THREE.Euler();
+  const poleIM = new THREE.InstancedMesh(poleGeo, bamboo, uprights.length);
+  poleIM.castShadow = !lowDetail;
+  uprights.forEach((u, i) => {
+    _p.set(u.x, u.y, u.z);
+    _q.identity();
+    _s.set(1, u.h, 1);
+    _m.compose(_p, _q, _s);
+    poleIM.setMatrixAt(i, _m);
+  });
+  poleIM.instanceMatrix.needsUpdate = true;
+  g.add(poleIM);
+  const beamIM = new THREE.InstancedMesh(beamGeo, bamboo, beams.length);
+  beams.forEach((b, i) => {
+    _p.set(b.x, b.y, b.z);
+    _e.set(0, 0, b.rz ?? 0);
+    _q.setFromEuler(_e);
+    _s.set(1, b.h, 1);
+    _m.compose(_p, _q, _s);
+    beamIM.setMatrixAt(i, _m);
+  });
+  beamIM.instanceMatrix.needsUpdate = true;
+  g.add(beamIM);
+  const shell = M(0xb8a888, { roughness: 0.75 });
+  for (const h of hangAt) {
+    add(rcyl(0.012, 0.012, 0.35, 3), rope, [h.x, h.y * 0.55, h.z], g, false);
+    add(rboxEnv(0.08, 0.04, 0.06), shell, [h.x, h.y * 0.35, h.z], g, false);
   }
 
   // 零星浮標／石塊

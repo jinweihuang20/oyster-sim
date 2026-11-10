@@ -728,15 +728,16 @@ function buildSleeveDetails(rig: PlayerRig, hand: EquipVis) {
     roughness: hand.id === 'sl_dragon' ? 0.4 : 0.82,
     metalness: hand.id === 'sl_dragon' ? 0.35 : 0.04,
   });
-  const coverG = G('slv-cover', () => rbox(0.108, 0.20, 0.108));
+  // 袖身略往肘延伸，蓋住小臂上端膚色面（同貼圖）
+  const coverG = G('slv-cover', () => rbox(0.108, 0.24, 0.108));
   const cuffG = G('slv-cuff', () => rcyl(0.058, 0.055, 0.036, 8));
-  const stripeG = G('slv-stripe', () => rbox(0.02, 0.18, 0.112));
+  const stripeG = G('slv-stripe', () => rbox(0.02, 0.22, 0.112));
   for (const arm of [rig.lowerL, rig.lowerR]) {
     if (!arm) continue;
     const g = ensureDet(arm, DET.sleeve);
-    add(g, coverG, texM, [0, -0.01, 0]);
+    add(g, coverG, texM, [0, -0.02, 0]);
     add(g, cuffG, cuffM, [0, 0.10, 0]);
-    if (hand.id === 'sl_neon') add(g, stripeG, SM('slv-white', 0xe8f8f0), [0.03, -0.01, 0]);
+    if (hand.id === 'sl_neon') add(g, stripeG, SM('slv-white', 0xe8f8f0), [0.03, -0.02, 0]);
     if (hand.id === 'sl_rain') add(g, G('slv-ref', () => rbox(0.11, 0.018, 0.11)), SM('slv-ref', 0xe8e6d8, { roughness: 0.4 }), [0, 0.04, 0]);
   }
 }

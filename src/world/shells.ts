@@ -1,8 +1,21 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { geoLowDetail } from '../core/geo';
+
+/** 與 main bootEco 對齊：模組載入時 setGeoLowDetail 尚未跑 */
+const bootShellLo = (() => {
+  try {
+    if (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) return true;
+    const raw = JSON.parse(localStorage.getItem('oyster-mix') || '{}') || {};
+    if (typeof raw.eco === 'boolean') return !!raw.eco;
+  } catch { /* */ }
+  return false;
+})();
 
 const mat = (c: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
   new THREE.MeshStandardMaterial({ color: c, roughness: 0.78, flatShading: false, ...o });
+
+const shellLo = () => bootShellLo || geoLowDetail();
 
 /** 蚵殼：灰色為主，偶爾帶烏（頂點色） */
 export function shellPaint(g: THREE.BufferGeometry, seed: number) {
@@ -34,7 +47,7 @@ function shellTex() {
 export const SHELL_TEX = shellTex();
 
 export const mkShell = (sy: number, seed: number) => {
-  let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(0.09, 2); g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
+  let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(0.09, bootShellLo ? 1 : 2); g.deleteAttribute('uv'); g.deleteAttribute('normal'); g = mergeVertices(g);
   let r = seed * 7919 + 13; const rn = () => (r = (r * 9301 + 49297) % 233280) / 233280; const ph = rn() * 6.28, ph2 = rn() * 6.28, amp = 0.12 + rn() * 0.1;
   const pos = g.attributes.position, uv = new Float32Array(pos.count * 2);
   for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), a = Math.atan2(z, x), edge = 1 - Math.abs(y) / 0.09;
@@ -49,9 +62,26 @@ export const SHELL_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.45, i + 1));
 export const HALF_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.38, i + 11));
 export const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 export const greyPick = () => GREYS[Math.min(4, Math.floor(Math.random() * Math.random() * 6.2))];
-export const shellM = (c: number) => { const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX }); m.emissive.setHex(0x0a0c10); m.emissiveIntensity = 0.15; return m; };
+export const shellM = (c: number) => {
+  if (shellLo()) {
+    const m = new THREE.MeshLambertMaterial({ color: c, vertexColors: true, map: SHELL_TEX });
+    m.emissive.setHex(0x0a0c10);
+    m.emissiveIntensity = 0.12;
+    return m;
+  }
+  const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX });
+  m.emissive.setHex(0x0a0c10);
+  m.emissiveIntensity = 0.15;
+  return m;
+};
 /** 臉盆生蚵：比殼堆略濕亮、偏暖乳白，跟乾灰殼堆一眼可分 */
 export const basinShellM = (c: number) => {
+  if (shellLo()) {
+    const m = new THREE.MeshLambertMaterial({ color: c, vertexColors: true, map: SHELL_TEX });
+    m.emissive.setHex(0x142028);
+    m.emissiveIntensity = 0.16;
+    return m;
+  }
   const m = mat(c, { vertexColors: true, roughness: 0.36, metalness: 0.06, map: SHELL_TEX });
   m.emissive.setHex(0x142028);
   m.emissiveIntensity = 0.2;

@@ -19,6 +19,13 @@ function matKey(mat: THREE.Material): string | null {
       mat.flatShading ? 1 : 0,
     ].join(':');
   }
+  if (mat instanceof THREE.MeshLambertMaterial) {
+    return [
+      'lam', mat.color.getHex(),
+      mat.transparent ? 1 : 0, mat.opacity, mat.side,
+      mat.map?.id ?? 0, mat.emissive.getHex(), mat.emissiveIntensity,
+    ].join(':');
+  }
   if (mat instanceof THREE.MeshBasicMaterial) {
     return [
       'bas', mat.color.getHex(),

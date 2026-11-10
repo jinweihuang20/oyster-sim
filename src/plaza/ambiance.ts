@@ -1,9 +1,9 @@
 import * as THREE from 'three';
+import type { MatFn } from '../dm/weapons';
 import { rboxEnv, rcyl } from '../core/geo';
 import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
 import { makePlazaTidalFlat } from './tidalFlat';
 
-type MatFn = (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial;
 type AddFn = (
   geo: THREE.BufferGeometry,
   mat: THREE.Material,

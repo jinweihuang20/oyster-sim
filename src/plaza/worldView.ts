@@ -215,14 +215,16 @@ export function createPlazaWorldView(
   }
 
   // 水泥廣場貼皮（分格對齊蚵堆）
-  const floorMaps = makePlazaFloorMaps(LO ? 384 : 512);
-  const floorMat = new THREE.MeshStandardMaterial({
-    map: floorMaps.map,
-    roughnessMap: floorMaps.rough,
-    roughness: 0.92,
-    metalness: 0.02,
-    color: 0xffffff,
-  });
+  const floorMaps = makePlazaFloorMaps(LO ? 256 : 512);
+  const floorMat: THREE.Material = LO
+    ? new THREE.MeshLambertMaterial({ map: floorMaps.map, color: 0xffffff })
+    : new THREE.MeshStandardMaterial({
+      map: floorMaps.map,
+      roughnessMap: floorMaps.rough,
+      roughness: 0.92,
+      metalness: 0.02,
+      color: 0xffffff,
+    });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(WALK_BOUND * 2.4, WALK_BOUND * 2.4), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0.002;
@@ -236,7 +238,7 @@ export function createPlazaWorldView(
     // 南排烤蚵台；其餘沿用工寮蚵山（InstancedMesh）
     const pile = pileIsGrill(i)
       ? makePlazaGrill(opts.shellGeo, opts.shellMat, i, LO)
-      : makeYardLikePile(opts.shellGeo, opts.shellMat, i, LO ? 140 : 210);
+      : makeYardLikePile(opts.shellGeo, opts.shellMat, i, LO ? 96 : 210);
     pile.position.copy(c);
     root.add(pile);
     pileGroups.push(pile);
@@ -296,6 +298,9 @@ export function createPlazaWorldView(
   for (const pile of pileGroups) mergeStaticMeshes(pile, { skip: skipMerge, name: 'pileMerged' });
   mergeStaticMeshes(ambiance.group, { skip: skipMerge, name: 'ambianceMerged' });
   mergeStaticMeshes(smokeArea.group, { skip: skipMerge, name: 'smokeMerged' });
+  mergeStaticMeshes(cafe.group, { skip: skipMerge, name: 'cafeMerged' });
+  mergeStaticMeshes(seafood.group, { skip: skipMerge, name: 'seafoodMerged' });
+  mergeStaticMeshes(hq.group, { skip: skipMerge, name: 'hqMerged' });
   root.userData.mergeStats = { meshesBefore: meshBefore, meshesAfter: countMeshes(root) };
 
   // 遠景細節裁切：建築小零件（窗框、桌上小物、菸蒂…）與貼圖招牌，鏡頭離建築夠遠就不畫
@@ -353,7 +358,7 @@ export function createPlazaWorldView(
   };
   PLAZA_STALL_SITES.filter((s) => KEEPER_LINES[s.id]).forEach((site, idx) => {
     const look = AMA_LOOKS[(idx * 3 + 1) % AMA_LOOKS.length];
-    const rig = makePlayerAvatar({ shirt: amaShirtHex(look), hair: look.hair, pants: look.pants }, M, add, LO);
+    const rig = makePlayerAvatar({ shirt: amaShirtHex(look), hair: look.hair, pants: look.pants }, M, add, LO, true);
     dressPlazaAma(rig, look);
     posePlazaHangArms(rig, false);
     applyAmaAppearance(rig);
@@ -385,7 +390,7 @@ export function createPlazaWorldView(
   const smokeNpcPose = smokeNpcSeatPose();
   const smokeNpcRig = makePlayerAvatar(
     { shirt: 0x4a6a8a, hair: 0x8a8a8a, pants: 0x3a3a48 },
-    M, add, LO,
+    M, add, LO, true,
   );
   dressPlazaAber(smokeNpcRig);
   smokeNpcRig.outer.scale.setScalar(AVATAR_SCALE);
@@ -530,9 +535,11 @@ export function createPlazaWorldView(
   // 只留對角兩盞真正的吊燈（外觀四盞都還在）；招牌／攤位／炭火改自發光，避免每幀開關燈害著色器重編
   const plazaLights: THREE.PointLight[] = [];
   const roofLamps: THREE.PointLight[] = [];
-  const roofLampBaseI = LO ? 8 : 11;
-  for (const [x, z] of [PLAZA_LAMP_XZ[0], PLAZA_LAMP_XZ[3]]) {
-    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 14 : 16, 1.35);
+  // LO：只留一盞動態點光（另一側靠環境光／自發光），一般兩盞對角
+  const roofLampXZ = LO ? [PLAZA_LAMP_XZ[0]] : [PLAZA_LAMP_XZ[0], PLAZA_LAMP_XZ[3]];
+  const roofLampBaseI = LO ? 12 : 11;
+  for (const [x, z] of roofLampXZ) {
+    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, LO ? 18 : 16, 1.35);
     pl.position.set(x, PLAZA_ROOF_Y - 0.55, z);
     pl.castShadow = false;
     pl.visible = true;
@@ -738,15 +745,19 @@ function hashPid(pid: string) {
     const g = new THREE.Group();
     g.visible = false;
     const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.012, 0.012, 0.72, 5),
-      new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.85, flatShading: true }),
+      new THREE.CylinderGeometry(0.012, 0.012, 0.72, LO ? 4 : 5),
+      LO
+        ? new THREE.MeshLambertMaterial({ color: 0x6a4a2a })
+        : new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.85, flatShading: true }),
     );
     // 傘柄在近 y=0（手握處），傘面沿 +Y；整組再往前傾
     pole.position.set(0, 0.2, 0);
     g.add(pole);
     const canopy = new THREE.Mesh(
-      new THREE.ConeGeometry(0.45, 0.2, 10, 1, true),
-      new THREE.MeshStandardMaterial({ color: 0xc0392b, side: THREE.DoubleSide, roughness: 0.7, flatShading: true }),
+      new THREE.ConeGeometry(0.45, 0.2, LO ? 6 : 10, 1, true),
+      LO
+        ? new THREE.MeshLambertMaterial({ color: 0xc0392b, side: THREE.FrontSide })
+        : new THREE.MeshStandardMaterial({ color: 0xc0392b, side: THREE.DoubleSide, roughness: 0.7, flatShading: true }),
     );
     canopy.position.set(0, 0.58, 0);
     g.add(canopy);
@@ -774,31 +785,28 @@ function hashPid(pid: string) {
   function makeRemoteHold(): { knife: THREE.Group; oyster: THREE.Group } {
     const knife = new THREE.Group();
     knife.visible = false;
-    const handle = new THREE.Mesh(
-      rcyl(0.012, 0.014, 0.09, 5),
-      new THREE.MeshStandardMaterial({ color: 0x7a4a20, roughness: 0.85 }),
-    );
+    const wood = LO ? new THREE.MeshLambertMaterial({ color: 0x7a4a20 }) : new THREE.MeshStandardMaterial({ color: 0x7a4a20, roughness: 0.85 });
+    const steel = LO ? new THREE.MeshLambertMaterial({ color: 0xd0d0d8 }) : new THREE.MeshStandardMaterial({ color: 0xd0d0d8, metalness: 0.7, roughness: 0.3 });
+    const handle = new THREE.Mesh(rcyl(0.012, 0.014, 0.09, LO ? 4 : 5), wood);
     handle.rotation.z = Math.PI / 2;
     knife.add(handle);
-    const blade = new THREE.Mesh(
-      rboxEnv(0.1, 0.006, 0.022),
-      new THREE.MeshStandardMaterial({ color: 0xd0d0d8, metalness: 0.7, roughness: 0.3 }),
-    );
+    const blade = new THREE.Mesh(rboxEnv(0.1, 0.006, 0.022), steel);
     blade.position.set(-0.08, 0, 0);
     knife.add(blade);
 
     const oyster = new THREE.Group();
     oyster.visible = false;
-    const bot = new THREE.Mesh(
-      new THREE.SphereGeometry(0.055, 7, 5),
-      new THREE.MeshStandardMaterial({ color: 0xe0dcd8, roughness: 0.85, flatShading: true }),
-    );
+    const shellCol = LO
+      ? new THREE.MeshLambertMaterial({ color: 0xe0dcd8 })
+      : new THREE.MeshStandardMaterial({ color: 0xe0dcd8, roughness: 0.85, flatShading: true });
+    const shellTop = LO
+      ? new THREE.MeshLambertMaterial({ color: 0xf0ecea })
+      : new THREE.MeshStandardMaterial({ color: 0xf0ecea, roughness: 0.85, flatShading: true });
+    const seg = LO ? 5 : 7;
+    const bot = new THREE.Mesh(new THREE.SphereGeometry(0.055, seg, LO ? 4 : 5), shellCol);
     bot.scale.set(1.15, 0.45, 1);
     oyster.add(bot);
-    const top = new THREE.Mesh(
-      new THREE.SphereGeometry(0.05, 7, 5),
-      new THREE.MeshStandardMaterial({ color: 0xf0ecea, roughness: 0.85, flatShading: true }),
-    );
+    const top = new THREE.Mesh(new THREE.SphereGeometry(0.05, seg, LO ? 4 : 5), shellTop);
     top.scale.set(1.1, 0.4, 0.95);
     top.position.set(0, 0.03, 0);
     oyster.add(top);
@@ -1332,7 +1340,7 @@ function hashPid(pid: string) {
       const isNpc = !!(p.isNpc || pid.startsWith('npc-'));
       const aber = isNpc && isPlazaAber(p);
       const look = hashLook(pid, isNpc);
-      const rig = makePlayerAvatar(aber ? { shirt: 0x4a6a8a, hair: 0x8a8a8a, pants: 0x3a3a48 } : look, M, add, LO);
+      const rig = makePlayerAvatar(aber ? { shirt: 0x4a6a8a, hair: 0x8a8a8a, pants: 0x3a3a48 } : look, M, add, LO, isNpc);
       if (isNpc) {
         if (aber) dressPlazaAber(rig);
         else {
@@ -1686,7 +1694,8 @@ function hashPid(pid: string) {
     const cx = camera.position.x, cz = camera.position.z;
     const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
     // 燈數固定，只調亮度，不開關 visible（three.js 增減燈會重編著色器）
-    for (const pl of roofLamps) pl.intensity = eco ? roofLampBaseI * 0.85 : roofLampBaseI;
+    // 省電：吊燈改靠外觀球自發光，關掉動態點光
+    for (const pl of roofLamps) pl.intensity = eco ? 0 : roofLampBaseI;
     tickDetailLod(dt, cx, cz);
 
     const k = Math.min(1, dt * 10);
@@ -1852,7 +1861,8 @@ function hashPid(pid: string) {
         }
       }
     }
-    fadeOccludedTags(camera, dt);
+    // 省電略過 O(n²) 遮擋淡出；遠距名牌已在上面隱藏
+    if (!eco) fadeOccludedTags(camera, dt);
     if (selfBubUntil > t) {
       const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
       const back = selfSeated ? -0.08 : 0;
@@ -1923,7 +1933,7 @@ function hashPid(pid: string) {
         selfCig.tick(tSec, dt);
       }
     }
-    bigShed.tick(dt);
+    if (!eco) bigShed.tick(dt);
     for (const k of stallKeepers) {
       if (eco) {
         const dx = k.rig.outer.position.x - cx, dz = k.rig.outer.position.z - cz;

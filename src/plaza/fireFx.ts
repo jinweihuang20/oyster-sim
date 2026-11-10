@@ -54,7 +54,7 @@ type Smoke = {
 type HotChunk = {
   mesh: THREE.Mesh;
   glow: THREE.Mesh | null;
-  mat: THREE.MeshStandardMaterial;
+  mat: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
   glowMat: THREE.MeshBasicMaterial | null;
   baseY: number;
   phase: number;
@@ -68,7 +68,8 @@ const smokeGeo = new THREE.SphereGeometry(0.07, 6, 5);
 const coalChunkGeo = rboxEnv(0.1, 0.05, 0.08);
 const coalGlowGeo = new THREE.SphereGeometry(0.04, 5, 4);
 
-const coalMat = new THREE.MeshStandardMaterial({ color: 0x1a120e, roughness: 1, metalness: 0 });
+const coalMat = new THREE.MeshLambertMaterial({ color: 0x1a120e });
+const coalMatStd = new THREE.MeshStandardMaterial({ color: 0x1a120e, roughness: 1, metalness: 0 });
 const flameMat = new THREE.MeshBasicMaterial({
   color: 0xff6a22,
   transparent: true,
@@ -104,7 +105,14 @@ function rng(seed: number) {
   };
 }
 
-function makeHotCoalMat() {
+function makeHotCoalMat(lo: boolean) {
+  if (lo) {
+    return new THREE.MeshLambertMaterial({
+      color: 0x2a1410,
+      emissive: 0xff3a10,
+      emissiveIntensity: 0.85,
+    });
+  }
   return new THREE.MeshStandardMaterial({
     color: 0x2a1410,
     roughness: 0.92,
@@ -124,8 +132,8 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
   const lo = !!opts.lowDetail;
   const wantFlames = opts.flames !== false;
   const wantSparks = opts.sparks ?? (!lo && wantFlames);
-  const smokeN = Math.max(0, Math.round((opts.smoke ?? (wantFlames ? 1 : 0)) * (lo ? 5 : 10)));
-  const nChunk = opts.chunks ?? (lo ? 7 : 14);
+  const smokeN = Math.max(0, Math.round((opts.smoke ?? (wantFlames ? 1 : 0)) * (lo ? 3 : 10)));
+  const nChunk = opts.chunks ?? (lo ? 5 : 14);
   const hotRatio = opts.hotRatio ?? 0.45;
   const pulseSp = Math.max(0.05, opts.pulseSpeed ?? 1);
   const flat = !!opts.flat;
@@ -136,16 +144,18 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
   group.name = 'charcoalFire';
 
   // 底炭層（flat：薄層，鋼盤與烤網之間）
-  const bed = new THREE.Mesh(rboxEnv(w, flat ? 0.022 : 0.045, d), coalMat);
+  const bedMat = lo ? coalMat : coalMatStd;
+  const bed = new THREE.Mesh(rboxEnv(w, flat ? 0.022 : 0.045, d), bedMat);
   bed.position.y = 0;
   bed.userData.sharedMat = true;
   group.add(bed);
 
-  // 不規則炭塊（燒紅者各自材質，可獨立脈動）
+  // 不規則炭塊（燒紅者各自材質，可獨立脈動）；LO 共用一顆熱炭材質少改 GPU state
   const hotChunks: HotChunk[] = [];
+  const sharedHot = lo ? makeHotCoalMat(true) : null;
   for (let i = 0; i < nChunk; i++) {
     const hot = rn() < hotRatio;
-    const mat = hot ? makeHotCoalMat() : coalMat;
+    const mat = hot ? (sharedHot ?? makeHotCoalMat(false)) : bedMat;
     const m = new THREE.Mesh(coalChunkGeo, mat);
     m.userData.sharedGeo = true;
     m.userData.sharedMat = !hot;
@@ -174,14 +184,20 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
       glow.scale.setScalar((flat ? 0.35 : 0.55) + rn() * (flat ? 0.3 : 0.55));
       glow.renderOrder = 2;
       group.add(glow);
-      hotChunks.push({ mesh: m, glow, mat: mat as THREE.MeshStandardMaterial, glowMat, baseY: sy, phase: rn() * 6.28 });
+      // LO：多數熱炭不掛 glow 球，少透明 overdraw
+      if (lo && glow && rn() > 0.35) {
+        group.remove(glow);
+        glow = null;
+        glowMat = null;
+      }
+      hotChunks.push({ mesh: m, glow, mat, glowMat, baseY: sy, phase: rn() * 6.28 });
     }
   }
 
   // 火舌（可關）
   const flames: Flame[] = [];
   if (wantFlames) {
-    const nFlame = lo ? 4 : 7;
+    const nFlame = lo ? 2 : 7;
     for (let i = 0; i < nFlame; i++) {
       const tip = i % 2 === 0;
       const mesh = new THREE.Mesh(flameGeo, tip ? flameTipMat : flameMat);
@@ -264,25 +280,38 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
     const flicker = 0.82 + 0.18 * Math.sin(t * 11.3) + 0.08 * Math.sin(t * 23.7 + 1.2);
     const flicker2 = 0.75 + 0.25 * Math.sin(t * 17.1 + 0.7);
 
-    for (const c of hotChunks) {
-      const pulse = 0.55 + 0.45 * Math.sin(t * (5.5 + c.phase * 0.4) + c.phase);
-      const pulse2 = 0.5 + 0.5 * Math.sin(t * 13.2 + c.phase * 1.7);
-      c.mat.emissiveIntensity = 0.45 + 0.75 * pulse * pulse2;
-      // 燒紅色在橙紅間微抖
-      const r = 1;
-      const g = 0.18 + 0.12 * pulse;
-      const bCol = 0.04 + 0.03 * pulse2;
-      c.mat.emissive.setRGB(r, g, bCol);
-      // flat：幾乎不動高度，避免脈動頂穿烤網
-      c.mesh.scale.y = c.baseY * (flat ? (0.96 + 0.04 * pulse) : (0.9 + 0.12 * pulse));
-      if (c.glow && c.glowMat) {
-        c.glow.position.x = c.mesh.position.x;
-        c.glow.position.z = c.mesh.position.z;
-        c.glow.position.y = c.mesh.position.y + (flat ? 0.004 : 0.015) + pulse * (flat ? 0.003 : 0.01);
-        const gs = (flat ? 0.32 : 0.5) + pulse * (flat ? 0.22 : 0.55);
-        c.glow.scale.setScalar(gs * (0.7 + c.baseY * 0.35));
-        c.glowMat.opacity = (flat ? 0.14 : 0.22) + (flat ? 0.22 : 0.38) * pulse * pulse2;
-        c.glowMat.color.setRGB(1, 0.22 + 0.2 * pulse, 0.06);
+    if (sharedHot) {
+      // LO：單一熱炭材質脈動一次，mesh 只改 scale
+      const pulse = 0.55 + 0.45 * Math.sin(t * 5.5);
+      const pulse2 = 0.5 + 0.5 * Math.sin(t * 13.2);
+      sharedHot.emissiveIntensity = 0.45 + 0.75 * pulse * pulse2;
+      sharedHot.emissive.setRGB(1, 0.18 + 0.12 * pulse, 0.04 + 0.03 * pulse2);
+      for (const c of hotChunks) {
+        c.mesh.scale.y = c.baseY * (flat ? (0.96 + 0.04 * pulse) : (0.9 + 0.12 * pulse));
+        if (c.glow && c.glowMat) {
+          c.glow.position.x = c.mesh.position.x;
+          c.glow.position.z = c.mesh.position.z;
+          c.glow.position.y = c.mesh.position.y + (flat ? 0.004 : 0.015) + pulse * (flat ? 0.003 : 0.01);
+          c.glow.scale.setScalar(((flat ? 0.32 : 0.5) + pulse * (flat ? 0.22 : 0.55)) * (0.7 + c.baseY * 0.35));
+          c.glowMat.opacity = (flat ? 0.14 : 0.22) + (flat ? 0.22 : 0.38) * pulse * pulse2;
+        }
+      }
+    } else {
+      for (const c of hotChunks) {
+        const pulse = 0.55 + 0.45 * Math.sin(t * (5.5 + c.phase * 0.4) + c.phase);
+        const pulse2 = 0.5 + 0.5 * Math.sin(t * 13.2 + c.phase * 1.7);
+        c.mat.emissiveIntensity = 0.45 + 0.75 * pulse * pulse2;
+        c.mat.emissive.setRGB(1, 0.18 + 0.12 * pulse, 0.04 + 0.03 * pulse2);
+        c.mesh.scale.y = c.baseY * (flat ? (0.96 + 0.04 * pulse) : (0.9 + 0.12 * pulse));
+        if (c.glow && c.glowMat) {
+          c.glow.position.x = c.mesh.position.x;
+          c.glow.position.z = c.mesh.position.z;
+          c.glow.position.y = c.mesh.position.y + (flat ? 0.004 : 0.015) + pulse * (flat ? 0.003 : 0.01);
+          const gs = (flat ? 0.32 : 0.5) + pulse * (flat ? 0.22 : 0.55);
+          c.glow.scale.setScalar(gs * (0.7 + c.baseY * 0.35));
+          c.glowMat.opacity = (flat ? 0.14 : 0.22) + (flat ? 0.22 : 0.38) * pulse * pulse2;
+          c.glowMat.color.setRGB(1, 0.22 + 0.2 * pulse, 0.06);
+        }
       }
     }
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
+import type { MatFn } from '../dm/weapons';
 import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
 import {
   PILE_SPACING, PLAZA_LAMP_XZ, WALK_BOUND, pileCenter, seatPose, CAFE_OPENING, CAFE_SOUTH_WALL_END,
@@ -112,7 +113,8 @@ export function makeYardLikePile(
   // clone 材質，避免廣場 dispose 時清掉工寮共用 mat；geometry 仍共用勿 dispose
   const mat = (shellMat as THREE.Material).clone();
   const pile = new THREE.InstancedMesh(shellGeo, mat, count);
-  pile.castShadow = true;
+  // 廣場無投射陰影的燈；省電時 shadowMap 也關
+  pile.castShadow = false;
   pile.renderOrder = 0;
   pile.userData.pileId = pileId;
   pile.userData.sharedGeo = true;
@@ -138,7 +140,7 @@ export function makeYardLikePile(
   g.add(pile);
   // 點擊用隱形碰撞（殼堆本身較碎）
   const hit = new THREE.Mesh(
-    new THREE.ConeGeometry(1.05, 0.85, 10),
+    new THREE.ConeGeometry(1.05, 0.85, count < 150 ? 6 : 10),
     new THREE.MeshBasicMaterial({ visible: false }),
   );
   hit.position.y = 0.4;
@@ -235,7 +237,7 @@ export function makePlazaGrill(
   const pile = new THREE.InstancedMesh(shellGeo, mat, nShell);
   pile.userData.pileId = pileId;
   pile.userData.sharedGeo = true;
-  pile.castShadow = true;
+  pile.castShadow = false;
   const d = new THREE.Object3D();
   const col = new THREE.Color();
   let r = (pileId + 7) * 7919;
@@ -272,7 +274,7 @@ export const CHAIR_SEAT_Y = 0.42;
 
 export function makePlazaChair(
   x: number, z: number, yaw: number,
-  M: (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial,
+  M: MatFn,
   add: (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], parent: THREE.Object3D, cast?: boolean) => THREE.Mesh,
 ): { group: THREE.Group; pad: THREE.Mesh } {
   const group = new THREE.Group();
@@ -351,7 +353,7 @@ export const PLAZA_POST_H = 4.75;
 
 /** 工業大吊扇：超長扇葉，掛在樑下 */
 function makePlazaCeilingFan(
-  M: (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial,
+  M: MatFn,
   add: (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], parent: THREE.Object3D, cast?: boolean) => THREE.Mesh,
   lowDetail: boolean,
   x: number,
@@ -408,7 +410,7 @@ function makePlazaCeilingFan(
  * 工寮原棚進廣場仍隱藏，改用這座加大棚架。
  */
 export function makePlazaBigShed(
-  M: (c: number, o?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial,
+  M: MatFn,
   add: (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], parent: THREE.Object3D, cast?: boolean) => THREE.Mesh,
   lowDetail = false,
 ): { group: THREE.Group; posts: { x: number; z: number }[]; tick: (dt: number) => void } {
@@ -475,7 +477,7 @@ export function makePlazaBigShed(
     const x = -span / 2 + (i + 0.5) * stripW;
     const panel = add(
       rboxEnv(stripW * 1.02, 0.035, span),
-      M(rust[i % 3], { side: THREE.DoubleSide, metalness: 0.35, roughness: 0.88 }),
+      M(rust[i % 3], { side: THREE.FrontSide, metalness: 0.35, roughness: 0.88 }),
       [x, roofY + (i % 2) * 0.025, 0],
       g,
       false,
