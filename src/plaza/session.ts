@@ -10,11 +10,12 @@ import { plazaShedPosts } from './props';
 import { plazaStallObstacles } from './ambiance';
 import { buildPlazaMapMarkers, drawPlazaMap } from './map';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
-import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent } from './types';
-import { plazaDisplayName } from './types';
+import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd } from './types';
+import { plazaDisplayName, normSeatWishEnd } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 import { plazaSoftCapClient } from '../core/economy';
 import { myTag } from '../meta/social';
+import { achCheck, achS } from '../meta/achievements';
 import { parseCosmetics } from './cosmetics';
 import { clipFlagText, flagErrText, type PlazaFlagState } from './flags';
 
@@ -82,6 +83,9 @@ export type PlazaDeps = {
   onGrillTaken?: (e: PlazaGrillTakenEvent) => void;
   track: (t: string, d?: Record<string, unknown>) => void;
   onPayout: (clamped: number, meta: { oysters: number; dur: number; raw: number }) => void;
+  /** 廣場任務獎金（送座位等），走跟死鬥一樣的入帳路徑 */
+  grantMoney?: (amount: number, via: string) => void;
+  persist?: () => void;
   onExit: () => void;
   /** 入場時連不上後端：不要進廣場，回主選單 */
   onEnterFail?: (err?: string) => void;
@@ -102,6 +106,8 @@ let ui: HTMLElement | null = null;
 let myPile: number | null = null;
 let mySlot: number | null = null;
 let snap: PlazaSnapshot | null = null;
+let seatWishes: PlazaSeatWish[] = [];
+const paidWishIds = new Set<string>();
 let phaseTimer = 0;
 let deps: PlazaDeps | null = null;
 let seated = false;
@@ -223,10 +229,15 @@ export function plazaNearPrompt(): PlazaNearPrompt | null {
   if (!active || seated) return null;
   if (carryNpcOk && myCarriedNpc()) {
     if (!nearPlace) return null;
-    return { kind: 'place', info: seatLabel(nearPlace.pileId, nearPlace.slot), btn: '放這裡', pileId: nearPlace.pileId, slot: nearPlace.slot };
+    const w = seatWishes.find(x => x.npcConnId === myCarriedNpc()!.connId);
+    const atTarget = !!(w && w.pileId === nearPlace.pileId && w.slot === nearPlace.slot);
+    return { kind: 'place', info: atTarget ? `送到這裡：${seatLabel(nearPlace.pileId, nearPlace.slot)}` : seatLabel(nearPlace.pileId, nearPlace.slot), btn: atTarget ? '送到這裡' : '放這裡', pileId: nearPlace.pileId, slot: nearPlace.slot };
   }
   if (carryNpcOk && nearCarry) {
-    return { kind: 'carry', info: `${nearCarry.nick}　站旁邊就能抱起來`, btn: nearCarry.nick === '阿伯' ? '抱起阿伯' : '抱起阿婆' };
+    const carry = nearCarry;
+    const w = seatWishes.find(x => x.npcConnId === carry.connId);
+    const info = w ? (w.carrierConnId && w.carrierConnId !== plazaConnId() ? '已有人在送' : (w.line || `${carry.nick}　站旁邊就能抱起來`)) : `${carry.nick}　站旁邊就能抱起來`;
+    return { kind: 'carry', info, btn: carry.nick === '阿伯' ? '抱起阿伯' : '抱起阿婆' };
   }
   if (near) return { kind: 'sit', info: seatLabel(near.pileId, near.slot), btn: '坐這裡', pileId: near.pileId, slot: near.slot };
   return null;
@@ -433,7 +444,7 @@ function zhErr(e?: string) { return plazaZhErr(e); }
 export function openPlaza(D: PlazaDeps) {
   if (active) return;
   active = true; seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
-  myPile = null; mySlot = null; snap = null; near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false;
   D.audio();
   client = new PlazaClient();
   view = createPlazaWorldView(D.scene, D.bubbles, {
@@ -456,9 +467,46 @@ async function abortEnter(D: PlazaDeps, err?: string) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
   removeFlagBtn();
   D.onEnterFail?.(err);
+}
+
+
+function applySeatWishes(list: PlazaSeatWish[] | undefined | null) {
+  seatWishes = Array.isArray(list) ? list.slice() : [];
+  view?.setSeatWishes?.(seatWishes, plazaConnId() || '');
+}
+
+function upsertSeatWish(w: PlazaSeatWish) {
+  const i = seatWishes.findIndex(x => x.wishId === w.wishId || x.npcConnId === w.npcConnId);
+  if (i >= 0) seatWishes[i] = w; else seatWishes.push(w);
+  view?.setSeatWishes?.(seatWishes, plazaConnId() || '');
+}
+
+function applySeatWishEnd(e: PlazaSeatWishEnd) {
+  seatWishes = seatWishes.filter(x => x.wishId !== e.wishId && x.npcConnId !== e.npcConnId);
+  view?.setSeatWishes?.(seatWishes, plazaConnId() || '');
+  const me = plazaConnId();
+  if (e.reason === 'done' && e.carrierConnId && me && e.carrierConnId === me && e.wishId && !paidWishIds.has(e.wishId)) {
+    paidWishIds.add(e.wishId);
+    const pay = Math.max(0, Math.floor(e.pay || 0));
+    if (pay > 0) {
+      deps?.grantMoney?.(pay, 'seat-wish');
+      deps?.toast(`送到了，拿到 $${pay.toLocaleString('zh-TW')}`, '#9be37a');
+    } else if (e.capped) {
+      deps?.toast('今日獎金已達上限', '#ffd76a');
+    } else {
+      deps?.toast('送到了', '#9be37a');
+    }
+    const st = achS().st;
+    const tot = Math.max(st.seatdel ?? 0, e.total || 0, (st.seatdel ?? 0) + 1);
+    st.seatdel = tot;
+    if (e.fast) st.seatfast = Math.max(st.seatfast ?? 0, (st.seatfast ?? 0) + 1);
+    achCheck();
+    deps?.persist?.();
+    deps?.track?.('seat_wish', { pay, capped: !!e.capped, total: tot, fast: !!e.fast });
+  }
 }
 
 async function boot(D: PlazaDeps) {
@@ -480,6 +528,7 @@ async function boot(D: PlazaDeps) {
   carryNpcOk = !!(r as any).carryNpc;
   applyJoinFlags((r as any).flags);
   if (snap) view?.syncRoster(snap, D.id);
+  applySeatWishes((r as any).wishes);
   if (r.grills) view?.grill.syncAll(r.grills);
   applyChatHistory(r.chat);
   void plazaPushOutfit();
@@ -538,7 +587,7 @@ function flashNetOk(msg: string) {
   setTimeout(() => { if (!netDown) setNetBanner(null); }, 2200);
 }
 
-async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?: PlazaGrillOyster[], flags?: PlazaFlagState[]) {
+async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?: PlazaGrillOyster[], flags?: PlazaFlagState[], wishes?: PlazaSeatWish[]) {
   if (!deps || !client) return;
   netDown = false;
   clearReconnectTimer();
@@ -549,6 +598,7 @@ async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?
     snap = normalizeSnap(s);
     view?.syncRoster(snap, deps.id);
   }
+  if (wishes) applySeatWishes(wishes);
   if (grills) view?.grill.syncAll(grills);
   applyJoinFlags(flags);
   // 補離線期間錯過的聊天
@@ -620,6 +670,8 @@ function wireClient(D: PlazaDeps) {
       if (!n.text) return;
       view?.showChat({ connId: n.connId || undefined, pid: n.pid || undefined, nick: n.nick, text: n.text });
     },
+    onSeatWish: (w) => { upsertSeatWish(w); },
+    onSeatWishEnd: (e) => { applySeatWishEnd(e); },
     onShellThrow: (e) => { try { D.onShellThrow?.(e); } catch (err) { console.error('onShellThrow', err); } },
     onShellInbound: (e) => { try { D.onShellInbound?.(e); } catch (err) { console.error('onShellInbound', err); } },
     onShellReflectHit: (e) => { try { D.onShellReflectHit?.(e); } catch (err) { console.error('onShellReflectHit', err); } },
@@ -658,7 +710,7 @@ function wireClient(D: PlazaDeps) {
       setNetBanner('連上了，正在回到廣場…');
     },
     onFlagUpsert: (f) => { upsertFlag(f); },
-    onRejoined: (s, chat, grills, flags) => { if (active) void restoreAfterRejoin(s, chat, grills, flags); },
+    onRejoined: (s, chat, grills, flags, wishes) => { if (active) void restoreAfterRejoin(s, chat, grills, flags, wishes); },
     onRejoinFail: (err, attempt) => {
       if (!active) return;
       netDown = true;
@@ -1282,7 +1334,8 @@ async function plazaDoCarry(npcConnId: string): Promise<boolean> {
     const r = await client.carryNpc(npcConnId);
     if (!r.ok) {
       markCarryUnsupported(r.err);
-      deps.toast(zhNpcErr(r.err, nearCarry?.nick === '阿伯' ? '阿伯' : '阿婆'), '#ff8a7a');
+      const who = nearCarry?.nick === '阿伯' ? '阿伯' : '阿婆';
+      deps.toast(r.err === 'taken' ? '已有人在送' : zhNpcErr(r.err, who), '#ff8a7a');
       return false;
     }
     deps.toast('抱起來了，靠近空位再放下', '#9be37a');
@@ -1306,7 +1359,9 @@ async function plazaDoPlace(seat: PlazaSeatRef): Promise<boolean> {
       return false;
     }
     if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
-    deps.toast(`${who}坐好了`, '#9be37a');
+    const deliver = normSeatWishEnd((r as any).deliver);
+    if (deliver) applySeatWishEnd(deliver);
+    else deps.toast(`${who}坐好了`, '#9be37a');
     return true;
   } finally { sittingBusy = false; carryPlacing = false; checkCarryLost(); }
 }
@@ -1480,7 +1535,12 @@ function refreshPlazaMap() {
     seated,
     nick: deps.nick(),
   });
-  drawPlazaMap(cvs, markers);
+  const wishPins = seatWishes.map(w => {
+    const pose = seatPose(w.pileId, w.slot);
+    const who = (w.npcNick || '阿婆').slice(0, 2);
+    return { x: pose.pos.x, z: pose.pos.z, label: who };
+  });
+  drawPlazaMap(cvs, markers, wishPins);
 }
 
 export function plazaMapIsOpen() {
@@ -1599,7 +1659,7 @@ export async function closePlaza(leaveSeat = true) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; deps = null; near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
   if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null, tag: myTag() });
 }

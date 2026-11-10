@@ -25,7 +25,7 @@ import { makePlazaHq } from './hq';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
-import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot } from './types';
+import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot, PlazaSeatWish } from './types';
 import { plazaDisplayName } from './types';
 import { GOLD_SMOKE_TINT, parseCosmetics } from './cosmetics';
 import { createPlazaFlagView } from './flagView';
@@ -137,6 +137,7 @@ export type PlazaWorldView = {
   /** 遠端抽一口：start 舉臂吸氣；end 放下並依 holdMs 吐煙 */
   applyRemotePuff: (opts: { connId?: string; pid?: string; start: boolean; holdMs: number }) => void;
   tick: (dt: number, camera: THREE.Camera) => void;
+  setSeatWishes: (list: PlazaSeatWish[], selfConnId?: string) => void;
   dispose: () => void;
 };
 
@@ -1537,6 +1538,67 @@ function hashPid(pid: string) {
     r.bubUntil = until;
   }
 
+  let seatWishes: PlazaSeatWish[] = [];
+  let wishSelfConn = '';
+  const wishMarks = new THREE.Group();
+  wishMarks.name = 'seatWishMarks';
+  root.add(wishMarks);
+  const wishMarkMats: THREE.Material[] = [];
+  const wishMarkGeos: THREE.BufferGeometry[] = [];
+  function clearWishMarks() {
+    while (wishMarks.children.length) {
+      const c = wishMarks.children[0];
+      wishMarks.remove(c);
+    }
+    for (const m of wishMarkMats) m.dispose();
+    wishMarkMats.length = 0;
+    for (const g of wishMarkGeos) g.dispose();
+    wishMarkGeos.length = 0;
+  }
+  function makeWishMark(w: PlazaSeatWish) {
+    const g = new THREE.Group();
+    const pose = seatPose(w.pileId, w.slot);
+    g.position.set(pose.pos.x, 0.04, pose.pos.z);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x2a5a86, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
+    const ringGeo = new THREE.RingGeometry(0.2, 0.28, 28);
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    g.add(ring);
+    const shaftMat = new THREE.MeshBasicMaterial({ color: 0x2a5a86, transparent: true, opacity: 0.92, depthWrite: false });
+    const shaftGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.55, 6);
+    const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+    shaft.position.y = 0.28;
+    g.add(shaft);
+    const pinMat = new THREE.MeshBasicMaterial({ color: 0xe8f2fa, transparent: true, opacity: 0.95, depthWrite: false });
+    const pinGeo = new THREE.OctahedronGeometry(0.07, 0);
+    const pin = new THREE.Mesh(pinGeo, pinMat);
+    pin.position.y = 0.62;
+    g.add(pin);
+    wishMarkMats.push(ringMat, shaftMat, pinMat);
+    wishMarkGeos.push(ringGeo, shaftGeo, pinGeo);
+    g.userData.pulse = 0;
+    return g;
+  }
+  function setSeatWishes(list: PlazaSeatWish[], selfConnId = '') {
+    seatWishes = Array.isArray(list) ? list.slice() : [];
+    if (selfConnId) wishSelfConn = selfConnId;
+    clearWishMarks();
+    for (const w of seatWishes) wishMarks.add(makeWishMark(w));
+  }
+  function wishForRemote(r: Remote): PlazaSeatWish | undefined {
+    return seatWishes.find(w => w.npcConnId === r.connId || (!!w.npcPid && !!r.pid && w.npcPid === r.pid));
+  }
+  function wishBubbleText(w: PlazaSeatWish): string {
+    const left = Math.max(0, Math.ceil((w.expiresAt - Date.now()) / 1000));
+    const mm = Math.floor(left / 60);
+    const ss = String(left % 60).padStart(2, '0');
+    let line = (w.line || '好想換位子').trim();
+    if (w.carrierConnId && w.carrierConnId !== wishSelfConn) line += '　已有人在送';
+    line += `　${mm}:${ss}`;
+    if (line.length > 44) line = line.slice(0, 43) + '…';
+    return line;
+  }
+
   let selfConnId = '';
   function anyoneCarriedBy(connId?: string) {
     if (!connId) return false;
@@ -1773,7 +1835,22 @@ function hashPid(pid: string) {
       if (r.bubUntil > t && show) {
         placeAboveHead(r.bubble.sprite, r.rig.head, 0.42);
         r.bubble.sprite.visible = true;
-      } else if (r.bubble.sprite.visible) r.bubble.sprite.visible = false;
+      } else {
+        const w = r.isNpc ? wishForRemote(r) : undefined;
+        if (w && show) {
+          const txt = wishBubbleText(w);
+          if ((r as any)._wishLine !== txt) {
+            (r as any)._wishLine = txt;
+            r.bubble.setText(txt, true);
+            r.bubble.setOpacity(1);
+          }
+          placeAboveHead(r.bubble.sprite, r.rig.head, 0.42);
+          r.bubble.sprite.visible = true;
+        } else {
+          if ((r as any)._wishLine) (r as any)._wishLine = '';
+          if (r.bubble.sprite.visible) r.bubble.sprite.visible = false;
+        }
+      }
     }
     fadeOccludedTags(camera, dt);
     if (selfBubUntil > t) {
@@ -1784,6 +1861,10 @@ function hashPid(pid: string) {
       selfBubble.sprite.position.set(ox, headY + 0.12, oz);
       selfBubble.sprite.visible = true;
     } else if (selfBubble.sprite.visible) selfBubble.sprite.visible = false;
+    if (wishMarks.children.length) {
+      const pulse = 1 + 0.08 * Math.sin(t * 0.004);
+      for (const c of wishMarks.children) c.scale.setScalar(pulse);
+    }
     grill.tick(t);
     flags.tick(dt, camera);
     const tSec = t * 0.001;
@@ -1888,6 +1969,8 @@ function hashPid(pid: string) {
   }
 
   function dispose() {
+    clearWishMarks();
+    root.remove(wishMarks);
     for (const e of remoteExhales) {
       try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
       e.fx.dispose();
@@ -1933,7 +2016,7 @@ function hashPid(pid: string) {
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfBody, setSelfCushion, playThrowFx, applyRemotePuff, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfBody, setSelfCushion, playThrowFx, applyRemotePuff, setSeatWishes, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {

@@ -1,5 +1,6 @@
 import * as signalR from '@microsoft/signalr';
-import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent } from './types';
+import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd } from './types';
+import { normSeatWish, normSeatWishEnd } from './types';
 import { normFlagDto, type PlazaFlagState } from './flags';
 
 export type PlazaHubHandlers = {
@@ -29,12 +30,14 @@ export type PlazaHubHandlers = {
   /** 吸菸區「抽一口」同步（其他人） */
   onPlazaPuff?: (e: { connId: string; pid: string; start: boolean; holdMs: number }) => void;
   onFlagUpsert?: (f: PlazaFlagState) => void;
+  onSeatWish?: (w: PlazaSeatWish) => void;
+  onSeatWishEnd?: (e: PlazaSeatWishEnd) => void;
   /** 連線中斷，開始自動重連 */
   onReconnecting?: (attempt: number) => void;
   /** 底層 socket 重連成功（尚未重新 Join） */
   onSocketReconnected?: () => void;
   /** 重新 Join 成功（含近期聊天／共烤狀態） */
-  onRejoined?: (snap?: PlazaSnapshot, chat?: PlazaChat[], grills?: PlazaGrillOyster[], flags?: PlazaFlagState[]) => void;
+  onRejoined?: (snap?: PlazaSnapshot, chat?: PlazaChat[], grills?: PlazaGrillOyster[], flags?: PlazaFlagState[], wishes?: PlazaSeatWish[]) => void;
   /** 重新 Join 失敗（仍會再試） */
   onRejoinFail?: (err?: string, attempt?: number) => void;
   /** 自動重連耗盡／連線徹底關閉 */
@@ -184,6 +187,12 @@ export class PlazaClient {
     conn.on('NpcSay', (m: any) => {
       try { this.handlers.onNpcSay?.(normChatDto(m)); } catch (err) { console.error('NpcSay', err); }
     });
+    conn.on('SeatWish', (w: any) => {
+      try { const n = normSeatWish(w); if (n) this.handlers.onSeatWish?.(n); } catch (err) { console.error('SeatWish', err); }
+    });
+    conn.on('SeatWishEnd', (e: any) => {
+      try { const n = normSeatWishEnd(e); if (n) this.handlers.onSeatWishEnd?.(n); } catch (err) { console.error('SeatWishEnd', err); }
+    });
     conn.on('ShellThrow', (e: any) => {
       try { this.handlers.onShellThrow?.(normShell(e)); } catch (err) { console.error('ShellThrow', err); }
     });
@@ -240,7 +249,7 @@ export class PlazaClient {
     });
   }
 
-  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[]; grills?: PlazaGrillOyster[]; carryNpc?: boolean; flags?: PlazaFlagState[] }> {
+  private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[]; grills?: PlazaGrillOyster[]; carryNpc?: boolean; flags?: PlazaFlagState[]; wishes?: PlazaSeatWish[] }> {
     if (!this.conn) return { ok: false, err: 'no_conn' };
     try {
       const r = await this.conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot; chat?: any[]; grills?: any[] }>('Join', this.pid, this.nick);
@@ -254,7 +263,9 @@ export class PlazaClient {
       const carryNpc = !!(r as any).carryNpc || !!(r as any).CarryNpc;
       const rawF = (r as any).flags ?? (r as any).Flags;
       const flags = Array.isArray(rawF) ? rawF.map(normFlagDto) : undefined;
-      return { ok: true, snap: r.snap, token: this.token, chat, grills, carryNpc, flags };
+      const rawW = (r as any).wishes ?? (r as any).Wishes ?? [];
+      const wishes = Array.isArray(rawW) ? rawW.map(normSeatWish).filter((x: PlazaSeatWish | null): x is PlazaSeatWish => !!x) : [];
+      return { ok: true, snap: r.snap, token: this.token, chat, grills, carryNpc, flags, wishes };
     } catch (e: any) {
       return { ok: false, err: e?.message || 'join_fail' };
     }
@@ -270,7 +281,7 @@ export class PlazaClient {
         this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
         return;
       }
-      this.handlers.onRejoined?.(r.snap, r.chat, r.grills, r.flags);
+      this.handlers.onRejoined?.(r.snap, r.chat, r.grills, r.flags, r.wishes);
     } finally {
       this.rejoining = false;
     }
@@ -284,7 +295,7 @@ export class PlazaClient {
     if (this.intentionalStop) return { ok: false, err: 'stopped' };
     if (this.connected) {
       const r = await this.joinHub();
-      if (r.ok) { this.handlers.onRejoined?.(r.snap, r.chat, r.grills, r.flags); return r; }
+      if (r.ok) { this.handlers.onRejoined?.(r.snap, r.chat, r.grills, r.flags, r.wishes); return r; }
       return r;
     }
     this.reconnectAttempt += 1;
@@ -292,7 +303,7 @@ export class PlazaClient {
     const pid = this.pid, nick = this.nick;
     if (!pid) return { ok: false, err: 'no_pid' };
     const r = await this.connect(pid, nick, { keepAttempt: true });
-    if (r.ok) this.handlers.onRejoined?.(r.snap, r.chat, (r as any).grills, (r as any).flags);
+    if (r.ok) this.handlers.onRejoined?.(r.snap, r.chat, (r as any).grills, (r as any).flags, (r as any).wishes);
     else this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
     return r;
   }
@@ -448,9 +459,9 @@ export class PlazaClient {
   async placeNpc(npcConnId: string, pileId: number, slot: number) {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', snap: undefined as PlazaSnapshot | undefined };
     try {
-      return await this.conn.invoke<{ ok: boolean; err?: string; snap?: PlazaSnapshot }>('PlaceNpc', npcConnId, pileId, slot);
+      return await this.conn.invoke<{ ok: boolean; err?: string; snap?: PlazaSnapshot; deliver?: PlazaSeatWishEnd }>('PlaceNpc', npcConnId, pileId, slot);
     } catch (e: any) {
-      return { ok: false as const, err: e?.message || 'place_fail', snap: undefined as PlazaSnapshot | undefined };
+      return { ok: false as const, err: e?.message || 'place_fail', snap: undefined as PlazaSnapshot | undefined, deliver: undefined as PlazaSeatWishEnd | undefined };
     }
   }
 

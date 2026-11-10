@@ -3472,6 +3472,14 @@ function launchPlaza() {
       }
     },
     track: (t, d) => track(t, d),
+    persist: () => persist(),
+    grantMoney: (amount, via) => {
+      const n = Math.max(0, Math.floor(amount));
+      if (!n) return;
+      save.money += n;
+      persist();
+      track('plaza_reward', { amount: n, via, money: save.money });
+    },
     onPayout: () => { /* 結算走 plazaReportEarn */ },
     onExit: () => {
       void (async () => {
