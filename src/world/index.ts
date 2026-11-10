@@ -13,10 +13,6 @@ export {
 } from './walkSeat';
 export { makeWorldLabel, renderSceneWithLocalAvatarOnTop, markLocalAvatarLayer, LOCAL_AVATAR_LAYER, type WorldLabel, type WorldLabelKind } from './worldLabel';
 export {
-  applyAvatarDistanceLod, syncAvatarLod, setAvatarLod, isAvatarLodOn,
-  AVATAR_LOD_ENTER, AVATAR_LOD_EXIT,
-} from './avatarLod';
-export {
   initYardScene, LAND, shedAnim, disposeShed, buildShed, applyShedLook, showLand, WATER_C, getShedG,
   type YardSceneDeps,
 } from './yardScene';

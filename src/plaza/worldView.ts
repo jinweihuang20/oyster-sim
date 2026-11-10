@@ -25,7 +25,6 @@ import { makePlazaHq } from './hq';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
-import { applyAvatarDistanceLod, syncAvatarLod, setAvatarLod, isAvatarLodOn } from '../world/avatarLod';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot, PlazaSeatWish } from './types';
 import { plazaDisplayName } from './types';
 import { GOLD_SMOKE_TINT, parseCosmetics } from './cosmetics';
@@ -1315,7 +1314,6 @@ function hashPid(pid: string) {
         applyOutfitToRig(rig, normalizeOutfitIds({
           head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
         }));
-        syncAvatarLod(rig);
       }
       root.add(rig.outer);
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
@@ -1422,7 +1420,7 @@ function hashPid(pid: string) {
       const next = normalizeOutfitIds({
         head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
       });
-      if (r.rig.outfitKey !== outfitKey(next)) { applyOutfitToRig(r.rig, next); syncAvatarLod(r.rig); }
+      if (r.rig.outfitKey !== outfitKey(next)) applyOutfitToRig(r.rig, next);
     }
     applyActionPose(r);
     paintOcc();
@@ -1802,7 +1800,6 @@ function hashPid(pid: string) {
       // 省電遠距：隱藏模型（碰撞仍用 x/z）
       if (eco && dist2 > HIDE2 && !rj.mh && (r.phase || '') !== 'moon') r.rig.outer.visible = false;
       else if (!(eco && dist2 > HIDE2) && !rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
-      applyAvatarDistanceLod(r.rig, Math.sqrt(dist2), MOBILE);
       r.rig.outer.updateMatrixWorld(true);
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       r.tag.sprite.visible = show;
@@ -1881,7 +1878,6 @@ function hashPid(pid: string) {
           cig.setSmokeTint(!r.isNpc && parseCosmetics(r.cosmetics).goldSmoke ? GOLD_SMOKE_TINT : undefined);
           const dx = r.x - cx, dz = r.z - cz;
           smokeJobs.push({ r, cig, dist2: dx * dx + dz * dz, aber: wantAber && !LO });
-          if (isAvatarLodOn(r.rig)) setAvatarLod(r.rig, true);
         }
       } else {
         clearPlazaSmokeCig(r.rig);
@@ -1921,7 +1917,6 @@ function hashPid(pid: string) {
       k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15;
       if (!eco) posePlazaStallKeeper(k.rig, tSec, k.ph);
       applyAmaAppearance(k.rig);
-      applyAvatarDistanceLod(k.rig, Math.sqrt(kd2), MOBILE);
       tickKeeperBubble(k, tSec);
     }
     let serverAber = false;
