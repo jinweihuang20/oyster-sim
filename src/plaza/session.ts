@@ -991,10 +991,38 @@ function ensureFlagBtn() {
   b.innerHTML = '<svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 21V4"/><path d="M6 4h11l-2.2 3.6L17 11H6"/></svg><span>插旗</span>';
   b.addEventListener('click', () => { void plantMyFlag(); });
   (document.getElementById('btns') || document.body).appendChild(b);
+  const pb = document.createElement('button');
+  pb.id = 'flagPullBtn';
+  pb.type = 'button';
+  pb.innerHTML = '<svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 21V4"/><path d="M6 4h11l-2.2 3.6L17 11H6"/><path d="M14 15l5 5M19 15l-5 5"/></svg><span>收旗</span>';
+  pb.addEventListener('click', () => { void pullMyFlag(); });
+  b.after(pb);
 }
 
 function removeFlagBtn() {
   document.getElementById('flagBtn')?.remove();
+  document.getElementById('flagPullBtn')?.remove();
+}
+
+let pullBusy = false;
+async function pullMyFlag() {
+  if (!deps || pullBusy) return;
+  pullBusy = true;
+  try {
+    const r = await plazaTryRemoveFlag();
+    if (!r.ok) { deps.toast(r.err === 'not_planted' ? '你的旗還沒插在廣場上' : r.err === 'nosup' ? '這台伺服器還沒開放收旗' : flagErrText(r.err), '#ffb08a'); return; }
+    deps.toast('旗收起來了，文字和升級都會保留', '#9be37a');
+    deps.track('flag_pull', {});
+  } finally { pullBusy = false; }
+}
+
+export async function plazaTryRemoveFlag() {
+  if (client?.connected) {
+    const r = await client.removeFlag();
+    if (r.ok && r.flag) upsertFlag(r.flag);
+    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null };
+  }
+  return { ok: false as const, err: 'no_conn', mine: null };
 }
 
 function syncFlagBtn() {
@@ -1002,6 +1030,7 @@ function syncFlagBtn() {
   if (show) ensureFlagBtn();
   const b = document.getElementById('flagBtn');
   if (b) b.classList.toggle('on', show);
+  document.getElementById('flagPullBtn')?.classList.toggle('on', show);
 }
 
 async function plantMyFlag() {
