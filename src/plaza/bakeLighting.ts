@@ -108,10 +108,21 @@ function aoAt(x: number, y: number, z: number, ny: number, grid: ReturnType<type
     const h = grid.sample(x + dx * 0.7, z + dz * 0.7);
     if (h > y + 0.12) blocked++;
   }
-  const hemi = 0.62 + 0.38 * Math.max(0, ny);
-  const occ = 1 - blocked * 0.045;
-  const ground = y < 0.12 ? 0.88 + y * 0.8 : 1;
-  return Math.max(0.5, hemi * occ * ground);
+  // 輕輕的環境遮蔽：棚底／背光面略暗，不要把整片廣場壓黑
+  const hemi = 0.92 + 0.08 * Math.max(0, ny);
+  const occ = 1 - blocked * 0.02;
+  const ground = y < 0.12 ? 0.97 + y * 0.25 : 1;
+  return Math.max(0.90, hemi * occ * ground);
+}
+
+/** 乘法亮度：1＝與烘焙前一樣亮。手機保留一點棚下層次，桌機幾乎只在暗角微暗。 */
+function bakedLit(ao0: number, ndl: number, shRaw: number, includeDirect: boolean) {
+  if (!includeDirect) {
+    return Math.min(1, Math.max(0.94, 0.94 + 0.06 * ((ao0 - 0.5) / 0.5)));
+  }
+  const sh = 0.96 + 0.04 * (0.35 + 0.65 * Math.max(0, ndl)) * (0.5 + 0.5 * shRaw);
+  // 略為抬高，讓整體亮度回到烘焙前，棚底仍略暗一點
+  return Math.min(1, Math.max(0.90, ao0 * sh) * 1.05);
 }
 
 /**
@@ -137,9 +148,8 @@ export function bakeStaticLighting(root: THREE.Object3D, opts: BakeLightingOpts 
         _p.setFromMatrixPosition(mx);
         im.localToWorld(_p);
         const ao0 = aoAt(_p.x, _p.y, _p.z, 1, grid);
-        const ao = includeDirect ? ao0 : 0.88 + 0.12 * ((ao0 - 0.5) / 0.5);
-        const sh = includeDirect ? shadowAt(_p.x, _p.y + 0.3, _p.z, sun, grid) : 1;
-        const lit = Math.max(includeDirect ? 0.42 : 0.86, ao * (includeDirect ? (0.55 + 0.45 * sh) : 1));
+        const shRaw = includeDirect ? shadowAt(_p.x, _p.y + 0.3, _p.z, sun, grid) : 1;
+        const lit = bakedLit(ao0, 1, shRaw, includeDirect);
         _c.setRGB(lit, lit, lit);
         im.setColorAt(i, _c);
       }
@@ -165,13 +175,9 @@ export function bakeStaticLighting(root: THREE.Object3D, opts: BakeLightingOpts 
       _p.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
       _n.fromBufferAttribute(nrm, i).applyMatrix3(normalMat).normalize();
       const ao0 = aoAt(_p.x, _p.y, _p.z, _n.y, grid);
-      const ao = includeDirect ? ao0 : 0.88 + 0.12 * ((ao0 - 0.5) / 0.5);
-      let sh = 1;
-      if (includeDirect) {
-        const ndl = Math.max(0, _n.dot(sun));
-        sh = 0.4 + 0.6 * ndl * shadowAt(_p.x, _p.y, _p.z, sun, grid);
-      }
-      const lit = Math.max(includeDirect ? 0.38 : 0.86, ao * sh);
+      const ndl = includeDirect ? _n.dot(sun) : 1;
+      const shRaw = includeDirect ? shadowAt(_p.x, _p.y, _p.z, sun, grid) : 1;
+      const lit = bakedLit(ao0, ndl, shRaw, includeDirect);
       col[i * 3] = lit;
       col[i * 3 + 1] = lit;
       col[i * 3 + 2] = lit;
