@@ -434,7 +434,8 @@ function applyEcoGfx() {
   // 省電：手機 1.0×～1.25×；桌面上限 2×（手機 DPR 常 2-3，再多等於燒電不加清晰度）
   const dprCap = COARSE ? (mix.eco ? 1.0 : 1.25) : (mix.eco ? 1.5 : 2);
   renderer.setPixelRatio(Math.min(devicePixelRatio, dprCap));
-  renderer.shadowMap.enabled = !mix.eco;
+  // 廣場靠自發光＋烘焙暖光，關掉整條 shadow pipeline：每個像素的 shader 不再做 shadow 取樣（這是手機最大的像素端耗電來源之一）
+  renderer.shadowMap.enabled = !mix.eco && !plazaMode;
   // 手機非省電：PCF 軟陰影在行動 GPU 太貴，改 Basic
   renderer.shadowMap.type = mix.eco ? THREE.BasicShadowMap : (COARSE ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap);
   // 廣場模式工寮燈已經 intensity=0，castShadow 保持 true 會每 0.25s 跑全場 depth pass
