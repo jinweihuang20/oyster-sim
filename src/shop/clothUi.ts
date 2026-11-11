@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import type { Save } from '../core';
 import { $ } from '../ui';
-import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, NONE_ID, isNoneId, defaultEquipId } from './shopEquip';
+import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, NONE_ID, isNoneId, defaultEquipId, stealHoldSeconds } from './shopEquip';
 import { EQUIP_VIS, paintEquipCanvas } from './equipVisual';
 import { openClothTryPreview, closeClothTryPreview } from './tryPreview';
 import { hydrateEquipThumbs } from './equipThumb';
@@ -53,8 +53,8 @@ export const wornIds = () => SLOTS.map(([s]) => equipNow(s).id);
 export const setsOn = () => { const w = wornIds(); return SETS.filter(s => s.need.every(i => w.includes(i))); };
 export const slOn = (id: string) => wornIds().includes(id);
 export function fxAll(): Required<Fx> {
-  const r = { bowl: 0, keep: 0, speed: 1, pearl: 1, nag: 1, throw: 1, dmg: 1, luck: 0 };
-  for (const f of [...SLOTS.map(([s]) => equipNow(s).fx), ...setsOn().map(s => s.fx)]) { r.bowl += f.bowl ?? 0; r.keep += f.keep ?? 0; r.luck += f.luck ?? 0; r.speed *= f.speed ?? 1; r.pearl *= f.pearl ?? 1; r.nag *= f.nag ?? 1; r.throw *= f.throw ?? 1; r.dmg *= f.dmg ?? 1; }
+  const r = { bowl: 0, keep: 0, speed: 1, pearl: 1, nag: 1, throw: 1, dmg: 1, luck: 0, steal: 0 };
+  for (const f of [...SLOTS.map(([s]) => equipNow(s).fx), ...setsOn().map(s => s.fx)]) { r.bowl += f.bowl ?? 0; r.keep += f.keep ?? 0; r.luck += f.luck ?? 0; r.steal += f.steal ?? 0; r.speed *= f.speed ?? 1; r.pearl *= f.pearl ?? 1; r.nag *= f.nag ?? 1; r.throw *= f.throw ?? 1; r.dmg *= f.dmg ?? 1; }
   r.keep = Math.min(0.7, r.keep); r.throw = Math.max(0.1, r.throw);
   if (D.isEvRun()) { r.throw = Math.max(1, r.throw); r.nag = Math.max(1, r.nag); } // 活動中阿婆是瘋子：怕你、少丟、少唸的效果都不算
   return r;
@@ -81,6 +81,7 @@ export function patDraw(g: CanvasRenderingContext2D, e: Eq, W: number, H: number
   if (e.pat === 'neon') { g.fillStyle = '#ffffff'; for (let y = 20; y < H; y += 40) g.fillRect(0, y, W, 6); }
   if (e.pat === 'tattoo') { g.strokeStyle = '#1e2a4a'; g.lineWidth = 3; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(W / 2, H + 12 - i * 22, 40, Math.PI, 2 * Math.PI); g.stroke(); } dot(40, 40, 9, '#b8323a'); dot(90, 80, 9, '#2a5a9a'); }
   if (e.pat === 'dragon') { g.strokeStyle = '#ffd25a'; g.lineWidth = 4; g.beginPath(); for (let x = 0; x <= W; x += 4) g.lineTo(x, H / 2 + Math.sin(x / 10) * 26); g.stroke(); }
+  if (e.pat === 'karakusa') { g.fillStyle = '#e8e2d4'; g.fillRect(0, 0, W, H); g.strokeStyle = '#1e3358'; g.lineWidth = 2.4; g.lineCap = 'round'; for (let row = 0; row < 5; row++) { const y0 = 12 + row * (H / 5); g.beginPath(); for (let x = 0; x <= W; x += 4) { const y = y0 + Math.sin(x / 14 + row) * 10; x ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); for (let i = 0; i < 4; i++) { const x = 16 + i * (W / 4); const y = y0 + Math.sin(x / 14 + row) * 10; g.beginPath(); g.ellipse(x, y - 6, 7, 4, -0.7, 0, 7); g.stroke(); g.beginPath(); g.ellipse(x + 8, y + 6, 7, 4, 0.8, 0, 7); g.stroke(); } } }
 }
 export function eqTex(e: Eq) {
   const c = document.createElement('canvas'); c.width = c.height = 128;
@@ -151,6 +152,11 @@ export function eqSvg(e: Eq, w = 72, grey = false) {
     lg_rolled: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 44h16M38 44h16" stroke="#e8bc98" stroke-width="6"/><path d="M18 40h16M38 40h16" stroke="${s}" stroke-width="2"/>`,
     ft_greenboots: `<path d="M18 8h18v28q16 2 22 10v6H18Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
     ft_redslipper: `<path d="M10 40q0-14 16-14h14q16 4 22 14v6H10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 40q16-12 36 0" fill="none" stroke="${s}" stroke-width="3"/>`,
+    hd_karakusa: `<path d="M14 40Q36 8 58 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M56 36l10 10-4 4-8-8" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M22 28q8-6 16 2t14-1" fill="none" stroke="#1e3358" stroke-width="1.8"/><path d="M28 34q6 4 12-2" fill="none" stroke="#1e3358" stroke-width="1.6"/>`,
+    sl_nightwrap: `<rect x="6" y="18" width="44" height="22" rx="8" fill="${f}" stroke="${s}" stroke-width="2.5"/><rect x="6" y="27" width="44" height="3" fill="#2a4a7a"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
+    bd_nightshort: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M30 16l6 10 6-10" fill="${f}" stroke="${s}" stroke-width="2"/><path d="M28 48h16" stroke="#1a2438" stroke-width="3"/>`,
+    lg_tied: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 50h16M38 50h16" stroke="#1a2438" stroke-width="5"/>`,
+    ft_tabi: `<path d="M10 40q0-10 10-12h8v18H10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M30 30h16q10 2 14 12v4H30Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M28 28v18" stroke="#e8e2d4" stroke-width="2"/>`,
     hd_none: `<circle cx="36" cy="32" r="16" fill="#e8bc98" stroke="${s}" stroke-width="2.5"/><path d="M20 32Q20 14 36 14Q52 14 52 32Q44 22 36 24Q28 22 20 32Z" fill="#222" stroke="${s}" stroke-width="2"/>`,
     hn_none: `<rect x="6" y="18" width="44" height="22" rx="8" fill="#e8bc98" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
     bd_none: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="#e8bc98" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M26 28l8 8M34 28l-8 8M40 28l8 8M48 28l-8 8" stroke="${grey ? '#888' : '#2a2a2a'}" stroke-width="2.6" stroke-linecap="round"/>`,
@@ -190,6 +196,7 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
 <pattern id="pNeon" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(70)"><rect width="10" height="10" fill="#39ff9a"/><rect width="10" height="3" fill="#fff"/></pattern>
 <pattern id="pSeq" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#b84ad8"/><circle cx="2" cy="2" r="1.6" fill="#f0c8ff"/><circle cx="6" cy="6" r="1.6" fill="#ffd8f8"/></pattern>
 <pattern id="pTat" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="${SK}"/><path d="M0 12q4-8 8 0t8 0" stroke="#1e2a4a" stroke-width="1.6" fill="none"/><circle cx="12" cy="4" r="2" fill="#b8323a"/></pattern>
+<pattern id="pKara" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="#e8e2d4"/><path d="M0 10q4-8 8 0t8 0" stroke="#1e3358" stroke-width="1.5" fill="none"/><ellipse cx="5" cy="5" rx="3" ry="2" fill="none" stroke="#1e3358" stroke-width="1.2"/></pattern>
 </defs>`;
   void 0;
   const PF: Record<string, string> = { flower: 'url(#pFlower)', camo: 'url(#pCamo)', neon: 'url(#pNeon)', tattoo: 'url(#pTat)' };
@@ -215,7 +222,8 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     bd_bikini: `<path d="${T}" fill="${SK}" ${ol}/><path d="M58 126q10-6 16 8H56Z" fill="#e84a5c" ${ol}/><path d="M102 126q-10-6-16 8h18Z" fill="#e84a5c" ${ol}/><path d="M68 122L80 100L92 122" fill="none" stroke="#fff6ee" stroke-width="3" stroke-linecap="round"/><path d="M56 168h48l-6 16H62Z" fill="#e84a5c" ${ol}/>`,
     bd_none: `<path d="${T}" fill="${SK}" ${ol}/><path d="M62 126l10 10M72 126l-10 10M88 126l10 10M98 126l-10 10" fill="none" stroke="#2a2a2a" stroke-width="3.4" stroke-linecap="round"/>`,
     bd_singlet: `<path d="${T}" fill="#f4f0e8" ${ol}/><path d="M70 90q10 12 20 0" fill="none" stroke="${k}" stroke-width="2"/><path d="M52 100h8M100 100h8" stroke="#e4e0d8" stroke-width="4"/>`,
-    bd_hawaii: `<path d="${T}" fill="#1e8a7a" ${ol}/><path d="M66 90l14 14 14-14" fill="#1e8a7a" stroke="${k}" stroke-width="2.5"/><circle cx="68" cy="130" r="6" fill="#e85040"/><circle cx="92" cy="148" r="6" fill="#f0c030"/><circle cx="80" cy="168" r="5" fill="#f078a0"/>` };
+    bd_hawaii: `<path d="${T}" fill="#1e8a7a" ${ol}/><path d="M66 90l14 14 14-14" fill="#1e8a7a" stroke="${k}" stroke-width="2.5"/><circle cx="68" cy="130" r="6" fill="#e85040"/><circle cx="92" cy="148" r="6" fill="#f0c030"/><circle cx="80" cy="168" r="5" fill="#f078a0"/>`,
+    bd_nightshort: `<path d="${T}" fill="#24344c" ${ol}/><path d="M66 90l14 14 14-14" fill="#24344c" stroke="${k}" stroke-width="2.5"/><path d="M72 170h16" stroke="#1a2438" stroke-width="4"/><path d="M62 148h8M90 148h8" fill="none" stroke="#e8e2d4" stroke-width="2"/>` };
   const hood = B.id === 'bd_rain' ? `<path d="M50 92Q48 34 80 30Q112 34 110 92Z" fill="#ffd21a" ${ol}/>` : '';
   // ---- 褲子 ----
   const P = 'M54 182h52l6 86H86l-6-60-6 60H48Z';
@@ -224,7 +232,8 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     lg_rain: `<path d="${P}" fill="#ffd21a" ${ol}/><path d="M60 190l-6 72M100 190l4 72" stroke="#fffbe0" stroke-width="3" opacity=".85"/>`,
     lg_flower: `<path d="${P}" fill="url(#pFlower)" ${ol}/>`,
     lg_camo: `<path d="${P}" fill="url(#pCamo)" ${ol}/><rect x="56" y="214" width="12" height="14" fill="none" stroke="#2e3a1e" stroke-width="2"/>`,
-    lg_rolled: `<path d="${P}" fill="#6a6248" ${ol}/><path d="M52 240h20M88 240h20" stroke="#e8bc98" stroke-width="10"/><path d="M52 232h20M88 232h20" stroke="${k}" stroke-width="2"/>` };
+    lg_rolled: `<path d="${P}" fill="#6a6248" ${ol}/><path d="M52 240h20M88 240h20" stroke="#e8bc98" stroke-width="10"/><path d="M52 232h20M88 232h20" stroke="${k}" stroke-width="2"/>`,
+    lg_tied: `<path d="${P}" fill="#2a3040" ${ol}/><path d="M52 250h20M88 250h20" stroke="#1a2438" stroke-width="8"/>` };
   // ---- 鞋子 ----
   const toes = (x: number) => [0, 1, 2, 3].map(i => `<circle cx="${x + 6 + i * 7}" cy="270" r="3" fill="${SK}" stroke="${k}" stroke-width="1.2"/>`).join('');
   const slip = (sole: string, strap: string) => [40, 84].map(x => `<rect x="${x - 4}" y="276" width="40" height="7" rx="3" fill="${sole}" stroke="${k}" stroke-width="2.5"/>${toes(x)}<path d="M${x + 2} 276q16-12 32 0" fill="none" stroke="${strap}" stroke-width="5"/>`).join('');
@@ -235,7 +244,8 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     ft_boots: [44, 84].map(x => `<path d="M${x} 236h30v40h6v8H${x - 4}v-8h4Z" fill="#ffd21a" ${ol}/><path d="M${x + 4} 242v32" stroke="#fffbe0" stroke-width="3"/>`).join(''),
     ft_work: [40, 84].map(x => `<path d="M${x + 2} 258h30l4 18h4v8H${x - 2}v-8h4Z" fill="#6a4a2a" ${ol}/>${[262, 268, 274].map(y => `<path d="M${x + 10} ${y}l12 3M${x + 22} ${y}l-12 3" stroke="#e8d8a8" stroke-width="1.5"/>`).join('')}`).join(''),
     ft_greenboots: [44, 84].map(x => `<path d="M${x} 236h30v40h6v8H${x - 4}v-8h4Z" fill="#2f8a3a" ${ol}/><path d="M${x + 4} 242v32" stroke="#1a5a28" stroke-width="3"/>`).join(''),
-    ft_redslipper: slip('#e85a4a', '#c82028') };
+    ft_redslipper: slip('#e85a4a', '#c82028'),
+    ft_tabi: [40, 84].map(x => `<path d="M${x} 252h18v22H${x - 2}v-8h2Z" fill="#1a1c22" ${ol}/><path d="M${x + 18} 256h16l4 18H${x + 18}Z" fill="#1a1c22" ${ol}/><path d="M${x + 17} 254v22" stroke="#e8e2d4" stroke-width="2"/>`).join('') };
   // ---- 頭 ----
   const hd: Record<string, string> = {
     hd_basic: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="url(#pFlowerR)" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#c84a5a" ${ol}/>`,
@@ -245,7 +255,8 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     hd_crown: `<path d="M58 54L60 28L70 40L80 22L90 40L100 28L102 54Z" fill="#e8b830" ${ol}/><path d="M58 54H102" stroke="#b8862a" stroke-width="4"/><circle cx="80" cy="44" r="4" fill="#c82a2a" stroke="${k}" stroke-width="1.5"/><circle cx="66" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="94" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="80" cy="22" r="2.5" fill="#fff6dc" stroke="${k}"/>`,
     hd_none: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="#222222" ${ol}/>`,
     hd_straw: `<path d="M22 60L80 28L138 60Q80 68 22 60Z" fill="#d2a85a" ${ol}/><path d="M48 52H112M62 42H98" stroke="#8a5a24" stroke-width="1.5"/><path d="M58 58H102" stroke="#5a3a18" stroke-width="4"/>`,
-    hd_purple: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="#6a2a78" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#6a2a78" ${ol}/>` };
+    hd_purple: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="#6a2a78" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#6a2a78" ${ol}/>`,
+    hd_karakusa: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="url(#pKara)" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#e8e2d4" ${ol}/>` };
   const face = `<circle cx="80" cy="66" r="24" fill="${SK}" ${ol}/><circle cx="71" cy="66" r="2.6" fill="${k}"/><circle cx="89" cy="66" r="2.6" fill="${k}"/><path d="M73 76q7 6 14 0" fill="none" stroke="${k}" stroke-width="2.2" stroke-linecap="round"/><circle cx="66" cy="73" r="3" fill="#f0a090" opacity=".7"/><circle cx="94" cy="73" r="3" fill="#f0a090" opacity=".7"/>`;
   void PF;
   const legsDraw = B.id === 'bd_bikini'
@@ -345,6 +356,7 @@ export function eqStats(): string[] {
   if (f.speed < 0.9999) out.push(`翹殼指針|慢 ${pc(1 - f.speed)}%`);
   if (f.keep) out.push(`沒中保住連擊|${pc(f.keep)}%`);
   if (f.luck) out.push(`幸運|+${f.luck}`);
+  if (f.steal > 0) out.push(`偷竊按住|廣場 ${stealHoldSeconds(f, 'plaza').toFixed(2)} 秒、工寮 ${stealHoldSeconds(f, 'yard').toFixed(2)} 秒`);
   return out;
 }
 function currentOutfit() {

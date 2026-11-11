@@ -1,5 +1,15 @@
 export type Slot = 'head' | 'hand' | 'body' | 'legs' | 'feet';
-export type Fx = { bowl?: number; keep?: number; speed?: number; pearl?: number; nag?: number; throw?: number; dmg?: number; luck?: number };
+export type Fx = { bowl?: number; keep?: number; speed?: number; pearl?: number; nag?: number; throw?: number; dmg?: number; luck?: number; steal?: number };
+export type StealKind = 'plaza' | 'yard';
+export const STEAL_HOLD_BASE = { plaza: 1.8, yard: 0.9 } as const;
+export const STEAL_HOLD_FLOOR = { plaza: 1.0, yard: 0.5 } as const;
+/** 偷竊按住秒數：減幅相加後乘基礎，再夾下限（廣場 1.00／工寮 0.50）。 */
+export function stealHoldSeconds(fx: Pick<Fx, 'steal'>, kind: StealKind): number {
+  const base = STEAL_HOLD_BASE[kind];
+  const floor = STEAL_HOLD_FLOOR[kind];
+  const red = Math.max(0, fx.steal ?? 0);
+  return Math.max(floor, base * (1 - red));
+}
 export type Eq = { id: string; slot: Slot; n: string; price: number; eff: string; base: string; pat: string; fx: Fx };
 export const SLOTS: [Slot, string][] = [['head', '頭'], ['hand', '手'], ['body', '衣服'], ['legs', '褲子'], ['feet', '鞋子']];
 export const NONE_ID: Record<Slot, string> = { head: 'hd_none', hand: 'hn_none', body: 'bd_none', legs: 'lg_none', feet: 'ft_none' };
@@ -39,6 +49,11 @@ export const EQUIP: Eq[] = [
   { slot: 'hand', id: 'sl_redflower', n: '大紅花布袖套', price: 9000, eff: '每碗多拿 $1', base: '#c4282e', pat: 'flower', fx: { bowl: 1 } },
   { slot: 'body', id: 'bd_hawaii', n: '花襯衫', price: 20000, eff: '幸運 +1（比較會開到珍珠、奇物）', base: '#1e8a7a', pat: 'flower', fx: { luck: 1 } },
   { slot: 'feet', id: 'ft_redslipper', n: '紅色塑膠拖鞋', price: 12000, eff: '珍珠率 +3%', base: '#d4302a', pat: 'plain', fx: { pearl: 1.03 } },
+  { slot: 'head', id: 'hd_karakusa', n: '唐草頭巾', price: 6000, eff: '偷東西時，按住時間 −6%', base: '#e8e2d4', pat: 'karakusa', fx: { steal: 0.06 } },
+  { slot: 'hand', id: 'sl_nightwrap', n: '夜行手袖', price: 8000, eff: '偷東西時，按住時間 −6%', base: '#1a1c22', pat: 'plain', fx: { steal: 0.06 } },
+  { slot: 'body', id: 'bd_nightshort', n: '紺青短打', price: 12000, eff: '偷東西時，按住時間 −6%', base: '#24344c', pat: 'plain', fx: { steal: 0.06 } },
+  { slot: 'legs', id: 'lg_tied', n: '束口深褲', price: 9000, eff: '偷東西時，按住時間 −6%', base: '#2a3040', pat: 'plain', fx: { steal: 0.06 } },
+  { slot: 'feet', id: 'ft_tabi', n: '分趾布鞋', price: 7000, eff: '偷東西時，按住時間 −6%', base: '#1a1c22', pat: 'plain', fx: { steal: 0.06 } },
   { slot: 'head', id: 'hd_none', n: '不穿', price: 0, eff: '不戴帽子或頭巾，露出頭髮', base: '#e8bc98', pat: 'plain', fx: {} },
   { slot: 'hand', id: 'hn_none', n: '不穿', price: 0, eff: '不穿袖套，手臂是膚色', base: '#e8bc98', pat: 'plain', fx: {} },
   { slot: 'body', id: 'bd_none', n: '不穿', price: 0, eff: '不穿衣服，上身膚色並貼著 X 字胸貼', base: '#e8bc98', pat: 'plain', fx: {} },
@@ -52,4 +67,5 @@ export const SETS: { id: string; n: string; need: string[]; eff: string; fx: Fx 
   { id: 'army', n: '迷彩套', need: ['hd_helmet', 'sl_camo', 'lg_camo', 'ft_work'], eff: '阿婆唸你的機率再 -30%', fx: { nag: 0.7 } },
   { id: 'farmer', n: '田庄阿伯套', need: ['hd_straw', 'bd_singlet', 'lg_rolled', 'ft_greenboots'], eff: '每碗再多 $2、翹殼指針再慢 3%', fx: { bowl: 2, speed: 0.97 } },
   { id: 'market', n: '阿嬤菜市場套', need: ['hd_purple', 'sl_redflower', 'bd_hawaii', 'ft_redslipper'], eff: '珍珠率再 +5%、阿婆唸你的機率再 -20%', fx: { pearl: 1.05, nag: 0.8 } },
+  { id: 'thief', n: '日式小偷套', need: ['hd_karakusa', 'sl_nightwrap', 'bd_nightshort', 'lg_tied', 'ft_tabi'], eff: '偷東西時，按住時間再 −20%（五件合計 −50%；廣場最快 1 秒，工寮最快 0.5 秒）', fx: { steal: 0.20 } },
 ];

@@ -8,7 +8,7 @@ export type EquipVis = {
   slot: 'head' | 'hand' | 'body' | 'legs' | 'feet';
   id: string;
   base: string;
-  pat: 'plain' | 'flower' | 'rain' | 'camo' | 'neon' | 'tattoo' | 'dragon';
+  pat: 'plain' | 'flower' | 'rain' | 'camo' | 'neon' | 'tattoo' | 'dragon' | 'karakusa';
 };
 
 export type OutfitIds = {
@@ -55,6 +55,11 @@ export const EQUIP_VIS: EquipVis[] = [
   { slot: 'legs', id: 'lg_rolled', base: '#6a6248', pat: 'plain' },
   { slot: 'feet', id: 'ft_greenboots', base: '#2f8a3a', pat: 'plain' },
   { slot: 'feet', id: 'ft_redslipper', base: '#d4302a', pat: 'plain' },
+  { slot: 'head', id: 'hd_karakusa', base: '#e8e2d4', pat: 'karakusa' },
+  { slot: 'hand', id: 'sl_nightwrap', base: '#1a1c22', pat: 'plain' },
+  { slot: 'body', id: 'bd_nightshort', base: '#24344c', pat: 'plain' },
+  { slot: 'legs', id: 'lg_tied', base: '#2a3040', pat: 'plain' },
+  { slot: 'feet', id: 'ft_tabi', base: '#1a1c22', pat: 'plain' },
   { slot: 'head', id: 'hd_none', base: '#e8bc98', pat: 'plain' },
   { slot: 'hand', id: 'hn_none', base: '#e8bc98', pat: 'plain' },
   { slot: 'body', id: 'bd_none', base: '#e8bc98', pat: 'plain' },
@@ -125,6 +130,11 @@ const REPEAT: Record<string, [number, number]> = {
   hd_straw: [1, 2],
   bd_singlet: [1, 2],
   lg_rolled: [1, 3],
+  hd_karakusa: [2, 2],
+  sl_nightwrap: [1, 3],
+  bd_nightshort: [1, 2],
+  lg_tied: [1, 3],
+  ft_tabi: [1, 1],
 };
 
 function wrapDot(g: CanvasRenderingContext2D, x: number, y: number, r: number, col: string, W: number, H: number) {
@@ -420,6 +430,37 @@ function drawPlainShade(g: CanvasRenderingContext2D, base: string, W: number, H:
 }
 
 /** 畫裝備花紋（第一人稱袖套與 3D 貼圖共用） */
+
+function drawKarakusa(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#e8e2d4';
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#1e3358';
+  g.lineWidth = Math.max(2, W / 64);
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const rows = 6;
+  for (let row = 0; row < rows; row++) {
+    const y0 = (row + 0.45) * (H / rows);
+    g.beginPath();
+    for (let x = 0; x <= W; x += 3) {
+      const y = y0 + Math.sin((x / W) * Math.PI * 2 + row * 0.9) * (H / 18);
+      if (x === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.stroke();
+    for (let i = 0; i < 5; i++) {
+      const x = (i + 0.35) * (W / 5);
+      const y = y0 + Math.sin((x / W) * Math.PI * 2 + row * 0.9) * (H / 18);
+      const s = W / 22;
+      g.beginPath();
+      g.ellipse(x, y - s * 0.7, s, s * 0.55, -0.7, 0, Math.PI * 2);
+      g.stroke();
+      g.beginPath();
+      g.ellipse(x + s * 1.1, y + s * 0.65, s, s * 0.55, 0.8, 0, Math.PI * 2);
+      g.stroke();
+    }
+  }
+}
+
 export function paintEquipCanvas(g: CanvasRenderingContext2D, e: EquipVis, W: number, H: number) {
   switch (e.id) {
     case 'hd_basic':
@@ -436,6 +477,8 @@ export function paintEquipCanvas(g: CanvasRenderingContext2D, e: EquipVis, W: nu
       drawBamboo(g, W, H); return;
     case 'hd_straw':
       drawStrawWeave(g, W, H); return;
+    case 'hd_karakusa':
+      drawKarakusa(g, W, H); return;
     case 'sl_rain':
     case 'bd_rain':
     case 'lg_rain':
@@ -561,6 +604,9 @@ function paintFeet(mats: NonNullable<PlayerRig['outfitMats']>, feet: EquipVis) {
   } else if (feet.id === 'ft_work') {
     paintMat(shoe, feet);
     paintSolid(sole, '#2a1a10');
+  } else if (feet.id === 'ft_tabi') {
+    paintSolid(shoe, '#1a1c22');
+    paintSolid(sole, '#121318');
   } else {
     paintMat(shoe, feet);
     paintMat(sole, feet);
@@ -825,6 +871,23 @@ function buildBodyDetails(rig: PlayerRig, body: EquipVis) {
       add(ug, G('haw-slv', () => rbox(0.125, 0.16, 0.125)), texM, [0, 0.02, 0]);
       add(ug, G('haw-cuff', () => rcyl(0.07, 0.068, 0.028, 8)), cuffM, [0, 0.11, 0]);
     }
+  } else if (body.id === 'bd_nightshort') {
+    const cloth = texM;
+    const dark = solid(0x1a2438, 'ns-dark', { roughness: 0.82 });
+    const cream = solid(0xe8e2d4, 'ns-tie', { roughness: 0.7 });
+    add(g, G('ns-col', () => rbox(0.12, 0.075, 0.07)), cloth, [-0.08, 0.345, -0.08], [0.22, 0.18, 0.28]);
+    add(g, G('ns-col', () => rbox(0.12, 0.075, 0.07)), cloth, [0.08, 0.345, -0.08], [0.22, -0.18, -0.28]);
+    add(g, G('ns-hem', () => rbox(0.39, 0.028, 0.23)), dark, [0, -0.112, 0]);
+    add(g, G('ns-tie', () => rbox(0.055, 0.016, 0.016)), cream, [-0.05, 0.05, -0.122]);
+    add(g, G('ns-tie', () => rbox(0.055, 0.016, 0.016)), cream, [0.05, 0.05, -0.122]);
+    add(g, G('ns-knot', () => rbox(0.03, 0.03, 0.02)), cream, [0, 0.05, -0.128]);
+    const cuffM = solid(0x1a2438, 'ns-cuff', { roughness: 0.8 });
+    for (const arm of [rig.upperL, rig.upperR]) {
+      if (!arm) continue;
+      const ug = ensureDet(arm, DET.upper);
+      add(ug, G('ns-slv', () => rbox(0.125, 0.15, 0.125)), cloth, [0, 0.02, 0]);
+      add(ug, G('ns-cuff', () => rcyl(0.07, 0.068, 0.026, 8)), cuffM, [0, 0.105, 0]);
+    }
   } else if (body.id === 'bd_none') {
     // 衣服不穿：膚色軀幹上的 X 字胸貼（沿用原本裸體外觀）
     const tape = solid(0x2a2a2a, 'nude-x', { roughness: 0.88, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
@@ -860,6 +923,7 @@ function buildSleeveDetails(rig: PlayerRig, hand: EquipVis) {
     add(g, coverG, texM, [0, -0.02, 0]);
     add(g, cuffG, cuffM, [0, 0.10, 0]);
     if (hand.id === 'sl_neon') add(g, stripeG, SM('slv-white', 0xe8f8f0), [0.03, -0.02, 0]);
+    if (hand.id === 'sl_nightwrap') add(g, stripeG, SM('slv-indigo', 0x2a4a7a), [0.03, -0.02, 0]);
     if (hand.id === 'sl_rain') add(g, G('slv-ref', () => rbox(0.11, 0.018, 0.11)), SM('slv-ref', 0xe8e6d8, { roughness: 0.4 }), [0, 0.04, 0]);
   }
 }
@@ -912,6 +976,11 @@ function buildLegDetails(rig: PlayerRig, legs: EquipVis) {
       add(g, G('roll-cuff', () => rcyl(0.092, 0.092, 0.06, 8)), rollM, [0, -0.08, 0]);
       // 只填反摺到鞋面之間，半徑對齊小腿正面寬度，不再比褲管鼓出去
       add(g, G('roll-skin2', () => rcyl(0.068, 0.062, 0.17, 8)), skinM, [0, -0.195, 0]);
+    } else if (legs.id === 'lg_tied') {
+      // 束口對齊小腿中心 z=0；半徑略大於小腿方柱對角線，包住邊角但不另加寬
+      const cuffM = SM('tied-cuff', 0x1a2438, { roughness: 0.84 });
+      add(g, G('tied-cuff', () => rcyl(0.095, 0.092, 0.045, 8)), cuffM, [0, -0.275, 0]);
+      add(g, G('tied-band', () => rcyl(0.098, 0.095, 0.02, 8)), SM('tied-band', 0xe8e2d4, { roughness: 0.7 }), [0, -0.255, 0]);
     }
   }
 }
@@ -950,6 +1019,17 @@ function buildFeetDetails(rig: PlayerRig, feet: EquipVis) {
       cover(add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.22, -0.09]));
       cover(add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.248, -0.09]));
       cover(add(host, G('wboot-lace', () => rbox(0.075, 0.01, 0.012)), lace, [0, -0.276, -0.09]));
+    } else if (feet.id === 'ft_tabi') {
+      const blk = SM('tabi', 0x1a1c22, { roughness: 0.78 });
+      const cream = SM('tabi-split', 0xe8e2d4, { roughness: 0.65 });
+      const cover = (m: THREE.Mesh) => { m.renderOrder = 1; return m; };
+      // 腳踝套筒對齊小腿中心，包住方柱下緣，不往鞋頭偏移
+      cover(add(host, G('tabi-shaft', () => rcyl(0.095, 0.098, 0.10, 10)), blk, [0, -0.26, 0]));
+      cover(add(host, G('tabi-cuff', () => rcyl(0.098, 0.098, 0.022, 10)), cream, [0, -0.21, 0]));
+      const inner = shin === rig.shinL ? 1 : -1;
+      cover(add(host, G('tabi-big', () => rbox(0.055, 0.05, 0.09)), blk, [inner * 0.042, -0.325, -0.125]));
+      cover(add(host, G('tabi-rest', () => rbox(0.08, 0.05, 0.08)), blk, [inner * -0.032, -0.325, -0.115]));
+      cover(add(host, G('tabi-line', () => rbox(0.012, 0.042, 0.09)), cream, [inner * 0.012, -0.322, -0.122]));
     }
   }
 }
@@ -1009,7 +1089,7 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   }
   if (rig.hatG) buildHat(rig.hatG, head);
   buildBodyDetails(rig, body);
-  if (body.id !== 'bd_hawaii') {
+  if (body.id !== 'bd_hawaii' && body.id !== 'bd_nightshort') {
     for (const arm of [rig.upperL, rig.upperR]) if (arm) ensureDet(arm, DET.upper);
   }
   if (bareArms) {

@@ -28,7 +28,7 @@ import {
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
   renderShop, getShopNewIds,
-  initClothUi, eqOwned, setEquip, equipNow, wornIds, setsOn, slOn, fxAll,
+  initClothUi, eqOwned, setEquip, equipNow, wornIds, setsOn, slOn, fxAll, stealHoldSeconds,
   migrateEquip, SCARED, applySleeve, sleeveGold, eqTex, eqSvg, figSvg,
   renderEquip, renderClothShop, shareOutfit, askSet, openEquip,
 } from './shop';
@@ -1703,7 +1703,6 @@ function plazaThrowTarget(): PlazaAimTarget | null {
   return best;
 }
 /** 廣場偷肉：讀條／同堆冷卻寫死；罰金／禁偷／碗少門檻見 eco */
-const PLAZA_STEAL_DUR = 1.8;
 const PLAZA_STEAL_PAIR_MS = 4000;
 const PLAZA_BUSY_PHASE = /^(seam|twist|pry|crab|scoop|grillplace|grillcook|grillflip|grilltake)$/i;
 let plazaStealBanUntil = 0;
@@ -4011,14 +4010,15 @@ function frameBody() {
           } else if (why) toast(why, '#ffb08a');
         } else {
           if (live) plazaStealTgt = live;
-          stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / PLAZA_STEAL_DUR * 100}%`;
-          if (stealT >= PLAZA_STEAL_DUR) { const t = plazaStealTgt; stealT = 0; void finishPlazaSteal(t); }
+          const plazaHold = stealHoldSeconds(fxAll(), 'plaza');
+          stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / plazaHold * 100}%`;
+          if (stealT >= plazaHold) { const t = plazaStealTgt; stealT = 0; void finishPlazaSteal(t); }
         }
       }
     } else {
     const tgt = walking || evRun?.steal === 'no_steal' ? null : stealTarget(); on('stealBtn', !!tgt); if (!tgt) stopSteal();
     if (tgt && !stealNpc && phase !== 'busy') hint.textContent = tgt.distract > 0 ? `${tgt.name}轉頭在聊天！${COARSE ? '按住「偷」' : '按住 E／「偷」'}偷對方的肉` : `${tgt.name}在看，不要偷…`;
-    if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / 0.9 * 100}%`; if (stealT >= 0.9) { stealT = 0; stealOne(stealNpc); } } }
+    if (stealNpc) { if (!freeToSteal(stealNpc)) caughtBy(stealNpc); else { const yardHold = stealHoldSeconds(fxAll(), 'yard'); stealT += dt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${stealT / yardHold * 100}%`; if (stealT >= yardHold) { stealT = 0; stealOne(stealNpc); } } }
     }
     updReticle();
     if (!plazaMode) {
