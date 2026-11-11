@@ -399,19 +399,8 @@ const seamMark = mesh(new THREE.BoxGeometry(0.042, 0.016, 0.016), new THREE.Mesh
 const seamRing = mesh(new THREE.TorusGeometry(0.03, 0.004, 6, 24), new THREE.MeshBasicMaterial({ color: 0xd8ff80, transparent: true, opacity: 0, depthWrite: false }), [0, 0.02, 0], oyster); seamRing.rotation.x = Math.PI / 2; seamRing.visible = false;
 let sweet = false, sweetT = 0;
 const seamGlow = mesh(new THREE.BoxGeometry(0.062, 0.026, 0.026), new THREE.MeshBasicMaterial({ color: 0xffc878, transparent: true, opacity: 0, depthWrite: false }), [0, 0.012, 0], oyster);
+// 縫提示後畫，避免被手擋住；不可把手／刀的 depthWrite 關掉，否則工寮桌面和牆會蓋住第一人稱雙手
 seamMark.renderOrder = seamGlow.renderOrder = seamRing.renderOrder = 12;
-function preventHandDepthOcclusion(root: THREE.Object3D) {
-  root.traverse(obj => {
-    const mesh = obj as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    let p: THREE.Object3D | null = obj;
-    while (p) { if (p === oyster) return; p = p.parent; }
-    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    for (const m of mats) m.depthWrite = false;
-  });
-}
-preventHandDepthOcclusion(handL);
-preventHandDepthOcclusion(handR);
 const shimmer = mesh(new THREE.SphereGeometry(0.11, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }), [0, 0, 0], oyster);
 const pearlMesh = mesh(new THREE.SphereGeometry(0.03, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.3 }), [0, 0.05, 0], oyster);
 pearlMesh.visible = false;
