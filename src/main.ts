@@ -399,6 +399,19 @@ const seamMark = mesh(new THREE.BoxGeometry(0.042, 0.016, 0.016), new THREE.Mesh
 const seamRing = mesh(new THREE.TorusGeometry(0.03, 0.004, 6, 24), new THREE.MeshBasicMaterial({ color: 0xd8ff80, transparent: true, opacity: 0, depthWrite: false }), [0, 0.02, 0], oyster); seamRing.rotation.x = Math.PI / 2; seamRing.visible = false;
 let sweet = false, sweetT = 0;
 const seamGlow = mesh(new THREE.BoxGeometry(0.062, 0.026, 0.026), new THREE.MeshBasicMaterial({ color: 0xffc878, transparent: true, opacity: 0, depthWrite: false }), [0, 0.012, 0], oyster);
+seamMark.renderOrder = seamGlow.renderOrder = seamRing.renderOrder = 12;
+function preventHandDepthOcclusion(root: THREE.Object3D) {
+  root.traverse(obj => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    let p: THREE.Object3D | null = obj;
+    while (p) { if (p === oyster) return; p = p.parent; }
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) m.depthWrite = false;
+  });
+}
+preventHandDepthOcclusion(handL);
+preventHandDepthOcclusion(handR);
 const shimmer = mesh(new THREE.SphereGeometry(0.11, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }), [0, 0, 0], oyster);
 const pearlMesh = mesh(new THREE.SphereGeometry(0.03, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.3 }), [0, 0.05, 0], oyster);
 pearlMesh.visible = false;
@@ -3802,9 +3815,21 @@ function resize() {
   narrow = camera.aspect < 0.8;
   // 橫向寬螢幕：垂直 FOV 加大，畫面才不會顯得壓扁
   wideView = camera.aspect > 1.35;
-  baseFov = narrow ? 82 : wideView ? 78 : 70;
-  handRig.position.set(0, narrow ? -0.02 : 0, 0);
-  handRig.scale.set(narrow ? 0.42 : 0.7, narrow ? 0.6 : 0.7, 0.7);
+  // 4:3 平板也用橫向 FOV，避免近鏡頭前臂過度放大
+  baseFov = narrow ? 82 : 78;
+  applyFpHandLayout();
+}
+/** 第一人稱手的畫面配置。camTick 每幀會重設 handRig，不可只寫在 resize。 */
+function applyFpHandLayout() {
+  // 近正方形橫向（iPad 4:3／3:2）：長前臂會穿過近剪裁面，投影後脹到畫面上方蓋住蚵仔縫
+  const squatView = !narrow && camera.aspect <= 1.52;
+  if (squatView) {
+    handRig.position.set(0, -0.08, -0.20);
+    handRig.scale.set(1, 1, 1);
+  } else {
+    handRig.position.set(0, 0, 0);
+    handRig.scale.set(1, 1, 1);
+  }
 }
 /** 切 App／旋轉後連跑兩幀，等 layout／visualViewport 穩定 */
 function fixViewport() {
@@ -4670,7 +4695,10 @@ function camTick(dt: number) {
   tpOn = show;
   me3.visible = false;
   if (plazaMe) plazaMe.outer.visible = usePlazaMe;
-  umbTick3(dt, show); handRig.scale.setScalar(show ? 0.75 : 1); handRig.position.set(0, show ? -0.04 : 0, 0); handL.children[0].visible = handR.children[0].visible = !show;
+  umbTick3(dt, show);
+  if (show) { handRig.scale.setScalar(0.75); handRig.position.set(0, -0.04, 0); }
+  else applyFpHandLayout();
+  handL.children[0].visible = handR.children[0].visible = !show;
   if (!show) {
     if (plazaMe) plazaMe.outer.visible = false;
     // 第三人稱坐下／走動會把第一人稱手藏起來；切回第一人稱且仍坐著時要恢復，否則剝蚵雙手會消失。走動本來就沒有第一人稱手。
