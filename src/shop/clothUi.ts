@@ -397,8 +397,8 @@ function pickSlot(s: Slot) {
   const now = performance.now();
   if (now < pickGuard) return;
   pickGuard = now + 80;
-  if (D.getEqPick() !== s) { D.setEqPick(s); eqListOpen = false; }
-  else if (!eqListOpen) eqListOpen = true;
+  // 點一下就直接打開該部位的換裝清單；再點同一個部位收起
+  if (D.getEqPick() !== s || !eqListOpen) { D.setEqPick(s); eqListOpen = true; }
   else { D.setEqPick(null); eqListOpen = false; }
   paintPickPane();
   if (eqListOpen) $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
