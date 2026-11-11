@@ -69,10 +69,24 @@ export type YardShopDeps = {
 let D: YardShopDeps;
 export function initYardShop(deps: YardShopDeps) { D = deps; }
 
-export const GEAR = [
-  { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%' },
-  { id: 'radio', n: '收音機', price: 300, good: '阿婆氣消得快：怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：丟殼預警變晚（⚠ 和提示聲晚一半才出現）' },
-  { id: 'glasses', n: '👓 老花眼鏡', price: 200, good: '蚵仔縫更亮更粗、光暈更大；插刀判定範圍 +25%', bad: '看遠有點霧：畫面邊緣微暗' }];
+/** 工寮器具：數值可由後台 ItemStats 覆寫；沒覆寫用這裡預設 */
+export type Gear = {
+  id: string; n: string; price: number; good: string; bad: string;
+  /** 手套：割手受傷倍率（預設 0.5） */
+  dmgMul?: number;
+  /** 手套：指針速度倍率（預設 1.05） */
+  speedMul?: number;
+  /** 收音機：怒氣增加倍率（預設 0.7） */
+  angerMul?: number;
+  /** 老花眼鏡：找縫判定倍率（預設 1.25） */
+  seamMul?: number;
+};
+export const GEAR: Gear[] = [
+  { id: 'glove', n: '🧤 棉紗手套', price: 120, good: '割到手的傷害減半', bad: '手套厚，指針速度 +5%', dmgMul: 0.5, speedMul: 1.05 },
+  { id: 'radio', n: '收音機', price: 300, good: '阿婆氣消得快：怒氣增加 ×0.7（聽廣播心情好）', bad: '太吵：丟殼預警變晚（⚠ 和提示聲晚一半才出現）', angerMul: 0.7 },
+  { id: 'glasses', n: '👓 老花眼鏡', price: 200, good: '蚵仔縫更亮更粗、光暈更大；插刀判定範圍 +25%', bad: '看遠有點霧：畫面邊緣微暗', seamMul: 1.25 },
+];
+export function gearFx(id: string): Gear | undefined { return GEAR.find(g => g.id === id); }
 /** 廣場高單價外觀（永久、可開關；所有權與器具一樣存在本機存檔） */
 export const COSMETICS = [
   { id: 'goldPipe', n: '金煙菸斗', price: 150000, good: '廣場吐出的煙和菸頭的煙會帶一層溫潤金霧', ic: 'pipe' },
@@ -146,7 +160,12 @@ export function pxHtml(k: string, base: number, pre = '') {
 /** 特價倒數：放在物品說明下面的小字 */
 export function pxCd(k: string) { const p = pxLive(k); return p?.sale && p.endsAt && p.price < p.base ? `<small class="saleCd" data-end="${p.endsAt}">特價${cdTxt(p.endsAt - pxNow())}</small>` : ''; }
 setInterval(() => { if (!$('shop').classList.contains('show')) return; let gone = false; $('shop').querySelectorAll<HTMLElement>('.saleCd').forEach(e => { const left = +e.dataset.end! - pxNow(); e.textContent = '特價' + cdTxt(left); if (left <= 0) gone = true; }); if (gone) renderShop(); }, 1000);
-export function openShopPx() { fetchPrices().then(r => { if (r === 'changed' && $('shop').classList.contains('show')) renderShop(); }); }
+export function openShopPx() {
+  void Promise.all([fetchPrices(), import('./itemStats').then(m => m.fetchItemStats())]).then(([r]) => {
+    if (r === 'changed' && $('shop').classList.contains('show')) renderShop();
+    else if ($('shop').classList.contains('show')) renderShop();
+  });
+}
 /** 已擁有時仍顯示價格，旁邊保留使用／換裝狀態；不可再買 */
 function ownedPxHtml(k: string, base: number, worn = false) {
   const label = worn ? '已穿戴' : '已擁有';

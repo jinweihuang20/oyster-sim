@@ -33,6 +33,7 @@ export default defineConfig({
           VER,
           readFileSync('src/shop/oddities.ts', 'utf8'),
           readFileSync('src/dm/weapons.ts', 'utf8'),
+          readFileSync('src/shop/pets.ts', 'utf8'),
         )),
       });
     },

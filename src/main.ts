@@ -23,9 +23,9 @@ import {
   syncEqPreview, refreshEqPreview, stopEqPreview, ODD,
   type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS,
   initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop,
-  initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, FLAG_PRICE_ITEMS,
+  initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, FLAG_PRICE_ITEMS, gearFx,
   gearOn, knifeNow, umbNow, bowlNow, petNow, makeOysterBaby,
-  fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
+  fetchPrices, px, pxHtml, pxCd, openShopPx, payFor, fetchItemStats, onItemStatApply,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
   renderShop, getShopNewIds,
   initClothUi, eqOwned, setEquip, equipNow, wornIds, setsOn, slOn, fxAll, walkSpeedNow, stealHoldSeconds,
@@ -1411,7 +1411,7 @@ function tryInsert() {
   if (phase !== 'seam') return;
   const d = DIFF[diff];
   if (Math.abs(seamErr()) < tolNow()) { noise(0.06, 3000, 0.4); tone(320, 0.08, 0.2, 'triangle', 0, 200); toast('插進去了！', '#9be37a'); seamGlow.visible = false; seamRing.visible = false; sweet = false; setPhase('twist'); }
-  else if (Math.random() < slipNow()) { stabs++; dStat[diff][1]++; dStat[diff][2]++; flinch = 0.6; nag(NAG_STAB); hint.textContent = '刀子滑掉，割到手了！'; setPhase('busy'); bleed(16); hurt((10 + diff * 5) * (gearOn('glove') ? 0.5 : 1), gearOn('glove') ? '哎呀！（有手套）' : '哎呀！'); if (hp > 0) later(0.7, () => setPhase('seam')); }
+  else if (Math.random() < slipNow()) { stabs++; dStat[diff][1]++; dStat[diff][2]++; flinch = 0.6; nag(NAG_STAB); hint.textContent = '刀子滑掉，割到手了！'; setPhase('busy'); bleed(16); hurt((10 + diff * 5) * (gearOn('glove') ? (gearFx('glove')?.dmgMul ?? 0.5) : 1), gearOn('glove') ? '哎呀！（有手套）' : '哎呀！'); if (hp > 0) later(0.7, () => setPhase('seam')); }
   else { dStat[diff][1]++; tone(140, 0.08, 0.2, 'square'); hint.textContent = '沒對準縫，刀子滑開了！再找找看'; if (Math.random() < 0.3) nag(NAG_SLIP); shake = 0.08; }
 }
 // ----- 2. 扭手腕 -----
@@ -1512,9 +1512,9 @@ function applyBowl() {
 }
 const pryW = () => Math.min(0.6, Math.min(1.6, 1 + 0.15 * pryHits) * PRY[diff].w * knifeNow().green * medM('green') * (newbie() ? 1.3 : 1));
 const PRY_SLOW = 0.56; // 整體放慢（0.8→0.56，再慢 30%）
-const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? 1.05 : 1) * knifeNow().speed * medM('speed') * fxAll().speed;
+const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? (gearFx('glove')?.speedMul ?? 1.05) : 1) * knifeNow().speed * medM('speed') * fxAll().speed;
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
-const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? 1.25 : 1);
+const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : k.id === 'harbor' ? 1.12 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : k.id === 'harbor' ? 0.82 : 1); }
 
@@ -1752,7 +1752,7 @@ function anger(n: Npc, lines: string[], retaliate: number) {
 const stunned = (n: Npc) => (n.clutch ?? 0) > 0;
 const freeToSteal = (n: Npc) => n.distract > 0 || stunned(n);
 let dayMaxGrudge = 0;
-function addGrudge(n: Npc, v: number) { if (v > 0) v *= (evRun ? Math.max(1, medM('grudge')) * Math.max(1, locNow().ang) : medM('grudge') * locNow().ang * (gearOn('radio') ? 0.7 : 1)) * (evRun?.angerX ?? 1); const g0 = n.grudge ?? 0; n.grudge = Math.max(0, Math.min(100, g0 + v)); if (v > 0) { n.gAt = performance.now(); if (g0 < 60 && n.grudge >= 60 && state === 'play') toast(`${n.name}很生氣！會更常丟你（一陣子不惹她就會消氣）`, '#ff7a6a'); } dayMaxGrudge = Math.max(dayMaxGrudge, n.grudge); }
+function addGrudge(n: Npc, v: number) { if (v > 0) v *= (evRun ? Math.max(1, medM('grudge')) * Math.max(1, locNow().ang) : medM('grudge') * locNow().ang * (gearOn('radio') ? (gearFx('radio')?.angerMul ?? 0.7) : 1)) * (evRun?.angerX ?? 1); const g0 = n.grudge ?? 0; n.grudge = Math.max(0, Math.min(100, g0 + v)); if (v > 0) { n.gAt = performance.now(); if (g0 < 60 && n.grudge >= 60 && state === 'play') toast(`${n.name}很生氣！會更常丟你（一陣子不惹她就會消氣）`, '#ff7a6a'); } dayMaxGrudge = Math.max(dayMaxGrudge, n.grudge); }
 function grudgeUI(n: Npc) {
   if (!n.gIcon) { n.gIcon = emojiSprite('💢', 0.12); n.gIcon.position.set(-0.1, 0.32, 0); n.head.add(n.gIcon); const bar = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff3b2f, depthTest: false })); bar.center.set(0, 0.5); bar.position.set(-0.03, 0.32, 0); n.head.add(bar); n.gBar = bar; }
   const g = n.grudge ?? 0; n.gIcon.visible = n.gBar!.visible = g > 4; n.gIcon.scale.setScalar(0.12 + g * 0.0015); n.gBar!.scale.set(0.006 + g * 0.0032, 0.035, 1);
@@ -2763,6 +2763,13 @@ document.addEventListener('visibilitychange', () => {
 let achFromRes = false; // 從收工畫面打開成就，關掉後回到收工畫面
 btn('rAch', () => { achFromRes = true; $('result').classList.remove('show'); achOpen(); });
 const ITEMS = [{ id: 'moon', n: '把你媽的愛送上月球', price: 5000, good: '選一位鄰居，發射飛彈鐵拳把對方送上月球，這一工都不會再出現', bad: '每一工最多用 2 個，下一工對方會回來' }];
+onItemStatApply((id, o) => {
+  const it = ITEMS.find(x => x.id === id); if (!it) return;
+  if (typeof o.n === 'string' && o.n.trim()) it.n = o.n.trim();
+  if (typeof o.good === 'string' && o.good.trim()) it.good = o.good.trim();
+  if (typeof o.bad === 'string' && o.bad.trim()) it.bad = o.bad.trim();
+});
+void fetchItemStats();
 
 // 主選單／雜貨新品／簽到提示／禮物信箱（見 ui/menu、meta/gifts）
 const shopKeys = () => [...KNIVES.filter(k => k.price > 0).map(k => 'knife-' + k.id), ...UMBS.filter(u => u.price > 0).map(u => 'umb-' + u.id), ...BOWLS.filter(b => b.price > 0).map(b => 'bowl-' + b.id), ...GEAR.map(g => 'gear-' + g.id), ...COSMETICS.map(g => 'gear-' + g.id), ...FLAG_PRICE_ITEMS.map(g => 'gear-' + g.id), ...EQUIP.filter(e => e.price > 0).map(e => 'cloth-' + e.id), ...MEDS.map(m => 'med-' + m.id), ...ITEMS.map(i => 'item-' + i.id)];

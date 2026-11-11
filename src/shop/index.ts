@@ -13,13 +13,14 @@ export {
 } from './meds';
 
 export {
-  initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS,
+  initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, gearFx,
   gearOn, knifeNow, umbNow, bowlNow, petNow,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
   renderShop, getShopNewIds, FLAG_PRICE_ITEMS, FLAG_ITEM,
   type Knife, type Umb, type Bowl, type YardShopDeps,
 } from './yardShop';
+export { fetchItemStats, applyItemStats, onItemStatApply } from './itemStats';
 export {
   initClothUi, eqOwned, setEquip, equipNow, wornIds, setsOn, slOn, fxAll, walkSpeedNow,
   migrateEquip, SCARED, applySleeve, sleeveGold, eqTex, eqSvg, figSvg,
