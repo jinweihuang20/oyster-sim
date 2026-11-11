@@ -6,6 +6,7 @@ import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, NONE_ID, isNoneId, def
 import { EQUIP_VIS, paintEquipCanvas } from './equipVisual';
 import { openClothTryPreview, closeClothTryPreview } from './tryPreview';
 import { hydrateEquipThumbs } from './equipThumb';
+import { refreshEqPreview } from './equipPreview';
 
 export type ClothUiDeps = {
   getSave: () => Save;
@@ -328,48 +329,155 @@ export function eqStats(): string[] {
   if (f.luck) out.push(`幸運|+${f.luck}`);
   return out;
 }
+function currentOutfit() {
+  return {
+    head: equipNow('head').id, hand: equipNow('hand').id,
+    body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
+  };
+}
+function boardInnerHtml() {
+  const st = eqStats();
+  return `<div class="eqBoardT">目前加成</div>${st.length ? `<div class="eqStats">${st.map(x => { const [a, b] = x.split('|'); return `<div><small>${a}</small><b>${b}</b></div>`; }).join('')}</div>` : '<p class="eqNone">現在穿的都是基本款，還沒有加成。去服飾店挑幾件吧。</p>'}`;
+}
+function setsInnerHtml() {
+  const sets = setsOn(), worn = wornIds();
+  return SETS.map(s => { const done = sets.includes(s), have = s.need.filter(i => eqOwned(i)).length;
+      const full = have === s.need.length; return `<div class="eqSet${done ? ' done' : ''}${full ? ' full' : ''}"${full ? ` data-setid="${s.id}" role="button"` : ''}><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqSvg(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}${full ? `<em class="eqSetGo"><i class="ic ${done ? 'ic-check' : 'ic-hand'}"></i> ${done ? '穿著中' : '一鍵換上'}</em>` : ''}</div>`; }).join('');
+}
+function listHtml(pick: Slot) {
+  const pickName = slotLabel(pick);
+  return `<div class="eqList"><div class="eqListT">換${pickName}<small>點一件就換上，換穿免費</small></div>${EQUIP.filter(e => e.slot === pick && eqOwned(e.id)).slice().sort((a, b) => Number(isNoneId(b.id)) - Number(isNoneId(a.id))).map(e => `<button data-eqset="${e.id}" class="${equipNow(e.slot).id === e.id ? 'on' : ''}">${eqIcon(e, 48)}<span><b>${e.n}</b><small>${e.eff}</small></span>${equipNow(e.slot).id === e.id ? '<em>穿著中</em>' : ''}</button>`).join('')}<p class="eqHint">想要更多款式，去服飾店看看。</p></div>`;
+}
+function pickPaneHtml() {
+  const pick = D.getEqPick();
+  if (!pick) {
+    eqListOpen = false;
+    return '<p class="eqHint">點旁邊的格子或人身上的部位查看與換裝。</p>';
+  }
+  const pickEq = equipNow(pick);
+  const pickName = slotLabel(pick);
+  return `<div class="eqInfo"><div class="eqInfoT"><small>${pickName}</small><b>${pickEq.n}</b><p>${eqWornText(pickEq)}</p></div>${eqListOpen ? '' : `<button type="button" class="eqInfoGo" data-eqopen="${pick}">換裝</button>`}</div>` + (eqListOpen ? listHtml(pick) : '');
+}
+function syncTileOn() {
+  const pick = D.getEqPick();
+  document.querySelectorAll('#eqBody .eqTile[data-slot]').forEach(el => {
+    el.classList.toggle('on', el.getAttribute('data-slot') === pick);
+  });
+}
+function paintPickPane() {
+  const pane = document.getElementById('eqPickPane');
+  if (!pane) return;
+  pane.innerHTML = pickPaneHtml();
+  syncTileOn();
+  hydrateEquipThumbs(pane);
+}
+function paintTile(s: Slot) {
+  const root = $('eqBody');
+  const btn = root.querySelector(`.eqTile[data-slot="${s}"]`);
+  if (!btn) return;
+  btn.outerHTML = eqTileHtml(s);
+  const next = root.querySelector<HTMLElement>(`.eqTile[data-slot="${s}"]`);
+  if (next) hydrateEquipThumbs(next);
+}
+function paintBoardAndSets() {
+  const root = $('eqBody');
+  const board = root.querySelector('.eqBoard');
+  if (board) board.innerHTML = boardInnerHtml();
+  const sets = root.querySelector('.eqSets');
+  if (sets) sets.innerHTML = setsInnerHtml();
+}
+function applyPreview() {
+  const fig = document.getElementById('eqFigW');
+  if (!fig) return;
+  if (fig.firstElementChild) refreshEqPreview(currentOutfit());
+  else D.syncEqPreview(fig, currentOutfit());
+}
+let pickGuard = 0;
+function pickSlot(s: Slot) {
+  const now = performance.now();
+  if (now < pickGuard) return;
+  pickGuard = now + 80;
+  if (D.getEqPick() !== s) { D.setEqPick(s); eqListOpen = false; }
+  else if (!eqListOpen) eqListOpen = true;
+  else { D.setEqPick(null); eqListOpen = false; }
+  paintPickPane();
+  if (eqListOpen) $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  else if (D.getEqPick()) $('eqBody').querySelector('.eqInfo')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+function wearFromList(id: string) {
+  const e = EQUIP.find(x => x.id === id);
+  if (!e) return;
+  setEquip(e.slot, e.id);
+  D.persist();
+  applySleeve();
+  D.applyOutfit3();
+  paintTile(e.slot);
+  paintBoardAndSets();
+  applyPreview();
+  paintPickPane();
+}
+function goShop() {
+  D.openShopPx();
+  $('equip').classList.remove('show');
+  D.stopEqPreview();
+  D.setEqFromRes(false);
+  if (D.getEqPick()) D.setClothTab(D.getEqPick()!);
+  D.renderShop();
+  const gs = Array.from(document.querySelectorAll('#shopList .stab'));
+  const i = gs.findIndex(g => g.querySelector('.slGrid'));
+  if (i >= 0) { D.setShopTab(i); D.renderShop(); }
+  $('shop').classList.add('show');
+  $('shop').scrollTop = 0;
+}
+function onEquipClick(ev: Event) {
+  const t = ev.target;
+  if (!(t instanceof Element)) return;
+  const slotBtn = t.closest('button[data-slot]');
+  if (slotBtn && $('eqBody').contains(slotBtn)) {
+    pickSlot(slotBtn.getAttribute('data-slot') as Slot);
+    return;
+  }
+  if (t.closest('.eqInfoGo')) {
+    eqListOpen = true;
+    paintPickPane();
+    $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return;
+  }
+  const setItem = t.closest('button[data-eqset]');
+  if (setItem) {
+    wearFromList(setItem.getAttribute('data-eqset')!);
+    return;
+  }
+  const setEl = t.closest<HTMLElement>('.eqSet[data-setid]');
+  if (setEl) {
+    const st = SETS.find(x => x.id === setEl.dataset.setid);
+    if (st) askSet(st);
+    return;
+  }
+  if (t.closest('#eqShare')) { void shareOutfit(); return; }
+  if (t.closest('#eqShop')) { goShop(); return; }
+}
+function ensureEquipBound() {
+  const root = $('eqBody');
+  if (root.dataset.eqBound === '1') return;
+  root.dataset.eqBound = '1';
+  root.addEventListener('click', onEquipClick);
+}
 export function renderEquip() {
-  const sets = setsOn(), st = eqStats(), worn = wornIds();
   const pick = D.getEqPick();
   if (!pick) eqListOpen = false;
   const hits = SLOTS.map(([s, n]) => `<button type="button" class="eqHit" data-slot="${s}" aria-label="${n}"></button>`).join('');
-  const pickEq = pick ? equipNow(pick) : null;
-  const pickName = pick ? slotLabel(pick) : '';
-  const info = pickEq
-    ? `<div class="eqInfo"><div class="eqInfoT"><small>${pickName}</small><b>${pickEq.n}</b><p>${eqWornText(pickEq)}</p></div>${eqListOpen ? '' : `<button type="button" class="eqInfoGo" data-eqopen="${pick}">換裝</button>`}</div>`
-    : '';
-  const list = pick && eqListOpen
-    ? `<div class="eqList"><div class="eqListT">換${pickName}<small>點一件就換上，換穿免費</small></div>${EQUIP.filter(e => e.slot === pick && eqOwned(e.id)).slice().sort((a, b) => Number(isNoneId(b.id)) - Number(isNoneId(a.id))).map(e => `<button data-eqset="${e.id}" class="${equipNow(e.slot).id === e.id ? 'on' : ''}">${eqIcon(e, 48)}<span><b>${e.n}</b><small>${e.eff}</small></span>${equipNow(e.slot).id === e.id ? '<em>穿著中</em>' : ''}</button>`).join('')}<p class="eqHint">想要更多款式，去服飾店看看。</p></div>`
-    : '';
-  const hint = pick ? '' : '<p class="eqHint">點旁邊的格子或人身上的部位查看與換裝。</p>';
   $('eqBody').innerHTML =
-    `<div class="eqBoard"><div class="eqBoardT">目前加成</div>${st.length ? `<div class="eqStats">${st.map(x => { const [a, b] = x.split('|'); return `<div><small>${a}</small><b>${b}</b></div>`; }).join('')}</div>` : '<p class="eqNone">現在穿的都是基本款，還沒有加成。去服飾店挑幾件吧。</p>'}</div>` +
+    `<div class="eqBoard">${boardInnerHtml()}</div>` +
     `<div class="eqStage">${SVG_SHED}<div class="eqCol l">${EQ_LEFT.map(eqTileHtml).join('')}</div><div class="eqFigW" id="eqFigW"></div><div class="eqCol r">${EQ_RIGHT.map(eqTileHtml).join('')}</div>${hits}</div>` +
-    info + list + hint +
-    `<div class="eqSecT">套裝收集</div><div class="eqSets">${SETS.map(s => { const done = sets.includes(s), have = s.need.filter(i => eqOwned(i)).length;
-      const full = have === s.need.length; return `<div class="eqSet${done ? ' done' : ''}${full ? ' full' : ''}"${full ? ` data-setid="${s.id}" role="button"` : ''}><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqSvg(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}${full ? `<em class="eqSetGo"><i class="ic ${done ? 'ic-check' : 'ic-hand'}"></i> ${done ? '穿著中' : '一鍵換上'}</em>` : ''}</div>`; }).join('')}</div>` +
+    `<div id="eqPickPane">${pickPaneHtml()}</div>` +
+    `<div class="eqSecT">套裝收集</div><div class="eqSets">${setsInnerHtml()}</div>` +
     `<div id="eqShareOut"></div><p class="eqHint">分享到 Discord 有機會拿神秘好禮</p><div class="eqDock"><button id="eqShare"><i class="ic ic-send"></i>分享穿搭</button><button id="eqShop"><i class="ic ic-shop"></i>去服飾店</button></div>`;
-  D.syncEqPreview($('eqFigW'), {
-    head: equipNow('head').id, hand: equipNow('hand').id,
-    body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
-  });
-  const pickSlot = (s: Slot) => {
-    if (D.getEqPick() !== s) { D.setEqPick(s); eqListOpen = false; }
-    else if (!eqListOpen) eqListOpen = true;
-    else { D.setEqPick(null); eqListOpen = false; }
-    renderEquip();
-    if (eqListOpen) $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    else if (D.getEqPick()) $('eqBody').querySelector('.eqInfo')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  };
-  $('eqBody').querySelectorAll('button[data-slot]').forEach(b => (b as HTMLButtonElement).onclick = () => pickSlot(b.getAttribute('data-slot') as Slot));
-  const go = $('eqBody').querySelector<HTMLButtonElement>('.eqInfoGo');
-  if (go) go.onclick = () => { eqListOpen = true; renderEquip(); $('eqBody').querySelector('.eqList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
-  $('eqBody').querySelectorAll<HTMLElement>('.eqSet[data-setid]').forEach(el => el.onclick = () => { const st = SETS.find(x => x.id === el.dataset.setid); if (st) askSet(st); });
-  $('eqBody').querySelectorAll('button[data-eqset]').forEach(b => (b as HTMLButtonElement).onclick = () => { const e = EQUIP.find(x => x.id === b.getAttribute('data-eqset'))!; setEquip(e.slot, e.id); D.persist(); applySleeve(); D.applyOutfit3(); renderEquip(); });
-  ($('eqShare') as HTMLButtonElement).onclick = shareOutfit;
-  ($('eqShop') as HTMLButtonElement).onclick = () => { D.openShopPx(); $('equip').classList.remove('show'); D.stopEqPreview(); D.setEqFromRes(false); if (D.getEqPick()) D.setClothTab(D.getEqPick()!); D.renderShop(); const gs = Array.from(document.querySelectorAll('#shopList .stab')); const i = gs.findIndex(g => g.querySelector('.slGrid')); if (i >= 0) { D.setShopTab(i); D.renderShop(); } $('shop').classList.add('show'); $('shop').scrollTop = 0; };
+  D.syncEqPreview($('eqFigW'), currentOutfit());
+  ensureEquipBound();
   hydrateEquipThumbs($('eqBody'));
 }
+
 export function renderClothShop() {
   if (D.getSleeveTry()) { D.setSleeveTry(null); applySleeve(); }
   const items = EQUIP.filter(e => e.slot === D.getClothTab() && (e.price > 0 || isNoneId(e.id))).sort((a, b) => Number(isNoneId(b.id)) - Number(isNoneId(a.id)) || a.price - b.price);
@@ -478,4 +586,12 @@ export function askSet(st: typeof SETS[number]) {
   document.body.appendChild(m);
 }
 
-export function openEquip() { renderEquip(); $('equip').classList.add('show'); requestAnimationFrame(() => { void $('equip').offsetHeight; renderEquip(); }); }
+export function openEquip() {
+  renderEquip();
+  $('equip').classList.add('show');
+  requestAnimationFrame(() => {
+    void $('equip').offsetHeight;
+    const fig = document.getElementById('eqFigW');
+    if (fig) D.syncEqPreview(fig, currentOutfit());
+  });
+}
