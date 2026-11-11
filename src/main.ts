@@ -1242,14 +1242,27 @@ function layoutBasinOysters() {
   });
   syncBasinWorld();
 }
+/** 每次清盆 +1；還在飛的舊蚵落地時發現代數不同就丟掉，避免清盆後又冒出來 */
+let basinGen = 0;
 function clearBasinOysters() {
+  basinGen++;
   for (const m of basinOy) m.removeFromParent();
   basinOy.length = 0;
+}
+/** 廣場入座／換位／重連回座：盆子換成這桌難度、補滿；不給錢、不算顆數 */
+function plazaRefillBasin() {
+  if (!plazaMode) return;
+  if (phase === 'scoop') { on('prog', false); setPhase('busy'); later(0.3, goPick); }
+  if (plazaOnGrill()) liftSeatPropsOntoPile();
+  clearBasinOysters();
+  fillBasin(false);
+  if (phase === 'pick' && !plazaOnGrill()) hint.textContent = '點臉盆內的蚵仔';
 }
 function fillBasin(animate: boolean) {
   const n = basinCap();
   syncBasinWorld();
   const weights = plazaMode ? plazaScoopWeights() : (newbie() ? [50, 50, 0, 0] : locW());
+  const gen = basinGen;
   for (let i = 0; i < n; i++) {
     const m = makeBasinOyster(wpick(weights.map(w => ({ w }))));
     const local = basinSlotLocal(i);
@@ -1265,6 +1278,7 @@ function fillBasin(animate: boolean) {
       } else p0 = pileSpot();
       const slotW = basinMesh.localToWorld(local.clone());
       fly(m, p0, slotW, 0.4 + i * 0.05, 0.4, () => {
+        if (gen !== basinGen) { m.removeFromParent(); return; }
         basinMesh.add(m);
         m.position.copy(local);
       });
@@ -3605,8 +3619,12 @@ function launchPlaza() {
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
       plazaEnsureFpView();
       on('standBtn', true); on('umbBtn', true); on('medBtn', true);
-      toast('換位坐下', '#9fe0ff'); SFX.pop(); later(0.3, goPick);
+      // 換位：手上那顆（含撬到一半）放回原堆，盆子換成新桌難度並補滿
+      oysterToHand(); oyster.visible = false; on('prog', false); setPhase('busy');
+      plazaRefillBasin();
+      toast('換位坐下，臉盆換成這桌的蚵仔', '#9fe0ff'); SFX.pop(); later(0.3, goPick);
     },
+    refillBasin: () => { plazaRefillBasin(); },
     enterSmokeSit: () => {
       setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
       // plazaRoam 會藏剝蚵鈕；plazaSmokeSit 讓站起／回主選單與一般座位同款可見

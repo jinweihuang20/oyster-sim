@@ -37,6 +37,8 @@ export type PlazaDeps = {
   beginShift: (pileId: number, slot: number) => void;
   /** 已在工班中再坐下（換位） */
   resumeSit: (pileId: number, slot: number) => void;
+  /** 重連後搶回原位：盆子換成這桌難度並補滿（手上那顆照舊） */
+  refillBasin?: () => void;
   /** 吸菸區坐下：不開剝蚵工班 */
   enterSmokeSit: (slot: number) => void;
   /** 樸子腳門口等純坐座位：不抽菸、不開工班 */
@@ -623,6 +625,7 @@ async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?
     if (r.ok) {
       if ((r as any).token) client.token = (r as any).token;
       if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
+      if (shiftStarted && !isLeisurePile(myPile)) deps.refillBasin?.();
       flashNetOk('已重連，位子還在');
       deps.toast('已重連，位子還在', '#9be37a');
       setHud(plazaHudPeople(snap));
