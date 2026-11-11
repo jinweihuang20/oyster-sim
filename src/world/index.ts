@@ -11,7 +11,7 @@ export {
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
   setWalking, setNearSeat, clearWalkInput,
 } from './walkSeat';
-export { makeWorldLabel, renderSceneWithLocalAvatarOnTop, markLocalAvatarLayer, LOCAL_AVATAR_LAYER, type WorldLabel, type WorldLabelKind } from './worldLabel';
+export { makeWorldLabel, renderSceneWithLocalAvatarOnTop, markLocalAvatarLayer, invalidateLocalAvatarCache, invalidateLightLayerCache, LOCAL_AVATAR_LAYER, type WorldLabel, type WorldLabelKind } from './worldLabel';
 export {
   initYardScene, LAND, shedAnim, disposeShed, buildShed, applyShedLook, showLand, WATER_C, getShedG,
   type YardSceneDeps,

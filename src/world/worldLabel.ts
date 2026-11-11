@@ -49,7 +49,10 @@ export function makeWorldLabel(
   const depthTest = opts.depthTest === true;
   const nameTone: WorldLabelNameTone = opts.nameTone === 'npc' ? 'npc' : 'player';
   // 固定畫布尺寸：避免改 canvas.width 導致 WebGL 貼圖卡住舊畫面
-  const dpr = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 2);
+  // 手機／粗指標（COARSE）：DPR 鎖 1，貼圖容量砍 1/4，近距離看文字仍清楚
+  const isCoarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+  const dprCap = isCoarse ? 1 : 2;
+  const dpr = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, dprCap);
   const cssW = kind === 'bubble' ? 320 : 360;
   const cssH = kind === 'bubble' ? 160 : 64;
   const canvas = document.createElement('canvas');
@@ -168,7 +171,8 @@ export function makeWorldLabel(
 
   const setText = (t: string, force = false) => {
     const next = t || '';
-    if (!force && next === text && kind === 'name') return;
+    // 文字沒變就不必重畫 Canvas／重新上傳貼圖（氣泡與名牌同樣適用）
+    if (!force && next === text) return;
     text = next;
     redraw();
   };
@@ -224,6 +228,15 @@ export function markLocalAvatarLayer(root: THREE.Object3D | null | undefined) {
  * 不改 depthFunc＝Equal：iOS 等行動 GPU 深度精度較粗時 Equal 會幾乎全失敗，角色只剩少數網格（例如雨鞋）。
  * 角色只畫一趟，也不會再出現小腿與鞋互搶深度的問題。
  */
+/** scene 的燈每幀遍歷一次很浪費；第一次啟用本機二趟時掃一次就夠 */
+let _lightsCached: THREE.Light[] | null = null;
+/** localRoot 的子節點也 cache；換 root 才重掃。新增的部件(帽子等)會回到預設 layer，等於只在第一趟畫，不影響正確性 */
+let _localCache: { root: THREE.Object3D | null; nodes: THREE.Object3D[] } | null = null;
+/** 外部可呼叫：角色換裝／加帽後清快取，確保第二趟也蓋得過自己的名牌 */
+export function invalidateLocalAvatarCache() { _localCache = null; }
+/** 新燈加入 scene 時呼叫一次 */
+export function invalidateLightLayerCache() { _lightsCached = null; }
+
 export function renderSceneWithLocalAvatarOnTop(
   renderer: THREE.WebGLRenderer,
   scene: THREE.Scene,
@@ -233,11 +246,22 @@ export function renderSceneWithLocalAvatarOnTop(
   const prevObjLayers: { obj: THREE.Object3D; mask: number }[] = [];
   const hasLocal = !!localRoot?.visible;
   if (hasLocal) {
-    localRoot.traverse(o => {
+    if (!_localCache || _localCache.root !== localRoot) {
+      const nodes: THREE.Object3D[] = [];
+      localRoot.traverse(o => nodes.push(o));
+      _localCache = { root: localRoot, nodes };
+    }
+    const nodes = _localCache.nodes;
+    for (let i = 0; i < nodes.length; i++) {
+      const o = nodes[i];
       prevObjLayers.push({ obj: o, mask: o.layers.mask });
       o.layers.set(LOCAL_AVATAR_LAYER);
-    });
-    scene.traverse(o => { if ((o as THREE.Light).isLight) o.layers.enable(LOCAL_AVATAR_LAYER); });
+    }
+    if (!_lightsCached) {
+      _lightsCached = [];
+      scene.traverse(o => { if ((o as THREE.Light).isLight) _lightsCached!.push(o as THREE.Light); });
+    }
+    for (let i = 0; i < _lightsCached.length; i++) _lightsCached[i].layers.enable(LOCAL_AVATAR_LAYER);
   }
   const prevMask = camera.layers.mask;
   const prevAuto = renderer.autoClear;

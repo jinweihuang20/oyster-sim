@@ -15,7 +15,7 @@ import {
   initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
   setWalking, setNearSeat, clearWalkInput,
-  makeWorldLabel, renderSceneWithLocalAvatarOnTop, type WorldLabel,
+  makeWorldLabel, renderSceneWithLocalAvatarOnTop, invalidateLocalAvatarCache, type WorldLabel,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
 import {
@@ -96,6 +96,8 @@ function setPlazaMode(v: boolean) {
   plazaMode = v;
   document.body.classList.toggle('plazaMode', v);
   applyPlazaShadowMode();
+  // 進／出廣場同時切 lamp.castShadow（applyEcoGfx 內部會讀 plazaMode）
+  try { applyEcoGfx(); } catch { /* applyEcoGfx 尚未定義時忽略 */ }
 }
 let plazaPayWait: Promise<number> | null = null;
 /** 廣場休閒：第一次坐下起算遊玩秒數（給結算／後端 softCap） */
@@ -429,12 +431,14 @@ function applyPlazaShadowMode() {
 }
 /** 熱切省電：關陰影、降 DPR；antialias／precision 僅啟動時套用 */
 function applyEcoGfx() {
-  // 省電：手機約 1.25×、桌面約 1.5×；一般最多 2×
-  const dprCap = COARSE ? (mix.eco ? 1.25 : 1.5) : (mix.eco ? 1.5 : 2);
+  // 省電：手機 1.0×～1.25×；桌面上限 2×（手機 DPR 常 2-3，再多等於燒電不加清晰度）
+  const dprCap = COARSE ? (mix.eco ? 1.0 : 1.25) : (mix.eco ? 1.5 : 2);
   renderer.setPixelRatio(Math.min(devicePixelRatio, dprCap));
   renderer.shadowMap.enabled = !mix.eco;
-  renderer.shadowMap.type = mix.eco ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
-  lamp.castShadow = !mix.eco;
+  // 手機非省電：PCF 軟陰影在行動 GPU 太貴，改 Basic
+  renderer.shadowMap.type = mix.eco ? THREE.BasicShadowMap : (COARSE ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap);
+  // 廣場模式工寮燈已經 intensity=0，castShadow 保持 true 會每 0.25s 跑全場 depth pass
+  lamp.castShadow = !mix.eco && !plazaMode;
   const map = mix.eco ? 512 : 1024;
   lamp.shadow.mapSize.set(map, map);
   lamp.shadow.map?.dispose();
@@ -4654,7 +4658,7 @@ function applyOutfit3() {
     head: equipNow('head').id, hand: equipNow('hand').id,
     body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
   };
-  if (plazaMe) applyOutfitToRig(plazaMe, outfit);
+  if (plazaMe) { applyOutfitToRig(plazaMe, outfit); invalidateLocalAvatarCache(); }
   refreshEqPreview(outfit);
   if (isPlazaActive()) void plazaPushOutfit();
 }

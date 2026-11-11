@@ -1832,7 +1832,8 @@ function hashPid(pid: string) {
       // 省電遠距：隱藏模型（碰撞仍用 x/z）
       if (eco && dist2 > HIDE2 && !rj.mh && (r.phase || '') !== 'moon') r.rig.outer.visible = false;
       else if (!(eco && dist2 > HIDE2) && !rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
-      r.rig.outer.updateMatrixWorld(true);
+      // 這幀下面馬上要讀 head 世界座標排名牌，更新 matrix；渲染器之後本來也會再更新一次，不用 force
+      r.rig.outer.updateMatrixWorld();
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       r.tag.sprite.visible = show;
       if (show) placeAboveHead(r.tag.sprite, r.rig.head, 0.22);
