@@ -1,6 +1,7 @@
 import {
-  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, SEAFOOD_BUILDING, HQ_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, pileCenter, pileIsGrill, pileIsRemoved, SMOKE_CENTER,
+  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, SEAFOOD_BUILDING, HQ_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, NORTH_DOCK, SHED_DOORS, SHED_W, SHED_D, SHED_FRONT_Z, pileCenter, pileIsGrill, pileIsRemoved, SMOKE_CENTER,
 } from './layout';
+import { shedName } from './shedRow';
 import { PLAZA_STALL_SITES } from './ambiance';
 import { plazaDisplayName, type PlazaPlayer } from './types';
 
@@ -18,7 +19,7 @@ export type PlazaMapWishPin = { x: number; z: number; label: string };
 /** 地圖世界範圍（含西潮間帶＋北側碼頭） */
 const MAP_MIN_X = -WALK_BOUND_WEST - 0.6;
 const MAP_MAX_X = WALK_BOUND_EAST + 0.6;
-const MAP_MIN_Z = -13.6;
+const MAP_MIN_Z = NORTH_DOCK.z1 - 0.6;
 const MAP_MAX_Z = WALK_BOUND + 0.6;
 
 const STALL_LABEL: Record<string, string> = {
@@ -116,8 +117,8 @@ export function drawPlazaMap(canvas: HTMLCanvasElement, markers: PlazaMapMarker[
 
   // 碼頭示意（世界 -Z；佈局位置不變）
   {
-    const [x0, y0] = to(-10, -11.2);
-    const [x1, y1] = to(10, -13.4);
+    const [x0, y0] = to(-11, -11.15);
+    const [x1, y1] = to(11, NORTH_DOCK.z1);
     const l = Math.min(x0, x1), t = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
     ctx.fillStyle = 'rgba(90,100,108,.55)';
     ctx.fillRect(l, t, w, h);
@@ -125,7 +126,25 @@ export function drawPlazaMap(canvas: HTMLCanvasElement, markers: PlazaMapMarker[
     ctx.font = `700 ${Math.max(10, size * 0.032)}px system-ui,sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('碼頭', l + w / 2, t + h / 2);
+    const [, ly] = to(0, -12.6);
+    ctx.fillText('碼頭', l + w / 2, ly);
+  }
+  // 北碼頭四間工寮（門面朝廣場）
+  for (const d of SHED_DOORS) {
+    const [x0, y0] = to(d.x - SHED_W / 2, SHED_FRONT_Z - SHED_D);
+    const [x1, y1] = to(d.x + SHED_W / 2, SHED_FRONT_Z);
+    const l = Math.min(x0, x1), t = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+    ctx.fillStyle = 'rgba(207,196,176,.78)';
+    roundRect(ctx, l, t, w, h, size * 0.008);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60,64,68,.8)';
+    ctx.lineWidth = Math.max(1, size * 0.0025);
+    ctx.stroke();
+    ctx.fillStyle = '#2b2f33';
+    ctx.font = `800 ${Math.max(8, size * 0.024)}px system-ui,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(shedName(d.loc).slice(0, 4), l + w / 2, t + h / 2);
   }
 
   // 蚵堆／烤台

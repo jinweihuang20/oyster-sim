@@ -15,6 +15,7 @@ import {
   PLAZA_SIT_ROOT_Y,
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
+import { makePlazaShedRow } from './shedRow';
 import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, SMOKE_PILE_ID, smokeNpcSeatPose, isPlazaAber, type PlazaSeatRef } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
 import { makeInstancedPlazaChairs, makeInstancedPads, type ChairPose } from './instancedProps';
@@ -144,6 +145,8 @@ export type PlazaWorldView = {
   applyRemotePuff: (opts: { connId?: string; pid?: string; start: boolean; holdMs: number }) => void;
   tick: (dt: number, camera: THREE.Camera) => void;
   setSeatWishes: (list: PlazaSeatWish[], selfConnId?: string) => void;
+  /** 北碼頭工寮門口：鎖定／玩家站在圈內 */
+  setShedDoorState: (loc: string, st: { locked: boolean; active: boolean }) => void;
   dispose: () => void;
 };
 
@@ -294,6 +297,10 @@ export function createPlazaWorldView(
   const hq = makePlazaHq(M, add, LO);
   root.add(hq.group);
 
+  // 北側碼頭工寮街：四間工寮＋門口圓圈（無燈）
+  const shedRow = makePlazaShedRow(M, add, LO);
+  root.add(shedRow.group);
+
   const plazaChairs = makeInstancedPlazaChairs(chairPoses, M, LO);
   chairsRoot.add(plazaChairs.group);
 
@@ -303,7 +310,7 @@ export function createPlazaWorldView(
     if (padSet.has(m)) return true;
     let p: THREE.Object3D | null = m;
     while (p) {
-      if (p.name === 'charcoalFire' || p.name === 'plazaCeilingFan' || p.name === 'cigSmoke' || p.name === 'seatCushion') return true;
+      if (p.name === 'charcoalFire' || p.name === 'plazaCeilingFan' || p.name === 'cigSmoke' || p.name === 'seatCushion' || p.name === 'shedRing' || p.name === 'shedLock' || p.name === 'shedWheel') return true;
       p = p.parent;
     }
     return false;
@@ -317,6 +324,7 @@ export function createPlazaWorldView(
   mergeStaticMeshes(cafe.group, { skip: skipMerge, name: 'cafeMerged' });
   mergeStaticMeshes(seafood.group, { skip: skipMerge, name: 'seafoodMerged' });
   mergeStaticMeshes(hq.group, { skip: skipMerge, name: 'hqMerged' });
+  mergeStaticMeshes(shedRow.group, { skip: skipMerge, name: 'shedRowMerged' });
   root.userData.mergeStats = { meshesBefore: meshBefore, meshesAfter: countMeshes(root) };
 
   root.updateMatrixWorld(true);
@@ -1827,6 +1835,7 @@ function hashPid(pid: string) {
   function tick(dt: number, camera: THREE.Camera) {
     const eco = !!opts.eco?.();
     const cx = camera.position.x, cz = camera.position.z;
+    shedRow.tick(dt, eco);
     tickPileDiffSigns(cx, cz);
     const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
     // 燈數固定，只調亮度，不開關 visible（three.js 增減燈會重編著色器）
@@ -2140,6 +2149,7 @@ function hashPid(pid: string) {
   }
 
   function dispose() {
+    shedRow.dispose();
     clearWishMarks();
     root.remove(wishMarks);
     for (const e of remoteExhales) {
@@ -2188,7 +2198,7 @@ function hashPid(pid: string) {
     });
   }
 
-  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfBody, setSelfCushion, playThrowFx, applyRemotePuff, setSeatWishes, tick, dispose };
+  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfBody, setSelfCushion, playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: shedRow.setDoorState, tick, dispose };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {

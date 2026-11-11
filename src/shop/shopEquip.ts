@@ -11,7 +11,7 @@ export function stealHoldSeconds(fx: Pick<Fx, 'steal'>, kind: StealKind): number
   return Math.max(floor, base * (1 - red));
 }
 /** 走路速度加成（依裝備 id；各件相加後乘上 1+合計），之後新增只要加在這裡 */
-export const WALK_SPEED_BONUS: Record<string, number> = { ft_tabi: 1.5 };
+export const WALK_SPEED_BONUS: Record<string, number> = { ft_tabi: 0.3 };
 export function walkSpeedMul(ids: readonly string[]): number {
   let sum = 0;
   for (const id of ids) sum += WALK_SPEED_BONUS[id] ?? 0;
@@ -60,7 +60,7 @@ export const EQUIP: Eq[] = [
   { slot: 'hand', id: 'sl_nightwrap', n: '夜行手袖', price: 8000, eff: '偷東西時，按住時間 −6%', base: '#1a1c22', pat: 'plain', fx: { steal: 0.06 } },
   { slot: 'body', id: 'bd_nightshort', n: '紺青短打', price: 12000, eff: '偷東西時，按住時間 −6%', base: '#24344c', pat: 'plain', fx: { steal: 0.06 } },
   { slot: 'legs', id: 'lg_tied', n: '束口深褲', price: 9000, eff: '偷東西時，按住時間 −6%', base: '#2a3040', pat: 'plain', fx: { steal: 0.06 } },
-  { slot: 'feet', id: 'ft_tabi', n: '分趾布鞋', price: 7000, eff: '走路速度 +150%；偷東西時，按住時間 −6%', base: '#1a1c22', pat: 'plain', fx: { steal: 0.06 } },
+  { slot: 'feet', id: 'ft_tabi', n: '分趾布鞋', price: 7000, eff: '走路速度 +30%；偷東西時，按住時間 −6%', base: '#1a1c22', pat: 'plain', fx: { steal: 0.06 } },
   { slot: 'head', id: 'hd_none', n: '不穿', price: 0, eff: '不戴帽子或頭巾，露出頭髮', base: '#e8bc98', pat: 'plain', fx: {} },
   { slot: 'hand', id: 'hn_none', n: '不穿', price: 0, eff: '不穿袖套，手臂是膚色', base: '#e8bc98', pat: 'plain', fx: {} },
   { slot: 'body', id: 'bd_none', n: '不穿', price: 0, eff: '不穿衣服，上身膚色並貼著 X 字胸貼', base: '#e8bc98', pat: 'plain', fx: {} },
