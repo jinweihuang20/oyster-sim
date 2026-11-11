@@ -25,8 +25,8 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxW: number): s
   return lines.slice(0, 4);
 }
 
-/** 名牌：真人白底藍邊＋人像；NPC 半透明灰、無邊框 */
-export type WorldLabelNameTone = 'player' | 'npc';
+/** 名牌：真人白底藍邊＋人像；NPC 半透明灰、無邊框；sign＝桌牌（白底藍邊、無人像） */
+export type WorldLabelNameTone = 'player' | 'npc' | 'sign';
 
 export type WorldLabelOpts = {
   worldH?: number;
@@ -47,7 +47,7 @@ export function makeWorldLabel(
   const opts: WorldLabelOpts = typeof worldHOrOpts === 'number' ? { worldH: worldHOrOpts } : worldHOrOpts;
   const worldH = opts.worldH ?? (kind === 'name' ? 0.2 : 0.3);
   const depthTest = opts.depthTest === true;
-  const nameTone: WorldLabelNameTone = opts.nameTone === 'npc' ? 'npc' : 'player';
+  const nameTone: WorldLabelNameTone = opts.nameTone === 'npc' || opts.nameTone === 'sign' ? opts.nameTone : 'player';
   // 固定畫布尺寸：避免改 canvas.width 導致 WebGL 貼圖卡住舊畫面
   // 手機／粗指標（COARSE）：DPR 鎖 1，貼圖容量砍 1/4，近距離看文字仍清楚
   const isCoarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
@@ -123,11 +123,13 @@ export function makeWorldLabel(
           ctx.lineWidth = 2.5;
           ctx.stroke();
         }
-        const ix = ox + padX + 10, iy = oy + h / 2;
-        ctx.strokeStyle = nameFrame ? '#c9a227' : '#2a5a86';
-        ctx.lineWidth = 2.2;
-        ctx.beginPath(); ctx.arc(ix, iy - 5, 4.5, 0, Math.PI * 2); ctx.stroke();
-        ctx.beginPath(); ctx.arc(ix, iy + 10, 8.5, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+        if (nameTone === 'player') {
+          const ix = ox + padX + 10, iy = oy + h / 2;
+          ctx.strokeStyle = nameFrame ? '#c9a227' : '#2a5a86';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath(); ctx.arc(ix, iy - 5, 4.5, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath(); ctx.arc(ix, iy + 10, 8.5, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+        }
         ctx.fillStyle = '#1f2a35';
       }
     } else {

@@ -18,6 +18,7 @@ import { myTag } from '../meta/social';
 import { achCheck, achS } from '../meta/achievements';
 import { parseCosmetics } from './cosmetics';
 import { clipFlagText, flagErrText, flagPlantPos, flagSlowText, type PlazaFlagState } from './flags';
+import { pileDiffOf, pileDiffName, parsePileDiffs, weightsFor, PILE_DIFF_MIXED } from './pileDiff';
 
 export type PlazaDeps = {
   id: string;
@@ -135,6 +136,13 @@ export const plazaSeated = () => seated;
 export const plazaSittingBusy = () => sittingBusy;
 export const plazaShiftStarted = () => shiftStarted;
 export function plazaMySeat() { return myPile != null && mySlot != null ? { pileId: myPile, slot: mySlot } : null; }
+/** 坐下撈一把時用的桌種權重；無座或非剝蚵堆當綜合 */
+export function plazaScoopWeights(): number[] {
+  const seat = plazaMySeat();
+  const kind = pileDiffOf(seat ? seat.pileId : -1, snap?.pileDiffs);
+  return weightsFor(kind < 0 ? PILE_DIFF_MIXED : kind);
+}
+
 /** @deprecated 對稱邊界；走動請用 plazaWalkRect */
 export function plazaWalkBound() { return WALK_BOUND; }
 export function plazaWalkRect() { return plazaWalkBounds(); }
@@ -214,8 +222,13 @@ function seatLabel(pileId: number, slot: number) {
   if (pileId === 100) return `吸菸區・座 ${slot + 1}`;
   if (pileId === 101) return `多那芝吸菸區・座 ${slot + 1}`;
   if (pileId === 102) return `樸子腳・座 ${slot + 1}`;
-  if (slot >= SLOTS_PER_PILE) return `第 ${pileId + 1} 堆・阿婆座 ${slot - SLOTS_PER_PILE + 1}`;
-  return `第 ${pileId + 1} 堆・座 ${slot + 1}`;
+  if (slot >= SLOTS_PER_PILE) return `第 ${pileId + 1} 堆・阿婆座 ${slot - SLOTS_PER_PILE + 1}${pileDiffSeatSuffix(pileId)}`;
+  return `第 ${pileId + 1} 堆・座 ${slot + 1}${pileDiffSeatSuffix(pileId)}`;
+}
+
+function pileDiffSeatSuffix(pileId: number): string {
+  const name = pileDiffName(pileDiffOf(pileId, snap?.pileDiffs));
+  return name ? `（${name}）` : '';
 }
 
 export type PlazaNearPrompt = {
@@ -740,6 +753,7 @@ function normalizeSnap(s: any): PlazaSnapshot {
     slotsPerPile: s?.slotsPerPile ?? s?.SlotsPerPile ?? SLOTS_PER_PILE,
     occupied,
     capacity: s?.capacity ?? s?.Capacity ?? PLAZA_CAPACITY,
+    pileDiffs: parsePileDiffs(s?.pileDiffs ?? s?.PileDiffs),
   };
 }
 

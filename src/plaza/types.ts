@@ -39,6 +39,8 @@ export type PlazaSnapshot = {
   slotsPerPile: number;
   occupied: number;
   capacity: number;
+  /** index＝pileId：0綜合 1簡單 2一般 3困難，-1＝非剝蚵堆 */
+  pileDiffs: number[];
 };
 
 export type PlazaChat = {
