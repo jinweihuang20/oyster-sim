@@ -627,8 +627,10 @@ export function createPlazaWorldView(
   }
   function tickPileDiffSigns(cx: number, cz: number) {
     const span = PILE_DIFF_FADE_END - PILE_DIFF_FADE_START;
+    // 自己坐著時不顯示難度牌（擋視線；坐下提示已帶難度）
+    const hideAll = selfSeated;
     for (const s of pileDiffSprites) {
-      if (s.kind < 0) { s.sprite.visible = false; continue; }
+      if (s.kind < 0 || hideAll) { s.sprite.visible = false; continue; }
       const d = Math.hypot(s.sprite.position.x - cx, s.sprite.position.z - cz);
       let a = 1;
       if (d >= PILE_DIFF_FADE_END) a = 0;
