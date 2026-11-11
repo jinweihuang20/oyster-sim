@@ -443,8 +443,8 @@ function applyPlazaShadowMode() {
 }
 /** 熱切省電：關陰影、降 DPR；antialias／precision 僅啟動時套用 */
 function applyEcoGfx() {
-  // 省電：手機 1.0×～1.25×；桌面上限 2×（手機 DPR 常 2-3，再多等於燒電不加清晰度）
-  const dprCap = COARSE ? (mix.eco ? 1.0 : 1.25) : (mix.eco ? 1.5 : 2);
+  // 手機：省電 1.25×／一般 1.5×（與 resize 一致）；桌面上限 2×（手機 DPR 常 2-3，再多等於燒電不加清晰度）
+  const dprCap = COARSE ? (mix.eco ? 1.25 : 1.5) : (mix.eco ? 1.5 : 2);
   renderer.setPixelRatio(Math.min(devicePixelRatio, dprCap));
   // 廣場靠自發光＋烘焙暖光，關掉整條 shadow pipeline：每個像素的 shader 不再做 shadow 取樣（這是手機最大的像素端耗電來源之一）
   renderer.shadowMap.enabled = !mix.eco && !plazaMode;
