@@ -17,7 +17,7 @@ import { plazaSoftCapClient } from '../core/economy';
 import { myTag } from '../meta/social';
 import { achCheck, achS } from '../meta/achievements';
 import { parseCosmetics } from './cosmetics';
-import { clipFlagText, flagErrText, type PlazaFlagState } from './flags';
+import { clipFlagText, flagErrText, flagPlantPos, type PlazaFlagState } from './flags';
 
 export type PlazaDeps = {
   id: string;
@@ -1147,17 +1147,22 @@ async function plantMyFlag() {
   if (plantBusy) return;
   plantBusy = true;
   try {
-    const p = deps.getWalkXZ();
+    const feet = deps.getWalkXZ();
+    const yaw = deps.getYaw();
+    const p = flagPlantPos(feet.x, feet.z, yaw);
     // 不帶文字：伺服器會保留已儲存的旗面文字（避免被名字蓋回去）
     const text = myFlagText ?? '';
-    let r = await client.plantFlag(p.x, p.z, deps.getYaw(), text);
+    let r = await client.plantFlag(p.x, p.z, yaw, text);
     if (!r.ok && r.err === 'seated' && !seated) {
       // 本機已站著但伺服器還記著座位：先釋座、送出目前位置再插一次
       await client.leaveSeat();
       const lockLook = deps.getTpv?.() ?? false;
-      await client.sync(p.x, p.z, deps.getYaw(), 'walk', deps.getCount(), false, deps.getUmb(),
+      const now = deps.getWalkXZ();
+      const yaw2 = deps.getYaw();
+      await client.sync(now.x, now.z, yaw2, 'walk', deps.getCount(), false, deps.getUmb(),
         lockLook ? 0 : (deps.getLookYaw?.() ?? 0), lockLook ? 0 : (deps.getPitch?.() ?? 0));
-      r = await client.plantFlag(p.x, p.z, deps.getYaw(), text);
+      const p2 = flagPlantPos(now.x, now.z, yaw2);
+      r = await client.plantFlag(p2.x, p2.z, yaw2, text);
     }
     if (!r.ok) { deps.toast(flagErrText(r.err), '#ffb08a'); return; }
     if (r.flag) {

@@ -486,7 +486,7 @@ export class PlazaClient {
 
   get connected() { return !!this.conn && this.conn.state === signalR.HubConnectionState.Connected; }
 
-  /** 在腳邊插旗；舊伺服器無此方法時回 nosup，不丟錯 */
+  /** 在面前約半步處插旗；舊伺服器無此方法時回 nosup，不丟錯 */
   async plantFlag(x: number, z: number, yaw: number, text: string) {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', flag: undefined as PlazaFlagState | undefined };
     try {
