@@ -394,7 +394,7 @@ function setsInnerHtml() {
 }
 function listHtml(pick: Slot) {
   const pickName = slotLabel(pick);
-  return `<div class="eqList"><div class="eqListT">換${pickName}<small>點一件就換上，換穿免費</small></div>${EQUIP.filter(e => e.slot === pick && eqOwned(e.id)).slice().sort((a, b) => Number(isNoneId(b.id)) - Number(isNoneId(a.id))).map(e => `<button data-eqset="${e.id}" class="${equipNow(e.slot).id === e.id ? 'on' : ''}">${eqIcon(e, 48)}<span><b>${e.n}</b><small>${e.eff}</small></span>${equipNow(e.slot).id === e.id ? '<em>穿著中</em>' : ''}</button>`).join('')}<p class="eqHint">想要更多款式，去服飾店看看。</p></div>`;
+  return `<div class="eqList"><div class="eqListT">換${pickName}<small>點一件就換上，換穿免費</small></div>${EQUIP.filter(e => e.slot === pick && eqOwned(e.id)).slice().sort((a, b) => Number(isNoneId(b.id)) - Number(isNoneId(a.id))).map(e => { const on = equipNow(e.slot).id === e.id; return `<button data-eqset="${e.id}" class="eqLi${on ? ' on' : ''}">${eqIcon(e, 48)}<span class="eqLiT"><span class="eqLiN"><b>${e.n}</b>${on ? '<em>穿著中</em>' : ''}</span><small>${e.eff}</small></span></button>`; }).join('')}<p class="eqHint">想要更多款式，去服飾店看看。</p></div>`;
 }
 function pickPaneHtml() {
   const pick = D.getEqPick();

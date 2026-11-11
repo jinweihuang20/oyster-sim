@@ -1940,3 +1940,14 @@ input[type=range]#rmEdSeats,input[type=range]#rmEdDur,input[type=range]#rmEdGoal
 #settings #v_brightReset{flex:none;margin:0!important;padding:0 8px!important;min-height:36px!important;height:36px;min-width:0!important;width:auto!important;font-size:13px!important;font-weight:800;color:#2a5a86;background:transparent;border:2px solid #2a5a86;border-radius:8px;white-space:nowrap}
 #settings #v_brightReset:hover{background:#2a5a8614}
 #settings #v_brightReset .ic{color:#2a5a86}
+
+/* ===== 裝備「換○○」清單：縮圖固定寬貼左、文字欄同一起點、穿著中小標籤不佔欄 ===== */
+.panel .eqList button.eqLi{display:flex;justify-content:flex-start;align-items:center;gap:10px;width:100%;min-width:0!important;padding:8px 10px;text-align:left}
+.eqList button.eqLi>.eqThumb{flex:0 0 52px;width:52px;height:46px;display:flex;align-items:center;justify-content:flex-start;margin:0}
+.eqList button.eqLi>.eqThumb .slv,.eqList button.eqLi>.eqThumb svg{width:52px;height:46px;max-height:46px;object-fit:contain;object-position:left center}
+.eqList button.eqLi .eqLiT{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.eqList button.eqLi .eqLiN{display:flex;align-items:center;gap:6px;max-width:100%;min-width:0}
+.eqList button.eqLi .eqLiN b{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eqList button.eqLi small{display:block;white-space:normal;font-weight:500;line-height:1.35}
+.eqList button.eqLi .eqLiN em{flex:none;margin:0;white-space:nowrap;font:800 11px/1 sans-serif;font-style:normal;letter-spacing:.04em;padding:3px 7px;border:1px solid #2a5a86;border-radius:999px;background:#fff;color:#2a5a86;box-shadow:none}
+.panel .eqList button.eqLi.on{background:#eef4fa;color:var(--ink);border-color:#2a5a86}
