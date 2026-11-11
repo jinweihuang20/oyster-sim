@@ -975,7 +975,6 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
     for (const m of mats.sleeve) paintMat(m, body);
   } else if (bareArms) {
     for (const m of mats.sleeve) paintSolid(m, SKIN_HEX);
-    for (const arm of [rig.lowerL, rig.lowerR]) if (arm) ensureDet(arm, DET.sleeve);
   } else {
     for (const m of mats.sleeve) paintMat(m, hand);
   }
@@ -990,7 +989,12 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   if (body.id !== 'bd_hawaii') {
     for (const arm of [rig.upperL, rig.upperR]) if (arm) ensureDet(arm, DET.upper);
   }
-  if (!bareArms) buildSleeveDetails(rig, hand);
+  if (bareArms) {
+    // 花襯衫走上面的專用上臂貼圖，但不能略過清小臂袖套：否則從 sl_* 換成「不穿」時，舊袖身／袖口會留著
+    for (const arm of [rig.lowerL, rig.lowerR]) if (arm) ensureDet(arm, DET.sleeve);
+  } else {
+    buildSleeveDetails(rig, hand);
+  }
   if (body.id === 'bd_bikini') {
     // 比基尼會把腿畫成膚色並自帶下身，清掉原本褲袋以免浮在皮膚上
     for (const leg of [rig.legL, rig.legR]) if (leg) ensureDet(leg, DET.leg);
