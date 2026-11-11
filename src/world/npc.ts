@@ -24,8 +24,12 @@ export function makeAma(top: number, hair: number, D: NpcMeshDeps) {
   mesh(crease(new THREE.SphereGeometry(0.15, 10, 8)), mat(skin), [0, 0, 0], head);
   mesh(crease(new THREE.SphereGeometry(0.155, 10, 8, 0, Math.PI * 2, 0, 1.4)), mat(hair), [0, 0.02, 0.02], head);
   mesh(crease(new THREE.SphereGeometry(0.07, 8, 6)), mat(hair), [0, 0.1, 0.13], head);
-  for (const s of [-1, 1]) mesh(crease(new THREE.SphereGeometry(0.018, 6, 4)), mat(0x222222), [s * 0.05, 0.02, -0.14], head);
-  mesh(rboxNpc(0.06, 0.012, 0.01), mat(0xa04040), [0, -0.06, -0.145], head);
+  // 眼球壓扁、貼在臉球表面外約 0.004，避免圓球凸出
+  for (const s of [-1, 1]) {
+    const eye = mesh(crease(new THREE.SphereGeometry(0.018, 6, 4)), mat(0x222222), [s * 0.05, 0.02, -0.147], head);
+    eye.scale.z = 0.006 / 0.036;
+  }
+  mesh(rboxNpc(0.06, 0.012, 0.006), mat(0xa04040), [0, -0.06, -0.145], head);
   const arm = (s: number) => {
     const p = new THREE.Group(); p.position.set(s * 0.2, 0.8, -0.02); g.add(p);
     mesh(rcyl(0.045, 0.04, 0.38, 6), mat(top), [0, -0.12, -0.12], p).rotation.x = 1.1;
