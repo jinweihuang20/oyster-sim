@@ -28,6 +28,7 @@ import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot, PlazaSeatWish } from './types';
+import { pileDiffOf, DEFAULT_PILE_DIFFS, PILE_DIFF_NAMES } from './pileDiff';
 import { plazaDisplayName } from './types';
 import { GOLD_SMOKE_TINT, parseCosmetics } from './cosmetics';
 import { createPlazaFlagView } from './flagView';
@@ -572,6 +573,72 @@ export function createPlazaWorldView(
   // 南排共烤：伺服器同步的烤網上蚵仔
   const grill = createGrillView(root);
   const flags = createPlazaFlagView(root);
+
+  // 蚵堆桌種牌：四種文案共用貼圖，各桌獨立 material 以便距離淡出
+  const pileDiffTemplates: WorldLabel[] = PILE_DIFF_NAMES.map(name =>
+    makeWorldLabel(name, 'name', { worldH: 0.26, depthTest: true, nameTone: 'sign' }),
+  );
+  type PileDiffSprite = { pileId: number; kind: number; sprite: THREE.Sprite };
+  const pileDiffSprites: PileDiffSprite[] = [];
+  const PILE_DIFF_LABEL_Y = 0.88;
+  const PILE_DIFF_FADE_START = 8;
+  const PILE_DIFF_FADE_END = 14;
+
+  function makePileDiffSprite(pileId: number, kind: number): THREE.Sprite | null {
+    if (kind < 0 || kind >= pileDiffTemplates.length) return null;
+    const tmpl = pileDiffTemplates[kind];
+    const mat = (tmpl.sprite.material as THREE.SpriteMaterial).clone();
+    const sprite = new THREE.Sprite(mat);
+    sprite.center.copy(tmpl.sprite.center);
+    sprite.scale.copy(tmpl.sprite.scale);
+    sprite.renderOrder = tmpl.sprite.renderOrder;
+    const c = pileCenter(pileId);
+    sprite.position.set(c.x, PILE_DIFF_LABEL_Y, c.z);
+    sprite.name = `pileDiff:${pileId}`;
+    return sprite;
+  }
+  for (let i = 0; i < PILE_COUNT; i++) {
+    const kind = pileDiffOf(i, DEFAULT_PILE_DIFFS);
+    const sprite = makePileDiffSprite(i, kind);
+    if (!sprite) continue;
+    root.add(sprite);
+    pileDiffSprites.push({ pileId: i, kind, sprite });
+  }
+  function applyPileDiffs(diffs?: number[] | null) {
+    for (const s of pileDiffSprites) {
+      const kind = pileDiffOf(s.pileId, diffs);
+      if (kind === s.kind) continue;
+      if (kind < 0) { s.sprite.visible = false; s.kind = -1; continue; }
+      s.sprite.visible = true;
+      const oldMat = s.sprite.material as THREE.SpriteMaterial;
+      const mat = (pileDiffTemplates[kind].sprite.material as THREE.SpriteMaterial).clone();
+      mat.opacity = oldMat.opacity;
+      s.sprite.material = mat;
+      oldMat.dispose();
+      s.kind = kind;
+    }
+  }
+  function tickPileDiffSigns(cx: number, cz: number) {
+    const span = PILE_DIFF_FADE_END - PILE_DIFF_FADE_START;
+    for (const s of pileDiffSprites) {
+      if (s.kind < 0) { s.sprite.visible = false; continue; }
+      const d = Math.hypot(s.sprite.position.x - cx, s.sprite.position.z - cz);
+      let a = 1;
+      if (d >= PILE_DIFF_FADE_END) a = 0;
+      else if (d > PILE_DIFF_FADE_START) a = 1 - (d - PILE_DIFF_FADE_START) / span;
+      s.sprite.visible = a > 0.02;
+      (s.sprite.material as THREE.SpriteMaterial).opacity = a;
+    }
+  }
+  function disposePileDiffSigns() {
+    for (const s of pileDiffSprites) {
+      s.sprite.removeFromParent();
+      (s.sprite.material as THREE.SpriteMaterial).dispose();
+    }
+    pileDiffSprites.length = 0;
+    for (const t of pileDiffTemplates) t.dispose();
+  }
+
 
   // 一盞真正的點光源放在廣場正中央、高掛屋頂下，照亮整個廣場；四盞吊燈外觀靠自發光＋烘焙暖光
   const plazaLights: THREE.PointLight[] = [];
@@ -1652,6 +1719,7 @@ function hashPid(pid: string) {
   function setPhase(p: PlazaPlayer) { applyPose(p, /* 勿用空字串，否則會把「自己」建成遠端分身 */ '\0'); }
 
   function syncRoster(snap: PlazaSnapshot, selfPid: string) {
+    applyPileDiffs(snap?.pileDiffs);
     pruneSelf(selfPid);
     const alive = new Set<string>();
     for (const p of snap?.players ?? []) {
@@ -1688,6 +1756,7 @@ function hashPid(pid: string) {
   function tick(dt: number, camera: THREE.Camera) {
     const eco = !!opts.eco?.();
     const cx = camera.position.x, cz = camera.position.z;
+    tickPileDiffSigns(cx, cz);
     const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
     // 燈數固定，只調亮度，不開關 visible（three.js 增減燈會重編著色器）
     // 省電：吊燈改靠外觀球自發光，關掉動態點光
@@ -2006,6 +2075,7 @@ function hashPid(pid: string) {
     try { smokeNpc.tag.dispose(); } catch { /* */ }
     for (const r of [...remotes.values()]) destroyRemote(r);
     remotes.clear();
+    disposePileDiffSigns();
     flags.dispose();
     grill.dispose();
     for (const f of fireFx) f.dispose();

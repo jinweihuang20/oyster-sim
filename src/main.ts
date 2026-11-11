@@ -55,7 +55,7 @@ import {
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
 import {
-  openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaSetSelfBody, plazaReportEarn, plazaMySeat, plazaShiftStarted,
+  openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaSetSelfBody, plazaReportEarn, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
@@ -1237,8 +1237,9 @@ function clearBasinOysters() {
 function fillBasin(animate: boolean) {
   const n = basinCap();
   syncBasinWorld();
+  const weights = plazaMode ? plazaScoopWeights() : (newbie() ? [50, 50, 0, 0] : locW());
   for (let i = 0; i < n; i++) {
-    const m = makeBasinOyster(wpick((newbie() ? [50, 50, 0, 0] : locW()).map(w => ({ w }))));
+    const m = makeBasinOyster(wpick(weights.map(w => ({ w }))));
     const local = basinSlotLocal(i);
     m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2));
     basinOy.push(m);

@@ -369,10 +369,25 @@ function boardInnerHtml() {
   const st = eqStats();
   return `<div class="eqBoardT">目前加成</div>${st.length ? `<div class="eqStats">${st.map(x => { const [a, b] = x.split('|'); return `<div><small>${a}</small><b>${b}</b></div>`; }).join('')}</div>` : '<p class="eqNone">現在穿的都是基本款，還沒有加成。去服飾店挑幾件吧。</p>'}`;
 }
+function ownedPxLabel(id: string, price: number, worn = false) {
+  const label = worn ? '已穿戴' : '已擁有';
+  return `<span class="shopOwnPx"><i class="ic ic-check" aria-hidden="true"></i> ${label} ${D.pxHtml(id, price)}</span>`;
+}
+function setPxHtml(s: typeof SETS[number]) {
+  let base = 0, live = 0;
+  for (const id of s.need) {
+    const e = EQUIP.find(x => x.id === id);
+    if (!e) continue;
+    base += e.price;
+    live += D.px(id, e.price);
+  }
+  if (live < base) return `<span class="eqSetPx"><span class="pxSale"><s>$${base}</s>$${live}</span> 特價</span>`;
+  return `<span class="eqSetPx">$${live}</span>`;
+}
 function setsInnerHtml() {
   const sets = setsOn(), worn = wornIds();
   return SETS.map(s => { const done = sets.includes(s), have = s.need.filter(i => eqOwned(i)).length;
-      const full = have === s.need.length; return `<div class="eqSet${done ? ' done' : ''}${full ? ' full' : ''}"${full ? ` data-setid="${s.id}" role="button"` : ''}><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqIcon(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}${full ? `<em class="eqSetGo"><i class="ic ${done ? 'ic-check' : 'ic-hand'}"></i> ${done ? '穿著中' : '一鍵換上'}</em>` : ''}</div>`; }).join('');
+      const full = have === s.need.length; return `<div class="eqSet${done ? ' done' : ''}${full ? ' full' : ''}"${full ? ` data-setid="${s.id}" role="button"` : ''}><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件 · ${setPxHtml(s)}</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqIcon(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}${full ? `<em class="eqSetGo"><i class="ic ${done ? 'ic-check' : 'ic-hand'}"></i> ${done ? '穿著中' : '一鍵換上'}</em>` : ''}</div>`; }).join('');
 }
 function listHtml(pick: Slot) {
   const pickName = slotLabel(pick);
@@ -512,7 +527,7 @@ export function renderClothShop() {
   if (D.getSleeveTry()) { D.setSleeveTry(null); applySleeve(); }
   const items = EQUIP.filter(e => e.slot === D.getClothTab() && (e.price > 0 || isNoneId(e.id))).sort((a, b) => Number(isNoneId(b.id)) - Number(isNoneId(a.id)) || a.price - b.price);
   $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-equip"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。點商品圖片可試穿，還沒買也能看。</p><div class="clTabs">${SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === D.getClothTab() ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
-    return `<div class="slCard${cur ? ' on' : ''}"><button type="button" class="slPeek" data-sltry="${s.id}" aria-label="試穿 ${s.n}">${eqIcon(s)}<b>${s.n}</b><em class="slPeekT">點我看穿著樣子</em></button><small>${s.eff}</small>${D.pxCd(s.id)}<div class="slBtns">${own ? `<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${D.getSave().money < D.px(s.id, s.price) ? 'disabled' : ''}>${D.pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
+    return `<div class="slCard${cur ? ' on' : ''}"><button type="button" class="slPeek" data-sltry="${s.id}" aria-label="試穿 ${s.n}">${eqIcon(s)}<b>${s.n}</b><em class="slPeekT">點我看穿著樣子</em></button><small>${s.eff}</small>${D.pxCd(s.id)}<div class="slBtns">${own ? `${ownedPxLabel(s.id, s.price, cur)}<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${D.getSave().money < D.px(s.id, s.price) ? 'disabled' : ''}>${D.pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
   $('shopList').querySelectorAll('button[data-ctab]').forEach(b => (b as HTMLButtonElement).onclick = () => { D.setClothTab(b.getAttribute('data-ctab') as Slot); D.renderShop(); });
   $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = EQUIP.find(x => x.id === id)!;
@@ -541,7 +556,7 @@ function openTryModal(item: Eq) {
   const own = eqOwned(item.id);
   const cur = equipNow(item.slot).id === item.id;
   const act = own
-    ? `<button type="button" data-sleq="${item.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>`
+    ? `${ownedPxLabel(item.id, item.price, cur)}<button type="button" data-sleq="${item.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>`
     : `<button type="button" data-slbuy="${item.id}" ${D.getSave().money < D.px(item.id, item.price) ? 'disabled' : ''}>${D.pxHtml(item.id, item.price, '買 ')}</button>`;
   const m = document.createElement('div');
   m.id = 'clothTry';
