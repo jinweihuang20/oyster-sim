@@ -864,6 +864,28 @@ function buildSleeveDetails(rig: PlayerRig, hand: EquipVis) {
   }
 }
 
+
+/** 捲管褲：把小腿褲管裁到反摺下緣，下面才用圓柱當腳踝，避免膚色從褲管正面穿出 */
+function cropShinForRolled(rig: PlayerRig, on: boolean) {
+  for (const shin of [rig.shinL, rig.shinR]) {
+    if (!shin) continue;
+    for (const c of shin.children) {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh || m.userData.mergedLimb) continue;
+      // 鞋／鞋底有 z 偏移；小腿褲管方柱在 z=0、預設 y=-0.14（裁切後 y=-0.045）
+      if (Math.abs(m.position.x) > 1e-4 || Math.abs(m.position.z) > 1e-4) continue;
+      if (Math.abs(m.position.y + 0.14) > 0.02 && Math.abs(m.position.y + 0.045) > 0.02) continue;
+      if (on) {
+        m.position.y = -0.045;
+        m.scale.y = 0.13 / 0.32;
+      } else {
+        m.position.y = -0.14;
+        m.scale.set(1, 1, 1);
+      }
+    }
+  }
+}
+
 function buildLegDetails(rig: PlayerRig, legs: EquipVis) {
   const darker = new THREE.Color(legs.base).multiplyScalar(0.78).getHex();
   const pocketM = SM(`leg-pk-${legs.id}`, darker, { roughness: 0.82 });
@@ -888,7 +910,8 @@ function buildLegDetails(rig: PlayerRig, legs: EquipVis) {
       const rollM = SM('roll-cuff', new THREE.Color(legs.base).multiplyScalar(0.82).getHex(), { roughness: 0.84 });
       const skinM = SM('roll-skin', 0xe8bc98, { roughness: 0.78 });
       add(g, G('roll-cuff', () => rcyl(0.092, 0.092, 0.06, 8)), rollM, [0, -0.08, 0]);
-      add(g, G('roll-skin', () => rcyl(0.078, 0.072, 0.22, 8)), skinM, [0, -0.22, 0]);
+      // 只填反摺到鞋面之間，半徑對齊小腿正面寬度，不再比褲管鼓出去
+      add(g, G('roll-skin2', () => rcyl(0.068, 0.062, 0.17, 8)), skinM, [0, -0.195, 0]);
     }
   }
 }
@@ -1007,6 +1030,7 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
     buildLegDetails(rig, legs);
   }
   if (feet.id !== 'ft_none') buildFeetDetails(rig, feet);
+  cropShinForRolled(rig, legs.id === 'lg_rolled' && body.id !== 'bd_bikini');
   rig.outfitKey = outfitKey(o);
   rebuildAvatarMerged(rig);
   return o;
