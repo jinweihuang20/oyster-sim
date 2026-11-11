@@ -123,16 +123,24 @@ export function flagErrText(err?: string) {
 }
 
 /** 伺服器回 slow 且帶 waitMs 時，顯示還要等幾秒（無條件進位）；沒帶就用原本的「慢一點再試」。 */
-export function flagSlowText(err?: string, waitMs?: number, kind: 'plant' | 'remove' = 'plant') {
+export function flagSlowText(err?: string, waitMs?: number, kind: 'plant' | 'remove' | 'edit' = 'plant') {
   if (err !== 'slow') return flagErrText(err);
   const ms = Number(waitMs);
   if (!Number.isFinite(ms) || ms <= 0) return flagErrText('slow');
   const n = Math.max(1, Math.ceil(ms / 1000));
-  return kind === 'remove' ? `收太快了，${n} 秒後再試` : `插太快了，${n} 秒後再試`;
+  if (kind === 'remove') return `收太快了，${n} 秒後再試`;
+  if (kind === 'plant') return `插太快了，${n} 秒後再試`;
+  return `太快了，${n} 秒後再試`;
+}
+
+function flagWaitMs(n: unknown) {
+  const v = Number(n);
+  return Number.isFinite(v) && v > 0 ? v : undefined;
 }
 
 /** 儲存旗上文字時的說明（和插旗的 nosup 用詞不同） */
-export function flagTextErr(err?: string) {
+export function flagTextErr(err?: string, waitMs?: number) {
+  if (err === 'slow') return flagSlowText(err, waitMs, 'edit');
   const extra: Record<string, string> = {
     too_long: '旗上最多寫 12 個字',
     url: '旗上不能寫網址',
@@ -236,7 +244,7 @@ export async function fetchFlagSnapshot(pid: string, ms = 2500): Promise<{ flags
   }
 }
 
-export async function postFlagText(pid: string, text: string): Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }> {
+export async function postFlagText(pid: string, text: string): Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null; waitMs?: number }> {
   if (!pid) return { ok: false, err: 'no_pid' };
   try {
     const r = await fetch(`${flagApiBase()}/plaza/flag/text`, {
@@ -247,13 +255,13 @@ export async function postFlagText(pid: string, text: string): Promise<{ ok: boo
     if (r.status === 404) return { ok: false, err: 'nosup' };
     const j = await r.json().catch(() => null);
     if (!j) return { ok: false, err: r.status >= 500 ? 'offline' : 'nosup' };
-    return { ok: !!j.ok, err: j.err, mine: j.mine ? normFlagDto(j.mine) : null };
+    return { ok: !!j.ok, err: j.err, mine: j.mine ? normFlagDto(j.mine) : null, waitMs: flagWaitMs(j.waitMs) };
   } catch {
     return { ok: false, err: 'offline' };
   }
 }
 
-export async function postFlagUpgrade(pid: string, track: FlagTrack, from?: number): Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }> {
+export async function postFlagUpgrade(pid: string, track: FlagTrack, from?: number): Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null; waitMs?: number }> {
   if (!pid) return { ok: false, err: 'no_pid' };
   try {
     const r = await fetch(`${flagApiBase()}/plaza/flag/upgrade`, {
@@ -264,13 +272,13 @@ export async function postFlagUpgrade(pid: string, track: FlagTrack, from?: numb
     if (r.status === 404) return { ok: false, err: 'nosup' };
     const j = await r.json().catch(() => null);
     if (!j) return { ok: false, err: 'nosup' };
-    return { ok: !!j.ok, err: j.err, mine: j.mine ? normFlagDto(j.mine) : null };
+    return { ok: !!j.ok, err: j.err, mine: j.mine ? normFlagDto(j.mine) : null, waitMs: flagWaitMs(j.waitMs) };
   } catch {
     return { ok: false, err: 'offline' };
   }
 }
 
-export async function postFlagSelect(pid: string, track: FlagTrack, level: number): Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }> {
+export async function postFlagSelect(pid: string, track: FlagTrack, level: number): Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null; waitMs?: number }> {
   if (!pid) return { ok: false, err: 'no_pid' };
   try {
     const r = await fetch(`${flagApiBase()}/plaza/flag/select`, {
@@ -281,7 +289,7 @@ export async function postFlagSelect(pid: string, track: FlagTrack, level: numbe
     if (r.status === 404) return { ok: false, err: 'nosup' };
     const j = await r.json().catch(() => null);
     if (!j) return { ok: false, err: r.status >= 500 ? 'offline' : 'nosup' };
-    return { ok: !!j.ok, err: j.err, mine: j.mine ? normFlagDto(j.mine) : null };
+    return { ok: !!j.ok, err: j.err, mine: j.mine ? normFlagDto(j.mine) : null, waitMs: flagWaitMs(j.waitMs) };
   } catch {
     return { ok: false, err: 'offline' };
   }

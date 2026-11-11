@@ -1187,7 +1187,7 @@ export async function plazaTrySetFlagText(text: string) {
       myFlagText = r.flag.text;
       if (r.flag.planted) upsertFlag(r.flag);
     }
-    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null };
+    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null, waitMs: r.waitMs };
   }
   return { ok: false as const, err: 'no_conn', mine: null };
 }
@@ -1196,7 +1196,7 @@ export async function plazaTryUpgradeFlag(track: string, from?: number) {
   if (client?.connected) {
     const r = await client.upgradeFlag(track, from);
     if (r.ok && r.flag?.planted) upsertFlag(r.flag);
-    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null };
+    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null, waitMs: r.waitMs };
   }
   return { ok: false as const, err: 'no_conn', mine: null };
 }
@@ -1205,7 +1205,7 @@ export async function plazaTrySelectFlag(track: string, level: number) {
   if (client?.connected) {
     const r = await client.selectFlag(track, level);
     if (r.ok && r.flag?.planted) upsertFlag(r.flag);
-    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null };
+    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null, waitMs: r.waitMs };
   }
   return { ok: false as const, err: 'no_conn', mine: null };
 }
