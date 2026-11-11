@@ -578,7 +578,8 @@ export function createPlazaWorldView(
   const roofLamps: THREE.PointLight[] = [];
   const roofLampBaseI = LO ? 9 : 10;
   {
-    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, 26, 0.7);
+    // 廣場半徑約 12 m，distance 原本 26 m 會讓 shader 多算一大圈其實看不到的像素
+    const pl = new THREE.PointLight(0xffe2b8, roofLampBaseI, 14, 0.7);
     pl.position.set(0, PLAZA_ROOF_Y - 0.35, 0);
     pl.castShadow = false;
     pl.visible = true;
