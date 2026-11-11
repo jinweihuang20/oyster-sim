@@ -54,7 +54,9 @@ export function openPetPreview(petId: string) {
   const p = findPet(petId); if (!p) return;
   el = document.createElement('div');
   el.id = 'petPreview';
-  el.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(10,10,18,0.78);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;box-sizing:border-box;touch-action:none';
+  // z-index 要壓過廣場 UI（#plazaTags 8800、plazaMode 下 #top/#stats 9100）、設定/兌換碼（13000–13100），
+  // 僅低於寵物提示 toast（13200）。
+  el.style.cssText = 'position:fixed;inset:0;z-index:13500;background:rgba(10,10,18,0.78);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;box-sizing:border-box;touch-action:none';
   el.innerHTML = `
     <div style="color:#fff;font-weight:700;font-size:18px">${p.n} <small style="opacity:.75;font-weight:400">拖曳旋轉</small></div>
     <div id="petPvHost" style="width:min(80vw,340px);aspect-ratio:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);border-radius:16px;overflow:hidden"></div>
