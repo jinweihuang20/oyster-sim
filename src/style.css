@@ -1337,7 +1337,7 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 /* ===== 糖果鍵（全站遊戲風 3D 按鈕）=====
    排除：死鬥 #dmRoot、廣場 #plazaRoot、遊戲中 HUD/觸控（#hud #btns #btnsL .mb #rotL #rotR #camBtn #joy）、Discord .dcBtn、BMC .bmcBtn、導覽 #hg
    角色：data-key=primary 綠／預設 港口藍／danger 紅／x 紅方鍵／disabled 灰（data-key 由 main.ts 依按鈕文字自動標記） */
-:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.eqHit,.eqCard,.eqTile,.eqInfoGo)){
+:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.eqHit,.eqCard,.eqTile,.eqInfoGo,#shedDoor *)){
   --k:#3d7fb8;--kd:#215582;--kb:#1b4466;
   background:linear-gradient(180deg,color-mix(in srgb,var(--k) 70%,#fff) 0%,var(--k) 55%,color-mix(in srgb,var(--k) 85%,#000) 100%)!important;
   color:#fff!important;border:1.5px solid var(--kb)!important;border-radius:8px!important;
@@ -1345,7 +1345,7 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
   text-shadow:0 1px 0 rgba(0,0,0,.35),0 0 1px rgba(0,0,0,.5)!important;font-weight:900;
   transform:none;transition:transform .08s cubic-bezier(.3,1.6,.5,1),box-shadow .08s!important;
 }
-:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.eqHit,.eqCard,.eqTile,.eqInfoGo)):active:not(:disabled){
+:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.eqHit,.eqCard,.eqTile,.eqInfoGo,#shedDoor *)):active:not(:disabled){
   transform:translateY(3px)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 var(--kd),0 1px 3px rgba(0,0,0,.15)!important;
 }
 body button#start,body button#again,body button.dcGo,body button[data-key="primary"]{--k:#3fae4a;--kd:#23752c;--kb:#1d5f25}
@@ -1951,3 +1951,22 @@ input[type=range]#rmEdSeats,input[type=range]#rmEdDur,input[type=range]#rmEdGoal
 .eqList button.eqLi small{display:block;white-space:normal;font-weight:500;line-height:1.35}
 .eqList button.eqLi .eqLiN em{flex:none;margin:0;white-space:nowrap;font:800 11px/1 sans-serif;font-style:normal;letter-spacing:.04em;padding:3px 7px;border:1px solid #2a5a86;border-radius:999px;background:#fff;color:#2a5a86;box-shadow:none}
 .panel .eqList button.eqLi.on{background:#eef4fa;color:var(--ink);border-color:#2a5a86}
+
+/* ===== 廣場北碼頭：工寮門口面板（選班別／提早解鎖） ===== */
+#shedDoor{position:fixed;left:50%;bottom:calc(var(--sa-bottom, 0px) + 200px);transform:translateX(-50%);z-index:9000;width:min(340px,calc(100vw - 24px));pointer-events:auto}
+#shedDoor .sdBox{background:#f7f4ee;color:#1b2430;border:1.5px solid #16191d;border-radius:14px;padding:12px 14px 10px;box-shadow:0 8px 24px rgba(10,20,35,.22),0 2px 6px rgba(10,20,35,.10);display:flex;flex-direction:column;gap:8px}
+#shedDoor .sdHead{display:flex;align-items:baseline;gap:8px}
+#shedDoor .sdHead b{font:900 19px var(--sign);letter-spacing:.04em}
+#shedDoor .sdMult{font:700 13px var(--sign);color:#2a5a86}
+#shedDoor .sdDesc{margin:0;font-size:13px;line-height:1.45;color:#3a4350}
+#shedDoor .sdNote{margin:0;font-size:12px;line-height:1.4;color:#3a4350}
+#shedDoor .sdLock{margin:0;font:800 14px var(--sign);color:#1b2430;display:flex;align-items:center;gap:6px}
+#shedDoor .sdShifts{display:flex;flex-wrap:wrap;gap:6px}
+#shedDoor button{font:800 14px var(--sign);border-radius:10px;border:1.5px solid #2a5a86;background:#fff;color:#2a5a86;box-shadow:0 1px 3px rgba(20,30,45,.12);padding:8px 10px;min-height:44px;margin:0;flex:1 1 30%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-shadow:none;cursor:pointer}
+#shedDoor button small{font:600 11px sans-serif;opacity:.8}
+#shedDoor button.main{background:#2a5a86;color:#fff;flex-basis:100%}
+#shedDoor button.confirm{background:#16191d;border-color:#16191d;color:#fff}
+#shedDoor button:disabled{opacity:.5;cursor:default}
+#shedDoor .sdX{flex:none;align-self:center;min-height:34px;padding:4px 16px;border-color:rgba(22,25,29,.35);color:#3a4350;background:transparent;box-shadow:none}
+#locPick .loc.locked .lbuy{display:inline-block;margin:4px auto 2px;padding:2px 10px;border:1px solid currentColor;border-radius:999px;font-weight:800;opacity:1}
+#locPick .loc.locked.confirm{opacity:1}

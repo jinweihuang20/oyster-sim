@@ -102,12 +102,48 @@ export const WALK_BOUND_WEST = 24;
 /** 東緣延伸到多那芝咖啡（實際可走僅前庭，見 plazaClampWalk） */
 export const WALK_BOUND_EAST = 20;
 export type PlazaWalkBounds = { minX: number; maxX: number; minZ: number; maxZ: number };
+/**
+ * 北側碼頭工寮街（北＝世界 -Z）：碼頭往外加寬，四間工寮門面朝南（朝廣場）。
+ * 可走：|x| ≤ xMax、z ≥ zMin（棚外北緣到工寮門前）。
+ */
+export const NORTH_DOCK = { xMax: 10.5, zMin: -14.0, z0: -11.15, z1: -18.2 } as const;
+/** 工寮門面 z、建築寬深 */
+export const SHED_FRONT_Z = -14.3;
+export const SHED_W = 3.4;
+export const SHED_D = 2.8;
+/** 門口圓圈 */
+export const SHED_RING_Z = -13.35;
+export const SHED_RING_R = 0.76;
+/** 西→東依解鎖順序；x 對齊蚵堆四欄（走道避開北側攤位與棚柱） */
+export const SHED_DOORS: readonly { loc: string; x: number }[] = [
+  { loc: 'home', x: -7.8 },
+  { loc: 'wanggong', x: -2.6 },
+  { loc: 'dongshi', x: 2.6 },
+  { loc: 'budai', x: 7.8 },
+];
+/** 工寮門口擺設碰撞（自家蚵寮門邊的蚵殼籃＋塑膠椅，與 shedRow.ts 對齊） */
+export function plazaShedObstacles(): [number, number, number][] {
+  const home = SHED_DOORS.find(d => d.loc === 'home');
+  if (!home) return [];
+  return [[home.x - 1.12, SHED_FRONT_Z + 0.24, 0.3], [home.x + 1.12, SHED_FRONT_Z + 0.24, 0.3]];
+}
+/** 站在哪個工寮的門口圓圈內 */
+export function shedDoorAt(x: number, z: number): string | null {
+  for (const d of SHED_DOORS) if (Math.hypot(x - d.x, z - SHED_RING_Z) <= SHED_RING_R) return d.loc;
+  return null;
+}
+/** 從工寮回廣場的站位：圓圈外一步、面向廣場（+Z，yaw=π） */
+export function shedReturnSpawn(loc: string): { x: number; z: number; yaw: number } | null {
+  const d = SHED_DOORS.find(s => s.loc === loc);
+  return d ? { x: d.x, z: SHED_RING_Z + SHED_RING_R + 0.5, yaw: Math.PI } : null;
+}
 export function plazaWalkBounds(): PlazaWalkBounds {
-  return { minX: -WALK_BOUND_WEST, maxX: WALK_BOUND_EAST, minZ: -WALK_BOUND, maxZ: WALK_BOUND };
+  return { minX: -WALK_BOUND_WEST, maxX: WALK_BOUND_EAST, minZ: NORTH_DOCK.zMin, maxZ: WALK_BOUND };
 }
 /** 該點是否在可走區（主廣場＋咖啡前庭） */
 export function plazaWalkAllowed(x: number, z: number, margin = 0): boolean {
-  if (x < -WALK_BOUND_WEST + margin || z < -WALK_BOUND + margin || z > WALK_BOUND - margin) return false;
+  if (z < -WALK_BOUND + margin) return Math.abs(x) <= NORTH_DOCK.xMax - margin && z >= NORTH_DOCK.zMin + margin;
+  if (x < -WALK_BOUND_WEST + margin || z > WALK_BOUND - margin) return false;
   if (x <= WALK_BOUND - margin) return true;
   return x <= CAFE_FORECOURT.xMax - margin && z >= CAFE_FORECOURT.zMin + margin;
 }
@@ -116,6 +152,11 @@ export function plazaWalkAllowed(x: number, z: number, margin = 0): boolean {
  * 碰到開口北側短牆時，往位移較小的方向推回（可沿牆滑）。
  */
 export function plazaClampWalk(p: { x: number; z: number }) {
+  // 北碼頭：出了棚北緣只准在碼頭寬度內
+  if (p.z < -WALK_BOUND && Math.abs(p.x) > NORTH_DOCK.xMax) {
+    const dx = Math.abs(p.x) - NORTH_DOCK.xMax, dz = -WALK_BOUND - p.z;
+    if (dx <= dz) p.x = Math.sign(p.x) * NORTH_DOCK.xMax; else p.z = -WALK_BOUND;
+  }
   if (p.x <= WALK_BOUND) return p;
   if (p.z < CAFE_FORECOURT.zMin) {
     const dx = p.x - WALK_BOUND, dz = CAFE_FORECOURT.zMin - p.z;

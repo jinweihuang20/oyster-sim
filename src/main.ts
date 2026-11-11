@@ -55,6 +55,7 @@ import {
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
 import {
+  plazaNearShed, SHED_DOORS, shedReturnSpawn, shedName,
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaSetSelfBody, plazaReportEarn, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile,
@@ -65,6 +66,7 @@ import {
   plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryShowFlag, plazaTryRemoveFlag, plazaTryUpgradeFlag, plazaTrySelectFlag,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
+import { openShedDoorPanel, closeShedDoorPanel } from './plaza/shedDoorUi';
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
 import { GOLD_SMOKE_TINT, encodeCosmetics } from './plaza/cosmetics';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
@@ -523,7 +525,7 @@ const radioSt = () => ((save.radioSt ?? 0) % STATIONS.length + STATIONS.length) 
 function pickTrack(): string {
   if (isDeathmatchActive()) return 'dm';
   if (state !== 'play' || tut) return 'temple';
-  if (plazaMode || save.loc === 'plaza') return 'plaza';
+  if (plazaMode || (save.loc === 'plaza' && !shedTrip)) return 'plaza';
   if (gearOn('radio')) return STATIONS[radioSt()].id;
   if (evRun) return 'event';
   const id = locNow().id; return hasBgmTrack(id) ? id : 'home';
@@ -539,7 +541,11 @@ initAudio({
 // ---------- 難度、珍珠、奇物、存檔 ----------
 /** 好友房：房間指定場景（不看自己有沒有解鎖） */
 let roomLoc: string | null = null, roomPlay = false;
-const locNow = () => (roomLoc ? LOCS.find(l => l.id === roomLoc) : undefined) ?? LOCS.find(l => l.id === save.loc && (l.need === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
+/** 從廣場北碼頭走進工寮：這一趟的地點（不改主選單選的地點），結束回廣場 */
+let shedTrip: { loc: string } | null = null;
+/** 廣場已有收入時先結算，結算畫面按「前往」再去工寮 */
+let pendingShed: { loc: string; len: number } | null = null;
+const locNow = () => (roomLoc ? LOCS.find(l => l.id === roomLoc) : undefined) ?? (shedTrip ? LOCS.find(l => l.id === shedTrip!.loc) : undefined) ?? LOCS.find(l => l.id === save.loc && (l.need === 0 || save.locs?.includes(l.id))) ?? LOCS[0];
 const locW = () => locNow().w;
 const RAR = [
   { name: '白珍珠', color: 0xf4f1ea, css: '#f4f1ea', w: 70, price: 200, emo: '⚪', tease: '最常見的珍珠，多剝幾顆就有' },
@@ -2228,7 +2234,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     clearPlazaLeaveUi();
     on('quitBtn', false); on('standBtn', false); on('throwBtn', false); on('umbBtn', false); on('stealBtn', false); on('sitBtn', false); on('giveUp', false); on('medBtn', false); on('camBtn', false);
     const menuBtn = $('resMenu');
-    if (menuBtn) { menuBtn.innerHTML = `<i class="ic ic-home"></i> 回主選單`; (menuBtn as HTMLButtonElement).disabled = true; }
+    if (menuBtn) { menuBtn.innerHTML = pendingShed ? `<i class="ic ic-pin"></i> 前往 ${shedName(pendingShed.loc)} 上工` : `<i class="ic ic-home"></i> 回主選單`; (menuBtn as HTMLButtonElement).disabled = true; }
     void plazaPayWait?.then(() => {
       const b = $('resMenu') as HTMLButtonElement | null;
       if (b) b.disabled = false;
@@ -2237,6 +2243,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
       if (b) b.disabled = false;
     });
   }
+  if (!plazaMode) { const mb = $('resMenu'); if (mb) mb.innerHTML = shedTrip ? `<i class="ic ic-pin"></i> 回廣場` : `<i class="ic ic-home"></i> 回主選單`; }
   if (!roomPlay) $('result').classList.add('show'); $('resEvLb')?.addEventListener('click', () => evLbOpen(ev!.id)); if (ac) SFX.endJingle(queen && !handPain && !plazaMode);
 }
 function revealPearl(r: number) { react3('cheer');
@@ -2542,7 +2549,15 @@ const btn = (id: string, f: () => void, upF?: () => void) => {
   // iOS 偶爾吃掉 pointerup（或被別的觸控搶走）：補一個 click 備援，700ms 內已觸發過就不重複
   el.addEventListener('click', e => { e.stopPropagation(); if (performance.now() - fired > 700) { fired = performance.now(); f(); } });
 };
-btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => { if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock(); $('backMenu').classList.add('show'); });
+btn('giveUp', giveUp); btn('radioBtn', toggleRadio); btn('quitBtn', () => {
+  if (state !== 'play' || tut) return; if (document.pointerLockElement) document.exitPointerLock();
+  const toPlaza = !!shedTrip && !plazaMode && !isRoomActive();
+  const bm = $('backMenu'), h = bm.querySelector('h2'), p = bm.querySelector('p');
+  if (h) h.innerHTML = toPlaza ? '<i class="ic ic-pin"></i> 回廣場' : '<i class="ic ic-home"></i> 回主選單';
+  if (p) p.innerHTML = toPlaza ? '確定要回廣場嗎？<br>這一工賺的照算。' : '確定要回主選單嗎？<br>這一工賺的照算。';
+  $('bmGo').innerHTML = toPlaza ? '<i class="ic ic-pin"></i> 回廣場' : '<i class="ic ic-home"></i> 回主選單';
+  bm.classList.add('show');
+});
 $('bmStay').onclick = () => $('backMenu').classList.remove('show');
 $('bmGo').onclick = () => { void (async () => {
   $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return;
@@ -2560,6 +2575,14 @@ $('bmGo').onclick = () => { void (async () => {
   endReason = 'quit'; endDay();
   $('result').classList.remove('show');
   const P = lastPay;
+  const showPay = () => {
+      if (!(P.gross || P.pen)) return;
+      const r = (ic: string, l: string, v: string, c = '') => `<div class="row"><span><i class="ic ic-${ic}"></i> ${l}</span><b${c}>${v}</b></div>`;
+      $('psBody').innerHTML = r('oyster', '收入', `+$${P.gross}`) + (P.pen ? r('warn', '罰款／扣價', `-$${P.pen}`, ' style="color:#ff8a7a"') + r('coin', '淨收入', `$${P.earn}`) : '') + `<p style="font-size:14px;opacity:.85">已入帳，身上共有 $${save.money}</p>`;
+      $('paySum').classList.add('show');
+  };
+  // 從廣場進來的工寮：提早下班直接回廣場門口
+  if (!wasPlaza && shedTrip) { returnToPlazaFromShed(); setTimeout(showPay, 900); return; }
   returnToMainMenu(async () => {
     if (wasPlaza) {
       await plazaPayWait?.catch(() => 0); setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0; plazaHideYard(false);
@@ -2567,12 +2590,7 @@ $('bmGo').onclick = () => { void (async () => {
       void refreshPlazaOnlineAfterLeave();
     }
   }, {
-    then: () => {
-      if (!(P.gross || P.pen)) return;
-      const r = (ic: string, l: string, v: string, c = '') => `<div class="row"><span><i class="ic ic-${ic}"></i> ${l}</span><b${c}>${v}</b></div>`;
-      $('psBody').innerHTML = r('oyster', '收入', `+$${P.gross}`) + (P.pen ? r('warn', '罰款／扣價', `-$${P.pen}`, ' style="color:#ff8a7a"') + r('coin', '淨收入', `$${P.earn}`) : '') + `<p style="font-size:14px;opacity:.85">已入帳，身上共有 $${save.money}</p>`;
-      $('paySum').classList.add('show');
-    },
+    then: showPay,
   });
 })(); };
 $('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (plazaMode) void plazaTrySit(); else if (isRoomActive()) void roomTrySit(); else if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('puffBtn', startPuff, endPuff); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('puffBtn').addEventListener(ev, endPuff); addEventListener('blur', endPuff); document.addEventListener('visibilitychange', () => { if (document.hidden) endPuff(); }); $('puffBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
@@ -2732,7 +2750,8 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
     const own = l.need === 0 || save.locs!.includes(l.id), cur = !plazaCur && cl!.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
     if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small>點一下選這裡</small><small class="ld">${l.d}</small></button>`;
-    return `<button class="loc locked" disabled>${head}<small><i class="ic ic-lock"></i> 解鎖條件：入碗 ${tot}/${l.need} 顆</small><small class="ld">${l.d}</small></button>`;
+    const pr = l.price ? px('loc-' + l.id, l.price) : 0;
+    return `<button class="loc locked" ${pr ? `data-lbuy="${l.id}"` : 'disabled'}>${head}<small><i class="ic ic-lock"></i> 解鎖條件：入碗 ${tot}/${l.need} 顆</small>${pr ? `<small class="lbuy">花 $${pr} 提早解鎖</small>` : ''}<small class="ld">${l.d}</small></button>`;
   }).join('') + '</div>';
   const mark = (id?: string) => { if (id && !seen.includes(id)) { seen.push(id); persist(); } };
   el.querySelectorAll<HTMLButtonElement>('button.loc').forEach(b => b.addEventListener('click', () => mark(b.dataset.loc || b.dataset.lbuy), { capture: true }));
@@ -2740,6 +2759,18 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   if (ROOM_ENABLED) el.querySelectorAll<HTMLButtonElement>('[data-room]').forEach(b => b.onclick = ev => {
     ev.stopPropagation(); audio();
     if (b.dataset.room === 'join') openRoomJoin(); else openRoomCreate();
+  });
+  // 未解鎖卡：按一次顯示確認，四秒內再按一次才扣錢
+  el.querySelectorAll<HTMLButtonElement>('button[data-lbuy]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.lbuy!; const l = LOCS.find(x => x.id === id); const tag = b.querySelector<HTMLElement>('.lbuy');
+    if (!l || !tag) return;
+    if (!b.classList.contains('confirm')) {
+      b.classList.add('confirm'); tag.textContent = `確定花 $${px('loc-' + id, l.price)} 解鎖？再按一次`;
+      setTimeout(() => { if (b.isConnected && b.classList.contains('confirm')) { b.classList.remove('confirm'); tag.textContent = `花 $${px('loc-' + id, l.price)} 提早解鎖`; } }, 4000);
+      return;
+    }
+    b.classList.remove('confirm');
+    if (await buyLocEarly(id)) { save.loc = id; persist(); renderLocs(); updSky(); syncStartUi(); }
   });
   el.querySelectorAll<HTMLButtonElement>('[data-loc]').forEach(b => b.onclick = () => {
     save.loc = b.dataset.loc;
@@ -3584,6 +3615,7 @@ function showMenuLoading(show = true) {
 /** 任意場景回主畫面：先秀轉場，再打開主選單（至少約 0.9 秒） */
 function returnToMainMenu(work?: () => void | Promise<void>, opts?: { then?: () => void }) {
   const gen = ++menuLoadGen;
+  shedTrip = null; pendingShed = null; closeShedDoorPanel();
   const at = performance.now();
   showMenuLoading(true);
   for (const id of ['result', 'backMenu']) $(id).classList.remove('show');
@@ -3618,6 +3650,91 @@ function enterWorkShed(run: () => void) {
       setTimeout(() => { if (gen === shedLoadGen) showShedLoading(false); }, wait);
     }
   }));
+}
+// ---------- 廣場北碼頭 → 工寮（上工完回廣場） ----------
+const locOwned = (l: typeof LOCS[number]) => l.need === 0 || (save.locs ?? []).includes(l.id);
+/** 花錢提早解鎖地點（金錢在本機存檔；價格可由後台價目表覆寫 loc-xxx） */
+async function buyLocEarly(id: string): Promise<boolean> {
+  const l = LOCS.find(x => x.id === id);
+  if (!l || !l.price) return false;
+  save.locs ??= [];
+  if (locOwned(l)) return true;
+  const name = shedName(id);
+  const pr = await payFor('loc-' + id, l.price, name);
+  if (pr == null) {
+    toast(save.money < px('loc-' + id, l.price) ? `錢不夠，解鎖${name}要 $${px('loc-' + id, l.price)}` : '價格剛更新，請再按一次', '#ffb08a');
+    return false;
+  }
+  save.money -= pr; save.locs.push(id); persist();
+  track('buy', { item: 'loc-' + id, price: pr });
+  Social.report('port', LOCS.indexOf(l));
+  if (ac) SFX.jingle();
+  toast(`已解鎖：${name}`, '#9be37a');
+  return true;
+}
+const SHED_SHIFTS = () => [
+  { len: SHIFT, label: '正常班', sub: `${Math.round(SHIFT / 60)} 分鐘` },
+  { len: 60, label: '臨時工', sub: '1 分鐘' },
+  { len: 120, label: '臨時工', sub: '2 分鐘' },
+];
+function openShedDoor(loc: string) {
+  const l = LOCS.find(x => x.id === loc);
+  if (!l || !plazaMode || state !== 'play') return;
+  const own = locOwned(l);
+  openShedDoorPanel({
+    name: shedName(loc),
+    mult: l.m,
+    desc: l.d,
+    unlocked: own,
+    needText: `入碗 ${save.life.inBowl ?? 0}/${l.need} 顆解鎖`,
+    price: l.price ? px('loc-' + loc, l.price) : null,
+    money: save.money,
+    settleFirst: plazaShiftStarted(),
+    shifts: SHED_SHIFTS(),
+    onShift: (len) => goShedFromPlaza(loc, len),
+    onUnlock: () => buyLocEarly(loc),
+    stillNear: () => plazaMode && plazaNearShed() === loc,
+  });
+}
+function goShedFromPlaza(loc: string, len: number) {
+  if (!plazaMode || state !== 'play') return;
+  const l = LOCS.find(x => x.id === loc);
+  if (!l || !locOwned(l)) return;
+  // 廣場已開工：先跑廣場結算畫面，主按鈕改成「前往 XX 上工」
+  if (plazaShiftStarted()) { pendingShed = { loc, len }; endReason = 'quit'; endDay(); return; }
+  void leavePlazaForShed({ loc, len });
+}
+/** 離開廣場（同回主選單的收尾），記住回程站位在該工寮門口，接著照原本流程上工 */
+async function leavePlazaForShed(trip: { loc: string; len: number }) {
+  pendingShed = null;
+  closeShedDoorPanel();
+  showShedLoading(true);
+  for (const id of ['result', 'backMenu']) $(id).classList.remove('show');
+  await plazaPayWait?.catch(() => 0);
+  plazaShellGen++;
+  setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0;
+  plazaHideYard(false);
+  plazaHideChrome(true);
+  await closePlaza().catch(() => 0);
+  applySeat(save.seat ?? 'door');
+  clearPlazaLeaveUi();
+  // closePlaza 會記下目前站位（圈內）；改成門口外一步、面向廣場
+  const sp = shedReturnSpawn(trip.loc);
+  if (sp) { save.plazaSpawn = sp; persist(); }
+  shedTrip = { loc: trip.loc };
+  state = 'menu'; syncShiftUi();
+  enterWorkShed(() => {
+    evRun = null; shiftLen = trip.len; audio(); updSky();
+    if (!save.tutDone) tutStart(); else startDay();
+  });
+}
+/** 工寮結算後回廣場：站在剛剛那間工寮門口 */
+function returnToPlazaFromShed() {
+  shedTrip = null; pendingShed = null;
+  for (const id of ['result', 'backMenu']) $(id).classList.remove('show');
+  state = 'menu'; syncShiftUi();
+  shiftLen = SHIFT; updSky();
+  launchPlaza();
 }
 function launchPlaza() {
   if (isDeathmatchActive() || isPlazaActive()) return;
@@ -3671,6 +3788,13 @@ function launchPlaza() {
     selfHatLift: () => headTopLift(equipNow('head').id),
     getPlazaSpawn: () => save.plazaSpawn,
     persistPlazaSpawn: (spawn) => { save.plazaSpawn = spawn; persist(); },
+    shedUnlocked: (loc) => { const l = LOCS.find(x => x.id === loc); return !!l && locOwned(l); },
+    shedPromptInfo: (loc) => {
+      const l = LOCS.find(x => x.id === loc); const name = shedName(loc);
+      if (!l) return name;
+      return locOwned(l) ? `${name}・工錢 ×${l.m.toFixed(1)}` : `${name}　入碗 ${save.life.inBowl ?? 0}/${l.need} 顆解鎖`;
+    },
+    openShedDoor: (loc) => openShedDoor(loc),
     onShellThrow: (e) => {
       // 自己丟的已經在本地飛過；別人的殼（含打向自己）播飛行動畫＋甩臂
       try {
@@ -3858,6 +3982,16 @@ btn('resMenu', () => {
   menuBtn.disabled = true;
   $('result').classList.remove('show');
   const fromPlaza = plazaMode;
+  const toShed = fromPlaza ? pendingShed : null;
+  if (toShed) {
+    void leavePlazaForShed(toShed).finally(() => { menuBtn.disabled = false; menuBtn.innerHTML = `<i class="ic ic-home"></i> 回主選單`; });
+    return;
+  }
+  if (!fromPlaza && shedTrip) {
+    returnToPlazaFromShed();
+    menuBtn.disabled = false; menuBtn.innerHTML = `<i class="ic ic-home"></i> 回主選單`;
+    return;
+  }
   if (fromPlaza) menuBtn.innerHTML = `<i class="ic ic-home"></i> 結算中…`;
   returnToMainMenu(async () => {
     if (fromPlaza) {

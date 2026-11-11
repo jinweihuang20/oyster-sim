@@ -3,6 +3,7 @@ import type { MatFn } from '../dm/weapons';
 import { rboxEnv, rcyl } from '../core/geo';
 import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
 import { makePlazaTidalFlat } from './tidalFlat';
+import { NORTH_DOCK } from './layout';
 
 type AddFn = (
   geo: THREE.BufferGeometry,
@@ -104,11 +105,14 @@ function makePlazaHarbor(M: MatFn, add: AddFn, segs: number, lowDetail: boolean)
   const g = new THREE.Group();
   g.name = 'plazaHarbor';
   // 碼頭沿棚外緣（柱環約 10.6），船在水上更外側
-  const dockZ = -12.35;
-  add(rboxEnv(22, 0.28, 2.4), M(0x7a8078, { roughness: 0.9 }), [0, -0.12, dockZ], g, false);
-  // 繫船柱
-  for (const x of [-8, -4, 0, 4, 8] as const) {
-    add(rcyl(0.08, 0.09, 0.55, segs), M(0x5a4a3a), [x, 0.2, dockZ - 0.9], g, false);
+  // 碼頭往北加寬到工寮街外緣（NORTH_DOCK.z0..z1），船改停更外側
+  const dockZ = (NORTH_DOCK.z0 + NORTH_DOCK.z1) / 2;
+  const dockD = NORTH_DOCK.z0 - NORTH_DOCK.z1;
+  add(rboxEnv(22, 0.28, dockD), M(0x7a8078, { roughness: 0.9 }), [0, -0.12, dockZ], g, false);
+  // 繫船柱：放在工寮之間的碼頭外緣（走不到，不需碰撞）
+  const bollard = M(0x5a4a3a);
+  for (const x of [-10.4, -5.2, 0, 5.2, 10.4] as const) {
+    add(rcyl(0.08, 0.09, 0.55, segs), bollard, [x, 0.2, NORTH_DOCK.z1 + 0.35], g, false);
   }
   const flagCols = [0xd03030, 0x2a5ad0, 0xf0c020, 0x30a050];
   const hullCols = [0xe8e8e0, 0x2a6ab0, 0xd8d0b0, 0xe0d8c8, 0x3a7a9a];
@@ -116,7 +120,7 @@ function makePlazaHarbor(M: MatFn, add: AddFn, segs: number, lowDetail: boolean)
   for (let i = 0; i < nBoat; i++) {
     const boat = new THREE.Group();
     const x = -9 + i * 4.5;
-    const z = dockZ - 3.2 - (i % 2) * 2.2;
+    const z = NORTH_DOCK.z1 - 2.0 - (i % 2) * 2.2;
     boat.position.set(x, -0.5, z);
     boat.rotation.y = (i % 2 === 0 ? -0.15 : 0.2) + (i - 2) * 0.04;
     g.add(boat);

@@ -22,7 +22,7 @@ export type WalkSeatDeps = {
   /** 矩形夾限後再套區域（東延僅咖啡前庭） */
   plazaWalkClamp?: (p: { x: number; z: number }) => void;
   plazaNearSeat: () => { pileId: number; slot: number } | null;
-  plazaNearPrompt?: () => { kind: 'sit' | 'carry' | 'place'; info: string; btn: string; pileId?: number; slot?: number } | null;
+  plazaNearPrompt?: () => { kind: 'sit' | 'carry' | 'place' | 'shed'; info: string; btn: string; icon?: string; pileId?: number; slot?: number } | null;
   isRoomMode?: () => boolean;
   /** 裝備走路速度倍率（分趾布鞋等） */
   walkSpeedMul?: () => number;
@@ -227,7 +227,7 @@ export function walkStep(dt: number) {
     const btn = D.$('sitBtn');
     if (prompt) {
       D.$('seatInfo').textContent = prompt.info;
-      if (btn) btn.innerHTML = `<i class="ic ic-chair"></i> ${prompt.btn}<span class="key"> (E)</span>`;
+      if (btn) btn.innerHTML = `<i class="ic ${prompt.icon ?? 'ic-chair'}"></i> ${prompt.btn}<span class="key"> (E)</span>`;
     } else if (n) {
       D.$('seatInfo').textContent = n.pileId === 100
         ? `吸菸區・座 ${n.slot + 1}`

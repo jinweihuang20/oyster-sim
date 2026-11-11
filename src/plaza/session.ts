@@ -5,8 +5,10 @@ import {
   seatPose, seatKey, nearestFreeSeat, nearestFreePlaceSeat, pileObstacles, pileCenter, randomWalkSpawn, resolveWalkSpawn,
   isSmokePile, isLeisurePile, isRestPile, plazaSmokeObstacles, isPlazaAber, SMOKE_PILE_ID, SMOKE_ABER_SLOT,
   type PlazaSeatRef, type PlazaSpawnMemory,
+  SHED_DOORS, shedDoorAt, plazaShedObstacles,
 } from './layout';
 import { plazaShedPosts } from './props';
+import { shedName } from './shedRow';
 import { plazaStallObstacles } from './ambiance';
 import { buildPlazaMapMarkers, drawPlazaMap } from './map';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
@@ -98,6 +100,10 @@ export type PlazaDeps = {
   persistPlazaSpawn?: (spawn: PlazaSpawnMemory) => void;
   /** 省電模式（廣場簡化／降負載） */
   getEco?: () => boolean;
+  /** 北碼頭工寮：是否已解鎖、提示文字、站在圈內按「進入」 */
+  shedUnlocked?: (loc: string) => boolean;
+  shedPromptInfo?: (loc: string) => string;
+  openShedDoor?: (loc: string) => void;
   /** 自己裝備了寵物（坐姿時寵物在頭頂、聊天泡泡要讓位） */
   hasOwnPet?: () => boolean;
   /** 自己頭上帽子高出髮蓋頂的量（公尺）；有寵物+坐姿時聊天泡泡要再多抬這麼多 */
@@ -122,6 +128,8 @@ let shiftStarted = false;
 let near: PlazaSeatRef | null = null;
 let nearCarry: { connId: string; nick: string } | null = null;
 let nearPlace: PlazaSeatRef | null = null;
+/** 站在哪間工寮的門口圓圈內 */
+let nearShed: string | null = null;
 /** 新伺服器 Join 會帶 carryNpc；舊服沒有則不顯示抱起／放下 */
 let carryNpcOk = false;
 /** 新伺服器 Join 會帶 flags 陣列；舊服沒有則不顯示插旗 */
@@ -158,6 +166,7 @@ export function plazaPileObs(): [number, number, number][] {
   const out = pileObstacles();
   for (const p of plazaShedPosts()) out.push([p.x, p.z, 0.22]);
   for (const o of plazaStallObstacles()) out.push(o);
+  for (const o of plazaShedObstacles()) out.push(o);
   for (const o of plazaSmokeObstacles()) out.push(o);
   for (const o of plazaCafeObstacles()) out.push(o);
   return out;
@@ -238,15 +247,30 @@ function pileDiffSeatSuffix(pileId: number): string {
 }
 
 export type PlazaNearPrompt = {
-  kind: 'sit' | 'carry' | 'place';
+  kind: 'sit' | 'carry' | 'place' | 'shed';
   info: string;
   btn: string;
+  /** 按鈕線條圖示 class（預設椅子） */
+  icon?: string;
+  shedLoc?: string;
   pileId?: number;
   slot?: number;
 };
 
 export function plazaNearPrompt(): PlazaNearPrompt | null {
   if (!active || seated) return null;
+  if (nearShed) {
+    const name = shedName(nearShed);
+    if (carryNpcOk && myCarriedNpc()) return { kind: 'shed', info: `${name}　抱著人不能進去`, btn: '先放下再進去', icon: 'ic-lock', shedLoc: nearShed };
+    const open = deps?.shedUnlocked?.(nearShed) ?? true;
+    return {
+      kind: 'shed',
+      info: deps?.shedPromptInfo?.(nearShed) ?? name,
+      btn: open ? `進入 ${name}` : `解鎖 ${name}`,
+      icon: open ? 'ic-pin' : 'ic-lock',
+      shedLoc: nearShed,
+    };
+  }
   if (carryNpcOk && myCarriedNpc()) {
     if (!nearPlace) return null;
     const w = seatWishes.find(x => x.npcConnId === myCarriedNpc()!.connId);
@@ -264,6 +288,8 @@ export function plazaNearPrompt(): PlazaNearPrompt | null {
 }
 
 export function plazaNearSeat() { return nearPlace ?? near; }
+/** 目前站在哪間工寮門口（沒有則 null） */
+export function plazaNearShed() { return active && !seated ? nearShed : null; }
 /** 點擊射線打到哪一堆（給補蚵用） */
 export function plazaHitPile(raycaster: THREE.Raycaster): number | null {
   return view?.hitPile(raycaster) ?? null;
@@ -464,7 +490,7 @@ function zhErr(e?: string) { return plazaZhErr(e); }
 export function openPlaza(D: PlazaDeps) {
   if (active) return;
   active = true; seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false;
   D.audio();
   client = new PlazaClient();
   view = createPlazaWorldView(D.scene, D.bubbles, {
@@ -489,7 +515,7 @@ async function abortEnter(D: PlazaDeps, err?: string) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
   removeFlagBtn();
   D.onEnterFail?.(err);
 }
@@ -1328,11 +1354,14 @@ function markCarryUnsupported(err?: string) {
 /** 走動時更新附近空位／可抱的阿婆（資訊只走遊戲 #seatCard） */
 export function plazaUpdateNear(wx: number, wz: number) {
   if (!active || seated) {
-    near = null; nearCarry = null; nearPlace = null;
+    near = null; nearCarry = null; nearPlace = null; nearShed = null;
     view?.highlightNear(null);
     return null;
   }
   near = null; nearCarry = null; nearPlace = null;
+  // 工寮門口圓圈在碼頭上，離座位很遠：站進圈內就只提示進工寮
+  nearShed = shedDoorAt(wx, wz);
+  if (nearShed) { view?.highlightNear(null); return null; }
   if (carryNpcOk && myCarriedNpc()) {
     const n = nearestFreePlaceSeat(wx, wz, takenSet(true), SIT_DIST);
     nearPlace = n ? { pileId: n.pileId, slot: n.slot } : null;
@@ -1397,6 +1426,11 @@ async function plazaDoPlace(seat: PlazaSeatRef): Promise<boolean> {
 /** 嘗試坐附近空位（E／坐這裡）；靠近阿婆則抱起，抱著時改放下 */
 export async function plazaTrySit(): Promise<boolean> {
   if (!deps || !active || seated || sittingBusy) return false;
+  if (nearShed) {
+    if (carryNpcOk && myCarriedNpc()) { deps.toast('抱著人不能進工寮，先放下', '#ffb08a'); return false; }
+    deps.openShedDoor?.(nearShed);
+    return false;
+  }
   if (carryNpcOk && myCarriedNpc()) {
     const seat = nearPlace ?? (() => {
       const n = nearestFreePlaceSeat(deps!.getWalkXZ().x, deps!.getWalkXZ().z, takenSet(true), SIT_DIST);
@@ -1618,6 +1652,8 @@ export function tickPlaza(dt: number) {
   }
   tickPlazaTags(view, deps.camera(), dt);
   if (!seated) plazaUpdateNear(p.x, p.z);
+  else nearShed = null;
+  if (view) for (const d of SHED_DOORS) view.setShedDoorState(d.loc, { locked: !(deps.shedUnlocked?.(d.loc) ?? true), active: nearShed === d.loc });
   placeChatFab();
   if (plazaMapIsOpen()) refreshPlazaMap();
   if (!client?.connected) return;
@@ -1687,7 +1723,7 @@ export async function closePlaza(leaveSeat = true) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
   if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null, tag: myTag() });
 }
