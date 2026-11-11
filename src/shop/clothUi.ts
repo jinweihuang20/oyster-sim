@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import type { Save } from '../core';
 import { $ } from '../ui';
-import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, NONE_ID, isNoneId, defaultEquipId, stealHoldSeconds } from './shopEquip';
+import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, NONE_ID, isNoneId, defaultEquipId, stealHoldSeconds, walkSpeedMul } from './shopEquip';
 import { EQUIP_VIS, paintEquipCanvas } from './equipVisual';
 import { openClothTryPreview, closeClothTryPreview } from './tryPreview';
 import { hydrateEquipThumbs } from './equipThumb';
@@ -52,6 +52,8 @@ export const equipNow = (slot: Slot) => EQUIP.find(e => e.slot === slot && e.id 
 export const wornIds = () => SLOTS.map(([s]) => equipNow(s).id);
 export const setsOn = () => { const w = wornIds(); return SETS.filter(s => s.need.every(i => w.includes(i))); };
 export const slOn = (id: string) => wornIds().includes(id);
+/** 目前穿著的走路速度倍率（每幀讀，換裝立即生效） */
+export const walkSpeedNow = () => walkSpeedMul(wornIds());
 export function fxAll(): Required<Fx> {
   const r = { bowl: 0, keep: 0, speed: 1, pearl: 1, nag: 1, throw: 1, dmg: 1, luck: 0, steal: 0 };
   for (const f of [...SLOTS.map(([s]) => equipNow(s).fx), ...setsOn().map(s => s.fx)]) { r.bowl += f.bowl ?? 0; r.keep += f.keep ?? 0; r.luck += f.luck ?? 0; r.steal += f.steal ?? 0; r.speed *= f.speed ?? 1; r.pearl *= f.pearl ?? 1; r.nag *= f.nag ?? 1; r.throw *= f.throw ?? 1; r.dmg *= f.dmg ?? 1; }
@@ -356,6 +358,7 @@ export function eqStats(): string[] {
   if (f.speed < 0.9999) out.push(`翹殼指針|慢 ${pc(1 - f.speed)}%`);
   if (f.keep) out.push(`沒中保住連擊|${pc(f.keep)}%`);
   if (f.luck) out.push(`幸運|+${f.luck}`);
+  { const w = walkSpeedNow(); if (w > 1.0001) out.push(`走路速度|+${Math.round((w - 1) * 100)}%`); }
   if (f.steal > 0) out.push(`偷竊按住|廣場 ${stealHoldSeconds(f, 'plaza').toFixed(2)} 秒、工寮 ${stealHoldSeconds(f, 'yard').toFixed(2)} 秒`);
   return out;
 }

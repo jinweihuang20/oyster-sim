@@ -8,7 +8,7 @@ import {
   dressPlazaAma, dressPlazaAber, applyAmaAppearance,
 } from './amaLook';
 import {
-  makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
+  makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, plazaGaitRate, posePlazaJump,
   posePlazaSit, posePlazaStand, posePlazaSmokeSit, posePlazaCarried, posePlazaCarryHold, easeSmokePuff,
   clearPlazaSmokeCig, getPlazaSmokeCig, ensurePlazaSmokeCig,
   plazaJumpHeight, PLAZA_JUMP_DUR, posePlazaStallKeeper, applyPlazaBodyPose, type PlayerRig,
@@ -1894,7 +1894,7 @@ function hashPid(pid: string) {
           if (r.isNpc) {
             r.bob += Math.min(gaitSp, 1.6) * dt * 2.6;
           } else {
-            r.bob += Math.min(gaitSp, 3) * dt * 5;
+            r.bob += plazaGaitRate(gaitSp) * dt;
           }
           const swing = posePlazaWalkCycle(r.rig, r.bob, Math.max(0.2, r.isNpc ? walkAmp * 0.55 : Math.max(0.25, walkAmp)));
           // 走動一律輕微ㄑ字彎肘擺臂（勿切回直臂下垂）

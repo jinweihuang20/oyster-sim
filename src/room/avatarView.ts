@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
 import { pickAmaLook, amaShirtHex, dressPlazaAma, applyAmaAppearance } from '../plaza/amaLook';
 import {
-  makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
+  makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, plazaGaitRate, posePlazaJump,
   posePlazaSit, posePlazaStand, posePlazaCarried, posePlazaCarryHold, applyPlazaBodyPose, type PlayerRig,
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
@@ -26,6 +26,8 @@ type Remote = {
   lookYaw: number; tLookYaw: number;
   carriedBy: string;
   bob: number;
+  /** 平滑後的移動速度（m/s），給步頻用 */
+  gaitSp?: number;
 };
 
 export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) {
@@ -139,7 +141,7 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
     }
   }
 
-  function poseOf(r: Remote, t: number) {
+  function poseOf(r: Remote, t: number, dt: number) {
     const carried = !!r.carriedBy;
     if (carried) {
       posePlazaCarried(r.rig);
@@ -161,7 +163,8 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
       return;
     }
     if (r.moving) {
-      r.bob += 0.18;
+      // 步頻跟實際移動速度（穿分趾布鞋走得快時腿也跟著快，不會滑步）；舊值約 60fps×0.18 ≈ 2.2 m/s 的步頻
+      r.bob += plazaGaitRate(Math.max(2.2, r.gaitSp ?? 0)) * Math.min(dt, 0.1);
       posePlazaWalkCycle(r.rig, r.bob, 0.45);
       posePlazaWalkSwingArms(r.rig, r.bob);
     } else {
@@ -174,8 +177,10 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
     const t = performance.now() / 1000;
     for (const r of remotes.values()) {
       const k = Math.min(1, dt * 10);
+      const px = r.x, pz = r.z;
       r.x += (r.tx - r.x) * k;
       r.z += (r.tz - r.z) * k;
+      if (dt > 1e-4) { const v = Math.hypot(r.x - px, r.z - pz) / dt; r.gaitSp = (r.gaitSp ?? 0) + (v - (r.gaitSp ?? 0)) * Math.min(1, dt * 6); }
       let dy = r.tyaw - r.yaw;
       while (dy > Math.PI) dy -= Math.PI * 2;
       while (dy < -Math.PI) dy += Math.PI * 2;
@@ -185,7 +190,7 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
       r.rig.outer.position.set(r.x, sitY, r.z);
       r.rig.outer.rotation.y = r.yaw;
       r.rig.outer.visible = true;
-      poseOf(r, t);
+      poseOf(r, t, dt);
       const carrying = [...remotes.values()].some(o => o !== r && o.carriedBy && (o.carriedBy === r.pid || o.carriedBy === r.connId));
       if (carrying && !r.seated) posePlazaCarryHold(r.rig);
       if (r.rig.head) r.rig.head.rotation.y = r.lookYaw;

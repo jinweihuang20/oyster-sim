@@ -278,6 +278,15 @@ export function posePlazaHangArms(rig: PlayerRig, sit = false) {
 }
 
 /**
+ * 走路步頻（相位弧度／秒）：一般速度同舊值（≤3 m/s → 速度×5）；
+ * 穿加速裝備走更快時步頻只再慢慢加（步幅變大），到 8 m/s 封頂，不會腳轉成風扇也不會滑步。
+ */
+export function plazaGaitRate(sp: number): number {
+  const s = Math.max(0, sp);
+  return Math.min(s, 3) * 5 + Math.max(0, Math.min(s, 8) - 3) * 2.5;
+}
+
+/**
  * 廣場走路腿部：跨步＋膝蓋彎曲（避免筆直無膝）。
  * @param ph 相位（弧度）
  * @param amp 0..1 移動幅度

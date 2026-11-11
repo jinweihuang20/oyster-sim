@@ -28,7 +28,7 @@ import {
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
   renderShop, getShopNewIds,
-  initClothUi, eqOwned, setEquip, equipNow, wornIds, setsOn, slOn, fxAll, stealHoldSeconds,
+  initClothUi, eqOwned, setEquip, equipNow, wornIds, setsOn, slOn, fxAll, walkSpeedNow, stealHoldSeconds,
   migrateEquip, SCARED, applySleeve, sleeveGold, eqTex, eqSvg, figSvg,
   renderEquip, renderClothShop, shareOutfit, askSet, openEquip,
 } from './shop';
@@ -48,7 +48,7 @@ import { ROOM_ENABLED, bindRoom, openRoomCreate, openRoomJoin, closeRoom, isRoom
 import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
 import {
-  makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, posePlazaJump,
+  makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, plazaGaitRate, posePlazaJump,
   posePlazaSit, posePlazaStand, posePlazaSmokeSit, easeSmokePuff, placePlazaArmChain,
   clearPlazaSmokeCig, ensurePlazaSmokeCig, getPlazaSmokeCig, posePlazaCarryHold,
   plazaJumpHeight, PLAZA_JUMP_DUR, applyPlazaBodyPose as applyBodyPose, type PlayerRig,
@@ -2608,6 +2608,7 @@ btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, 
 initWalkSeat({
   $, on, COARSE, clamp,
   getState: () => state, getPhase: () => phase,
+  walkSpeedMul: walkSpeedNow,
   isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaNearSeat, plazaNearPrompt, plazaMySeat, seatPose,
   isRoomMode: () => isRoomActive(), roomSeated, roomStandWalk, roomWalkBodies, roomNearPrompt,
   setPlazaSeatPropsVisible, oyster, shellGeo, shellTopMat, shellTop, handRig, SEAT, BASIN, BOWL, getBowlR: () => BOWL_R,
@@ -4360,7 +4361,7 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     const walkRef = 2.4;
     const tgt = walkMotion.spd > 0.4 ? Math.min(0.75, walkMotion.spd / walkRef) : 0;
     walkMotion.bobW += (tgt - walkMotion.bobW) * (1 - Math.exp(-(tgt > walkMotion.bobW ? 14 : 10) * rdt));
-    if (walkMotion.spd > 0.4) walkMotion.bobPh += rdt * walkMotion.spd * (Math.PI / 0.85);
+    if (walkMotion.spd > 0.4) walkMotion.bobPh += rdt * Math.min(walkMotion.spd, 4.5) * (Math.PI / 0.85);
     const w = walkMotion.bobW * walkMotion.bobW, sy = Math.sin(walkMotion.bobPh), cy = Math.cos(walkMotion.bobPh);
     const ox = cy * 0.012 * w, oy = sy * 0.02 * w, oz = -Math.abs(sy) * 0.005 * w;
     const rs = Math.sin(yaw), rc = Math.cos(yaw);
@@ -4909,7 +4910,7 @@ function camTick(dt: number) {
   meSeatLegs.visible = !walking && !plazaMode; meLegL.visible = meLegR.visible = walking && !plazaMode;
   if (walking) {
     const sp = Math.hypot(walkPos.x - lastWalk.x, walkPos.z - lastWalk.z) / Math.max(dt, 1e-3); lastWalk.copy(walkPos); walkMovingT = sp > 0.3 ? performance.now() : walkMovingT;
-    walkPh += Math.min(sp, 3) * dt * 5;
+    walkPh += plazaGaitRate(sp) * dt;
     handRig.visible = false;
     if (plazaMode) {
       // 廣場：死鬥同款 avatar，腳底 y=0、頭高 ≈1.5；第三人稱鎖俯仰，避免遠端跟著點頭

@@ -24,6 +24,8 @@ export type WalkSeatDeps = {
   plazaNearSeat: () => { pileId: number; slot: number } | null;
   plazaNearPrompt?: () => { kind: 'sit' | 'carry' | 'place'; info: string; btn: string; pileId?: number; slot?: number } | null;
   isRoomMode?: () => boolean;
+  /** 裝備走路速度倍率（分趾布鞋等） */
+  walkSpeedMul?: () => number;
   roomSeated?: () => boolean;
   roomStandWalk?: () => void;
   roomWalkBodies?: () => [number, number, number, number][];
@@ -170,7 +172,7 @@ export function walkStep(dt: number) {
   let f = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - joy.y, r = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + joy.x;
   const l = Math.hypot(f, r); if (l > 1) { f /= l; r /= l; }
   const room = !!D.isRoomMode?.();
-  const moveSp = (D.isPlazaMode() ? 3.0 : room ? 2.0 : 1.7) * walkTune.mul;
+  const moveSp = (D.isPlazaMode() ? 3.0 : room ? 2.0 : 1.7) * walkTune.mul * (D.walkSpeedMul?.() ?? 1);
   walkMotion.spd = l * moveSp; walkMotion.strafe = r * moveSp;
   const yaw = D.getYaw();
   const prevX = walkPos.x, prevZ = walkPos.z;

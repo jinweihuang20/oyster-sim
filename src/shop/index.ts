@@ -7,7 +7,7 @@ export { ODD } from './oddities';
 export { PETS, defaultPetId, findPet, makeOysterBaby, type Pet, type PetFx } from './pets';
 export { renderPetThumb } from './petThumb';
 export { openPetPreview, closePetPreview } from './petPreview';
-export { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, stealHoldSeconds } from './shopEquip';
+export { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, stealHoldSeconds, WALK_SPEED_BONUS, walkSpeedMul } from './shopEquip';
 export {
   initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop,
 } from './meds';
@@ -21,7 +21,7 @@ export {
   type Knife, type Umb, type Bowl, type YardShopDeps,
 } from './yardShop';
 export {
-  initClothUi, eqOwned, setEquip, equipNow, wornIds, setsOn, slOn, fxAll,
+  initClothUi, eqOwned, setEquip, equipNow, wornIds, setsOn, slOn, fxAll, walkSpeedNow,
   migrateEquip, SCARED, applySleeve, sleeveGold, eqTex, eqSvg, figSvg,
   renderEquip, renderClothShop, shareOutfit, askSet, openEquip,
   type ClothUiDeps,
