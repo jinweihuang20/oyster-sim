@@ -778,7 +778,7 @@ function hashPid(pid: string) {
   function poseUmb(r: Remote) {
     if (!r?.rig?.upperR || !r.rig?.lowerR || !r.rig?.head) return;
     if (r.seated) poseSit(r); else poseStand(r);
-    placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.32, 0, 0.26, 0.28, -0.3, 0.24, 0.24, -0.55);
+    placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.26, 0.32, -0.3, 0.24, 0.28, -0.55);
     r.headWorkX = -0.08;
     hideHold(r);
   }
@@ -980,7 +980,7 @@ function hashPid(pid: string) {
   function poseThrow(r: Remote) {
     if (!r?.seated || !r.rig?.upperR || !r.rig?.lowerR || !r.rig?.head) return;
     poseSit(r);
-    placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.32, 0, 0.28, 0.22, -0.2, 0.3, 0.18, -0.42);
+    placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.28, 0.26, -0.2, 0.3, 0.22, -0.42);
     r.headWorkX = -0.12;
     hideHold(r);
   }
@@ -1213,26 +1213,26 @@ function hashPid(pid: string) {
         r.headWorkX = -0.04;
       } else if (ph === 'twist' || ph === 'pry') {
         // 左手握蚵、右手持刀撬
-        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.14, 0.2, -0.26, -0.08, 0.14, -0.4);
-        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.16, 0.18, -0.22, 0.02, 0.12, -0.38);
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.33, 0, -0.14, 0.26, -0.26, -0.08, 0.2, -0.4);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.16, 0.24, -0.22, 0.02, 0.18, -0.38);
         placeHold(r, 0.02, 0.12, -0.38, -0.08, 0.14, -0.4, true);
         r.headWorkX = 0.12;
       } else if (ph === 'seam') {
-        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.14, 0.2, -0.24, -0.08, 0.14, -0.38);
-        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.14, 0.18, -0.2, 0.0, 0.12, -0.36);
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.33, 0, -0.14, 0.26, -0.24, -0.08, 0.2, -0.38);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.14, 0.24, -0.2, 0.0, 0.18, -0.36);
         placeHold(r, 0.0, 0.12, -0.36, -0.08, 0.14, -0.38, true);
         r.headWorkX = 0.1;
       } else if (ph === 'grillplace' || ph === 'grillflip' || ph === 'grilltake') {
         // 烤蚵：伸手往烤網放／掀／取
-        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.12, 0.18, -0.32, -0.06, 0.12, -0.48);
-        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.12, 0.18, -0.28, 0.06, 0.12, -0.44);
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.33, 0, -0.12, 0.24, -0.32, -0.06, 0.18, -0.48);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.12, 0.24, -0.28, 0.06, 0.18, -0.44);
         placeHold(r, 0.0, 0.1, -0.46, -0.06, 0.12, -0.48, ph !== 'grilltake');
         r.knife.visible = false;
         r.headWorkX = 0.14;
       } else if (ph === 'grillcook') {
         // 等烤開：蚵在烤網上，雙手擱桌邊
-        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.28, 0, -0.2, 0.14, -0.18, -0.18, 0.08, -0.28);
-        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.28, 0, 0.2, 0.14, -0.18, 0.18, 0.08, -0.28);
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.33, 0, -0.2, 0.22, -0.18, -0.18, 0.16, -0.28);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.2, 0.22, -0.18, 0.18, 0.16, -0.28);
         r.knife.visible = false;
         r.oyster.visible = true;
         r.oyster.position.set(0, 0.02, -0.55);
@@ -1240,14 +1240,14 @@ function hashPid(pid: string) {
         r.headWorkX = 0.18;
       } else if (ph === 'aim' || ph === 'toss') {
         // 左手托肉／蚵往前，右手刀收一點
-        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.16, 0.22, -0.28, -0.1, 0.16, -0.44);
-        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.2, 0.22, -0.12, 0.18, 0.12, -0.28);
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.33, 0, -0.16, 0.28, -0.28, -0.1, 0.22, -0.44);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.2, 0.28, -0.12, 0.18, 0.18, -0.28);
         placeHold(r, 0.18, 0.12, -0.28, -0.1, 0.16, -0.44, true);
         r.headWorkX = -0.05;
       } else if (ph === 'throwaim') {
         // 準星瞄到人：左手高舉拿殼，全場可見要丟
-        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.32, 0, -0.24, 0.5, -0.16, -0.18, 0.64, -0.3);
-        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.16, 0.14, -0.08, 0.14, 0.06, -0.2);
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.33, 0, -0.24, 0.54, -0.16, -0.18, 0.68, -0.3);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.16, 0.2, -0.08, 0.14, 0.12, -0.2);
         r.knife.visible = false;
         r.oyster.visible = true;
         r.oyster.position.set(-0.18, 0.6, -0.32);
@@ -1255,20 +1255,20 @@ function hashPid(pid: string) {
         r.headWorkX = -0.16;
       } else if (ph === 'empty') {
         // 空手殼：右手持殼要丟
-        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.2, 0.22, -0.1, -0.18, 0.1, -0.22);
-        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.2, 0.24, -0.22, 0.16, 0.18, -0.4);
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.33, 0, -0.2, 0.28, -0.1, -0.18, 0.16, -0.22);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.2, 0.3, -0.22, 0.16, 0.24, -0.4);
         placeHold(r, 0.16, 0.18, -0.4, 0, 0, 0, false);
         r.oyster.visible = true;
         r.oyster.position.set(0.16, 0.2, -0.42);
         r.headWorkX = -0.08;
       } else if (ph === 'scoop' || ph === 'pick') {
-        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.18, 0.16, -0.22, -0.14, 0.08, -0.36);
-        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.18, 0.16, -0.18, 0.14, 0.08, -0.32);
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.33, 0, -0.18, 0.22, -0.22, -0.14, 0.14, -0.36);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.18, 0.22, -0.18, 0.14, 0.14, -0.32);
         placeHold(r, 0.14, 0.08, -0.32, 0, 0, 0, false);
         r.headWorkX = 0.08;
       } else if (ph === 'crab') {
-        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.3, 0, -0.12, 0.22, -0.2, -0.06, 0.18, -0.34);
-        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.3, 0, 0.12, 0.22, -0.2, 0.06, 0.18, -0.34);
+        placeArmChain(r.rig.upperL, r.rig.lowerL, -0.22, 0.33, 0, -0.12, 0.28, -0.2, -0.06, 0.24, -0.34);
+        placeArmChain(r.rig.upperR, r.rig.lowerR, 0.22, 0.33, 0, 0.12, 0.28, -0.2, 0.06, 0.24, -0.34);
         placeHold(r, 0.06, 0.18, -0.34, -0.06, 0.18, -0.34, true);
         r.headWorkX = 0.15;
       } else {

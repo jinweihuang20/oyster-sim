@@ -250,15 +250,26 @@ export function posePlazaHangArms(rig: PlayerRig, sit = false) {
   if (rig.shoulderR) rig.shoulderR.rotation.set(0, 0, 0);
   const hang = (upper: THREE.Group, lower: THREE.Group, side: number) => {
     const shx = side * 0.22, shy = 0.33, shz = 0;
-    const uFwd = sit ? 0.42 : 0.1;
-    const lFwd = sit ? 0.55 : 0.22;
-    const out = side * (sit ? 0.06 : 0.04);
+    if (sit) {
+      // 坐姿：手搭在大腿上，略往前
+      const out = side * 0.06;
+      const elbowX = shx + out;
+      const elbowY = shy - 0.22;
+      const elbowZ = shz - 0.42;
+      const wristX = elbowX + out * 0.5;
+      const wristY = elbowY - 0.16;
+      const wristZ = elbowZ - 0.13;
+      placePlazaArmChain(upper, lower, shx, shy, shz, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
+      return;
+    }
+    // 站姿：上臂鉛直、前臂略往前且靠近腿側，雙手自然垂放
+    const out = side * 0.015;
     const elbowX = shx + out;
-    const elbowY = shy - (sit ? 0.22 : 0.24);
-    const elbowZ = shz - uFwd;
-    const wristX = elbowX + out * 0.5;
-    const wristY = elbowY - (sit ? 0.16 : 0.2);
-    const wristZ = elbowZ - (lFwd - uFwd);
+    const elbowY = shy - 0.26;
+    const elbowZ = shz + 0.01;
+    const wristX = elbowX + out;
+    const wristY = elbowY - 0.24;
+    const wristZ = elbowZ - 0.02;
     placePlazaArmChain(upper, lower, shx, shy, shz, elbowX, elbowY, elbowZ, wristX, wristY, wristZ);
   };
   hang(rig.upperL, rig.lowerL, -1);
