@@ -114,18 +114,22 @@ export function makePlayerAvatar(
   const torso = new THREE.Group(); torso.position.set(0, 0.92, 0); root.add(torso);
   add(box(0.38, 0.48, 0.22), shirtM, [0, 0.12, 0], torso);
   add(box(0.4, 0.1, 0.24), pantsM, [0, -0.16, 0], torso);
-  add(box(0.12, 0.08, 0.12), skinM, [0, 0.4, 0], torso);
+  // 脖子：衫領（約 y0.36）到頭底之間
+  add(box(0.12, 0.06, 0.12), skinM, [0, 0.39, 0], torso);
 
-  const head = new THREE.Group(); head.position.set(0, 0.58, 0); torso.add(head);
+  const head = new THREE.Group(); head.position.set(0, 0.54, 0); torso.add(head);
   add(box(0.28, 0.28, 0.28), skinM, [0, 0, 0], head);
-  add(box(0.3, 0.12, 0.3), hairM, [0, 0.1, 0.01], head);
-  add(box(0.3, 0.18, 0.08), hairM, [0, 0.02, 0.12], head);
+  // 薄髮帽：只比頭大一點避免額前共面閃爍；瀏海停在眼睛上方
+  add(box(0.30, 0.088, 0.30), hairM, [0, 0.111, 0], head);
+  // 後腦勺髮塊：只覆蓋頭頂後半，前面（-Z）仍露臉
+  add(box(0.30, 0.10, 0.08), hairM, [0, 0.03, 0.12], head);
   for (const s of [-1, 1]) add(box(0.05, 0.05, 0.04), std(0x111111), [s * 0.07, 0.02, -0.14], head);
   add(box(0.1, 0.03, 0.03), std(0xa04040), [0, -0.08, -0.14], head);
   const hatG = new THREE.Group(); head.add(hatG);
 
-  const shoulderL = new THREE.Object3D(); shoulderL.position.set(-0.22, 0.3, 0); torso.add(shoulderL);
-  const shoulderR = new THREE.Object3D(); shoulderR.position.set(0.22, 0.3, 0); torso.add(shoulderR);
+  // 肩線略低於衫領頂
+  const shoulderL = new THREE.Object3D(); shoulderL.position.set(-0.22, 0.33, 0); torso.add(shoulderL);
+  const shoulderR = new THREE.Object3D(); shoulderR.position.set(0.22, 0.33, 0); torso.add(shoulderR);
 
   // 槍架：抵肩瞄準角度（槍口 -Z）
   const weaponMount = new THREE.Group();
@@ -245,7 +249,7 @@ export function posePlazaHangArms(rig: PlayerRig, sit = false) {
   rig.shoulderL.rotation.set(0, 0, 0);
   if (rig.shoulderR) rig.shoulderR.rotation.set(0, 0, 0);
   const hang = (upper: THREE.Group, lower: THREE.Group, side: number) => {
-    const shx = side * 0.22, shy = 0.30, shz = 0;
+    const shx = side * 0.22, shy = 0.33, shz = 0;
     const uFwd = sit ? 0.42 : 0.1;
     const lFwd = sit ? 0.55 : 0.22;
     const out = side * (sit ? 0.06 : 0.04);
@@ -358,7 +362,7 @@ export function posePlazaWalkSwingArms(rig: PlayerRig, swing: number) {
   const fwdL = -swing * amp;
   const fwdR = swing * amp;
   const hangSwing = (upper: THREE.Group, lower: THREE.Group, side: number, fwd: number) => {
-    const shx = side * 0.22, shy = 0.30, shz = 0;
+    const shx = side * 0.22, shy = 0.33, shz = 0;
     const out = side * 0.05;
     // 肘略低：上臂自然下垂再輕彎，避免誇張抬肘
     const elbowX = shx + out;
@@ -421,7 +425,7 @@ export function posePlazaStallKeeper(rig: PlayerRig, t: number, ph: number) {
   const cyc = (t + ph) % 12;
   const wave = cyc > 9 ? Math.sin(((cyc - 9) / 3) * Math.PI) : 0; // 0..1..0
   const work = (side: number, k: number) => {
-    const shx = side * 0.22, shy = 0.3;
+    const shx = side * 0.22, shy = 0.33;
     const a = t * 2.2 + ph + k;
     const elbowX = shx + side * 0.08, elbowY = shy - 0.2, elbowZ = -0.16;
     const wristX = side * 0.12 + Math.cos(a) * 0.05;
@@ -604,13 +608,13 @@ export function posePlazaSmokeSit(rig: PlayerRig, puffKOrOpts: number | SmokeSit
   // 左手：擱在左大腿（坐姿外側前方）
   placePlazaArmChain(
     rig.upperL, rig.lowerL,
-    -0.22, 0.30, 0,
+    -0.22, 0.33, 0,
     -0.30, 0.06, -0.12,
     -0.22, -0.08, -0.22,
   );
 
   const k = easeSmokePuff(puffK);
-  const rSh = [0.22, 0.30, 0] as const;
+  const rSh = [0.22, 0.33, 0] as const;
   // 休息：上臂貼身略前（約 25°），肘低靠肋／膝外
   const rEl0 = [0.30, 0.10, -0.12] as const;
   const rWr0 = [0.26, -0.02, -0.26] as const;
@@ -675,13 +679,13 @@ export function posePlazaCarried(rig: PlayerRig) {
   if (rig.head) { rig.head.rotation.x = 0.18; rig.head.rotation.y = 0.08; }
   placePlazaArmChain(
     rig.upperL, rig.lowerL,
-    -0.22, 0.30, 0,
+    -0.22, 0.33, 0,
     -0.16, 0.16, -0.16,
     -0.08, 0.10, -0.22,
   );
   placePlazaArmChain(
     rig.upperR, rig.lowerR,
-    0.22, 0.30, 0,
+    0.22, 0.33, 0,
     0.14, 0.14, -0.18,
     0.06, 0.08, -0.24,
   );
@@ -692,13 +696,13 @@ export function posePlazaCarryHold(rig: PlayerRig) {
   posePlazaHangArms(rig, false);
   placePlazaArmChain(
     rig.upperL, rig.lowerL,
-    -0.22, 0.30, 0,
+    -0.22, 0.33, 0,
     -0.16, 0.12, -0.20,
     -0.10, 0.06, -0.32,
   );
   placePlazaArmChain(
     rig.upperR, rig.lowerR,
-    0.22, 0.30, 0,
+    0.22, 0.33, 0,
     0.18, 0.10, -0.18,
     0.12, 0.04, -0.30,
   );

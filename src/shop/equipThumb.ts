@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { makePlayerAvatar, posePlazaHangArms, type PlayerRig } from '../dm/character';
+import { rebuildAvatarMerged, NO_MERGE } from '../dm/avatarMerge';
 import { makeMeshHelpers } from '../dm/mesh';
 import { applyOutfitToRig, type OutfitIds } from './equipVisual';
-import { EQUIP, type Slot } from './shopEquip';
+import { EQUIP, isNoneId, type Slot } from './shopEquip';
 
-/** 商店／衣櫃卡片的 3D 縮圖：共用一台離屏 renderer，依 id 快取 dataURL。 */
-const TW = 144;
-const TH = 120;
+/** 商店／衣櫃卡片的 3D 縮圖：共用一台離屏 renderer，依 id 快取 dataURL。只畫該件裝備本身。 */
+const TW = 160;
+const TH = 160;
 const cache = new Map<string, string>();
 let failed = false;
 let renderer: THREE.WebGLRenderer | null = null;
@@ -15,17 +16,19 @@ let camera: THREE.PerspectiveCamera | null = null;
 let rig: PlayerRig | null = null;
 const look = new THREE.Vector3();
 const tmp = new THREE.Vector3();
+const box = new THREE.Box3();
+const meshBox = new THREE.Box3();
 const queue: HTMLElement[] = [];
 let ticking = false;
 let io: IntersectionObserver | null = null;
 
-function baseOutfit(): OutfitIds {
+function baseOutfit(slot: Slot, id: string): OutfitIds {
   return {
-    head: 'hd_none',
-    hand: 'hn_none',
-    body: 'bd_basic',
-    legs: 'lg_basic',
-    feet: 'ft_none',
+    head: slot === 'head' ? id : 'hd_none',
+    hand: slot === 'hand' ? id : 'hn_none',
+    body: slot === 'body' ? id : 'bd_basic',
+    legs: slot === 'legs' ? id : 'lg_basic',
+    feet: slot === 'feet' ? id : 'ft_none',
   };
 }
 
@@ -62,6 +65,10 @@ function ensure(): boolean {
     const cam = new THREE.PerspectiveCamera(32, TW / TH, 0.05, 20);
     const { M, add } = makeMeshHelpers(sc, true);
     const av = makePlayerAvatar({ shirt: 0xc45c26, hair: 0x222222, pants: 0x2a2a40 }, M, add, true);
+    // 縮圖不需要合併網格，才好隱藏身體、只留下裝備
+    av.outer.userData[NO_MERGE] = true;
+    av.outer.traverse(o => { o.visible = true; });
+    rebuildAvatarMerged(av);
     sc.add(av.outer);
     renderer = gl;
     scene = sc;
@@ -74,53 +81,146 @@ function ensure(): boolean {
   }
 }
 
-function frameSlot(slot: Slot) {
-  if (!rig || !camera) return;
-  rig.outer.updateMatrixWorld(true);
-  let dist = 1.3;
-  let fov = 32;
-  let lift = 0.06;
-  if (slot === 'head') {
-    rig.head.getWorldPosition(look);
-    look.y += 0.05;
-    dist = 0.92;
-    fov = 34;
-    lift = 0.04;
-  } else if (slot === 'hand') {
-    rig.upperR.getWorldPosition(look);
-    rig.lowerR.getWorldPosition(tmp);
-    look.lerp(tmp, 0.55);
-    dist = 0.82;
-    fov = 36;
-    lift = 0.05;
-  } else if (slot === 'body') {
-    rig.torso.getWorldPosition(look);
-    look.y += 0.02;
-    dist = 1.52;
-    fov = 30;
-    lift = 0.04;
-  } else if (slot === 'legs') {
-    rig.legL.getWorldPosition(look);
-    rig.legR.getWorldPosition(tmp);
-    look.lerp(tmp, 0.5);
-    look.y -= 0.1;
-    dist = 1.4;
-    fov = 32;
-    lift = 0.04;
-  } else {
-    rig.shinL.getWorldPosition(look);
-    rig.shinR.getWorldPosition(tmp);
-    look.lerp(tmp, 0.5);
-    look.y -= 0.3;
-    dist = 0.88;
-    fov = 36;
-    lift = 0.2;
+function isMesh(o: THREE.Object3D): o is THREE.Mesh {
+  return (o as THREE.Mesh).isMesh === true;
+}
+
+function matOf(mesh: THREE.Mesh): THREE.Material[] {
+  return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+}
+
+function under(o: THREE.Object3D, roots: THREE.Object3D[]) {
+  let p: THREE.Object3D | null = o;
+  while (p) {
+    if (roots.includes(p)) return true;
+    p = p.parent;
   }
+  return false;
+}
+
+function hideObj(o?: THREE.Object3D | null) {
+  if (o) o.visible = false;
+}
+
+function hideByMats(root: THREE.Object3D | undefined, mats: THREE.Material[]) {
+  if (!root || !mats.length) return;
+  const set = new Set(mats);
+  root.traverse(o => {
+    if (!isMesh(o)) return;
+    if (matOf(o).some(m => set.has(m))) o.visible = false;
+  });
+}
+
+function hideMeshesExceptUnder(root: THREE.Object3D, keep: THREE.Object3D[]) {
+  const alive = keep.filter(Boolean);
+  root.traverse(o => {
+    if (!isMesh(o)) return;
+    if (alive.length && under(o, alive)) return;
+    o.visible = false;
+  });
+}
+
+function isolateSlot(slot: Slot, itemId: string) {
+  if (!rig) return;
+  rig.outer.traverse(o => { o.visible = true; });
+  hideObj(rig.weaponMount);
+  hideObj(rig.handL);
+  hideObj(rig.handR);
+
+  const bodyDet = rig.torso.userData.eqBodyDet as THREE.Object3D | undefined;
+  const bodyMats = rig.outfitMats.body;
+  const legMats = rig.outfitMats.legs;
+  const feetMats = rig.outfitMats.feet;
+
+  if (slot === 'head') {
+    hideMeshesExceptUnder(rig.outer, rig.hatG ? [rig.hatG] : []);
+    return;
+  }
+
+  if (slot === 'body') {
+    const keep = bodyDet ? [bodyDet] : [];
+    // 花襯衫短袖掛在上臂，縮圖要一起拍
+    if (itemId === 'bd_hawaii') {
+      if (rig.upperL) keep.push(rig.upperL);
+      if (rig.upperR) keep.push(rig.upperR);
+    }
+    const bikini = itemId === 'bd_bikini';
+    const limb = [rig.head, rig.upperL, rig.lowerL, rig.upperR, rig.lowerR, rig.legL, rig.legR].filter(Boolean) as THREE.Object3D[];
+    rig.outer.traverse(o => {
+      if (!isMesh(o)) return;
+      if (under(o, keep)) return;
+      if (under(o, limb)) { o.visible = false; return; }
+      if (!bikini && matOf(o).some(m => bodyMats.includes(m as THREE.MeshStandardMaterial))) return;
+      o.visible = false;
+    });
+    return;
+  }
+
+  if (slot === 'hand') {
+    hideMeshesExceptUnder(rig.outer, [rig.upperR, rig.lowerR].filter(Boolean));
+    return;
+  }
+
+  if (slot === 'legs') {
+    const keep = [rig.legL, rig.legR].filter(Boolean);
+    const hipHost = [rig.torso];
+    const headHost = [rig.head];
+    rig.outer.traverse(o => {
+      if (!isMesh(o)) return;
+      if (under(o, keep)) return;
+      if (matOf(o).some(m => legMats.includes(m as THREE.MeshStandardMaterial)) && under(o, hipHost) && !under(o, headHost)) return;
+      o.visible = false;
+    });
+    hideByMats(rig.shinL, feetMats);
+    hideByMats(rig.shinR, feetMats);
+    return;
+  }
+
+  // 鞋子只拍右腳，比較大、也比較看得清楚
+  hideMeshesExceptUnder(rig.outer, rig.shinR ? [rig.shinR] : []);
+  hideByMats(rig.shinR, legMats);
+}
+
+function visibleWorldBox(root: THREE.Object3D, out: THREE.Box3) {
+  out.makeEmpty();
+  root.updateMatrixWorld(true);
+  root.traverse(o => {
+    if (!isMesh(o) || !o.geometry) return;
+    let p: THREE.Object3D | null = o;
+    while (p) {
+      if (!p.visible) return;
+      p = p.parent;
+    }
+    o.geometry.computeBoundingBox();
+    if (!o.geometry.boundingBox || o.geometry.boundingBox.isEmpty()) return;
+    meshBox.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
+    out.union(meshBox);
+  });
+  return out;
+}
+
+function frameVisible(slot: Slot) {
+  if (!rig || !camera) return;
+  visibleWorldBox(rig.outer, box);
+  if (box.isEmpty()) {
+    camera.position.set(0.28, 1.1, 1.6);
+    camera.lookAt(0, 1.0, 0);
+    camera.updateProjectionMatrix();
+    return;
+  }
+  box.getCenter(look);
+  box.getSize(tmp);
+  const maxDim = Math.max(tmp.x, tmp.y, tmp.z, 0.08);
+  const fov = slot === 'feet' ? 32 : 34;
   camera.fov = fov;
   camera.aspect = TW / TH;
-  camera.near = 0.05;
+  camera.near = 0.08;
   camera.far = 20;
-  camera.position.set(look.x + 0.22, look.y + lift, look.z + dist);
+  const pad = slot === 'feet' || slot === 'head' ? 1.28 : 1.36;
+  const dist = (maxDim * 0.5 * pad) / Math.tan((fov * Math.PI / 180) / 2);
+  if (slot === 'feet') camera.position.set(look.x + dist * 0.18, look.y + dist * 0.78, look.z + dist * 0.66);
+  else if (slot === 'head') camera.position.set(look.x + dist * 0.2, look.y + dist * 0.28, look.z + dist * 0.96);
+  else camera.position.set(look.x + dist * 0.32, look.y + dist * 0.14, look.z + dist * 0.96);
   camera.lookAt(look);
   camera.updateProjectionMatrix();
 }
@@ -128,16 +228,16 @@ function frameSlot(slot: Slot) {
 function renderThumb(id: string): string | null {
   const hit = cache.get(id);
   if (hit) return hit;
+  if (isNoneId(id)) return null;
   if (!ensure() || !renderer || !rig || !scene || !camera) return null;
   const item = EQUIP.find(e => e.id === id);
   if (!item) return null;
-  const outfit = baseOutfit();
-  outfit[item.slot] = item.id;
-  applyOutfitToRig(rig, outfit);
+  applyOutfitToRig(rig, baseOutfit(item.slot, item.id));
   posePlazaHangArms(rig);
   rig.outer.position.set(0, 0, 0);
-  rig.outer.rotation.set(0, Math.PI + 0.38, 0);
-  frameSlot(item.slot);
+  rig.outer.rotation.set(0, Math.PI + 0.42, 0);
+  isolateSlot(item.slot, item.id);
+  frameVisible(item.slot);
   renderer.render(scene, camera);
   const url = renderer.domElement.toDataURL('image/png');
   cache.set(id, url);

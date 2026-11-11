@@ -36,7 +36,7 @@ function frameCamera(aspect: number) {
   camera.aspect = Math.max(0.3, aspect);
   // 對準略高讓人偏下靠陰影；略拉遠避免腳被裁切
   camera.position.set(0, 1.0, 3.75);
-  camera.near = 0.05;
+  camera.near = 0.4;
   camera.far = 40;
   camera.lookAt(0, 1.02, 0);
   camera.updateProjectionMatrix();
@@ -73,7 +73,7 @@ function ensure() {
   if (renderer && scene && camera && rig) return;
   disposePreview();
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(30, 160 / 300, 0.05, 40);
+  camera = new THREE.PerspectiveCamera(30, 160 / 300, 0.4, 40);
   frameCamera(160 / 300);
   scene.add(new THREE.AmbientLight(0xfff0e0, 0.6));
   scene.add(new THREE.HemisphereLight(0xfff5e8, 0x3a5568, 1));
@@ -144,16 +144,6 @@ function updateGuideDom() {
     if (!p) continue;
     const hit = stage.querySelector<HTMLElement>(`.eqHit[data-slot="${s}"]`);
     if (hit) { hit.style.left = `${p.x}%`; hit.style.top = `${p.y}%`; }
-    const line = stage.querySelector(`.eqLines line[data-slot="${s}"]`);
-    const circ = stage.querySelector(`.eqLines circle[data-slot="${s}"]`);
-    if (line) {
-      line.setAttribute('x2', p.x.toFixed(2));
-      line.setAttribute('y2', p.y.toFixed(2));
-    }
-    if (circ) {
-      circ.setAttribute('cx', p.x.toFixed(2));
-      circ.setAttribute('cy', p.y.toFixed(2));
-    }
   }
 }
 
@@ -204,4 +194,49 @@ export function refreshEqPreview(outfit: OutfitIds) {
 export function stopEqPreview() {
   if (raf) cancelAnimationFrame(raf);
   raf = 0;
+}
+
+/** 離屏畫出與裝備預覽相同構圖的角色（透明底，不含格子）。 */
+export function snapshotEqPreview(outfit: OutfitIds, w: number, h: number): HTMLCanvasElement | null {
+  ensure();
+  if (!scene || !camera || !rig) return null;
+  applyOutfitToRig(rig, outfit);
+  posePlazaHangArms(rig);
+  placeRig(YAW0);
+  const restoreCam = () => {
+    if (hostEl && hostEl.clientWidth > 2) frameCamera(hostEl.clientWidth / hostEl.clientHeight);
+  };
+  const blit = (src: HTMLCanvasElement) => {
+    const out = document.createElement('canvas');
+    out.width = w;
+    out.height = h;
+    out.getContext('2d')!.drawImage(src, 0, 0, w, h);
+    return out;
+  };
+  try {
+    const snap = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true, powerPreference: 'low-power' });
+    snap.setClearColor(0x000000, 0);
+    snap.setPixelRatio(1);
+    snap.setSize(w, h, false);
+    frameCamera(w / h);
+    snap.render(scene, camera);
+    const out = blit(snap.domElement);
+    snap.dispose();
+    snap.domElement.remove();
+    restoreCam();
+    return out;
+  } catch {
+    if (!renderer) { restoreCam(); return null; }
+    frameCamera(w / h);
+    renderer.setPixelRatio(1);
+    renderer.setSize(w, h, false);
+    renderer.render(scene, camera);
+    const out = blit(renderer.domElement);
+    if (hostEl && hostEl.clientWidth > 2) {
+      renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.25));
+      renderer.setSize(hostEl.clientWidth, hostEl.clientHeight, false);
+    }
+    restoreCam();
+    return out;
+  }
 }

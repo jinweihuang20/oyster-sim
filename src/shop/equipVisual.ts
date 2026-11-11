@@ -47,6 +47,14 @@ export const EQUIP_VIS: EquipVis[] = [
   { slot: 'feet', id: 'ft_boots', base: '#ffd21a', pat: 'plain' },
   { slot: 'feet', id: 'ft_work', base: '#6a4a2a', pat: 'plain' },
   { slot: 'feet', id: 'ft_gold', base: '#e8b830', pat: 'plain' },
+  { slot: 'head', id: 'hd_straw', base: '#d2a85a', pat: 'plain' },
+  { slot: 'head', id: 'hd_purple', base: '#6a2a78', pat: 'flower' },
+  { slot: 'hand', id: 'sl_redflower', base: '#c4282e', pat: 'flower' },
+  { slot: 'body', id: 'bd_singlet', base: '#f4f0e8', pat: 'plain' },
+  { slot: 'body', id: 'bd_hawaii', base: '#1e8a7a', pat: 'flower' },
+  { slot: 'legs', id: 'lg_rolled', base: '#6a6248', pat: 'plain' },
+  { slot: 'feet', id: 'ft_greenboots', base: '#2f8a3a', pat: 'plain' },
+  { slot: 'feet', id: 'ft_redslipper', base: '#d4302a', pat: 'plain' },
   { slot: 'head', id: 'hd_none', base: '#e8bc98', pat: 'plain' },
   { slot: 'hand', id: 'hn_none', base: '#e8bc98', pat: 'plain' },
   { slot: 'body', id: 'bd_none', base: '#e8bc98', pat: 'plain' },
@@ -111,6 +119,12 @@ const REPEAT: Record<string, [number, number]> = {
   bd_vest: [1, 1],
   bd_bikini: [1, 1],
   bd_none: [1, 1],
+  hd_purple: [2, 2],
+  sl_redflower: [2, 2],
+  bd_hawaii: [2, 3],
+  hd_straw: [1, 2],
+  bd_singlet: [1, 2],
+  lg_rolled: [1, 3],
 };
 
 function wrapDot(g: CanvasRenderingContext2D, x: number, y: number, r: number, col: string, W: number, H: number) {
@@ -146,6 +160,66 @@ function drawFloral(g: CanvasRenderingContext2D, base: string, W: number, H: num
   for (let i = 0; i < 12; i++) {
     const x = (i * 53 + 8) % W, y = (i * 41 + 30) % H;
     g.beginPath(); g.ellipse(x, y, 3.2, 1.4, i * 0.7, 0, 7); g.fill();
+  }
+}
+
+function drawPurpleFloral(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#6a2a78'; g.fillRect(0, 0, W, H);
+  const petals = ['#e8b8e0', '#f2d4f0', '#fff0c8'];
+  const centers = ['#f0d060', '#c04070', '#ffe8a0'];
+  for (let i = 0; i < 16; i++) {
+    const x = (i * 47 + 18) % W;
+    const y = (i * 71 + 22) % H;
+    const s = 4.4 + (i % 3) * 1.2;
+    drawFlower(g, x, y, s, petals[i % 3], centers[i % 3], W, H);
+  }
+}
+
+function drawBigRedFloral(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#c4282e'; g.fillRect(0, 0, W, H);
+  const petals = ['#fff3c8', '#ffe0a0', '#fff8e8'];
+  const centers = ['#2f7a38', '#f0d020'];
+  for (let i = 0; i < 10; i++) {
+    const x = (i * 61 + 22) % W;
+    const y = (i * 53 + 18) % H;
+    drawFlower(g, x, y, 7.5 + (i % 2) * 1.8, petals[i % 3], centers[i % 2], W, H);
+  }
+  g.fillStyle = 'rgba(40,110,40,.5)';
+  for (let i = 0; i < 8; i++) {
+    const x = (i * 53 + 8) % W, y = (i * 41 + 30) % H;
+    g.beginPath(); g.ellipse(x, y, 4.2, 1.8, i * 0.7, 0, 7); g.fill();
+  }
+}
+
+function drawHawaiiFloral(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#1e8a7a'; g.fillRect(0, 0, W, H);
+  const petals = ['#e85040', '#f0c030', '#f078a0', '#fff3c8'];
+  const centers = ['#f0d060', '#c04040', '#ffe8a0'];
+  for (let i = 0; i < 12; i++) {
+    const x = (i * 53 + 16) % W;
+    const y = (i * 67 + 20) % H;
+    drawFlower(g, x, y, 6.2 + (i % 3) * 1.6, petals[i % 4], centers[i % 3], W, H);
+  }
+  g.fillStyle = '#2a6a38';
+  for (let i = 0; i < 10; i++) {
+    const x = (i * 49 + 10) % W, y = (i * 37 + 24) % H;
+    g.beginPath(); g.ellipse(x, y, 5.2, 2.1, i * 0.55, 0, 7); g.fill();
+  }
+}
+
+function drawStrawWeave(g: CanvasRenderingContext2D, W: number, H: number) {
+  g.fillStyle = '#d2a85a'; g.fillRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 8) {
+    g.fillStyle = y % 16 === 0 ? '#c49848' : '#e0bc70';
+    g.fillRect(0, y, W, 5);
+    g.fillStyle = '#8a5a24';
+    g.fillRect(0, y + 5, W, 1);
+  }
+  g.strokeStyle = 'rgba(90,55,20,.4)';
+  g.lineWidth = 1;
+  for (let x = 0; x < W; x += 10) {
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 14, H); g.stroke();
+    g.beginPath(); g.moveTo(x + 14, 0); g.lineTo(x, H); g.stroke();
   }
 }
 
@@ -352,8 +426,16 @@ export function paintEquipCanvas(g: CanvasRenderingContext2D, e: EquipVis, W: nu
     case 'sl_flower':
     case 'lg_flower':
       drawFloral(g, e.base, W, H); return;
+    case 'hd_purple':
+      drawPurpleFloral(g, W, H); return;
+    case 'sl_redflower':
+      drawBigRedFloral(g, W, H); return;
+    case 'bd_hawaii':
+      drawHawaiiFloral(g, W, H); return;
     case 'hd_hat':
       drawBamboo(g, W, H); return;
+    case 'hd_straw':
+      drawStrawWeave(g, W, H); return;
     case 'sl_rain':
     case 'bd_rain':
     case 'lg_rain':
@@ -384,6 +466,10 @@ export function paintEquipCanvas(g: CanvasRenderingContext2D, e: EquipVis, W: nu
       drawWornTee(g, W, H); return;
     case 'lg_basic':
       drawWorkPants(g, W, H); return;
+    case 'lg_rolled':
+      drawPlainShade(g, e.base, W, H); return;
+    case 'bd_singlet':
+      drawPlainShade(g, e.base, W, H); return;
     case 'bd_boss':
       drawBoss(g, W, H); return;
     case 'ft_work':
@@ -395,6 +481,8 @@ export function paintEquipCanvas(g: CanvasRenderingContext2D, e: EquipVis, W: nu
     case 'ft_basic':
     case 'ft_boots':
     case 'ft_gold':
+    case 'ft_greenboots':
+    case 'ft_redslipper':
       drawPlainShade(g, e.base, W, H); return;
     default:
       drawPlainShade(g, e.base, W, H);
@@ -461,12 +549,15 @@ function paintFeet(mats: NonNullable<PlayerRig['outfitMats']>, feet: EquipVis) {
   } else if (feet.id === 'ft_basic') {
     paintSolid(shoe, '#f2f2ee');
     paintSolid(sole, '#e4dfd4');
+  } else if (feet.id === 'ft_redslipper') {
+    paintSolid(shoe, '#e85a4a');
+    paintSolid(sole, '#a82820');
   } else if (feet.id === 'ft_gold') {
     paintSolid(shoe, '#e8c040', { metal: 0.45, rough: 0.35 });
     paintSolid(sole, '#c9a227', { metal: 0.3, rough: 0.45 });
-  } else if (feet.id === 'ft_boots') {
+  } else if (feet.id === 'ft_boots' || feet.id === 'ft_greenboots') {
     paintMat(shoe, feet);
-    paintSolid(sole, '#c49212');
+    paintSolid(sole, feet.id === 'ft_greenboots' ? '#1a4a20' : '#c49212');
   } else if (feet.id === 'ft_work') {
     paintMat(shoe, feet);
     paintSolid(sole, '#2a1a10');
@@ -516,6 +607,7 @@ function ensureDet(parent: THREE.Object3D, key: string): THREE.Group {
 const DET = {
   body: 'eqBodyDet',
   sleeve: 'eqSleeveDet',
+  upper: 'eqUpperDet',
   leg: 'eqLegDet',
   shin: 'eqShinDet',
 } as const;
@@ -526,6 +618,8 @@ export function clearOutfitDetails(rig: PlayerRig) {
     [rig.torso, DET.body],
     [rig.lowerL, DET.sleeve],
     [rig.lowerR, DET.sleeve],
+    [rig.upperL, DET.upper],
+    [rig.upperR, DET.upper],
     [rig.legL, DET.leg],
     [rig.legR, DET.leg],
     [rig.shinL, DET.shin],
@@ -584,6 +678,13 @@ function buildHat(hat: THREE.Group, head: EquipVis) {
     addH(G('douli-band', () => rcyl(0.15, 0.15, 0.028, 12)), solid(0x5a4030, 'hat-band'), [0, 0.148, 0]);
     addH(G('cord', () => rbox(0.012, 0.18, 0.012)), cord, [-0.10, 0.04, -0.06], [0.15, 0, 0.32]);
     addH(G('cord', () => rbox(0.012, 0.18, 0.012)), cord, [0.10, 0.04, -0.06], [0.15, 0, -0.32]);
+  } else if (head.id === 'hd_straw') {
+    const straw = solid(col, 'straw-hat', { map: makeEqTexture(head), roughness: 0.9 });
+    const strawD = solid(dark, 'straw-hatD', { roughness: 0.92 });
+    const band = solid(0x5a3a18, 'straw-band', { roughness: 0.88 });
+    addH(G('straw-brim', () => rcyl(0.48, 0.46, 0.018, 16)), straw, [0, 0.128, 0]);
+    addH(G('straw-crown', () => crease(new THREE.ConeGeometry(0.20, 0.10, 12))), strawD, [0, 0.188, 0]);
+    addH(G('straw-band', () => rcyl(0.18, 0.18, 0.032, 12)), band, [0, 0.142, 0]);
   } else if (head.id === 'hd_fisher') {
     const navy = solid(col, 'fish-navy', { roughness: 0.72 });
     const navyD = solid(dark, 'fish-navyD', { roughness: 0.74 });
@@ -623,8 +724,8 @@ function buildHat(hat: THREE.Group, head: EquipVis) {
     addH(G('crown-tassel', () => rcyl(0.012, 0.008, 0.15, 6)), red, [0.17, 0.055, 0]);
   } else {
     // 花布頭巾：第一個小孩是頂蓋，阿婆會把它 Z 向縮小以免蓋住髮髻
-    addH(G('scarf-top', () => rbox(0.34, 0.045, 0.28)), flowerM, [0, 0.155, 0.0]);
-    addH(G('scarf-front', () => rbox(0.30, 0.055, 0.055)), flowerM, [0, 0.105, -0.132]);
+    addH(G('scarf-top', () => rbox(0.34, 0.045, 0.32)), flowerM, [0, 0.158, 0.0]);
+    addH(G('scarf-front', () => rbox(0.30, 0.055, 0.055)), flowerM, [0, 0.105, -0.148]);
     addH(G('scarf-side', () => rbox(0.055, 0.065, 0.22)), flowerM, [-0.15, 0.12, -0.02]);
     addH(G('scarf-side', () => rbox(0.055, 0.065, 0.22)), flowerM, [0.15, 0.12, -0.02]);
     const knot = solid(dark, 'scarf-knot', { map: makeEqTexture(head), roughness: 0.8 });
@@ -704,6 +805,26 @@ function buildBodyDetails(rig: PlayerRig, body: EquipVis) {
     lift(add(g, G('bik-tie', () => rbox(0.06, 0.045, 0.045)), flor, [0.235, -0.16, 0]));
     lift(add(g, G('bik-tie2', () => rbox(0.028, 0.07, 0.024)), white, [-0.26, -0.185, 0]));
     lift(add(g, G('bik-tie2', () => rbox(0.028, 0.07, 0.024)), white, [0.26, -0.185, 0]));
+  } else if (body.id === 'bd_singlet') {
+    const cream = solid(0xf2efe8, 'sing-neck', { roughness: 0.88 });
+    const bind = solid(0xe4e0d8, 'sing-bind', { roughness: 0.86 });
+    add(g, G('sing-neck', () => rcyl(0.11, 0.12, 0.036, 10)), cream, [0, 0.35, 0]);
+    add(g, G('sing-hem', () => rbox(0.39, 0.02, 0.23)), solid(0xd8d4cc, 'sing-hem', { roughness: 0.88 }), [0, -0.112, 0]);
+    add(g, G('sing-arm', () => rbox(0.03, 0.16, 0.20)), bind, [-0.19, 0.22, 0]);
+    add(g, G('sing-arm', () => rbox(0.03, 0.16, 0.20)), bind, [0.19, 0.22, 0]);
+  } else if (body.id === 'bd_hawaii') {
+    add(g, G('haw-col', () => rbox(0.12, 0.08, 0.075)), texM, [-0.08, 0.345, -0.08], [0.22, 0.18, 0.28]);
+    add(g, G('haw-col', () => rbox(0.12, 0.08, 0.075)), texM, [0.08, 0.345, -0.08], [0.22, -0.18, -0.28]);
+    const btn = G('haw-btn', () => rcyl(0.012, 0.012, 0.01, 6));
+    const btnM = solid(0xf2e8c8, 'haw-btn', { roughness: 0.7 });
+    for (const y of [0.26, 0.14, 0.02, -0.08]) add(g, btn, btnM, [0, y, -0.122]);
+    const cuffM = solid(new THREE.Color(body.base).multiplyScalar(0.78).getHex(), 'haw-cuff', { roughness: 0.8 });
+    for (const arm of [rig.upperL, rig.upperR]) {
+      if (!arm) continue;
+      const ug = ensureDet(arm, DET.upper);
+      add(ug, G('haw-slv', () => rbox(0.125, 0.16, 0.125)), texM, [0, 0.02, 0]);
+      add(ug, G('haw-cuff', () => rcyl(0.07, 0.068, 0.028, 8)), cuffM, [0, 0.11, 0]);
+    }
   } else if (body.id === 'bd_none') {
     // 衣服不穿：膚色軀幹上的 X 字胸貼（沿用原本裸體外觀）
     const tape = solid(0x2a2a2a, 'nude-x', { roughness: 0.88, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
@@ -763,6 +884,11 @@ function buildLegDetails(rig: PlayerRig, legs: EquipVis) {
     if (legs.id === 'lg_rain') {
       add(g, G('rp-ref', () => rbox(0.14, 0.028, 0.14)), SM('rp-ref', 0xe8e6d8, { roughness: 0.4 }), [0, -0.08, 0]);
       add(g, G('rp-cuff', () => rcyl(0.075, 0.07, 0.04, 8)), SM('rp-cuff', 0xd4a010, { roughness: 0.8 }), [0, -0.275, 0]);
+    } else if (legs.id === 'lg_rolled') {
+      const rollM = SM('roll-cuff', new THREE.Color(legs.base).multiplyScalar(0.82).getHex(), { roughness: 0.84 });
+      const skinM = SM('roll-skin', 0xe8bc98, { roughness: 0.78 });
+      add(g, G('roll-cuff', () => rcyl(0.092, 0.092, 0.06, 8)), rollM, [0, -0.08, 0]);
+      add(g, G('roll-skin', () => rcyl(0.078, 0.072, 0.22, 8)), skinM, [0, -0.22, 0]);
     }
   }
 }
@@ -772,8 +898,8 @@ function buildFeetDetails(rig: PlayerRig, feet: EquipVis) {
     if (!shin) continue;
     const g = shin.userData[DET.shin] as THREE.Group | undefined;
     const host = g ?? ensureDet(shin, DET.shin);
-    if (feet.id === 'ft_basic' || feet.id === 'ft_gold') {
-      const strapC = feet.id === 'ft_gold' ? 0xe8b830 : 0x2a5ab0;
+    if (feet.id === 'ft_basic' || feet.id === 'ft_gold' || feet.id === 'ft_redslipper') {
+      const strapC = feet.id === 'ft_gold' ? 0xe8b830 : feet.id === 'ft_redslipper' ? 0xc82028 : 0x2a5ab0;
       const strap = SM(`slip-${feet.id}`, strapC, {
         roughness: feet.id === 'ft_gold' ? 0.35 : 0.7,
         metalness: feet.id === 'ft_gold' ? 0.45 : 0.04,
@@ -784,9 +910,9 @@ function buildFeetDetails(rig: PlayerRig, feet: EquipVis) {
       if (feet.id === 'ft_gold') {
         add(host, G('slip-gem', () => rcyl(0.016, 0.016, 0.012, 8)), SM('slip-gem', 0xfff0b0, { metalness: 0.6, roughness: 0.28 }), [0, -0.252, -0.10]);
       }
-    } else if (feet.id === 'ft_boots') {
-      const yel = SM('boot-yel', 0xffffff, { map: makeEqTexture(feet), roughness: 0.72 });
-      const yelD = SM('boot-yelD', 0xd4a010, { roughness: 0.75 });
+    } else if (feet.id === 'ft_boots' || feet.id === 'ft_greenboots') {
+      const yel = SM(`boot-${feet.id}`, 0xffffff, { map: makeEqTexture(feet), roughness: 0.72 });
+      const yelD = SM(`bootD-${feet.id}`, feet.id === 'ft_greenboots' ? 0x1a5a28 : 0xd4a010, { roughness: 0.75 });
       // 小腿是 0.13 寬的方柱，對角半徑約 0.092；舊筒徑 0.08～0.085 會讓膚色邊角穿出鞋面
       const cover = (m: THREE.Mesh) => { m.renderOrder = 1; return m; };
       cover(add(host, G('rboot-shaft2', () => rcyl(0.105, 0.11, 0.20, 10)), yel, [0, -0.21, -0.02]));
@@ -831,6 +957,7 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   const feet = BY_ID.get(o.feet)!;
   const SKIN_HEX = '#e8bc98';
   const shirtless = body.id === 'bd_bikini' || body.id === 'bd_none';
+  const sleeveless = body.id === 'bd_singlet';
   if (body.id === 'bd_bikini') {
     for (const m of mats.body) paintSolid(m, SKIN_HEX);
     for (const m of mats.legs) paintSolid(m, SKIN_HEX);
@@ -843,8 +970,10 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
     if (legs.id === 'lg_none') for (const m of mats.legs) paintSolid(m, SKIN_HEX);
     else for (const m of mats.legs) paintMat(m, legs);
   }
-  const bareArms = hand.id === 'hn_none' || (shirtless && hand.id === 'hn_basic');
-  if (bareArms) {
+  const bareArms = hand.id === 'hn_none' || ((shirtless || sleeveless) && hand.id === 'hn_basic');
+  if (body.id === 'bd_hawaii') {
+    for (const m of mats.sleeve) paintMat(m, body);
+  } else if (bareArms) {
     for (const m of mats.sleeve) paintSolid(m, SKIN_HEX);
     for (const arm of [rig.lowerL, rig.lowerR]) if (arm) ensureDet(arm, DET.sleeve);
   } else {
@@ -858,6 +987,9 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   }
   if (rig.hatG) buildHat(rig.hatG, head);
   buildBodyDetails(rig, body);
+  if (body.id !== 'bd_hawaii') {
+    for (const arm of [rig.upperL, rig.upperR]) if (arm) ensureDet(arm, DET.upper);
+  }
   if (!bareArms) buildSleeveDetails(rig, hand);
   if (body.id === 'bd_bikini') {
     // 比基尼會把腿畫成膚色並自帶下身，清掉原本褲袋以免浮在皮膚上

@@ -2651,14 +2651,14 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
     : `<b><i class="ic ic-pin"></i> 上工地點：${cl!.n} ×${cl!.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}</small>`;
   const pzN = plazaOnlineN;
   const pzLive = pzN != null && pzN > 0;
-  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}${pzLive ? ' live' : ''}" data-loc="plaza"><span class="pzTag">多人</span><span class="ln">🦪 蚵仔廣場</span><span class="lm">${pzN != null ? `<i class="pzDot" aria-hidden="true"></i>${pzN} 人在線` : '連線中…'}</span><small>${plazaCur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${plazaCountLabel()}</small></button>`;
+  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}${pzLive ? ' live' : ''}" data-loc="plaza"><span class="pzTag">多人</span><span class="ln">🦪 蚵仔廣場</span><span class="lm">${pzN != null ? `<i class="pzDot" aria-hidden="true"></i>${pzN} 人在線` : '連線中…'}</span><small>點一下選這裡</small><small class="ld">${plazaCountLabel()}</small></button>`;
   const roomCard = ROOM_ENABLED
     ? `<div class="loc locRoom"><span class="pzTag">好友</span><span class="ln">好友房</span><small class="ld">開一間房間，和朋友在同一個場景剝蚵</small><span class="rmBtns"><button type="button" data-room="create">開房間</button><button type="button" data-room="join">加入房間</button></span></div>`
     : '';
   el.innerHTML = `<div class="locHead">${headTxt}</div><div class="locRow">` + plazaCard + roomCard + LOCS.map(l => {
     const own = l.need === 0 || save.locs!.includes(l.id), cur = !plazaCur && cl!.id === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
-    if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small>${cur ? '✅ 選擇中' : '點一下選這裡'}</small><small class="ld">${l.d}</small></button>`;
+    if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small>點一下選這裡</small><small class="ld">${l.d}</small></button>`;
     return `<button class="loc locked" disabled>${head}<small><i class="ic ic-lock"></i> 解鎖條件：入碗 ${tot}/${l.need} 顆</small><small class="ld">${l.d}</small></button>`;
   }).join('') + '</div>';
   const mark = (id?: string) => { if (id && !seen.includes(id)) { seen.push(id); persist(); } };
@@ -3697,9 +3697,16 @@ $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖�
     if (!r.ok) toast(r.err, '#ffb08a');
   };
 }
-$('shopBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); openShopPx(); renderShop(); $('shop').classList.add('show'); };
-$('shopBtn2').onclick = () => { openShopPx(); renderShop(); $('shop').classList.add('show'); };
-$('shopClose').onclick = () => { $('shop').classList.remove('show'); if (sleeveTry) { sleeveTry = null; applySleeve(); } };
+$('shopBtn').onclick = () => { shopFromEquip = false; if (document.pointerLockElement) document.exitPointerLock(); openShopPx(); renderShop(); $('shop').classList.add('show'); };
+$('shopBtn2').onclick = () => { shopFromEquip = false; openShopPx(); renderShop(); $('shop').classList.add('show'); };
+$('shopClose').onclick = () => {
+  $('shop').classList.remove('show');
+  if (sleeveTry) { sleeveTry = null; applySleeve(); }
+  if (shopFromEquip) {
+    shopFromEquip = false;
+    openEquip();
+  }
+};
 applyKnife(); applyUmb(); applySeat(save.seat ?? 'door');
 $('pidLong').textContent = statsId;
 let myTag = '', tagNoted = false;
@@ -4532,6 +4539,7 @@ let sleeveTry: string | null = null, scaredT = 10;
 let clothTab: Slot = 'hand';
 let eqPick: Slot | null = null;
 let eqFromRes = false;
+let shopFromEquip = false;
 
 initClothUi({
   getSave: () => save,
@@ -4554,6 +4562,7 @@ initClothUi({
   shirtCuff,
   getEqFromRes: () => eqFromRes,
   setEqFromRes: (v) => { eqFromRes = v; },
+  setShopFromEquip: (v) => { shopFromEquip = v; },
   isEvRun: () => !!evRun,
   getSleeveTry: () => sleeveTry,
   setSleeveTry: (v) => { sleeveTry = v; },
