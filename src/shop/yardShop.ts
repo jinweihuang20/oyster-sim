@@ -9,7 +9,7 @@ import type * as THREE from 'three';
 import { mountFlagPreview, type FlagPreviewState } from './flagPreview';
 import {
   FLAG_COLORS, FLAG_ERR_ZH, FLAG_FX, FLAG_ITEM, FLAG_SIZES, FLAG_TEXT_MAX,
-  fetchFlagSnapshot, flagErrText, flagTextErr, flagTextSaveNote, nextFlagItem,
+  fetchFlagSnapshot, flagErrText, flagSlowText, flagTextErr, flagTextSaveNote, nextFlagItem,
   postFlagSelect, postFlagText, postFlagUpgrade, type FlagTrack, type PlazaFlagState,
 } from '../plaza/flags';
 
@@ -36,10 +36,10 @@ export type YardShopDeps = {
   toast: (t: string, c?: string) => void;
   getShopTab: () => number;
   onFlagChange?: () => void;
-  showFlag?: (on: boolean) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
-  setFlagText?: (text: string) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
-  upgradeFlag?: (track: FlagTrack, from?: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
-  selectFlag?: (track: FlagTrack, level: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
+  showFlag?: (on: boolean) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null; waitMs?: number }>;
+  setFlagText?: (text: string) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null; waitMs?: number }>;
+  upgradeFlag?: (track: FlagTrack, from?: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null; waitMs?: number }>;
+  selectFlag?: (track: FlagTrack, level: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null; waitMs?: number }>;
   clearBowlMeat: () => void;
   renderClothShop: () => void;
   renderMedShop: () => void;
@@ -369,7 +369,7 @@ function bindFlagShop(mine: PlazaFlagState | null) {
       const r = await D.showFlag(on);
       if (!r.ok) {
         const m: Record<string, string> = { no_conn: '要在廣場裡才能切換旗子顯示', never_planted: '還沒插過旗，先到廣場按「插旗」', not_planted: '旗子已經是收起來的', nosup: '這台伺服器還沒開放這個功能' };
-        D.toast(m[r.err || ''] ?? flagErrText(r.err), '#ffb08a');
+        D.toast(m[r.err || ''] ?? flagSlowText(r.err, r.waitMs, on ? 'plant' : 'remove'), '#ffb08a');
         return;
       }
       D.toast(on ? '旗子插回原本的位置了' : '旗子收起來了，文字和升級都會保留', '#9be37a');
@@ -398,7 +398,7 @@ function bindFlagShop(mine: PlazaFlagState | null) {
       let r = D.setFlagText ? await withTimeout(D.setFlagText(raw), 8000) : null;
       if (!r || r.err === 'no_conn' || r.err === 'nosup') r = await withTimeout(postFlagText(pid, raw), 8000);
       if (!r) { flagMsg('伺服器沒有回應，文字還沒儲存，請稍後再試', false); return; }
-      if (!r.ok) { flagMsg(flagTextErr(r.err), false); return; }
+      if (!r.ok) { flagMsg(flagTextErr(r.err, r.waitMs), false); return; }
       const got = r.mine?.text ?? raw;
       const note = flagTextSaveNote(raw, got);
       const msg = note ? `旗幟文字已儲存（${note}）` : `旗幟文字已儲存：「${got}」`;
@@ -421,7 +421,7 @@ function bindFlagShop(mine: PlazaFlagState | null) {
       let r = D.selectFlag ? await D.selectFlag(track, lv) : null;
       if (!r || r.err === 'no_conn') r = await postFlagSelect(D.getPlayerId(), track, lv);
       if (!r.ok) {
-        D.toast(r.err === 'nosup' ? '這台伺服器還沒開放挑選旗幟樣式' : r.err === 'grow' ? '換成這個尺寸會跟隔壁的旗太近，先到廣場把旗插到空一點的地方再換（已解鎖，不用再買）' : flagErrText(r.err), '#ffb08a');
+        D.toast(r.err === 'nosup' ? '這台伺服器還沒開放挑選旗幟樣式' : r.err === 'grow' ? '換成這個尺寸會跟隔壁的旗太近，先到廣場把旗插到空一點的地方再換（已解鎖，不用再買）' : flagSlowText(r.err, r.waitMs, 'edit'), '#ffb08a');
         return;
       }
       const next: any = r.mine ? { ...r.mine } : { ...(mine ?? {}) };
@@ -445,7 +445,7 @@ function bindFlagShop(mine: PlazaFlagState | null) {
         const save = D.getSave();
         save.money -= pr;
         D.persist();
-        let r: { ok: boolean; err?: string; mine?: PlazaFlagState | null } | null = null;
+        let r: { ok: boolean; err?: string; mine?: PlazaFlagState | null; waitMs?: number } | null = null;
         try {
           r = D.upgradeFlag ? await D.upgradeFlag(track, lv) : null;
           if (!r || r.err === 'no_conn') r = await postFlagUpgrade(D.getPlayerId(), track, lv);
@@ -456,7 +456,7 @@ function bindFlagShop(mine: PlazaFlagState | null) {
           D.getSave().money += pr; // 沒升級成功一律退錢
           D.persist();
           if (r.mine) flagMineCache = r.mine;
-          D.toast(r.err === 'stale' ? FLAG_ERR_ZH.stale : flagErrText(r.err) + '，錢已退回', '#ffb08a');
+          D.toast(r.err === 'stale' ? FLAG_ERR_ZH.stale : flagSlowText(r.err, r.waitMs, 'edit') + '，錢已退回', '#ffb08a');
           return;
         }
         if (r.mine) flagMineCache = r.mine;
