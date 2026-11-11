@@ -9,7 +9,7 @@ import type * as THREE from 'three';
 import { mountFlagPreview, type FlagPreviewState } from './flagPreview';
 import {
   FLAG_COLORS, FLAG_ERR_ZH, FLAG_FX, FLAG_ITEM, FLAG_SIZES, FLAG_TEXT_MAX,
-  fetchFlagSnapshot, flagErrText, flagTextErr, flagTextSaveNote, nextFlagItem,
+  fetchFlagSnapshot, flagErrText, flagSlowText, flagTextErr, flagTextSaveNote, nextFlagItem,
   postFlagSelect, postFlagText, postFlagUpgrade, type FlagTrack, type PlazaFlagState,
 } from '../plaza/flags';
 
@@ -36,7 +36,7 @@ export type YardShopDeps = {
   toast: (t: string, c?: string) => void;
   getShopTab: () => number;
   onFlagChange?: () => void;
-  showFlag?: (on: boolean) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
+  showFlag?: (on: boolean) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null; waitMs?: number }>;
   setFlagText?: (text: string) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   upgradeFlag?: (track: FlagTrack, from?: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
   selectFlag?: (track: FlagTrack, level: number) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null }>;
@@ -369,7 +369,7 @@ function bindFlagShop(mine: PlazaFlagState | null) {
       const r = await D.showFlag(on);
       if (!r.ok) {
         const m: Record<string, string> = { no_conn: '要在廣場裡才能切換旗子顯示', never_planted: '還沒插過旗，先到廣場按「插旗」', not_planted: '旗子已經是收起來的', nosup: '這台伺服器還沒開放這個功能' };
-        D.toast(m[r.err || ''] ?? flagErrText(r.err), '#ffb08a');
+        D.toast(m[r.err || ''] ?? flagSlowText(r.err, r.waitMs, on ? 'plant' : 'remove'), '#ffb08a');
         return;
       }
       D.toast(on ? '旗子插回原本的位置了' : '旗子收起來了，文字和升級都會保留', '#9be37a');

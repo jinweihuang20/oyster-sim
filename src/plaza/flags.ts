@@ -122,6 +122,15 @@ export function flagErrText(err?: string) {
   return FLAG_ERR_ZH[err] || err;
 }
 
+/** 伺服器回 slow 且帶 waitMs 時，顯示還要等幾秒（無條件進位）；沒帶就用原本的「慢一點再試」。 */
+export function flagSlowText(err?: string, waitMs?: number, kind: 'plant' | 'remove' = 'plant') {
+  if (err !== 'slow') return flagErrText(err);
+  const ms = Number(waitMs);
+  if (!Number.isFinite(ms) || ms <= 0) return flagErrText('slow');
+  const n = Math.max(1, Math.ceil(ms / 1000));
+  return kind === 'remove' ? `收太快了，${n} 秒後再試` : `插太快了，${n} 秒後再試`;
+}
+
 /** 儲存旗上文字時的說明（和插旗的 nosup 用詞不同） */
 export function flagTextErr(err?: string) {
   const extra: Record<string, string> = {

@@ -17,7 +17,7 @@ import { plazaSoftCapClient } from '../core/economy';
 import { myTag } from '../meta/social';
 import { achCheck, achS } from '../meta/achievements';
 import { parseCosmetics } from './cosmetics';
-import { clipFlagText, flagErrText, flagPlantPos, type PlazaFlagState } from './flags';
+import { clipFlagText, flagErrText, flagPlantPos, flagSlowText, type PlazaFlagState } from './flags';
 
 export type PlazaDeps = {
   id: string;
@@ -1106,7 +1106,7 @@ async function pullMyFlag() {
   pullBusy = true;
   try {
     const r = await plazaTryRemoveFlag();
-    if (!r.ok) { deps.toast(r.err === 'not_planted' ? '你的旗還沒插在廣場上' : r.err === 'nosup' ? '這台伺服器還沒開放收旗' : flagErrText(r.err), '#ffb08a'); return; }
+    if (!r.ok) { deps.toast(r.err === 'not_planted' ? '你的旗還沒插在廣場上' : r.err === 'nosup' ? '這台伺服器還沒開放收旗' : flagSlowText(r.err, r.waitMs, 'remove'), '#ffb08a'); return; }
     deps.toast('旗收起來了，文字和升級都會保留', '#9be37a');
     deps.track('flag_pull', {});
   } finally { pullBusy = false; }
@@ -1116,7 +1116,7 @@ export async function plazaTryShowFlag() {
   if (client?.connected) {
     const r = await client.showFlag();
     if (r.ok && r.flag) upsertFlag(r.flag);
-    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null };
+    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null, waitMs: r.waitMs };
   }
   return { ok: false as const, err: 'no_conn', mine: null };
 }
@@ -1125,7 +1125,7 @@ export async function plazaTryRemoveFlag() {
   if (client?.connected) {
     const r = await client.removeFlag();
     if (r.ok && r.flag) upsertFlag(r.flag);
-    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null };
+    return { ok: !!r.ok, err: r.err, mine: r.flag ?? null, waitMs: r.waitMs };
   }
   return { ok: false as const, err: 'no_conn', mine: null };
 }
@@ -1164,7 +1164,7 @@ async function plantMyFlag() {
       const p2 = flagPlantPos(now.x, now.z, yaw2);
       r = await client.plantFlag(p2.x, p2.z, yaw2, text);
     }
-    if (!r.ok) { deps.toast(flagErrText(r.err), '#ffb08a'); return; }
+    if (!r.ok) { deps.toast(flagSlowText(r.err, r.waitMs, 'plant'), '#ffb08a'); return; }
     if (r.flag) {
       myFlagText = r.flag.text;
       upsertFlag(r.flag);

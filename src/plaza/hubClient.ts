@@ -125,6 +125,11 @@ function normChatDto(m: any): PlazaChat {
   };
 }
 
+function finWait(n: unknown) {
+  const v = Number(n);
+  return Number.isFinite(v) && v > 0 ? v : undefined;
+}
+
 export class PlazaClient {
   conn: signalR.HubConnection | null = null;
   token = '';
@@ -490,8 +495,8 @@ export class PlazaClient {
   async plantFlag(x: number, z: number, yaw: number, text: string) {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', flag: undefined as PlazaFlagState | undefined };
     try {
-      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any }>('PlantFlag', x, z, yaw, text);
-      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined };
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any; waitMs?: number }>('PlantFlag', x, z, yaw, text);
+      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined, waitMs: finWait(r?.waitMs) };
     } catch {
       return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };
     }
@@ -500,8 +505,8 @@ export class PlazaClient {
   async showFlag() {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', flag: undefined as PlazaFlagState | undefined };
     try {
-      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any }>('ShowFlag');
-      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined };
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any; waitMs?: number }>('ShowFlag');
+      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined, waitMs: finWait(r?.waitMs) };
     } catch {
       return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };
     }
@@ -510,8 +515,8 @@ export class PlazaClient {
   async removeFlag() {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn', flag: undefined as PlazaFlagState | undefined };
     try {
-      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any }>('RemoveFlag');
-      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined };
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; flag?: any; waitMs?: number }>('RemoveFlag');
+      return { ok: !!r?.ok, err: r?.err, flag: r?.flag ? normFlagDto(r.flag) : undefined, waitMs: finWait(r?.waitMs) };
     } catch {
       return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };
     }
