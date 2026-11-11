@@ -6,15 +6,22 @@ export type PlazaCosmetics = {
   goldSmoke: boolean;
   cushion: boolean;
   nameFrame: boolean;
+  /** 寵物 id，例如 'pt_oyster_baby'；沒帶寵物為空字串 */
+  pet: string;
 };
 
 export function parseCosmetics(raw?: string | null): PlazaCosmetics {
   const parts = String(raw || '').split(',').map(s => s.trim()).filter(Boolean);
   const has = (key: string) => parts.includes(key) || parts.some(p => p.startsWith(`${key}:`));
+  const valueOf = (key: string): string => {
+    const p = parts.find(x => x.startsWith(`${key}:`));
+    return p ? p.slice(key.length + 1) : '';
+  };
   return {
     goldSmoke: parts.includes('goldSmoke'),
     cushion: has('cushion'),
     nameFrame: parts.includes('nameFrame'),
+    pet: valueOf('pet'),
   };
 }
 
@@ -23,5 +30,6 @@ export function encodeCosmetics(flags: PlazaCosmetics): string {
   if (flags.goldSmoke) parts.push('goldSmoke');
   if (flags.cushion) parts.push('cushion');
   if (flags.nameFrame) parts.push('nameFrame');
+  if (flags.pet) parts.push(`pet:${flags.pet}`);
   return parts.join(',');
 }

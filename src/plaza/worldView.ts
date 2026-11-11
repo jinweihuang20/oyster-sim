@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
-import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVisual';
+import { applyOutfitToRig, normalizeOutfitIds, outfitKey, headTopLift } from '../shop/equipVisual';
+import { makeOysterBaby } from '../shop/pets';
 import {
   AMA_LOOKS, AMA_SCALE, AMA_SIT_LIFT, AMA_CARRY_TILT, AMA_CARRY_Y, AMA_CARRY_FWD, AMA_CARRY_ROLL, AMA_CARRY_LIE_BACK, AMA_CARRY_LIE_Y,
   amaCarrySide, pickAmaLook, amaShirtHex,
@@ -74,6 +75,8 @@ type Remote = {
   tPitch: number; pitch: number;
   /** 工作姿勢附加的頭傾（再疊 look pitch） */
   headWorkX: number;
+  /** 抽一口把菸舉到嘴邊的程度 0..1；越接近 1 越不套鏡頭俯仰／轉頭，嘴才對得到菸 */
+  smokeK?: number;
   /** 剛進場、座標尚不可信：先藏模型，避免從原點高速滑行 */
   awaitingPose: boolean;
   isNpc?: boolean;
@@ -150,6 +153,10 @@ export type PlazaWorldOpts = {
   lowDetail?: boolean;
   /** 省電：執行中動態降燈／炭火／遠距角色 */
   eco?: () => boolean;
+  /** 自己裝備了寵物（坐姿時寵物在頭頂、聊天泡泡要讓位） */
+  hasOwnPet?: () => boolean;
+  /** 自己頭上帽子高出髮蓋頂的量（公尺）；有寵物+坐姿時聊天泡泡要再多抬這麼多 */
+  selfHatLift?: () => number;
 };
 
 export function createPlazaWorldView(
@@ -1056,8 +1063,10 @@ function hashPid(pid: string) {
   function applyHeadLook(r: Remote) {
     if (!r.rig?.head) return;
     // 坐下：lookYaw＝相對座位；走動：lookYaw 多為 0（身體跟 yaw），pitch 第一人稱會同步
-    r.rig.head.rotation.x = r.headWorkX + r.pitch * 0.85;
-    r.rig.head.rotation.y = r.lookYaw;
+    // 抽菸舉手時手臂是照「頭不俯仰」對準嘴；鏡頭俯仰（坐著多半低頭 -0.35）會把嘴往下帶，菸就變成在鼻子前面
+    const sk = Math.min(1, Math.max(0, r.smokeK ?? 0));
+    r.rig.head.rotation.x = r.headWorkX + r.pitch * 0.85 * (1 - sk);
+    r.rig.head.rotation.y = r.lookYaw * (1 - sk);
   }
 
   function playThrowFx(connId: string) {
@@ -1095,6 +1104,7 @@ function hashPid(pid: string) {
 
   function clearRemotePuff(r: Remote) {
     r.puff = undefined;
+    r.smokeK = 0;
   }
 
   function applyRemotePuff(opts: { connId?: string; pid?: string; start: boolean; holdMs: number }) {
@@ -1221,7 +1231,9 @@ function hashPid(pid: string) {
         inhale,
         away: pf.awayT,
       });
-      r.headWorkX = -0.04 - inhale * 0.08;
+      // 與 posePlazaSmokeSit 內手的進度同一條曲線
+      r.smokeK = easeSmokePuff(easeSmokePuff(pf.animT));
+      r.headWorkX = r.rig.head.rotation.x;
       r.knife.visible = false;
       r.oyster.visible = false;
     }
@@ -1490,6 +1502,8 @@ function hashPid(pid: string) {
     const cos = parseCosmetics(r.cosmetics);
     r.tag.setNameFrame(!r.isNpc && cos.nameFrame);
     syncCushion(r.pid || r.key, !r.isNpc && r.seated && cos.cushion, r.pileId, r.slot);
+    // 寵物：掛／拆到遠端右肩；NPC 不帶寵物
+    syncRemotePet(r, r.isNpc ? '' : cos.pet);
     if (r.carriedBy) {
       r.seated = false;
       r.pileId = -1;
@@ -1554,9 +1568,64 @@ function hashPid(pid: string) {
 
   function upsert(p: PlazaPlayer, selfPid: string) { applyPose(p, selfPid); }
 
+  /** 遠端寵物：依 petId 掛／拆模型到 rig.shoulderR */
+  function syncRemotePet(r: Remote, petId: string) {
+    const curId: string = (r as any)._petId ?? '';
+    const curMesh: THREE.Group | undefined = (r as any)._petMesh;
+    if (curId === petId) return;
+    if (curMesh) { r.rig.shoulderR?.remove(curMesh); (r as any)._petMesh = undefined; }
+    (r as any)._petId = petId;
+    if (!petId) return;
+    let mesh: THREE.Group | null = null;
+    if (petId === 'pt_oyster_baby') mesh = makeOysterBaby();
+    if (!mesh) return;
+    mesh.scale.setScalar(0.7);
+    // 掛到 outer（自然跟著玩家 x/z/yaw），再由 updateRemotePet 控制 local 位置
+    r.rig.outer.add(mesh);
+    (r as any)._petMesh = mesh;
+    (r as any)._petBob = 0;
+  }
+
+  /** 遠端寵物逐幀：躺=右側同躺；坐=頭頂；站／走=身後（真的在走才彈跳） */
+  function updateRemotePet(r: Remote, dt: number) {
+    const mesh = (r as any)._petMesh as THREE.Group | undefined;
+    if (!mesh) return;
+    const seated = !!r.seated;
+    const lying = !seated && (r.phase === 'lie');
+    const moving = !seated && !lying && !!(r as any)._walkOn;
+    const bob0 = (r as any)._petBob ?? 0;
+    const bob = bob0 + dt * (moving ? 7 : 2.2);
+    (r as any)._petBob = bob;
+    if (lying) {
+      // 躺姿：mesh 是 outer 的 child。outer 已 R_y(bodyYaw)*R_x(π/2)：
+      //   outer local +X → 世界右手邊；outer local -Z → 世界 +Y（上）
+      // pet 自動繼承 outer 旋轉 → pet 臉 (local -Z) 指向世界 +Y（朝天），pet 頭 (local +Y) 指玩家頭方向 ✓
+      // 位置：右手邊 x=0.4、略離地（outer 本身 lying 時 y=+0.16；再給 z=+0.07 將 pet 下壓貼地）
+      mesh.position.set(0.4, 0, 0.07);
+      mesh.rotation.set(0, 0, 0);
+    } else if (seated) {
+      // 髮蓋頂 ≈ y=1.44（坐姿 root.y=-0.16）；z=-0.1 往臉前靠
+      // 戴帽子要再抬 headTopLift 量，否則被帽頂擋到
+      const headId = (r.rig.outfitKey ?? '').split('|')[0] ?? '';
+      const hatLift = headTopLift(headId);
+      mesh.position.set(0, 1.44 + hatLift + Math.sin(bob) * 0.015, -0.1);
+      mesh.rotation.set(0, 0, 0);
+    } else {
+      // 站著／走動都在身後貼地；彈跳只在實際位移時才加；靜止時湊近
+      const y = moving ? Math.abs(Math.sin(bob)) * 0.2 : Math.sin(bob) * 0.008;
+      const targetDist = moving ? 1.0 : 0.4;
+      const curDist = (r as any)._petDist ?? targetDist;
+      const nextDist = curDist + (targetDist - curDist) * 0.08;
+      (r as any)._petDist = nextDist;
+      mesh.position.set(0, y, nextDist);
+      mesh.rotation.set(0, 0, 0);
+    }
+  }
+
   function destroyRemote(r: Remote) {
     if (r.cigSmoke) { root.remove(r.cigSmoke.group); r.cigSmoke.dispose(); r.cigSmoke = undefined; }
     syncCushion(r.pid || r.key, false, -1, -1);
+    syncRemotePet(r, '');
     clearPlazaSmokeCig(r.rig);
     const ashes = (r as any)._aberAsh?.ashes as { dispose: () => void }[] | undefined;
     if (ashes) for (const a of ashes) { try { a.dispose(); } catch { /* */ } }
@@ -1902,13 +1971,22 @@ function hashPid(pid: string) {
       // 省電遠距：隱藏模型（碰撞仍用 x/z）
       if (eco && dist2 > HIDE2 && !rj.mh && (r.phase || '') !== 'moon') r.rig.outer.visible = false;
       else if (!(eco && dist2 > HIDE2) && !rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
+      // 寵物逐幀：坐著→頭頂；走動→身後彈跳
+      updateRemotePet(r, dt);
       // 這幀下面馬上要讀 head 世界座標排名牌，更新 matrix；渲染器之後本來也會再更新一次，不用 force
       r.rig.outer.updateMatrixWorld();
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       r.tag.sprite.visible = show;
-      if (show) placeAboveHead(r.tag.sprite, r.rig.head, 0.22);
+      // 有寵物且坐著時寵物會停在頭上（y≈1.44），名牌 / 聊天泡泡要往上讓位
+      // 戴帽子時寵物再抬 headTopLift，名牌同步加抬，否則被帽頂＋寵物一起擋到
+      const petOnHead = !!(r as any)._petMesh && !!r.seated;
+      const remoteHeadId = petOnHead ? ((r.rig.outfitKey ?? '').split('|')[0] ?? '') : '';
+      const remoteHatLift = headTopLift(remoteHeadId);
+      const tagLift = petOnHead ? 0.52 + remoteHatLift : 0.22;
+      const bubLift = petOnHead ? 0.72 + remoteHatLift : 0.42;
+      if (show) placeAboveHead(r.tag.sprite, r.rig.head, tagLift);
       if (r.bubUntil > t && show) {
-        placeAboveHead(r.bubble.sprite, r.rig.head, 0.42);
+        placeAboveHead(r.bubble.sprite, r.rig.head, bubLift);
         r.bubble.sprite.visible = true;
       } else {
         const w = r.isNpc ? wishForRemote(r) : undefined;
@@ -1919,7 +1997,7 @@ function hashPid(pid: string) {
             r.bubble.setText(txt, true);
             r.bubble.setOpacity(1);
           }
-          placeAboveHead(r.bubble.sprite, r.rig.head, 0.42);
+          placeAboveHead(r.bubble.sprite, r.rig.head, bubLift);
           r.bubble.sprite.visible = true;
         } else {
           if ((r as any)._wishLine) (r as any)._wishLine = '';
@@ -1932,7 +2010,11 @@ function hashPid(pid: string) {
       const back = selfSeated ? -0.08 : 0;
       const ox = selfX + Math.sin(selfYaw) * back;
       const oz = selfZ + Math.cos(selfYaw) * back;
-      selfBubble.sprite.position.set(ox, headY + 0.12, oz);
+      // 坐著且有寵物（在頭頂）時，聊天泡泡再往上讓一截；戴帽子再加抬
+      const selfPetOnHead = selfSeated && !!(opts.hasOwnPet?.() ?? false);
+      const selfHatLift = selfPetOnHead ? (opts.selfHatLift?.() ?? 0) : 0;
+      const bubLift = selfPetOnHead ? 0.42 + selfHatLift : 0.12;
+      selfBubble.sprite.position.set(ox, headY + bubLift, oz);
       selfBubble.sprite.visible = true;
     } else if (selfBubble.sprite.visible) selfBubble.sprite.visible = false;
     if (wishMarks.children.length) {

@@ -19,12 +19,12 @@ import {
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
 import {
-  checkCode, REDEEM_MESSAGES, type RedeemCodeDef, applyOutfitToRig,
+  checkCode, REDEEM_MESSAGES, type RedeemCodeDef, applyOutfitToRig, headTopLift,
   syncEqPreview, refreshEqPreview, stopEqPreview, ODD,
   type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS,
   initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop,
   initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, FLAG_PRICE_ITEMS,
-  gearOn, knifeNow, umbNow, bowlNow,
+  gearOn, knifeNow, umbNow, bowlNow, petNow, makeOysterBaby,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
   renderShop, getShopNewIds,
@@ -270,6 +270,42 @@ function buildBowl(b: { r: number; h: number; color: number; metal?: number }) {
 const bowlMeat: THREE.Mesh[] = [], splats: THREE.Mesh[] = [];
 const meatMat = mat(0xd8cbb0, { roughness: 0.3, metalness: 0.1 }), splatMat = mat(0x8a8680, { roughness: 0.6 });
 const meatGeo = new THREE.SphereGeometry(0.035, 8, 6); meatGeo.scale(1.4, 0.6, 1);
+
+// ---------- 寵物（商店新分類：站在玩家右肩） ----------
+/** petAnchor 直接掛 scene，每幀由 updatePetAnchor() 把它放到當前「玩家右肩世界位置」 */
+const petAnchor = new THREE.Group();
+petAnchor.rotation.order = 'YXZ'; // 躺姿要先轉 Y 再翻 X
+scene.add(petAnchor);
+let petMesh: THREE.Group | null = null;
+let petCurId: string | null = null;
+/** 蓄積秒數；AFK 期間不累積 */
+let petAcc = 0;
+/** 寵物睡覺狀態（AFK 時 true，掛機符號顯示） */
+let petSleeping = false;
+let petBob = 0;
+function refreshPet() {
+  const p = petNow();
+  const wantId = p?.id ?? null;
+  if (wantId === petCurId) return;
+  if (petMesh) { petAnchor.remove(petMesh); petMesh = null; }
+  petCurId = wantId;
+  petAcc = 0; petSleeping = false;
+  if (!wantId) return;
+  if (wantId === 'pt_oyster_baby') petMesh = makeOysterBaby();
+  if (petMesh) {
+    // 肩上較小一隻，才不會蓋住頭
+    petMesh.scale.setScalar(0.7);
+    petAnchor.add(petMesh);
+  }
+  // 廣場模式下，也把寵物放到 cosmetics 字串，讓別人看得到
+  if (isPlazaActive()) void plazaPushCosmetics();
+}
+function setPetSleeping(v: boolean) {
+  if (petSleeping === v) return;
+  petSleeping = v;
+  const slp = (petMesh?.userData as any)?.sleep as THREE.Object3D | undefined;
+  if (slp) slp.visible = v;
+}
 
 // ---------- 阿婆 ----------
 const skin = 0xe8bc98;
@@ -1495,6 +1531,7 @@ initYardShop({
   applyGloves,
   drawRadio,
   onCosmeticsChange: () => refreshPlazaCosmetics(),
+  onPetChange: () => refreshPet(),
   getPlayerId: () => statsId,
   getNick: () => myName(),
   toast,
@@ -2938,6 +2975,137 @@ function moonHit(n: Npc) {
     if (lt >= END) { scene.remove(star); if (follow && state === 'play') tPitch = pitch0; return false; } return true;
   });
 }
+/** 寵物位置：躺=右側同躺；坐=頭頂；走動=身後彈跳。給 petTick 參考 */
+let petWalkingMode = false;
+let petLyingMode = false;
+/** 身後距離平滑：走動 1.0m，靜止湊近到 0.4m */
+let petDistCur = 1.0;
+/** 把 petAnchor 擺到當前玩家世界位置／朝向。頭頂 ≈ feet+1.78；身後 +0.55、離地 0.3；躺姿 → 右手邊同躺 */
+function updatePetAnchor() {
+  if (!petMesh) return;
+  let bx = 0, by = 0, bz = 0, byaw = 0, isWalk = false, isLie = false;
+  if (walking) {
+    bx = walkPos.x; by = jumpY; bz = walkPos.z; byaw = yaw;
+    isLie = bodyPose === 'lie';
+    isWalk = !isLie;
+    if (isLie) byaw = bodyYaw; // 躺著的身體朝向用 bodyYaw
+  } else if (plazaMode) {
+    const mine = plazaMySeat();
+    const pose = mine ? seatPose(mine.pileId, mine.slot) : { pos: new THREE.Vector3(SEAT.x, 0, SEAT.z), yaw: seatYaw };
+    bx = pose.pos.x; by = 0; bz = pose.pos.z; byaw = pose.yaw;
+  } else {
+    // 工寮坐著剝蚵
+    bx = SEAT.x; by = 0; bz = SEAT.z; byaw = seatYaw;
+  }
+  petWalkingMode = isWalk;
+  petLyingMode = isLie;
+  if (isLie) {
+    // 躺姿：pet 放到玩家右手邊，和玩家一樣躺著面朝天
+    // 玩家躺著時 outer.rotation=(π/2, bodyYaw, 0)；右手邊 = (cos(bodyYaw), 0, -sin(bodyYaw))
+    const rx = Math.cos(byaw), rz = -Math.sin(byaw);
+    const sideDist = 0.4;
+    petAnchor.position.set(bx + rx * sideDist, by + 0.08, bz + rz * sideDist);
+    petAnchor.rotation.set(Math.PI / 2, byaw, 0);
+  } else if (isWalk) {
+    // 身後：玩家臉向 -z（yaw=0），身後 = +z；轉成世界 (sin,cos)；高度貼地（彈跳由 petMesh.position.y 疊加）
+    // 靜止時 pet 湊近到 0.4m，走動時拉開到 1.0m，用 lerp 平滑過渡
+    const movingRecent = performance.now() - walkMovingT < 200;
+    const target = movingRecent ? 1.0 : 0.4;
+    petDistCur += (target - petDistCur) * 0.08;
+    const s = Math.sin(byaw), c = Math.cos(byaw);
+    petAnchor.position.set(bx + s * petDistCur, by, bz + c * petDistCur);
+    petAnchor.rotation.set(0, byaw, 0);
+  } else {
+    // 坐著：髮蓋頂 ≈ y=1.44，位置往臉前 0.1m；戴帽子要再抬 headTopLift 量，否則被帽頂擋到
+    const s = Math.sin(byaw), c = Math.cos(byaw);
+    const fwd = 0.1;
+    const hatLift = headTopLift(equipNow('head').id);
+    petAnchor.position.set(bx - s * fwd, by + 1.44 + hatLift, bz - c * fwd);
+    petAnchor.rotation.set(0, byaw, 0);
+  }
+}
+
+/** 寵物每幀：工寮剝蚵／廣場都會動；玩家 10 秒沒操作就睡著暫停；累積到 tickSec 丟一塊肉進碗（只有工寮才真的入碗） */
+function petTick(dt: number) {
+  if (!petMesh || !petCurId) return;
+  const p = petNow(); if (!p) return;
+  // 位置先更新，不論啟用與否（才不會從舊位置閃現）
+  updatePetAnchor();
+  // 只在真的在玩的時候運作；廣場模式必須坐在剝蚵桌（不是烤位、不是抽菸區）才會產出
+  const show = state === 'play' && !isPaused() && !tut;
+  const plazaShellSeat = (() => {
+    if (!plazaMode || !isPlazaActive()) return false;
+    const s = plazaMySeat();
+    if (!s) return false;
+    return !pileIsGrill(s.pileId) && !isSmokePile(s.pileId);
+  })();
+  const canProduce = show && (!plazaMode || plazaShellSeat);
+  petAnchor.visible = show;
+  if (!show) { petAcc = 0; setPetSleeping(false); return; }
+  // AFK：距上次任何輸入 10 秒 → 睡著暫停
+  const idleMs = performance.now() - lastInteractAt;
+  const afk = idleMs > 10000;
+  setPetSleeping(afk);
+  // 真的在走（身後、最近 200ms 有位移）→ 高頻彈跳；躺著不動；其他（站著／坐著／睡覺）→ 微漂浮
+  const actuallyMoving = petWalkingMode && (performance.now() - walkMovingT < 200);
+  if (petLyingMode) {
+    petMesh.position.y = 0;
+  } else if (actuallyMoving && !afk) {
+    petBob += dt * 7;
+    petMesh.position.y = Math.abs(Math.sin(petBob)) * 0.2;
+  } else {
+    petBob += dt * (afk ? 0.6 : 2.2);
+    petMesh.position.y = Math.sin(petBob) * (afk ? 0.006 : 0.012);
+  }
+  if (afk || !canProduce) return;
+  petAcc += dt;
+  if (petAcc >= p.fx.tickSec) {
+    petAcc = 0;
+    petDropMeat(p);
+  }
+}
+/** 寵物提示：右下角小膠囊，不搶大 toast 的戲 */
+let _petToastHost: HTMLElement | null = null;
+function petToast(text: string, color = '#9be37a') {
+  if (!_petToastHost) {
+    _petToastHost = document.createElement('div');
+    _petToastHost.id = 'petToasts';
+    document.body.appendChild(_petToastHost);
+  }
+  const host = _petToastHost;
+  // 太多同時出現就併最舊幾個刪掉，保 UI 乾淨
+  while (host.childElementCount > 3) host.firstElementChild?.remove();
+  const el = document.createElement('div');
+  el.className = 'petToast';
+  el.textContent = text;
+  el.style.color = color;
+  host.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('on'));
+  setTimeout(() => { el.classList.remove('on'); setTimeout(() => el.remove(), 350); }, 1600);
+}
+
+/** 寵物丟一塊肉到碗裡：沿用普通「拋肉入碗」流程（count/dCnt/meatPay/碗堆） */
+const _petFrom = new THREE.Vector3();
+function petDropMeat(p: NonNullable<ReturnType<typeof petNow>>) {
+  if (flyers.length > 40) return;
+  petAnchor.getWorldPosition(_petFrom); _petFrom.y += 0.04;
+  const m = new THREE.Mesh(meatGeo, meatMat);
+  const land = new THREE.Vector3(
+    BOWL.x + rnd(-0.06, 0.06),
+    BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015,
+    BOWL.z + rnd(-0.06, 0.06),
+  );
+  const md = p.fx.meatDiff;
+  fly(m, _petFrom.clone(), land, 0.5, 0.3, () => {
+    count++; evMeat();
+    const pv = Math.max(0, eco.dpay[md] - (shiftLen < SHIFT ? eco.tempCut : 0));
+    meatPay += pv; dCnt[md]++;
+    bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    SFX.plop();
+    petToast(`${p.n.replace(/^\S+\s/, '')} ＋1 ${DIFF[md].n}  +$${pv}`);
+    updHud();
+  });
+}
 function moonTick(dt: number) {
   for (let i = moonFx.length - 1; i >= 0; i--) if (!moonFx[i](dt)) moonFx.splice(i, 1);
   if (punchT > 0) { punchT = Math.max(0, punchT - dt); const k = Math.sin((1 - punchT / 0.5) * Math.PI); handR.position.z -= k * 0.35; handR.position.y += k * 0.08; handR.position.x -= k * 0.06; }
@@ -3485,6 +3653,7 @@ function launchPlaza() {
       goldSmoke: gearOn('goldPipe'),
       cushion: gearOn('seatCush'),
       nameFrame: gearOn('nameFrame'),
+      pet: petNow()?.id ?? '',
     }),
     ownsFlag: () => save.shop.owned.includes('plazaFlag'),
     getMoving: () => {
@@ -3495,6 +3664,8 @@ function launchPlaza() {
     },
     getUmb: () => umbHeld || umbT > 0,
     getEco: () => mix.eco,
+    hasOwnPet: () => !!petNow(),
+    selfHatLift: () => headTopLift(equipNow('head').id),
     getPlazaSpawn: () => save.plazaSpawn,
     persistPlazaSpawn: (spawn) => { save.plazaSpawn = spawn; persist(); },
     onShellThrow: (e) => {
@@ -3744,7 +3915,7 @@ $('shopClose').onclick = () => {
     openEquip();
   }
 };
-applyKnife(); applyUmb(); applySeat(save.seat ?? 'door');
+applyKnife(); applyUmb(); applySeat(save.seat ?? 'door'); refreshPet();
 $('pidLong').textContent = statsId;
 let myTag = '', tagNoted = false;
 const pidText = () => myTag ? `${Social.myNick()} #${myTag}` : '';
@@ -4174,6 +4345,7 @@ function frameBody() {
   // 廣場坐下：TP 鎖 0；FP 夾在 ±90°
   if (plazaMode && !walking) yaw = tYaw = clamp(yaw, -yl(), yl());
   moonTick(rdt);
+  petTick(rdt);
   shake = Math.max(0, shake - rdt);
   if (walking && bodyPose !== 'lie') walkStep(rdt); else if (walking) { walkMotion.spd = walkMotion.strafe = 0; } else { walkMotion.spd = walkMotion.strafe = 0; }
   let camPitch = pitch - pe * 0.08 + (smokeSitActive && !tpv ? puffCamPitch : 0), camRoll = 0;
@@ -4355,6 +4527,7 @@ bindRoom({
     goldSmoke: gearOn('goldPipe'),
     cushion: gearOn('seatCush'),
     nameFrame: gearOn('nameFrame'),
+    pet: petNow()?.id ?? '',
   }),
   isWalking: () => walking,
   enterScene: (scene, then) => {

@@ -632,7 +632,8 @@ export function posePlazaSmokeSit(rig: PlayerRig, puffKOrOpts: number | SmokeSit
   const rWr0 = [0.26, -0.02, -0.26] as const;
   // 嘴邊：上臂仍低（肘約肩下 0.12～0.14），主要靠小臂彎到唇前
   const rEl1 = [0.20, 0.20, -0.10] as const;
-  const rWr1 = [-0.16, 0.74, -0.24] as const;
+  // 以實際骨架算過：濾嘴（菸 +Z 端）落在嘴唇正前方（頭不俯仰時誤差 < 0.5 cm）
+  const rWr1 = [-0.25, 0.72, -0.19] as const;
   const lerp = (a: number, b: number) => a + (b - a) * k;
   // 弧線只微抬肘，避免上臂高舉
   const lift = Math.sin(k * Math.PI);
@@ -664,7 +665,8 @@ export function posePlazaSmokeSit(rig: PlayerRig, puffKOrOpts: number | SmokeSit
   placePlazaArmChain(rig.upperR, rig.lowerR, rSh[0], rSh[1], rSh[2], elx, ely, elz, wrx, wry, wrz);
 
   // 頭／胸：吸氣後仰微抬；吐煙前可再前傾由呼叫端疊
-  if (rig.head) rig.head.rotation.x = -0.04 - k * 0.02 - inhale * 0.08;
+  // 菸含在嘴上時頭不再隨吸氣俯仰，否則嘴會離開濾嘴（約 1.7 cm）
+  if (rig.head) rig.head.rotation.x = -0.04 - k * 0.02 - inhale * 0.08 * (1 - k);
   rig.torso.position.y = (rig.torso.position.y || 0) + inhale * 0.018;
   rig.torso.rotation.x = (rig.torso.rotation.x || 0) - inhale * 0.03;
 }

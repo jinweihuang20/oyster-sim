@@ -104,6 +104,18 @@ export function outfitKey(o: OutfitIds) {
   return `${o.head}|${o.hand}|${o.body}|${o.legs}|${o.feet}`;
 }
 
+/** 頭盔/帽子超出髮蓋頂的高度（公尺）；寵物疊坐頭頂時要往上讓這個量，不然會被擋住 */
+const HEAD_TOP_LIFT: Record<string, number> = {
+  hd_hat: 0.18,     // 斗笠
+  hd_fisher: 0.14,  // 漁夫帽
+  hd_helmet: 0.12,  // 工地安全帽
+  hd_crown: 0.18,   // 廟會金冠
+  hd_straw: 0.18,   // 竹編草帽
+};
+export function headTopLift(headId: string): number {
+  return HEAD_TOP_LIFT[headId] ?? 0;
+}
+
 const REPEAT: Record<string, [number, number]> = {
   hd_basic: [2, 2],
   sl_flower: [2, 2],

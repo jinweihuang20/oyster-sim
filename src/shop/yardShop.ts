@@ -12,6 +12,20 @@ import {
   fetchFlagSnapshot, flagErrText, flagSlowText, flagTextErr, flagTextSaveNote, nextFlagItem,
   postFlagSelect, postFlagText, postFlagUpgrade, type FlagTrack, type PlazaFlagState,
 } from '../plaza/flags';
+import { PETS, findPet, type Pet } from './pets';
+import { renderPetThumb } from './petThumb';
+import { openPetPreview } from './petPreview';
+
+/** 目前裝備中的寵物（買了且開開關才會回傳，沒有時回 null） */
+export const petNow = (): Pet | null => {
+  const save = D.getSave();
+  const id = save.shop.equipped.pet;
+  const p = findPet(id);
+  if (!p) return null;
+  if (!save.shop.owned.includes(p.id)) return null;
+  if (save.gear?.[p.id] === false) return null;
+  return p;
+};
 
 export type Knife = { id: string; n: string; price: number; green: number; speed: number; steps: number; stab: number; seam: number; luck: number; blade: number; desc: string };
 export type Umb = { id: string; n: string; price: number; open: number; dur: number; perf: number; cover: number; reflect: number; look: string; size: number; desc: string };
@@ -31,6 +45,8 @@ export type YardShopDeps = {
   drawRadio: () => void;
   /** 廣場外觀開關後同步（金煙／坐墊／名牌框） */
   onCosmeticsChange?: () => void;
+  /** 寵物購買／切換／開關後同步（出場或收起寵物模型） */
+  onPetChange?: () => void;
   getPlayerId: () => string;
   getNick: () => string;
   toast: (t: string, c?: string) => void;
@@ -239,6 +255,43 @@ export function renderShop() {
     D.persist(); renderShop(); D.onCosmeticsChange?.();
   });
   renderFlagShop();
+  // 寵物：買了可以開關；只能同時裝備一隻（放在 renderFlagShop 之後，才不會把旗幟拉進寵物 tab）
+  const curPet = D.getSave().shop.equipped.pet;
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 寵物</h3><p style="font-size:12px;opacity:.8"><b style="color:#d9952b">點縮圖可開啟 3D 檢視</b>。寵物會站在你的右肩，剝蚵仔時會跟著你產出效果。買了可以在這裡開關；同時只能帶一隻。你超過 10 秒都沒操作，寵物會睡著暫停效果。</p>` +
+    '<div class="petList">' + PETS.map(p => {
+      const save = D.getSave();
+      const own = save.shop.owned.includes(p.id);
+      const on = own && save.gear?.[p.id] !== false && curPet === p.id;
+      const equipBtn = own
+        ? (curPet === p.id
+          ? `<button data-ptog="${p.id}">${on ? '✅ 使用中' : '⬜ 沒用'}</button>`
+          : `<button data-peq="${p.id}">換這一隻</button>`)
+        : `<button data-pbuy="${p.id}" ${save.money < px(p.id, p.price) ? 'disabled' : ''}>${pxHtml(p.id, p.price)}</button>`;
+      const thumb = renderPetThumb(p.id);
+      const thumbInner = thumb
+        ? `<img src="${thumb}" alt="${p.n}" />`
+        : `<span style="font-size:12px;opacity:.8">預覽</span>`;
+      const ownPx = own ? ownedPxHtml(p.id, p.price) : '';
+      return `<div class="petCard"><button class="petThumb" type="button" data-ppreview="${p.id}" aria-label="預覽 ${p.n}">${thumbInner}</button><div class="petBody"><div class="petInfo"><b>${p.n}</b><span class="petDesc">${p.desc}</span><span class="petEff">${p.eff}</span>${pxCd(p.id) ? `<span class="petCd">${pxCd(p.id)}</span>` : ''}</div><div class="petAct">${ownPx}${equipBtn}</div></div></div>`;
+    }).join('') + '</div>');
+  $('shopList').querySelectorAll<HTMLElement>('[data-ppreview]').forEach(el => {
+    el.onclick = () => { const id = el.getAttribute('data-ppreview')!; openPetPreview(id); };
+  });
+  $('shopList').querySelectorAll('button[data-pbuy],button[data-peq],button[data-ptog]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
+    const id = b.getAttribute('data-pbuy') || b.getAttribute('data-peq') || b.getAttribute('data-ptog')!;
+    const p = PETS.find(x => x.id === id)!; const save = D.getSave(); save.gear = save.gear ?? {};
+    if (b.hasAttribute('data-pbuy')) {
+      const pr = await payFor(id, p.price, p.n); if (pr == null) return;
+      save.money -= pr; save.shop.owned.push(id); save.gear[id] = true; save.shop.equipped.pet = id;
+      D.track('buy', { item: id, price: pr }); if (D.getAc()) D.SFX.jingle();
+    } else if (b.hasAttribute('data-peq')) {
+      save.shop.equipped.pet = id; save.gear[id] = true;
+    } else {
+      // toggle on/off（只影響當前裝備的）
+      save.gear[id] = save.gear[id] === false;
+    }
+    D.persist(); renderShop(); D.onPetChange?.();
+  });
   const cw = weaponNow();
   $('shopList').insertAdjacentHTML('beforeend', `<h3><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg> 槍枝</h3><p style="font-size:12px;opacity:.8"><b style="color:#d9952b">點整列可預覽 3D 模型</b>（進去後拖曳旋轉）；買了才能在死鬥裡裝備；${WEAPON_DEFS.oysterGun.name}開局就送。${import.meta.env.DEV ? '（開發模式：全部已解鎖）' : ''}</p><table class="kt"><tr><th>槍</th><th>傷害</th><th>彈匣</th><th>射速</th><th>彈速</th><th></th></tr>` + shopWeapons().map(w => {
     const own = ownsWeapon(w.id);

@@ -1517,6 +1517,33 @@ body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
 #shopList table.kt b[style*="9be37a"]{color:#2f8a3a!important}
 #shopList table.kt b[style*="ff8a7a"]{color:#c0503f!important}
 
+/* ===== 寵物剝蚵提示：右下角小膠囊，不走大 toast ===== */
+#petToasts{position:fixed;right:14px;bottom:120px;display:flex;flex-direction:column-reverse;gap:6px;pointer-events:none;z-index:13200;max-width:62vw}
+#petToasts .petToast{padding:6px 12px;background:rgba(10,18,28,0.72);color:#9be37a;font-size:13px;font-weight:700;border-radius:999px;border:1px solid rgba(255,255,255,.1);box-shadow:0 2px 8px rgba(0,0,0,.3);opacity:0;transform:translateY(8px);transition:opacity .3s ease,transform .3s ease;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.02em}
+#petToasts .petToast.on{opacity:1;transform:translateY(0)}
+@media (pointer:coarse){#petToasts{bottom:150px}}
+
+/* ===== 寵物商店卡（獨立樣式，不沿用 .kt；flex 避免 grid 在 iOS 的邊緣問題） ===== */
+#shopList .petList{display:flex;flex-direction:column;gap:10px;margin:6px 0 12px}
+#shopList .petCard{display:flex;align-items:flex-start;gap:10px;background:rgba(255,255,255,.6);border:1px solid rgba(31,42,54,.10);border-radius:12px;padding:10px 12px;box-shadow:0 2px 8px rgba(20,30,45,.06);color:#2a3440;box-sizing:border-box;width:100%}
+#shopList .petCard .petThumb{flex:0 0 64px;width:64px;height:64px;min-width:64px;border-radius:10px;background:rgba(31,42,54,.08);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;border:0;padding:0;margin:0;box-sizing:border-box;-webkit-appearance:none;appearance:none}
+#shopList .petCard .petThumb img{width:100%;height:100%;display:block;object-fit:contain}
+#shopList .petCard .petBody{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px}
+#shopList .petCard .petInfo{min-width:0;line-height:1.45}
+#shopList .petCard .petInfo b{font-size:15px;display:block;margin-bottom:2px;word-break:break-word}
+#shopList .petCard .petInfo .petDesc{font-size:12px;color:#6b7480;display:block;word-break:break-word}
+#shopList .petCard .petInfo .petEff{font-size:12px;color:#2f8a3a;display:block;margin-top:2px;word-break:break-word}
+#shopList .petCard .petInfo .petCd{display:block;margin-top:2px}
+#shopList .petCard .petAct{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+#shopList .petCard .petAct button{min-width:88px;padding:8px 12px;margin:0}
+@media (min-width:540px){
+  #shopList .petCard{align-items:center}
+  #shopList .petCard .petThumb{flex:0 0 72px;width:72px;height:72px;min-width:72px}
+  #shopList .petCard .petBody{flex-direction:row;align-items:center;gap:12px}
+  #shopList .petCard .petInfo{flex:1 1 auto}
+  #shopList .petCard .petAct{flex:0 0 auto}
+}
+
 /* 成就提示：不透明 */
 #achBan{background:#fbf7ee!important;opacity:1!important;-webkit-backdrop-filter:none;backdrop-filter:none;border:1px solid #e2d3a8!important;box-shadow:0 8px 24px rgba(10,20,35,.28),0 2px 6px rgba(10,20,35,.12)!important;color:#1f2a36!important}
 

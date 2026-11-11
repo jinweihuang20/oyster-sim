@@ -98,6 +98,10 @@ export type PlazaDeps = {
   persistPlazaSpawn?: (spawn: PlazaSpawnMemory) => void;
   /** 省電模式（廣場簡化／降負載） */
   getEco?: () => boolean;
+  /** 自己裝備了寵物（坐姿時寵物在頭頂、聊天泡泡要讓位） */
+  hasOwnPet?: () => boolean;
+  /** 自己頭上帽子高出髮蓋頂的量（公尺）；有寵物+坐姿時聊天泡泡要再多抬這麼多 */
+  selfHatLift?: () => number;
 };
 
 let active = false;
@@ -469,6 +473,8 @@ export function openPlaza(D: PlazaDeps) {
     // 手機或省電：少幾何／少燈；執行中仍可依 getEco 再降動態負載
     lowDetail: matchMedia('(pointer: coarse)').matches || !!D.getEco?.(),
     eco: () => !!D.getEco?.(),
+    hasOwnPet: () => !!D.hasOwnPet?.(),
+    selfHatLift: () => D.selfHatLift?.() ?? 0,
   });
   buildUi();
   wireClient(D);
