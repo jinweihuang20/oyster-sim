@@ -403,6 +403,18 @@ let sweet = false, sweetT = 0;
 const seamGlow = mesh(new THREE.BoxGeometry(0.062, 0.026, 0.026), new THREE.MeshBasicMaterial({ color: 0xffc878, transparent: true, opacity: 0, depthWrite: false }), [0, 0.012, 0], oyster);
 // 縫提示後畫，避免被手擋住；不可把手／刀的 depthWrite 關掉，否則工寮桌面和牆會蓋住第一人稱雙手
 seamMark.renderOrder = seamGlow.renderOrder = seamRing.renderOrder = 12;
+// 縫提示對準刀時正好在第一人稱拿刀的手底下；手會寫深度（見 4ea3c9e），透明提示永遠在不透明物之後畫，renderOrder 擋不住。
+// 縫在朝鏡頭那半邊就關深度測試，直接蓋在手／刀／蚵殼上；轉到背面再恢復，避免穿透蚵仔看到背面的縫。
+const _seamW = new THREE.Vector3(), _seamO = new THREE.Vector3(), _seamC = new THREE.Vector3();
+let seamOnTop = false;
+function syncSeamOnTop(cam: THREE.Camera) {
+  const par = seamGlow.parent ?? oyster;
+  seamGlow.getWorldPosition(_seamW); par.getWorldPosition(_seamO); cam.getWorldPosition(_seamC);
+  const on = _seamW.sub(_seamO).dot(_seamC.sub(_seamO)) > 0;
+  if (on === seamOnTop) return;
+  seamOnTop = on;
+  for (const o of [seamMark, seamGlow, seamRing]) (o.material as THREE.Material).depthTest = !on;
+}
 const shimmer = mesh(new THREE.SphereGeometry(0.11, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }), [0, 0, 0], oyster);
 const pearlMesh = mesh(new THREE.SphereGeometry(0.03, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.3 }), [0, 0.05, 0], oyster);
 pearlMesh.visible = false;
@@ -1230,14 +1242,27 @@ function layoutBasinOysters() {
   });
   syncBasinWorld();
 }
+/** 每次清盆 +1；還在飛的舊蚵落地時發現代數不同就丟掉，避免清盆後又冒出來 */
+let basinGen = 0;
 function clearBasinOysters() {
+  basinGen++;
   for (const m of basinOy) m.removeFromParent();
   basinOy.length = 0;
+}
+/** 廣場入座／換位／重連回座：盆子換成這桌難度、補滿；不給錢、不算顆數 */
+function plazaRefillBasin() {
+  if (!plazaMode) return;
+  if (phase === 'scoop') { on('prog', false); setPhase('busy'); later(0.3, goPick); }
+  if (plazaOnGrill()) liftSeatPropsOntoPile();
+  clearBasinOysters();
+  fillBasin(false);
+  if (phase === 'pick' && !plazaOnGrill()) hint.textContent = '點臉盆內的蚵仔';
 }
 function fillBasin(animate: boolean) {
   const n = basinCap();
   syncBasinWorld();
   const weights = plazaMode ? plazaScoopWeights() : (newbie() ? [50, 50, 0, 0] : locW());
+  const gen = basinGen;
   for (let i = 0; i < n; i++) {
     const m = makeBasinOyster(wpick(weights.map(w => ({ w }))));
     const local = basinSlotLocal(i);
@@ -1253,6 +1278,7 @@ function fillBasin(animate: boolean) {
       } else p0 = pileSpot();
       const slotW = basinMesh.localToWorld(local.clone());
       fly(m, p0, slotW, 0.4 + i * 0.05, 0.4, () => {
+        if (gen !== basinGen) { m.removeFromParent(); return; }
         basinMesh.add(m);
         m.position.copy(local);
       });
@@ -3593,8 +3619,12 @@ function launchPlaza() {
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
       plazaEnsureFpView();
       on('standBtn', true); on('umbBtn', true); on('medBtn', true);
-      toast('換位坐下', '#9fe0ff'); SFX.pop(); later(0.3, goPick);
+      // 換位：手上那顆（含撬到一半）放回原堆，盆子換成新桌難度並補滿
+      oysterToHand(); oyster.visible = false; on('prog', false); setPhase('busy');
+      plazaRefillBasin();
+      toast('換位坐下，臉盆換成這桌的蚵仔', '#9fe0ff'); SFX.pop(); later(0.3, goPick);
     },
+    refillBasin: () => { plazaRefillBasin(); },
     enterSmokeSit: () => {
       setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
       // plazaRoam 會藏剝蚵鈕；plazaSmokeSit 讓站起／回主選單與一般座位同款可見
@@ -3955,7 +3985,7 @@ function frameBody() {
         sweet = inZ; sweetT = Math.max(0, sweetT - rdt); const snap = sweetT / 0.25;
         gm.color.set(inZ ? 0xd8ff80 : 0xffc878); if (inZ) gm.opacity = gearOn('glasses') ? 1 : 0.8;
         seamGlow.scale.setScalar(gl * (inZ ? 1.5 + snap * 0.6 : 1));
-        seamRing.visible = inZ && seamMark.visible; seamRing.scale.setScalar(1 + snap * 0.8); (seamRing.material as THREE.MeshBasicMaterial).opacity = 0.85 - snap * 0.4; }
+        seamRing.visible = inZ && seamMark.visible; seamRing.scale.setScalar(1 + snap * 0.8); (seamRing.material as THREE.MeshBasicMaterial).opacity = 0.85 - snap * 0.4; syncSeamOnTop(viewCam()); }
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
       knife.position.y = 0.03 + (e < tolNow() * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
     } else if (phase !== 'twist') knife.position.y = 0.03;
