@@ -835,7 +835,7 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .eqSets{display:flex;flex-direction:column;gap:10px;margin:0 0 8px;font-size:13px}
 .eqSet{position:relative;background:var(--paint);border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);padding:8px;overflow:hidden}
 .eqSet.done{background:#fff3cf}
-.eqSetH{display:flex;justify-content:space-between;align-items:baseline}.eqSetH b{font:900 16px var(--sign)}.eqSetH span{font-size:12px;opacity:.75}
+.eqSetH{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}.eqSetH b{font:900 16px var(--sign)}.eqSetH span{font-size:12px;color:rgba(22,25,29,.75)}.eqSetH .eqSetPx{color:#2a5a86}
 .eqSetI{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0 4px}
 .eqSetI div{display:flex;flex-direction:column;align-items:center;padding:4px 2px;border:2px dashed rgba(22,25,29,.35);min-width:0}
 .eqSetI svg,.eqSetI img.slv,.eqSetI .eqThumb{width:40px;height:34px;min-height:34px;flex:none;display:block}
@@ -932,6 +932,15 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 
 #bubbles{z-index:0;isolation:isolate}
 /* 商店特價：按鈕一行（小字劃掉原價＋新價），「特價」角標，倒數放說明下面 */
+
+.shopOwnPx{position:relative;display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:#2a5a86;white-space:nowrap;overflow:visible;padding-right:6px;line-height:1.3}
+.shopOwnPx .ic{width:12px;height:12px;flex:none}
+.eqSetPx{position:relative;display:inline-flex;align-items:center;overflow:visible;padding-right:4px;color:#2a5a86;font-weight:700}
+#shop .slBtns{align-items:center}
+#shop .slBtns .shopOwnPx{flex:1 1 100%;justify-content:center}
+#shopList table.kt td:last-child{flex-wrap:wrap;justify-content:flex-end;row-gap:4px}
+#shopList table.kt td:last-child .shopOwnPx{flex:1 1 auto}
+#shop .flagShop > .shopOwnPx{margin:0 0 8px}
 .pxSale{white-space:nowrap}.pxSale s{opacity:.6;font-size:.72em;margin-right:3px;font-weight:400}
 button:has(.saleTag){position:relative;overflow:visible!important}
 .saleTag{position:absolute;top:-8px;right:-6px;background:#c8302a;color:#fff8e8;border:1.5px solid #1b1b1b;padding:0 3px;font-size:10px;line-height:14px;font-weight:700;pointer-events:none;z-index:1}
@@ -1801,7 +1810,8 @@ body.poseOpen #flagPullBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!importan
 }
 .clothTryCvs{width:100%;height:100%;display:block;touch-action:none}
 .clothTryHint{margin:8px 0 0;font-size:12px;opacity:.78;text-align:center}
-.clothTryAct{margin-top:10px}
+.clothTryAct{margin-top:10px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.clothTryAct .shopOwnPx{font-size:14px}
 .clothTryAct button{width:100%;min-height:42px;background:#2a5a86!important;color:#fff!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:10px!important;box-shadow:0 2px 8px rgba(0,0,0,.22)!important;font-weight:800}
 .clothTryAct button:disabled{opacity:.55}
 
