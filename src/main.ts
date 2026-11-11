@@ -97,6 +97,7 @@ let plazaMode = false;
 function setPlazaMode(v: boolean) {
   plazaMode = v;
   document.body.classList.toggle('plazaMode', v);
+  updBaseFov();
   applyPlazaShadowMode();
   // 進／出廣場同時切 lamp.castShadow（applyEcoGfx 內部會讀 plazaMode）
   try { applyEcoGfx(); } catch { /* applyEcoGfx 尚未定義時忽略 */ }
@@ -4133,10 +4134,23 @@ function viewSize() {
   const h = Math.round(vv?.height || innerHeight || 1);
   return { w: Math.max(1, w), h: Math.max(1, h) };
 }
-/** 第三人稱：橫向加垂直 FOV，避免寬螢幕看起來扁扁的 */
+/** 水平視角 H（度）在目前比例下對應的垂直 FOV */
+function vFovForH(hDeg: number, aspect = camera.aspect) {
+  return THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(hDeg) / 2) / Math.max(0.1, aspect)));
+}
+/** 第三人稱 FOV：直向看廣一點，橫向逐步收窄；再壓住水平視角，免得寬螢幕兩側拉寬、看起來扁扁的 */
+const TP_FOV = { walk: [68, 60, 96], plazaSit: [72, 64, 100], shedSit: [66, 58, 94] } as const;
 function tpFovFor(mode: 'walk' | 'plazaSit' | 'shedSit') {
-  if (wideView) return mode === 'plazaSit' ? 78 : mode === 'walk' ? 72 : 70;
-  return mode === 'plazaSit' ? 64 : 58;
+  const [vTall, vWide, hMax] = TP_FOV[mode];
+  const t = Math.min(1, Math.max(0, (camera.aspect - 0.6) / (1.33 - 0.6)));
+  return Math.round(Math.min(vTall + (vWide - vTall) * t, vFovForH(hMax)) * 10) / 10;
+}
+/** 第三人稱鏡頭距離倍率：很寬的螢幕稍微拉遠，補回收窄的視角 */
+const tpDistK = () => (camera.aspect > 1.6 ? 1.05 : 1);
+/** 第一人稱基準 FOV；廣場內水平視角最多 100°（工寮剝蚵維持原本） */
+function updBaseFov() {
+  baseFov = narrow ? 82 : 78;
+  if (plazaMode) baseFov = Math.min(baseFov, vFovForH(100));
 }
 function resize() {
   const { w, h } = viewSize();
@@ -4152,10 +4166,10 @@ function resize() {
   tpCam.aspect = camera.aspect;
   tpCam.updateProjectionMatrix();
   narrow = camera.aspect < 0.8;
-  // 橫向寬螢幕：垂直 FOV 加大，畫面才不會顯得壓扁
+  // 橫向寬螢幕：第三人稱眼高／注視點用（FOV 改由 tpFovFor 依比例連續計算）
   wideView = camera.aspect > 1.35;
   // 4:3 平板也用橫向 FOV，避免近鏡頭前臂過度放大
-  baseFov = narrow ? 82 : 78;
+  updBaseFov();
   applyFpHandLayout();
 }
 /** 第一人稱手的畫面配置。camTick 每幀會重設 handRig，不可只寫在 resize。 */
@@ -5082,13 +5096,13 @@ function camTick(dt: number) {
         applyBodyPose(rig, lastPose, poseK);
       }
       const fx = -Math.sin(yaw + flYaw), fz = -Math.cos(yaw + flYaw);
-      const dist = wideView ? tpDist * 0.92 : tpDist;
+      const dist = tpDist * tpDistK();
       const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = dist * Math.cos(el);
       const eyeY = wideView ? 1.55 : 1.4;
       const cp = new THREE.Vector3(walkPos.x - fx * hd, eyeY + dist * Math.sin(el) + jumpY * 0.35 - poseK * (lastPose === 'lie' ? 0.7 : 0.35), walkPos.z - fz * hd);
       { const CAP = 2.7, R = 10.9, hy = eyeY; if (cp.y > CAP) { const k = (CAP - hy) / (cp.y - hy); const ix = walkPos.x + (cp.x - walkPos.x) * k, iz = walkPos.z + (cp.z - walkPos.z) * k; if (Math.abs(ix) < R && Math.abs(iz) < R) { cp.x = ix; cp.z = iz; cp.y = CAP; } } }
       if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
-      { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, wideView ? 1.15 : 1.0, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
+      { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, wideView && camera.aspect <= 1.6 ? 1.15 : 1.0, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
       { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
       tpCam.updateMatrixWorld(); return;
     }
@@ -5113,7 +5127,7 @@ function camTick(dt: number) {
       }
     }
     const fx = -Math.sin(yaw + flYaw), fz = -Math.cos(yaw + flYaw);
-    const z = tpDist / 3.6;
+    const z = tpDist * tpDistK() / 3.6;
     const ltx = walkPos.x + fx * 1.2, lty = jumpY + 0.9, ltz = walkPos.z + fz * 1.2;
     const cx0 = walkPos.x - fx * 2.9, cy0 = jumpY + 2.5, cz0 = walkPos.z - fz * 2.9;
     const cp = new THREE.Vector3(ltx + (cx0 - ltx) * z, lty + (cy0 - lty) * z, ltz + (cz0 - ltz) * z);
@@ -5153,7 +5167,7 @@ function camTick(dt: number) {
     }
     handRig.visible = false;
     const fx = -Math.sin(yaw + flYaw), fz = -Math.cos(yaw + flYaw);
-    const dist = wideView ? tpDist * 0.92 : tpDist;
+    const dist = tpDist * tpDistK();
     const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = dist * Math.cos(el);
     const cp = new THREE.Vector3(SEAT.x - fx * hd, SEAT.y + 0.4 + dist * Math.sin(el), SEAT.z - fz * hd);
     const lt = new THREE.Vector3(SEAT.x + fx * 0.2, SEAT.y - 0.15, SEAT.z + fz * 0.2);
@@ -5185,7 +5199,7 @@ function camTick(dt: number) {
   const h = seatYaw + yaw * 0.35 + flYaw, fx = -Math.sin(h), fz = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
   {
     // 工寮：從背後斜 3/4 看，人在畫面中下、全身入鏡；距離跟走動同一套縮放
-    const z = tpDist / 3.6;
+    const z = tpDist * tpDistK() / 3.6;
     const ltx = SEAT.x + fx * 0.8 + rx * 0.35, lty = SEAT.y - 0.2, ltz = SEAT.z + fz * 0.8 + rz * 0.35;
     const cx0 = SEAT.x - fx * 2.6 - rx * 1.5, cy0 = SEAT.y + 0.85, cz0 = SEAT.z - fz * 2.6 - rz * 1.5;
     const cp = new THREE.Vector3(ltx + (cx0 - ltx) * z, lty + (cy0 - lty) * z, ltz + (cz0 - ltz) * z);
