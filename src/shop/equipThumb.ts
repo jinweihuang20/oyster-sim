@@ -139,6 +139,11 @@ function isolateSlot(slot: Slot, itemId: string) {
 
   if (slot === 'body') {
     const keep = bodyDet ? [bodyDet] : [];
+    // 花襯衫短袖掛在上臂，縮圖要一起拍
+    if (itemId === 'bd_hawaii') {
+      if (rig.upperL) keep.push(rig.upperL);
+      if (rig.upperR) keep.push(rig.upperR);
+    }
     const bikini = itemId === 'bd_bikini';
     const limb = [rig.head, rig.upperL, rig.lowerL, rig.upperR, rig.lowerR, rig.legL, rig.legR].filter(Boolean) as THREE.Object3D[];
     rig.outer.traverse(o => {
@@ -209,7 +214,7 @@ function frameVisible(slot: Slot) {
   const fov = slot === 'feet' ? 32 : 34;
   camera.fov = fov;
   camera.aspect = TW / TH;
-  camera.near = 0.04;
+  camera.near = 0.08;
   camera.far = 20;
   const pad = slot === 'feet' || slot === 'head' ? 1.28 : 1.36;
   const dist = (maxDim * 0.5 * pad) / Math.tan((fov * Math.PI / 180) / 2);

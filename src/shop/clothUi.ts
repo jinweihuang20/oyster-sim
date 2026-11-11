@@ -6,7 +6,7 @@ import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, NONE_ID, isNoneId, def
 import { EQUIP_VIS, paintEquipCanvas } from './equipVisual';
 import { openClothTryPreview, closeClothTryPreview } from './tryPreview';
 import { hydrateEquipThumbs } from './equipThumb';
-import { refreshEqPreview } from './equipPreview';
+import { refreshEqPreview, snapshotEqPreview } from './equipPreview';
 
 export type ClothUiDeps = {
   getSave: () => Save;
@@ -32,6 +32,7 @@ export type ClothUiDeps = {
   shirtCuff: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
   getEqFromRes: () => boolean;
   setEqFromRes: (v: boolean) => void;
+  setShopFromEquip: (v: boolean) => void;
   isEvRun: () => boolean;
   getSleeveTry: () => string | null;
   setSleeveTry: (v: string | null) => void;
@@ -98,7 +99,8 @@ export function applySleeve() {
   const s = trying ? EQUIP.find(x => x.id === trying)! : equipNow('hand');
   const body = equipNow('body');
   const shirtless = body.id === 'bd_bikini' || body.id === 'bd_none';
-  const bare = !trying && (s.id === 'hn_none' || (shirtless && s.id === 'hn_basic'));
+  const sleeveless = body.id === 'bd_singlet';
+  const bare = !trying && (s.id === 'hn_none' || ((shirtless || sleeveless) && s.id === 'hn_basic'));
   if (bare) {
     D.sleeve.map?.dispose();
     D.sleeve.map = null;
@@ -110,7 +112,7 @@ export function applySleeve() {
   }
   D.sleeve.map?.dispose(); D.sleeve.map = eqTex(s); D.sleeve.color.set(0xffffff);
   D.sleeve.emissive.set(s.pat === 'neon' ? 0x1a8a50 : 0x000000); D.sleeve.needsUpdate = true;
-  D.shirtCuff.color.set(shirtless ? s.base : body.base);
+  D.shirtCuff.color.set((shirtless || sleeveless) ? s.base : body.base);
 }
 export function sleeveGold() { if (!slOn('sl_dragon')) return; let k = 0; const iv = setInterval(() => { D.sleeve.emissive.set(k % 2 ? 0x000000 : 0xb08010); if (++k > 8) { clearInterval(iv); D.sleeve.emissive.set(0); } }, 150); }
 // 線條圖示：各部位一個簡單輪廓，填該件顏色
@@ -141,6 +143,14 @@ export function eqSvg(e: Eq, w = 72, grey = false) {
     ft_work: `<path d="M16 18h20v14q18 2 22 12v8H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 24h10M22 30h10" stroke="#e8d8a8" stroke-width="2"/>`,
     lg_flower: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><circle cx="26" cy="22" r="3" fill="#fff3c8"/><circle cx="46" cy="36" r="3" fill="#fff3c8"/>`,
     bd_bikini: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="#e8bc98" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M24 26q6-2 10 6h-12Z" fill="${grey ? '#c4c4c4' : '#e84a5c'}" stroke="${s}" stroke-width="1.6"/><path d="M48 26q-6-2-10 6h12Z" fill="${grey ? '#c4c4c4' : '#e84a5c'}" stroke="${s}" stroke-width="1.6"/><path d="M30 22L36 12L42 22" fill="none" stroke="#fff6ee" stroke-width="2"/><path d="M24 50h24l-3 8H27Z" fill="${grey ? '#c4c4c4' : '#e84a5c'}" stroke="${s}" stroke-width="1.6"/>`,
+    hd_straw: `<path d="M2 44L36 18L70 44Q36 50 2 44Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 38H54M26 30H46" stroke="${s}" stroke-width="1.5"/><path d="M22 40H50" stroke="#5a3a18" stroke-width="3"/>`,
+    hd_purple: `<path d="M14 40Q36 8 58 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M56 36l10 10-4 4-8-8" fill="${f}" stroke="${s}" stroke-width="2.5"/><circle cx="28" cy="30" r="2.5" fill="#e8b8e0"/><circle cx="42" cy="26" r="2.5" fill="#fff0c8"/>`,
+    sl_redflower: `<defs><clipPath id="c_sl_redflower"><rect x="6" y="18" width="44" height="22" rx="8"/></clipPath></defs><rect x="6" y="18" width="44" height="22" rx="8" fill="${f}"/><g clip-path="url(#c_sl_redflower)"><g transform="translate(16 26)"><circle r="4" fill="#fff3c8"/><circle r="1.4" fill="#2f7a38"/></g><g transform="translate(34 32)"><circle r="4.4" fill="#ffe0a0"/><circle r="1.5" fill="#f0d020"/></g><g transform="translate(28 22)"><circle r="3.4" fill="#fff8e8"/><circle r="1.2" fill="#2f7a38"/></g></g><rect x="6" y="18" width="44" height="22" rx="8" fill="none" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
+    bd_singlet: `<path d="M24 14L16 22v36h40V22L48 14l-6 8h-12Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M28 14q8 10 16 0" fill="none" stroke="${s}" stroke-width="2"/>`,
+    bd_hawaii: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M30 16l6 10 6-10" fill="${f}" stroke="${s}" stroke-width="2"/><circle cx="28" cy="34" r="3" fill="#e85040"/><circle cx="44" cy="42" r="3" fill="#f0c030"/>`,
+    lg_rolled: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 44h16M38 44h16" stroke="#e8bc98" stroke-width="6"/><path d="M18 40h16M38 40h16" stroke="${s}" stroke-width="2"/>`,
+    ft_greenboots: `<path d="M18 8h18v28q16 2 22 10v6H18Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
+    ft_redslipper: `<path d="M10 40q0-14 16-14h14q16 4 22 14v6H10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 40q16-12 36 0" fill="none" stroke="${s}" stroke-width="3"/>`,
     hd_none: `<circle cx="36" cy="32" r="16" fill="#e8bc98" stroke="${s}" stroke-width="2.5"/><path d="M20 32Q20 14 36 14Q52 14 52 32Q44 22 36 24Q28 22 20 32Z" fill="#222" stroke="${s}" stroke-width="2"/>`,
     hn_none: `<rect x="6" y="18" width="44" height="22" rx="8" fill="#e8bc98" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
     bd_none: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="#e8bc98" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M26 28l8 8M34 28l-8 8M40 28l8 8M48 28l-8 8" stroke="${grey ? '#888' : '#2a2a2a'}" stroke-width="2.6" stroke-linecap="round"/>`,
@@ -185,8 +195,9 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
   const PF: Record<string, string> = { flower: 'url(#pFlower)', camo: 'url(#pCamo)', neon: 'url(#pNeon)', tattoo: 'url(#pTat)' };
   // ---- 手臂（在衣服後面）：肩到腕，手在末端 ----
   const shirtless = B.id === 'bd_bikini' || B.id === 'bd_none';
-  const bareArm = A.id === 'hn_none' || (shirtless && A.id === 'hn_basic');
-  const armFill = bareArm ? SK : A.id === 'sl_flower' ? 'url(#pFlower)' : A.id === 'sl_camo' ? 'url(#pCamo)' : A.id === 'sl_neon' ? 'url(#pNeon)' : A.id === 'sl_89' ? 'url(#pTat)' : A.base;
+  const sleeveless = B.id === 'bd_singlet';
+  const bareArm = A.id === 'hn_none' || ((shirtless || sleeveless) && A.id === 'hn_basic');
+  const armFill = bareArm ? SK : A.id === 'sl_flower' ? 'url(#pFlower)' : A.id === 'sl_redflower' ? 'url(#pFlowerR)' : A.id === 'sl_camo' ? 'url(#pCamo)' : A.id === 'sl_neon' ? 'url(#pNeon)' : A.id === 'sl_89' ? 'url(#pTat)' : A.base;
   const arm = (x1: number, x2: number) => { const d = `M${x1} 100L${x2} 160`, dx = x2 - x1, len = Math.hypot(dx, 60), nx = -60 / len, ny = dx / len;
     let ex = '';
     if (A.id === 'sl_rain') ex = `<path d="M${x1 + nx * 3} ${100 + ny * 3}L${x2 + nx * 3} ${160 + ny * 3}" stroke="#fffbe0" stroke-width="2.5" stroke-linecap="round" opacity=".9"/>`;
@@ -202,7 +213,9 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     bd_boss: `<path d="${T}" fill="#1e2a3a" ${ol}/><path d="M66 90l14 14 14-14" fill="#2e3e52" stroke="${k}" stroke-width="2.5"/><path d="M80 104V182" stroke="#c8c8c8" stroke-width="2.5" stroke-dasharray="2 2"/><rect x="58" y="140" width="14" height="12" fill="none" stroke="#c8c8c8" stroke-width="2"/><rect x="88" y="140" width="14" height="12" fill="none" stroke="#c8c8c8" stroke-width="2"/>`,
     bd_sequin: `<path d="${T}" fill="url(#pSeq)" ${ol}/><path d="M64 92q16 16 32 0" fill="none" stroke="#ffd25a" stroke-width="3"/>`,
     bd_bikini: `<path d="${T}" fill="${SK}" ${ol}/><path d="M58 126q10-6 16 8H56Z" fill="#e84a5c" ${ol}/><path d="M102 126q-10-6-16 8h18Z" fill="#e84a5c" ${ol}/><path d="M68 122L80 100L92 122" fill="none" stroke="#fff6ee" stroke-width="3" stroke-linecap="round"/><path d="M56 168h48l-6 16H62Z" fill="#e84a5c" ${ol}/>`,
-    bd_none: `<path d="${T}" fill="${SK}" ${ol}/><path d="M62 126l10 10M72 126l-10 10M88 126l10 10M98 126l-10 10" fill="none" stroke="#2a2a2a" stroke-width="3.4" stroke-linecap="round"/>` };
+    bd_none: `<path d="${T}" fill="${SK}" ${ol}/><path d="M62 126l10 10M72 126l-10 10M88 126l10 10M98 126l-10 10" fill="none" stroke="#2a2a2a" stroke-width="3.4" stroke-linecap="round"/>`,
+    bd_singlet: `<path d="${T}" fill="#f4f0e8" ${ol}/><path d="M70 90q10 12 20 0" fill="none" stroke="${k}" stroke-width="2"/><path d="M52 100h8M100 100h8" stroke="#e4e0d8" stroke-width="4"/>`,
+    bd_hawaii: `<path d="${T}" fill="#1e8a7a" ${ol}/><path d="M66 90l14 14 14-14" fill="#1e8a7a" stroke="${k}" stroke-width="2.5"/><circle cx="68" cy="130" r="6" fill="#e85040"/><circle cx="92" cy="148" r="6" fill="#f0c030"/><circle cx="80" cy="168" r="5" fill="#f078a0"/>` };
   const hood = B.id === 'bd_rain' ? `<path d="M50 92Q48 34 80 30Q112 34 110 92Z" fill="#ffd21a" ${ol}/>` : '';
   // ---- 褲子 ----
   const P = 'M54 182h52l6 86H86l-6-60-6 60H48Z';
@@ -210,7 +223,8 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     lg_basic: `<path d="${P}" fill="#4a4a52" ${ol}/><path d="M58 190q8 10 16 0M86 190q8 10 16 0" stroke="#8a8a92" stroke-width="2" fill="none"/><rect x="92" y="222" width="12" height="12" fill="none" stroke="#8a8a92" stroke-width="2"/>`,
     lg_rain: `<path d="${P}" fill="#ffd21a" ${ol}/><path d="M60 190l-6 72M100 190l4 72" stroke="#fffbe0" stroke-width="3" opacity=".85"/>`,
     lg_flower: `<path d="${P}" fill="url(#pFlower)" ${ol}/>`,
-    lg_camo: `<path d="${P}" fill="url(#pCamo)" ${ol}/><rect x="56" y="214" width="12" height="14" fill="none" stroke="#2e3a1e" stroke-width="2"/>` };
+    lg_camo: `<path d="${P}" fill="url(#pCamo)" ${ol}/><rect x="56" y="214" width="12" height="14" fill="none" stroke="#2e3a1e" stroke-width="2"/>`,
+    lg_rolled: `<path d="${P}" fill="#6a6248" ${ol}/><path d="M52 240h20M88 240h20" stroke="#e8bc98" stroke-width="10"/><path d="M52 232h20M88 232h20" stroke="${k}" stroke-width="2"/>` };
   // ---- 鞋子 ----
   const toes = (x: number) => [0, 1, 2, 3].map(i => `<circle cx="${x + 6 + i * 7}" cy="270" r="3" fill="${SK}" stroke="${k}" stroke-width="1.2"/>`).join('');
   const slip = (sole: string, strap: string) => [40, 84].map(x => `<rect x="${x - 4}" y="276" width="40" height="7" rx="3" fill="${sole}" stroke="${k}" stroke-width="2.5"/>${toes(x)}<path d="M${x + 2} 276q16-12 32 0" fill="none" stroke="${strap}" stroke-width="5"/>`).join('');
@@ -219,7 +233,9 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     ft_basic: slip('#f2f2ee', '#2a5ab0'),
     ft_gold: slip('#e8b830', '#ffd25a') + `<circle cx="56" cy="271" r="2" fill="#fff"/><circle cx="100" cy="271" r="2" fill="#fff"/>`,
     ft_boots: [44, 84].map(x => `<path d="M${x} 236h30v40h6v8H${x - 4}v-8h4Z" fill="#ffd21a" ${ol}/><path d="M${x + 4} 242v32" stroke="#fffbe0" stroke-width="3"/>`).join(''),
-    ft_work: [40, 84].map(x => `<path d="M${x + 2} 258h30l4 18h4v8H${x - 2}v-8h4Z" fill="#6a4a2a" ${ol}/>${[262, 268, 274].map(y => `<path d="M${x + 10} ${y}l12 3M${x + 22} ${y}l-12 3" stroke="#e8d8a8" stroke-width="1.5"/>`).join('')}`).join('') };
+    ft_work: [40, 84].map(x => `<path d="M${x + 2} 258h30l4 18h4v8H${x - 2}v-8h4Z" fill="#6a4a2a" ${ol}/>${[262, 268, 274].map(y => `<path d="M${x + 10} ${y}l12 3M${x + 22} ${y}l-12 3" stroke="#e8d8a8" stroke-width="1.5"/>`).join('')}`).join(''),
+    ft_greenboots: [44, 84].map(x => `<path d="M${x} 236h30v40h6v8H${x - 4}v-8h4Z" fill="#2f8a3a" ${ol}/><path d="M${x + 4} 242v32" stroke="#1a5a28" stroke-width="3"/>`).join(''),
+    ft_redslipper: slip('#e85a4a', '#c82028') };
   // ---- 頭 ----
   const hd: Record<string, string> = {
     hd_basic: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="url(#pFlowerR)" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#c84a5a" ${ol}/>`,
@@ -227,7 +243,9 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     hd_fisher: `<path d="M58 54V38Q80 26 102 38V54Z" fill="#4a6a8a" ${ol}/><path d="M44 62L58 52H102L116 62Q80 68 44 62Z" fill="#4a6a8a" ${ol}/><path d="M58 50H102" stroke="#2a3a4a" stroke-width="2.5"/>`,
     hd_helmet: `<path d="M56 56Q56 30 80 30Q104 30 104 56Z" fill="#ffb21a" ${ol}/><path d="M48 54H112V60H48Z" fill="#ffb21a" ${ol}/><path d="M80 30V54M70 33v21M90 33v21" stroke="${k}" stroke-width="2"/>`,
     hd_crown: `<path d="M58 54L60 28L70 40L80 22L90 40L100 28L102 54Z" fill="#e8b830" ${ol}/><path d="M58 54H102" stroke="#b8862a" stroke-width="4"/><circle cx="80" cy="44" r="4" fill="#c82a2a" stroke="${k}" stroke-width="1.5"/><circle cx="66" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="94" cy="48" r="2.5" fill="#2a8ac8"/><circle cx="80" cy="22" r="2.5" fill="#fff6dc" stroke="${k}"/>`,
-    hd_none: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="#222222" ${ol}/>` };
+    hd_none: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="#222222" ${ol}/>`,
+    hd_straw: `<path d="M22 60L80 28L138 60Q80 68 22 60Z" fill="#d2a85a" ${ol}/><path d="M48 52H112M62 42H98" stroke="#8a5a24" stroke-width="1.5"/><path d="M58 58H102" stroke="#5a3a18" stroke-width="4"/>`,
+    hd_purple: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="#6a2a78" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#6a2a78" ${ol}/>` };
   const face = `<circle cx="80" cy="66" r="24" fill="${SK}" ${ol}/><circle cx="71" cy="66" r="2.6" fill="${k}"/><circle cx="89" cy="66" r="2.6" fill="${k}"/><path d="M73 76q7 6 14 0" fill="none" stroke="${k}" stroke-width="2.2" stroke-linecap="round"/><circle cx="66" cy="73" r="3" fill="#f0a090" opacity=".7"/><circle cx="94" cy="73" r="3" fill="#f0a090" opacity=".7"/>`;
   void PF;
   const legsDraw = B.id === 'bd_bikini'
@@ -342,7 +360,7 @@ function boardInnerHtml() {
 function setsInnerHtml() {
   const sets = setsOn(), worn = wornIds();
   return SETS.map(s => { const done = sets.includes(s), have = s.need.filter(i => eqOwned(i)).length;
-      const full = have === s.need.length; return `<div class="eqSet${done ? ' done' : ''}${full ? ' full' : ''}"${full ? ` data-setid="${s.id}" role="button"` : ''}><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqSvg(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}${full ? `<em class="eqSetGo"><i class="ic ${done ? 'ic-check' : 'ic-hand'}"></i> ${done ? '穿著中' : '一鍵換上'}</em>` : ''}</div>`; }).join('');
+      const full = have === s.need.length; return `<div class="eqSet${done ? ' done' : ''}${full ? ' full' : ''}"${full ? ` data-setid="${s.id}" role="button"` : ''}><div class="eqSetH"><b>${s.n}</b><span>${have}/${s.need.length} 件</span></div><div class="eqSetI">${s.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<div class="${worn.includes(i) ? 'worn' : eqOwned(i) ? 'own' : 'no'}">${eqIcon(e, 40, !eqOwned(i))}<small>${e.n}</small></div>`; }).join('')}</div><p>${s.eff}${s.id === 'typhoon' ? '（手部任意）' : ''}</p>${done ? '<i class="eqStamp">套裝完成</i>' : ''}${full ? `<em class="eqSetGo"><i class="ic ${done ? 'ic-check' : 'ic-hand'}"></i> ${done ? '穿著中' : '一鍵換上'}</em>` : ''}</div>`; }).join('');
 }
 function listHtml(pick: Slot) {
   const pickName = slotLabel(pick);
@@ -384,7 +402,7 @@ function paintBoardAndSets() {
   const board = root.querySelector('.eqBoard');
   if (board) board.innerHTML = boardInnerHtml();
   const sets = root.querySelector('.eqSets');
-  if (sets) sets.innerHTML = setsInnerHtml();
+  if (sets) { sets.innerHTML = setsInnerHtml(); hydrateEquipThumbs(sets); }
 }
 function applyPreview() {
   const fig = document.getElementById('eqFigW');
@@ -417,10 +435,10 @@ function wearFromList(id: string) {
   paintPickPane();
 }
 function goShop() {
+  D.setShopFromEquip(true);
   D.openShopPx();
   $('equip').classList.remove('show');
   D.stopEqPreview();
-  D.setEqFromRes(false);
   if (D.getEqPick()) D.setClothTab(D.getEqPick()!);
   D.renderShop();
   const gs = Array.from(document.querySelectorAll('#shopList .stab'));
@@ -549,15 +567,19 @@ function openTryModal(item: Eq) {
 export async function shareOutfit() {
   const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d')!;
   g.fillStyle = '#1e3a5a'; g.fillRect(0, 0, W, H); g.strokeStyle = '#f0e6c8'; g.lineWidth = 14; g.strokeRect(30, 30, W - 60, H - 60);
-  g.fillStyle = '#c8302a'; g.fillRect(60, 60, W - 120, 150); g.strokeStyle = '#1b1b1b'; g.lineWidth = 6; g.strokeRect(60, 60, W - 120, 150);
-  g.fillStyle = '#fff6dc'; g.textAlign = 'center'; g.font = 'bold 84px sans-serif'; g.fillText('剝蚵仔模擬器', W / 2, 165);
-  g.font = 'bold 60px sans-serif'; g.fillText(D.myName(), W / 2, 300); g.font = '36px sans-serif'; g.fillStyle = '#c8d8e8'; g.fillText('#' + D.statsId.slice(0, 4).toUpperCase() + ' 的今日穿搭', W / 2, 352);
-  const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(figSvg().replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="750" '));
-  await new Promise(r => { img.onload = r; img.onerror = r; }); g.fillStyle = '#f0e6c8'; g.fillRect(80, 400, 440, 780); g.drawImage(img, 100, 415, 400, 750);
-  g.textAlign = 'left'; let y = 450;
-  for (const [s, n] of SLOTS) { const e = equipNow(s); g.fillStyle = e.base; g.fillRect(570, y - 40, 50, 50); g.strokeStyle = '#1b1b1b'; g.lineWidth = 4; g.strokeRect(570, y - 40, 50, 50); g.fillStyle = '#c8d8e8'; g.font = '32px sans-serif'; g.fillText(n, 640, y - 12); g.fillStyle = '#fff6dc'; g.font = 'bold 42px sans-serif'; g.fillText(e.n, 640, y + 34); y += 130; }
-  const sets = setsOn(); if (sets.length) { g.fillStyle = '#ffd25a'; g.font = 'bold 40px sans-serif'; g.fillText('套裝：' + sets.map(s => s.n).join('、'), 570, y + 10); }
-  g.textAlign = 'center'; g.fillStyle = '#c8d8e8'; g.font = '34px sans-serif'; g.fillText('https://jinweihuang20.github.io/oyster-sim/', W / 2, H - 80);
+  g.fillStyle = '#c8302a'; g.fillRect(60, 55, W - 120, 120); g.strokeStyle = '#1b1b1b'; g.lineWidth = 6; g.strokeRect(60, 55, W - 120, 120);
+  g.fillStyle = '#fff6dc'; g.textAlign = 'center'; g.font = 'bold 72px sans-serif'; g.fillText('剝蚵仔模擬器', W / 2, 135);
+  g.font = 'bold 48px sans-serif'; g.fillText(D.myName(), W / 2, 220);
+  g.font = '32px sans-serif'; g.fillStyle = '#c8d8e8'; g.fillText('#' + D.statsId.slice(0, 4).toUpperCase() + ' 的今日穿搭', W / 2, 258);
+  const stageH = 970, stageW = Math.round(stageH * 3 / 4), sx = Math.round((W - stageW) / 2), sy = 280;
+  const shed = new Image();
+  shed.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SVG_SHED.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '));
+  await new Promise<void>(r => { shed.onload = () => r(); shed.onerror = () => r(); });
+  g.drawImage(shed, sx, sy, stageW, stageH);
+  const figX = sx + stageW * 0.20, figY = sy + stageH * 0.03, figW = stageW * 0.60, figH = stageH * 0.92;
+  const snap = snapshotEqPreview(currentOutfit(), Math.round(figW), Math.round(figH));
+  if (snap) g.drawImage(snap, figX, figY, figW, figH);
+  g.fillStyle = '#c8d8e8'; g.font = '30px sans-serif'; g.fillText('https://jinweihuang20.github.io/oyster-sim/', W / 2, H - 62);
   const blob: Blob | null = await new Promise(r => c.toBlob(r, 'image/png')); if (!blob) return;
   const file = new File([blob], 'oyster-outfit.png', { type: 'image/png' }); const url = URL.createObjectURL(blob);
   $('eqShareOut').innerHTML = `<img src="${url}" alt="穿搭卡" style="width:100%;border-radius:8px;margin-top:8px"><p class="eqHint">手機也可以長按圖片儲存。</p><a href="${url}" download="oyster-outfit.png" class="btnLike">儲存圖片</a><p class="eqHint" style="margin-top:10px">加入 Discord 分享穿搭，就送神秘好禮！</p><a href="https://discord.gg/tpPBqxACVq" target="_blank" rel="noopener" class="btnLike dcBtn">加入 Discord</a>`;
@@ -569,7 +591,7 @@ export function askSet(st: typeof SETS[number]) {
   document.getElementById('giftMsg')?.remove();
   const worn = wornIds(), on = st.need.every(i => worn.includes(i));
   const m = document.createElement('div'); m.id = 'giftMsg'; m.className = 'giftMsg setAsk';
-  const items = st.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<li>${eqSvg(e, 32, false)}<span>${e.n}</span></li>`; }).join('');
+  const items = st.need.map(i => { const e = EQUIP.find(x => x.id === i)!; return `<li>${eqIcon(e, 32)}<span>${e.n}</span></li>`; }).join('');
   m.innerHTML = on
     ? `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-check"></i> 已經穿著這套了</b><p class="saEff">${st.n}：${st.eff}</p><div class="mbtns"><button class="gmNo"><i class="ic ic-check"></i> 確定</button></div></div>`
     : `<div class="rdGot gmBox"><button class="gmX" aria-label="關閉">✕</button><b><i class="ic ic-hand"></i> 要換上「${st.n}」嗎？</b><ul class="saList">${items}</ul><p class="saEff">套裝加成：${st.eff}</p><div class="mbtns"><button class="gmNo">取消</button><button class="gmYes"><i class="ic ic-check"></i> 換上</button></div></div>`;
@@ -584,6 +606,7 @@ export function askSet(st: typeof SETS[number]) {
   });
   m.addEventListener('click', e => { if (e.target === m) close(); });
   document.body.appendChild(m);
+  hydrateEquipThumbs(m);
 }
 
 export function openEquip() {

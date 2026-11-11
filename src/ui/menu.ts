@@ -89,7 +89,15 @@ export function newDecor() {
     const k = c + '-' + b.getAttribute('data-' + at); if (!newSnap.includes(k)) return;
     const card = b.closest('tr, .slCard, .itemCard'); const nm = card?.querySelector('b');
     if (nm && !card!.querySelector('.newTag')) nm.insertAdjacentHTML('afterend', '<span class="newTag">新品</span>');
-    if (i === shopTab && !shopKnown.has(k) || i === shopTab && !shopAnn.has('seen:' + k)) { markSeen(k); changed = true; } }); });
+    if (i === shopTab) { markSeen(k); changed = true; } }); });
+  // 打開分頁就把該類新商品標成看過（廣場旗幟等沒有 data-gbuy 的項目，否則器具會一直亮著）
+  const tabName = document.querySelectorAll<HTMLElement>('#shopTabs button')[shopTab]?.textContent ?? '';
+  if (tabName) {
+    for (const k of newSnap) {
+      const cat = NEW_CAT[k.split('-')[0]];
+      if (cat && tabName.includes(cat)) { markSeen(k); changed = true; }
+    }
+  }
   if (changed) saveNew();
   const left = newNow();
   document.querySelectorAll<HTMLElement>('#shopTabs button').forEach(b => { const t = b.textContent ?? ''; b.classList.toggle('hasNew', left.some(k => t.includes(NEW_CAT[k.split('-')[0]]))); });
