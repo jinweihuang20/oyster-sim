@@ -2265,7 +2265,7 @@ function renderDex() {
 renderDex();
 
 // ---------- 操作 ----------
-let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; lx: number; lt: number } | null = null;
+let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; lx: number; lt: number; swiped?: boolean } | null = null;
 /** 廣場坐下：第三人稱不轉頭；第一人稱左右 ±90°；工寮仍用 YAW */
 const PLAZA_SIT_YAW = Math.PI / 2;
 const yl = () => {
@@ -2402,6 +2402,8 @@ window.addEventListener('pointermove', e => {
   if (flHeld && flDown && e.pointerId === flDragId) { flApplyDrag(e); return; }
   if (!down || down.id !== e.pointerId) return;
   const dx = e.clientX - down.x, dy = e.clientY - down.y;
+  // 曾滑出點選死區就記住：放開時即使滑回原處也不當點（避免轉視角後誤拿蚵）
+  if (!down.swiped && Math.hypot(dx, dy) > 16) down.swiped = true;
   if (swipePhase() && !moonAimOn) return;
   if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; rotTipTouch(); if (Math.abs(dx) > 8) { down.drag = true; rotTipDragged(); } return; }
   // 拿蚵觸控：微滑才升格「認真拖」，其餘坐下已 drag 立刻轉頭
@@ -2432,7 +2434,7 @@ const up = (e: PointerEvent) => {
   const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
   // 坐下已預設 drag：小位移仍當點選（拿蚵觸控門檻較寬）
   const tapKeep = phase === 'pick' && e.pointerType !== 'mouse' ? 48 : 14;
-  const asTap = moved < tapKeep;
+  const asTap = moved < tapKeep && !(phase === 'pick' && e.pointerType !== 'mouse' && down.swiped);
   if (asTap) {
     if (isGrillPhase() || (plazaOnGrill() && (phase === 'pick' || phase === 'empty' || phase === 'busy'))) {
       const lk = document.pointerLockElement === canvas;
