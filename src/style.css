@@ -300,7 +300,12 @@ body.tutOn .ntag{display:none!important}
 #umbBtn.held{background:#2e9a35!important;box-shadow:0 0 0 3px #b9ffb0}
 /* 指針條不被右側按鈕擋住 */
 @media (pointer:coarse) and (orientation:portrait){#gauge{bottom:auto;top:55%;width:min(84vw,340px)}#diff{bottom:auto;top:calc(55% - 26px)}#gauge.miss{animation:gm .25s}}
-@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#gauge{left:calc(var(--sa-left) + 25vw);width:min(42vw,300px);bottom:26%}#diff{width:50vw;left:var(--sa-left);bottom:calc(26% + 22px)}}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
+  /* 置中；下緣對齊左下「放棄這顆」(#btnsCorner bottom = sa + 6px)，避開左右按鈕 */
+  #gauge{left:50%;width:min(40vw,320px);bottom:calc(var(--sa-bottom) + 6px);top:auto}
+  #diff{left:0;width:100%;bottom:calc(var(--sa-bottom) + 32px);top:auto;text-align:center}
+  #prog{bottom:calc(var(--sa-bottom) + 54px);top:auto}
+}
 #shopTabs{flex-wrap:nowrap!important}#shopTabs button{flex:1 1 0!important;min-width:0!important;white-space:nowrap!important;word-break:keep-all;padding:6px 4px!important;font-size:clamp(12px,3.6vw,15px)!important;overflow:hidden;text-overflow:ellipsis}
 /* 手機按鈕重新排版：右下雨傘；偷／丟殼見檔尾「右手臂」；左下次要一排（藥品／放棄／換位置） */
 #btnsL{display:none}

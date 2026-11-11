@@ -4,7 +4,7 @@ export { applyOutfitToRig, clearOutfitDetails } from './equipVisual';
 export { syncEqPreview, refreshEqPreview, stopEqPreview } from './equipPreview';
 export { openClothTryPreview, closeClothTryPreview } from './tryPreview';
 export { ODD } from './oddities';
-export { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS } from './shopEquip';
+export { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, stealHoldSeconds } from './shopEquip';
 export {
   initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop,
 } from './meds';

@@ -123,8 +123,9 @@ export function makePlayerAvatar(
   add(box(0.30, 0.088, 0.30), hairM, [0, 0.111, 0], head);
   // 後腦勺髮塊：只覆蓋頭頂後半，前面（-Z）仍露臉
   add(box(0.30, 0.10, 0.08), hairM, [0, 0.03, 0.12], head);
-  for (const s of [-1, 1]) add(box(0.05, 0.05, 0.04), std(0x111111), [s * 0.07, 0.02, -0.14], head);
-  add(box(0.1, 0.03, 0.03), std(0xa04040), [0, -0.08, -0.14], head);
+  // 五官貼在臉前面約 0.004，厚度 0.006，避免太凸和共面閃爍
+  for (const s of [-1, 1]) add(box(0.05, 0.05, 0.006), std(0x111111), [s * 0.07, 0.02, -0.147], head);
+  add(box(0.1, 0.03, 0.006), std(0xa04040), [0, -0.08, -0.147], head);
   const hatG = new THREE.Group(); head.add(hatG);
 
   // 肩線略低於衫領頂

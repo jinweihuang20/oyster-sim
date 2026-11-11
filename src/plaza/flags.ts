@@ -40,12 +40,27 @@ export const FLAG_COLORS: FlagColorSpec[] = [
   { lv: 4, n: '金紅漸層', price: 220000, cloth: 0xc9a227, text: 0xffe9a0, style: 'gradient' },
 ];
 
-/** 尺寸三級；radius 是和其他旗的最小間距半徑 */
+/** 尺寸三級；scale 是 3D 大小。和其他旗的間距只看旗桿占地，不再依 radius／旗面尺寸 */
 export const FLAG_SIZES: FlagSizeSpec[] = [
   { lv: 0, n: '小旗', price: 0, scale: 1, radius: 0.8 },
   { lv: 1, n: '中旗', price: 80000, scale: 1.35, radius: 1.05 },
   { lv: 2, n: '大旗', price: 180000, scale: 1.75, radius: 1.35 },
 ];
+
+/** 插旗位置：從玩家目前座標沿面向水平前移的距離（公尺） */
+export const FLAG_PLANT_FORWARD = 0.6;
+/** 旗桿占地半徑（與旗面大小無關） */
+export const FLAG_POLE_RADIUS = 0.11;
+/** 兩支旗桿半徑相加後再加一點點，重疊才算太近 */
+export const FLAG_POLE_OVERLAP_EPS = 0.02;
+
+/** 玩家所在位置 + 面向水平前 0.6 公尺（與伺服器 PlazaFlags.PlantPosFrom 相同） */
+export function flagPlantPos(x: number, z: number, yaw: number) {
+  return {
+    x: x - Math.sin(yaw) * FLAG_PLANT_FORWARD,
+    z: z - Math.cos(yaw) * FLAG_PLANT_FORWARD,
+  };
+}
 
 export const FLAG_FX: FlagFxSpec[] = [
   { lv: 0, n: '無特效', price: 0 },
