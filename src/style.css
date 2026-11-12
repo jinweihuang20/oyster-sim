@@ -1581,12 +1581,20 @@ body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
 #calTip .calTipX{all:unset;flex:none;width:22px;height:22px;border-radius:50%;background:#e9e6df;color:#6b7480;font-size:12px;display:grid;place-items:center;cursor:pointer}
 @keyframes calTipIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 
-/* 手機：拖曳轉蚵提示 */
-#rotTip{position:fixed;z-index:40;pointer-events:none;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:10px;opacity:0;transition:opacity .35s}
-#rotTip.on{opacity:1}
-#rotTip .rtHand{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.78);border:1.5px solid rgba(255,255,255,.95);box-shadow:0 3px 10px rgba(0,0,0,.25);animation:rtSwipe 1.6s ease-in-out infinite}
-#rotTip .rtTxt{padding:5px 11px;border-radius:999px;background:rgba(22,28,36,.6);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:13px;white-space:nowrap}
+/* 手機：拖曳轉蚵提示（蚵仔上／橫向左側） */
+#rotTip,#rotTipL{position:fixed;z-index:40;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:10px;opacity:0;transition:opacity .35s}
+#rotTip{transform:translate(-50%,-50%)}
+#rotTipL{left:max(10px,calc(var(--sa-left,0px) + 14px));top:48%;transform:translateY(-50%);max-width:min(38vw,200px)}
+#rotTip.on,#rotTipL.on{opacity:1}
+#rotTip .rtHand,#rotTipL .rtHand{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.78);border:1.5px solid rgba(255,255,255,.95);box-shadow:0 3px 10px rgba(0,0,0,.25);animation:rtSwipe 1.6s ease-in-out infinite}
+#rotTip .rtTxt,#rotTipL .rtTxt{padding:5px 11px;border-radius:999px;background:rgba(22,28,36,.6);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:13px;white-space:nowrap}
+#rotTipL .rtTxt{white-space:normal;text-align:center;line-height:1.3;font-size:12px}
 @keyframes rtSwipe{0%,100%{transform:translateX(-34px) scale(.92)}50%{transform:translateX(34px) scale(1)}}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
+  #rotTipL{top:46%;gap:8px}
+  #rotTipL .rtHand{width:38px;height:38px}
+  #rotTipL .rtTxt{font-size:11px;padding:4px 9px}
+}
 
 /* 分頁選中狀態統一：未選淡灰、選中實心藍（雜貨店、排行榜） */
 body #shopTabs button,body #lbTabs button,body #lbView button{background:#eef0f2!important;background-image:none!important;color:#5b6570!important;border:1.5px solid #d5dadf!important;box-shadow:none!important;opacity:1!important;font-weight:500}

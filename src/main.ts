@@ -252,13 +252,13 @@ function markBowlDrawOrder(root: THREE.Object3D) {
   root.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.renderOrder = 2; if (m.material) { const mats = Array.isArray(m.material) ? m.material : [m.material]; for (const mat of mats) { const mm = mat as THREE.Material & { depthTest?: boolean }; mm.depthTest = true; } } } });
 }
 
-// 玩家前面：生蚵臉盆、裝肉的碗（點碗丟肉）；略靠近堆心，之後再依堆面抬高
-const BASIN_H = 0.18;
-const BASIN_R_TOP = 0.33;
-const BASIN_R_BOT = 0.26;
+// 玩家前面：生蚵臉盆、裝肉的碗（點碗丟肉）；略往堆坡上移，紅盆縮小以免被殼擋住
+const BASIN_H = 0.16;
+const BASIN_R_TOP = 0.27;
+const BASIN_R_BOT = 0.21;
 /** 可撿蚵相對臉盆中心的高度：貼近盆底內側（勿用正值漂出盆緣） */
-const BASIN_OY_Y = -BASIN_H / 2 + 0.048;
-const basinMesh = mesh(new THREE.CylinderGeometry(BASIN_R_TOP, BASIN_R_BOT, BASIN_H, 16, 1, true), mat(0xc84030, { side: THREE.DoubleSide, roughness: 0.55 }), [-0.35, 0.1, 1.28]);
+const BASIN_OY_Y = -BASIN_H / 2 + 0.042;
+const basinMesh = mesh(new THREE.CylinderGeometry(BASIN_R_TOP, BASIN_R_BOT, BASIN_H, 16, 1, true), mat(0xc84030, { side: THREE.DoubleSide, roughness: 0.55 }), [-0.35, 0.14, 0.98]);
 {
   // 臉盆底部（開管圓柱否則從上看穿空）
   const fl = new THREE.Mesh(
@@ -268,14 +268,18 @@ const basinMesh = mesh(new THREE.CylinderGeometry(BASIN_R_TOP, BASIN_R_BOT, BASI
   fl.position.y = -BASIN_H / 2 + 0.007;
   basinMesh.add(fl);
 }
-const BASIN0 = new THREE.Vector3(-0.35, 0.1, 1.28), BASIN = BASIN0.clone();
+/** 工寮用（縮小＋靠堆）；廣場用舊尺寸／位置，勿套用工寮調整 */
+const BASIN0 = new THREE.Vector3(-0.35, 0.14, 0.98), BASIN = BASIN0.clone();
+const BASIN0_PLAZA = new THREE.Vector3(-0.35, 0.1, 1.28);
 const basinOy: THREE.Mesh[] = [];
 // 裝飾殼易與可撿蚵仔混淆（拿了還留在盆裡），改隱藏；可撿的是 basinOy
 const basinShells = new THREE.InstancedMesh(shellGeo, pileMat, 1); basinShells.visible = false;
 const seatRig = new THREE.Group(); scene.add(seatRig); seatRig.add(basinMesh, basinShells);
 markBowlDrawOrder(basinMesh);
 // 裝肉碗貼臉盆右側：間距約兩顆蚵殼短邊（短邊≈0.1）
-const BOWL0 = new THREE.Vector3(0.35, 0.12, 1.22), BOWL = BOWL0.clone(); let BOWL_R = 0.17;
+const BOWL0 = new THREE.Vector3(0.35, 0.16, 0.92), BOWL = BOWL0.clone(); let BOWL_R = 0.17;
+const BOWL0_PLAZA = new THREE.Vector3(0.35, 0.12, 1.22);
+const BASIN_PLAZA_SX = 0.33 / BASIN_R_TOP, BASIN_PLAZA_SY = 0.18 / BASIN_H;
 const bowlG = new THREE.Group(); seatRig.add(bowlG); const BOWL_L = BOWL0.clone();
 const _liftPos = new THREE.Vector3(), _liftQ = new THREE.Quaternion(), _liftS = new THREE.Vector3(), _liftM = new THREE.Matrix4();
 function buildBowl(b: { r: number; h: number; color: number; metal?: number }) {
@@ -710,8 +714,28 @@ const plazaOnGrill = () => {
   return !!(plazaMode && s && pileIsGrill(s.pileId));
 };
 const isGrillPhase = (p = phase) => p === 'grillPlace' || p === 'grillCook' || p === 'grillFlip' || p === 'grillTake';
-function basinHome() { return plazaOnGrill() ? BASIN0_GRILL : BASIN0; }
-function bowlHome() { return plazaOnGrill() ? BOWL0_GRILL : BOWL0; }
+/** 手機橫向工寮：盆再往堆坡移一截（廣場／烤位不套用） */
+const _basinHomeLand = new THREE.Vector3();
+const _bowlHomeLand = new THREE.Vector3();
+function yardLandBowlNudge() {
+  return COARSE && !plazaMode && matchMedia('(orientation: landscape)').matches;
+}
+function syncBasinPlazaScale() {
+  if (plazaMode && !plazaOnGrill()) basinMesh.scale.set(BASIN_PLAZA_SX, BASIN_PLAZA_SY, BASIN_PLAZA_SX);
+  else basinMesh.scale.set(1, 1, 1);
+}
+function basinHome() {
+  if (plazaOnGrill()) return BASIN0_GRILL;
+  if (plazaMode) return BASIN0_PLAZA;
+  if (!yardLandBowlNudge()) return BASIN0;
+  return _basinHomeLand.set(BASIN0.x, BASIN0.y, BASIN0.z - 0.14);
+}
+function bowlHome() {
+  if (plazaOnGrill()) return BOWL0_GRILL;
+  if (plazaMode) return BOWL0_PLAZA;
+  if (!yardLandBowlNudge()) return BOWL0;
+  return _bowlHomeLand.set(BOWL0.x, BOWL0.y, BOWL0.z - 0.14);
+}
 function oysterToHand() {
   grillDetachHinge();
   if (oyster.parent !== handL) { oyster.parent?.remove(oyster); handL.add(oyster); }
@@ -802,7 +826,7 @@ const IDEAL = 0.75; let PERF0 = 0.7, PERF1 = 0.8;
 const HINTS: Record<Phase, string> = {
   pick: COARSE ? '看自己的紅臉盆，點一顆蚵仔（或點自己的手）拿起來（小顆比較好撬，黑又粗的比較硬）' : '看自己的紅臉盆，點一顆蚵仔（或按 Space）拿起來（小顆比較好撬，黑又粗的比較硬）',
   scoop: '撈蚵仔中…',
-  seam: COARSE ? '按住 ◀ ▶ 或拖蚵仔來轉，找殼縫；縫對準刀尖時點一下蚵仔插刀（拖其他地方是看四周）' : '滾輪／A D 轉蚵仔找殼縫，縫對準刀尖時點一下（或 Space）插刀',
+  seam: COARSE ? '按住 ◀ ▶、拖蚵仔，或橫向時在左側滑動來轉；縫對準刀尖時點一下蚵仔插刀（右側滑是看四周）' : '滾輪／A D 轉蚵仔找殼縫，縫對準刀尖時點一下（或 Space）插刀',
   twist: COARSE ? '看指針來回擺動，走到綠區時點一下螢幕撬一下；撬夠次數殼就打開。點在紅區太用力會把殼弄碎' : '看指針來回擺動，走到綠區時點一下滑鼠（或按 Space）撬一下；撬夠次數殼就打開。點在紅區太用力會把殼弄碎',
   aim: '肉在刀尖上！點一下碗（或碗附近）丟進去，0.8 秒內點有「俐落」+$1，2 秒沒點會自己進碗',
   empty: COARSE ? '空殼：按「丟殼」對準阿婆丟過去，或者等一下自動丟掉' : '空殼：F／右鍵／「丟殼」對準阿婆丟過去，或者等一下自動丟掉',
@@ -1320,8 +1344,8 @@ function makeBasinOyster(dd: number) {
 const basinCap = () => plazaMode ? 15 : 20;
 /** 臉盆本地座標（子物件），蚵仔永遠跟盆走 */
 function basinSlotLocal(i: number) {
-  const a = i * 2.4, r = 0.045 + (i % 4) * 0.038;
-  return new THREE.Vector3(Math.cos(a) * r, BASIN_OY_Y + Math.floor(i / 6) * 0.032, Math.sin(a) * r);
+  const a = i * 2.4, r = 0.036 + (i % 4) * 0.030;
+  return new THREE.Vector3(Math.cos(a) * r, BASIN_OY_Y + Math.floor(i / 6) * 0.028, Math.sin(a) * r);
 }
 function syncBasinWorld() {
   basinMesh.updateMatrixWorld(true);
@@ -1528,24 +1552,29 @@ function liftSeatPropsOntoPile() {
     const o = plazaMyPileOrigin();
     if (o) { ox = o.x; oz = o.z; }
   }
+  syncBasinPlazaScale();
   const homeB = basinHome();
   seatRig.updateMatrixWorld(true);
   const b = bowlNow();
+  // 工寮盆較靠堆：略抬；廣場維持原本貼堆量
+  const sink = plazaMode ? 0.05 : 0.02;
   // 烤位：碗底貼地；一般蚵堆：取碗底附近堆面並略降（整圈 max 會抬太高）
   const bowlW = seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, 0, BOWL_L.z));
   const bowlFloorWant = onGrill
     ? 0.02
-    : pileSurfYMax(bowlW.x, bowlW.z, Math.max(0.12, b.r * 0.55), ox, oz) - 0.06;
+    : pileSurfYMax(bowlW.x, bowlW.z, Math.max(0.12, b.r * 0.55), ox, oz) - sink;
   const bowlLocal = seatRig.worldToLocal(new THREE.Vector3(bowlW.x, bowlFloorWant, bowlW.z));
   bowlG.position.set(BOWL_L.x, bowlLocal.y, BOWL_L.z);
   BOWL.copy(seatRig.localToWorld(new THREE.Vector3(BOWL_L.x, bowlLocal.y + Math.max(0.08, b.h - 0.02), BOWL_L.z)));
 
   const basW = seatRig.localToWorld(new THREE.Vector3(homeB.x, 0, homeB.z));
+  const basR = BASIN_R_BOT * basinMesh.scale.x;
+  const basH = BASIN_H * basinMesh.scale.y;
   // 一般蚵堆：只取盆底附近堆面（勿用整圈外緣 max，坡上會把左盆抬太高）
   const basFloorWant = onGrill
     ? 0.02
-    : pileSurfYMax(basW.x, basW.z, BASIN_R_BOT * 0.55, ox, oz) - 0.05;
-  const basCenterWant = basFloorWant + BASIN_H / 2;
+    : pileSurfYMax(basW.x, basW.z, basR * 0.55, ox, oz) - sink;
+  const basCenterWant = basFloorWant + basH / 2;
   const basLocal = seatRig.worldToLocal(new THREE.Vector3(basW.x, basCenterWant, basW.z));
   const dy = basLocal.y - basinMesh.position.y;
   basinMesh.position.set(homeB.x, basLocal.y, homeB.z);
@@ -2620,7 +2649,11 @@ function renderDex() {
 renderDex();
 
 // ---------- 操作 ----------
-let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; lx: number; lt: number; swiped?: boolean } | null = null;
+let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; leftRot?: boolean; lx: number; lt: number; swiped?: boolean } | null = null;
+/** 手機橫向：左側螢幕當轉蚵區（勿當轉視角） */
+function landSeamRotZone(cx: number) {
+  return COARSE && matchMedia('(orientation: landscape)').matches && phase === 'seam' && cx < innerWidth * 0.4;
+}
 /** 廣場坐下：第三人稱不轉頭；第一人稱左右 ±90°；工寮仍用 YAW */
 const PLAZA_SIT_YAW = Math.PI / 2;
 const yl = () => {
@@ -2748,8 +2781,11 @@ canvas.addEventListener('pointerdown', e => {
     down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: false, lx: e.clientX, lt: performance.now() };
     return;
   }
-  // 坐下：預設先當轉視角（跟走動一樣跟手）；點蚵／點網靠 pointerup 小位移仍算點
-  down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && hitsOyster(e.clientX, e.clientY), lx: e.clientX, lt: performance.now() };
+  // 坐下：預設轉視角；找縫時拖蚵仔或（手機橫向）左側螢幕＝轉蚵
+  const touchSeam = e.pointerType !== 'mouse' && phase === 'seam';
+  const onOy = touchSeam && hitsOyster(e.clientX, e.clientY);
+  const leftRot = touchSeam && !onOy && landSeamRotZone(e.clientX);
+  down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: onOy || leftRot, leftRot, lx: e.clientX, lt: performance.now() };
 });
 let lastMoveT = performance.now();
 /** Pointer Lock 滑鼠位移累積：改在每幀套用，避免與 pe／puff 鏡頭搶寫造成準心頓挫 */
@@ -2827,7 +2863,10 @@ const up = (e: PointerEvent) => {
         }
       });
     }
-    else if (phase === 'seam') tryInsert();
+    else if (phase === 'seam') {
+      // 左側轉蚵區輕點不算插刀（避免誤觸）；點在蚵仔上才插
+      if (!down.leftRot) tryInsert();
+    }
     else if (phase === 'empty' && tut && TUT[tut.i].id === 'empty') discardShell();
     else if (phase === 'pick') {
       if (e.pointerType === 'mouse') pickAt(innerWidth / 2, innerHeight / 2);
@@ -4679,10 +4718,11 @@ function tpFovFor(mode: 'walk' | 'plazaSit' | 'shedSit') {
 }
 /** 第三人稱鏡頭距離倍率：很寬的螢幕稍微拉遠，補回收窄的視角 */
 const tpDistK = () => (camera.aspect > 1.6 ? 1.05 : 1);
-/** 第一人稱基準 FOV；廣場內水平視角最多 100°（工寮剝蚵維持原本） */
+/** 第一人稱基準 FOV：廣場水平最多 100°；手機橫向工寮壓到約 90°，避免廣角太誇張 */
 function updBaseFov() {
   baseFov = narrow ? 82 : 78;
   if (plazaMode) baseFov = Math.min(baseFov, vFovForH(100));
+  else if (COARSE && !narrow) baseFov = Math.min(baseFov, vFovForH(90));
 }
 function resize() {
   const { w, h } = viewSize();
@@ -4724,13 +4764,17 @@ function fixViewport() {
     requestAnimationFrame(resize);
   });
 }
-addEventListener('resize', resize);
-window.visualViewport?.addEventListener('resize', () => { resize(); });
+function refreshYardBowlPose() {
+  if (state === 'play' && !walking && !plazaOnGrill()) applyBowl();
+}
+addEventListener('resize', () => { resize(); refreshYardBowlPose(); });
+window.visualViewport?.addEventListener('resize', () => { resize(); refreshYardBowlPose(); });
 window.visualViewport?.addEventListener('scroll', () => { resize(); });
 addEventListener('orientationchange', () => {
   setTimeout(fixViewport, 50);
-  setTimeout(fixViewport, 280);
+  setTimeout(() => { fixViewport(); refreshYardBowlPose(); }, 280);
 });
+matchMedia('(orientation: landscape)').addEventListener('change', () => refreshYardBowlPose());
 addEventListener('pageshow', () => { fixViewport(); });
 resize();
 const clock = new THREE.Clock(); const v = new THREE.Vector3();
@@ -6137,22 +6181,38 @@ requestAnimationFrame(() => requestAnimationFrame(dismissBoot));
   if (sl) { new MutationObserver(lab).observe(sl, { childList: true, subtree: true }); lab(); }
 }
 
-// ── 手機提示：按住蚵仔左右拖可以轉動 ──
+// ── 手機提示：按住蚵仔左右拖可以轉動；橫向另在左側提示滑動轉蚵 ──
 const ROT_TIP_KEY = 'rotTipDragN';
 let rotTipN = (() => { try { return +(localStorage.getItem(ROT_TIP_KEY) ?? 0) || 0; } catch { return 0; } })();
 let rotTipIdle = 0, rotTipUsed = false, rotTipCounted = false, rotTipWasSeam = false;
 const _rtv = new THREE.Vector3();
 function rotTipEl() { let t = document.getElementById('rotTip'); if (!t) { t = document.createElement('div'); t.id = 'rotTip'; t.innerHTML = '<span class="rtHand"></span><span class="rtTxt">按住蚵仔左右拖，可以轉動</span>'; document.body.appendChild(t); } return t; }
-function rotTipHide() { document.getElementById('rotTip')?.classList.remove('on'); }
+function rotTipLeftEl() {
+  let t = document.getElementById('rotTipL');
+  if (!t) {
+    t = document.createElement('div'); t.id = 'rotTipL';
+    t.innerHTML = '<span class="rtHand"></span><span class="rtTxt">左側左右滑，轉動蚵仔</span>';
+    document.body.appendChild(t);
+  }
+  return t;
+}
+function rotTipHide() {
+  document.getElementById('rotTip')?.classList.remove('on');
+  document.getElementById('rotTipL')?.classList.remove('on');
+}
 function rotTipTouch() { rotTipUsed = true; rotTipHide(); }
 function rotTipDragged() { if (rotTipCounted) return; rotTipCounted = true; rotTipN++; try { localStorage.setItem(ROT_TIP_KEY, String(rotTipN)); } catch { } }
 function rotTipTick(dt: number) {
   if (!rotTipWasSeam) { rotTipIdle = 0; rotTipUsed = false; rotTipCounted = false; }
   rotTipWasSeam = true;
-  if (!COARSE || rotTipUsed || (!tut && !mix.rotTip)) return;
+  if (!COARSE || rotTipUsed || (!tut && !mix.rotTip)) { rotTipHide(); return; }
   rotTipIdle += dt; if (!tut && rotTipIdle < 3) return;
+  const land = matchMedia('(orientation: landscape)').matches;
   const t = rotTipEl(); oyster.getWorldPosition(_rtv).project(viewCam());
   t.style.left = `${(_rtv.x + 1) / 2 * innerWidth}px`; t.style.top = `${(1 - _rtv.y) / 2 * innerHeight}px`; t.classList.add('on');
+  const L = rotTipLeftEl();
+  if (land) L.classList.add('on');
+  else L.classList.remove('on');
 }
 setInterval(() => { if (phase !== 'seam') { rotTipWasSeam = false; rotTipHide(); } }, 200);
 // ── 教學第 1 步（手機）：畫面滑動轉視角提示 ──
