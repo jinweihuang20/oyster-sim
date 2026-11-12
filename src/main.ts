@@ -1909,6 +1909,14 @@ function prewarmStealUi() {
   _retLab = '';
   _lastStealBtnOn = null;
   _lastStealHint = '';
+  warmStealHintsForNames(npcs.map(n => n.name));
+}
+let _plazaHintWarmAt = 0;
+function maybeWarmPlazaStealHints() {
+  const now = performance.now();
+  if (now - _plazaHintWarmAt < 2500) return;
+  _plazaHintWarmAt = now;
+  try { warmStealHintsForNames(plazaAimTargetsFrame().map(t => t.nick)); } catch { /* */ }
 }
 function plazaAimTargetsFrame() {
   if (!_frameAimTargets) _frameAimTargets = plazaAimTargets();
@@ -1924,10 +1932,32 @@ function prepStealCam() {
   }
   viewCam().updateMatrixWorld();
 }
+const _stealHintWarmed = new Set<string>();
+function warmStealHint(txt: string) {
+  if (!txt || _stealHintWarmed.has(txt)) return;
+  _stealHintWarmed.add(txt);
+  const prev = hint.textContent;
+  const prevLast = _lastStealHint;
+  hint.textContent = txt;
+  void hint.offsetWidth;
+  hint.textContent = prev ?? '';
+  _lastStealHint = prevLast;
+}
 function setStealHint(txt: string) {
   if (txt === _lastStealHint) return;
   _lastStealHint = txt;
+  _stealHintWarmed.add(txt);
   hint.textContent = txt;
+}
+/** 預熱偷提示字串（不同暱稱第一次寫入 hint 會觸發排版卡頓） */
+function warmStealHintsForNames(names: string[]) {
+  const e = COARSE ? '按住「偷」' : '按住 E／「偷」';
+  for (const n of names) {
+    if (!n) continue;
+    warmStealHint(`${n}在看，不要偷…`);
+    warmStealHint(`${n}轉頭在聊天！${e}偷對方的肉`);
+    warmStealHint(`${n}沒注意！${e}偷對方的肉`);
+  }
 }
 function setStealBtn(v: boolean) {
   if (_lastStealBtnOn === v) return;
@@ -2650,14 +2680,15 @@ renderDex();
 
 // ---------- 操作 ----------
 let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; leftNoLook?: boolean; leftRotZone?: boolean; lx: number; lt: number; swiped?: boolean } | null = null;
-/** 手機橫向＋坐下＋第一人稱＋正在剝殼（不含機關槍／吸菸閒坐） */
+/** 手機橫向＋坐下＋第一人稱＋正在剝殼（不含機關槍／吸菸／烤蚵桌——烤桌左側仍可轉視角） */
 function landFpSitPeeling() {
   if (!(COARSE && !walking && !tpv && state === 'play')) return false;
   if (!matchMedia('(orientation: landscape)').matches) return false;
   if (mgActive || (plazaMode && plazaOnMg())) return false;
   if (plazaMode && document.body.classList.contains('plazaSmokeSit')) return false;
+  if (plazaOnGrill() || isGrillPhase()) return false;
   return phase === 'seam' || phase === 'twist' || phase === 'pick' || phase === 'empty'
-    || phase === 'aim' || phase === 'scoop' || phase === 'crab' || isGrillPhase();
+    || phase === 'aim' || phase === 'scoop' || phase === 'crab';
 }
 /** 上述情境下左半邊不轉視角 */
 function landLeftNoLook(cx: number) {
@@ -4967,6 +4998,7 @@ function frameBody() {
     if (walking && !walkHintShown && npcs.some(n => (n.grudge ?? 0) > 5)) { walkHintShown = true; toast('起來走走，阿婆氣消得比較快', '#9be37a'); }
     beginStealFrame();
     if (plazaMode) {
+      maybeWarmPlazaStealHints();
       const banned = performance.now() < plazaStealBanUntil;
       const stealUi = canShowStealReticle();
       // 同工寮：按鈕只在瞄到碗／讀條中出現；第三人稱／沒坐下／機關槍不顯示偷 UI

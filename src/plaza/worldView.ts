@@ -898,34 +898,37 @@ function hashPid(pid: string) {
     hideHold(r);
   }
 
-  /** 簡易蚵仔刀＋蚵仔（遠端剝殼手持） */
+  const remoteHoldWood = LO ? new THREE.MeshLambertMaterial({ color: 0x7a4a20 }) : new THREE.MeshStandardMaterial({ color: 0x7a4a20, roughness: 0.85 });
+  const remoteHoldSteel = LO ? new THREE.MeshLambertMaterial({ color: 0xd0d0d8 }) : new THREE.MeshStandardMaterial({ color: 0xd0d0d8, metalness: 0.7, roughness: 0.3 });
+  const remoteHoldShell = LO
+    ? new THREE.MeshLambertMaterial({ color: 0xe0dcd8 })
+    : new THREE.MeshStandardMaterial({ color: 0xe0dcd8, roughness: 0.85, flatShading: true });
+  const remoteHoldShellTop = LO
+    ? new THREE.MeshLambertMaterial({ color: 0xf0ecea })
+    : new THREE.MeshStandardMaterial({ color: 0xf0ecea, roughness: 0.85, flatShading: true });
+  const remoteHoldSeg = LO ? 5 : 7;
+  const remoteHoldBotGeo = new THREE.SphereGeometry(0.055, remoteHoldSeg, LO ? 4 : 5);
+  const remoteHoldTopGeo = new THREE.SphereGeometry(0.05, remoteHoldSeg, LO ? 4 : 5);
+
+  /** 簡易蚵仔刀＋蚵仔（遠端剝殼手持；材質共用避免每人首次入鏡卡頓） */
   function makeRemoteHold(): { knife: THREE.Group; oyster: THREE.Group } {
     const knife = new THREE.Group();
     knife.userData.noMerge = true;
     knife.visible = false;
-    const wood = LO ? new THREE.MeshLambertMaterial({ color: 0x7a4a20 }) : new THREE.MeshStandardMaterial({ color: 0x7a4a20, roughness: 0.85 });
-    const steel = LO ? new THREE.MeshLambertMaterial({ color: 0xd0d0d8 }) : new THREE.MeshStandardMaterial({ color: 0xd0d0d8, metalness: 0.7, roughness: 0.3 });
-    const handle = new THREE.Mesh(rcyl(0.012, 0.014, 0.09, LO ? 4 : 5), wood);
+    const handle = new THREE.Mesh(rcyl(0.012, 0.014, 0.09, LO ? 4 : 5), remoteHoldWood);
     handle.rotation.z = Math.PI / 2;
     knife.add(handle);
-    const blade = new THREE.Mesh(rboxEnv(0.1, 0.006, 0.022), steel);
+    const blade = new THREE.Mesh(rboxEnv(0.1, 0.006, 0.022), remoteHoldSteel);
     blade.position.set(-0.08, 0, 0);
     knife.add(blade);
 
     const oyster = new THREE.Group();
     oyster.userData.noMerge = true;
     oyster.visible = false;
-    const shellCol = LO
-      ? new THREE.MeshLambertMaterial({ color: 0xe0dcd8 })
-      : new THREE.MeshStandardMaterial({ color: 0xe0dcd8, roughness: 0.85, flatShading: true });
-    const shellTop = LO
-      ? new THREE.MeshLambertMaterial({ color: 0xf0ecea })
-      : new THREE.MeshStandardMaterial({ color: 0xf0ecea, roughness: 0.85, flatShading: true });
-    const seg = LO ? 5 : 7;
-    const bot = new THREE.Mesh(new THREE.SphereGeometry(0.055, seg, LO ? 4 : 5), shellCol);
+    const bot = new THREE.Mesh(remoteHoldBotGeo, remoteHoldShell);
     bot.scale.set(1.15, 0.45, 1);
     oyster.add(bot);
-    const top = new THREE.Mesh(new THREE.SphereGeometry(0.05, seg, LO ? 4 : 5), shellTop);
+    const top = new THREE.Mesh(remoteHoldTopGeo, remoteHoldShellTop);
     top.scale.set(1.1, 0.4, 0.95);
     top.position.set(0, 0.03, 0);
     oyster.add(top);
@@ -951,11 +954,23 @@ function hashPid(pid: string) {
   const remoteMeatGeo = new THREE.SphereGeometry(0.03, 6, 5);
   remoteMeatGeo.scale(1.35, 0.55, 1);
   const remoteMeatMat = M(0xd8cbb0, { roughness: 0.35, flatShading: true });
+  // 遠端臉盆／肉碗共用材質＋幾何：每人一份會在準心第一次掃到時才編譯著色器→卡一下
+  const remoteBasinMat = M(0xc84030, { side: THREE.DoubleSide, roughness: 0.55, flatShading: true });
+  const remoteBasinFlMat = M(0xa03028, { roughness: 0.65, flatShading: true });
+  const remoteBasinOyMat = M(0xc8c2c0, { roughness: 0.8, flatShading: true });
+  const remoteBowlMat = M(0x4a8ac0, { side: THREE.DoubleSide, roughness: 0.45, flatShading: true });
+  const remoteBowlFlMat = M(0x3a6a98, { roughness: 0.5, flatShading: true });
+  const remoteBasinGeo = new THREE.CylinderGeometry(0.2, 0.16, 0.11, 12, 1, true);
+  const remoteBasinFlGeo = new THREE.CircleGeometry(0.16, 12);
+  const remoteBasinOyGeo = new THREE.SphereGeometry(0.035, 5, 4);
+  const remoteBowlWallGeo = new THREE.CylinderGeometry(0.13, 0.1, 0.09, 12, 1, true);
+  const remoteBowlFlGeo = new THREE.CircleGeometry(0.1, 12);
 
   /** 坐下面前：紅臉盆＋裝肉碗（貼蚵堆坡面，renderOrder 高於殼堆） */
   function makeRemoteProps(): { props: THREE.Group; bowlNode: THREE.Object3D; meatRoot: THREE.Group } {
     const props = new THREE.Group();
     props.userData.noMerge = true;
+    props.userData.sharedGeoMat = true;
     props.visible = false;
     const markTop = (o: THREE.Object3D) => {
       o.traverse(x => {
@@ -964,33 +979,28 @@ function hashPid(pid: string) {
       });
     };
     // 座椅離堆心 ~1.38；盆／碗再往 -Z（堆心）靠並抬高，像擱在蚵山上
-    const basinMat = M(0xc84030, { side: THREE.DoubleSide, roughness: 0.55, flatShading: true });
-    const basin = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.16, 0.11, 12, 1, true), basinMat);
+    const basin = new THREE.Mesh(remoteBasinGeo, remoteBasinMat);
     // 臉盆左、裝肉碗右；兩盆間距 ≈ 兩顆蚵殼短邊
     const basinX = -0.28, basinZ = -0.58;
     basin.position.set(basinX, 0.2, basinZ);
     props.add(basin);
-    const basinFl = new THREE.Mesh(new THREE.CircleGeometry(0.16, 12), M(0xa03028, { roughness: 0.65, flatShading: true }));
+    const basinFl = new THREE.Mesh(remoteBasinFlGeo, remoteBasinFlMat);
     basinFl.rotation.x = -Math.PI / 2;
     basinFl.position.set(basinX, 0.145, basinZ);
     props.add(basinFl);
     // 盆裡幾顆殼示意
     for (let i = 0; i < 5; i++) {
       const a = i * 1.1, rr = 0.04 + (i % 3) * 0.02;
-      const oy = new THREE.Mesh(
-        new THREE.SphereGeometry(0.035, 5, 4),
-        M(0xc8c2c0, { roughness: 0.8, flatShading: true }),
-      );
+      const oy = new THREE.Mesh(remoteBasinOyGeo, remoteBasinOyMat);
       oy.scale.set(1.2, 0.55, 1);
       oy.position.set(basinX + Math.cos(a) * rr, 0.2, basinZ + Math.sin(a) * rr);
       props.add(oy);
     }
     const bowlNode = new THREE.Group();
-    const bowlMat = M(0x4a8ac0, { side: THREE.DoubleSide, roughness: 0.45, flatShading: true });
-    const wall = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.09, 12, 1, true), bowlMat);
+    const wall = new THREE.Mesh(remoteBowlWallGeo, remoteBowlMat);
     wall.position.y = 0.045;
     bowlNode.add(wall);
-    const fl = new THREE.Mesh(new THREE.CircleGeometry(0.1, 12), M(0x3a6a98, { roughness: 0.5, flatShading: true }));
+    const fl = new THREE.Mesh(remoteBowlFlGeo, remoteBowlFlMat);
     fl.rotation.x = -Math.PI / 2;
     bowlNode.add(fl);
     const meatX = basinX + 0.2 + 0.2 + 0.13; // 盆緣 + 兩短邊 + 肉碗半徑
@@ -2243,6 +2253,14 @@ function hashPid(pid: string) {
     shedRow.dispose();
     clearWishMarks();
     root.remove(wishMarks);
+    for (const m of [
+      remoteMeatMat, remoteBasinMat, remoteBasinFlMat, remoteBasinOyMat, remoteBowlMat, remoteBowlFlMat,
+      remoteHoldWood, remoteHoldSteel, remoteHoldShell, remoteHoldShellTop,
+    ]) { try { m.dispose(); } catch { /* */ } }
+    for (const g of [
+      remoteMeatGeo, remoteBasinGeo, remoteBasinFlGeo, remoteBasinOyGeo, remoteBowlWallGeo, remoteBowlFlGeo,
+      remoteHoldBotGeo, remoteHoldTopGeo,
+    ]) { try { g.dispose(); } catch { /* */ } }
     for (const e of remoteExhales) {
       try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }
       e.fx.dispose();
