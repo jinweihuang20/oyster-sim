@@ -182,11 +182,9 @@ export function makeWorldLabel(
     sprite.scale.set(worldH * aspect, worldH, 1);
     mat.opacity = opacity;
     mat.needsUpdate = true;
-    // 準心第一次對準某人時名牌才進視錐→GPU upload 會卡一幀；建好就先塞進 GPU
-    if (!texUploaded && _labelRenderer) {
-      uploadLabelTex(tex);
-      texUploaded = true;
-    }
+    // 每次重畫都 upload：否則改字／首次入鏡才上傳會在準心掃到時卡一幀
+    uploadLabelTex(tex);
+    texUploaded = true;
   };
 
   const setText = (t: string, force = false) => {

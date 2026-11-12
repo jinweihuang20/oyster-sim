@@ -32,6 +32,8 @@ export type PlazaDeps = {
   camera: () => THREE.Camera;
   /** 遠端進場預編譯著色器用 */
   renderer?: THREE.WebGLRenderer;
+  /** 預熱遠端角色／臉盆進 GPU（visible=false 也要先暖，否則準心第一次掃到才卡） */
+  warmGpu?: (root: THREE.Object3D) => void;
   bubbles: HTMLElement;
   /** 與工寮同款蚵殼幾何／材質 */
   shellGeo: THREE.BufferGeometry;
@@ -602,6 +604,7 @@ export function openPlaza(D: PlazaDeps) {
     hasOwnPet: () => !!D.hasOwnPet?.(),
     selfHatLift: () => D.selfHatLift?.() ?? 0,
     getRenderer: () => D.renderer,
+    warmGpu: root => D.warmGpu?.(root),
   });
   buildUi();
   wireClient(D);

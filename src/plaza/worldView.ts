@@ -172,6 +172,8 @@ export type PlazaWorldOpts = {
   selfHatLift?: () => number;
   /** 遠端進場時預編譯著色器，避免準心第一次掃到才卡 */
   getRenderer?: () => THREE.WebGLRenderer | null | undefined;
+  /** 正確預熱（含 hidden 臉盆）；優先於 getRenderer.compile */
+  warmGpu?: (root: THREE.Object3D) => void;
 };
 
 export function createPlazaWorldView(
@@ -1013,6 +1015,16 @@ function hashPid(pid: string) {
     markTop(props);
     return { props, bowlNode, meatRoot };
   }
+  // 共用臉盆／碗材質進場先暖：否則第一個坐下的人被準心掃到才編譯
+  if (opts.warmGpu) {
+    try {
+      const w = makeRemoteProps();
+      w.props.visible = true;
+      root.add(w.props);
+      opts.warmGpu(w.props);
+      root.remove(w.props);
+    } catch { /* */ }
+  }
 
   function syncRemoteMeats(r: Remote) {
     const n = Math.min(8, Math.max(0, r.count | 0));
@@ -1532,6 +1544,20 @@ function hashPid(pid: string) {
       if (r.seated && !isLeisurePile(r.pileId)) syncRemoteMeats(r);
       hangArms(r, r.seated);
       if (awaitingPose) { rig.outer.visible = false; r.tag.sprite.visible = false; }
+      // visible=false 的臉盆／人 compile 會跳過 → 強制打開預熱，避免準心第一次瞄到才卡
+      if (opts.warmGpu) {
+        const wasOuter = rig.outer.visible;
+        const wasProps = r.props.visible;
+        const wasTag = r.tag.sprite.visible;
+        rig.outer.visible = true;
+        r.props.visible = true;
+        r.tag.sprite.visible = true;
+        try { opts.warmGpu(rig.outer); } catch { /* */ }
+        rig.outer.visible = wasOuter;
+        r.props.visible = wasProps;
+        r.tag.sprite.visible = wasTag;
+        if (awaitingPose) { rig.outer.visible = false; r.tag.sprite.visible = false; }
+      }
     }
     if (p.connId) r.connId = p.connId;
     return r;

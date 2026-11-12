@@ -1118,9 +1118,43 @@ function dressAma(n: Npc) {
   else if (kind === 3) for (let k = 0; k < 7; k++) { const cx = Math.random() * 64, cy = Math.random() * 64; for (let a = 0; a < 5; a++) { x.beginPath(); x.arc(cx + Math.cos(a * 1.26) * 4, cy + Math.sin(a * 1.26) * 4, 3, 0, 7); x.fill(); } x.fillStyle = '#ffe680'; x.beginPath(); x.arc(cx, cy, 2, 0, 7); x.fill(); x.fillStyle = hex(acc); }
   const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 1); tex.colorSpace = THREE.SRGBColorSpace;
   const m = n.body.material as THREE.MeshStandardMaterial; m.map?.dispose(); m.map = tex; m.color.set(0xffffff); m.needsUpdate = true;
+  // 花布等到準心掃到身體才 upload 會卡一幀
+  try { renderer.initTexture(tex); } catch { /* */ }
   for (const a of [n.armL, n.armR]) { const sl = a.children[0] as THREE.Mesh; (sl.material as THREE.MeshStandardMaterial).color.set(base); }
   const PANTS = [0x3a5068, 0x4a5a68, 0x5a4a3a, 0x2a5a78, 0x4a6a5a, 0x586070]; (n.pants as THREE.MeshStandardMaterial).color.set(PANTS[Math.floor(Math.random() * PANTS.length)]);
 }
+/**
+ * 強制把物件／場景畫進 GPU（含視錐外）。
+ * compile 參數為 (scene, camera)；visible=false 的節點 compile 會跳過，所以先打開再還原。
+ */
+function warmGpuRoot(root: THREE.Object3D) {
+  const cam = viewCam();
+  const saved: { o: THREE.Object3D; v: boolean; f: boolean }[] = [];
+  root.traverse(o => {
+    if ((o as THREE.Light).isLight || (o as THREE.Camera).isCamera) return;
+    saved.push({ o, v: o.visible, f: o.frustumCulled });
+    o.visible = true;
+    o.frustumCulled = false;
+  });
+  const prevAuto = renderer.shadowMap.autoUpdate;
+  const prevNeed = renderer.shadowMap.needsUpdate;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = false;
+  try {
+    cam.updateMatrixWorld(true);
+    try { renderer.compile(root === scene ? scene : root, cam); } catch { /* */ }
+    renderer.setRenderTarget(null);
+    // 實際 render 一幀才會把幾何／變體著色器塞進 GPU（離屏 RT 會編出另一套）
+    renderer.render(root === scene ? scene : scene, cam);
+  } catch { /* */ }
+  renderer.shadowMap.autoUpdate = prevAuto;
+  renderer.shadowMap.needsUpdate = prevNeed;
+  for (const s of saved) {
+    s.o.visible = s.v;
+    s.o.frustumCulled = s.f;
+  }
+}
+function warmSceneGpu() { warmGpuRoot(scene); }
 let nightShift = false, walkHintShown = false, saltNext = false;
 function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && !plazaMode && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '<i class="ic ic-radio"></i><i class="led"></i>' : `<i class="ic ic-radio"></i> ${on ? STATIONS[radioSt()].n : '關'}`; b.title = on ? `收音機：${STATIONS[radioSt()].n}` : '收音機：關（點按鈕切換）'; }
 // 收音機按鈕循環：關 → 懷舊歌謠台 → 廣播電台 → 台語老歌 → 關
@@ -1246,6 +1280,24 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
     prewarmStealUi();
     if (plazaMode) { _plazaHintWarmKey = ''; maybeWarmPlazaStealHints(); }
   }
+  // 下一幀再暖 GPU：避免擋住上工當幀；打開隱藏物件編譯，減少準心掃到才卡
+  requestAnimationFrame(() => {
+    const tagWas = npcs.map(n => n.tag.sprite.visible);
+    const bubWas = npcs.map(n => n.bubble.sprite.visible);
+    try {
+      for (const n of npcs) {
+        const m = n.body.material as THREE.MeshStandardMaterial;
+        if (m.map) try { renderer.initTexture(m.map); } catch { /* */ }
+        n.tag.sprite.visible = true;
+        n.bubble.sprite.visible = true;
+      }
+      warmSceneGpu();
+    } catch { /* */ }
+    npcs.forEach((n, i) => {
+      n.tag.sprite.visible = tagWas[i]!;
+      n.bubble.sprite.visible = bubWas[i]!;
+    });
+  });
 }
 /** HUD dirty：避免每幀寫 DOM／innerHTML 觸發強制重排 */
 const hudPrev = { hpW: '', hpPct: '', timerLab: '', timer: '', count: -1, pearls: -1, stats: '' };
@@ -4341,6 +4393,7 @@ function launchPlaza() {
     scene,
     camera: () => viewCam(),
     renderer,
+    warmGpu: root => warmGpuRoot(root),
     bubbles: $('bubbles'),
     shellGeo,
     shellMat: pileMat,
