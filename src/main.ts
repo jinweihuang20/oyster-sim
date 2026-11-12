@@ -2470,6 +2470,10 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   if (againBtn) { againBtn.style.display = plazaMode ? 'none' : ''; againBtn.innerHTML = `<i class="ic ic-again"></i> 再次上工`; }
   // 廣場結算：藏廣場 UI／再次上工；等伺服器入帳前標示結算中
   if (plazaMode) {
+    // 入碗數已用於結算；清空碗內庫存／模型，離開後不能再當機關槍子彈
+    bowlStock = 0;
+    if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; }
+    updHud();
     plazaEndCleanup();
     clearPlazaLeaveUi();
     on('quitBtn', false); on('standBtn', false); on('throwBtn', false); on('umbBtn', false); on('stealBtn', false); on('sitBtn', false); on('giveUp', false); on('medBtn', false); on('camBtn', false);
@@ -3995,6 +3999,8 @@ async function leavePlazaForShed(trip: { loc: string; len: number }) {
   showShedLoading(true);
   for (const id of ['result', 'backMenu']) $(id).classList.remove('show');
   await plazaPayWait?.catch(() => 0);
+  bowlStock = 0;
+  if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; }
   plazaShellGen++;
   setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0;
   plazaHideYard(false);
@@ -4350,6 +4356,8 @@ btn('resMenu', () => {
   returnToMainMenu(async () => {
     if (fromPlaza) {
       await plazaPayWait?.catch(() => 0);
+      bowlStock = 0;
+      if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; }
       setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0;
       plazaHideYard(false);
       plazaHideChrome(true);
