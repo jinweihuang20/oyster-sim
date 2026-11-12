@@ -4,7 +4,7 @@ import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds, plazaClampWalk, plazaCafeObstacles,
   seatPose, seatKey, nearestFreeSeat, nearestFreePlaceSeat, pileObstacles, pileCenter, randomWalkSpawn, resolveWalkSpawn,
   isSmokePile, isLeisurePile, isRestPile, isMgPile, plazaSmokeObstacles, isPlazaAber, SMOKE_PILE_ID, SMOKE_ABER_SLOT,
-  MG_PILE_ID, MG_SIT_PRICE, MG_SIT_AMMO, MG_MAG_PRICE, MG_AMMO_MAX, MG_SIT_MS,
+  MG_PILE_ID, MG_SIT_PRICE, MG_SIT_AMMO, MG_SIT_MS,
   type PlazaSeatRef, type PlazaSpawnMemory,
   SHED_DOORS, shedDoorAt, plazaShedObstacles,
 } from './layout';
@@ -755,8 +755,11 @@ async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?
       if ((r as any).token) client.token = (r as any).token;
       if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
       if (isMgPile(myPile) && mySlot != null) {
-        const info = (r as any).mg as { expireAt?: number; ammo?: number } | undefined;
-        deps.enterMgSit(mySlot, info?.expireAt ?? (Date.now() + MG_SIT_MS), info?.ammo ?? MG_SIT_AMMO, mgFromMeat);
+        const info = (r as any).mg as { expireAt?: number; ExpireAt?: number; ammo?: number; Ammo?: number } | undefined;
+        const ammo = typeof info?.ammo === 'number' ? info.ammo : (typeof info?.Ammo === 'number' ? info.Ammo : MG_SIT_AMMO);
+        const rawExp = Number(info?.expireAt ?? info?.ExpireAt ?? 0);
+        const expireAt = Number.isFinite(rawExp) && rawExp > Date.now() + 2000 ? rawExp : (Date.now() + MG_SIT_MS);
+        deps.enterMgSit(mySlot, expireAt, ammo, mgFromMeat);
       } else if (shiftStarted && !isLeisurePile(myPile)) deps.refillBasin?.();
       flashNetOk('已重連，位子還在');
       deps.toast('已重連，位子還在', '#9be37a');
@@ -785,15 +788,15 @@ function wireClient(D: PlazaDeps) {
       view?.syncRoster(snap, D.id);
       checkCarryLost();
       syncPlazaPeopleHud();
-      // 機關槍 90 秒到期：伺服器踢下後 roster 顯示自己沒坐著
+      // 機關槍 90 秒到期：先 goWalk（仍有 myPile 算高台離座點），再清座位
       if (seated && myPile != null && isMgPile(myPile)) {
         const me = snap.players.find(p => (!!p.pid && p.pid === D.id) || (!!client?.connectionId && p.connId === client.connectionId));
         if (me && !me.seated) {
-          seated = false; myPile = null; mySlot = null;
-          view?.highlight(null, null);
-          syncSeatChrome();
           D.onMgExpired?.();
           D.goWalk();
+          seated = false; myPile = null; mySlot = null; mgFromMeat = false;
+          view?.highlight(null, null);
+          syncSeatChrome();
           D.toast('機關槍時間到了', '#ffb08a');
           setHud(`${plazaHudPeople(snap)}　靠近空位坐下`);
           return;
@@ -1612,13 +1615,16 @@ export async function plazaTrySit(mgPay: PlazaMgPay = 'auto'): Promise<boolean> 
     seated = true; near = null;
     syncSeatChrome();
     if (mg) {
-      const info = (r as any).mg as { expireAt?: number; ammo?: number } | undefined;
-      const ammo = info?.ammo ?? offlineAmmo;
+      const info = (r as any).mg as { expireAt?: number; ExpireAt?: number; ammo?: number; Ammo?: number } | undefined;
+      const ammo = typeof info?.ammo === 'number' ? info.ammo : (typeof info?.Ammo === 'number' ? info.Ammo : offlineAmmo);
       const fromMeat = meatAmmo > 0;
       mgFromMeat = fromMeat;
+      // expireAt 必須是未來時間；0／缺欄位時用本機 90 秒，避免一上機就被踢
+      const rawExp = Number(info?.expireAt ?? info?.ExpireAt ?? 0);
+      const expireAt = Number.isFinite(rawExp) && rawExp > Date.now() + 2000 ? rawExp : (Date.now() + MG_SIT_MS);
       if (fromMeat) deps.toast(`碗裡 ${ammo} 顆蚵肉當子彈・發射才扣碗`, '#ffd76a');
       else deps.toast(`付 $${MG_SIT_PRICE} 上機・${ammo} 發（不扣碗內蚵肉）`, '#ffd76a');
-      deps.enterMgSit(seat.slot, info?.expireAt ?? (Date.now() + MG_SIT_MS), ammo, fromMeat);
+      deps.enterMgSit(seat.slot, expireAt, ammo, fromMeat);
     } else if (smoke) deps.enterSmokeSit(seat.slot);
     else if (isRestPile(seat.pileId)) deps.enterRestSit(seat.slot);
     else if (first) { shiftStarted = true; deps.beginShift(seat.pileId, seat.slot); }

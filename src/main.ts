@@ -59,12 +59,12 @@ import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaSetSelfBody, plazaReportEarn, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile, isMgPile,
-  MG_MAG_PRICE, MG_AMMO_MAX,
+  MG_MAG_PRICE, MG_MAG_AMMO, MG_AMMO_MAX,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaMgFire, plazaMgReload, plazaMgFx, plazaMgMount, plazaAimMg, plazaOnMg,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
-  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, plazaLeaveAskIsOpen, plazaCloseLeaveAsk, seatPose, plazaPushOutfit, plazaPushCosmetics,
+  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, plazaLeaveAskIsOpen, plazaCloseLeaveAsk, seatPose, mgLeaveXZ, plazaPushOutfit, plazaPushCosmetics,
   plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryShowFlag, plazaTryRemoveFlag, plazaTryUpgradeFlag, plazaTrySelectFlag,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
@@ -1986,26 +1986,32 @@ function reportPlazaShellHit() {
   const p = plazaSelfBleedPos();
   void plazaShellHit({ x: p.x, y: p.y, z: p.z });
 }
-/** 廣場遠端可見：略大於一般 bleed，方便遠看；仍受 mix.gore 控制 */
+/** 廣場遠端可見噴血（收斂一點）；仍受 mix.gore 控制 */
 function plazaBleedBurst(at: THREE.Vector3) {
   if (!mix.gore) return;
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 8; i++) {
     const m = new THREE.Mesh(dropGeo, dropMat);
-    m.position.copy(at).add(new THREE.Vector3(rnd(-0.03, 0.03), rnd(-0.02, 0.04), rnd(-0.03, 0.03)));
-    m.scale.setScalar(rnd(0.85, 1.9));
+    m.position.copy(at).add(new THREE.Vector3(rnd(-0.02, 0.02), rnd(-0.01, 0.03), rnd(-0.02, 0.02)));
+    m.scale.setScalar(rnd(0.45, 1.05));
     scene.add(m);
-    const sp = rnd(0.7, 1.5);
+    const sp = rnd(0.25, 0.7);
     const a = rnd(0, Math.PI * 2);
     drops.push({
       m,
-      v: new THREE.Vector3(Math.cos(a) * sp * rnd(0.4, 0.9), rnd(0.9, 2.2), Math.sin(a) * sp * rnd(0.4, 0.9)),
+      v: new THREE.Vector3(Math.cos(a) * sp * rnd(0.3, 0.7), rnd(0.35, 1.1), Math.sin(a) * sp * rnd(0.3, 0.7)),
     });
   }
 }
-/** 廣場任何人被殼砸中：全場（含本人）噴血 */
+/** 廣場被殼／機關槍打中的噴血：第一人稱本人不噴，避免鏡頭前糊滿血 */
 function resolvePlazaShellHitFx(e: PlazaShellHitEvent) {
   if (!plazaMode || !isPlazaActive()) return;
   if (![e.x, e.y, e.z].every(Number.isFinite)) return;
+  const me = plazaConnId();
+  const selfHit = !!(me && e.connId === me);
+  if (selfHit && !tpv) {
+    try { SFX.hitNpc(); } catch { /* */ }
+    return;
+  }
   plazaBleedBurst(new THREE.Vector3(e.x, e.y, e.z));
   try { SFX.hitNpc(); } catch { /* */ }
 }
@@ -2131,8 +2137,11 @@ function resolvePlazaMgHit(e: PlazaMgHitEvent) {
   const me = plazaConnId();
   if (!me || e.toConnId !== me) return;
   blockStreak = 0; hitsTaken++;
-  const splat = document.getElementById('splat');
-  if (splat) { splat.style.opacity = '1'; later(0.9, () => { splat.style.opacity = '0'; }); }
+  // 第一人稱：不蓋全螢幕殼汁／不噴血（紅框由 hurt 輕觸）
+  if (tpv) {
+    const splat = document.getElementById('splat');
+    if (splat) { splat.style.opacity = '0.55'; later(0.7, () => { splat.style.opacity = '0'; }); }
+  }
   hurt(8, `${e.fromNick || '別人'} 的蚵仔機關槍打中你了！`);
   hitInHand();
   updHud();
@@ -2204,11 +2213,11 @@ function leaveMgByTime() {
 async function tryMgReload() {
   if (!mgActive || !plazaOnMg()) return;
   if (Date.now() >= mgExpireAt) { leaveMgByTime(); return; }
-  if (mgAmmo >= MG_AMMO_MAX) { toast('彈匣還是滿的', '#9fe0ff'); return; }
-  if (save.money < MG_MAG_PRICE) { toast(`彈夾要 $${MG_MAG_PRICE}，你錢不夠`, '#ffb08a'); return; }
+  if (!mgMeatAmmo && mgAmmo >= MG_MAG_AMMO) { toast('彈匣還是滿的', '#9fe0ff'); return; }
+  if (save.money < MG_MAG_PRICE) { toast(`彈夾要 $${MG_MAG_PRICE}／${MG_MAG_AMMO} 發，你錢不夠`, '#ffb08a'); return; }
   save.money -= MG_MAG_PRICE;
   persist();
-  track('mg_reload', { price: MG_MAG_PRICE, money: save.money });
+  track('mg_reload', { price: MG_MAG_PRICE, ammo: MG_MAG_AMMO, money: save.money });
   updHud();
   const r = await plazaMgReload();
   if (!r.ok) {
@@ -2217,10 +2226,10 @@ async function tryMgReload() {
     else toast(plazaZhErr(r.err) || '買彈夾失敗', '#ff8a7a');
     return;
   }
-  mgAmmo = typeof r.ammo === 'number' ? r.ammo : MG_AMMO_MAX;
+  mgAmmo = typeof r.ammo === 'number' ? r.ammo : MG_MAG_AMMO;
   mgMeatAmmo = false; // 買彈夾＝付費彈，之後不扣碗
   updMgHud();
-  toast(`補滿 ${mgAmmo} 發！`, '#9be37a');
+  toast(`補滿 ${mgAmmo} 發！（$${MG_MAG_PRICE}）`, '#9be37a');
   SFX.pop();
 }
 
@@ -2889,7 +2898,9 @@ initWalkSeat({
   $, on, COARSE, clamp,
   getState: () => state, getPhase: () => phase,
   walkSpeedMul: walkSpeedNow,
-  isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaGroundY, plazaNearSeat, plazaNearPrompt, plazaMySeat, seatPose,
+  isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaGroundY, plazaNearSeat, plazaNearPrompt, plazaMySeat,
+  plazaLeaveXZ: (pileId, slot) => (isMgPile(pileId) ? mgLeaveXZ(slot) : null),
+  seatPose,
   isRoomMode: () => isRoomActive(), roomSeated, roomStandWalk, roomWalkBodies, roomNearPrompt,
   setPlazaSeatPropsVisible, oyster, shellGeo, shellTopMat, shellTop, handRig, SEAT, BASIN, BOWL, getBowlR: () => BOWL_R,
   seatGround, seatNow,

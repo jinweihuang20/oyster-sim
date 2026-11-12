@@ -65,7 +65,10 @@ export const MG_SEAT_COUNT = 2;
 /** 付費上機：金額／發數（不扣碗內蚵肉） */
 export const MG_SIT_PRICE = 4000;
 export const MG_SIT_AMMO = 200;
-export const MG_MAG_PRICE = 1000;
+/** 買彈夾：與付費解鎖同價同發數 */
+export const MG_MAG_PRICE = MG_SIT_PRICE;
+export const MG_MAG_AMMO = MG_SIT_AMMO;
+/** 蚵肉當子彈上限（付費彈夾為 MG_MAG_AMMO） */
 export const MG_AMMO_MAX = 500;
 export const MG_SIT_MS = 90_000;
 /**
@@ -95,7 +98,22 @@ export const MG_SEATS: readonly { x: number; z: number; yaw: number }[] = [
 ];
 /** 玩家站在槍後方（沿 yaw 背向）的距離 */
 export const MG_STAND_BACK = 0.72;
+/** 離座時站在圓圈側邊（沿面向右側），避免再往後偏出甲板掉到一樓 */
+export const MG_LEAVE_SIDE = 0.7;
 export const isMgPile = (pileId: number) => pileId === MG_PILE_ID;
+
+/** 機關槍離座／踢下後的走動座標（圓圈旁、仍在高台上） */
+export function mgLeaveXZ(slot: number): { x: number; z: number; yaw: number } {
+  const s = MG_SEATS[Math.max(0, Math.min(MG_SEATS.length - 1, slot))] ?? MG_SEATS[0];
+  const cx = s.x + Math.sin(s.yaw) * MG_STAND_BACK;
+  const cz = s.z + Math.cos(s.yaw) * MG_STAND_BACK;
+  // 右側：yaw=0 朝 -z 時右為 +x
+  return {
+    x: cx + Math.cos(s.yaw) * MG_LEAVE_SIDE,
+    z: cz - Math.sin(s.yaw) * MG_LEAVE_SIDE,
+    yaw: s.yaw,
+  };
+}
 
 /** 廣場地面高度（機關槍高台／樓梯）；其餘為 0 */
 export function plazaGroundY(x: number, z: number): number {

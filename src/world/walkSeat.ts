@@ -33,6 +33,8 @@ export type WalkSeatDeps = {
   roomWalkBodies?: () => [number, number, number, number][];
   roomNearPrompt?: () => { kind: 'sit' | 'carry' | 'place'; info: string; btn: string; slot?: number; npcConnId?: string } | null;
   plazaMySeat: () => { pileId: number; slot: number } | null;
+  /** 離座站位（機關槍高台等）；缺省則用座位後方 */
+  plazaLeaveXZ?: (pileId: number, slot: number) => { x: number; z: number; yaw: number } | null;
   seatPose: (pileId: number, slot: number) => { pos: THREE.Vector3; yaw: number };
   setPlazaSeatPropsVisible: (v: boolean) => void;
   oyster: THREE.Object3D;
@@ -141,12 +143,15 @@ export function plazaEnterWalkPose(fromSeat = true) {
   if (fromSeat) {
     const s = D.plazaMySeat();
     if (s) {
+      // 機關槍：站圓圈旁留在高台；一般座：略往後離開椅子
+      const leave = D.plazaLeaveXZ?.(s.pileId, s.slot);
       const pose = D.seatPose(s.pileId, s.slot);
-      const wx = pose.pos.x + Math.sin(pose.yaw) * 0.55;
-      const wz = pose.pos.z + Math.cos(pose.yaw) * 0.55;
+      const wx = leave?.x ?? (pose.pos.x + Math.sin(pose.yaw) * 0.55);
+      const wz = leave?.z ?? (pose.pos.z + Math.cos(pose.yaw) * 0.55);
+      const wyaw = leave?.yaw ?? pose.yaw;
       walkPos.set(wx, 1.55 + (D.plazaGroundY?.(wx, wz) ?? (pose.pos.y || 0)), wz);
-      D.setTYaw(pose.yaw); D.setYaw(pose.yaw);
-      D.setSeatYaw(pose.yaw);
+      D.setTYaw(wyaw); D.setYaw(wyaw);
+      D.setSeatYaw(wyaw);
     } else {
       walkPos.copy(D.SEAT);
       walkPos.x += Math.sin(D.getSeatYaw()) * 0.55; walkPos.z += Math.cos(D.getSeatYaw()) * 0.55;
