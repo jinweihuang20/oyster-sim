@@ -16,13 +16,20 @@ import {
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { makePlazaShedRow } from './shedRow';
-import { PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey, pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, isMgPile, MG_PILE_ID, MG_DECK_Y, SMOKE_PILE_ID, smokeNpcSeatPose, isPlazaAber, plazaGroundY, type PlazaSeatRef } from './layout';
+import {
+  PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey,
+  pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, isMgPile,
+  MG_PILE_ID, MG_DECK_Y, SMOKE_PILE_ID, SMOKE_SEAT_COUNT, SMOKE_ABER_SLOT, smokeNpcSeatPose, isPlazaAber, plazaGroundY,
+  CAFE_SMOKE_PILE_ID, CAFE_SMOKE_SEAT_COUNT, SEAFOOD_PILE_ID, SEAFOOD_SEAT_COUNT, HQ_SEAT_SLOT,
+  type PlazaSeatRef,
+} from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
 import { makeInstancedPlazaChairs, makeInstancedPads, type ChairPose } from './instancedProps';
 import { bakeStaticLighting } from './bakeLighting';
 import { mergeStaticMeshes, countMeshes } from './mergeStatic';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { makePlazaSmokeArea } from './smokeArea';
+import { makePlazaTidalFlat } from './tidalFlat';
 import { buildMgMounts, aimMgMount, MgFxSystem, type MgHitTarget } from './mgGun';
 import { makePlazaCafe } from './cafe';
 import { makePlazaSeafood } from './seafood';
@@ -36,7 +43,12 @@ import { plazaDisplayName } from './types';
 import { GOLD_SMOKE_TINT, parseCosmetics } from './cosmetics';
 import { createPlazaFlagView } from './flagView';
 import type { PlazaFlagState } from './flags';
-
+import {
+  type PlazaZoneId, ZONE_LOAD_R, ZONE_UNLOAD_R, ZONE_PIN_R, ZONE_DISPOSE,
+  CULL_NEAR, CULL_MID, CULL_ECO_SCALE,
+  zoneAt, zonesWanted, zoneShouldUnload, distToZone, cullTier,
+  corePilesInQuadrant, southGrillPiles, quadrantCenter,
+} from './zones';
 type Remote = {
   /** Map key＝pid（同一人只留一具模型，重連換 connId 不複製） */
   key: string;
@@ -263,27 +275,28 @@ export function createPlazaWorldView(
   root.add(floor);
 
   const fireFx: CharcoalFireFx[] = [];
+  const builtPiles = new Set<number>();
+  const builtQuadrants = new Set<0 | 1 | 2 | 3>();
+
+  // 椅子姿態：全部從 layout 預先登錄（mesh 可晚到；不擋進場）
   for (let i = 0; i < PILE_COUNT; i++) {
     if (pileIsRemoved(i)) continue;
-    const c = pileCenter(i);
-    // 南排烤蚵台；其餘沿用工寮蚵山（InstancedMesh）
-    const pile = pileIsGrill(i)
-      ? makePlazaGrill(opts.shellGeo, opts.shellMat, i, LO)
-      : makeYardLikePile(opts.shellGeo, opts.shellMat, i, LO ? 96 : 210);
-    pile.position.copy(c);
-    root.add(pile);
-    pileGroups.push(pile);
-    const fx = pile.userData.fireFx as CharcoalFireFx | undefined;
-    if (fx) fireFx.push(fx);
-
     const seatN = SLOTS_PER_PILE + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
     for (let s = 0; s < seatN; s++) {
       const pose = seatPose(i, s);
       chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(i, s) });
     }
   }
+  for (let s = 0; s < SMOKE_SEAT_COUNT; s++) {
+    const pose = seatPose(SMOKE_PILE_ID, s);
+    chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(SMOKE_PILE_ID, s) });
+  }
+  {
+    const pose = smokeNpcSeatPose();
+    chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(SMOKE_PILE_ID, SMOKE_ABER_SLOT) });
+  }
 
-  // 廣場大棚（鏽鐵皮＋外圈木柱；厝頂／高樑可第三人稱半透明）
+  // 廣場大棚（鏽鐵皮＋外圈木柱；厝頂／高樑可第三人稱半透明）— 進場必建
   const bigShed = makePlazaBigShed(M, add, LO);
   root.add(bigShed.group);
   const tpOccludeMats = bigShed.tpOccludeMats;
@@ -291,47 +304,34 @@ export function createPlazaWorldView(
   const _tpOccRay = new THREE.Raycaster();
   const _tpOccFrom = new THREE.Vector3();
   const _tpOccDir = new THREE.Vector3();
-  // 外圈夜市攤／烤肉區（氣氛；碰撞見 plazaStallObstacles）
-  const ambiance = makePlazaAmbiance(M, add, LO);
-  root.add(ambiance.group);
 
-  // 西側棚外吸菸區（座位 pileId=SMOKE_PILE_ID）
-  const smokeArea = makePlazaSmokeArea(M, add, LO);
-  root.add(smokeArea.group);
-  for (const [k, pad] of smokeArea.seatPads) seatMeshes.set(k, pad);
-  chairPoses.push(...smokeArea.chairPoses);
-  // 蚵仔機關槍：烤區旁高台＋槍座
-  const mgMounts = buildMgMounts(root, LO);
-  for (let i = 0; i < mgMounts.length; i++) {
-    const pad = mgMounts[i].children.find(c => (c as THREE.Mesh).isMesh && (c as THREE.Mesh).geometry.type === 'CircleGeometry') as THREE.Mesh | undefined;
-    if (pad) seatMeshes.set(seatKey(MG_PILE_ID, i), pad);
-  }
+  type ZoneBundle = {
+    group: THREE.Group;
+    dispose?: () => void;
+    tick?: (tSec: number, dt: number) => void;
+  };
+  let ambiance: (ReturnType<typeof makePlazaAmbiance> & ZoneBundle) | null = null;
+  let smokeArea: (ReturnType<typeof makePlazaSmokeArea> & ZoneBundle) | null = null;
+  let cafe: (ReturnType<typeof makePlazaCafe> & ZoneBundle) | null = null;
+  let seafood: (ReturnType<typeof makePlazaSeafood> & ZoneBundle) | null = null;
+  let hq: (ReturnType<typeof makePlazaHq> & ZoneBundle) | null = null;
+  let shedRow: ReturnType<typeof makePlazaShedRow> | null = null;
+  let tidalFlat: { group: THREE.Group } | null = null;
+  const mgMounts: THREE.Group[] = [];
   const mgFx = new MgFxSystem(opts.shellGeo, opts.shellMat, LO);
   root.add(mgFx.root);
+  const shedDoorState = new Map<string, { locked: boolean; active: boolean }>();
+  const loadedZones = new Set<PlazaZoneId>(['core']);
+  const zoneGroups = new Map<PlazaZoneId, THREE.Object3D[]>();
+  const pendingZones: PlazaZoneId[] = [];
+  const pendingQuadrants: (0 | 1 | 2 | 3)[] = [];
+  let streamProbeT = 0;
+  let streamBusy = false;
+  let seatedZone: PlazaZoneId | null = null;
+  let walkX = 0, walkZ = 0;
+  const meshBefore = countMeshes(root);
 
-  // 東南角多那芝咖啡外觀＋門口吸菸區（座位 pileId=CAFE_SMOKE_PILE_ID）
-  const cafe = makePlazaCafe(M, add, LO);
-  root.add(cafe.group);
-  for (const [k, pad] of cafe.seatPads) seatMeshes.set(k, pad);
-
-  // 多那芝北側海產店「樸子腳」外觀＋門口座位（pileId=SEAFOOD_PILE_ID，純坐）
-  const seafood = makePlazaSeafood(M, add, LO);
-  root.add(seafood.group);
-  for (const [k, pad] of seafood.seatPads) seatMeshes.set(k, pad);
-
-  // 樸子腳北側「聯合競選總部」組合屋外觀（無座位、無點光）
-  const hq = makePlazaHq(M, add, LO);
-  root.add(hq.group);
-
-  // 北側碼頭工寮街：四間工寮＋門口圓圈（無燈）
-  const shedRow = makePlazaShedRow(M, add, LO);
-  root.add(shedRow.group);
-
-  const plazaChairs = makeInstancedPlazaChairs(chairPoses, M, LO);
-  chairsRoot.add(plazaChairs.group);
-
-  // 合併靜態桌椅／棚架／攤位（略過選位墊、炭火、吊扇、薄煙；店面小零件留給遠景 LOD）
-  const padSet = new Set<THREE.Object3D>([...seatMeshes.values()]);
+  const padSet = new Set<THREE.Object3D>();
   const skipMerge = (m: THREE.Mesh) => {
     if (padSet.has(m)) return true;
     if (m.userData.tpOcclude) return true;
@@ -342,46 +342,300 @@ export function createPlazaWorldView(
     }
     return false;
   };
-  const meshBefore = countMeshes(root);
+
+  function bakeZone(g: THREE.Object3D) {
+    bakeStaticLighting(g, {
+      includeDirect: LO,
+      sunDir: new THREE.Vector3(-3, 11, -5),
+      lampXZ: PLAZA_LAMP_XZ,
+      lampY: PLAZA_ROOF_Y - 0.55,
+      lampPool: true,
+    });
+  }
+
+  function absorbPads(from: Map<string, THREE.Mesh> | Iterable<[string, THREE.Mesh]>) {
+    for (const [k, pad] of from) seatMeshes.set(k, pad);
+  }
+
+  function flushPadsToInstances() {
+    if (!seatMeshes.size) return;
+    root.updateMatrixWorld(true);
+    const extraPadPoses: ChairPose[] = [];
+    const _padW = new THREE.Vector3();
+    const _padE = new THREE.Euler();
+    const _padQ = new THREE.Quaternion();
+    const _padS = new THREE.Vector3();
+    for (const [key, mesh] of [...seatMeshes]) {
+      mesh.updateWorldMatrix(true, false);
+      mesh.matrixWorld.decompose(_padW, _padQ, _padS);
+      _padE.setFromQuaternion(_padQ, 'YXZ');
+      const py = key.startsWith(`${MG_PILE_ID}:`) ? Math.max(_padW.y, MG_DECK_Y + 0.14) : _padW.y;
+      extraPadPoses.push({ x: _padW.x, y: py, z: _padW.z, yaw: _padE.y, key });
+      mesh.removeFromParent();
+      seatMeshes.delete(key);
+    }
+    if (!extraPadPoses.length) return;
+    const pads = makeInstancedPads(extraPadPoses, M, LO);
+    root.add(pads.mesh);
+    allPads.push(pads);
+    paintInstancedPads(padTaken);
+  }
+
+  function disposeZoneSubtree(obj: THREE.Object3D) {
+    obj.traverse(o => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      if (m.geometry && !m.userData.sharedGeo && m.geometry !== opts.shellGeo) {
+        try { m.geometry.dispose(); } catch { /* */ }
+      }
+      if (m.userData.sharedMat) return;
+      const mat = m.material as THREE.Material | THREE.Material[];
+      if (Array.isArray(mat)) mat.forEach(x => { if (x !== opts.shellMat) try { x.dispose(); } catch { /* */ } });
+      else if (mat && mat !== opts.shellMat) try { mat.dispose(); } catch { /* */ }
+    });
+    obj.removeFromParent();
+  }
+
+  function buildOnePile(i: number) {
+    if (builtPiles.has(i) || pileIsRemoved(i)) return;
+    const c = pileCenter(i);
+    const pile = pileIsGrill(i)
+      ? makePlazaGrill(opts.shellGeo, opts.shellMat, i, LO)
+      : makeYardLikePile(opts.shellGeo, opts.shellMat, i, LO ? 96 : 210);
+    pile.position.copy(c);
+    root.add(pile);
+    pileGroups.push(pile);
+    builtPiles.add(i);
+    const fx = pile.userData.fireFx as CharcoalFireFx | undefined;
+    if (fx) fireFx.push(fx);
+    mergeStaticMeshes(pile, { skip: skipMerge, name: `pileMerged_${i}` });
+    bakeZone(pile);
+  }
+
+  function buildQuadrant(q: 0 | 1 | 2 | 3) {
+    if (builtQuadrants.has(q)) return;
+    for (const id of corePilesInQuadrant(q)) buildOnePile(id);
+    builtQuadrants.add(q);
+  }
+
+  type DetailLod = { box: THREE.Box3; small: THREE.Object3D[]; signs: THREE.Object3D[]; smallOn: boolean; signOn: boolean; group: THREE.Object3D };
+  const detailLods: DetailLod[] = [];
+  let lodT = 0;
+  const _lodP = new THREE.Vector3();
+
+  function registerDetailLod(g: THREE.Object3D, pads?: Iterable<THREE.Object3D>) {
+    const localPads = new Set<THREE.Object3D>(pads ? [...pads] : []);
+    g.updateMatrixWorld(true);
+    const d: DetailLod = { box: new THREE.Box3().setFromObject(g), small: [], signs: [], smallOn: true, signOn: true, group: g };
+    const sph = new THREE.Sphere(), sc = new THREE.Vector3();
+    const walk = (o: THREE.Object3D) => {
+      if (o.userData.noLod || localPads.has(o)) return;
+      const m = o as THREE.Mesh;
+      if (m.isMesh && o.visible && !(m as any).isInstancedMesh) {
+        const mat = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.MeshStandardMaterial;
+        const geo = m.geometry;
+        o.getWorldScale(sc);
+        const pg = geo as THREE.PlaneGeometry;
+        if (mat?.map && geo.type === 'PlaneGeometry' && pg.parameters.height * sc.y <= 0.8) { d.signs.push(o); return; }
+        if (mat?.map) { for (const c of o.children) walk(c); return; }
+        if (!geo.boundingSphere) geo.computeBoundingSphere();
+        sph.copy(geo.boundingSphere!);
+        if (sph.radius * Math.max(sc.x, sc.y, sc.z) < 0.3) { d.small.push(o); return; }
+      }
+      for (const c of o.children) walk(c);
+    };
+    walk(g);
+    detailLods.push(d);
+  }
+
+  /** 常態細節 LOD：mid 關小零件、far 關招牌（門檻隨 eco 縮） */
+  function tickDetailLod(dt: number, cx: number, cz: number, eco: boolean) {
+    if ((lodT -= dt) > 0) return;
+    lodT = 0.25;
+    const s = eco ? CULL_ECO_SCALE : 1;
+    const smallHi = CULL_NEAR * s + 3; // ~11 / ~9
+    const smallLo = smallHi - 2;
+    const signHi = CULL_MID * s + 3; // ~17 / ~13.5
+    const signLo = signHi - 2;
+    for (const d of detailLods) {
+      if (!d.group.parent) continue;
+      _lodP.set(cx, (d.box.min.y + d.box.max.y) / 2, cz);
+      d.box.clampPoint(_lodP, _lodP);
+      const dist = Math.hypot(_lodP.x - cx, _lodP.z - cz);
+      const smallOn = d.smallOn ? dist < smallHi : dist < smallLo;
+      const signOn = d.signOn ? dist < signHi : dist < signLo;
+      if (smallOn !== d.smallOn) { d.smallOn = smallOn; for (const o of d.small) o.visible = smallOn; }
+      if (signOn !== d.signOn) { d.signOn = signOn; for (const o of d.signs) o.visible = signOn; }
+    }
+  }
+
+  const stallKeepers: { rig: PlayerRig; ph: number; lines: string[]; bub: WorldLabel | null; next: number; until: number; li: number }[] = [];
+  const KEEPER_LINES: Record<string, string[]> = {
+    bbq: ['烤肉喔！剛烤好的！', '香腸一支三十，兩支五十五！', '來喔來喔，烤玉米也有！', '要辣的跟我說喔～'],
+    'drink-s': ['冰涼的青草茶喔！', '剝蚵剝到口渴了吧？來一杯！', '冬瓜茶、楊桃汁，現倒現喝！', '大杯的才三十喔！'],
+  };
+
+  function spawnStallKeepers() {
+    if (stallKeepers.length) return;
+    PLAZA_STALL_SITES.filter((s) => KEEPER_LINES[s.id]).forEach((site, idx) => {
+      const look = AMA_LOOKS[(idx * 3 + 1) % AMA_LOOKS.length];
+      const rig = makePlayerAvatar({ shirt: amaShirtHex(look), hair: look.hair, pants: look.pants }, M, add, LO, true);
+      dressPlazaAma(rig, look);
+      posePlazaHangArms(rig, false);
+      applyAmaAppearance(rig);
+      const out = Math.atan2(site.x, site.z);
+      const back = site.kind === 'cart' ? 0.6 : 0.68;
+      rig.outer.position.set(site.x + Math.sin(out) * back, 0, site.z + Math.cos(out) * back);
+      rig.outer.rotation.y = out;
+      rig.outer.userData.skipTpOcclude = true;
+      root.add(rig.outer);
+      stallKeepers.push({ rig, ph: idx * 1.7, lines: KEEPER_LINES[site.id], bub: null, next: 3 + idx * 4, until: 0, li: idx });
+    });
+  }
+
+  function clearStallKeepers() {
+    for (const k of stallKeepers) {
+      try { root.remove(k.rig.outer); } catch { /* */ }
+      try { k.bub?.dispose(); } catch { /* */ }
+    }
+    stallKeepers.length = 0;
+  }
+
+  function trackZone(id: PlazaZoneId, objs: THREE.Object3D[]) {
+    zoneGroups.set(id, objs);
+    loadedZones.add(id);
+  }
+
+  function buildZone(id: PlazaZoneId): boolean {
+    if (loadedZones.has(id) && id !== 'core') return false;
+    if (id === 'core') return false;
+    if (id === 'westSmoke') {
+      smokeArea = makePlazaSmokeArea(M, add, LO);
+      root.add(smokeArea.group);
+      absorbPads(smokeArea.seatPads);
+      for (const p of smokeArea.seatPads.values()) padSet.add(p);
+      tidalFlat = makePlazaTidalFlat(M, add, LO);
+      root.add(tidalFlat.group);
+      mergeStaticMeshes(smokeArea.group, { skip: skipMerge, name: 'smokeMerged' });
+      mergeStaticMeshes(tidalFlat.group, { skip: skipMerge, name: 'tidalMerged' });
+      bakeZone(smokeArea.group);
+      bakeZone(tidalFlat.group);
+      flushPadsToInstances();
+      trackZone(id, [smokeArea.group, tidalFlat.group]);
+      return true;
+    }
+    if (id === 'southGrill') {
+      for (const pid of southGrillPiles()) buildOnePile(pid);
+      const mounts = buildMgMounts(root, LO);
+      mgMounts.length = 0;
+      mgMounts.push(...mounts);
+      for (let i = 0; i < mgMounts.length; i++) {
+        const pad = mgMounts[i].children.find(c => (c as THREE.Mesh).isMesh && (c as THREE.Mesh).geometry.type === 'CircleGeometry') as THREE.Mesh | undefined;
+        if (pad) { seatMeshes.set(seatKey(MG_PILE_ID, i), pad); padSet.add(pad); }
+      }
+      flushPadsToInstances();
+      const grillObjs: THREE.Object3D[] = [...mgMounts];
+      for (const pid of southGrillPiles()) {
+        const g = pileGroups.find(p => p.userData.pileId === pid);
+        if (g) grillObjs.push(g);
+      }
+      trackZone(id, grillObjs);
+      return true;
+    }
+    if (id === 'eastStreet') {
+      cafe = makePlazaCafe(M, add, LO);
+      seafood = makePlazaSeafood(M, add, LO);
+      hq = makePlazaHq(M, add, LO);
+      root.add(cafe.group); root.add(seafood.group); root.add(hq.group);
+      absorbPads(cafe.seatPads); absorbPads(seafood.seatPads);
+      for (const p of cafe.seatPads.values()) padSet.add(p);
+      for (const p of seafood.seatPads.values()) padSet.add(p);
+      mergeStaticMeshes(cafe.group, { skip: skipMerge, name: 'cafeMerged' });
+      mergeStaticMeshes(seafood.group, { skip: skipMerge, name: 'seafoodMerged' });
+      mergeStaticMeshes(hq.group, { skip: skipMerge, name: 'hqMerged' });
+      bakeZone(cafe.group); bakeZone(seafood.group); bakeZone(hq.group);
+      flushPadsToInstances();
+      registerDetailLod(cafe.group, cafe.seatPads.values());
+      registerDetailLod(seafood.group, seafood.seatPads.values());
+      registerDetailLod(hq.group);
+      trackZone(id, [cafe.group, seafood.group, hq.group]);
+      return true;
+    }
+    if (id === 'northShed') {
+      shedRow = makePlazaShedRow(M, add, LO);
+      root.add(shedRow.group);
+      for (const [loc, st] of shedDoorState) shedRow.setDoorState(loc, st);
+      mergeStaticMeshes(shedRow.group, { skip: skipMerge, name: 'shedRowMerged' });
+      bakeZone(shedRow.group);
+      trackZone(id, [shedRow.group]);
+      return true;
+    }
+    if (id === 'ambiance') {
+      ambiance = makePlazaAmbiance(M, add, LO, { skipTidal: true });
+      root.add(ambiance.group);
+      mergeStaticMeshes(ambiance.group, { skip: skipMerge, name: 'ambianceMerged' });
+      bakeZone(ambiance.group);
+      spawnStallKeepers();
+      trackZone(id, [ambiance.group]);
+      return true;
+    }
+    return false;
+  }
+
+  function unloadZone(id: PlazaZoneId) {
+    if (id === 'core' || !loadedZones.has(id)) return;
+    if (id === 'westSmoke') {
+      smokeArea?.ambientSmoke.dispose();
+      smokeArea = null;
+      if (tidalFlat) { disposeZoneSubtree(tidalFlat.group); tidalFlat = null; }
+    } else if (id === 'southGrill') {
+      for (const pid of southGrillPiles()) {
+        const idx = pileGroups.findIndex(g => g.userData.pileId === pid);
+        if (idx >= 0) {
+          const g = pileGroups[idx];
+          const fx = g.userData.fireFx as CharcoalFireFx | undefined;
+          if (fx) {
+            const fi = fireFx.indexOf(fx);
+            if (fi >= 0) { fx.dispose(); fireFx.splice(fi, 1); }
+          }
+          disposeZoneSubtree(g);
+          pileGroups.splice(idx, 1);
+          builtPiles.delete(pid);
+        }
+      }
+      for (const m of [...mgMounts]) disposeZoneSubtree(m);
+      mgMounts.length = 0;
+    } else if (id === 'eastStreet') {
+      const drop = new Set([cafe?.group, seafood?.group, hq?.group].filter(Boolean) as THREE.Object3D[]);
+      cafe?.dispose(); seafood?.dispose(); hq?.dispose();
+      cafe = null; seafood = null; hq = null;
+      for (let i = detailLods.length - 1; i >= 0; i--) {
+        if (drop.has(detailLods[i].group)) detailLods.splice(i, 1);
+      }
+    } else if (id === 'northShed') {
+      shedRow?.dispose();
+      shedRow = null;
+    } else if (id === 'ambiance') {
+      clearStallKeepers();
+      ambiance = null;
+    }
+    const objs = zoneGroups.get(id) ?? [];
+    for (const o of objs) {
+      if (o.parent) disposeZoneSubtree(o);
+    }
+    zoneGroups.delete(id);
+    loadedZones.delete(id);
+  }
+
+  const plazaChairs = makeInstancedPlazaChairs(chairPoses, M, LO);
+  chairsRoot.add(plazaChairs.group);
   mergeStaticMeshes(chairsRoot, { skip: skipMerge, name: 'chairsMerged' });
   mergeStaticMeshes(bigShed.group, { skip: skipMerge, name: 'shedMerged' });
-  // 厝頂／樑另合，保留可調 opacity 的材質
   mergeStaticMeshes(bigShed.tpOcclude, { name: 'shedRoofMerged' });
-  for (const pile of pileGroups) mergeStaticMeshes(pile, { skip: skipMerge, name: 'pileMerged' });
-  mergeStaticMeshes(ambiance.group, { skip: skipMerge, name: 'ambianceMerged' });
-  mergeStaticMeshes(smokeArea.group, { skip: skipMerge, name: 'smokeMerged' });
-  mergeStaticMeshes(cafe.group, { skip: skipMerge, name: 'cafeMerged' });
-  mergeStaticMeshes(seafood.group, { skip: skipMerge, name: 'seafoodMerged' });
-  mergeStaticMeshes(hq.group, { skip: skipMerge, name: 'hqMerged' });
-  mergeStaticMeshes(shedRow.group, { skip: skipMerge, name: 'shedRowMerged' });
-  root.userData.mergeStats = { meshesBefore: meshBefore, meshesAfter: countMeshes(root) };
+  bakeZone(bigShed.group);
+  bakeZone(chairsRoot);
 
-  root.updateMatrixWorld(true);
-  const extraPadPoses: ChairPose[] = [];
-  const _padW = new THREE.Vector3();
-  const _padE = new THREE.Euler();
-  const _padQ = new THREE.Quaternion();
-  const _padS = new THREE.Vector3();
-  for (const [key, mesh] of [...seatMeshes]) {
-    mesh.updateWorldMatrix(true, false);
-    mesh.matrixWorld.decompose(_padW, _padQ, _padS);
-    _padE.setFromQuaternion(_padQ, 'YXZ');
-    // 機關槍高台：強制貼在甲板面上（甲板頂＝DECK_Y+0.12，圓圈不可再低）
-    const py = key.startsWith(`${MG_PILE_ID}:`) ? Math.max(_padW.y, MG_DECK_Y + 0.14) : _padW.y;
-    extraPadPoses.push({ x: _padW.x, y: py, z: _padW.z, yaw: _padE.y, key });
-    mesh.removeFromParent();
-    seatMeshes.delete(key);
-  }
-  const extraPads = extraPadPoses.length ? makeInstancedPads(extraPadPoses, M, LO) : null;
-  if (extraPads) root.add(extraPads.mesh);
-  bakeStaticLighting(root, {
-    includeDirect: LO,
-    sunDir: new THREE.Vector3(-3, 11, -5),
-    lampXZ: PLAZA_LAMP_XZ,
-    lampY: PLAZA_ROOF_Y - 0.55,
-    lampPool: true,
-  });
-  const allPads = extraPads ? [plazaChairs.pads, extraPads] : [plazaChairs.pads];
+  const allPads: ReturnType<typeof makeInstancedPads>[] = [plazaChairs.pads];
   const paintInstancedPads = (taken: Set<string> | null) => {
     for (const api of allPads) {
       for (const k of api.keys()) {
@@ -391,73 +645,109 @@ export function createPlazaWorldView(
     }
   };
 
-  // 遠景細節裁切：建築小零件（窗框、桌上小物、菸蒂…）與貼圖招牌，鏡頭離建築夠遠就不畫
-  type DetailLod = { box: THREE.Box3; small: THREE.Object3D[]; signs: THREE.Object3D[]; smallOn: boolean; signOn: boolean };
-  const detailLods: DetailLod[] = [];
+  /** 進場：整場先建齊（須在 allPads／paintInstancedPads 之後，否則 flushPads 會炸） */
   {
-    const padSet = new Set<THREE.Object3D>([...cafe.seatPads.values(), ...seafood.seatPads.values()]);
-    const sph = new THREE.Sphere(), sc = new THREE.Vector3();
-    for (const g of [cafe.group, seafood.group, hq.group]) {
-      g.updateMatrixWorld(true);
-      const d: DetailLod = { box: new THREE.Box3().setFromObject(g), small: [], signs: [], smallOn: true, signOn: true };
-      const walk = (o: THREE.Object3D) => {
-        if (o.userData.noLod || padSet.has(o)) return;
-        const m = o as THREE.Mesh;
-        if (m.isMesh && o.visible && !(m as any).isInstancedMesh) {
-          const mat = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.MeshStandardMaterial;
-          const geo = m.geometry;
-          o.getWorldScale(sc);
-          // 招牌＝有貼圖的細長平面（高 ≤ 0.8 m）；整面店面貼圖牆不算，避免遠看破洞
-          const pg = geo as THREE.PlaneGeometry;
-          if (mat?.map && geo.type === 'PlaneGeometry' && pg.parameters.height * sc.y <= 0.8) { d.signs.push(o); return; }
-          if (mat?.map) { for (const c of o.children) walk(c); return; }
-          if (!geo.boundingSphere) geo.computeBoundingSphere();
-          sph.copy(geo.boundingSphere!);
-          if (sph.radius * Math.max(sc.x, sc.y, sc.z) < 0.3) { d.small.push(o); return; }
-        }
-        for (const c of o.children) walk(c);
-      };
-      walk(g);
-      detailLods.push(d);
+    for (const q of [0, 1, 2, 3] as const) buildQuadrant(q);
+    for (const id of ['southGrill', 'ambiance', 'westSmoke', 'eastStreet', 'northShed'] as PlazaZoneId[]) {
+      buildZone(id);
     }
+    pendingQuadrants.length = 0;
+    pendingZones.length = 0;
   }
-  let lodT = 0;
-  const _lodP = new THREE.Vector3();
-  /** 鏡頭到建築外框的水平距離；小零件 >25 m、招牌 >40 m 不畫（±2 m 緩衝免閃） */
-  function tickDetailLod(dt: number, cx: number, cz: number) {
-    if ((lodT -= dt) > 0) return;
-    lodT = 0.25;
-    for (const d of detailLods) {
-      _lodP.set(cx, (d.box.min.y + d.box.max.y) / 2, cz);
-      d.box.clampPoint(_lodP, _lodP);
-      const dist = Math.hypot(_lodP.x - cx, _lodP.z - cz);
-      const smallOn = d.smallOn ? dist < 27 : dist < 23;
-      const signOn = d.signOn ? dist < 42 : dist < 38;
-      if (smallOn !== d.smallOn) { d.smallOn = smallOn; for (const o of d.small) o.visible = smallOn; }
-      if (signOn !== d.signOn) { d.signOn = signOn; for (const o of d.signs) o.visible = signOn; }
+
+  function enqueueWanted(x: number, z: number) {
+    const want = zonesWanted(x, z, ZONE_LOAD_R);
+    for (const id of want) {
+      if (loadedZones.has(id)) continue;
+      if (pendingZones.includes(id)) continue;
+      pendingZones.push(id);
+    }
+    // 近的優先
+    pendingZones.sort((a, b) => distToZone(x, z, a) - distToZone(x, z, b));
+  }
+
+  /** 遠距便宜繪製：不隱藏，只關投影（還原時用 userData 記原始 castShadow） */
+  function applyZoneCheapDraw(objs: THREE.Object3D[], cheap: boolean) {
+    for (const g of objs) {
+      if (!g) continue;
+      g.visible = true;
+      if (!!g.userData.zoneCheap === cheap) continue;
+      g.userData.zoneCheap = cheap;
+      g.traverse(o => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        if (cheap) {
+          if (m.userData._castSh == null) m.userData._castSh = !!m.castShadow;
+          m.castShadow = false;
+        } else if (m.userData._castSh != null) {
+          m.castShadow = !!m.userData._castSh;
+        }
+      });
     }
   }
 
-  // 攤位老闆（純客戶端，不經伺服器）：站在攤台後方、面向廣場中心
-  const stallKeepers: { rig: PlayerRig; ph: number; lines: string[]; bub: WorldLabel | null; next: number; until: number; li: number }[] = [];
-  const KEEPER_LINES: Record<string, string[]> = {
-    bbq: ['烤肉喔！剛烤好的！', '香腸一支三十，兩支五十五！', '來喔來喔，烤玉米也有！', '要辣的跟我說喔～'],
-    'drink-s': ['冰涼的青草茶喔！', '剝蚵剝到口渴了吧？來一杯！', '冬瓜茶、楊桃汁，現倒現喝！', '大杯的才三十喔！'],
+  function tickZoneStreamer(dt: number, x: number, z: number, seated: boolean) {
+    walkX = x; walkZ = z;
+    seatedZone = seated ? zoneAt(x, z) : null;
+    streamProbeT -= dt;
+    if (streamProbeT <= 0) {
+      streamProbeT = 0.25;
+      enqueueWanted(x, z);
+      pendingQuadrants.sort((a, b) => {
+        const ca = quadrantCenter(a), cb = quadrantCenter(b);
+        return Math.hypot(ca.x - x, ca.z - z) - Math.hypot(cb.x - x, cb.z - z);
+      });
+      // 可選 dispose（預設關）：場內改便宜繪製，避免消失／重建卡頓
+      if (ZONE_DISPOSE) {
+        const pinned = new Set<PlazaZoneId>();
+        for (const id of loadedZones) {
+          if (id !== 'core' && distToZone(x, z, id) <= ZONE_PIN_R) pinned.add(id);
+        }
+        if (seatedZone) pinned.add(seatedZone);
+        for (const id of [...loadedZones]) {
+          if (zoneShouldUnload(id, x, z, { seatedZone, pinned, unloadR: ZONE_UNLOAD_R })) unloadZone(id);
+        }
+      }
+      // 遠距：保持可見，關投影陰影（已 merge 的靜態＋無 FX＝成本極低）
+      const ecoNow = !!opts.eco?.();
+      for (const id of loadedZones) {
+        if (id === 'core') continue;
+        const tier = cullTier(distToZone(x, z, id), ecoNow);
+        const objs = zoneGroups.get(id);
+        if (!objs) continue;
+        applyZoneCheapDraw(objs, tier !== 'near');
+      }
+    }
+    // 分幀：每幀最多建 1 象限或 1 區
+    if (streamBusy) return;
+    if (pendingQuadrants.length) {
+      streamBusy = true;
+      try { buildQuadrant(pendingQuadrants.shift()!); } finally { streamBusy = false; }
+      return;
+    }
+    if (pendingZones.length) {
+      const id = pendingZones.shift()!;
+      if (loadedZones.has(id)) return;
+      streamBusy = true;
+      try { buildZone(id); } finally { streamBusy = false; }
+    }
+    root.userData.zoneStats = {
+      loaded: [...loadedZones],
+      pending: [...pendingZones],
+      pendingQ: [...pendingQuadrants],
+      meshes: countMeshes(root),
+      meshesBefore: meshBefore,
+    };
+  }
+
+  root.userData.mergeStats = { meshesBefore: meshBefore, meshesAfter: countMeshes(root) };
+  root.userData.zoneStats = {
+    loaded: [...loadedZones],
+    pending: [],
+    pendingQ: [],
+    meshes: countMeshes(root),
+    meshesBefore: meshBefore,
   };
-  PLAZA_STALL_SITES.filter((s) => KEEPER_LINES[s.id]).forEach((site, idx) => {
-    const look = AMA_LOOKS[(idx * 3 + 1) % AMA_LOOKS.length];
-    const rig = makePlayerAvatar({ shirt: amaShirtHex(look), hair: look.hair, pants: look.pants }, M, add, LO, true);
-    dressPlazaAma(rig, look);
-    posePlazaHangArms(rig, false);
-    applyAmaAppearance(rig);
-    const out = Math.atan2(site.x, site.z);
-    const back = site.kind === 'cart' ? 0.6 : 0.68;
-    rig.outer.position.set(site.x + Math.sin(out) * back, 0, site.z + Math.cos(out) * back);
-    rig.outer.rotation.y = out;
-    rig.outer.userData.skipTpOcclude = true;
-    root.add(rig.outer);
-    stallKeepers.push({ rig, ph: idx * 1.7, lines: KEEPER_LINES[site.id], bub: null, next: 3 + idx * 4, until: 0, li: idx });
-  });
 
   // 吸菸區氣氛阿伯（純客戶端、固定椅；不可入座／不可瞄準；與遠端抽一口同套 pose）
   type SmokeNpc = {
@@ -517,11 +807,11 @@ export function createPlazaWorldView(
   }
   function tickSmokeNpc(dt: number, tSec: number, eco: boolean, cx: number, cz: number) {
     const sn = smokeNpc;
-    const dist2 = (sn.rig.outer.position.x - cx) ** 2 + (sn.rig.outer.position.z - cz) ** 2;
-    const far = eco && dist2 > 20 * 20;
-    const hide = eco && dist2 > 60 * 60;
-    sn.rig.outer.visible = !hide;
-    sn.tag.sprite.visible = !hide;
+    const dist = Math.hypot(sn.rig.outer.position.x - cx, sn.rig.outer.position.z - cz);
+    const tier = cullTier(dist, eco);
+    const far = tier === 'mid' || tier === 'far' || tier === 'hide';
+    sn.rig.outer.visible = true;
+    sn.tag.sprite.visible = tier !== 'hide'; // 名牌可關；人仍在
     if (far) return;
     ensurePlazaSmokeCig(sn.rig, LO);
     const cig = getPlazaSmokeCig(sn.rig);
@@ -1874,6 +2164,7 @@ function hashPid(pid: string) {
 
   function setSelfPose(x: number, z: number, yaw: number, seated: boolean, smoke = false, connId = '') {
     selfX = x; selfZ = z; selfYaw = yaw; selfSeated = seated; selfSmoke = !!(seated && smoke);
+    walkX = x; walkZ = z;
     if (connId) selfConnId = connId;
     if (selfSmoke && !selfCig) {
       selfCig = makeCigSmoke({ count: LO ? 3 : 5, seed: 9901, scale: 0.7 });
@@ -1965,15 +2256,18 @@ function hashPid(pid: string) {
 
   function tick(dt: number, camera: THREE.Camera) {
     const eco = !!opts.eco?.();
+    // 分區串流依腳下 walkPos（非鏡頭），避免轉頭觸發狂建
+    tickZoneStreamer(dt, walkX, walkZ, selfSeated);
     const cx = camera.position.x, cz = camera.position.z;
     // 木牆淡化改由 tickTpOcclude 在 camTick 之後呼叫（否則 focus／鏡頭是上一幀）
-    shedRow.tick(dt, eco);
+    shedRow?.tick(dt, eco);
     tickPileDiffSigns(cx, cz);
-    const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
+    const cullS = eco ? CULL_ECO_SCALE : 1;
+    const FIRE2 = (CULL_NEAR * cullS * 0.78) ** 2;
     // 燈數固定，只調亮度，不開關 visible（three.js 增減燈會重編著色器）
     // 省電：吊燈改靠外觀球自發光，關掉動態點光
     for (const pl of roofLamps) pl.intensity = roofLampBaseI;
-    tickDetailLod(dt, cx, cz);
+    tickDetailLod(dt, cx, cz, eco);
 
     const k = Math.min(1, dt * 10);
     const t = now();
@@ -1989,7 +2283,9 @@ function hashPid(pid: string) {
       r.pitch += (r.tPitch - r.pitch) * Math.min(1, dt * 10);
       const rj = r as any;
       const dist2 = (r.x - cx) * (r.x - cx) + (r.z - cz) * (r.z - cz);
-      const far = eco && dist2 > FAR2;
+      const tier = cullTier(Math.sqrt(dist2), eco);
+      // mid+：停細動畫；不隱形（廣場改便宜插值／站樁）
+      const far = tier === 'mid' || tier === 'far' || tier === 'hide';
       if ((r.phase || '') === 'jump' && !r.seated) { if (!rj.jt) rj.jt = performance.now(); }
       let jumpElapsed = -1;
       if (rj.jt) {
@@ -2111,9 +2407,8 @@ function hashPid(pid: string) {
         else if (inMoon && !(mu < 0 && rj.mt && now < rj.mt)) { r.rig.outer.visible = false; rj.mh = true; }
         else if (rj.mh && !inMoon) { r.rig.outer.visible = true; rj.mh = false; rj.mt = 0; }
         else if (mu >= 1 && !inMoon) { rj.mt = 0; rj.mh = false; r.rig.outer.visible = true; } }
-      // 省電遠距：隱藏模型（碰撞仍用 x/z）
-      if (eco && dist2 > HIDE2 && !rj.mh && (r.phase || '') !== 'moon') r.rig.outer.visible = false;
-      else if (!(eco && dist2 > HIDE2) && !rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
+      // 遠距仍顯示（只停動畫）；moon／awaiting 另控
+      if (!rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
       // 寵物逐幀：坐著→頭頂；走動→身後彈跳
       updateRemotePet(r, dt);
       // 這幀下面馬上要讀 head 世界座標排名牌，更新 matrix；渲染器之後本來也會再更新一次，不用 force
@@ -2180,12 +2475,14 @@ function hashPid(pid: string) {
       for (const f of fireFx) {
         f.group.getWorldPosition(_firePos);
         const fd2 = (_firePos.x - cx) * (_firePos.x - cx) + (_firePos.z - cz) * (_firePos.z - cz);
-        if (eco && fd2 > FIRE2) continue;
+        // mid 以上降頻／關炭火；near 全開
+        if (fd2 > FIRE2) continue;
+        if (fd2 > FIRE2 * 0.55 && (MOBILE || eco)) continue;
         f.tick(tSec, fdt);
       }
-      ambiance.tick(tSec, fdt);
-      smokeArea.tick(tSec, fdt);
-      cafe.tick(tSec, fdt);
+      ambiance?.tick(tSec, fdt);
+      smokeArea?.tick(tSec, fdt);
+      cafe?.tick(tSec, fdt);
       flags.tick(fdt, camera);
       if (!eco) bigShed.tick(fdt);
       tickRemoteExhales(fdt);
@@ -2238,12 +2535,11 @@ function hashPid(pid: string) {
     for (const k of stallKeepers) {
       const dx = k.rig.outer.position.x - cx, dz = k.rig.outer.position.z - cz;
       const kd2 = dx * dx + dz * dz;
-      if (eco) {
-        k.rig.outer.visible = kd2 <= HIDE2; if (kd2 > FAR2) continue;
-        k.rig.outer.visible = true;
-      }
+      const kt = cullTier(Math.sqrt(kd2), eco);
+      k.rig.outer.visible = true;
+      if (kt === 'far' || kt === 'hide') continue; // 遠距：站樁不播動作
       k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15;
-      if (!eco) posePlazaStallKeeper(k.rig, tSec, k.ph);
+      if (kt === 'near') posePlazaStallKeeper(k.rig, tSec, k.ph);
       applyAmaAppearance(k.rig);
       tickKeeperBubble(k, tSec);
     }
@@ -2281,7 +2577,8 @@ function hashPid(pid: string) {
   }
 
   function dispose() {
-    shedRow.dispose();
+    shedRow?.dispose();
+    clearStallKeepers();
     clearWishMarks();
     root.remove(wishMarks);
     for (const m of [
@@ -2315,10 +2612,10 @@ function hashPid(pid: string) {
     grill.dispose();
     for (const f of fireFx) f.dispose();
     fireFx.length = 0;
-    smokeArea.ambientSmoke.dispose();
-    cafe.dispose();
-    seafood.dispose();
-    hq.dispose();
+    try { smokeArea?.ambientSmoke.dispose(); } catch { /* */ }
+    try { cafe?.dispose(); } catch { /* */ }
+    try { seafood?.dispose(); } catch { /* */ }
+    try { hq?.dispose(); } catch { /* */ }
     if (selfCig) { root.remove(selfCig.group); selfCig.dispose(); selfCig = null; }
     for (const g of cushions.values()) disposeCushion(g);
     cushions.clear();
@@ -2365,7 +2662,10 @@ function hashPid(pid: string) {
   return {
     root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill,
     syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfBody, setSelfCushion,
-    playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: shedRow.setDoorState,
+    playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: (loc, st) => {
+      shedDoorState.set(loc, st);
+      shedRow?.setDoorState(loc, st);
+    },
     mgMounts, aimMg, mgFx, mgHitTargets, tick,
     tickTpOcclude: (dt, camera, focus) => applyTpOcclude(dt, camera, focus),
     dispose: disposeAll,

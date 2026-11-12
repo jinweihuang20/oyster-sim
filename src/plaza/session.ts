@@ -1817,6 +1817,7 @@ export function tickPlazaTpOcclude(dt: number, camera: THREE.Camera, focus: THRE
 
 export function tickPlaza(dt: number) {
   if (!active || !deps) return;
+  // walkPos（非鏡頭）驅動 zone streamer／視距；setSelfPose 寫入 view 後 tick 內串流
   const p = deps.getWalkXZ();
   const smokeSit = seated && myPile != null && isSmokePile(myPile);
   const restSit = seated && myPile != null && isRestPile(myPile);

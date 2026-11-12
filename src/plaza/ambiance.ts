@@ -55,6 +55,7 @@ export function makePlazaAmbiance(
   M: MatFn,
   add: AddFn,
   lowDetail = false,
+  opts?: { skipTidal?: boolean },
 ): {
   group: THREE.Group;
   lights: THREE.PointLight[];
@@ -86,7 +87,7 @@ export function makePlazaAmbiance(
   }
 
   root.add(makePlazaHarbor(M, add, segs, lowDetail));
-  root.add(makePlazaTidalFlat(M, add, lowDetail).group);
+  if (!opts?.skipTidal) root.add(makePlazaTidalFlat(M, add, lowDetail).group);
 
   return {
     group: root,
