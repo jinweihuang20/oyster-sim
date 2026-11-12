@@ -2705,23 +2705,22 @@ renderDex();
 
 // ---------- 操作 ----------
 let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; leftNoLook?: boolean; leftRotZone?: boolean; lx: number; lt: number; swiped?: boolean } | null = null;
-/** 手機橫向＋坐下＋第一人稱＋正在剝殼（不含機關槍／吸菸／烤蚵桌——烤桌左側仍可轉視角） */
+/** 手機橫向＋坐下＋第一人稱（不含機關槍／吸菸／烤蚵桌——烤桌左側仍可轉視角） */
 function landFpSitPeeling() {
   if (!(COARSE && !walking && !tpv && state === 'play')) return false;
   if (!matchMedia('(orientation: landscape)').matches) return false;
   if (mgActive || (plazaMode && plazaOnMg())) return false;
   if (plazaMode && document.body.classList.contains('plazaSmokeSit')) return false;
   if (plazaOnGrill() || isGrillPhase()) return false;
-  return phase === 'seam' || phase === 'twist' || phase === 'pick' || phase === 'empty'
-    || phase === 'aim' || phase === 'scoop' || phase === 'crab';
+  return true;
 }
-/** 上述情境下左半邊不轉視角 */
+/** 僅「手上未剝開的蚵」（找縫）時左半邊不轉視角；翹殼／丟肉等可照常轉 */
 function landLeftNoLook(cx: number) {
-  return landFpSitPeeling() && cx < innerWidth * 0.4;
+  return landFpSitPeeling() && phase === 'seam' && cx < innerWidth * 0.4;
 }
 /** 找縫時左側可拖轉蚵；點一下仍插刀／進翹殼 */
 function landSeamRotZone(cx: number) {
-  return landLeftNoLook(cx) && phase === 'seam';
+  return landLeftNoLook(cx);
 }
 /** 廣場坐下：第三人稱不轉頭；第一人稱左右 ±90°；工寮仍用 YAW */
 const PLAZA_SIT_YAW = Math.PI / 2;
@@ -2850,7 +2849,7 @@ canvas.addEventListener('pointerdown', e => {
     down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: false, lx: e.clientX, lt: performance.now() };
     return;
   }
-  // 坐下：預設轉視角；橫向左側永不轉視角（找縫時拖＝轉蚵，點一下仍插刀／翹殼）
+  // 坐下：預設轉視角；橫向找縫時左側不轉視角（拖＝轉蚵，點一下仍插刀）
   const touch = e.pointerType !== 'mouse';
   const leftNoLook = touch && landLeftNoLook(e.clientX);
   const touchSeam = touch && phase === 'seam';
@@ -2894,13 +2893,13 @@ window.addEventListener('pointermove', e => {
   // 曾滑出點選死區就記住：放開時即使滑回原處也不當點（避免轉視角後誤拿蚵）
   if (!down.swiped && Math.hypot(dx, dy) > 16) down.swiped = true;
   if (swipePhase() && !moonAimOn) return;
-  // 橫向左側找縫：水平滑超過門檻才轉蚵（點一下仍插刀）；左側永不改成轉視角
+  // 橫向左側找縫：水平滑超過門檻才轉蚵（點一下仍插刀）；找縫時左側不改成轉視角
   if (down.leftRotZone && !down.rotMode && Math.abs(dx) > 18 && Math.abs(dx) >= Math.abs(dy) * 0.85) {
     down.rotMode = true;
     down.lx = e.clientX;
   }
   if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; rotTipTouch(); if (Math.abs(dx) > 8) { down.drag = true; rotTipDragged(); } return; }
-  if (down.leftNoLook) return; // 橫向左半邊：不轉視角
+  if (down.leftNoLook) return; // 找縫＋橫向左半邊：不轉視角
   // 拿蚵觸控：微滑才升格「認真拖」，其餘坐下已 drag 立刻轉頭
   const dragSlop = phase === 'pick' && e.pointerType !== 'mouse' ? 16 : 0;
   if (dragSlop > 0 && !down.drag && Math.hypot(dx, dy) > dragSlop) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
