@@ -5506,14 +5506,23 @@ function camTick(dt: number) {
     const rig = ensurePlazaMe();
     const mine = plazaMySeat();
     const pose = mine ? seatPose(mine.pileId, mine.slot) : { pos: new THREE.Vector3(SEAT.x, 0, SEAT.z), yaw: seatYaw };
-    const back = -0.08;
+    const onMg = mgActive || !!(mine && isMgPile(mine.pileId));
+    // 機關槍：站高台（遠端同款）；一般座位才略往前貼椅
+    const back = onMg ? 0 : -0.08;
+    const feetY = onMg ? (pose.pos.y || plazaGroundY(pose.pos.x, pose.pos.z)) : (pose.pos.y || 0);
     rig.outer.visible = true;
-    rig.outer.position.set(pose.pos.x + Math.sin(pose.yaw) * back, 0, pose.pos.z + Math.cos(pose.yaw) * back);
+    rig.outer.position.set(pose.pos.x + Math.sin(pose.yaw) * back, feetY, pose.pos.z + Math.cos(pose.yaw) * back);
     rig.outer.rotation.order = 'YXZ';
     rig.outer.rotation.y = pose.yaw;
     rig.outer.rotation.x = 0;
-    const smoke = smokeSitActive || (mine ? isSmokePile(mine.pileId) : false);
-    if (smoke) {
+    const smoke = !onMg && (smokeSitActive || (mine ? isSmokePile(mine.pileId) : false));
+    if (onMg) {
+      // 機關槍：站姿操作（與遠端 poseStand 一致），勿用坐姿／y=0 否則第三人稱看不到自己
+      clearPlazaSmokeCig(rig);
+      posePlazaStand(rig);
+      posePlazaHangArms(rig, false);
+      if (mgSlot >= 0) plazaAimMg(mgSlot, yaw + flYaw, pitch);
+    } else if (smoke) {
       if (smokeSitActive) {
         posePlazaSmokeSit(rig, {
           puffK: puffVisualK(),
@@ -5532,10 +5541,20 @@ function camTick(dt: number) {
     const fx = -Math.sin(yaw + flYaw), fz = -Math.cos(yaw + flYaw);
     const dist = tpDist * tpDistK();
     const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = dist * Math.cos(el);
-    const cp = new THREE.Vector3(SEAT.x - fx * hd, SEAT.y + 0.4 + dist * Math.sin(el), SEAT.z - fz * hd);
-    const lt = new THREE.Vector3(SEAT.x + fx * 0.2, SEAT.y - 0.15, SEAT.z + fz * 0.2);
-    if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
-    { const f = tpFovFor('plazaSit'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
+    if (onMg) {
+      // 跟廣場走動同一套：鏡頭繞站立角色，人在甲板上入鏡
+      const eyeY = (wideView ? 1.55 : 1.4) + feetY;
+      const cp = new THREE.Vector3(pose.pos.x - fx * hd, eyeY + dist * Math.sin(el), pose.pos.z - fz * hd);
+      const lookY = (wideView && camera.aspect <= 1.6 ? 1.15 : 1.0) + feetY;
+      const lt = new THREE.Vector3(pose.pos.x + fx * 1.2, lookY, pose.pos.z + fz * 1.2);
+      if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
+      { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
+    } else {
+      const cp = new THREE.Vector3(SEAT.x - fx * hd, SEAT.y + 0.4 + dist * Math.sin(el), SEAT.z - fz * hd);
+      const lt = new THREE.Vector3(SEAT.x + fx * 0.2, SEAT.y - 0.15, SEAT.z + fz * 0.2);
+      if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
+      { const f = tpFovFor('plazaSit'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
+    }
     tpCam.lookAt(tpLook); tpCam.updateMatrixWorld();
     return;
   }
