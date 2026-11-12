@@ -59,7 +59,7 @@ import {
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaSetSelfBody, plazaReportEarn, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile, isMgPile,
-  MG_MAG_PRICE, MG_MAG_AMMO, MG_AMMO_MAX,
+  MG_MAG_PRICE, MG_MAG_AMMO, MG_AMMO_MAX, MG_SIT_MS,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaMgFire, plazaMgReload, plazaMgFx, plazaMgMount, plazaAimMg, plazaOnMg,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
@@ -4283,7 +4283,8 @@ function launchPlaza() {
       tYaw = yaw = 0; tPitch = pitch = -0.12; // 死鬥同款：pitch<0 略往下看廣場
       plazaEnsureFpView();
       handRig.visible = false;
-      mgActive = true; mgSlot = slot; mgExpireAt = expireAt; mgAmmo = ammo; mgMeatAmmo = !!fromMeat; mgFireHeld = false;
+      // 倒數固定本機 90 秒，不吃伺服器絕對時間戳（時鐘差／舊後端會變成 ~20 秒）
+      mgActive = true; mgSlot = slot; mgExpireAt = Date.now() + MG_SIT_MS; mgAmmo = ammo; mgMeatAmmo = !!fromMeat; mgFireHeld = false;
       applyMgFpView();
       petAcc = 0; setPetSleeping(false); if (petAnchor) petAnchor.visible = false;
       void plazaPushCosmetics();
