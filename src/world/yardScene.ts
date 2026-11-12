@@ -72,7 +72,15 @@ export function buildShed(id: string) {
   const B = (w: number, h: number, d: number, m: THREE.Material, p: [number, number, number], ry = 0) => { const x = D.mesh(rboxEnv(w, h, d), m, p, g); x.rotation.y = ry; return x; };
   const C = (rt: number, rb: number, h: number, m: THREE.Material, p: [number, number, number], seg = 8) => D.mesh(rcyl(rt, rb, h, seg), m, p, g);
   const glow = (c: number) => new THREE.MeshBasicMaterial({ color: c });
-  const flat = (w: number, d: number, m: THREE.Material, p: [number, number, number]) => { const x = D.mesh(new THREE.PlaneGeometry(w, d), m, p, g); x.rotation.x = -Math.PI / 2; x.castShadow = false; x.receiveShadow = true; return x; };
+  const flat = (w: number, d: number, m: THREE.Material, p: [number, number, number]) => {
+    const x = D.mesh(new THREE.PlaneGeometry(w, d), m, p, g);
+    x.rotation.x = -Math.PI / 2; x.castShadow = false; x.receiveShadow = false;
+    x.renderOrder = 1;
+    const mm = x.material as THREE.Material;
+    mm.depthWrite = false;
+    mm.polygonOffset = true; mm.polygonOffsetFactor = -2; mm.polygonOffsetUnits = -2;
+    return x;
+  };
   if (id === 'wanggong') {
     // 藍白條紋帆布棚（四角鋼管 + 斜面帆布）
     const pipe = M(0xb8bcc0, { metalness: 0.6, roughness: 0.4 });
@@ -101,7 +109,7 @@ export function buildShed(id: string) {
   } else if (id === 'dongshi') {
     // 觀光木棧道地板
     const plankA = M(0xa06e40), plankB = M(0x8a5c34);
-    for (let i = 0; i < 26; i++) { const p = B(13, 0.04, 0.48, i % 2 ? plankA : plankB, [0, 0.005, -6.3 + i * 0.5]); p.castShadow = false; p.receiveShadow = true; }
+    for (let i = 0; i < 26; i++) { const p = B(13, 0.04, 0.48, i % 2 ? plankA : plankB, [0, 0.03, -6.3 + i * 0.5]); p.castShadow = false; p.receiveShadow = true; }
     // 竹蚵棚框 + 垂吊蚵串
     const bam = M(0xb8a060), oy = M(0x7a7a72, { roughness: 1 });
     for (const x of [-3.6, 3.6]) { for (const z of [-3.4, -1.2, 1.0, 3.2]) C(0.045, 0.05, 2.7, bam, [x, 1.35, z], 6); const r = C(0.04, 0.04, 7.0, bam, [x, 2.55, -0.1], 6); r.rotation.x = Math.PI / 2; }
@@ -149,9 +157,9 @@ export function buildShed(id: string) {
     shedAnim.push(t => { ridges.forEach((r, k) => r.position.x = -1.9 + ((k * 0.4 + t * 0.3) % 4)); beltOy.forEach((r, k) => r.position.x = -1.9 + ((k * 0.7 + t * 0.3) % 3.9)); });
     // 黃色安全線
     const yel = M(0xf0c020, { roughness: 0.6 });
-    for (const x of [-3.4, 3.4]) flat(0.12, 9, yel, [x, 0.012, 0]);
-    flat(6.8, 0.12, yel, [0, 0.012, -3.5]); flat(6.8, 0.12, yel, [0, 0.012, 3.6]);
-    for (let k = 0; k < 6; k++) { const s = flat(0.12, 0.6, k % 2 ? M(0x222222) : yel, [-1.5 + k * 0.6, 0.013, -4.9]); s.rotation.z = 0.6; }
+    for (const x of [-3.4, 3.4]) flat(0.12, 9, yel, [x, 0.03, 0]);
+    flat(6.8, 0.12, yel, [0, 0.03, -3.5]); flat(6.8, 0.12, yel, [0, 0.03, 3.6]);
+    for (let k = 0; k < 6; k++) { const s = flat(0.12, 0.6, k % 2 ? M(0x222222) : yel, [-1.5 + k * 0.6, 0.03, -4.9]); s.rotation.z = 0.6; }
     // 大蚵殼山 + 麻袋
     for (const [x, z, r] of [[-4.6, -4.0, 0.9], [4.7, -3.8, 1.0]] as const) D.mesh(new THREE.ConeGeometry(r, r * 1.1, 9), M(0x8a909a, { roughness: 1 }), [x, r * 0.55, z], g);
     const sack = M(0xc8b088, { roughness: 1 });
@@ -165,9 +173,13 @@ export function buildShed(id: string) {
     const wood = M(0x5a4a3a);
     for (const x of [-3.5, 3.5]) for (const z of [-3.5, 0, 3.5]) C(0.07, 0.07, 3.1, wood, [x, 1.55, z], 6);
     for (const z of [-3.5, 3.5]) B(7.2, 0.1, 0.1, wood, [0, 3.0, z]);
-    // 水泥地水漬
-    const stain = M(0x4e4c48, { roughness: 0.3, transparent: true, opacity: 0.55 });
-    for (const [x, z, s] of [[-2.4, 0.6, 0.7], [2.2, -1.6, 0.9], [1.5, 2.9, 0.5], [-1.2, -2.6, 0.6]] as const) { const d = D.mesh(new THREE.CircleGeometry(s, 12), stain, [x, 0.008, z], g); d.rotation.x = -Math.PI / 2; d.scale.y = 0.6; d.castShadow = false; }
+    // 水泥地水漬（抬高＋polygonOffset，避免貼地轉視角深度閃爍）
+    const stain = M(0x4e4c48, { roughness: 0.3, transparent: true, opacity: 0.55, depthWrite: false });
+    stain.polygonOffset = true; stain.polygonOffsetFactor = -2; stain.polygonOffsetUnits = -2;
+    for (const [x, z, s] of [[-2.4, 0.6, 0.7], [2.2, -1.6, 0.9], [1.5, 2.9, 0.5], [-1.2, -2.6, 0.6]] as const) {
+      const d = D.mesh(new THREE.CircleGeometry(s, 12), stain, [x, 0.03, z], g);
+      d.rotation.x = -Math.PI / 2; d.scale.y = 0.6; d.castShadow = false; d.receiveShadow = false; d.renderOrder = 1;
+    }
     // 吊著的裸燈泡
     for (const [x, z] of [[0, 0], [-2.2, -1.5], [2.2, 1.2]]) { D.mesh(new THREE.SphereGeometry(0.07, 10, 8), glow(0xffd9a0), [x, 2.55, z], g).castShadow = false; C(0.006, 0.006, 0.45, M(0x111111), [x, 2.8, z], 4); }
     // 紅色塑膠椅

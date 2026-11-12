@@ -596,6 +596,7 @@ export function openPlaza(D: PlazaDeps) {
     // 手機或省電：少幾何／少燈；執行中仍可依 getEco 再降動態負載
     lowDetail: matchMedia('(pointer: coarse)').matches || !!D.getEco?.(),
     eco: () => !!D.getEco?.(),
+    getTpv: () => !!D.getTpv?.(),
     hasOwnPet: () => !!D.hasOwnPet?.(),
     selfHatLift: () => D.selfHatLift?.() ?? 0,
   });
@@ -1801,6 +1802,12 @@ export function plazaToggleMap() {
 
 /** 自己蹲／躺／跳的程度，給抱著的阿婆調高度 */
 export function plazaSetSelfBody(pz: string, pk: number, jy: number) { view?.setSelfBody(pz, pk, jy); }
+
+/** 鏡頭／tpLook 更新後呼叫：木牆厝頂半透明（必須在 camTick 之後） */
+export function tickPlazaTpOcclude(dt: number, camera: THREE.Camera, focus: THREE.Vector3) {
+  if (!active || !view) return;
+  view.tickTpOcclude(dt, camera, focus);
+}
 
 export function tickPlaza(dt: number) {
   if (!active || !deps) return;

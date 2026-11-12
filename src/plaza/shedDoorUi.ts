@@ -23,14 +23,15 @@ export type ShedDoorPanelOpts = {
 let el: HTMLDivElement | null = null;
 let raf = 0;
 let cur: ShedDoorPanelOpts | null = null;
-let confirmT: ReturnType<typeof setTimeout> | null = null;
+let askCancel: (() => void) | null = null;
 
 export const shedDoorPanelOpen = () => !!el;
 
 export function closeShedDoorPanel() {
   if (raf) cancelAnimationFrame(raf);
   raf = 0;
-  if (confirmT) { clearTimeout(confirmT); confirmT = null; }
+  askCancel?.();
+  askCancel = null;
   el?.remove();
   el = null;
   cur = null;
@@ -69,20 +70,37 @@ function render() {
   });
   const buy = el.querySelector<HTMLButtonElement>('.sdBuy');
   if (buy && o.onUnlock) buy.onclick = async () => {
-    if (!buy.classList.contains('confirm')) {
-      buy.classList.add('confirm');
-      buy.textContent = `確定花 $${o.price} 解鎖？再按一次`;
-      if (confirmT) clearTimeout(confirmT);
-      confirmT = setTimeout(() => { if (cur === o) render(); }, 4000);
-      return;
-    }
-    if (confirmT) { clearTimeout(confirmT); confirmT = null; }
+    if (!(await askUnlockConfirm(o.name, o.price!))) return;
+    if (cur !== o) return;
     buy.disabled = true;
     const ok = await o.onUnlock!();
     if (cur !== o) return;
     if (ok) o.unlocked = true;
     render();
   };
+}
+
+function askUnlockConfirm(name: string, price: number): Promise<boolean> {
+  return new Promise(resolve => {
+    askCancel?.();
+    document.getElementById('locBuyAsk')?.remove();
+    const m = document.createElement('div');
+    m.id = 'locBuyAsk';
+    m.className = 'giftMsg';
+    m.innerHTML = `<div class="rdGot gmBox" role="dialog" aria-modal="true" aria-label="確認解鎖"><button class="gmX" type="button" aria-label="關閉">✕</button><b><i class="ic ic-lock"></i> 提早解鎖</b><p class="nmTx">確定花 $${price} 解鎖「${esc(name)}」嗎？</p><div class="mbtns"><button type="button" class="gmNo">取消</button><button type="button" class="gmYes gmPri">花 $${price} 解鎖</button></div></div>`;
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      askCancel = null;
+      m.remove();
+      resolve(ok);
+    };
+    askCancel = () => finish(false);
+    m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', () => finish(false)));
+    m.querySelector('.gmYes')!.addEventListener('click', () => finish(true));
+    document.body.appendChild(m);
+  });
 }
 
 export function openShedDoorPanel(o: ShedDoorPanelOpts) {

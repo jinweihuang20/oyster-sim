@@ -479,7 +479,8 @@ export class MgFxSystem {
       let personHit = false;
       if (!dead && b.local && !hit) {
         for (const t of targets) {
-          if (t.seated || t.connId === b.fromConn) continue;
+          // 走動／坐下（含蚵桌／休息／槍座）都可打中；略過自己
+          if (t.connId === b.fromConn) continue;
           const d = Math.hypot(
             b.mesh.position.x - t.x,
             b.mesh.position.y - t.y,

@@ -145,6 +145,8 @@ export type PlazaWorldView = {
   /** 遠端抽一口：start 舉臂吸氣；end 放下並依 holdMs 吐煙 */
   applyRemotePuff: (opts: { connId?: string; pid?: string; start: boolean; holdMs: number }) => void;
   tick: (dt: number, camera: THREE.Camera) => void;
+  /** 鏡頭更新後呼叫：木牆／厝頂淡化（需當幀 camera／focus） */
+  tickTpOcclude: (dt: number, camera: THREE.Camera, focus?: THREE.Vector3) => void;
   setSeatWishes: (list: PlazaSeatWish[], selfConnId?: string) => void;
   /** 北碼頭工寮門口：鎖定／玩家站在圈內 */
   setShedDoorState: (loc: string, st: { locked: boolean; active: boolean }) => void;
@@ -162,6 +164,8 @@ export type PlazaWorldOpts = {
   lowDetail?: boolean;
   /** 省電：執行中動態降燈／炭火／遠距角色 */
   eco?: () => boolean;
+  /** 第三人稱：厝頂／牆淡化僅在 TP 需要 */
+  getTpv?: () => boolean;
   /** 自己裝備了寵物（坐姿時寵物在頭頂、聊天泡泡要讓位） */
   hasOwnPet?: () => boolean;
   /** 自己頭上帽子高出髮蓋頂的量（公尺）；有寵物+坐姿時聊天泡泡要再多抬這麼多 */
@@ -280,7 +284,9 @@ export function createPlazaWorldView(
   root.add(bigShed.group);
   const tpOccludeMats = bigShed.tpOccludeMats;
   let tpOccludeK = 0;
-
+  const _tpOccRay = new THREE.Raycaster();
+  const _tpOccFrom = new THREE.Vector3();
+  const _tpOccDir = new THREE.Vector3();
   // 外圈夜市攤／烤肉區（氣氛；碰撞見 plazaStallObstacles）
   const ambiance = makePlazaAmbiance(M, add, LO);
   root.add(ambiance.group);
@@ -444,6 +450,7 @@ export function createPlazaWorldView(
     const back = site.kind === 'cart' ? 0.6 : 0.68;
     rig.outer.position.set(site.x + Math.sin(out) * back, 0, site.z + Math.cos(out) * back);
     rig.outer.rotation.y = out;
+    rig.outer.userData.skipTpOcclude = true;
     root.add(rig.outer);
     stallKeepers.push({ rig, ph: idx * 1.7, lines: KEEPER_LINES[site.id], bub: null, next: 3 + idx * 4, until: 0, li: idx });
   });
@@ -478,6 +485,7 @@ export function createPlazaWorldView(
   // 坐下根節點高度（與遠端坐姿一致）
   smokeNpcRig.root.position.y = SIT_ROOT_Y;
   posePlazaSmokeSit(smokeNpcRig, 0);
+  smokeNpcRig.outer.userData.skipTpOcclude = true;
   root.add(smokeNpcRig.outer);
   const smokeNpcTag = ensureTag('阿伯', true);
   smokeNpcTag.sprite.position.set(smokeNpcPose.pos.x, CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95, smokeNpcPose.pos.z);
@@ -706,13 +714,14 @@ export function createPlazaWorldView(
     return null;
   }
 
+  const _aimH = new THREE.Vector3(), _aimB = new THREE.Vector3();
   function aimTargets(leisureNpc = false): PlazaAimTarget[] {
     const out: PlazaAimTarget[] = [];
     for (const r of remotes.values()) {
       const carried = !!(r.carriedBy || (r.phase || '') === 'carried');
       if (carried && r.isNpc && (r.phase || '') !== 'moon') {
-        const h = headWorld(r, new THREE.Vector3());
-        const b = bowlWorld(r, new THREE.Vector3());
+        const h = headWorld(r, _aimH);
+        const b = bowlWorld(r, _aimB);
         out.push({
           connId: r.connId || r.key,
           nick: plazaDisplayName(r.nick, r.numTag),
@@ -733,7 +742,7 @@ export function createPlazaWorldView(
       // 被放在原地站著的阿婆：只給飛彈瞄
       const standNpc = leisureNpc && r.isNpc && !r.seated && !carried && (r.phase || '') === 'stand';
       if (standNpc) {
-        const h = headWorld(r, new THREE.Vector3());
+        const h = headWorld(r, _aimH);
         out.push({
           connId: r.connId || r.key,
           nick: plazaDisplayName(r.nick, r.numTag),
@@ -752,8 +761,8 @@ export function createPlazaWorldView(
       }
       // 休息座（吸菸區／咖啡廳／樸子腳）只給飛彈瞄阿婆，不給丟殼／偷
       if (!r.seated || r.pileId < 0 || (isLeisurePile(r.pileId) && !(leisureNpc && r.isNpc)) || (r.phase || '') === 'moon') continue;
-      const h = headWorld(r, new THREE.Vector3());
-      const b = bowlWorld(r, new THREE.Vector3());
+      const h = headWorld(r, _aimH);
+      const b = bowlWorld(r, _aimB);
       out.push({
         connId: r.connId || r.key,
         nick: plazaDisplayName(r.nick, r.numTag),
@@ -1481,6 +1490,7 @@ function hashPid(pid: string) {
         }));
       }
       root.add(rig.outer);
+      rig.outer.userData.skipTpOcclude = true; // 遠端角色不參與鏡頭透視淡化
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
       rig.outer.scale.setScalar(isNpc && !aber ? AMA_SCALE : AVATAR_SCALE);
       const umbMesh = makeRemoteUmb();
@@ -1868,34 +1878,54 @@ function hashPid(pid: string) {
 
   const now = () => performance.now();
 
-  function applyTpOcclude(dt: number, camera: THREE.Camera) {
-    // 第三人稱：厝頂／樑／東南北木牆——鏡頭貼近或穿出時半透明（不限高台、不限哪一面牆）
-    const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
-    const soft = PLAZA_ROOF_Y - 1.35;
-    const hard = PLAZA_ROOF_Y - 0.5;
-    let want = 0;
-    if (cy >= hard) want = 1;
-    else if (cy > soft) want = (cy - soft) / Math.max(1e-5, hard - soft);
-    // 貼外牆（東 x+、南 z+；棚內只有這兩面實牆）
-    const edge = WALK_BOUND - 2.8;
-    const nearE = cx > edge ? Math.min(1, (cx - edge) / 2.2) : 0;
-    const nearS = cz > edge ? Math.min(1, (cz - edge) / 2.2) : 0;
-    const nearWall = Math.max(nearE, nearS);
-    if (nearWall > 0) want = Math.max(want, 0.35 + nearWall * 0.65);
-    tpOccludeK += (want - tpOccludeK) * Math.min(1, dt * 7);
-    const op = 1 - tpOccludeK * 0.8; // 最淡約 0.2
-    for (const raw of tpOccludeMats) {
-      const m = raw as THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
-      m.opacity = op;
-      m.transparent = op < 0.985;
-      m.depthWrite = op > 0.82;
+  function applyTpOcclude(dt: number, camera: THREE.Camera, focus?: THREE.Vector3) {
+    // 木頭牆／厝頂：鏡頭↔玩家之間有擋到才淡（輕量；其他建築由 tickTpCamOcclude 處理）
+    try {
+      if (!opts.getTpv?.()) {
+        if (tpOccludeK > 0.001) {
+          tpOccludeK = 0;
+          for (const raw of tpOccludeMats) {
+            const m = raw as THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+            m.opacity = 1; m.transparent = true; m.depthWrite = true;
+          }
+        }
+        return;
+      }
+      let want = 0;
+      if (focus) {
+        _tpOccFrom.copy(camera.position);
+        const span = _tpOccFrom.distanceTo(focus);
+        if (span > 0.35) {
+          const hitBetween = (a: THREE.Vector3, b: THREE.Vector3) => {
+            _tpOccDir.subVectors(b, a);
+            const len = _tpOccDir.length();
+            if (len < 0.35) return false;
+            _tpOccDir.multiplyScalar(1 / len);
+            _tpOccRay.set(a, _tpOccDir);
+            _tpOccRay.near = 0.08;
+            _tpOccRay.far = Math.max(0.05, len - 0.08);
+            return _tpOccRay.intersectObject(bigShed.tpOcclude, true).length > 0;
+          };
+          if (hitBetween(_tpOccFrom, focus) || hitBetween(focus, _tpOccFrom)) want = 1;
+        }
+      }
+      tpOccludeK += (want - tpOccludeK) * Math.min(1, dt * 7);
+      const op = 1 - tpOccludeK * 0.8;
+      for (const raw of tpOccludeMats) {
+        const m = raw as THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+        m.opacity = op;
+        m.transparent = true;
+        m.depthWrite = op > 0.82;
+      }
+    } catch (e) {
+      console.error('applyTpOcclude', e);
     }
   }
 
   function tick(dt: number, camera: THREE.Camera) {
     const eco = !!opts.eco?.();
     const cx = camera.position.x, cz = camera.position.z;
-    applyTpOcclude(dt, camera);
+    // 木牆淡化改由 tickTpOcclude 在 camTick 之後呼叫（否則 focus／鏡頭是上一幀）
     shedRow.tick(dt, eco);
     tickPileDiffSigns(cx, cz);
     const FAR2 = 20 * 20, HIDE2 = 60 * 60, FIRE2 = 14 * 14;
@@ -2282,7 +2312,14 @@ function hashPid(pid: string) {
     mgFx.dispose();
     _dispose();
   }
-  return { root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill, syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfBody, setSelfCushion, playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: shedRow.setDoorState, mgMounts, aimMg, mgFx, mgHitTargets, tick, dispose: disposeAll };
+  return {
+    root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill,
+    syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfBody, setSelfCushion,
+    playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: shedRow.setDoorState,
+    mgMounts, aimMg, mgFx, mgHitTargets, tick,
+    tickTpOcclude: (dt, camera, focus) => applyTpOcclude(dt, camera, focus),
+    dispose: disposeAll,
+  };
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {

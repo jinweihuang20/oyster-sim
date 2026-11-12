@@ -98,9 +98,11 @@ export function makePlazaShedRow(M: MatFn, add: AddFn, lowDetail = false) {
   // 同色共用材質
   const matCache = new Map<string, THREE.Material>();
   const mat = (c: number, o: Record<string, unknown> = {}) => {
-    const k = `${c}:${JSON.stringify(o)}`;
+    // 第三人稱透視：牆面雙面，鏡頭在工寮內側往外看也能射線打到／淡化
+    const o2 = { side: THREE.DoubleSide, ...o };
+    const k = `${c}:${JSON.stringify(o2)}`;
     let m = matCache.get(k);
-    if (!m) { m = M(c, o as any); matCache.set(k, m); }
+    if (!m) { m = M(c, o2 as any); matCache.set(k, m); }
     return m;
   };
   const basic = (c: number) => {
