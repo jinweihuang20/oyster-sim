@@ -2649,10 +2649,14 @@ function renderDex() {
 renderDex();
 
 // ---------- 操作 ----------
-let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; leftRotZone?: boolean; lx: number; lt: number; swiped?: boolean } | null = null;
+let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; leftNoLook?: boolean; leftRotZone?: boolean; lx: number; lt: number; swiped?: boolean } | null = null;
+/** 手機橫向坐下：左半邊不轉視角 */
+function landLeftNoLook(cx: number) {
+  return COARSE && !walking && matchMedia('(orientation: landscape)').matches && cx < innerWidth * 0.4;
+}
 /** 手機橫向找縫：左側可拖轉蚵；點一下仍插刀／進翹殼 */
 function landSeamRotZone(cx: number) {
-  return COARSE && matchMedia('(orientation: landscape)').matches && phase === 'seam' && cx < innerWidth * 0.4;
+  return landLeftNoLook(cx) && phase === 'seam';
 }
 /** 廣場坐下：第三人稱不轉頭；第一人稱左右 ±90°；工寮仍用 YAW */
 const PLAZA_SIT_YAW = Math.PI / 2;
@@ -2781,11 +2785,13 @@ canvas.addEventListener('pointerdown', e => {
     down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: false, lx: e.clientX, lt: performance.now() };
     return;
   }
-  // 坐下：預設轉視角；找縫拖蚵仔＝轉蚵；橫向左側要滑夠才轉蚵（點一下仍可插刀翹殼）
-  const touchSeam = e.pointerType !== 'mouse' && phase === 'seam';
+  // 坐下：預設轉視角；橫向左側永不轉視角（找縫時拖＝轉蚵，點一下仍插刀／翹殼）
+  const touch = e.pointerType !== 'mouse';
+  const leftNoLook = touch && landLeftNoLook(e.clientX);
+  const touchSeam = touch && phase === 'seam';
   const onOy = touchSeam && hitsOyster(e.clientX, e.clientY);
-  const leftRotZone = touchSeam && !onOy && landSeamRotZone(e.clientX);
-  down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: onOy, leftRotZone, lx: e.clientX, lt: performance.now() };
+  const leftRotZone = touchSeam && !onOy && leftNoLook;
+  down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: onOy, leftNoLook, leftRotZone, lx: e.clientX, lt: performance.now() };
 });
 let lastMoveT = performance.now();
 /** Pointer Lock 滑鼠位移累積：改在每幀套用，避免與 pe／puff 鏡頭搶寫造成準心頓挫 */
@@ -2823,17 +2829,13 @@ window.addEventListener('pointermove', e => {
   // 曾滑出點選死區就記住：放開時即使滑回原處也不當點（避免轉視角後誤拿蚵）
   if (!down.swiped && Math.hypot(dx, dy) > 16) down.swiped = true;
   if (swipePhase() && !moonAimOn) return;
-  // 橫向左側：水平滑超過門檻才鎖定轉蚵，避免點一下被當成拖曳
-  if (down.leftRotZone && !down.rotMode) {
-    const dist = Math.hypot(dx, dy);
-    if (Math.abs(dx) > 18 && Math.abs(dx) >= Math.abs(dy) * 1.15) {
-      down.rotMode = true;
-      down.lx = e.clientX;
-    } else if (dist > 22) {
-      down.leftRotZone = false; // 斜向／明顯拖＝轉視角
-    }
+  // 橫向左側找縫：水平滑超過門檻才轉蚵（點一下仍插刀）；左側永不改成轉視角
+  if (down.leftRotZone && !down.rotMode && Math.abs(dx) > 18 && Math.abs(dx) >= Math.abs(dy) * 0.85) {
+    down.rotMode = true;
+    down.lx = e.clientX;
   }
   if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; rotTipTouch(); if (Math.abs(dx) > 8) { down.drag = true; rotTipDragged(); } return; }
+  if (down.leftNoLook) return; // 橫向左半邊：不轉視角
   // 拿蚵觸控：微滑才升格「認真拖」，其餘坐下已 drag 立刻轉頭
   const dragSlop = phase === 'pick' && e.pointerType !== 'mouse' ? 16 : 0;
   if (dragSlop > 0 && !down.drag && Math.hypot(dx, dy) > dragSlop) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
@@ -2860,7 +2862,7 @@ const up = (e: PointerEvent) => {
   const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
   // 坐下已預設 drag：小位移仍當點選；左側點按門檻略寬。有滑過轉蚵就不当點
   const tapKeep = phase === 'pick' && e.pointerType !== 'mouse' ? 48
-    : (down.leftRotZone ? 32 : 14);
+    : (down.leftNoLook ? 32 : 14);
   const asTap = moved < tapKeep && !(down.rotMode && down.swiped)
     && !(phase === 'pick' && e.pointerType !== 'mouse' && down.swiped);
   if (asTap) {
