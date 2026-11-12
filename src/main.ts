@@ -4924,7 +4924,8 @@ const warnEl = $('warn');
 let pauseAt = 0;
 // 只算真的畫得出來的面板（被隱藏的父層裡的 .show 不算，避免看不到的面板讓遊戲一直暫停）
 const panelOpen = () => { for (const p of Array.from(document.querySelectorAll('.panel.show'))) if ((p as HTMLElement).getClientRects().length) return true; return false; };
-const isPaused = () => state === 'play' && (document.hidden || panelOpen() || $('medList').classList.contains('show') || !!document.getElementById('npcTip')?.classList.contains('show'));
+// 廣場開道具／藥品不暫停（休閒場別人還在動）；工寮仍暫停避免邊開選單邊剝
+const isPaused = () => state === 'play' && (document.hidden || panelOpen() || (!plazaMode && $('medList').classList.contains('show')) || !!document.getElementById('npcTip')?.classList.contains('show'));
 let frameErr = 0;
 let frameSleeping = false;
 let lastDrawAt = 0;
