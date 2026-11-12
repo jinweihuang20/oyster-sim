@@ -60,9 +60,9 @@ export function makeWorldLabel(
   const depthTest = opts.depthTest === true;
   const nameTone: WorldLabelNameTone = opts.nameTone === 'npc' || opts.nameTone === 'sign' ? opts.nameTone : 'player';
   // 固定畫布尺寸：避免改 canvas.width 導致 WebGL 貼圖卡住舊畫面
-  // 手機／粗指標（COARSE）：DPR 鎖 1，貼圖容量砍 1/4，近距離看文字仍清楚
+  // 手機：名牌／泡泡允許 1.5x（貼圖仍很小）；省電降解析度時字才不會糊成一團
   const isCoarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
-  const dprCap = isCoarse ? 1 : 2;
+  const dprCap = isCoarse ? 1.5 : 2;
   const dpr = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, dprCap);
   const cssW = kind === 'bubble' ? 320 : 360;
   const cssH = kind === 'bubble' ? 160 : 64;
@@ -94,9 +94,10 @@ export function makeWorldLabel(
   let texUploaded = false;
 
   const redraw = () => {
-    const fontPx = kind === 'name' ? 26 : 24;
+    // 略加大字級＋不透明底：省電／低 DPR 時仍好讀；名牌是小貼圖，幾乎不影響耗電
+    const fontPx = kind === 'name' ? 28 : 26;
     const padX = kind === 'name' ? 14 : 16;
-    const padY = kind === 'name' ? 8 : 10;
+    const padY = kind === 'name' ? 9 : 11;
     const maxTextW = kind === 'bubble' ? 260 : 320;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -115,13 +116,13 @@ export function makeWorldLabel(
     if (kind === 'name') {
       roundRect(ctx, ox + 0.5, oy + 0.5, w - 1, h - 1, 10);
       if (nameTone === 'npc') {
-        // NPC：半透明灰底、灰字、無邊框（退到背景）
-        ctx.fillStyle = 'rgba(70,76,84,0.5)';
+        // NPC：略提高不透明度，遠距／省電時仍能辨識
+        ctx.fillStyle = 'rgba(48,54,62,0.78)';
         ctx.fill();
-        ctx.fillStyle = '#d4d9de';
+        ctx.fillStyle = '#eef2f6';
       } else {
         // 真人：實底白名牌＋藍細邊＋人像線條圖示；金箔框改金邊＋內線，字色維持深色好讀
-        ctx.fillStyle = nameFrame ? 'rgba(255,252,242,0.82)' : 'rgba(255,255,255,0.7)';
+        ctx.fillStyle = nameFrame ? 'rgba(255,252,242,0.94)' : 'rgba(255,255,255,0.92)';
         ctx.fill();
         if (nameFrame) {
           ctx.strokeStyle = '#c9a227';

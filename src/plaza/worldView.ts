@@ -815,7 +815,7 @@ function hashPid(pid: string) {
 
   void bubblesHost;
 
-  const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: 0.36 });
+  const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: LO ? 0.44 : 0.38 });
   selfBubble.sprite.visible = false;
   root.add(selfBubble.sprite);
   let selfBubUntil = 0;
@@ -826,7 +826,8 @@ function hashPid(pid: string) {
   /** 掛在 root（勿掛 head）：轉頭時本地 +Y 會歪掉 */
   function ensureTag(nick: string, isNpc = false) {
     const tag = makeWorldLabel(nick, 'name', {
-      worldH: 0.24,
+      // 省電／手機低解析時略放大，字才清楚（Sprite 很小，耗電可忽略）
+      worldH: LO ? 0.3 : 0.26,
       nameTone: isNpc ? 'npc' : 'player',
     });
     tag.sprite.visible = false;
@@ -849,7 +850,10 @@ function hashPid(pid: string) {
   }
 
   function ensureBubble(isNpc = false) {
-    const el = makeWorldLabel(' ', 'bubble', { worldH: 0.36, nameTone: isNpc ? 'npc' : 'player' });
+    const el = makeWorldLabel(' ', 'bubble', {
+      worldH: LO ? 0.44 : 0.38,
+      nameTone: isNpc ? 'npc' : 'player',
+    });
     el.sprite.visible = false;
     root.add(el.sprite);
     return el;
