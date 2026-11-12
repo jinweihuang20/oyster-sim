@@ -4805,7 +4805,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
-{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：降解析・關陰影・簡材質／少燈・降面（重新整理後 AA／精度／GPU／網格才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU／網格才會變）', '#9be37a'); }; }
+{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：鎖 30fps・降解析・關陰影・簡材質／少燈・降面（重新整理後 AA／精度／GPU／網格才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU／網格才會變）', '#9be37a'); }; }
 { const el = $('v_bright') as HTMLInputElement; const pct = $('v_brightPct'); const syncBrightUi = () => { el.value = String(Math.round(mix.bright * 100)); pct.textContent = `${Math.round(mix.bright * 100)}%`; };
   const applyBright = (n: number, save: boolean) => { mix.bright = setSceneBrightness(n); syncBrightUi(); if (save) applyMix(); };
   syncBrightUi();
@@ -4985,8 +4985,9 @@ function frameBody() {
   }
   const now = performance.now();
   const paused = isPaused();
-  // 選單／暫停約 15fps；桌機遊玩 60fps。手機有操作／自身在動時 60fps，靜止 1.5 秒後 30fps 降溫
+  // 選單／暫停約 15fps；省電一律 30；否則桌機／手機有操作 60，手機靜止 30
   const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15
+    : mix.eco ? 1000 / 30
     : (COARSE && !mobileBusy(now) ? 1000 / 30 : 1000 / 60);
   const since = now - lastDrawAt;
   if (since < minMs - 1.5) { scheduleFrame(); return; }
