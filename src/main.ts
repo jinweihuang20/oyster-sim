@@ -126,17 +126,23 @@ const bootEco = (() => {
 // 手機／省電：方塊取代圓角、圓柱少段（需在建場景幾何前）
 setGeoLowDetail(bootEco || COARSE);
 const canvas = $('c') as HTMLCanvasElement;
-// 移動端／省電：mediump、關 AA、low-power GPU；一般 high-performance（powerPreference 僅建 renderer 時生效）
+// 手機／省電（見 mobile.txt）：關 AA、mediump、low-power；填色與著色器降載最省熱
+const mobileLite = COARSE || bootEco;
 const renderer = new THREE.WebGLRenderer({
   canvas,
-  antialias: !bootEco,
-  powerPreference: bootEco ? 'low-power' : 'high-performance',
-  precision: bootEco ? 'mediump' : 'highp',
+  antialias: !mobileLite,
+  powerPreference: mobileLite ? 'low-power' : 'high-performance',
+  precision: mobileLite ? 'mediump' : 'highp',
   preserveDrawingBuffer: !!SHOT,
 });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = bootEco ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+/** 手機 DPR 上限：省電 1.0／一般 1.25（iPhone 原生 3x 會讓填色爆熱） */
+function mobileDprCap(eco: boolean) {
+  if (COARSE) return eco ? 1 : 1.25;
+  return eco ? 1.5 : 2;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, mobileDprCap(bootEco)));
+renderer.shadowMap.enabled = !COARSE && !bootEco;
+renderer.shadowMap.type = mobileLite ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
 // 名牌 Canvas 預先 upload，避免準心第一次對準某人才卡
 bindWorldLabelRenderer(renderer);
 const scene = new THREE.Scene();
@@ -172,7 +178,8 @@ const sun = new THREE.DirectionalLight(0xffe8c4, 1.15); sun.position.set(-3, 11,
 const lamp = new THREE.PointLight(0xffe8c8, 14, 10, 1.6); lamp.position.set(0, 2.55, 0); lamp.castShadow = true;
 // 地板大面積收影時 bias 太負會在轉視角時陰影痘／閃；略收斂
 lamp.shadow.bias = -0.001; lamp.shadow.normalBias = 0.04;
-lamp.shadow.mapSize.set(bootEco ? 512 : 1024, bootEco ? 512 : 1024); scene.add(lamp);
+// 手機陰影圖最多 512（PointLight 陰影在行動 GPU 很燒）
+lamp.shadow.mapSize.set(COARSE || bootEco ? 512 : 1024, COARSE || bootEco ? 512 : 1024); scene.add(lamp);
 const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff4dc });
 const yardFloor = makeYardFloorMaps(matchMedia('(pointer: coarse)').matches ? 256 : 384);
 {
@@ -511,18 +518,15 @@ function applyPlazaShadowMode() {
   renderer.shadowMap.needsUpdate = true;
   shadowAcc = 0;
 }
-/** 熱切省電：關陰影、降 DPR；antialias／precision 僅啟動時套用 */
+/** 熱切省電／手機降載：關陰影、降 DPR；antialias／precision 僅啟動時套用（見 mobile.txt） */
 function applyEcoGfx() {
-  // 手機：省電 1.25×／一般 1.5×（與 resize 一致）；桌面上限 2×（手機 DPR 常 2-3，再多等於燒電不加清晰度）
-  const dprCap = COARSE ? (mix.eco ? 1.25 : 1.5) : (mix.eco ? 1.5 : 2);
+  const dprCap = mobileDprCap(mix.eco);
   renderer.setPixelRatio(Math.min(devicePixelRatio, dprCap));
-  // 廣場靠自發光＋烘焙暖光，關掉整條 shadow pipeline：每個像素的 shader 不再做 shadow 取樣（這是手機最大的像素端耗電來源之一）
-  renderer.shadowMap.enabled = !mix.eco && !plazaMode;
-  // 手機非省電：PCF 軟陰影在行動 GPU 太貴，改 Basic
-  renderer.shadowMap.type = mix.eco ? THREE.BasicShadowMap : (COARSE ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap);
-  // 廣場模式工寮燈已經 intensity=0，castShadow 保持 true 會每 0.25s 跑全場 depth pass
-  lamp.castShadow = !mix.eco && !plazaMode;
-  const map = mix.eco ? 512 : 1024;
+  // 手機／省電／廣場：關整條 shadow pipeline（填色取樣與 depth pass 是發熱主因）
+  renderer.shadowMap.enabled = !mix.eco && !plazaMode && !COARSE;
+  renderer.shadowMap.type = mix.eco || COARSE ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+  lamp.castShadow = !mix.eco && !plazaMode && !COARSE;
+  const map = mix.eco || COARSE ? 512 : 1024;
   lamp.shadow.mapSize.set(map, map);
   lamp.shadow.map?.dispose();
   lamp.shadow.map = null;
@@ -4805,7 +4809,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
-{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：鎖 30fps・降解析・關陰影・簡材質／少燈・降面（重新整理後 AA／精度／GPU／網格才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU／網格才會變）', '#9be37a'); }; }
+{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：降解析・關陰影・簡材質／少燈・降面（重新整理後 AA／精度／GPU／網格才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU／網格才會變）', '#9be37a'); }; }
 { const el = $('v_bright') as HTMLInputElement; const pct = $('v_brightPct'); const syncBrightUi = () => { el.value = String(Math.round(mix.bright * 100)); pct.textContent = `${Math.round(mix.bright * 100)}%`; };
   const applyBright = (n: number, save: boolean) => { mix.bright = setSceneBrightness(n); syncBrightUi(); if (save) applyMix(); };
   syncBrightUi();
@@ -4867,9 +4871,8 @@ function updBaseFov() {
 }
 function resize() {
   const { w, h } = viewSize();
-  // 回前景時 DPR 偶爾變；與省電上限對齊
-  const dprCap = COARSE ? (mix.eco ? 1.25 : 1.5) : (mix.eco ? 1.5 : 2);
-  const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+  // 回前景時 DPR 偶爾變；與手機／省電上限對齊
+  const dpr = Math.min(window.devicePixelRatio || 1, mobileDprCap(mix.eco));
   if (Math.abs(renderer.getPixelRatio() - dpr) > 1e-3) renderer.setPixelRatio(dpr);
   const bufW = renderer.domElement.width, bufH = renderer.domElement.height;
   const wantW = Math.max(1, Math.floor(w * dpr)), wantH = Math.max(1, Math.floor(h * dpr));
@@ -4985,9 +4988,8 @@ function frameBody() {
   }
   const now = performance.now();
   const paused = isPaused();
-  // 選單／暫停約 15fps；省電一律 30；否則桌機／手機有操作 60，手機靜止 30
+  // 選單／暫停約 15fps；遊玩 60（手機靜止 1.5 秒後 30 降溫）。發熱改靠降 DPR／關陰影（mobile.txt）
   const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15
-    : mix.eco ? 1000 / 30
     : (COARSE && !mobileBusy(now) ? 1000 / 30 : 1000 / 60);
   const since = now - lastDrawAt;
   if (since < minMs - 1.5) { scheduleFrame(); return; }
