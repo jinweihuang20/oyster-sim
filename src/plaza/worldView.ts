@@ -1532,8 +1532,6 @@ function hashPid(pid: string) {
       if (r.seated && !isLeisurePile(r.pileId)) syncRemoteMeats(r);
       hangArms(r, r.seated);
       if (awaitingPose) { rig.outer.visible = false; r.tag.sprite.visible = false; }
-      // 進場就 compile（含 hidden）：準心對準臉盆時不要再付著色器帳
-      try { opts.getRenderer?.()?.compile(rig.outer, scene); } catch { /* */ }
     }
     if (p.connId) r.connId = p.connId;
     return r;
