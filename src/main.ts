@@ -15,7 +15,7 @@ import {
   initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
   setWalking, setNearSeat, clearWalkInput,
-  makeWorldLabel, renderSceneWithLocalAvatarOnTop, invalidateLocalAvatarCache, type WorldLabel,
+  makeWorldLabel, bindWorldLabelRenderer, renderSceneWithLocalAvatarOnTop, invalidateLocalAvatarCache, type WorldLabel,
   tickTpCamOcclude, clearTpCamOcclude, setTpCamOccludeIgnore,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
@@ -110,7 +110,7 @@ function setPlazaMode(v: boolean) {
 let plazaPayWait: Promise<number> | null = null;
 /** 廣場休閒：第一次坐下起算遊玩秒數（給結算／後端 softCap） */
 let plazaPlayAt = 0;
-/** 廣場坐下暫時開第三人稱（不寫入存檔偏好） */
+/** 進廣場當下暫時開第三人稱（不寫入存檔偏好；離開再還原） */
 let plazaForceTp = false;
 let plazaHomeHide: THREE.Object3D[] = [];
 /** 視角偏好（提早宣告：walkSeat 進場會設；完整 setTpv 稍後掛上 tpvApi） */
@@ -137,6 +137,8 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = bootEco ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+// 名牌 Canvas 預先 upload，避免準心第一次對準某人才卡
+bindWorldLabelRenderer(renderer);
 const scene = new THREE.Scene();
 // 明亮溫暖晴天：暖日光＋柔藍天（去夢核灰／死板硬邊感）
 scene.background = new THREE.Color(0xa8d0e8);
@@ -346,6 +348,11 @@ const makeAma = (top: number, hair: number) => makeAmaMesh(top, hair, { mat, mes
 type Npc = ReturnType<typeof makeAma> & { name: string; rate: number; chatty: number; peek: boolean; count: number; pause: number; look: number; bubble: WorldLabel; bubT: number; lean: number;
   cyc: number; dur: number; ev: number; mood: number; angry: number; distract: number; turnDir: number; windup: number; w0?: number; warned?: boolean; throwCd: number; stuck: THREE.Mesh | null; baseY: number; basinN?: number; scoopT?: number; clutch?: number; grudge?: number; gAt?: number; tag: WorldLabel; tagTxt?: string; calm?: number; gIcon?: THREE.Sprite; gBar?: THREE.Sprite; bump?: THREE.Object3D; bumpT?: number; oy: THREE.Group; top: THREE.Mesh; meat: THREE.Mesh; bowl: THREE.Vector3; bowlMeat: THREE.Mesh[]; bowlM?: THREE.Object3D };
 const npcs: Npc[] = [];
+/** 工寮阿婆碗共用材質／幾何：每人一份會在準心第一次掃到時才編譯／上傳→卡一下 */
+const npcBowlWallMat = mat(0xdddddd, { side: THREE.DoubleSide });
+const npcBowlFlMat = mat(0xb8b8b8, { side: THREE.DoubleSide, roughness: 0.55 });
+const npcBowlWallGeo = new THREE.CylinderGeometry(0.13, 0.09, 0.1, 14, 1, true);
+const npcBowlFlGeo = new THREE.CylinderGeometry(0.088, 0.088, 0.012, 14);
 function makeNpc(d: NpcDef) {
   const a = makeAma(d.top, d.hair); const ang = Math.PI / 2 + d.a; const r = d.r ?? 1.9;
   a.g.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r); a.g.lookAt(0, 0, 0); a.g.rotateY(Math.PI); scene.add(a.g);
@@ -359,12 +366,9 @@ function makeNpc(d: NpcDef) {
   const bowlL = new THREE.Vector3(0.32, 0, -0.42); const bowl = a.g.localToWorld(bowlL.clone());
   const npcBowlY = pileSurfY(bowl.x, bowl.z);
   const npcBowlH = 0.1;
-  const bowlM = mesh(new THREE.CylinderGeometry(0.13, 0.09, npcBowlH, 14, 1, true), mat(0xdddddd, { side: THREE.DoubleSide }), [bowl.x, npcBowlY + npcBowlH / 2, bowl.z]);
+  const bowlM = mesh(npcBowlWallGeo, npcBowlWallMat, [bowl.x, npcBowlY + npcBowlH / 2, bowl.z]);
   {
-    const fl = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.088, 0.088, 0.012, 14),
-      mat(0xb8b8b8, { side: THREE.DoubleSide, roughness: 0.55 }),
-    );
+    const fl = new THREE.Mesh(npcBowlFlGeo, npcBowlFlMat);
     fl.position.y = -npcBowlH / 2 + 0.006;
     bowlM.add(fl);
   }
@@ -1237,7 +1241,11 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
   ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); applySleeve(); drawMeds(); clearBasinOysters(); fillBasin(false); if (!(isRoomActive() && walking)) goPick(); if (!SHOT && !tut && !matchMedia('(pointer: coarse)').matches) canvas.requestPointerLock?.(); updHud();
-  if (!plazaMode && !isRoomActive()) prewarmStealUi();
+  // 工寮／廣場都先排一次偷 UI；廣場再補遠端暱稱（含「暱稱：不可偷原因」）
+  if (!isRoomActive()) {
+    prewarmStealUi();
+    if (plazaMode) { _plazaHintWarmKey = ''; maybeWarmPlazaStealHints(); }
+  }
 }
 /** HUD dirty：避免每幀寫 DOM／innerHTML 觸發強制重排 */
 const hudPrev = { hpW: '', hpPct: '', timerLab: '', timer: '', count: -1, pearls: -1, stats: '' };
@@ -1894,6 +1902,15 @@ function beginStealFrame() {
   _frameYardSteal = undefined;
   _frameAimTargets = undefined;
 }
+/** 廣場不可偷原因（setStealHint 用 `${nick}：${why}`，舊預熱漏掉→準心換人就卡） */
+const PLAZA_STEAL_WHYS = [
+  '只能偷同一堆的人',
+  '對方碗裡太少，先別偷',
+  '對方撐著傘，偷不到',
+  '對方正在撬殼，下手不了',
+  '同一個目標要隔一下再偷',
+  '對方離開了',
+];
 /** 上班瞬間先強迫排一次偷準心／按鈕樣式，避免第一次瞄到對座阿婆才卡頓 */
 function prewarmStealUi() {
   const el = $('reticle');
@@ -1910,13 +1927,20 @@ function prewarmStealUi() {
   _lastStealBtnOn = null;
   _lastStealHint = '';
   warmStealHintsForNames(npcs.map(n => n.name));
+  warmStealHint('偷被抓太多次，99 秒後才能再偷');
 }
 let _plazaHintWarmAt = 0;
+let _plazaHintWarmKey = '';
 function maybeWarmPlazaStealHints() {
+  let names: string[] = [];
+  try { names = plazaAimTargetsFrame().map(t => t.nick).filter(Boolean); } catch { return; }
+  const key = names.join('\0');
   const now = performance.now();
-  if (now - _plazaHintWarmAt < 2500) return;
+  // 名單變了立刻預熱；否則最多 2.5s 補一次
+  if (key === _plazaHintWarmKey && now - _plazaHintWarmAt < 2500) return;
+  _plazaHintWarmKey = key;
   _plazaHintWarmAt = now;
-  try { warmStealHintsForNames(plazaAimTargetsFrame().map(t => t.nick)); } catch { /* */ }
+  warmStealHintsForNames(names);
 }
 function plazaAimTargetsFrame() {
   if (!_frameAimTargets) _frameAimTargets = plazaAimTargets();
@@ -1957,6 +1981,7 @@ function warmStealHintsForNames(names: string[]) {
     warmStealHint(`${n}在看，不要偷…`);
     warmStealHint(`${n}轉頭在聊天！${e}偷對方的肉`);
     warmStealHint(`${n}沒注意！${e}偷對方的肉`);
+    for (const w of PLAZA_STEAL_WHYS) warmStealHint(`${n}：${w}`);
   }
 }
 function setStealBtn(v: boolean) {
@@ -4054,14 +4079,24 @@ function applySmokeSitFpHands() {
   if (cuff) cuff.position.set(0, -u * 0.06, 0.66 + u * 0.35);
 }
 
-/** 廣場坐下：強制第一人稱（不寫入存檔偏好；站起再還原） */
+/** 進廣場當下：強制第三人稱一次（不寫入存檔偏好；離開廣場再還原） */
+function plazaEnsureTpView() {
+  plazaForceTp = true;
+  if (tpv) { drawCamBtn(); return; }
+  if (flHeld) flRelease();
+  flYaw = 0; flRet = 0; flHeld = false; flPtr = -1; flDragId = -1; flDown = null;
+  lookMx = lookMy = 0;
+  tpv = true;
+  applyOutfit3();
+  drawCamBtn();
+}
+/** 廣場坐下：強制第一人稱（不寫入存檔；離開廣場仍依 plazaForceTp 還原偏好） */
 function plazaEnsureFpView() {
   if (!tpv) { drawCamBtn(); return; }
-  plazaForceTp = false;
-  tpv = false;
   clearTpCamOcclude();
   // 清掉第三人稱環視殘值，避免坐下後準心被 flYaw 回彈拉扯
   flYaw = 0; flRet = 0; flHeld = false; flPtr = -1; flDragId = -1; flDown = null;
+  tpv = false;
   drawCamBtn();
 }
 /** 離開廣場時清掉座落卡／搖桿等 HUD，避免殘留到主選單或其他工寮 */
@@ -4306,6 +4341,7 @@ function launchPlaza() {
     audio: () => audio(),
     scene,
     camera: () => viewCam(),
+    renderer,
     bubbles: $('bubbles'),
     shellGeo,
     shellMat: pileMat,
@@ -4480,6 +4516,7 @@ function launchPlaza() {
       { const spawn = plazaResolveEnterSpawn(); walkPos.set(spawn.x, 1.55, spawn.z); tYaw = yaw = spawn.yaw; }
       tPitch = pitch = -0.18;
       plazaEnterWalkPose(false);
+      plazaEnsureTpView();
       drawRadio();
       on('quitBtn', true); on('camBtn', COARSE); on('seatCard', false);
       document.body.classList.add('plazaRoam');

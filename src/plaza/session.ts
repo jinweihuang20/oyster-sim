@@ -30,6 +30,8 @@ export type PlazaDeps = {
   audio: () => void;
   scene: THREE.Scene;
   camera: () => THREE.Camera;
+  /** 遠端進場預編譯著色器用 */
+  renderer?: THREE.WebGLRenderer;
   bubbles: HTMLElement;
   /** 與工寮同款蚵殼幾何／材質 */
   shellGeo: THREE.BufferGeometry;
@@ -599,6 +601,7 @@ export function openPlaza(D: PlazaDeps) {
     getTpv: () => !!D.getTpv?.(),
     hasOwnPet: () => !!D.hasOwnPet?.(),
     selfHatLift: () => D.selfHatLift?.() ?? 0,
+    getRenderer: () => D.renderer,
   });
   buildUi();
   wireClient(D);

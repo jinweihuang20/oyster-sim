@@ -170,6 +170,8 @@ export type PlazaWorldOpts = {
   hasOwnPet?: () => boolean;
   /** 自己頭上帽子高出髮蓋頂的量（公尺）；有寵物+坐姿時聊天泡泡要再多抬這麼多 */
   selfHatLift?: () => number;
+  /** 遠端進場時預編譯著色器，避免準心第一次掃到才卡 */
+  getRenderer?: () => THREE.WebGLRenderer | null | undefined;
 };
 
 export function createPlazaWorldView(
@@ -856,26 +858,25 @@ function hashPid(pid: string) {
     sprite.position.set(_tagHead.x, _tagHead.y + yLift, _tagHead.z);
   }
 
+  /** 遠端雨傘共用材質／幾何（每人一份會在第一次開傘入鏡時卡） */
+  const remoteUmbPoleMat = LO
+    ? new THREE.MeshLambertMaterial({ color: 0x6a4a2a })
+    : new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.85, flatShading: true });
+  const remoteUmbCanopyMat = LO
+    ? new THREE.MeshLambertMaterial({ color: 0xc0392b, side: THREE.FrontSide })
+    : new THREE.MeshStandardMaterial({ color: 0xc0392b, side: THREE.DoubleSide, roughness: 0.7, flatShading: true });
+  const remoteUmbPoleGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.72, LO ? 4 : 5);
+  const remoteUmbCanopyGeo = new THREE.ConeGeometry(0.45, 0.2, LO ? 6 : 10, 1, true);
   /** 遠端雨傘：跟本機一樣「往前開」擋殼，不是頭頂撐雨 */
   function makeRemoteUmb() {
     const g = new THREE.Group();
     g.userData.noMerge = true;
     g.visible = false;
-    const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.012, 0.012, 0.72, LO ? 4 : 5),
-      LO
-        ? new THREE.MeshLambertMaterial({ color: 0x6a4a2a })
-        : new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.85, flatShading: true }),
-    );
+    const pole = new THREE.Mesh(remoteUmbPoleGeo, remoteUmbPoleMat);
     // 傘柄在近 y=0（手握處），傘面沿 +Y；整組再往前傾
     pole.position.set(0, 0.2, 0);
     g.add(pole);
-    const canopy = new THREE.Mesh(
-      new THREE.ConeGeometry(0.45, 0.2, LO ? 6 : 10, 1, true),
-      LO
-        ? new THREE.MeshLambertMaterial({ color: 0xc0392b, side: THREE.FrontSide })
-        : new THREE.MeshStandardMaterial({ color: 0xc0392b, side: THREE.DoubleSide, roughness: 0.7, flatShading: true }),
-    );
+    const canopy = new THREE.Mesh(remoteUmbCanopyGeo, remoteUmbCanopyMat);
     canopy.position.set(0, 0.58, 0);
     g.add(canopy);
     layoutRemoteUmb(g, true);
@@ -1531,6 +1532,8 @@ function hashPid(pid: string) {
       if (r.seated && !isLeisurePile(r.pileId)) syncRemoteMeats(r);
       hangArms(r, r.seated);
       if (awaitingPose) { rig.outer.visible = false; r.tag.sprite.visible = false; }
+      // 進場就 compile（含 hidden）：準心對準臉盆時不要再付著色器帳
+      try { opts.getRenderer?.()?.compile(rig.outer, scene); } catch { /* */ }
     }
     if (p.connId) r.connId = p.connId;
     return r;
@@ -2256,10 +2259,11 @@ function hashPid(pid: string) {
     for (const m of [
       remoteMeatMat, remoteBasinMat, remoteBasinFlMat, remoteBasinOyMat, remoteBowlMat, remoteBowlFlMat,
       remoteHoldWood, remoteHoldSteel, remoteHoldShell, remoteHoldShellTop,
+      remoteUmbPoleMat, remoteUmbCanopyMat,
     ]) { try { m.dispose(); } catch { /* */ } }
     for (const g of [
       remoteMeatGeo, remoteBasinGeo, remoteBasinFlGeo, remoteBasinOyGeo, remoteBowlWallGeo, remoteBowlFlGeo,
-      remoteHoldBotGeo, remoteHoldTopGeo,
+      remoteHoldBotGeo, remoteHoldTopGeo, remoteUmbPoleGeo, remoteUmbCanopyGeo,
     ]) { try { g.dispose(); } catch { /* */ } }
     for (const e of remoteExhales) {
       try { e.fx.group.parent?.remove(e.fx.group); } catch { /* */ }

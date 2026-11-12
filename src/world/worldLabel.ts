@@ -38,6 +38,17 @@ export type WorldLabelOpts = {
   bubbleTint?: (text: string) => { fill: string; line: string; text: string } | null;
 };
 
+/** 主畫面 renderer：名牌 Canvas 第一次入鏡前先 upload，避免準心掃到某人才卡一下 */
+let _labelRenderer: THREE.WebGLRenderer | null = null;
+export function bindWorldLabelRenderer(r: THREE.WebGLRenderer | null) {
+  _labelRenderer = r;
+}
+function uploadLabelTex(tex: THREE.Texture) {
+  const gl = _labelRenderer;
+  if (!gl) return;
+  try { gl.initTexture(tex); } catch { /* */ }
+}
+
 /** 頭頂名牌／對話泡泡：Canvas 貼到 Sprite，跟隨 3D，不寫 DOM */
 export function makeWorldLabel(
   initial: string,
@@ -79,6 +90,8 @@ export function makeWorldLabel(
   let text = '';
   let opacity = 1;
   let nameFrame = false;
+  /** 只在第一次畫完後立刻 upload；之後改字靠 needsUpdate 走正常路徑 */
+  let texUploaded = false;
 
   const redraw = () => {
     const fontPx = kind === 'name' ? 26 : 24;
@@ -169,6 +182,11 @@ export function makeWorldLabel(
     sprite.scale.set(worldH * aspect, worldH, 1);
     mat.opacity = opacity;
     mat.needsUpdate = true;
+    // 準心第一次對準某人時名牌才進視錐→GPU upload 會卡一幀；建好就先塞進 GPU
+    if (!texUploaded && _labelRenderer) {
+      uploadLabelTex(tex);
+      texUploaded = true;
+    }
   };
 
   const setText = (t: string, force = false) => {
