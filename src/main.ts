@@ -2650,11 +2650,20 @@ renderDex();
 
 // ---------- 操作 ----------
 let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; leftNoLook?: boolean; leftRotZone?: boolean; lx: number; lt: number; swiped?: boolean } | null = null;
-/** 手機橫向坐下：左半邊不轉視角 */
-function landLeftNoLook(cx: number) {
-  return COARSE && !walking && matchMedia('(orientation: landscape)').matches && cx < innerWidth * 0.4;
+/** 手機橫向＋坐下＋第一人稱＋正在剝殼（不含機關槍／吸菸閒坐） */
+function landFpSitPeeling() {
+  if (!(COARSE && !walking && !tpv && state === 'play')) return false;
+  if (!matchMedia('(orientation: landscape)').matches) return false;
+  if (mgActive || (plazaMode && plazaOnMg())) return false;
+  if (plazaMode && document.body.classList.contains('plazaSmokeSit')) return false;
+  return phase === 'seam' || phase === 'twist' || phase === 'pick' || phase === 'empty'
+    || phase === 'aim' || phase === 'scoop' || phase === 'crab' || isGrillPhase();
 }
-/** 手機橫向找縫：左側可拖轉蚵；點一下仍插刀／進翹殼 */
+/** 上述情境下左半邊不轉視角 */
+function landLeftNoLook(cx: number) {
+  return landFpSitPeeling() && cx < innerWidth * 0.4;
+}
+/** 找縫時左側可拖轉蚵；點一下仍插刀／進翹殼 */
 function landSeamRotZone(cx: number) {
   return landLeftNoLook(cx) && phase === 'seam';
 }
@@ -6219,11 +6228,10 @@ function rotTipTick(dt: number) {
   rotTipWasSeam = true;
   if (!COARSE || rotTipUsed || (!tut && !mix.rotTip)) { rotTipHide(); return; }
   rotTipIdle += dt; if (!tut && rotTipIdle < 3) return;
-  const land = matchMedia('(orientation: landscape)').matches;
   const t = rotTipEl(); oyster.getWorldPosition(_rtv).project(viewCam());
   t.style.left = `${(_rtv.x + 1) / 2 * innerWidth}px`; t.style.top = `${(1 - _rtv.y) / 2 * innerHeight}px`; t.classList.add('on');
   const L = rotTipLeftEl();
-  if (land) L.classList.add('on');
+  if (landFpSitPeeling() && phase === 'seam') L.classList.add('on');
   else L.classList.remove('on');
 }
 setInterval(() => { if (phase !== 'seam') { rotTipWasSeam = false; rotTipHide(); } }, 200);
