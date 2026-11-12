@@ -3,7 +3,7 @@ import { rboxEnv, rcyl } from '../core/geo';
 import type { MatFn } from '../dm/weapons';
 import { CHAIR_SEAT_Y } from './props';
 
-export type ChairPose = { x: number; z: number; yaw: number; key: string };
+export type ChairPose = { x: number; z: number; yaw: number; key: string; /** 預設地面；機關槍高台等要抬高 */ y?: number };
 
 const _d = new THREE.Object3D();
 const _c = new THREE.Color();
@@ -34,6 +34,7 @@ export function makeInstancedPads(poses: ChairPose[], M: MatFn, lo: boolean) {
   im.frustumCulled = false;
   im.castShadow = false;
   im.receiveShadow = false;
+  im.renderOrder = 2;
   const opacity = new Float32Array(Math.max(1, poses.length));
   im.geometry.setAttribute('instanceOpacity', new THREE.InstancedBufferAttribute(opacity, 1));
   const index = new Map<string, number>();
@@ -43,7 +44,7 @@ export function makeInstancedPads(poses: ChairPose[], M: MatFn, lo: boolean) {
   for (let i = 0; i < poses.length; i++) {
     const p = poses[i];
     index.set(p.key, i);
-    dummy.position.set(p.x, 0.015, p.z);
+    dummy.position.set(p.x, p.y ?? 0.015, p.z);
     dummy.rotation.set(0, p.yaw, 0);
     dummy.scale.set(1, 1, 1);
     dummy.updateMatrix();

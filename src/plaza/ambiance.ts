@@ -15,7 +15,6 @@ type AddFn = (
 
 export type PlazaStallKind =
   | 'bbq'      // 立式烤肉攤（高台）
-  | 'bbqSit'   // 坐式烤肉區（矮桌／地爐）
   | 'drink'
   | 'snack'
   | 'fruit'
@@ -36,8 +35,6 @@ export const PLAZA_STALL_SITES: readonly {
   { id: 'bbq', x: -1.4, z: 9.65, kind: 'bbq', radius: 1.25 },
   { id: 'cart', x: 2.6, z: 9.6, kind: 'cart', radius: 0.85 },
   { id: 'drink-s', x: 5.9, z: 9.5, kind: 'drink', radius: 1.0 },
-  // 坐式烤肉區（西南角矮桌圍爐，非立式高台）
-  { id: 'bbqSit', x: -7.4, z: 9.5, kind: 'bbqSit', radius: 1.45 },
   // 西邊改潮間帶／養殖預留，不再放攤
   // 東側三攤已移除（讓出東排蚵堆空位＋店面前庭）
   // 北（碼頭在棚外；攤位仍在棚內走道）
@@ -52,7 +49,7 @@ export function plazaStallObstacles(): [number, number, number][] {
 }
 
 /**
- * 廣場氣氛：夜市攤＋立式／坐式烤肉＋北側碼頭漁船＋西側潮間帶。
+ * 廣場氣氛：夜市攤＋立式烤肉＋北側碼頭漁船＋西側潮間帶。
  */
 export function makePlazaAmbiance(
   M: MatFn,
@@ -78,7 +75,6 @@ export function makePlazaAmbiance(
     root.add(g);
     switch (site.kind) {
       case 'bbq': buildBbqStand(g, M, add, segs, lowDetail, lights, fires); break;
-      case 'bbqSit': buildBbqSit(g, M, add, segs, lowDetail, lights, fires); break;
       case 'drink': buildDrink(g, M, add, segs); break;
       case 'snack': buildSnack(g, M, add, segs, lowDetail); break;
       case 'fruit': buildFruit(g, M, add, segs); break;
@@ -193,65 +189,6 @@ function buildBbqStand(
     add(rcyl(0.14, 0.13, 0.28, segs), M(0xd04040, { roughness: 0.55 }), [sx, 0.14, -1.15], g, false);
   }
   add(rcyl(0.14, 0.14, 0.55, segs), M(0xd8d0c0, { metalness: 0.2, roughness: 0.5 }), [0.95, 0.28, 0.35], g, true);
-}
-
-/** 坐式烤肉：地爐＋矮桌＋地墊／矮凳圍坐（非立式高台） */
-function buildBbqSit(
-  g: THREE.Group,
-  M: MatFn,
-  add: AddFn,
-  segs: number,
-  lowDetail: boolean,
-  lights: THREE.PointLight[],
-  fires: CharcoalFireFx[],
-) {
-  const wood = M(0x6a5238, { roughness: 0.88 });
-  const matCol = M(0xc8b070, { roughness: 0.85 });
-  // 地墊
-  add(rboxEnv(2.4, 0.03, 2.4), matCol, [0, 0.02, 0], g, false);
-  // 中央矮炭爐
-  const steel = M(0x3a3a3e, { metalness: 0.4, roughness: 0.55 });
-  add(rcyl(0.42, 0.38, 0.28, segs), steel, [0, 0.2, 0], g, true);
-  const fire = makeCharcoalFire({
-    width: 0.62,
-    depth: 0.62,
-    lowDetail,
-    withLight: false,
-    lightIntensity: 4.0,
-    lightDistance: 5.2,
-    smoke: lowDetail ? 0.65 : 1.05,
-    seed: 3302,
-  });
-  fire.group.position.set(0, 0.36, 0);
-  g.add(fire.group);
-  fires.push(fire);
-  if (fire.light) lights.push(fire.light);
-  // 矮烤網架
-  add(rboxEnv(0.7, 0.02, 0.7), M(0x6a6a70, { metalness: 0.5 }), [0, 0.48, 0], g, false);
-  const meat = M(0x8a3a22);
-  for (let i = 0; i < 4; i++) {
-    const a = i * Math.PI / 2 + 0.3;
-    add(rboxEnv(0.14, 0.025, 0.06), meat, [Math.cos(a) * 0.18, 0.52, Math.sin(a) * 0.18], g, false);
-  }
-  // 四邊矮桌
-  for (const [x, z] of [[0, -0.95], [0, 0.95], [-0.95, 0], [0.95, 0]] as const) {
-    add(rboxEnv(0.55, 0.08, 0.4), wood, [x, 0.28, z], g, false);
-    for (const s of [-0.18, 0.18] as const) {
-      add(rcyl(0.03, 0.03, 0.24, 4), wood, [x + (z === 0 ? s : 0), 0.12, z + (x === 0 ? s : 0)], g, false);
-    }
-  }
-  // 矮塑膠凳圍一圈
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + 0.2;
-    add(rcyl(0.12, 0.11, 0.18, segs), M(0xd04040), [Math.cos(a) * 1.25, 0.09, Math.sin(a) * 1.25], g, false);
-  }
-  // 低遮陽（較矮）
-  const tarp = M(0xd87830, { side: THREE.DoubleSide, roughness: 0.75 });
-  for (const sx of [-1.15, 1.15] as const) {
-    add(rcyl(0.035, 0.04, 1.55, segs), wood, [sx, 0.78, -1.15], g, true);
-    add(rcyl(0.035, 0.04, 1.55, segs), wood, [sx, 0.78, 1.15], g, true);
-  }
-  add(rboxEnv(2.5, 0.03, 2.5), tarp, [0, 1.55, 0], g, false);
 }
 
 function buildDrink(g: THREE.Group, M: MatFn, add: AddFn, segs: number) {

@@ -21,8 +21,10 @@ export type WalkSeatDeps = {
   plazaWalkRect?: () => { minX: number; maxX: number; minZ: number; maxZ: number };
   /** 矩形夾限後再套區域（東延僅咖啡前庭） */
   plazaWalkClamp?: (p: { x: number; z: number }) => void;
+  /** 廣場地面高度（高台／樓梯） */
+  plazaGroundY?: (x: number, z: number) => number;
   plazaNearSeat: () => { pileId: number; slot: number } | null;
-  plazaNearPrompt?: () => { kind: 'sit' | 'carry' | 'place' | 'shed'; info: string; btn: string; icon?: string; pileId?: number; slot?: number } | null;
+  plazaNearPrompt?: () => { kind: 'sit' | 'carry' | 'place' | 'shed'; info: string; btn: string; icon?: string; altBtn?: string; altIcon?: string; pileId?: number; slot?: number } | null;
   isRoomMode?: () => boolean;
   /** 裝備走路速度倍率（分趾布鞋等） */
   walkSpeedMul?: () => number;
@@ -140,12 +142,15 @@ export function plazaEnterWalkPose(fromSeat = true) {
     const s = D.plazaMySeat();
     if (s) {
       const pose = D.seatPose(s.pileId, s.slot);
-      walkPos.set(pose.pos.x + Math.sin(pose.yaw) * 0.55, 1.55, pose.pos.z + Math.cos(pose.yaw) * 0.55);
+      const wx = pose.pos.x + Math.sin(pose.yaw) * 0.55;
+      const wz = pose.pos.z + Math.cos(pose.yaw) * 0.55;
+      walkPos.set(wx, 1.55 + (D.plazaGroundY?.(wx, wz) ?? (pose.pos.y || 0)), wz);
       D.setTYaw(pose.yaw); D.setYaw(pose.yaw);
       D.setSeatYaw(pose.yaw);
     } else {
-      walkPos.copy(D.SEAT).setY(1.55);
+      walkPos.copy(D.SEAT);
       walkPos.x += Math.sin(D.getSeatYaw()) * 0.55; walkPos.z += Math.cos(D.getSeatYaw()) * 0.55;
+      walkPos.y = 1.55 + (D.plazaGroundY?.(walkPos.x, walkPos.z) ?? 0);
       D.setTYaw(D.getSeatYaw()); D.setYaw(D.getSeatYaw());
     }
     D.setTpv(!!D.saveTpv()); D.drawCamBtn();
@@ -176,6 +181,7 @@ export function walkStep(dt: number) {
   walkMotion.spd = l * moveSp; walkMotion.strafe = r * moveSp;
   const yaw = D.getYaw();
   const prevX = walkPos.x, prevZ = walkPos.z;
+  const gy0 = D.isPlazaMode() ? (D.plazaGroundY?.(prevX, prevZ) ?? 0) : 0;
   const sp = moveSp * dt; walkPos.x += (-Math.sin(yaw) * f + Math.cos(yaw) * r) * sp; walkPos.z += (-Math.cos(yaw) * f - Math.sin(yaw) * r) * sp;
   const obs: [number, number, number][] = D.isPlazaMode()
     ? [...D.plazaPileObs()]
@@ -215,7 +221,13 @@ export function walkStep(dt: number) {
     const bound = D.isPlazaMode() ? D.plazaWalkBound() : 3.25;
     walkPos.x = D.clamp(walkPos.x, -bound, bound); walkPos.z = D.clamp(walkPos.z, -bound, bound);
   }
-  walkPos.y = 1.55 + (D.isPlazaMode() && !D.getTpv() ? 0 : Math.sin(performance.now() / 120) * 0.012 * Math.min(1, l));
+  // 機關槍高台：不能從側面硬爬（高度一次跳超過一階就退回）
+  if (D.isPlazaMode() && D.plazaGroundY) {
+    const gy1 = D.plazaGroundY(walkPos.x, walkPos.z);
+    if (gy1 - gy0 > 0.38) { walkPos.x = prevX; walkPos.z = prevZ; }
+  }
+  const groundY = D.isPlazaMode() ? (D.plazaGroundY?.(walkPos.x, walkPos.z) ?? 0) : 0;
+  walkPos.y = 1.55 + groundY + (D.isPlazaMode() && !D.getTpv() ? 0 : Math.sin(performance.now() / 120) * 0.012 * Math.min(1, l));
   if (D.isPlazaMode()) {
     nearSeat = null; D.stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
     const prompt = D.plazaNearPrompt?.();
@@ -225,9 +237,21 @@ export function walkStep(dt: number) {
     D.on('seatCard', !!(prompt || n));
     D.$('seatCard').classList.add('mini');
     const btn = D.$('sitBtn');
+    const alt = D.$('sitAltBtn') as HTMLButtonElement | null;
     if (prompt) {
       D.$('seatInfo').textContent = prompt.info;
-      if (btn) btn.innerHTML = `<i class="ic ${prompt.icon ?? 'ic-chair'}"></i> ${prompt.btn}<span class="key"> (E)</span>`;
+      if (btn) {
+        const key = prompt.altBtn ? '' : '<span class="key"> (E)</span>';
+        btn.innerHTML = `<i class="ic ${prompt.icon ?? 'ic-chair'}"></i> ${prompt.btn}${key}`;
+      }
+      if (alt) {
+        if (prompt.altBtn) {
+          alt.hidden = false;
+          alt.innerHTML = `<i class="ic ${prompt.altIcon ?? 'ic-oyster'}"></i> ${prompt.altBtn}`;
+        } else {
+          alt.hidden = true;
+        }
+      }
     } else if (n) {
       D.$('seatInfo').textContent = n.pileId === 100
         ? `吸菸區・座 ${n.slot + 1}`
@@ -237,8 +261,10 @@ export function walkStep(dt: number) {
         ? `樸子腳・座 ${n.slot + 1}`
         : `第 ${n.pileId + 1} 堆・座 ${n.slot + 1}`;
       if (btn) btn.innerHTML = `<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>`;
-    } else if (btn) {
-      btn.innerHTML = `<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>`;
+      if (alt) alt.hidden = true;
+    } else {
+      if (btn) btn.innerHTML = `<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>`;
+      if (alt) alt.hidden = true;
     }
     return;
   }
@@ -248,6 +274,8 @@ export function walkStep(dt: number) {
     D.on('seatCard', !!prompt);
     D.$('seatCard').classList.add('mini');
     const btn = D.$('sitBtn');
+    const alt = D.$('sitAltBtn') as HTMLButtonElement | null;
+    if (alt) alt.hidden = true;
     if (prompt) {
       D.$('seatInfo').textContent = prompt.info;
       if (btn) btn.innerHTML = `<i class="ic ic-chair"></i> ${prompt.btn}<span class="key"> (E)</span>`;

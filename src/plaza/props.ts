@@ -413,12 +413,28 @@ export function makePlazaBigShed(
   M: MatFn,
   add: (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], parent: THREE.Object3D, cast?: boolean) => THREE.Mesh,
   lowDetail = false,
-): { group: THREE.Group; posts: { x: number; z: number }[]; tick: (dt: number) => void } {
+): {
+  group: THREE.Group;
+  posts: { x: number; z: number }[];
+  /** 第三人稱鏡頭貼厝頂時可半透明的鐵皮／高樑 */
+  tpOcclude: THREE.Group;
+  tpOccludeMats: THREE.Material[];
+  tick: (dt: number) => void;
+} {
   const g = new THREE.Group();
   g.name = 'plazaBigShed';
   const posts = collectPlazaShedPosts();
   const wood = M(0x5a4a3a, { roughness: 0.88 });
+  // 獨立材質：第三人稱擋鏡頭時只淡這些，不牽連棚柱
+  const beamMat = M(0x5a4a3a, { roughness: 0.88, transparent: true, opacity: 1 });
   const rust = [0x8a5a3a, 0x9a6a48, 0x7a6a5e];
+  const roofMats = rust.map((c) =>
+    M(c, { side: THREE.DoubleSide, metalness: 0.35, roughness: 0.88, transparent: true, opacity: 1 }),
+  );
+  const tpOccludeMats: THREE.Material[] = [beamMat, ...roofMats];
+  const tpOcclude = new THREE.Group();
+  tpOcclude.name = 'plazaTpOcclude';
+  g.add(tpOcclude);
   const postH = PLAZA_POST_H;
   const roofY = PLAZA_ROOF_Y;
   const segs = lowDetail ? 5 : 7;
@@ -427,49 +443,55 @@ export function makePlazaBigShed(
   for (const p of posts) {
     add(rcyl(0.07, 0.08, postH, segs), wood, [p.x, postH / 2, p.z], g, true);
   }
-  // 外框樑
-  const beam = (x: number, y: number, z: number, w: number, d: number) =>
-    add(rboxEnv(w, 0.12, d), wood, [x, y, z], g, false);
+  // 外框樑（高台第三人稱常頂到北樑）
+  const beam = (x: number, y: number, z: number, w: number, d: number) => {
+    const m = add(rboxEnv(w, 0.12, d), beamMat, [x, y, z], tpOcclude, false);
+    m.userData.tpOcclude = true;
+    return m;
+  };
   beam(0, roofY - 0.08, -10.6, 21.4, 0.14);
   beam(0, roofY - 0.08, 10.6, 21.4, 0.14);
   beam(-10.6, roofY - 0.08, 0, 0.14, 21.4);
   beam(10.6, roofY - 0.08, 0, 0.14, 21.4);
 
-  // 東／南牆：貼齊走動極限，橫木條頂到屋頂樑
+  // 東／南牆：貼齊走動極限；整面可第三人稱半透明（不限高台／哪一面）
   {
     const thick = 0.14;
     const wallH = roofY - 0.04;
     const span = 21.4;
     const plankH = lowDetail ? 0.36 : 0.28;
-    const plankA = M(0x6a5540, { roughness: 0.92 });
-    const plankB = M(0x534330, { roughness: 0.94 });
+    const wallPlankA = M(0x6a5540, { roughness: 0.92, transparent: true, opacity: 1, side: THREE.DoubleSide });
+    const wallPlankB = M(0x534330, { roughness: 0.94, transparent: true, opacity: 1, side: THREE.DoubleSide });
+    const wallStud = M(0x5a4a3a, { roughness: 0.88, transparent: true, opacity: 1, side: THREE.DoubleSide });
+    tpOccludeMats.push(wallPlankA, wallPlankB, wallStud);
     const n = Math.ceil(wallH / plankH);
     /** a0..a1＝沿牆方向的實牆段（東牆在多那芝咖啡處開口、南牆東端拆掉） */
     const face = (axis: 'x' | 'z', outer: number, a0: number, a1: number, studs: number[]) => {
       // outer＝內側面在 WALK_BOUND；板心再往外半厚
       const c = outer + thick * 0.5;
       const len = a1 - a0, mid = (a0 + a1) * 0.5;
+      const tag = (m: THREE.Mesh) => { m.userData.tpOcclude = true; return m; };
       for (let i = 0; i < n; i++) {
         const y0 = i * plankH;
         const h = Math.min(plankH * 0.9, wallH - y0);
         if (h < 0.06) break;
         const y = y0 + h * 0.5;
-        if (axis === 'x') add(rboxEnv(thick, h, len), i % 2 ? plankA : plankB, [c, y, mid], g, false);
-        else add(rboxEnv(len, h, thick), i % 2 ? plankA : plankB, [mid, y, c], g, false);
+        if (axis === 'x') tag(add(rboxEnv(thick, h, len), i % 2 ? wallPlankA : wallPlankB, [c, y, mid], tpOcclude, false));
+        else tag(add(rboxEnv(len, h, thick), i % 2 ? wallPlankA : wallPlankB, [mid, y, c], tpOcclude, false));
       }
       for (const s of studs) {
-        if (axis === 'x') add(rboxEnv(thick + 0.04, wallH, 0.16), wood, [c + 0.02, wallH * 0.5, s], g, true);
-        else add(rboxEnv(0.16, wallH, thick + 0.04), wood, [s, wallH * 0.5, c + 0.02], g, true);
+        if (axis === 'x') tag(add(rboxEnv(thick + 0.04, wallH, 0.16), wallStud, [c + 0.02, wallH * 0.5, s], tpOcclude, true));
+        else tag(add(rboxEnv(0.16, wallH, thick + 0.04), wallStud, [s, wallH * 0.5, c + 0.02], tpOcclude, true));
       }
-      if (axis === 'x') add(rboxEnv(thick + 0.06, 0.1, len + 0.1), wood, [c, wallH + 0.02, mid], g, false);
-      else add(rboxEnv(len + 0.1, 0.1, thick + 0.06), wood, [mid, wallH + 0.02, c], g, false);
+      if (axis === 'x') tag(add(rboxEnv(thick + 0.06, 0.1, len + 0.1), wallStud, [c, wallH + 0.02, mid], tpOcclude, false));
+      else tag(add(rboxEnv(len + 0.1, 0.1, thick + 0.06), wallStud, [mid, wallH + 0.02, c], tpOcclude, false));
     };
     const half = span / 2;
-    face('x', WALK_BOUND, -half, CAFE_OPENING.z0, [-10.6, -5.2, CAFE_OPENING.z0 - 0.08].filter(z => z <= CAFE_OPENING.z0 - 0.08)); // 東（開口通競選總部＋樸子腳＋多那芝）
-    face('z', WALK_BOUND, -half, CAFE_SOUTH_WALL_END, [-10.6, -5.2, 0, 5.2, CAFE_SOUTH_WALL_END - 0.08]); // 南（東端拆掉）
+    face('x', WALK_BOUND, -half, CAFE_OPENING.z0, [-10.6, -5.2, CAFE_OPENING.z0 - 0.08].filter(z => z <= CAFE_OPENING.z0 - 0.08)); // 東
+    face('z', WALK_BOUND, -half, CAFE_SOUTH_WALL_END, [-10.6, -5.2, 0, 5.2, CAFE_SOUTH_WALL_END - 0.08]); // 南
   }
 
-  // 鏽鐵皮厝頂（長條斜舖，蓋住整場）
+  // 鏽鐵皮厝頂（長條斜舖；可半透明，第三人稱高視角才不會整片擋死）
   const n = lowDetail ? 22 : 34;
   const span = 21.6;
   const stripW = span / n;
@@ -477,11 +499,12 @@ export function makePlazaBigShed(
     const x = -span / 2 + (i + 0.5) * stripW;
     const panel = add(
       rboxEnv(stripW * 1.02, 0.035, span),
-      M(rust[i % 3], { side: THREE.FrontSide, metalness: 0.35, roughness: 0.88 }),
+      roofMats[i % roofMats.length],
       [x, roofY + (i % 2) * 0.025, 0],
-      g,
+      tpOcclude,
       false,
     );
+    panel.userData.tpOcclude = true;
     panel.rotation.z = 0.05;
   }
 
@@ -544,6 +567,8 @@ export function makePlazaBigShed(
   return {
     group: g,
     posts,
+    tpOcclude,
+    tpOccludeMats,
     tick: (dt: number) => { for (const t of fanTicks) t(dt); },
   };
 }

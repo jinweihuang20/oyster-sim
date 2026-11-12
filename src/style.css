@@ -233,7 +233,12 @@ button{touch-action:manipulation}
 #joyK{position:absolute;left:35px;top:35px;width:60px;height:60px;border-radius:50%;background:rgba(255,230,180,.7)}
 /* 高於 #plazaTags(8800) 人名，避免座位指示被蓋住 */
 #seatCard{position:fixed;left:50%;top:44%;transform:translateX(-50%);z-index:8900;background:rgba(36,22,10,.92);border:2px solid #9fe0ff;border-radius:14px;padding:10px 14px;font-size:15px;line-height:1.5;text-align:center;display:none;pointer-events:auto;max-width:calc(100vw - 24px)}
-#seatCard.on{display:block}#sitBtn{margin-top:8px;min-height:48px;background:#3a8ad0;color:#fff;pointer-events:auto}
+#seatCard.on{display:block}
+#seatActions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px}
+#sitBtn,#sitAltBtn{margin:0;min-height:48px;padding:0 14px;border:0;border-radius:10px;color:#fff;pointer-events:auto;cursor:pointer}
+#sitBtn{background:#3a8ad0}
+#sitAltBtn{background:#8a5a28}
+#sitAltBtn[hidden]{display:none!important}
 /* ◀▶ 轉蚵仔：囥畫面中央兩邊，永遠袂佮右下角動作按鈕相疊 */
 .mb{bottom:auto!important;top:42%}
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){.mb{top:30%}}
@@ -1018,6 +1023,16 @@ body.plazaMode #top #dexBtn,body.plazaRoam #top #dexBtn{display:none!important}
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
 /* 吸菸區坐下：仍屬 plazaRoam（藏剝蚵鈕），但要顯示站起／回主選單（與一般座位同款） */
 body.plazaRoam.plazaSmokeSit #standBtn.on,body.plazaRoam.plazaSmokeSit #quitBtn.on,body.plazaRoam.plazaSmokeSit #puffBtn.on{visibility:visible!important;pointer-events:auto!important;display:block!important}
+/* 蚵仔機關槍：站起／回主選單／發射／買彈夾 */
+#mgFireBtn,#mgReloadBtn{display:none}
+body.plazaRoam.plazaMgSit #standBtn.on,body.plazaRoam.plazaMgSit #quitBtn.on,body.plazaRoam.plazaMgSit #mgFireBtn,body.plazaRoam.plazaMgSit #mgReloadBtn{visibility:visible!important;pointer-events:auto!important;display:block!important}
+body.plazaRoam.plazaMgSit #throwBtn,body.plazaRoam.plazaMgSit #stealBtn,body.plazaRoam.plazaMgSit #umbBtn,body.plazaRoam.plazaMgSit #puffBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
+#mgHud{display:none;position:fixed;top:calc(var(--sa-top) + 72px);left:50%;transform:translateX(-50%);z-index:9200;pointer-events:none;gap:10px;align-items:center;font-weight:800;font-size:15px;color:#fff4dc;text-shadow:0 1px 4px #000;background:rgba(20,12,8,.55);border:1px solid rgba(255,200,120,.35);padding:8px 14px;border-radius:12px}
+body.plazaRoam.plazaMgSit #mgHud{display:flex}
+#mgHud .mgTime{min-width:3.2em;text-align:center;color:#ffd76a}
+#mgHud .mgAmmo{min-width:4.5em;text-align:center;color:#9fe0ff}
+#mgHud.low .mgTime{color:#ff8a7a}
+#mgHud.empty .mgAmmo{color:#ffb08a}
 /* 電腦廣場：視角用 V，隱藏右下視角鈕 */
 @media (pointer:fine){
   body.plazaMode #camBtn,body.plazaRoam #camBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
@@ -1705,7 +1720,11 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
 #medList.show{z-index:80!important}
 
 #seatCard.mini{top:auto;bottom:calc(var(--sa-bottom) + 210px);max-width:none;display:none;flex-direction:column;align-items:center;gap:6px;padding:8px 10px 10px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(20,24,30,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:12px;color:rgba(255,255,255,.8);white-space:nowrap}
-#seatCard.mini.on{display:flex}#seatCard.mini #sitBtn{margin:0;min-height:40px;padding:0 16px;border-radius:999px;background:#2a5a86;color:#fff;border:0;box-shadow:none}
+#seatCard.mini.on{display:flex}
+#seatCard.mini #seatActions{margin-top:0;gap:6px}
+#seatCard.mini #sitBtn,#seatCard.mini #sitAltBtn{min-height:40px;padding:0 14px;border-radius:999px;border:0;box-shadow:none}
+#seatCard.mini #sitBtn{background:#2a5a86;color:#fff}
+#seatCard.mini #sitAltBtn{background:#6a4220;color:#fff}
 
 /* 手機：偷／丟殼改掛右手臂高度（只改位置，樣式沿用原 #btns 規則） */
 @media (pointer:coarse){

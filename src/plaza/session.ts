@@ -3,7 +3,8 @@ import { PlazaClient } from './hubClient';
 import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds, plazaClampWalk, plazaCafeObstacles,
   seatPose, seatKey, nearestFreeSeat, nearestFreePlaceSeat, pileObstacles, pileCenter, randomWalkSpawn, resolveWalkSpawn,
-  isSmokePile, isLeisurePile, isRestPile, plazaSmokeObstacles, isPlazaAber, SMOKE_PILE_ID, SMOKE_ABER_SLOT,
+  isSmokePile, isLeisurePile, isRestPile, isMgPile, plazaSmokeObstacles, isPlazaAber, SMOKE_PILE_ID, SMOKE_ABER_SLOT,
+  MG_PILE_ID, MG_SIT_PRICE, MG_SIT_AMMO, MG_MAG_PRICE, MG_AMMO_MAX, MG_SIT_MS,
   type PlazaSeatRef, type PlazaSpawnMemory,
   SHED_DOORS, shedDoorAt, plazaShedObstacles,
 } from './layout';
@@ -45,13 +46,23 @@ export type PlazaDeps = {
   enterSmokeSit: (slot: number) => void;
   /** 樸子腳門口等純坐座位：不抽菸、不開工班 */
   enterRestSit: (slot: number) => void;
+  /** 蚵仔機關槍座：上機；fromMeat＝用碗內蚵肉當子彈（發射才扣碗） */
+  enterMgSit: (slot: number, expireAt: number, ammo: number, fromMeat?: boolean) => void;
+  /** 讀取／扣除金錢（機關槍付費） */
+  getMoney: () => number;
+  spendMoney: (n: number, reason: string) => boolean;
+  /** 扣除／退回碗內庫存當子彈（不重算本趟入碗結算數；負數＝退庫存） */
+  spendBowlMeat: (n: number, reason: string) => boolean;
   /** 站起恢復走動（不結束工班） */
   goWalk: () => void;
   applySeatPose: (pos: THREE.Vector3, yaw: number) => void;
   getPhase: () => string;
   /** 同步用相位（可含 throwAim 等表現態；預設同 getPhase） */
   getSyncPhase?: () => string;
+  /** 本趟入碗結算數（換座位不重算） */
   getCount: () => number;
+  /** 碗內尚可動用（機關槍子彈／同步給別人偷） */
+  getBowlStock: () => number;
   getWalkXZ: () => { x: number; z: number };
   getYaw: () => number;
   getMoving: () => boolean;
@@ -59,6 +70,8 @@ export type PlazaDeps = {
   getUmb: () => boolean;
   /** 坐下時左右轉頭（相對座位）；第一人稱走動也可送，第三人稱走動為 0 */
   getLookYaw?: () => number;
+  /** 機關槍槍管用：含環視 flYaw，需與鏡頭一致 */
+  getAimYaw?: () => number;
   /** 視角俯仰；第三人稱走動鎖 0，其餘照本機 */
   getPitch?: () => number;
   /** 是否第三人稱（走動時用來決定要不要鎖頭／俯仰同步） */
@@ -69,6 +82,12 @@ export type PlazaDeps = {
   getCosmetics?: () => string;
   /** 本機是否已買廣場旗幟 */
   ownsFlag?: () => boolean;
+  /** 機關槍：遠端開火／自己被打／廣場提示 */
+  onMgFire?: (e: import('./hubClient').PlazaMgFireEvent) => void;
+  onMgHit?: (e: import('./hubClient').PlazaMgHitEvent) => void;
+  onPlazaAlert?: (e: { kind?: string; text: string; nick?: string; connId?: string; expireAt?: number; ammo?: number }) => void;
+  /** 機關槍時間到被伺服器踢下 */
+  onMgExpired?: () => void;
   /** 別人丟殼飛過（含打向自己，先播飛行動畫） */
   onShellThrow?: (e: PlazaShellEvent) => void;
   /** 殼飛到自己：結算擋／中 */
@@ -138,6 +157,8 @@ let flagList: PlazaFlagState[] = [];
 let myFlagText: string | null = null;
 let plantBusy = false;
 let sittingBusy = false;
+/** 本機機關槍是否用碗內蚵肉當子彈（重連還原用；買彈夾後清掉） */
+let mgFromMeat = false;
 /** 斷線後手動重連 timer */
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let netDown = false;
@@ -237,6 +258,12 @@ function seatLabel(pileId: number, slot: number) {
   if (pileId === 100) return `吸菸區・座 ${slot + 1}`;
   if (pileId === 101) return `多那芝吸菸區・座 ${slot + 1}`;
   if (pileId === 102) return `樸子腳・座 ${slot + 1}`;
+  if (isMgPile(pileId)) {
+    const meats = deps?.getBowlStock() ?? 0;
+    return meats > 0
+      ? `蚵仔機關槍・座 ${slot + 1}　碗內 ${meats} 顆可當子彈`
+      : `蚵仔機關槍・座 ${slot + 1}　花 $${MG_SIT_PRICE}／${MG_SIT_AMMO} 發`;
+  }
   if (slot >= SLOTS_PER_PILE) return `第 ${pileId + 1} 堆・阿婆座 ${slot - SLOTS_PER_PILE + 1}${pileDiffSeatSuffix(pileId)}`;
   return `第 ${pileId + 1} 堆・座 ${slot + 1}${pileDiffSeatSuffix(pileId)}`;
 }
@@ -252,10 +279,16 @@ export type PlazaNearPrompt = {
   btn: string;
   /** 按鈕線條圖示 class（預設椅子） */
   icon?: string;
+  /** 第二顆按鈕（機關槍：碗內蚵肉當子彈） */
+  altBtn?: string;
+  altIcon?: string;
   shedLoc?: string;
   pileId?: number;
   slot?: number;
 };
+
+/** 機關槍上機：money＝付錢滿彈；meat＝碗內蚵肉當子彈；auto＝有肉優先用肉 */
+export type PlazaMgPay = 'money' | 'meat' | 'auto';
 
 export function plazaNearPrompt(): PlazaNearPrompt | null {
   if (!active || seated) return null;
@@ -283,7 +316,19 @@ export function plazaNearPrompt(): PlazaNearPrompt | null {
     const info = w ? (w.carrierConnId && w.carrierConnId !== plazaConnId() ? '已有人在送' : (w.line || `${carry.nick}　站旁邊就能抱起來`)) : `${carry.nick}　站旁邊就能抱起來`;
     return { kind: 'carry', info, btn: carry.nick === '阿伯' ? '抱起阿伯' : '抱起阿婆' };
   }
-  if (near) return { kind: 'sit', info: seatLabel(near.pileId, near.slot), btn: '坐這裡', pileId: near.pileId, slot: near.slot };
+  if (near) {
+    const mg = isMgPile(near.pileId);
+    return {
+      kind: 'sit',
+      info: seatLabel(near.pileId, near.slot),
+      btn: mg ? `花錢 $${MG_SIT_PRICE}` : '坐這裡',
+      icon: mg ? 'ic-coin' : undefined,
+      altBtn: mg ? '用我的蚵仔肉' : undefined,
+      altIcon: mg ? 'ic-oyster' : undefined,
+      pileId: near.pileId,
+      slot: near.slot,
+    };
+  }
   return null;
 }
 
@@ -372,6 +417,52 @@ export async function plazaShellHit(at: { x: number; y: number; z: number }) {
   return client.shellHit(at.x, at.y, at.z);
 }
 
+/** 機關槍開火（伺服器扣彈並廣播彈道） */
+export async function plazaMgFire(
+  from: { x: number; y: number; z: number },
+  dir: { x: number; y: number; z: number },
+) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn' };
+  return client.mgFire(from.x, from.y, from.z, dir.x, dir.y, dir.z);
+}
+
+/** 機關槍命中走動玩家 */
+export async function plazaMgHit(targetConnId: string, at: { x: number; y: number; z: number }) {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn' };
+  return client.mgHit(targetConnId, at.x, at.y, at.z);
+}
+
+/** 機關槍買彈夾（客戶端先扣款再呼叫） */
+export async function plazaMgReload() {
+  if (!client?.connected) return { ok: false as const, err: 'no_conn', ammo: 0 };
+  const r = await client.mgReload();
+  if (r.ok) mgFromMeat = false; // 之後改付費彈，不扣碗
+  return r;
+}
+
+/** 本機瞄準機關槍管 */
+export function plazaAimMg(slot: number, lookYaw: number, pitch: number) {
+  view?.aimMg(slot, lookYaw, pitch);
+}
+
+/** 機關槍特效系統（子彈／火花／彈殼） */
+export function plazaMgFx() {
+  return view?.mgFx ?? null;
+}
+
+export function plazaMgMount(slot: number) {
+  return view?.mgMounts[slot] ?? null;
+}
+
+export function plazaMgHitTargets() {
+  return view?.mgHitTargets() ?? [];
+}
+
+/** 是否正坐在機關槍座 */
+export function plazaOnMg() {
+  return !!(seated && myPile != null && isMgPile(myPile));
+}
+
 /** 遠端丟殼甩臂 */
 export function plazaPlayThrowFx(connId: string) {
   view?.playThrowFx(connId);
@@ -405,7 +496,7 @@ export async function plazaGrillFlip(oysterId: string) {
   return client.grillFlip(oysterId);
 }
 export async function plazaGrillTake(oysterId: string) {
-  if (!client?.connected) return { ok: true as const, err: undefined, oyster: undefined, count: (deps?.getCount() ?? 0) + 1 }; // 離線單機烤
+  if (!client?.connected) return { ok: true as const, err: undefined, oyster: undefined, count: (deps?.getBowlStock() ?? 0) + 1 }; // 離線單機烤
   return client.grillTake(oysterId);
 }
 /** 點擊／最近可搶的共烤蚵（同堆 open／flipped） */
@@ -455,6 +546,12 @@ const ERR_ZH: Record<string, string> = {
   off_grill: '要點在烤網上',
   not_grill: '這裡不是烤蚵位',
   not_ready: '還沒烤開',
+  no_mg: '不在機關槍座位上',
+  no_ammo: '子彈打光了，先買彈夾',
+  mg_time: '機關槍時間到了',
+  target_seated: '對方坐著打不到',
+  bad_dir: '瞄準方向不對',
+  money: '錢不夠',
   already_flipped: '上殼掀掉了',
   need_flip: '先掀上殼再拿',
   gone: '被別人搶走了',
@@ -490,7 +587,7 @@ function zhErr(e?: string) { return plazaZhErr(e); }
 export function openPlaza(D: PlazaDeps) {
   if (active) return;
   active = true; seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
   D.audio();
   client = new PlazaClient();
   view = createPlazaWorldView(D.scene, D.bubbles, {
@@ -657,7 +754,10 @@ async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?
     if (r.ok) {
       if ((r as any).token) client.token = (r as any).token;
       if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
-      if (shiftStarted && !isLeisurePile(myPile)) deps.refillBasin?.();
+      if (isMgPile(myPile) && mySlot != null) {
+        const info = (r as any).mg as { expireAt?: number; ammo?: number } | undefined;
+        deps.enterMgSit(mySlot, info?.expireAt ?? (Date.now() + MG_SIT_MS), info?.ammo ?? MG_SIT_AMMO, mgFromMeat);
+      } else if (shiftStarted && !isLeisurePile(myPile)) deps.refillBasin?.();
       flashNetOk('已重連，位子還在');
       deps.toast('已重連，位子還在', '#9be37a');
       setHud(plazaHudPeople(snap));
@@ -685,6 +785,20 @@ function wireClient(D: PlazaDeps) {
       view?.syncRoster(snap, D.id);
       checkCarryLost();
       syncPlazaPeopleHud();
+      // 機關槍 90 秒到期：伺服器踢下後 roster 顯示自己沒坐著
+      if (seated && myPile != null && isMgPile(myPile)) {
+        const me = snap.players.find(p => (!!p.pid && p.pid === D.id) || (!!client?.connectionId && p.connId === client.connectionId));
+        if (me && !me.seated) {
+          seated = false; myPile = null; mySlot = null;
+          view?.highlight(null, null);
+          syncSeatChrome();
+          D.onMgExpired?.();
+          D.goWalk();
+          D.toast('機關槍時間到了', '#ffb08a');
+          setHud(`${plazaHudPeople(snap)}　靠近空位坐下`);
+          return;
+        }
+      }
       if (!netDown && !seated) setHud(`${plazaHudPeople(snap)}　靠近空位坐下`);
     },
     onJoined: (p) => {
@@ -726,6 +840,9 @@ function wireClient(D: PlazaDeps) {
     onShellBlocked: (e) => { try { D.onShellBlocked?.(e); } catch (err) { console.error('onShellBlocked', err); } },
     onNpcMoon: (e) => { try { view?.moonLaunch(e.connId, 700, e.fromX, e.fromZ); D.onNpcMoon?.(e); } catch (err) { console.error('onNpcMoon', err); } },
     onShellHit: (e) => { try { D.onShellHit?.(e); } catch (err) { console.error('onShellHit', err); } },
+    onMgFire: (e) => { try { D.onMgFire?.(e); } catch (err) { console.error('onMgFire', err); } },
+    onMgHit: (e) => { try { D.onMgHit?.(e); } catch (err) { console.error('onMgHit', err); } },
+    onPlazaAlert: (e) => { try { D.onPlazaAlert?.(e); } catch (err) { console.error('onPlazaAlert', err); } },
     onStealResult: (e) => { try { D.onStealResult?.(e); } catch (err) { console.error('onStealResult', err); } },
     onGrillUpsert: (o) => {
       const prev = view?.grill.get(o.id)?.state;
@@ -1208,7 +1325,7 @@ async function plantMyFlag() {
       const lockLook = deps.getTpv?.() ?? false;
       const now = deps.getWalkXZ();
       const yaw2 = deps.getYaw();
-      await client.sync(now.x, now.z, yaw2, 'walk', deps.getCount(), false, deps.getUmb(),
+      await client.sync(now.x, now.z, yaw2, 'walk', deps.getBowlStock(), false, deps.getUmb(),
         lockLook ? 0 : (deps.getLookYaw?.() ?? 0), lockLook ? 0 : (deps.getPitch?.() ?? 0));
       const p2 = flagPlantPos(now.x, now.z, yaw2);
       r = await client.plantFlag(p2.x, p2.z, yaw2, text);
@@ -1423,8 +1540,8 @@ async function plazaDoPlace(seat: PlazaSeatRef): Promise<boolean> {
   } finally { sittingBusy = false; carryPlacing = false; checkCarryLost(); }
 }
 
-/** 嘗試坐附近空位（E／坐這裡）；靠近阿婆則抱起，抱著時改放下 */
-export async function plazaTrySit(): Promise<boolean> {
+/** 嘗試坐附近空位（E／按鈕）；機關槍可指定付錢或用蚵肉 */
+export async function plazaTrySit(mgPay: PlazaMgPay = 'auto'): Promise<boolean> {
   if (!deps || !active || seated || sittingBusy) return false;
   if (nearShed) {
     if (carryNpcOk && myCarriedNpc()) { deps.toast('抱著人不能進工寮，先放下', '#ffb08a'); return false; }
@@ -1443,15 +1560,45 @@ export async function plazaTrySit(): Promise<boolean> {
   const seat = near ?? nearestFreeSeat(deps.getWalkXZ().x, deps.getWalkXZ().z, takenSet(true), SIT_DIST);
   if (!seat) { deps.toast('靠近空的藍色板凳再坐', '#ffb08a'); return false; }
   sittingBusy = true;
+  const mg = isMgPile(seat.pileId);
+  let paidMgMoney = false;
+  /** 用碗內蚵肉當子彈：彈藥＝目前庫存；發射時才從碗扣 */
+  let meatAmmo = 0;
   try {
+    if (mg) {
+      const meats = deps.getBowlStock();
+      const wantMeat = mgPay === 'meat' || (mgPay === 'auto' && meats >= 1);
+      if (wantMeat) {
+        if (meats < 1) {
+          deps.toast('碗裡沒有蚵仔肉，改花錢解鎖或先去剝一些', '#ffb08a');
+          return false;
+        }
+        meatAmmo = meats;
+      } else {
+        if (deps.getMoney() < MG_SIT_PRICE) {
+          deps.toast(`花錢上機要 $${MG_SIT_PRICE}（${MG_SIT_AMMO} 發），你錢不夠`, '#ffb08a');
+          return false;
+        }
+        if (!deps.spendMoney(MG_SIT_PRICE, 'mg-sit')) {
+          deps.toast(`花錢上機要 $${MG_SIT_PRICE}（${MG_SIT_AMMO} 發），你錢不夠`, '#ffb08a');
+          return false;
+        }
+        paidMgMoney = true;
+      }
+    }
     const smoke = isSmokePile(seat.pileId);
     const first = !shiftStarted;
+    // 蚵肉＝顆數；付錢＝MG_SIT_AMMO（伺服器 mgAmmo≤0 也會給付費發數）
+    const claimAmmo = meatAmmo > 0 ? meatAmmo : MG_SIT_AMMO;
+    const offlineAmmo = claimAmmo;
     // 離線：先在本機坐下；重連後 restoreAfterRejoin 會向伺服器補登記座位
-    const r = !client?.connected ? { ok: true as const, err: undefined, snap: undefined }
+    const r = !client?.connected
+      ? { ok: true as const, err: undefined, snap: undefined, mg: mg ? { expireAt: Date.now() + MG_SIT_MS, ammo: offlineAmmo } : undefined }
       : first || myPile == null
-      ? await client.claimSeat(seat.pileId, seat.slot)
-      : await client.changeSeat(seat.pileId, seat.slot);
+      ? await client.claimSeat(seat.pileId, seat.slot, meatAmmo > 0 ? meatAmmo : 0)
+      : await client.changeSeat(seat.pileId, seat.slot, meatAmmo > 0 ? meatAmmo : 0);
     if (!r.ok) {
+      if (paidMgMoney) deps.spendMoney(-MG_SIT_PRICE, 'mg-sit-refund');
       deps.toast(zhErr(r.err), '#ff8a7a');
       if (r.snap) { snap = normalizeSnap(r.snap); view?.syncRoster(snap, deps.id); }
       return false;
@@ -1464,7 +1611,15 @@ export async function plazaTrySit(): Promise<boolean> {
     view?.highlight(seat.pileId, seat.slot);
     seated = true; near = null;
     syncSeatChrome();
-    if (smoke) deps.enterSmokeSit(seat.slot);
+    if (mg) {
+      const info = (r as any).mg as { expireAt?: number; ammo?: number } | undefined;
+      const ammo = info?.ammo ?? offlineAmmo;
+      const fromMeat = meatAmmo > 0;
+      mgFromMeat = fromMeat;
+      if (fromMeat) deps.toast(`碗裡 ${ammo} 顆蚵肉當子彈・發射才扣碗`, '#ffd76a');
+      else deps.toast(`付 $${MG_SIT_PRICE} 上機・${ammo} 發（不扣碗內蚵肉）`, '#ffd76a');
+      deps.enterMgSit(seat.slot, info?.expireAt ?? (Date.now() + MG_SIT_MS), ammo, fromMeat);
+    } else if (smoke) deps.enterSmokeSit(seat.slot);
     else if (isRestPile(seat.pileId)) deps.enterRestSit(seat.slot);
     else if (first) { shiftStarted = true; deps.beginShift(seat.pileId, seat.slot); }
     else deps.resumeSit(seat.pileId, seat.slot);
@@ -1477,6 +1632,7 @@ export async function plazaStandWalk() {
   if (!deps || !active || !seated) return;
   // 先 goWalk（仍留著 myPile／mySlot 算站起點），再清座位並通知伺服器
   seated = false;
+  mgFromMeat = false;
   deps.goWalk();
   myPile = null; mySlot = null;
   view?.highlight(null, null);
@@ -1488,7 +1644,7 @@ export async function plazaStandWalk() {
     const p = deps.getWalkXZ();
     const lockLook = deps.getTpv?.() ?? false;
     void client.sync(
-      p.x, p.z, deps.getYaw(), 'walk', deps.getCount(), false, deps.getUmb(),
+      p.x, p.z, deps.getYaw(), 'walk', deps.getBowlStock(), false, deps.getUmb(),
       lockLook ? 0 : (deps.getLookYaw?.() ?? 0),
       lockLook ? 0 : (deps.getPitch?.() ?? 0),
     );
@@ -1645,12 +1801,27 @@ export function tickPlaza(dt: number) {
   const p = deps.getWalkXZ();
   const smokeSit = seated && myPile != null && isSmokePile(myPile);
   const restSit = seated && myPile != null && isRestPile(myPile);
+  const mgSit = seated && myPile != null && isMgPile(myPile);
   view?.setSelfPose(p.x, p.z, deps.getYaw(), seated, smokeSit, client?.connectionId ?? '');
   {
     const cushOn = seated && parseCosmetics(deps.getCosmetics?.() || '').cushion;
     view?.setSelfCushion(seated && cushOn, myPile ?? -1, mySlot ?? -1);
   }
+  // 本機機關槍：槍管跟鏡頭（含環視），避免大角度時槍管／準心分家
+  if (mgSit && mySlot != null) {
+    const lockLook = !!(deps.getTpv?.() ?? false);
+    const lookYaw = lockLook ? 0 : (deps.getAimYaw?.() ?? deps.getLookYaw?.() ?? 0);
+    const pitch = lockLook ? 0 : (deps.getPitch?.() ?? 0);
+    view?.aimMg(mySlot, lookYaw, pitch);
+  }
   tickPlazaTags(view, deps.camera(), dt);
+  // 子彈飛行／命中（本機子彈才回報 MgHit；環境彈痕所有人都算）
+  if (view?.mgFx) {
+    const hit = view.mgFx.tick(dt, view.mgHitTargets(), plazaPileObs());
+    if (hit && client?.connected) {
+      void client.mgHit(hit.target.connId, hit.at.x, hit.at.y, hit.at.z);
+    }
+  }
   if (!seated) plazaUpdateNear(p.x, p.z);
   else nearShed = null;
   if (view) for (const d of SHED_DOORS) view.setShedDoorState(d.loc, { locked: !(deps.shedUnlocked?.(d.loc) ?? true), active: nearShed === d.loc });
@@ -1664,14 +1835,14 @@ export function tickPlaza(dt: number) {
     const yaw = deps.getYaw();
     const sp = deps.getSyncPhase?.();
     const phase = seated
-      ? (smokeSit ? 'smoke' : restSit ? 'rest' : (sp ?? deps.getPhase()))
+      ? (mgSit ? 'mg' : smokeSit ? 'smoke' : restSit ? 'rest' : (sp ?? deps.getPhase()))
       : (sp === 'jump' || sp === 'crouch' || sp === 'lie' ? sp : 'walk');
     const moving = !seated && deps.getMoving();
     // 第三人稱（走動／坐下／躺著繞鏡頭）：鎖 look，身體朝向用 yaw；第一人稱坐下仍同步轉頭
     const lockLook = !!(deps.getTpv?.() ?? false);
     const lookYaw = lockLook ? 0 : (deps.getLookYaw?.() ?? 0);
     const pitch = lockLook ? 0 : (deps.getPitch?.() ?? 0);
-    void client.sync(p.x, p.z, yaw, phase, deps.getCount(), moving, deps.getUmb(), lookYaw, pitch);
+    void client.sync(p.x, p.z, yaw, phase, deps.getBowlStock(), moving, deps.getUmb(), lookYaw, pitch);
   }
 }
 

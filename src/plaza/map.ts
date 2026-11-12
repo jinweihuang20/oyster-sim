@@ -24,7 +24,6 @@ const MAP_MAX_Z = WALK_BOUND + 0.6;
 
 const STALL_LABEL: Record<string, string> = {
   bbq: '立烤',
-  bbqSit: '坐烤',
   drink: '飲料',
   'drink-s': '飲料',
   snack: '小吃',

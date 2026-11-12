@@ -21,6 +21,12 @@ export type PlazaHubHandlers = {
   onShellBlocked?: (e: PlazaShellEvent) => void;
   /** 有人被殼砸中：全場噴血 */
   onShellHit?: (e: PlazaShellHitEvent) => void;
+  /** 機關槍開火（其他人） */
+  onMgFire?: (e: PlazaMgFireEvent) => void;
+  /** 自己被機關槍打中 */
+  onMgHit?: (e: PlazaMgHitEvent) => void;
+  /** 廣場警示（例如有人上機關槍） */
+  onPlazaAlert?: (e: { kind?: string; text: string; nick?: string; connId?: string; expireAt?: number; ammo?: number }) => void;
   onNpcMoon?: (e: any) => void;
   onStealResult?: (e: PlazaStealEvent) => void;
   /** 共烤蚵狀態更新（放上／烤開／掀殼） */
@@ -80,6 +86,45 @@ function normShellHit(e: any): PlazaShellHitEvent {
   return {
     connId: String(e?.connId ?? e?.ConnId ?? ''),
     nick: String(e?.nick ?? e?.Nick ?? '?'),
+    x: fin(e?.x ?? e?.X),
+    y: fin(e?.y ?? e?.Y),
+    z: fin(e?.z ?? e?.Z),
+  };
+}
+
+export type PlazaMgFireEvent = {
+  connId: string; nick: string; slot: number;
+  fromX: number; fromY: number; fromZ: number;
+  dirX: number; dirY: number; dirZ: number;
+  ammo: number; id: number;
+};
+export type PlazaMgHitEvent = {
+  fromConnId: string; fromNick: string;
+  toConnId: string; toNick: string;
+  x: number; y: number; z: number;
+};
+
+function normMgFire(e: any): PlazaMgFireEvent {
+  return {
+    connId: String(e?.connId ?? e?.ConnId ?? ''),
+    nick: String(e?.nick ?? e?.Nick ?? '?'),
+    slot: Math.floor(fin(e?.slot ?? e?.Slot)),
+    fromX: fin(e?.fromX ?? e?.FromX),
+    fromY: fin(e?.fromY ?? e?.FromY),
+    fromZ: fin(e?.fromZ ?? e?.FromZ),
+    dirX: fin(e?.dirX ?? e?.DirX),
+    dirY: fin(e?.dirY ?? e?.DirY),
+    dirZ: fin(e?.dirZ ?? e?.DirZ, -1),
+    ammo: Math.floor(fin(e?.ammo ?? e?.Ammo)),
+    id: Math.floor(fin(e?.id ?? e?.Id)),
+  };
+}
+function normMgHit(e: any): PlazaMgHitEvent {
+  return {
+    fromConnId: String(e?.fromConnId ?? e?.FromConnId ?? ''),
+    fromNick: String(e?.fromNick ?? e?.FromNick ?? '?'),
+    toConnId: String(e?.toConnId ?? e?.ToConnId ?? ''),
+    toNick: String(e?.toNick ?? e?.ToNick ?? '?'),
     x: fin(e?.x ?? e?.X),
     y: fin(e?.y ?? e?.Y),
     z: fin(e?.z ?? e?.Z),
@@ -211,6 +256,24 @@ export class PlazaClient {
       try { this.handlers.onShellBlocked?.(normShell(e)); } catch (err) { console.error('ShellBlocked', err); }
     });
     conn.on('NpcMoon', (e: any) => { try { this.handlers.onNpcMoon?.(e); } catch (err) { console.error('NpcMoon', err); } });
+    conn.on('MgFire', (e: any) => {
+      try { this.handlers.onMgFire?.(normMgFire(e)); } catch (err) { console.error('MgFire', err); }
+    });
+    conn.on('MgHit', (e: any) => {
+      try { this.handlers.onMgHit?.(normMgHit(e)); } catch (err) { console.error('MgHit', err); }
+    });
+    conn.on('PlazaAlert', (e: any) => {
+      try {
+        this.handlers.onPlazaAlert?.({
+          kind: String(e?.kind ?? e?.Kind ?? ''),
+          text: String(e?.text ?? e?.Text ?? ''),
+          nick: String(e?.nick ?? e?.Nick ?? ''),
+          connId: String(e?.connId ?? e?.ConnId ?? ''),
+          expireAt: Number(e?.expireAt ?? e?.ExpireAt ?? 0) || undefined,
+          ammo: Number(e?.ammo ?? e?.Ammo ?? 0) || undefined,
+        });
+      } catch (err) { console.error('PlazaAlert', err); }
+    });
     conn.on('ShellHit', (e: any) => {
       try { this.handlers.onShellHit?.(normShellHit(e)); } catch (err) { console.error('ShellHit', err); }
     });
@@ -313,18 +376,19 @@ export class PlazaClient {
     return r;
   }
 
-  async claimSeat(pileId: number, slot: number) {
-    if (!this.conn) return { ok: false as const, err: 'no_conn', snap: undefined as PlazaSnapshot | undefined };
+  /** mgAmmo：機關槍；省略／0＝付錢滿彈；&gt;0＝碗內蚵肉當子彈顆數 */
+  async claimSeat(pileId: number, slot: number, mgAmmo = 0) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn', snap: undefined as PlazaSnapshot | undefined, mg: undefined as { expireAt: number; ammo: number } | undefined };
     try {
-      return await this.conn.invoke<{ ok: boolean; err?: string; token?: string; seat?: { pileId: number; slot: number }; snap?: PlazaSnapshot }>('ClaimSeat', pileId, slot);
-    } catch (e: any) { return { ok: false as const, err: e?.message || 'claim_fail', snap: undefined as PlazaSnapshot | undefined }; }
+      return await this.conn.invoke<{ ok: boolean; err?: string; token?: string; seat?: { pileId: number; slot: number }; snap?: PlazaSnapshot; mg?: { expireAt: number; ammo: number } }>('ClaimSeat', pileId, slot, mgAmmo);
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'claim_fail', snap: undefined as PlazaSnapshot | undefined, mg: undefined as { expireAt: number; ammo: number } | undefined }; }
   }
 
-  async changeSeat(pileId: number, slot: number) {
-    if (!this.conn) return { ok: false as const, err: 'no_conn', snap: undefined as PlazaSnapshot | undefined };
+  async changeSeat(pileId: number, slot: number, mgAmmo = 0) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn', snap: undefined as PlazaSnapshot | undefined, mg: undefined as { expireAt: number; ammo: number } | undefined };
     try {
-      return await this.conn.invoke<{ ok: boolean; err?: string; seat?: { pileId: number; slot: number }; snap?: PlazaSnapshot }>('ChangeSeat', pileId, slot);
-    } catch (e: any) { return { ok: false as const, err: e?.message || 'change_fail', snap: undefined as PlazaSnapshot | undefined }; }
+      return await this.conn.invoke<{ ok: boolean; err?: string; seat?: { pileId: number; slot: number }; snap?: PlazaSnapshot; mg?: { expireAt: number; ammo: number } }>('ChangeSeat', pileId, slot, mgAmmo);
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'change_fail', snap: undefined as PlazaSnapshot | undefined, mg: undefined as { expireAt: number; ammo: number } | undefined }; }
   }
 
   async leaveSeat() {
@@ -364,6 +428,29 @@ export class PlazaClient {
     try {
       return await this.conn.invoke<{ ok: boolean; err?: string }>('ThrowAt', targetConnId, fromX, fromY, fromZ, toX, toY, toZ);
     } catch (e: any) { return { ok: false as const, err: e?.message || 'throw_fail' }; }
+  }
+
+  async mgFire(fromX: number, fromY: number, fromZ: number, dirX: number, dirY: number, dirZ: number) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn' };
+    try {
+      return await this.conn.invoke<{ ok: boolean; err?: string; ammo?: number; id?: number }>(
+        'MgFire', fromX, fromY, fromZ, dirX, dirY, dirZ,
+      );
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'mg_fail' }; }
+  }
+
+  async mgHit(targetConnId: string, x: number, y: number, z: number) {
+    if (!this.conn) return { ok: false as const, err: 'no_conn' };
+    try {
+      return await this.conn.invoke<{ ok: boolean; err?: string }>('MgHit', targetConnId, x, y, z);
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'mg_fail' }; }
+  }
+
+  async mgReload() {
+    if (!this.conn) return { ok: false as const, err: 'no_conn' };
+    try {
+      return await this.conn.invoke<{ ok: boolean; err?: string; ammo?: number }>('MgReload');
+    } catch (e: any) { return { ok: false as const, err: e?.message || 'mg_fail' }; }
   }
 
   /** 純視覺飛殼（無受擊目標） */

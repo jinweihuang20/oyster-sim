@@ -57,15 +57,19 @@ import { makeMeshHelpers } from './dm/mesh';
 import {
   plazaNearShed, SHED_DOORS, shedReturnSpawn, shedName,
   openPlaza, closePlaza, isPlazaActive, tickPlaza, plazaSetSelfBody, plazaReportEarn, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
-  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy,
-  plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile,
+  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
+  plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile, isMgPile,
+  MG_MAG_PRICE, MG_AMMO_MAX,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
+  plazaMgFire, plazaMgReload, plazaMgFx, plazaMgMount, plazaAimMg, plazaOnMg,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
   plazaToggleMap, plazaCloseMap, plazaMapIsOpen, plazaLeaveAskIsOpen, plazaCloseLeaveAsk, seatPose, plazaPushOutfit, plazaPushCosmetics,
   plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryShowFlag, plazaTryRemoveFlag, plazaTryUpgradeFlag, plazaTrySelectFlag,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
+import { mgMuzzleWorld, mgEjectWorld, mgMountRight } from './plaza/mgGun';
+import type { PlazaMgFireEvent, PlazaMgHitEvent } from './plaza/hubClient';
 import { openShedDoorPanel, closeShedDoorPanel } from './plaza/shedDoorUi';
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
 import { GOLD_SMOKE_TINT, encodeCosmetics } from './plaza/cosmetics';
@@ -665,6 +669,8 @@ syncShiftUi();
 let phase: Phase = 'busy';
 let hp = 100, stabs = 0, flinch = 0, handPain = false;
 let timeLeft = SHIFT, count = 0, bowlBonus = 0, cracked = 0, opened = 0, missed = 0, abandoned = 0, perfects = 0, dayPearls: number[] = [], dayOdd: number[] = [];
+/** 碗內尚可動用的蚵肉（機關槍子彈／被偷）；count＝本趟已入碗結算數，換座位不重算 */
+let bowlStock = 0;
 let reflects = 0, wasteShells = 0, thrown = 0, lost = 0, blockStreak = 0;
 let steals = 0, caught = 0, penalty = 0, meatHits = 0, shellHits = 0, blocks = 0, hitsTaken = 0, crackedNow = false;
 let holding = false, hold = 0, diff = 1, slowmo = 0, shake = 0, pearlShow = 0;
@@ -810,7 +816,8 @@ function updReticle() {
     }
   }
   const locked = document.pointerLockElement === canvas && phase !== 'busy';
-  const show = stealReady || canThrow || phase === 'pick' || locked;
+  const mgAim = mgActive && plazaOnMg();
+  const show = stealReady || canThrow || phase === 'pick' || locked || mgAim;
   on('reticle', show);
   let throwHot = false;
   if (canThrow && !stealReady) {
@@ -1001,8 +1008,8 @@ function applyGrillTakeWin(serverCount?: number, takenDiff?: number) {
     if (meatsLeft > 1) { if (meatsLeft === 3) dayMulti3++; else dayMulti2++; later(0.25, () => toast(meatsLeft === 3 ? '三仁！' : '雙仁！', '#ffd76a')); } }
   const md = Math.max(0, Math.min(3, takenDiff ?? diff));
   crackSound(); shake = 0.18; opened++; dStat[md][0]++;
-  if (typeof serverCount === 'number') count = serverCount;
-  else count++;
+  // 入碗數在丟進碗時再加（與剝殼桌一致）；勿用伺服器總數覆蓋，避免換位後被重算掉
+  void serverCount;
   // 比照剝殼桌：搶到肉可開珍珠／奇物（含傳說保底）
   find = tut ? { kind: 'none', i: 0 } : rollFind();
   toast('搶到了！丟進碗裡', '#9be37a');
@@ -1160,7 +1167,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
     else track('start', { seat: save.seat ?? 'door', loc: locNow().id });
   }
   const sidNow = statsSid; const pingT = setInterval(() => { if (tut || state !== 'play' || statsSid !== sidNow || document.hidden) { if (statsSid !== sidNow || state !== 'play') clearInterval(pingT); return; } track('ping'); }, 60_000);
-  count = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
+  count = bowlStock = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   plazaStealBanUntil = 0; plazaStealCatches = 0; plazaStealPairCd.clear(); stopPlazaSteal();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
@@ -1455,7 +1462,8 @@ function applySeat(id: string) {
 function applyPlazaSeatPose(pos: THREE.Vector3, yaw: number) {
   const old = seatRig.matrixWorld.clone().invert();
   seatYaw = yaw; seatRig.rotation.y = yaw;
-  seatRig.position.set(pos.x - Math.sin(yaw) * SEAT0.z, 0, pos.z - Math.cos(yaw) * SEAT0.z);
+  const gy = pos.y || 0;
+  seatRig.position.set(pos.x - Math.sin(yaw) * SEAT0.z, gy, pos.z - Math.cos(yaw) * SEAT0.z);
   seatRig.updateMatrixWorld(true);
   const M = seatRig.matrixWorld.clone().multiply(old);
   bowlMeat.forEach(m => m.position.applyMatrix4(M));
@@ -1705,7 +1713,7 @@ function toss(tapped: boolean) {
   const land = new THREE.Vector3(BOWL.x + rnd(-0.06, 0.06), BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015, BOWL.z + rnd(-0.06, 0.06));
   SFX.whoosh(); if (quick) { perfects++; $('gtag').textContent = ''; }
   fly(m, from, land, 0.45, 0.3, () => {
-    count++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(eco.dpay[md] * eco.crumbRate)) : eco.dpay[md]) - (shiftLen < SHIFT ? eco.tempCut : 0)) + (quick ? eco.quickBonus : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    count++; bowlStock++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(eco.dpay[md] * eco.crumbRate)) : eco.dpay[md]) - (shiftLen < SHIFT ? eco.tempCut : 0)) + (quick ? eco.quickBonus : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
     burst(land.clone().setY(BOWL.y + 0.02), 8, 0xbfe4f2, 1);
     if (!wasCracked) burst(land.clone().setY(BOWL.y + 0.05), 6, 0xffd23a, 1.4);
     if (quick) { tone(980, 0.06, 0.18, 'triangle', 0, 520); tone(1568, 0.08, 0.1, 'sine', 0.05); } else SFX.plop();
@@ -2001,6 +2009,226 @@ function resolvePlazaShellHitFx(e: PlazaShellHitEvent) {
   plazaBleedBurst(new THREE.Vector3(e.x, e.y, e.z));
   try { SFX.hitNpc(); } catch { /* */ }
 }
+
+/** 蚵仔機關槍本機狀態 */
+let mgActive = false;
+let mgSlot = 0;
+let mgExpireAt = 0;
+let mgAmmo = 0;
+/** 用碗內蚵肉當子彈：每發射擊才扣碗；付費上機為 false */
+let mgMeatAmmo = false;
+let mgFireHeld = false;
+let mgLastFire = 0;
+let mgLocalBulletId = 1;
+const _mgFrom = new THREE.Vector3();
+const _mgDir = new THREE.Vector3();
+const _mgEject = new THREE.Vector3();
+const _mgMuzzle = new THREE.Vector3();
+const _mgRight = new THREE.Vector3();
+
+/** 機關槍第一人稱：站在高台槍後、看得到槍身上視圖；手隱藏 */
+function applyMgFpView() {
+  if (!mgActive) return;
+  handRig.visible = false;
+  // 站立視線＝甲板高度 + 眼高
+  if (!tpv) SEAT.y = plazaGroundY(SEAT.x, SEAT.z) + 1.48;
+}
+
+function clearMgSitLocal() {
+  mgActive = false; mgFireHeld = false; mgAmmo = 0; mgExpireAt = 0; mgMeatAmmo = false;
+  document.body.classList.remove('plazaMgSit');
+  const hud = document.getElementById('mgHud');
+  if (hud) { hud.classList.remove('low', 'empty'); hud.setAttribute('aria-hidden', 'true'); }
+  on('mgFireBtn', false); on('mgReloadBtn', false);
+}
+
+/** 機關槍蚵肉彈：只動碗內庫存／模型，不重算入碗結算數 */
+function spendMgBowlMeat(n: number) {
+  if (n > 0) {
+    if (bowlStock < n) return false;
+    bowlStock -= n;
+    for (let i = 0; i < n; i++) {
+      const m = bowlMeat.pop();
+      if (m) scene.remove(m);
+    }
+  } else if (n < 0) {
+    bowlStock -= n;
+  } else return true;
+  updHud();
+  return true;
+}
+
+function updMgHud() {
+  const hud = document.getElementById('mgHud');
+  if (!hud || !mgActive) return;
+  const left = Math.max(0, Math.ceil((mgExpireAt - Date.now()) / 1000));
+  const tn = document.getElementById('mgTimeN');
+  const an = document.getElementById('mgAmmoN');
+  if (tn) tn.textContent = String(left);
+  if (an) an.textContent = String(Math.max(0, mgAmmo));
+  hud.classList.toggle('low', left <= 15);
+  hud.classList.toggle('empty', mgAmmo <= 0);
+  hud.setAttribute('aria-hidden', 'false');
+}
+
+function spawnMgShotFx(
+  from: THREE.Vector3,
+  dir: THREE.Vector3,
+  id: number,
+  fromConn: string,
+  local: boolean,
+  slot: number,
+  muzzleAt?: THREE.Vector3,
+) {
+  const fx = plazaMgFx();
+  if (!fx) return;
+  fx.spawnBullet({ id, from, dir, fromConn, local });
+  const mount = plazaMgMount(slot);
+  // 火花／彈殼仍在真實槍口；子彈本體沿準心視線走
+  if (muzzleAt) fx.muzzleFlash(muzzleAt, dir);
+  else if (mount) {
+    mgMuzzleWorld(mount, _mgEject);
+    fx.muzzleFlash(_mgEject, dir);
+  } else fx.muzzleFlash(from, dir);
+  if (mount) {
+    mgEjectWorld(mount, _mgEject);
+    mgMountRight(mount, _mgRight);
+    fx.ejectCasing(_mgEject, _mgRight);
+  }
+  try { SFX.whoosh(); } catch { /* */ }
+}
+
+/** 與死鬥 dirOf 相同：(-sin y cos p, sin p, -cos y cos p) */
+function mgDirOf(aimYaw: number, aimPitch: number, out: THREE.Vector3) {
+  const cp = Math.cos(aimPitch), sp = Math.sin(aimPitch);
+  out.set(-Math.sin(aimYaw) * cp, sp, -Math.cos(aimYaw) * cp);
+  if (out.lengthSq() < 1e-8) out.set(0, 0, -1);
+  else out.normalize();
+  return out;
+}
+
+/** 死鬥同款：眼位 + 視線前方一點當彈道起點；方向用 yaw/pitch（與 cam.rotation.set 同一套） */
+function mgComputeAim(dir: THREE.Vector3, origin: THREE.Vector3) {
+  const aimYaw = yaw + flYaw + (walking ? 0 : seatYaw);
+  const aimPitch = pitch;
+  mgDirOf(aimYaw, aimPitch, dir);
+  origin.set(SEAT.x, SEAT.y, SEAT.z).addScaledVector(dir, 0.4);
+}
+
+function resolvePlazaMgFireFx(e: PlazaMgFireEvent) {
+  if (!plazaMode || !isPlazaActive()) return;
+  const me = plazaConnId();
+  if (me && e.connId === me) return; // 本機開火已播過
+  _mgFrom.set(e.fromX, e.fromY, e.fromZ);
+  _mgDir.set(e.dirX, e.dirY, e.dirZ);
+  spawnMgShotFx(_mgFrom, _mgDir, e.id, e.connId, false, e.slot);
+}
+
+function resolvePlazaMgHit(e: PlazaMgHitEvent) {
+  if (!plazaMode || state !== 'play' || !isPlazaActive()) return;
+  // 正坐著（含機關槍）免疫；只打走動玩家
+  if (plazaSeated()) return;
+  const me = plazaConnId();
+  if (!me || e.toConnId !== me) return;
+  blockStreak = 0; hitsTaken++;
+  const splat = document.getElementById('splat');
+  if (splat) { splat.style.opacity = '1'; later(0.9, () => { splat.style.opacity = '0'; }); }
+  hurt(8, `${e.fromNick || '別人'} 的蚵仔機關槍打中你了！`);
+  hitInHand();
+  updHud();
+}
+
+async function tryMgFireOnce() {
+  if (!mgActive || !plazaMode || !plazaOnMg() || state !== 'play') return;
+  if (Date.now() >= mgExpireAt) { leaveMgByTime(); return; }
+  if (mgAmmo <= 0) { toast('子彈打光了，先買彈夾', '#ffb08a'); return; }
+  const now = performance.now();
+  if (now - mgLastFire < 50) return;
+  mgLastFire = now;
+  const mount = plazaMgMount(mgSlot);
+  // 與準心同一條視線（用本幀 yaw/pitch，不吃舊的 camera matrix）
+  mgComputeAim(_mgDir, _mgFrom);
+  if (mount) {
+    // 槍管先轉到同一角度，火花才在正確槍口
+    plazaAimMg(mgSlot, yaw + flYaw, pitch);
+    mgMuzzleWorld(mount, _mgMuzzle);
+  }
+  const localId = mgLocalBulletId++;
+  // 樂觀扣彈；伺服器失敗再還
+  mgAmmo = Math.max(0, mgAmmo - 1);
+  // 蚵肉上機：發射才從碗裡扣 1（付費上機不扣碗）
+  let meatTaken = false;
+  if (mgMeatAmmo) {
+    meatTaken = spendMgBowlMeat(1);
+    if (!meatTaken) {
+      mgAmmo = 0;
+      updMgHud();
+      toast('碗裡蚵肉打光了', '#ffb08a');
+      return;
+    }
+  }
+  updMgHud();
+  // 連射時每發刷新，畫面持續微震
+  shake = Math.max(shake, 0.22);
+  spawnMgShotFx(_mgFrom, _mgDir, localId, plazaConnId() || 'local', true, mgSlot, mount ? _mgMuzzle : undefined);
+  const r = await plazaMgFire(
+    { x: _mgFrom.x, y: _mgFrom.y, z: _mgFrom.z },
+    { x: _mgDir.x, y: _mgDir.y, z: _mgDir.z },
+  );
+  if (!r.ok) {
+    if (r.err === 'no_conn') return; // 離線：保留本機子彈與扣彈／扣碗
+    if (r.err === 'no_ammo' || r.err === 'mg_time') {
+      if (meatTaken) spendMgBowlMeat(-1);
+      if (r.err === 'mg_time') leaveMgByTime();
+      else { mgAmmo = 0; updMgHud(); toast(plazaZhErr(r.err), '#ffb08a'); }
+      return;
+    }
+    if (r.err !== 'slow') {
+      mgAmmo = Math.min(MG_AMMO_MAX, mgAmmo + 1);
+      if (meatTaken) spendMgBowlMeat(-1);
+      updMgHud();
+    }
+    return;
+  }
+  if (typeof (r as any).ammo === 'number') { mgAmmo = (r as any).ammo; updMgHud(); }
+}
+
+function leaveMgByTime() {
+  if (!mgActive) return;
+  clearMgSitLocal();
+  void plazaPushCosmetics();
+  toast('機關槍時間到了', '#ffb08a');
+  if (plazaSeated()) standUp();
+}
+
+async function tryMgReload() {
+  if (!mgActive || !plazaOnMg()) return;
+  if (Date.now() >= mgExpireAt) { leaveMgByTime(); return; }
+  if (mgAmmo >= MG_AMMO_MAX) { toast('彈匣還是滿的', '#9fe0ff'); return; }
+  if (save.money < MG_MAG_PRICE) { toast(`彈夾要 $${MG_MAG_PRICE}，你錢不夠`, '#ffb08a'); return; }
+  save.money -= MG_MAG_PRICE;
+  persist();
+  track('mg_reload', { price: MG_MAG_PRICE, money: save.money });
+  updHud();
+  const r = await plazaMgReload();
+  if (!r.ok) {
+    save.money += MG_MAG_PRICE; persist(); updHud();
+    if (r.err === 'mg_time') leaveMgByTime();
+    else toast(plazaZhErr(r.err) || '買彈夾失敗', '#ff8a7a');
+    return;
+  }
+  mgAmmo = typeof r.ammo === 'number' ? r.ammo : MG_AMMO_MAX;
+  mgMeatAmmo = false; // 買彈夾＝付費彈，之後不扣碗
+  updMgHud();
+  toast(`補滿 ${mgAmmo} 發！`, '#9be37a');
+  SFX.pop();
+}
+
+/** 鏡頭已更新後呼叫：連射才會跟準心同一幀朝向 */
+function tickMgFireAfterCam() {
+  if (!mgActive || !plazaMode || !plazaOnMg()) return;
+  if (mgFireHeld) void tryMgFireOnce();
+}
 let plazaStealTgt: PlazaAimTarget | null = null;
 function startPlazaSteal() {
   if (state !== 'play' || umbHeld || !plazaSeated()) return;
@@ -2031,13 +2259,15 @@ async function finishPlazaSteal(t: PlazaAimTarget) {
     plazaOnStealCaught(t.nick);
     return;
   }
-  count = r.steal.fromCount;
+  // 本機累加，勿用伺服器總數覆蓋（換位／延遲會把已入碗的肉重算掉）
+  count++; bowlStock++;
   meatPay += eco.dpay[eco.yardStealDiff] ?? eco.dpay[1]; steals++; evMeat();
   plazaStealPairCd.set(t.connId, performance.now() + PLAZA_STEAL_PAIR_MS);
   const m = new THREE.Mesh(meatGeo, meatMat);
   const from = new THREE.Vector3(t.bowl.x, t.bowl.y, t.bowl.z);
   fly(m, from, BOWL.clone().add(new THREE.Vector3(rnd(-0.08, 0.08), 0.06, rnd(-0.08, 0.08))), 0.5, 0.3, () => bowlMeat.push(m));
   SFX.sneak(); toast(`偷到 ${t.nick} 一顆！`, '#c9a0ff'); updHud();
+  void r.steal.fromCount;
 }
 // ----- 6. 擲殼仔 -----
 /** 對人丟殼才算 thrown（和平主義）；丟地上／殼堆不算 */
@@ -2147,7 +2377,7 @@ function caughtBy(n: Npc) {
 }
 function stealOne(n: Npc) {
   if (n.count <= 0) { toast('碗裡沒肉了'); stopSteal(); return; }
-  n.count--; count++; evMeat(); meatPay += eco.dpay[eco.yardStealDiff] ?? eco.dpay[1]; steals++; addGrudge(n, 12); const m = new THREE.Mesh(meatGeo, meatMat);
+  n.count--; count++; bowlStock++; evMeat(); meatPay += eco.dpay[eco.yardStealDiff] ?? eco.dpay[1]; steals++; addGrudge(n, 12); const m = new THREE.Mesh(meatGeo, meatMat);
   const lm = n.bowlMeat.pop(); if (lm) scene.remove(lm);
   fly(m, n.bowl.clone(), BOWL.clone().add(new THREE.Vector3(rnd(-0.08, 0.08), 0.06, rnd(-0.08, 0.08))), 0.5, 0.3, () => bowlMeat.push(m));
   SFX.sneak(); toast('偷到一顆！', '#c9a0ff'); updHud();
@@ -2386,7 +2616,16 @@ canvas.addEventListener('pointerdown', e => {
   // 按住環視鈕時：這根或另一根手指只轉鏡頭，不轉角色、也不當剝殼點選
   if (flHeld && e.pointerId !== flPtr) { flStartDrag(e); return; }
   if (walking) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
-  if (e.button === 2) { throwShell(); return; }
+  if (e.button === 2) {
+    if (mgActive && plazaOnMg()) { mgFireHeld = true; void tryMgFireOnce(); return; }
+    throwShell(); return;
+  }
+  // 機關槍：桌面左鍵按住連射；觸控改用「發射」鈕，避免轉視角誤射
+  if (mgActive && plazaOnMg() && e.button === 0 && !COARSE) {
+    mgFireHeld = true; void tryMgFireOnce();
+    down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: false, lx: e.clientX, lt: performance.now() };
+    return;
+  }
   // 坐下：預設先當轉視角（跟走動一樣跟手）；點蚵／點網靠 pointerup 小位移仍算點
   down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: true, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: e.pointerType !== 'mouse' && phase === 'seam' && hitsOyster(e.clientX, e.clientY), lx: e.clientX, lt: performance.now() };
 });
@@ -2436,6 +2675,7 @@ function release() { if (!holding) return; const h = hold; holding = false; hold
 const up = (e: PointerEvent) => {
   if (flHeld && e.pointerId === flPtr) { flRelease(); return; }
   if (flDown && e.pointerId === flDragId) { flDown = null; flDragId = -1; return; }
+  if (mgActive && (e.button === 0 || e.button === 2)) mgFireHeld = false;
   if (moonAimOn && down && down.id === e.pointerId) { const d = down; down = null; if (!d.drag) moonTapAt(e.clientX, e.clientY); return; }
   if (down && down.id === e.pointerId && walking) { down = null; return; }
   if (!(down && down.id === e.pointerId)) return;
@@ -2512,13 +2752,17 @@ window.addEventListener('keydown', e => {
     if ((e.code === 'KeyC' || e.code === 'KeyZ') && (plazaMode || isRoomActive())) { if (!e.repeat) plazaPose(e.code === 'KeyC' ? 'crouch' : 'lie'); return; }
     walkKeys.add(e.code);
     if (e.code === 'KeyE') {
-      if (plazaMode) void plazaTrySit();
+      if (plazaMode) void plazaTrySit('auto');
       else if (isRoomActive()) void roomTrySit();
       else if (nearSeat) sitDown(nearSeat.id);
     }
     return;
   }
   if (e.code === 'KeyG') { standUp(); return; }
+  if (mgActive && plazaOnMg()) {
+    if (e.code === 'KeyF') { e.preventDefault(); if (!e.repeat) { mgFireHeld = true; void tryMgFireOnce(); } return; }
+    if (e.code === 'KeyR') { e.preventDefault(); if (!e.repeat) void tryMgReload(); return; }
+  }
   if (e.code === 'Space' && plazaMode && walking) { if (!e.repeat) plazaJump(); return; }
   if (e.code === 'Space' && !e.repeat && umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
   if (e.code === 'Space' && !e.repeat) { if (phase === 'grillPlace') toast('點烤網上想放的位置', '#ffd76a'); else if (plazaOnGrill() && (phase === 'pick' || phase === 'empty' || phase === 'busy')) void grillRaceAt(innerWidth / 2, innerHeight / 2); else if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (isGrillPhase()) grillAct(); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) { if (!tutMeat()) toss(true); } else if (phase === 'aim') { holding = true; hold = 0; } }
@@ -2532,7 +2776,15 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyT' && !e.repeat) startPuff();
   if (e.code === 'KeyE' && !e.repeat) startSteal();
 });
-window.addEventListener('keyup', e => { walkKeys.delete(e.code); if (e.code === 'Space') release(); if (/Key[AD]|Arrow(Left|Right)/.test(e.code)) rotKey = 0; if (e.code === 'KeyE') stopSteal(); if (e.code === 'KeyR') closeUmbrella(); if (e.code === 'KeyT') endPuff(); });
+window.addEventListener('keyup', e => {
+  walkKeys.delete(e.code);
+  if (e.code === 'Space') release();
+  if (/Key[AD]|Arrow(Left|Right)/.test(e.code)) rotKey = 0;
+  if (e.code === 'KeyE') stopSteal();
+  if (e.code === 'KeyF') mgFireHeld = false;
+  if (e.code === 'KeyR') { if (!mgActive) closeUmbrella(); }
+  if (e.code === 'KeyT') endPuff();
+});
 // 換畫面後 350ms 內忽略點擊，防止放開觸發後的合成 click 穿透到新畫面同位置的按鈕
 let guardUntil = 0;
 function inputGuard() { guardUntil = performance.now() + 350; }
@@ -2594,7 +2846,16 @@ $('bmGo').onclick = () => { void (async () => {
     then: showPay,
   });
 })(); };
-$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => { if (plazaMode) void plazaTrySit(); else if (isRoomActive()) void roomTrySit(); else if (nearSeat) sitDown(nearSeat.id); }); btn('throwBtn', throwShell); btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('puffBtn', startPuff, endPuff); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('puffBtn').addEventListener(ev, endPuff); addEventListener('blur', endPuff); document.addEventListener('visibilitychange', () => { if (document.hidden) endPuff(); }); $('puffBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
+$('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => {
+  if (plazaMode) {
+    const p = plazaNearPrompt();
+    void plazaTrySit(p?.altBtn ? 'money' : 'auto');
+  } else if (isRoomActive()) void roomTrySit();
+  else if (nearSeat) sitDown(nearSeat.id);
+}); btn('sitAltBtn', () => { if (plazaMode) void plazaTrySit('meat'); }); btn('throwBtn', throwShell);
+btn('mgFireBtn', () => { mgFireHeld = true; void tryMgFireOnce(); }, () => { mgFireHeld = false; });
+btn('mgReloadBtn', () => { void tryMgReload(); });
+btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('puffBtn', startPuff, endPuff); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('puffBtn').addEventListener(ev, endPuff); addEventListener('blur', endPuff); document.addEventListener('visibilitychange', () => { if (document.hidden) endPuff(); }); $('puffBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
 { const sb = $('stealBtn'); sb.addEventListener('pointerdown', e => { try { sb.setPointerCapture(e.pointerId); } catch { } });
   for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) sb.addEventListener(ev, stopSteal);
   window.addEventListener('pointerup', stopSteal); window.addEventListener('pointercancel', stopSteal); window.addEventListener('blur', stopSteal); document.addEventListener('visibilitychange', stopSteal); }
@@ -2628,7 +2889,7 @@ initWalkSeat({
   $, on, COARSE, clamp,
   getState: () => state, getPhase: () => phase,
   walkSpeedMul: walkSpeedNow,
-  isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaNearSeat, plazaNearPrompt, plazaMySeat, seatPose,
+  isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaGroundY, plazaNearSeat, plazaNearPrompt, plazaMySeat, seatPose,
   isRoomMode: () => isRoomActive(), roomSeated, roomStandWalk, roomWalkBodies, roomNearPrompt,
   setPlazaSeatPropsVisible, oyster, shellGeo, shellTopMat, shellTop, handRig, SEAT, BASIN, BOWL, getBowlR: () => BOWL_R,
   seatGround, seatNow,
@@ -3073,13 +3334,14 @@ function petTick(dt: number) {
   const p = petNow(); if (!p) return;
   // 位置先更新，不論啟用與否（才不會從舊位置閃現）
   updatePetAnchor();
-  // 只在真的在玩的時候運作；廣場模式必須坐在剝蚵桌（不是烤位、不是抽菸區）才會產出
-  const show = state === 'play' && !isPaused() && !tut;
+  // 只在真的在玩的時候運作；廣場模式必須坐在剝蚵桌（不是烤位、不是抽菸區／機關槍）才會產出
+  const onMg = mgActive || plazaOnMg();
+  const show = state === 'play' && !isPaused() && !tut && !onMg;
   const plazaShellSeat = (() => {
     if (!plazaMode || !isPlazaActive()) return false;
     const s = plazaMySeat();
     if (!s) return false;
-    return !pileIsGrill(s.pileId) && !isSmokePile(s.pileId);
+    return !pileIsGrill(s.pileId) && !isSmokePile(s.pileId) && !isMgPile(s.pileId);
   })();
   const canProduce = show && (!plazaMode || plazaShellSeat);
   petAnchor.visible = show;
@@ -3139,7 +3401,7 @@ function petDropMeat(p: NonNullable<ReturnType<typeof petNow>>) {
   );
   const md = p.fx.meatDiff;
   fly(m, _petFrom.clone(), land, 0.5, 0.3, () => {
-    count++; evMeat();
+    count++; bowlStock++; evMeat();
     const pv = Math.max(0, eco.dpay[md] - (shiftLen < SHIFT ? eco.tempCut : 0));
     meatPay += pv; dCnt[md]++;
     bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
@@ -3549,11 +3811,14 @@ function clearPlazaLeaveUi() {
   disposeFpCigarette();
   if (plazaMe) clearPlazaSmokeCig(plazaMe);
   handRig.visible = true;
-  document.body.classList.remove('plazaRoam', 'plazaSmokeSit');
+  document.body.classList.remove('plazaRoam', 'plazaSmokeSit', 'plazaMgSit');
+  clearMgSitLocal();
   const info = document.getElementById('seatInfo');
   if (info) info.innerHTML = '';
   const sit = document.getElementById('sitBtn');
   if (sit) sit.innerHTML = '<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>';
+  const sitAlt = document.getElementById('sitAltBtn') as HTMLButtonElement | null;
+  if (sitAlt) { sitAlt.hidden = true; sitAlt.innerHTML = '<i class="ic ic-oyster"></i> 用我的蚵仔肉'; }
   const kb = document.getElementById('joyK');
   if (kb) kb.style.transform = '';
 }
@@ -3764,10 +4029,13 @@ function launchPlaza() {
     // 可丟殼且準星瞄到人：同步 throwAim，遠端播左手舉殼
     getSyncPhase: () => jumpT > 0 ? 'jump' : bodyPose && walking ? bodyPose : ((phase === 'empty' || phase === 'seam') && plazaThrowTarget() ? 'throwAim' : phase),
     getCount: () => count,
+    /** 碗內尚可動用（機關槍當子彈／同步給別人偷）；與結算用 count 分開 */
+    getBowlStock: () => bowlStock,
     getWalkXZ: () => (walking ? { x: walkPos.x, z: walkPos.z } : { x: SEAT.x, z: SEAT.z }),
     getYaw: () => (!walking ? seatYaw : (plazaMode && bodyPose === 'lie' ? bodyYaw : yaw)),
     // 坐下第一人稱：yaw＝相對座位轉頭；第三人稱／走動：lookYaw＝0（躺／繞鏡頭不轉身體）
     getLookYaw: () => (walking || tpv ? 0 : yaw),
+    getAimYaw: () => (walking || tpv ? 0 : yaw + flYaw),
     getPitch: () => (tpv ? 0 : pitch),
     getTpv: () => tpv,
     getOutfit: () => ({
@@ -3781,7 +4049,8 @@ function launchPlaza() {
       goldSmoke: gearOn('goldPipe'),
       cushion: gearOn('seatCush'),
       nameFrame: gearOn('nameFrame'),
-      pet: petNow()?.id ?? '',
+      // 機關槍座：不顯示／不同步寵物
+      pet: (mgActive || plazaOnMg()) ? '' : (petNow()?.id ?? ''),
     }),
     ownsFlag: () => save.shop.owned.includes('plazaFlag'),
     getMoving: () => {
@@ -3792,7 +4061,7 @@ function launchPlaza() {
     },
     getUmb: () => umbHeld || umbT > 0,
     getEco: () => mix.eco,
-    hasOwnPet: () => !!petNow(),
+    hasOwnPet: () => !!(petNow() && !(mgActive || plazaOnMg())),
     selfHatLift: () => headTopLift(equipNow('head').id),
     getPlazaSpawn: () => save.plazaSpawn,
     persistPlazaSpawn: (spawn) => { save.plazaSpawn = spawn; persist(); },
@@ -3833,6 +4102,32 @@ function launchPlaza() {
     },
     onShellBlocked: (e) => { resolvePlazaBlocked(e); },
     onShellHit: (e) => { resolvePlazaShellHitFx(e); },
+    onMgFire: (e) => { resolvePlazaMgFireFx(e); },
+    onMgHit: (e) => { resolvePlazaMgHit(e); },
+    onPlazaAlert: (e) => {
+      if (!e?.text) return;
+      toast(e.text, '#ff8a7a');
+      try { SFX.alert(); } catch { /* */ }
+    },
+    onMgExpired: () => { clearMgSitLocal(); },
+    getMoney: () => save.money,
+    spendMoney: (n, reason) => {
+      if (n > 0) {
+        if (save.money < n) return false;
+        save.money -= n;
+      } else if (n < 0) {
+        save.money -= n; // 負數＝退款
+      } else return true;
+      persist();
+      track('spend', { amount: n, reason, money: save.money });
+      updHud();
+      return true;
+    },
+    spendBowlMeat: (n, reason) => {
+      const ok = spendMgBowlMeat(n);
+      if (ok) track('spend_meat', { amount: n, reason, bowlStock, count });
+      return ok;
+    },
     onNpcMoon: (e: any) => {
       const me = plazaConnId();
       const byId = String(e?.byConnId ?? e?.ByConnId ?? '');
@@ -3847,9 +4142,10 @@ function launchPlaza() {
       const me = plazaConnId();
       if (!me) return;
       if (e.toConnId === me && !e.caught) {
-        const lostN = Math.max(0, count - e.toCount);
-        count = Math.max(0, e.toCount);
-        for (let i = 0; i < lostN; i++) { const lm = bowlMeat.pop(); if (lm) scene.remove(lm); }
+        // 被偷只扣 1，勿用伺服器總數整碗重算
+        if (count > 0) count--;
+        if (bowlStock > 0) bowlStock--;
+        const lm = bowlMeat.pop(); if (lm) scene.remove(lm);
         toast(`${e.fromNick} 偷走你一顆！（短暫不會再被偷）`, '#ff8a7a');
         shake = 0.12; SFX.sting();
         updHud();
@@ -3935,6 +4231,8 @@ function launchPlaza() {
       setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
       // plazaRoam 會藏剝蚵鈕；plazaSmokeSit 讓站起／回主選單與一般座位同款可見
       document.body.classList.add('plazaRoam', 'plazaSmokeSit');
+      document.body.classList.remove('plazaMgSit');
+      clearMgSitLocal();
       tYaw = yaw = 0; tPitch = pitch = -0.35;
       plazaEnsureFpView();
       setSmokeSitHands(true);
@@ -3949,6 +4247,8 @@ function launchPlaza() {
       setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
       // 與吸菸座同款按鈕可見度（站起／回主選單），但不拿菸、不顯示抽一口
       document.body.classList.add('plazaRoam', 'plazaSmokeSit');
+      document.body.classList.remove('plazaMgSit');
+      clearMgSitLocal();
       tYaw = yaw = 0; tPitch = pitch = -0.3;
       plazaEnsureFpView();
       handRig.visible = false;
@@ -3960,9 +4260,43 @@ function launchPlaza() {
       hint.textContent = hq ? '競選總部門口：按「換位置」站起來繼續逛' : '樸子腳門口：按「換位置」站起來繼續逛';
       SFX.pop();
     },
+    enterMgSit: (slot: number, expireAt: number, ammo: number, fromMeat = false) => {
+      setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
+      document.body.classList.add('plazaRoam', 'plazaMgSit');
+      document.body.classList.remove('plazaSmokeSit');
+      setSmokeSitHands(false);
+      cancelPuff();
+      clearPuffExhales();
+      disposeFpCigarette();
+      setPlazaSeatPropsVisible(false);
+      tYaw = yaw = 0; tPitch = pitch = -0.12; // 死鬥同款：pitch<0 略往下看廣場
+      plazaEnsureFpView();
+      handRig.visible = false;
+      mgActive = true; mgSlot = slot; mgExpireAt = expireAt; mgAmmo = ammo; mgMeatAmmo = !!fromMeat; mgFireHeld = false;
+      applyMgFpView();
+      petAcc = 0; setPetSleeping(false); if (petAnchor) petAnchor.visible = false;
+      void plazaPushCosmetics();
+      on('standBtn', true); on('throwBtn', false); on('stealBtn', false);
+      on('umbBtn', false); on('medBtn', true); on('quitBtn', true); on('camBtn', COARSE);
+      on('mgFireBtn', true); on('mgReloadBtn', true);
+      if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
+      updMgHud();
+      updReticle();
+      toast(fromMeat ? '蚵肉當子彈・發射才扣碗' : `付費上機・${ammo} 發不扣碗`, '#ff8a7a');
+      hint.textContent = COARSE
+        ? (fromMeat
+          ? '按住「發射」；每發扣碗裡 1 顆蚵肉；時間到會下來'
+          : '按住「發射」；打完可「買彈夾」；時間到會下來')
+        : (fromMeat
+          ? '按住 F／發射；每發扣碗裡 1 顆；G 換位置；最多 90 秒'
+          : '按住 F／發射；R 買彈夾；G 換位置；最多 90 秒');
+      SFX.pop();
+    },
     goWalk: () => {
       document.body.classList.add('plazaRoam');
-      document.body.classList.remove('plazaSmokeSit');
+      document.body.classList.remove('plazaSmokeSit', 'plazaMgSit');
+      clearMgSitLocal();
+      void plazaPushCosmetics();
       setSmokeSitHands(false);
       cancelPuff();
       clearPuffExhales();
@@ -4330,8 +4664,13 @@ function frameBody() {
     if (phase !== 'twist') setInZ('');
     // 偷蚵仔
     on('standBtn', !walking && (!plazaMode || plazaSeated()) && (!isRoomActive() || roomSeated()));
-    // 吸菸區／樸子腳坐著：不剝蚵，藏左下臉盆與肉碗
-    if (plazaMode && seatRig.visible && document.body.classList.contains('plazaSmokeSit')) setPlazaSeatPropsVisible(false);
+    // 吸菸區／樸子腳／機關槍：不剝蚵，藏左下臉盆與肉碗
+    if (plazaMode && seatRig.visible && (document.body.classList.contains('plazaSmokeSit') || document.body.classList.contains('plazaMgSit'))) setPlazaSeatPropsVisible(false);
+    // 機關槍 HUD／狀態；連射改在本幀鏡頭更新後再發射，避免用到舊朝向
+    if (mgActive) {
+      if (!plazaMode || !plazaOnMg()) clearMgSitLocal();
+      else { applyMgFpView(); updMgHud(); if (Date.now() >= mgExpireAt) leaveMgByTime(); }
+    }
     if (smokeSitActive) {
       // 第三人稱時藏手持菸；第一人稱顯示
       handRig.visible = !tpv;
@@ -4526,6 +4865,7 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
   } else if (!walking) { walkMotion.bobW = 0; walkMotion.bobPh = 0; }
   camera.rotation.set(camPitch, yaw + flYaw + (walking ? 0 : seatYaw), camRoll);
   camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
+  tickMgFireAfterCam();
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
   // 廣場關掉工寮中央點光（棚頂吊燈／環境光夠）；工寮內省電再壓亮度
   lamp.intensity = plazaMode
@@ -5058,7 +5398,8 @@ function camTick(dt: number) {
   if (!show) {
     if (plazaMe) plazaMe.outer.visible = false;
     // 第三人稱坐下／走動會把第一人稱手藏起來；切回第一人稱且仍坐著時要恢復，否則剝蚵雙手會消失。走動本來就沒有第一人稱手。
-    if (!walking) handRig.visible = true;
+    // 機關槍第一人稱：保持空手，改看槍身上視圖
+    if (!walking) handRig.visible = !mgActive;
     return;
   }
   const kk = enter ? 1 : 1 - Math.exp(-5 * dt);
@@ -5074,7 +5415,7 @@ function camTick(dt: number) {
       // 剛從坐下站起：清掉坐姿髖偏移
       if (rig.root.position.y !== 0) posePlazaStand(rig);
       rig.outer.visible = true;
-      rig.outer.position.set(walkPos.x, jumpY, walkPos.z);
+      rig.outer.position.set(walkPos.x, jumpY + (plazaMode ? plazaGroundY(walkPos.x, walkPos.z) : 0), walkPos.z);
       rig.outer.rotation.order = 'YXZ';
       // 躺著：身體朝向鎖 bodyYaw，鏡頭仍用 yaw 繞轉
       rig.outer.rotation.y = bodyPose === 'lie' ? bodyYaw : yaw;
@@ -5098,11 +5439,13 @@ function camTick(dt: number) {
       const fx = -Math.sin(yaw + flYaw), fz = -Math.cos(yaw + flYaw);
       const dist = tpDist * tpDistK();
       const el = Math.min(1.1, Math.max(0.05, tpPitch)), hd = dist * Math.cos(el);
-      const eyeY = wideView ? 1.55 : 1.4;
+      // 機關槍高台／樓梯：鏡頭跟著地面高度，避免人上去了相機還留在 y≈1.4
+      const gy = plazaGroundY(walkPos.x, walkPos.z);
+      const eyeY = (wideView ? 1.55 : 1.4) + gy;
       const cp = new THREE.Vector3(walkPos.x - fx * hd, eyeY + dist * Math.sin(el) + jumpY * 0.35 - poseK * (lastPose === 'lie' ? 0.7 : 0.35), walkPos.z - fz * hd);
-      { const CAP = 2.7, R = 10.9, hy = eyeY; if (cp.y > CAP) { const k = (CAP - hy) / (cp.y - hy); const ix = walkPos.x + (cp.x - walkPos.x) * k, iz = walkPos.z + (cp.z - walkPos.z) * k; if (Math.abs(ix) < R && Math.abs(iz) < R) { cp.x = ix; cp.z = iz; cp.y = CAP; } } }
+      { const CAP = 2.7 + gy, R = 10.9, hy = eyeY; if (cp.y > CAP) { const k = (CAP - hy) / (cp.y - hy); const ix = walkPos.x + (cp.x - walkPos.x) * k, iz = walkPos.z + (cp.z - walkPos.z) * k; if (Math.abs(ix) < R && Math.abs(iz) < R) { cp.x = ix; cp.z = iz; cp.y = CAP; } } }
       if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
-      { const lt = new THREE.Vector3(walkPos.x + fx * 1.2, wideView && camera.aspect <= 1.6 ? 1.15 : 1.0, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
+      { const lookY = (wideView && camera.aspect <= 1.6 ? 1.15 : 1.0) + gy; const lt = new THREE.Vector3(walkPos.x + fx * 1.2, lookY, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
       { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
       tpCam.updateMatrixWorld(); return;
     }
@@ -5110,7 +5453,7 @@ function camTick(dt: number) {
     const rig = ensurePlazaMe();
     if (rig.root.position.y !== 0) posePlazaStand(rig);
     rig.outer.visible = true;
-    rig.outer.position.set(walkPos.x, jumpY, walkPos.z);
+    rig.outer.position.set(walkPos.x, jumpY + (plazaMode ? plazaGroundY(walkPos.x, walkPos.z) : 0), walkPos.z);
     rig.outer.rotation.order = 'YXZ';
     rig.outer.rotation.y = yaw;
     rig.outer.rotation.x = 0;
@@ -5476,7 +5819,7 @@ new MutationObserver(() => {
 syncMenuBack();
 setEvShown($('overlay').classList.contains('show')); evFetch(); svFetch();
 setInterval(() => { if ($('overlay').classList.contains('show') && evCfg) evRender(); if ($('overlay').classList.contains('show') && svList.length) svRender(); }, 30_000);
-(window as any).__ev = { get run() { return evRun; }, get cfg() { return evCfg; }, get hp() { return hp; }, get npcs() { return npcs.length; }, get left() { return timeLeft; }, minDist: () => { let m = 99; for (let i = 0; i < npcs.length; i++) for (let j = i + 1; j < npcs.length; j++) m = Math.min(m, npcs[i].g.position.distanceTo(npcs[j].g.position)); return m; }, refetch: evFetch, meat: (k: number) => { for (let i = 0; i < k; i++) { count++; evMeat(); } updHud(); }, hurt: (d: number) => hurt(d, '測試') };
+  (window as any).__ev = { get run() { return evRun; }, get cfg() { return evCfg; }, get hp() { return hp; }, get npcs() { return npcs.length; }, get left() { return timeLeft; }, minDist: () => { let m = 99; for (let i = 0; i < npcs.length; i++) for (let j = i + 1; j < npcs.length; j++) m = Math.min(m, npcs[i].g.position.distanceTo(npcs[j].g.position)); return m; }, refetch: evFetch, meat: (k: number) => { for (let i = 0; i < k; i++) { count++; bowlStock++; evMeat(); } updHud(); }, hurt: (d: number) => hurt(d, '測試') };
 
 /** 開場 loading：自頁面開啟起至少 1 秒，且等首幀畫完再淡出 */
 function dismissBoot() {

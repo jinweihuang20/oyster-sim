@@ -59,6 +59,56 @@ export const SEAFOOD_ARCADE_X = 13.78;
 /** 樸子腳門口座位（與後端 PlazaWorld.SeafoodPileId 對齊）：3 圓桌 × 2 板凳，純坐、不抽菸、不開工班 */
 export const SEAFOOD_PILE_ID = 102;
 export const SEAFOOD_SEAT_COUNT = 6;
+/** 蚵仔機關槍站立座（與後端 PlazaWorld.MgPileId 對齊） */
+export const MG_PILE_ID = 103;
+export const MG_SEAT_COUNT = 2;
+/** 付費上機：金額／發數（不扣碗內蚵肉） */
+export const MG_SIT_PRICE = 4000;
+export const MG_SIT_AMMO = 200;
+export const MG_MAG_PRICE = 1000;
+export const MG_AMMO_MAX = 500;
+export const MG_SIT_MS = 90_000;
+/**
+ * 機關槍高台：烤區（南排 pile 12）西側旁，需走樓梯上去。
+ * 甲板中心／尺寸；與 buildMgPlatform、plazaGroundY 對齊。
+ */
+export const MG_DECK_Y = 2.15;
+export const MG_PLATFORM = {
+  cx: -5.15,
+  cz: 10.35,
+  w: 4.6,
+  d: 2.55,
+  y: MG_DECK_Y,
+} as const;
+/** 北向樓梯（朝廣場／烤台爬上甲板）：x 範圍、z0 地面端、z1 甲板北緣 */
+export const MG_STAIRS = {
+  x0: -6.05,
+  x1: -4.25,
+  z0: 8.52,
+  z1: MG_PLATFORM.cz - MG_PLATFORM.d * 0.5,
+  steps: 7,
+} as const;
+/** 高台上槍座中心；朝北看廣場；與後端 MgSeats 對齊 */
+export const MG_SEATS: readonly { x: number; z: number; yaw: number }[] = [
+  { x: -6.15, z: 10.5, yaw: 0 },
+  { x: -4.15, z: 10.5, yaw: 0 },
+];
+/** 玩家站在槍後方（沿 yaw 背向）的距離 */
+export const MG_STAND_BACK = 0.72;
+export const isMgPile = (pileId: number) => pileId === MG_PILE_ID;
+
+/** 廣場地面高度（機關槍高台／樓梯）；其餘為 0 */
+export function plazaGroundY(x: number, z: number): number {
+  const p = MG_PLATFORM;
+  const hw = p.w * 0.5, hd = p.d * 0.5;
+  if (x >= p.cx - hw && x <= p.cx + hw && z >= p.cz - hd && z <= p.cz + hd) return p.y;
+  const s = MG_STAIRS;
+  if (x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1) {
+    const t = (z - s.z0) / Math.max(1e-5, s.z1 - s.z0);
+    return Math.max(0, Math.min(1, t)) * p.y;
+  }
+  return 0;
+}
 export const SEAFOOD_TABLE_X = 12.3;
 export const SEAFOOD_TABLE_Z: readonly number[] = [-0.45, 1.5, 3.45];
 export const SEAFOOD_STOOL_OFFSET = 0.55;
@@ -68,8 +118,8 @@ export const isRestPile = (pileId: number) => pileId === SEAFOOD_PILE_ID;
 export const HQ_SEAT_SLOT = 6;
 export const HQ_SEAT = { x: 13.68, z: -6.3 } as const;
 export const REST_SEAT_COUNT = SEAFOOD_SEAT_COUNT + 1;
-/** 非蚵堆座位（吸菸區＋休息座）：不開工班、不算容量、不能被偷／丟 */
-export const isLeisurePile = (pileId: number) => isSmokePile(pileId) || isRestPile(pileId);
+/** 非蚵堆座位（吸菸區＋休息座＋機關槍）：不開工班、不算容量、不能被偷／丟 */
+export const isLeisurePile = (pileId: number) => isSmokePile(pileId) || isRestPile(pileId) || isMgPile(pileId);
 export const isSmokePile = (pileId: number) => pileId === SMOKE_PILE_ID || pileId === CAFE_SMOKE_PILE_ID;
 export const isCafeSmokePile = (pileId: number) => pileId === CAFE_SMOKE_PILE_ID;
 export const smokeSeatCountOf = (pileId: number) => (pileId === CAFE_SMOKE_PILE_ID ? CAFE_SMOKE_SEAT_COUNT : SMOKE_SEAT_COUNT);
@@ -191,6 +241,17 @@ export const PLAZA_LAMP_XZ: readonly [number, number][] = [
 
 /** 一堆座位：0–3 玩家、4–5 阿婆；皆朝堆心。吸菸區 pileId=SMOKE_PILE_ID。 */
 export function seatPose(pileId: number, slot: number) {
+  if (isMgPile(pileId)) {
+    const s = MG_SEATS[Math.max(0, Math.min(MG_SEATS.length - 1, slot))] ?? MG_SEATS[0];
+    // 站在高台槍後方操作（槍在面前）
+    const pos = new THREE.Vector3(
+      s.x + Math.sin(s.yaw) * MG_STAND_BACK,
+      MG_DECK_Y,
+      s.z + Math.cos(s.yaw) * MG_STAND_BACK,
+    );
+    const center = new THREE.Vector3(s.x - Math.sin(s.yaw), MG_DECK_Y, s.z - Math.cos(s.yaw));
+    return { pos, yaw: s.yaw, center, angle: 0 };
+  }
   if (isRestPile(pileId) && slot === HQ_SEAT_SLOT) {
     const pos = new THREE.Vector3(HQ_SEAT.x, 0, HQ_SEAT.z);
     const center = new THREE.Vector3(HQ_SEAT.x - 1, 0, HQ_SEAT.z);
@@ -267,6 +328,7 @@ export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDis
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
   for (let s = 0; s < CAFE_SMOKE_SEAT_COUNT; s++) consider(CAFE_SMOKE_PILE_ID, s);
   for (let s = 0; s < REST_SEAT_COUNT; s++) consider(SEAFOOD_PILE_ID, s);
+  for (let s = 0; s < MG_SEAT_COUNT; s++) consider(MG_PILE_ID, s);
   return best;
 }
 
@@ -358,6 +420,16 @@ export function pileObstacles(): [number, number, number][] {
     if (pileIsRemoved(i)) continue;
     const c = pileCenter(i);
     out.push([c.x, c.z, 1.05]);
+  }
+  // 高台南／東西側腳與欄（北面樓梯口不擋）
+  {
+    const p = MG_PLATFORM;
+    const hw = p.w * 0.5, hd = p.d * 0.5;
+    out.push([p.cx - hw + 0.22, p.cz + hd - 0.22, 0.34]);
+    out.push([p.cx + hw - 0.22, p.cz + hd - 0.22, 0.34]);
+    out.push([p.cx - hw - 0.08, p.cz + 0.35, 0.3]);
+    out.push([p.cx + hw + 0.08, p.cz + 0.35, 0.3]);
+    out.push([p.cx, p.cz + hd + 0.1, 0.48]);
   }
   return out;
 }
