@@ -5421,6 +5421,7 @@ function enterRoomWalk(fromSeat: boolean) {
     walkPos.x += Math.sin(seatYaw) * 0.55;
     walkPos.z += Math.cos(seatYaw) * 0.55;
     tYaw = yaw = seatYaw;
+    setTpv(true);
   } else {
     walkPos.set(0, 1.55, 3.1);
     tYaw = yaw = 0;

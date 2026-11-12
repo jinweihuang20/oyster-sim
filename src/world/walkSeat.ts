@@ -131,6 +131,8 @@ export function standUp() {
   D.oyster.visible = false; D.setProgress(0); D.setCombo(0); D.setTension(0); D.shellTop.rotation.z = 0; D.setRotKey(0); D.stopSteal(); D.setPhase('busy');
   walking = true; D.handRig.visible = false; walkPos.copy(D.SEAT).setY(1.55); const out = D.seatGround(D.seatNow()).setLength(0.45); walkPos.add(out);
   const y = D.getYaw() + D.getSeatYaw(); D.setTYaw(y); D.setYaw(y); D.setTPitch(-0.25); D.setPitch(-0.25);
+  // 任何場景站起：改第三人稱（方便走動環視）
+  D.setTpv(true); D.drawCamBtn();
   D.$('diff').textContent = ''; D.on('standBtn', false); D.on('joy', true); D.on('stealBtn', false);
   D.hint.textContent = D.COARSE ? '用搖桿走動，走到空的藍色板凳旁，按「坐這裡」坐下' : 'WASD 走動，走到空的藍色板凳旁，按 E／「坐這裡」坐下';
 }
@@ -158,7 +160,8 @@ export function plazaEnterWalkPose(fromSeat = true) {
       walkPos.y = 1.55 + (D.plazaGroundY?.(walkPos.x, walkPos.z) ?? 0);
       D.setTYaw(D.getSeatYaw()); D.setYaw(D.getSeatYaw());
     }
-    D.setTpv(!!D.saveTpv()); D.drawCamBtn();
+    // 站起一律第三人稱（不再還原存檔偏好）
+    D.setTpv(true); D.drawCamBtn();
   }
   D.drawRadio();
   D.setTPitch(-0.2); D.setPitch(-0.2); D.$('diff').textContent = '';
