@@ -53,7 +53,7 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 .panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(92vw,460px);max-height:90vh;overflow:auto;background:rgba(36,22,10,.94);border:2px solid #d9952b;border-radius:18px;padding:18px 22px;display:none;text-align:center}
 .panel.show{display:block}.panel ul{text-align:left;padding-left:18px;line-height:1.6;font-size:15px}
 .row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.1)}
-.dexItem{display:flex;align-items:center;gap:12px;padding:6px;text-align:left}.dot{width:30px;height:30px;border-radius:50%;flex:none}
+.dexItem{display:flex;align-items:flex-start;gap:12px;text-align:left}.dot{width:40px;height:40px;border-radius:50%;flex:none}
 
 #diff{position:absolute;bottom:calc(18% + 22px);width:100%;text-align:center;font-size:14px;font-weight:700;text-shadow:0 1px 3px #000}
 #stats{position:absolute;top:52px;left:50%;transform:translateX(-50%);font-size:12px;background:rgba(20,12,6,.45);padding:3px 10px;border-radius:10px;white-space:nowrap;display:flex;align-items:stretch;gap:8px;max-width:calc(100vw - 24px)}
@@ -285,11 +285,18 @@ body.tutOn #hint{display:none!important}
 @media (max-height:700px){#overlay h1{font-size:24px;margin:4px 0}#overlay p,#overlay ul{font-size:13px;line-height:1.45}}
 @media (orientation:landscape) and (max-height:500px){#overlay #start{min-height:52px;font-size:19px}}
 
-.dexItem .dot{display:flex;align-items:center;justify-content:center;font-size:20px;min-width:34px;min-height:34px}
-.dexItem .dot.unk{background:#2a2622!important;border:2px solid #888;box-sizing:border-box;color:#9a948c;font-weight:900;font-size:18px}.dexItem.locked b{color:#888}
-.rb{display:inline-block;font-size:11px;padding:1px 6px;border-radius:8px;font-weight:700;margin:1px}
-.r-common{background:#555;color:#eee}.r-uncommon{background:#2a7a4a;color:#dfffe8}.r-rare{background:#2a5ab0;color:#e0ecff}.r-legend{background:#b07a10;color:#fff3c0}
-.dexProg{margin:6px 0 10px}.dexBar{height:10px;background:#333;border-radius:6px;overflow:hidden;margin:6px 0}.dexBar i{display:block;height:100%;background:linear-gradient(90deg,#9be37a,#f2c440)}
+.dexItem .dot{display:flex;align-items:center;justify-content:center;font-size:20px;min-width:40px;min-height:40px;box-sizing:border-box;border:1.5px solid rgba(30,26,22,.12);box-shadow:0 0 0 3px color-mix(in srgb,var(--dex-glow,#ccc) 22%,transparent),inset 0 1px 0 rgba(255,255,255,.35)}
+.dexItem .dot.unk{background:#ece7dc!important;border:1.5px solid #cfc4ae;box-shadow:none;color:#8a8276;font-weight:900;font-size:18px}
+.dexItem.locked{opacity:.88}
+.dexItem.locked b{color:#8a8276}
+.rb{display:inline-block;font-size:11px;padding:2px 7px;border-radius:999px;font-weight:700;margin:0;line-height:1.2;border:1px solid transparent}
+.r-common{background:#ebe7e0;color:#5a5560;border-color:#d5d0c6}
+.r-uncommon{background:#e4f5ea;color:#2a6a42;border-color:#b7dfc4}
+.r-rare{background:#e4eefc;color:#2a5a86;border-color:#b7cce8}
+.r-legend{background:#fff0cc;color:#8a6200;border-color:#e6c35a}
+.dexProg{margin:0 0 14px}
+.dexBar{height:10px;background:#e8e0d0;border-radius:999px;overflow:hidden;margin:8px 0}
+.dexBar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#7ecf7a,#f2b705)}
 .ntag{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;background:rgba(30,20,10,.65);color:#ffe9c0;border:1px solid rgba(255,220,160,.5);border-radius:10px;font-size:12px;padding:2px 8px;cursor:pointer;white-space:nowrap}
 body.tutOn .ntag{display:none!important}
 #npcTip{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);max-width:340px;width:90vw;z-index:60;display:none;font-size:14px;text-align:left}
@@ -311,7 +318,6 @@ body.tutOn .ntag{display:none!important}
   #diff{left:0;width:100%;bottom:calc(var(--sa-bottom) + 32px);top:auto;text-align:center}
   #prog{bottom:calc(var(--sa-bottom) + 54px);top:auto}
 }
-#shopTabs{flex-wrap:nowrap!important}#shopTabs button{flex:1 1 0!important;min-width:0!important;white-space:nowrap!important;word-break:keep-all;padding:6px 4px!important;font-size:clamp(12px,3.6vw,15px)!important;overflow:hidden;text-overflow:ellipsis}
 /* 手機按鈕重新排版：右下雨傘；偷／丟殼見檔尾「右手臂」；左下次要一排（藥品／放棄／換位置） */
 #btnsL{display:none}
 @media (pointer:coarse){
@@ -342,8 +348,6 @@ body.tutOn .ntag{display:none!important}
 #puffBtn.held{background:linear-gradient(90deg,#2e9e4f var(--p,100%),rgba(30,60,40,.9) var(--p,100%))!important}
 #puffBtn.held.low{background:linear-gradient(90deg,#e0392b var(--p,100%),rgba(70,20,20,.9) var(--p,100%))!important;animation:ulow .3s infinite alternate}
 @keyframes ulow{to{filter:brightness(1.35)}}
-#shopTabs button{overflow:visible!important;text-overflow:clip!important;padding:4px 2px!important;font-size:14px!important;line-height:1.15;white-space:normal!important;word-break:keep-all!important;min-width:56px!important}
-#shopTabs .ti{display:block;font-size:16px}#shopTabs .tl{display:block;white-space:nowrap}
 
 /* 手機觸控區：中間留大片滑動區，按鈕貼邊、縮小 */
 @media (pointer:coarse){
@@ -360,7 +364,7 @@ body.tutOn .ntag{display:none!important}
  #btns button.mb{min-width:52px!important;min-height:52px!important;width:52px;height:52px}
 }
 @media (pointer:coarse) and (orientation:landscape) and (max-height:500px){#rotR{right:calc(var(--sa-right) + 110px)!important}#joy{bottom:calc(var(--sa-bottom) + 56px)!important}}
-.dexN{display:inline-block;background:#d9952b;color:#2a1600;border-radius:10px;padding:0 7px;font-size:13px;font-weight:800}
+.dexN{display:inline-flex;align-items:center;background:#fff3c4;color:#8a6200;border:1px solid #e6c35a;border-radius:999px;padding:1px 7px;font-size:12px;font-weight:800;line-height:1.3}
 #locPick{margin:8px auto;max-width:640px;text-align:left}
 #locPick .locHead{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:6px 10px;border:2px solid #f2c440;border-radius:10px;background:rgba(60,30,10,.7)}
 #locPick .locHead small{flex-basis:100%;color:#ffe9a8;font-size:13px}
@@ -541,7 +545,6 @@ button:disabled{filter:grayscale(.8);opacity:.55}
 #lockHint,#back-toast,#pauseTag{border-radius:2px;border:2px solid var(--ink);background:var(--ink);color:var(--paint)}
 .bub{background:var(--paint);color:var(--ink);border:2px solid var(--ink);border-radius:2px;box-shadow:3px 3px 0 rgba(0,0,0,.5)}.bub:after{border-top-color:var(--ink)}
 #warn .ic{width:1em;height:1em}
-.dexN{background:var(--red);color:var(--paint);border-radius:0}
 .scrollHint span{color:var(--red);background:linear-gradient(transparent,rgba(239,233,220,.97))}
 /* 雜貨店表 */
 .kt td,.kt th{border-bottom:2px dashed rgba(22,25,29,.2)}.kt th{background:var(--ink);color:var(--paint);font-weight:900}
@@ -615,18 +618,19 @@ button:disabled{filter:grayscale(.8);opacity:.55}
 #feed b{color:#f2b705}#feed small{opacity:.75;margin-right:6px;font-size:12px}
 @keyframes fdMove{from{transform:translateX(0)}to{transform:translateX(calc(-100vw - 100%))}}
 /* 排行榜 */
-#lbTabs,#lbView{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:6px 0}
-#lbTabs button,#lbView button{font-size:14px;padding:6px 10px;min-height:38px;background-color:var(--iron2);color:#fff}
-#lbTabs button.on,#lbView button.on{background-color:var(--red);color:var(--paint)}
 #lbMe{color:#f2b705;font-weight:900;min-height:1em}
 #lbList{margin:8px 0;text-align:left}
-.lbRow{display:flex;align-items:center;gap:8px;padding:6px;border:2px solid var(--ink);background:rgba(239,233,220,.08);margin-bottom:6px;box-shadow:2px 2px 0 var(--ink)}
-.lbRow.me{background:rgba(242,183,5,.18);border-color:#f2b705}
-.lbR{width:1.8em;text-align:center;font-weight:900;font-size:18px}
-.lbN{flex:1;min-width:0;overflow:visible}
+.lbRow{display:grid;grid-template-columns:2em minmax(0,1fr);gap:6px 8px;align-items:start;padding:10px 12px;margin:0 0 10px}
+.lbR{width:auto;text-align:center;font-weight:900;font-size:18px;line-height:1.2;padding-top:2px}
+.lbBody{min-width:0;display:flex;flex-direction:column;gap:6px}
+.lbN{min-width:0;overflow:hidden}
 .lbT{display:block;font-style:normal;font-size:12px;color:#f2b705;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lbV{font-weight:900;flex-shrink:0}
-.lbA{display:flex;gap:4px;flex-shrink:0}.lbA button{font-size:13px;padding:4px 6px;min-height:34px}.lbA>span{font-size:13px;opacity:.8;display:inline-flex;gap:2px;align-items:center}
+.lbFoot{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;min-width:0}
+.lbV{display:inline-flex;align-items:baseline;gap:2px;flex:none;padding:4px 10px;border-radius:8px;background:rgba(42,90,134,.12);color:#1f4d73;font-variant-numeric:tabular-nums;line-height:1.2;white-space:nowrap}
+.lbUnit{font-size:13px;font-weight:800;opacity:.85}
+.lbNum{font-size:20px;font-weight:900;letter-spacing:.02em}
+.lbSide{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;min-width:0;margin-left:auto}
+.lbA{display:flex;gap:4px;flex:none}.lbA button{font-size:13px;padding:4px 6px;min-height:34px}.lbA>span{font-size:13px;opacity:.8;display:inline-flex;gap:2px;align-items:center}
 .lbGap{border-top:2px dashed rgba(239,233,220,.4);margin:8px 0}
 .lbMsg{text-align:center;opacity:.8}.lbNote{font-size:12px;opacity:.75}
 #lbNickRow{display:flex;gap:6px;justify-content:center}#lbNick{font-size:16px;width:9em}
@@ -712,35 +716,51 @@ body.tutOn #feed{display:none!important}
 @media (max-width:500px){.panel.sheet{top:calc(8px + var(--sa-top))!important;max-height:calc(100dvh - 16px - var(--sa-bottom))!important}}
 /* 排行榜 */
 #lb .pb{display:flex;flex-direction:column;gap:12px}
-/* 上排 3（剝蚵榜）＋下排 2（死鬥）；gap 當分隔線，避免多 tab 邊框疊厚／缺線 */
-#lbTabs{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;margin:0;background:var(--ink);border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink)}
-#lbTabs button{margin:0!important;min-width:0!important;min-height:44px!important;height:auto;padding:8px 4px;font-size:13px;line-height:1.2;border:0!important;border-radius:0;box-shadow:none!important;background-color:var(--paint2);color:var(--ink);white-space:normal;transform:none;overflow:hidden}
-#lbTabs button{grid-column:span 2}
-#lbTabs button.on{background-color:var(--red);color:var(--paint)}
-#lbView{display:inline-flex;align-self:center;gap:0;margin:0;border:2px solid var(--ink);border-radius:999px;overflow:hidden;background:var(--paint)}
-#lbView button{margin:0!important;min-width:64px!important;min-height:32px!important;height:32px;padding:0 14px;font-size:13px;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--ink);transform:none}
-#lbView button+button{border-left:2px solid var(--ink)}
-#lbView button.on{background-color:var(--iron);color:var(--paint)}
 #lbMe:empty{display:none}#lbMe{text-align:center;color:var(--redD)}
-#lbList{margin:0;min-height:260px;display:flex;flex-direction:column;gap:6px}
+#lbList{margin:0;min-height:260px;display:flex;flex-direction:column;gap:0}
 .lbEmpty{flex:1;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;border:2px dashed rgba(22,25,29,.35);color:#4a4f55;font-size:15px;font-weight:700}
 .lbEmpty .ic{font-size:36px;opacity:.7}.lbEmpty small{font-weight:400;font-size:13px}
-.lbRow{display:grid;grid-template-columns:2em minmax(0,1fr) auto auto;align-items:center;column-gap:8px;margin:0;padding:6px 8px;background:rgba(255,255,255,.35)}
-.lbR{width:auto;flex-shrink:0}
-.lbN{display:flex;flex-direction:column;align-items:stretch;gap:1px;width:100%;min-width:0;max-width:100%;overflow:visible;white-space:normal;justify-self:stretch}
-.lbWho{display:flex;align-items:baseline;gap:4px;min-width:0;max-width:100%;flex-shrink:0}
+.lbRow{display:grid;grid-template-columns:2em minmax(0,1fr);align-items:start;column-gap:8px;row-gap:0;margin:0 0 10px;padding:10px 12px}
+.lbR{width:auto;flex-shrink:0;font-weight:900;line-height:1.25;padding-top:1px;text-align:center}
+.lbMedal{
+  display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  width:auto;min-width:28px;height:auto;padding:2px 0 0!important;border:0!important;
+  background:transparent!important;box-shadow:none!important;border-radius:0!important;
+  color:inherit;line-height:1;
+}
+.lbMedal b{font-size:15px;font-weight:900;line-height:1}
+.lbMedalIc{
+  width:18px;height:18px;display:block;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M7 2h4l1 4h-6zm6 0h4l1 4h-6zM8.5 7h7a4.5 4.5 0 1 1-7 0zm3.5 2.2a2.3 2.3 0 1 0 0 4.6 2.3 2.3 0 0 0 0-4.6zM9 16.5l3 1.2 3-1.2V21l-3-1.3L9 21z'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M7 2h4l1 4h-6zm6 0h4l1 4h-6zM8.5 7h7a4.5 4.5 0 1 1-7 0zm3.5 2.2a2.3 2.3 0 1 0 0 4.6 2.3 2.3 0 0 0 0-4.6zM9 16.5l3 1.2 3-1.2V21l-3-1.3L9 21z'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+.lbMedal.gold{color:#c4920a}
+.lbMedal.silver{color:#7a8490}
+.lbMedal.bronze{color:#cd7f32}
+.lbMedal.gold b{color:#8a6200}
+.lbMedal.silver b{color:#3d4650}
+.lbMedal.bronze b{color:#8b5a2b}
+.lbBody{min-width:0;display:flex;flex-direction:column;gap:6px}
+.lbN{display:flex;flex-direction:column;align-items:stretch;gap:1px;min-width:0;max-width:100%;overflow:hidden}
+.lbWho{display:flex;align-items:baseline;gap:4px;min-width:0;max-width:100%;flex-wrap:wrap}
 .lbNick{display:block;width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:900}
 .lbId,.lbN small.lbId{display:inline;margin:0;opacity:.7;font-size:11px;line-height:1.25;white-space:nowrap;flex-shrink:0}
 .lbT{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lbV{text-align:right;min-width:3.5em;flex-shrink:0;font-variant-numeric:tabular-nums}
-.lbA{display:grid;grid-template-columns:repeat(2,48px);gap:4px;flex-shrink:0}
-.lbA button,.lbA>span{margin:0!important;min-width:0!important;min-height:34px!important;height:34px;padding:0 4px;font-size:13px;justify-content:center;font-variant-numeric:tabular-nums}
+.lbFoot{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;min-width:0}
+.lbV{display:inline-flex;align-items:baseline;gap:3px;flex:none;padding:5px 11px;border-radius:8px;background:rgba(42,90,134,.14);color:#1a4568;border:1.5px solid rgba(42,90,134,.22);font-variant-numeric:tabular-nums;line-height:1.15;white-space:nowrap}
+.lbUnit{font-size:14px;font-weight:800;opacity:.9}
+.lbNum{font-size:22px;font-weight:900;letter-spacing:.02em}
+.lbRow.me .lbV{background:rgba(242,183,5,.22);border-color:rgba(180,120,0,.35);color:#7a4a00}
+.lbSide{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;min-width:0;margin-left:auto}
+.lbA{display:inline-flex;gap:4px;flex:none}
+.lbA button,.lbA>span{margin:0!important;min-width:44px!important;min-height:34px!important;height:34px;padding:0 6px;font-size:13px;justify-content:center;font-variant-numeric:tabular-nums;white-space:nowrap}
 .lbA>span{display:inline-flex;align-items:center}
 @media (max-width:500px){
-  .lbRow{column-gap:6px;padding:6px}
-  .lbV{min-width:2.8em;font-size:14px}
-  .lbA{grid-template-columns:repeat(2,36px);gap:2px}
-  .lbA button,.lbA>span{min-height:30px!important;height:30px;font-size:12px;padding:0 2px}
+  .lbRow{column-gap:6px;padding:8px}
+  .lbNum{font-size:20px}
+  .lbFoot{gap:6px}
+  .lbSide{justify-content:flex-start;margin-left:0;width:100%}
+  .lbA button,.lbA>span{min-width:40px!important;min-height:30px!important;height:30px;font-size:12px;padding:0 4px}
 }
 .lbGap{margin:2px 0}
 .lbSec{margin-top:4px;font-weight:900;font-size:13px;letter-spacing:.1em;color:var(--iron);border-top:2px dashed rgba(22,25,29,.35);padding-top:12px}
@@ -760,7 +780,7 @@ html,body{overflow-x:hidden;max-width:100%}
 .panel img,.panel table{max-width:100%}
 .panel.sheet .scrollHint span{margin:0}
 
-.slGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}.slCard{border:2px solid #1b1b1b;border-radius:8px;padding:6px;background:rgba(255,255,255,.06);display:flex;flex-direction:column;gap:4px}.slCard.on{border-color:#ffd25a}.slCard small{opacity:.85}.slBtns{display:flex;gap:4px}.slBtns button{flex:1;min-height:36px;font-size:13px}.slv{max-width:100%}
+.slGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}.slCard{padding:8px;display:flex;flex-direction:column;gap:4px}.slCard.on{border-color:#c4a45a!important;box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 0 0 1px rgba(196,164,90,.35),0 2px 8px rgba(20,30,45,.07)!important}.slCard small{opacity:.85}.slBtns{display:flex;gap:4px}.slBtns button{flex:1;min-height:36px;font-size:13px}.slv{max-width:100%}
 .clTabs{display:flex;gap:4px;margin:6px 0}.clTabs button{flex:1;min-height:36px;font-size:14px;opacity:.7}.clTabs button.on{opacity:1;background:#d9952b;color:#2a1600}
 .eqStage{position:relative;width:100%;max-width:340px;margin:0 auto;aspect-ratio:3/4}.eqFig{position:absolute;left:25%;top:0;width:50%;height:100%}.eqSlot{position:absolute;min-width:84px;padding:4px 6px;font-size:12px;display:flex;flex-direction:column;align-items:flex-start;background:rgba(240,230,200,.95);color:#1b1b1b;border:2px solid #1b1b1b}.eqSlot.on{background:#ffd25a}.eqSlot b{font-size:13px}
 .eqList{display:flex;flex-direction:column;gap:6px;margin:8px 0}.eqList button{display:flex;gap:8px;align-items:center;text-align:left}.eqList button.on{background:#d9952b;color:#2a1600}.eqList small{display:block;opacity:.85}.eqHint{font-size:12px;opacity:.8;text-align:center}.eqSets{font-size:13px;margin:8px 0;display:flex;flex-direction:column;gap:4px}.eqSets div{opacity:.6}.eqSets div.on{opacity:1;color:#ffd25a}#eqShare{width:100%;margin-top:6px}.btnLike{display:block;text-align:center;padding:10px;margin-top:6px;border:2px solid #1b1b1b;background:#d9952b;color:#2a1600;text-decoration:none;border-radius:6px}
@@ -920,12 +940,53 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 #moonAim .maT{position:absolute;margin:-28px 0 0 -40px;width:80px;padding:0;background:none;border:0;color:#ff4a3a;display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 0 3px #000);animation:maP 0.9s ease-in-out infinite}
 #moonAim .maT span{font-size:13px;font-weight:700;color:#fff;background:rgba(0,0,0,.6);padding:1px 6px;border-radius:4px}
 @keyframes maP{50%{color:#ffd25a}}
-.itemCard{display:flex;align-items:center;gap:10px;padding:10px;margin:8px 0;border:2px solid #d9952b;border-radius:8px;background:rgba(0,0,0,.2)}
+.itemCard{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0 0 10px}
 .itemCard .itemIc{color:#c8401a;flex:none}.itemCard .itemTx{flex:1}.itemCard small{display:block;font-size:12px;margin-top:2px}.itemCard button{min-width:80px;min-height:44px}
 
 #moonAim{pointer-events:none}#moonAim .maX,#moonAim .maT{pointer-events:auto}#moonAim .maTip{pointer-events:none}
-#shopTabs,#shop .ph #shopTabs{display:flex!important;flex-wrap:wrap!important;gap:4px;margin:8px 0 0!important;max-width:100%;box-sizing:border-box}
-#shopTabs button{flex:1 1 calc(25% - 4px)!important;min-width:0!important;max-width:100%;box-sizing:border-box}
+/* ===== 面板分類選單：軟遊戲風（未選暖米、選中柔藍）===== */
+:is(#shopTabs,#shop .ph #shopTabs,#lbTabs,#lbView){
+  display:flex!important;flex-wrap:wrap!important;gap:5px!important;
+  margin:0;padding:0!important;max-width:100%;box-sizing:border-box;
+  background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible;
+}
+#shopTabs,#shop .ph #shopTabs{margin:8px 0 0!important}
+#shop .ph #shopTabs{margin:8px -4px 0!important}
+#lbView{align-self:center;justify-content:center}
+:is(#shopTabs,#lbTabs,#lbView) button{
+  box-sizing:border-box;margin:0!important;min-width:0!important;max-width:100%;
+  min-height:32px!important;height:auto!important;padding:5px 9px!important;
+  font-size:12px!important;line-height:1.2!important;font-weight:700!important;
+  white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis;
+  border-radius:10px!important;transform:none!important;opacity:1!important;
+  color:#4a5560!important;border:1.5px solid #d9cbb0!important;text-shadow:none;
+  background:linear-gradient(180deg,#fffaf0 0%,#f3ead8 100%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.8),0 1px 3px rgba(40,30,15,.08)!important;
+}
+:is(#shopTabs,#lbTabs,#lbView) button:active{
+  transform:translateY(1px)!important;
+  box-shadow:inset 0 1px 3px rgba(40,30,15,.12)!important;
+}
+#shopTabs button{flex:1 1 calc(25% - 5px)!important}
+#lbTabs button{flex:1 1 calc(33.33% - 5px)!important;grid-column:auto!important}
+#lbView button{flex:0 1 auto;min-width:4.5em!important;padding:5px 12px!important}
+:is(#shopTabs,#lbTabs,#lbView) button.on{
+  color:#fff!important;border-color:#3d6f9a!important;text-shadow:none;
+  background:linear-gradient(180deg,#5a8fbf 0%,#2a5a86 100%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 2px 6px rgba(42,90,134,.22)!important;
+  font-weight:800!important;
+}
+:is(#shopTabs,#lbTabs,#lbView) button.on:active{
+  box-shadow:inset 0 1px 4px rgba(20,40,60,.25)!important;
+}
+#shopTabs .ti,#shopTabs .tl{display:inline!important;font-size:inherit!important;line-height:inherit!important}
+#shopTabs .ti{margin-right:.15em}
+#shopTabs button.hasNew:not(.on){box-shadow:inset 0 1px 0 rgba(255,255,255,.8),0 1px 3px rgba(40,30,15,.08),inset 0 0 0 1.5px #e85a4a!important}
+@media (max-width:500px){
+  :is(#shopTabs,#lbTabs,#lbView) button{min-height:30px!important;padding:4px 7px!important;font-size:11px!important}
+  #shopTabs button{flex:1 1 calc(33.33% - 5px)!important}
+  #lbTabs button{flex:1 1 calc(50% - 5px)!important}
+}
 
 #medList{width:min(360px,92vw)!important;max-width:360px!important}
 #medList button[data-use],#medList button[data-item]{display:block;flex:none;height:auto;width:100%;box-sizing:border-box;padding:8px 10px;touch-action:manipulation}
@@ -958,8 +1019,8 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 #shopBtn,#shopBtn2,#oShop,#eqShop{position:relative!important;overflow:visible!important}
 #shopBtn .newDot,#shopBtn2 .newDot,#oShop .newDot,#eqShop .newDot,.newDot{position:absolute!important;top:-7px!important;right:-7px!important;left:auto!important;bottom:auto!important;z-index:5;display:block!important;margin:0!important;padding:0 4px!important;min-width:18px;height:18px;line-height:18px!important;box-sizing:border-box;font-size:11px!important;font-weight:800;text-align:center;color:#fff!important;background:#e0322a!important;border:1.5px solid #fff8e8;border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap;width:auto!important;opacity:1!important}
 .newTag{display:inline-block;margin-left:6px;padding:0 5px;font-size:11px;line-height:16px;font-weight:800;color:#fff;background:#e0322a;border:1px solid #2a1600;border-radius:3px;vertical-align:middle}
-#shopTabs button.hasNew{box-shadow:inset 0 0 0 2px #ff5a3a,2px 2px 0 #000!important}
-#shopTabs button.hasNew:after{content:"";display:inline-block;width:7px;height:7px;margin-left:3px;border-radius:50%;background:#ff3a2a;vertical-align:top}
+#shopTabs button.hasNew{box-shadow:inset 0 0 0 1.5px #ff5a3a!important}
+#shopTabs button.hasNew:after{content:"";display:inline-block;width:6px;height:6px;margin-left:3px;border-radius:50%;background:#ff3a2a;vertical-align:top}
 #newMsg .nmTx{margin:8px 0;font-size:15px;line-height:1.5}
 #featMsg .featList{margin:10px 0 4px;padding-left:1.2em;font-size:14px;line-height:1.55;text-align:left}
 #featMsg .featList li{margin:6px 0}
@@ -1527,7 +1588,6 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 .frBadge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(42,90,134,.15);color:#2a5a86;font-size:12px;font-weight:800}
 .frBadge.dim{opacity:.65}
 .lbFr{color:#2a5a86;font-weight:800;margin-left:4px}
-.lbSide{display:flex;align-items:center;gap:6px;flex-shrink:0;justify-self:end}
 .lbFrAct{flex:none;display:inline-flex;align-items:center;max-width:none}
 .lbFrAct .frAct,.lbFrAct .frBadge{
   font-size:12px;min-height:30px;padding:4px 8px;white-space:nowrap;writing-mode:horizontal-tb;
@@ -1616,6 +1676,32 @@ body button.loc.locPlaza{
 #menuTop #calBtn .ic,#menuTop #oNotice .ic{width:18px!important;height:18px!important}
 #menuTop #menuMoney{padding:0 12px!important}
 
+/* ===== 主畫面頂列：明亮米白紙卡（公告／名字／簽到／金額）===== */
+#menuTop #meLine,#menuTop #menuMoney,#menuTop #calBtn,#menuTop #oNotice{
+  background:#f6efdf!important;
+  color:#2a3440!important;
+  border:1.5px solid #d6c49c!important;
+  box-shadow:inset 0 1px 0 #fffaf0,0 2px 6px rgba(60,40,10,.10)!important;
+  text-shadow:none!important;
+}
+#menuTop #meLine #nameEdit{color:#2a3440!important}
+#menuTop #meLine .ic,#menuTop #calBtn .ic,#menuTop #oNotice .ic{
+  color:#2a3440!important;
+  background-color:#2a3440!important;
+}
+#menuTop #menuMoney,#menuTop #menuMoney b,#menuTop #menuMoneyV{
+  color:#c49a12!important;
+  -webkit-text-fill-color:#c49a12!important;
+}
+#menuTop #menuMoney .ic{color:#c49a12!important;background-color:#c49a12!important}
+#menuTop #calBtn:active,#menuTop #oNotice:active,#menuTop #meLine:active{
+  background:#efe6d0!important;
+  box-shadow:inset 0 1px 0 #fffaf0,0 1px 2px rgba(60,40,10,.12)!important;
+}
+#menuTop .calBtn .calDot,#menuTop .noticeBtn .noticeDot{
+  border-color:#f6efdf!important;
+}
+
 /* ===== 遊戲名：透明低調 ===== */
 #titleSign{background:none!important;border:0!important;box-shadow:none!important;padding:6px 0 2px!important;margin:10px auto 6px!important;text-align:center!important}
 #titleSign::before,#titleSign::after{display:none!important}
@@ -1629,7 +1715,7 @@ body button.loc.locPlaza{
 #titleSign .titleSub::after{background:linear-gradient(90deg,#9aa3ad,transparent)!important}
 
 /* ===== 全站容器減重：細框＋柔和陰影（死鬥 HUD 除外）===== */
-:is(.panel,.achCard,.achCatT,.achSum>div,.bub,.eqBoard,.eqList,.eqSecT,.eqSet,.eqStage,.eqStamp,.evEntry,.svEntry,.rdGot,.resAch,.hgB,#achBan,#hgCall,#lbTabs,#locPick .locHead,#moonAim .maTip,#sv .svQ,#stats,#top,#gauge,#gtag,.panel input[type=text],.panel input[type=email],.panel textarea,.panel .px):not(#dmRoot *){
+:is(.panel,.achCard,.achCatT,.achSum>div,.bub,.eqBoard,.eqList,.eqSecT,.eqSet,.eqStage,.eqStamp,.evEntry,.svEntry,.rdGot,.resAch,.hgB,#achBan,#hgCall,#locPick .locHead,#moonAim .maTip,#sv .svQ,#stats,#top,#gauge,#gtag,.panel input[type=text],.panel input[type=email],.panel textarea,.panel .px):not(#dmRoot *){
   border-width:1.5px!important;border-radius:10px;
   box-shadow:0 2px 10px rgba(20,30,45,.12),0 1px 2px rgba(20,30,45,.08)!important;
 }
@@ -1732,7 +1818,7 @@ body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
 /* ===== 藥品卡片列表 ===== */
 .medIntro{font-size:12px;color:#6b7480;margin:2px 0 10px}
 .medGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
-.medCard{display:grid;grid-template-columns:1fr auto;grid-template-areas:"top buy" "good buy" "bad buy";column-gap:10px;row-gap:3px;align-items:center;background:rgba(255,255,255,.6);border:1px solid rgba(31,42,54,.10);border-radius:12px;padding:10px 12px;box-shadow:0 2px 8px rgba(20,30,45,.06);color:#2a3440}
+.medCard{display:grid;grid-template-columns:1fr auto;grid-template-areas:"top buy" "good buy" "bad buy";column-gap:10px;row-gap:3px;align-items:center;padding:10px 12px}
 .medTop{grid-area:top;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
 .medName{font-size:15px;white-space:nowrap}
 .medMeta{font-size:12px;color:#7a828c;white-space:nowrap;margin-left:auto}
@@ -1741,10 +1827,60 @@ body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
 .medGood::before{content:"＋ ";font-weight:900}.medBad::before{content:"－ ";font-weight:900}
 .medCard .medBuy{grid-area:buy;white-space:nowrap;min-width:72px;padding:8px 12px!important}
 
+/* ===== 共用列表卡片邊框（雜貨店／排行榜） ===== */
+:is(#shopList table.kt tr,#shopList .petCard,#shopList .itemCard,#shopList .slCard,#shopList .medCard,.medCard,#lbList .lbRow,#dexList .dexItem,#dexList .dexProg,#dexList .dexLife){
+  background:#fbf7ee!important;
+  border:1.5px solid #e2d3a8!important;
+  border-radius:10px!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 2px 8px rgba(20,30,45,.07)!important;
+  color:#2a3440;
+}
+
+/* ===== 圖鑑頁 ===== */
+#dexList{display:flex;flex-direction:column;gap:0}
+#dexList .dexProg{padding:12px 14px;margin:0 0 14px}
+#dexList .dexProgTop{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+#dexList .dexProgTop b{font-size:16px;color:#2a3440}
+#dexList .dexProgSub{display:block;margin-top:2px;font-size:12px;color:#7a828c;font-weight:600}
+#dexList .dexProgTotal{font-size:13px;color:#5a6570;white-space:nowrap}
+#dexList .dexProgTotal b{color:#2a5a86}
+#dexList .dexRars{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
+#dexList .dexSec{margin:0 0 16px}
+#dexList .dexH{
+  display:flex;align-items:center;gap:8px;margin:0 0 8px;padding:0;
+  font-size:14px;font-weight:800;letter-spacing:.04em;color:#2a3440;
+}
+#dexList .dexH::before{content:"";width:3px;height:1em;border-radius:2px;background:#2a5a86;flex:none}
+#dexList .dexGrid{display:grid;grid-template-columns:1fr;gap:8px}
+@media (min-width:560px){#dexList .dexGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+#dexList .dexItem{padding:10px 12px;margin:0;gap:12px;align-items:center}
+#dexList .dexItem.locked{background:#f3eee3!important;border-style:dashed!important;box-shadow:none!important}
+#dexList .dexBody{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+#dexList .dexTitle{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+#dexList .dexTitle b{font-size:15px;color:#2a3440;min-width:0}
+#dexList .dexMeta{margin:0;font-size:12px;line-height:1.45;color:#6b7480}
+#dexList .dexLine{margin:0;font-size:12px;line-height:1.4;color:#8a6a30;font-style:italic}
+#dexList .dexPx{color:#c49a12;font-weight:800}
+#dexList .dexLife{padding:12px 14px;margin:0}
+#dexList .dexLife p{margin:0 0 6px;font-size:13px;line-height:1.55;color:#3a4450}
+#dexList .dexLife p:last-child{margin-bottom:0}
+#dexList .dexTitles{color:#5a6570}
+#lbList .lbRow.me{
+  background:#fff6d6!important;
+  border-color:#e2c56a!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.75) inset,0 2px 8px rgba(180,140,40,.12)!important;
+}
+#lbList .lbRow.top1{background:linear-gradient(90deg,#fff3c4,#fbf7ee)!important;border-color:#e6c35a!important}
+#lbList .lbRow.top2{background:linear-gradient(90deg,#eef1f4,#fbf7ee)!important;border-color:#c5ccd3!important}
+#lbList .lbRow.top3{background:linear-gradient(90deg,#f5e0cc,#fbf7ee)!important;border-color:#d4a574!important}
+#lbList .lbRow.me.top1,#lbList .lbRow.me.top2,#lbList .lbRow.me.top3{
+  background:#fff6d6!important;border-color:#e2c56a!important;
+}
+
 /* ===== 雜貨店表格改卡片 ===== */
 #shopList table.kt,#shopList table.kt tbody{display:block;width:100%;border:0!important;background:none!important;box-shadow:none!important}
 #shopList table.kt tr.ktHead{display:none}
-#shopList table.kt tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;background:rgba(255,255,255,.6);border:1px solid rgba(31,42,54,.10);border-radius:12px;padding:10px 12px;margin:0 0 10px;box-shadow:0 2px 8px rgba(20,30,45,.06);color:#2a3440}
+#shopList table.kt tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:10px 12px;margin:0 0 10px}
 #shopList table.kt td{display:block;border:0!important;padding:0!important;background:none!important;text-align:left;white-space:nowrap}
 #shopList table.kt td:first-child{flex:1 1 100%;white-space:normal;line-height:1.45}
 #shopList table.kt td:first-child b{font-size:15px}
@@ -1769,7 +1905,7 @@ body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
 
 /* ===== 寵物商店卡（獨立樣式，不沿用 .kt；flex 避免 grid 在 iOS 的邊緣問題） ===== */
 #shopList .petList{display:flex;flex-direction:column;gap:10px;margin:6px 0 12px}
-#shopList .petCard{display:flex;align-items:flex-start;gap:10px;background:rgba(255,255,255,.6);border:1px solid rgba(31,42,54,.10);border-radius:12px;padding:10px 12px;box-shadow:0 2px 8px rgba(20,30,45,.06);color:#2a3440;box-sizing:border-box;width:100%}
+#shopList .petCard{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;box-sizing:border-box;width:100%}
 #shopList .petCard .petThumb{flex:0 0 64px;width:64px;height:64px;min-width:64px;border-radius:10px;background:rgba(31,42,54,.08);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;border:0;padding:0;margin:0;box-sizing:border-box;-webkit-appearance:none;appearance:none}
 #shopList .petCard .petThumb img{width:100%;height:100%;display:block;object-fit:contain}
 #shopList .petCard .petBody{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px}
@@ -1825,10 +1961,29 @@ body #locPick button.loc.cur::after{top:6px!important;right:6px!important}
   #rotTipL .rtTxt{font-size:11px;padding:4px 9px}
 }
 
-/* 分頁選中狀態統一：未選淡灰、選中實心藍（雜貨店、排行榜） */
-body #shopTabs button,body #lbTabs button,body #lbView button{background:#eef0f2!important;background-image:none!important;color:#5b6570!important;border:1.5px solid #d5dadf!important;box-shadow:none!important;opacity:1!important;font-weight:500}
-body #shopTabs button.on,body #lbTabs button.on,body #lbView button.on{background:#2a5a86!important;color:#fff!important;border-color:#2a5a86!important;font-weight:700;box-shadow:0 2px 6px rgba(42,90,134,.35)!important}
-body #shopTabs button.hasNew:not(.on){box-shadow:inset 0 0 0 2px #ff5a3a!important}
+/* 分頁選中狀態：軟遊戲風（含服飾子分類） */
+body :is(#shopTabs,#lbTabs,#lbView,.clTabs) button{
+  color:#4a5560!important;border:1.5px solid #d9cbb0!important;border-radius:10px!important;
+  background:linear-gradient(180deg,#fffaf0 0%,#f3ead8 100%)!important;
+  background-image:linear-gradient(180deg,#fffaf0 0%,#f3ead8 100%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.8),0 1px 3px rgba(40,30,15,.08)!important;
+  opacity:1!important;font-weight:700!important;text-shadow:none;
+}
+body :is(#shopTabs,#lbTabs,#lbView,.clTabs) button.on{
+  color:#fff!important;border-color:#3d6f9a!important;
+  background:linear-gradient(180deg,#5a8fbf 0%,#2a5a86 100%)!important;
+  background-image:linear-gradient(180deg,#5a8fbf 0%,#2a5a86 100%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 2px 6px rgba(42,90,134,.22)!important;
+  font-weight:800!important;text-shadow:none;
+}
+body #shopTabs button.hasNew:not(.on){
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.8),0 1px 3px rgba(40,30,15,.08),inset 0 0 0 1.5px #e85a4a!important;
+}
+body .clTabs{display:flex!important;flex-wrap:wrap!important;gap:5px!important;background:transparent!important}
+body .clTabs button{
+  flex:1 1 auto!important;min-width:0!important;min-height:32px!important;
+  padding:5px 9px!important;font-size:12px!important;margin:0!important;
+}
 
 #lookTip{position:fixed;left:50%;top:46%;z-index:40;pointer-events:none;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:12px;opacity:0;transition:opacity .35s}
 #lookTip.on{opacity:1}

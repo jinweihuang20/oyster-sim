@@ -4,7 +4,7 @@ const API = 'https://game-status.gwtech.org/s';
 type Deps = { id: string; test: boolean; nick: () => string; setNick: (v: string) => void; inTut: () => boolean; on: () => boolean; label: (kind: string, item: number) => string; title?: () => string; foil?: () => boolean; toast: (t: string) => void; LS: { getItem(k: string): string | null; setItem(k: string, v: string): void } };
 let D: Deps;
 const $ = (id: string) => document.getElementById(id)!;
-const esc = (v: string) => v.replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
 const tq = () => D.test ? '&test=1' : '';
 function post(p: string, data: object) {
   return fetch(API + p, { method: 'POST', body: JSON.stringify({ id: D.id, nick: D.nick(), title: D.title?.() ?? '', foil: !!D.foil?.(), test: D.test, ...data }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(r => r.ok ? r.json() : null).catch(() => null);
@@ -135,9 +135,21 @@ async function render() {
   };
   const fr = await import('./friends');
   await fr.loadFriends();
+  const fmtV = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toLocaleString('en-US') : String(v ?? '');
+  };
   const row = (x: any) => {
-    return `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
-      (x.me ? `<span class="lbSide"><span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span></span>` : `<span class="lbSide"><span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span><span class="lbFrAct">${fr.friendActionBtn(x.k, x.tag, x.nick)}</span></span>`) + '</div>';
+    const side = x.me
+      ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>`
+      : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span><span class="lbFrAct">${fr.friendActionBtn(x.k, x.tag, x.nick)}</span>`;
+    const score = `<span class="lbV">${unit ? `<span class="lbUnit">${esc(unit)}</span>` : ''}<b class="lbNum">${esc(fmtV(x.v))}</b></span>`;
+    const rank = Number(x.rank);
+    const medal = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+    const rankEl = medal
+      ? `<span class="lbR lbMedal ${medal}" title="第 ${rank} 名" aria-label="第 ${rank} 名"><span class="lbMedalIc"></span><b>${rank}</b></span>`
+      : `<span class="lbR">${esc(x.rank)}</span>`;
+    return `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}${medal ? ` top${rank}` : ''}">${rankEl}<div class="lbBody"><div class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</div><div class="lbFoot">${score}<div class="lbSide">${side}</div></div></div></div>`;
   };
   const rows = r.rows as any[];
   const emptyHint = board === 'seat' ? '把鄰居送到指定位子後就會出現成績！' : board.startsWith('dm') ? '死鬥結算後就會出現成績！' : '收工後就會出現你的成績！';

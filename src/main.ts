@@ -2657,8 +2657,8 @@ function stealOne(n: Npc) {
   SFX.sneak(); toast('偷到一顆！', '#c9a0ff'); updHud();
 }
 function lifeHtml() { const L = save.life, w = L.opened + L.wasteShells ? Math.round((L.missed + L.wasteShells) / (L.opened + L.wasteShells) * 100) : 0;
-  const tl = Object.entries(save.titles).map(([k, v]) => `${k} ×${v}`).join('、') || '（猶無）';
-  return `<h3>生涯紀錄</h3><p style="font-size:13px;line-height:1.6">工作 ${save.days} 天・累積收入 $${save.money}・最佳 ${save.best} 顆<br>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}<br>完美／俐落 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}<br>偷 ${L.steals}/被抓 ${L.caught}・丟中阿婆 ${L.shellHits}・被丟中 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}<br>稱號：${tl}</p>`; }
+  const tl = Object.entries(save.titles).map(([k, v]) => `${esc(k)} ×${v}`).join('、') || '（還沒有）';
+  return `<section class="dexSec"><h3 class="dexH">生涯紀錄</h3><div class="dexLife"><p>工作 <b>${save.days}</b> 天・累積收入 <b class="dexPx">$${save.money}</b>・最佳 <b>${save.best}</b> 顆</p><p>開殼 ${L.opened}・入碗 ${L.inBowl}・浪費率 ${w}%・殼屑 ${L.cracked}</p><p>完美／俐落 ${L.perfects}・最長連擊 ${L.bestCombo}・放棄 ${L.abandoned}・割手 ${L.stabs}</p><p>偷 ${L.steals}／被抓 ${L.caught}・丟中阿婆 ${L.shellHits}・被丟中 ${L.hitsTaken}・擋 ${L.blocks}・反彈 ${L.reflects}</p><p class="dexTitles">稱號：${tl}</p></div></section>`; }
 let lastPay = { gross: 0, pen: 0, earn: 0 }, nameWait = false;
 function endDay() { inputGuard(); if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
@@ -2838,11 +2838,30 @@ function renderDex() {
     ...RAR.map((r, i) => ({ name: r.name, color: r.css, weight: r.w, price: r.price, tease: r.tease, emoji: r.emo as string | undefined, icon: undefined as string | undefined, line: undefined as string | undefined, has: save.dex[i] ?? 0 })),
     ...ODD.map((o, i) => ({ name: o.name, color: o.color, weight: o.weight, price: o.price, tease: o.tease, emoji: o.emoji, icon: o.icon, line: o.line, has: save.odd[i] ?? 0 })),
   ];
-  const item = (x: typeof all[number]) => { const rr = rarOf(x.weight); return `<div class="dexItem ${x.has ? '' : 'locked'}">${x.has ? `<div class="dot" style="background:${x.color};box-shadow:0 0 8px ${x.color}">${x.icon ? `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#1e1a16" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${x.icon}</svg>` : (x.emoji ?? '')}</div>` : '<div class="dot unk" aria-hidden="true">?</div>'}<div><b>${x.has ? x.name : '？？？'}</b>${x.has ? ` <span class="dexN">×${x.has}</span>` : ''} <span class="rb r-${rr}">${RZ[rr]}</span><br><small>${x.has ? `收集 ${x.has} 件・值 ${x.price}${x.line ? `<br>「${x.line}」` : ''}` : `💭 ${x.tease}`}</small></div></div>`; };
+  const item = (x: typeof all[number]) => {
+    const rr = rarOf(x.weight);
+    const locked = !x.has;
+    const icon = x.icon
+      ? `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#1e1a16" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">${x.icon}</svg>`
+      : (x.emoji ?? '');
+    return `<article class="dexItem${locked ? ' locked' : ''}">${locked
+      ? '<div class="dot unk" aria-hidden="true">?</div>'
+      : `<div class="dot" style="background:${x.color};--dex-glow:${x.color}">${icon}</div>`}<div class="dexBody"><div class="dexTitle"><b>${locked ? '？？？' : esc(x.name)}</b>${x.has ? `<span class="dexN">×${x.has}</span>` : ''}<span class="rb r-${rr}">${RZ[rr]}</span></div><p class="dexMeta">${locked ? esc(x.tease) : `收集 ${x.has} 件・值 <b class="dexPx">$${x.price}</b>`}</p>${x.has && x.line ? `<p class="dexLine">「${esc(x.line)}」</p>` : ''}</div></article>`;
+  };
   const got = all.filter(x => x.has).length;
-  const per = (['common', 'uncommon', 'rare', 'legend'] as const).map(r => { const xs = all.filter(x => rarOf(x.weight) === r); return `<span class="rb r-${r}">${RZ[r]} ${xs.filter(x => x.has).length}/${xs.length}</span>`; }).join(' ');
-  $('dexList').innerHTML = `<div class="dexProg"><b>已收集 ${got} / ${all.length} 種</b>・累計挖到 <b>${all.reduce((a, x) => a + x.has, 0)}</b> 個<div class="dexBar"><i style="width:${got / all.length * 100}%"></i></div>${per}</div>` +
-    '<h3>珍珠</h3>' + all.slice(0, RAR.length).map(item).join('') + '<h3>奇物</h3>' + all.slice(RAR.length).map(item).join('') + lifeHtml();
+  const total = all.reduce((a, x) => a + x.has, 0);
+  const pct = all.length ? Math.round(got / all.length * 100) : 0;
+  const per = (['common', 'uncommon', 'rare', 'legend'] as const).map(r => {
+    const xs = all.filter(x => rarOf(x.weight) === r);
+    return `<span class="rb r-${r}">${RZ[r]} ${xs.filter(x => x.has).length}/${xs.length}</span>`;
+  }).join('');
+  const pearls = all.slice(0, RAR.length).map(item).join('');
+  const odds = all.slice(RAR.length).map(item).join('');
+  $('dexList').innerHTML =
+    `<div class="dexProg"><div class="dexProgTop"><div><b>已收集 ${got} / ${all.length}</b><span class="dexProgSub">完成度 ${pct}%</span></div><span class="dexProgTotal">累計 <b>${total}</b> 個</span></div><div class="dexBar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div><div class="dexRars">${per}</div></div>` +
+    `<section class="dexSec"><h3 class="dexH">珍珠</h3><div class="dexGrid">${pearls}</div></section>` +
+    `<section class="dexSec"><h3 class="dexH">奇物</h3><div class="dexGrid">${odds}</div></section>` +
+    lifeHtml();
 }
 renderDex();
 
