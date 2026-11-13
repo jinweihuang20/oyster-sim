@@ -1750,7 +1750,7 @@ const pryW = () => Math.min(0.6, Math.min(1.6, 1 + 0.15 * pryHits) * PRY[diff].w
 const PRY_SLOW = 0.56; // 整體放慢（0.8→0.56，再慢 30%）
 const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? (gearFx('glove')?.speedMul ?? 1.05) : 1) * knifeNow().speed * medM('speed') * fxAll().speed;
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
-const tolNow = () => DIFF[diff].tol * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
+const tolNow = () => DIFF[diff].tol * 1.15 * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : k.id === 'harbor' ? 1.12 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : k.id === 'harbor' ? 0.82 : 1); }
 
