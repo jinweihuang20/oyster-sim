@@ -1625,7 +1625,7 @@ let reach = 0, scoopT = 0, scoopDur = 0.7;
 const scr = (o: THREE.Object3D) => { const p = worldOf(o).project(camera); return new THREE.Vector2(p.x * innerWidth, p.y * innerHeight); };
 const knifeTip = knife.children[1] as THREE.Object3D;
 const _seamA = new THREE.Vector3(), _seamB = new THREE.Vector2(), _seamK = new THREE.Vector2();
-/** 比對殼縫相對蚵心 vs 刀刃螢幕朝向（刀改姿後尖端貼蚵，舊「尖−蚵心」角會過敏感） */
+/** 殼縫相對蚵心的朝向須與刀刃螢幕朝向垂直（差 π/2）；用刀刃方向避免尖端貼蚵時過敏感 */
 function seamErr() {
   const c = scr(oyster), m = scr(seamMark).sub(c);
   knife.updateMatrixWorld(true);
@@ -1634,7 +1634,8 @@ function seamErr() {
   knife.localToWorld(_seamA.set(0.06, 0, 0)).project(camera);
   _seamB.set((tx - _seamA.x) * innerWidth, (ty - _seamA.y) * innerHeight);
   const k = _seamB.lengthSq() > 4 ? _seamB : _seamK.copy(scr(knifeTip)).sub(c);
-  let d = Math.atan2(m.y, m.x) - Math.atan2(k.y, k.x);
+  // 對準：縫朝向 ⊥ 刀刃（減 π/2 後接近 0）
+  let d = Math.atan2(m.y, m.x) - Math.atan2(k.y, k.x) - Math.PI / 2;
   return Math.atan2(Math.sin(d), Math.cos(d));
 }
 function tryInsert() {
