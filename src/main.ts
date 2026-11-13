@@ -1625,12 +1625,11 @@ let reach = 0, scoopT = 0, scoopDur = 0.7;
 const scr = (o: THREE.Object3D) => { const p = worldOf(o).project(camera); return new THREE.Vector2(p.x * innerWidth, p.y * innerHeight); };
 const knifeTip = knife.children[1] as THREE.Object3D;
 const _seamA = new THREE.Vector3(), _seamB = new THREE.Vector2(), _seamK = new THREE.Vector2();
-/** 縫本體朝向（切線）↔刀刃 夾角可插區間；約垂直＝刀尖對準縫 */
-const SEAM_ANG_LO = 70 * Math.PI / 180, SEAM_ANG_HI = 135 * Math.PI / 180;
-/** 縫切線 vs 刀刃的絕對夾角 0…π */
+/** 縫線↔刀刃的無向夾角須接近垂直：≥70°（≤90°）。勿用 0…180 的有向差——135° 其實離「平行」只剩 45°，會誤判水平也過 */
+const SEAM_PERP_MIN = 70 * Math.PI / 180;
+/** 兩條線的無向夾角 0…π/2（平行=0，垂直=π/2） */
 function seamKnifeAng() {
   const c = scr(oyster), rad = scr(seamMark).sub(c);
-  // 切線＝半徑轉 90°（殼縫標長軸）；先前誤用半徑會變成「要平行才過」而過嚴
   const tanX = -rad.y, tanY = rad.x;
   knife.updateMatrixWorld(true);
   knife.localToWorld(_seamA.set(-0.15, 0, 0)).project(camera);
@@ -1642,15 +1641,14 @@ function seamKnifeAng() {
     kx = tip.x; ky = tip.y;
   }
   let d = Math.atan2(tanY, tanX) - Math.atan2(ky, kx);
-  return Math.abs(Math.atan2(Math.sin(d), Math.cos(d)));
+  d = Math.abs(Math.atan2(Math.sin(d), Math.cos(d))); // 0…π
+  return Math.min(d, Math.PI - d); // 0…π/2
 }
-const seamOk = () => { const a = seamKnifeAng(); return a >= SEAM_ANG_LO && a <= SEAM_ANG_HI; };
-/** 偏離可插區間的弧度（區間內為 0） */
+const seamOk = () => seamKnifeAng() >= SEAM_PERP_MIN;
+/** 偏離垂直可插區的弧度（已在區內為 0） */
 function seamErr() {
   const a = seamKnifeAng();
-  if (a < SEAM_ANG_LO) return SEAM_ANG_LO - a;
-  if (a > SEAM_ANG_HI) return a - SEAM_ANG_HI;
-  return 0;
+  return a >= SEAM_PERP_MIN ? 0 : SEAM_PERP_MIN - a;
 }
 function tryInsert() {
   if (phase !== 'seam') return;
