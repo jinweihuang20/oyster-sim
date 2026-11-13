@@ -194,7 +194,8 @@ export class PlazaClient {
     this.nick = nick;
     this.intentionalStop = false;
     if (!opts?.keepAttempt) this.reconnectAttempt = 0;
-    await this.disconnect();
+    // 進場／重連清線：不要 Depart（舊服無此方法；且 await 失敗會卡住「正在入場」）
+    await this.disconnect({ depart: false });
     this.intentionalStop = false;
     const conn = new signalR.HubConnectionBuilder()
       .withUrl(plazaHubUrl(), { withCredentials: false })
@@ -576,13 +577,21 @@ export class PlazaClient {
     }
   }
 
-  async disconnect() {
+  /**
+   * @param depart 主動離開廣場才通知伺服器立刻清人；進場前清線／重連不要 Depart。
+   */
+  async disconnect(opts?: { depart?: boolean }) {
     this.intentionalStop = true;
     const c = this.conn; this.conn = null; this.token = '';
     if (!c) return;
-    // 先 Depart 再 stop，避免 OnDisconnected 把人標成休眠鬼魂
-    if (c.state === signalR.HubConnectionState.Connected) {
-      try { await c.invoke('Depart'); } catch { /* 舊服略過 */ }
+    if (opts?.depart && c.state === signalR.HubConnectionState.Connected) {
+      // 舊服無 Depart；加短逾時避免卡在離開／取消入場
+      try {
+        await Promise.race([
+          c.invoke('Depart'),
+          new Promise<void>((_, rej) => setTimeout(() => rej(new Error('depart_timeout')), 800)),
+        ]);
+      } catch { /* 舊服／逾時略過 */ }
     }
     try { await c.stop(); } catch { /* ignore */ }
   }

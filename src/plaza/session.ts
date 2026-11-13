@@ -588,27 +588,59 @@ function zhNpcErr(e: string | undefined, who: string) {
 }
 function zhErr(e?: string) { return plazaZhErr(e); }
 
+function forceResetPlazaLocal() {
+  active = false; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
+  chatUnread = 0; hideChatPeek();
+  clearReconnectTimer();
+  const old = client; client = null;
+  if (old) void old.disconnect({ depart: false });
+  try { view?.dispose(); } catch { /* */ }
+  view = null;
+  try { ui?.remove(); } catch { /* */ }
+  ui = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear();
+  deps = null; near = null; nearShed = null; nearCarry = null; nearPlace = null;
+  carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
+  removeFlagBtn();
+  teardownPlayersChrome();
+  syncPlazaPeopleHud();
+}
+
 export function openPlaza(D: PlazaDeps) {
-  if (active) return;
+  // 上次入場半殘（active 卡住）時同步清掉再進，避免按鈕沒反應
+  if (active) forceResetPlazaLocal();
   active = true; seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
   D.audio();
-  client = new PlazaClient();
-  view = createPlazaWorldView(D.scene, D.bubbles, {
-    shellGeo: D.shellGeo,
-    shellMat: D.shellMat,
-    // 手機或省電：少幾何／少燈；執行中仍可依 getEco 再降動態負載
-    lowDetail: matchMedia('(pointer: coarse)').matches || !!D.getEco?.(),
-    eco: () => !!D.getEco?.(),
-    getTpv: () => !!D.getTpv?.(),
-    hasOwnPet: () => !!D.hasOwnPet?.(),
-    selfHatLift: () => D.selfHatLift?.() ?? 0,
-    getRenderer: () => D.renderer,
-    warmGpu: root => D.warmGpu?.(root),
-  });
-  buildUi();
-  wireClient(D);
-  void boot(D);
+  try {
+    client = new PlazaClient();
+    view = createPlazaWorldView(D.scene, D.bubbles, {
+      shellGeo: D.shellGeo,
+      shellMat: D.shellMat,
+      // 手機或省電：少幾何／少燈；執行中仍可依 getEco 再降動態負載
+      lowDetail: matchMedia('(pointer: coarse)').matches || !!D.getEco?.(),
+      eco: () => !!D.getEco?.(),
+      getTpv: () => !!D.getTpv?.(),
+      hasOwnPet: () => !!D.hasOwnPet?.(),
+      selfHatLift: () => D.selfHatLift?.() ?? 0,
+      getRenderer: () => D.renderer,
+      warmGpu: root => D.warmGpu?.(root),
+    });
+    buildUi();
+    wireClient(D);
+    void boot(D);
+  } catch (e) {
+    console.error('openPlaza', e);
+    active = false;
+    client = null;
+    try { view?.dispose(); } catch { /* */ }
+    view = null;
+    try { ui?.remove(); } catch { /* */ }
+    ui = null;
+    deps = null;
+    teardownPlayersChrome();
+    D.onEnterFail?.('open_fail');
+  }
 }
 
 async function abortEnter(D: PlazaDeps, err?: string) {
@@ -661,6 +693,7 @@ function applySeatWishEnd(e: PlazaSeatWishEnd) {
 }
 
 async function boot(D: PlazaDeps) {
+  try {
   setHud('連線中…');
   const r = await client!.connect(D.id, D.nick());
   if (!active || !client) return; // 入場中被取消
@@ -671,6 +704,7 @@ async function boot(D: PlazaDeps) {
     setHud('離線中　可以先坐下自己剝、自己烤');
     D.enterWalk();
     showRoamUi();
+    syncPlazaPeopleHud();
     setNetBanner('連線失敗，正在重連…');
     scheduleManualReconnect(3000);
     return;
@@ -686,10 +720,21 @@ async function boot(D: PlazaDeps) {
   setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
   D.enterWalk();
   showRoamUi();
+  syncPlazaPeopleHud();
   if (!plazaIoAnnounced) {
     plazaIoAnnounced = true;
     const online = snap?.occupied ?? snap?.players?.filter((p) => !p.isNpc).length ?? null;
     void postDiscordPlazaPresence(D.nick(), 'join', { online, tag: myTag() });
+  }
+  } catch (e) {
+    console.error('plaza boot', e);
+    if (!active) return;
+    // 進場例外：仍放行離線逛，避免卡在「正在入場」
+    netDown = true;
+    D.toast('廣場入場異常，先離線逛', '#ffb08a');
+    try { setHud('離線中　可以先坐下自己剝、自己烤'); } catch { /* */ }
+    try { D.enterWalk(); showRoamUi(); syncPlazaPeopleHud(); setNetBanner('連線異常，正在重連…'); } catch { void abortEnter(D, 'boot_fail'); return; }
+    scheduleManualReconnect(3000);
   }
 }
 
@@ -1447,8 +1492,13 @@ function syncPlazaPeopleHud() {
     top.title = h.title;
     top.setAttribute('aria-label', h.title);
   }
-  placePlayersChrome();
-  if (document.getElementById('pzPlayersWrap')?.classList.contains('open')) paintPlayersDrop();
+  // 等 plazaMode 再掛玩家鈕，避免入場 loading 期間搬 #camBtn 出錯卡住
+  if (document.body.classList.contains('plazaMode') || document.body.classList.contains('plazaRoam')) {
+    try {
+      placePlayersChrome();
+      if (document.getElementById('pzPlayersWrap')?.classList.contains('open')) paintPlayersDrop();
+    } catch (e) { console.error('placePlayersChrome', e); }
+  }
 }
 
 const PZ_PLAYERS_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.8.1 5 2.4 5 5.8"/></svg>`;
@@ -2027,7 +2077,7 @@ export async function closePlaza(leaveSeat = true) {
   clearReconnectTimer();
   syncPlazaPeopleHud();
   if (leaveSeat) await client?.leaveSeat();
-  await client?.disconnect();
+  await client?.disconnect({ depart: true });
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
