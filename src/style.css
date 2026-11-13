@@ -1492,7 +1492,8 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 
 /* ===== 好友 ===== */
 #oFriends{position:relative}
-#oFriends .frDot{position:absolute;top:6px;right:10px;width:9px;height:9px;border-radius:50%;background:#e2382c;border:1.5px solid #fff;display:none}
+#oFriends .frDot{display:none;position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#e2382c;border:1.5px solid var(--paint);z-index:2;pointer-events:none}
+#oFriends.hasReq .frDot{display:block}
 #friendsBody{text-align:left;max-height:min(62vh,520px);overflow:auto}
 #friendsBody .frAdd{display:flex;gap:8px;margin:0 0 12px}
 #friendsBody .frAdd input{flex:1;min-width:0;padding:8px 10px;border:1.5px solid rgba(31,42,54,.2);border-radius:8px;font:inherit}

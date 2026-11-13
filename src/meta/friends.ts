@@ -30,26 +30,37 @@ let idSet = { ks: new Set<string>(), tags: new Set<string>(), at: 0 };
 let watchOutgoing = new Set<string>();
 let acceptedPing = false;
 const outWatchKey = () => `oyster-fr-watch:${D?.id || ''}`;
+const pingKey = () => `oyster-fr-ping:${D?.id || ''}`;
 
 function loadWatchOutgoing() {
   try {
     const raw = JSON.parse(localStorage.getItem(outWatchKey()) || '[]');
     watchOutgoing = new Set(Array.isArray(raw) ? raw.map(String) : []);
   } catch { watchOutgoing = new Set(); }
+  try { acceptedPing = localStorage.getItem(pingKey()) === '1'; } catch { acceptedPing = false; }
 }
 function saveWatchOutgoing() {
   try { localStorage.setItem(outWatchKey(), JSON.stringify([...watchOutgoing])); } catch { /* */ }
 }
+function saveAcceptedPing() {
+  try {
+    if (acceptedPing) localStorage.setItem(pingKey(), '1');
+    else localStorage.removeItem(pingKey());
+  } catch { /* */ }
+}
 
 function noteFriendList(friends: FriendRow[], outgoing: FriendReq[]) {
   for (const o of outgoing) watchOutgoing.add(o.k);
+  let hit = false;
   for (const f of friends) {
     if (watchOutgoing.has(f.k)) {
-      acceptedPing = true;
+      hit = true;
       watchOutgoing.delete(f.k);
     }
   }
+  if (hit) acceptedPing = true;
   saveWatchOutgoing();
+  saveAcceptedPing();
 }
 
 const get = (p: string) => fetch(API + p, { mode: 'cors', cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
@@ -119,11 +130,12 @@ function syncDot() {
   const show = incomingCount() > 0 || acceptedPing;
   btn.classList.toggle('hasReq', show);
   const dot = btn.querySelector('.frDot') as HTMLElement | null;
-  if (dot) dot.style.display = show ? '' : 'none';
+  if (dot) dot.removeAttribute('style');
 }
 
 function clearFriendDot() {
   acceptedPing = false;
+  saveAcceptedPing();
   syncDot();
 }
 
@@ -311,8 +323,10 @@ export async function openFriends() {
   const body = document.getElementById('friendsBody');
   if (body) body.innerHTML = '<p class="frEmpty">讀取中…</p>';
   await loadFriends(true);
+  // 「被接受」看過就清；待接受邀請仍維持紅點直到處理完
   clearFriendDot();
   paintPanel();
+  syncDot();
 }
 
 export function closeFriends() { $('friends').classList.remove('show'); }
@@ -361,7 +375,10 @@ export function initFriends(d: Deps) {
   setInterval(() => { if (!document.hidden) void refreshFriendIds(true); }, 45_000);
   setInterval(() => {
     if (document.hidden) return;
-    if (document.getElementById('friends')?.classList.contains('show')) void loadFriends(true).then(() => { clearFriendDot(); paintPanel(); });
-    else void loadFriends(false);
-  }, 20_000);
+    if (document.getElementById('friends')?.classList.contains('show')) void loadFriends(true).then(() => { paintPanel(); syncDot(); });
+    else void loadFriends(true);
+  }, 12_000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) void loadFriends(true);
+  });
 }
