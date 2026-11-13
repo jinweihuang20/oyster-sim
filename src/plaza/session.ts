@@ -1510,9 +1510,14 @@ function escHtml(s: string) {
   return s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 }
 
-function paintPlayersDrop() {
+let playersDropTab: 'plaza' | 'friends' = 'plaza';
+
+async function paintPlayersDrop() {
   const drop = document.getElementById('pzPlayersDrop');
   if (!drop) return;
+  const fr = await import('../meta/friends');
+  await fr.refreshFriendIds();
+  const data = await fr.loadFriends();
   const selfId = deps?.id ?? '';
   const humans = (snap?.players ?? []).filter(p => !p.isNpc);
   const others = humans
@@ -1522,13 +1527,44 @@ function paintPlayersDrop() {
   const selfSnap = humans.find(p => p.pid === selfId);
   const selfName = plazaDisplayName(deps?.nick?.() ?? selfSnap?.nick, myTag() || selfSnap?.tag);
   const selfMeat = deps?.getBowlStock?.() ?? selfSnap?.count ?? 0;
-  const rows: { name: string; meat: number; self: boolean }[] = [
-    { name: `${selfName}（你）`, meat: selfMeat, self: true },
-    ...others.map(p => ({ name: plazaDisplayName(p.nick, p.tag), meat: p.count | 0, self: false })),
-  ];
-  drop.innerHTML = rows.map(r =>
-    `<div class="pzPRow${r.self ? ' self' : ''}"><span class="pzPName">${escHtml(r.name)}</span><span class="pzPMeat"><i class="ic ic-oyster"></i> ${r.meat}</span></div>`,
-  ).join('');
+
+  const tabs = `<div class="pzPTabs" role="tablist">
+    <button type="button" class="pzPTab${playersDropTab === 'plaza' ? ' on' : ''}" data-pzptab="plaza">廣場</button>
+    <button type="button" class="pzPTab${playersDropTab === 'friends' ? ' on' : ''}" data-pzptab="friends">好友</button>
+  </div>`;
+
+  let body = '';
+  if (playersDropTab === 'plaza') {
+    const rows = [
+      { name: `${selfName}（你）`, meat: selfMeat, self: true, act: '' },
+      ...others.map(p => {
+        const mark = fr.friendMark(p.tag);
+        const name = plazaDisplayName(p.nick, p.tag) + (mark || '');
+        return { name, meat: p.count | 0, self: false, act: fr.friendActionBtn('', p.tag, p.nick) };
+      }),
+    ];
+    body = rows.map(r =>
+      `<div class="pzPRow${r.self ? ' self' : ''}"><span class="pzPName">${escHtml(r.name)}</span><span class="pzPMeat"><i class="ic ic-oyster"></i> ${r.meat}</span>${r.act || ''}</div>`,
+    ).join('') || '<div class="pzPEmpty">廣場還沒有其他人</div>';
+  } else {
+    const friends = data?.friends ?? [];
+    const plazaByTag = new Map(humans.map(p => [String(p.tag || ''), p]));
+    body = friends.length ? friends.map(f => {
+      const inPz = plazaByTag.get(String(f.tag || ''));
+      const meat = inPz ? (inPz.count | 0) : null;
+      const loc = f.online ? (inPz ? '廣場中' : (f.whereZh || '線上')) : '離線';
+      return `<div class="pzPRow"><span class="pzPName">${escHtml(f.nick)} <small>#${escHtml(f.tag)}</small> <small class="pzPFr">（好友）</small></span>
+        <span class="pzPLoc">${escHtml(loc)}${meat != null ? ` · <i class="ic ic-oyster"></i> ${meat}` : ''}</span></div>`;
+    }).join('') : '<div class="pzPEmpty">還沒有好友</div>';
+  }
+
+  drop.innerHTML = tabs + body;
+  drop.querySelectorAll('[data-pzptab]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    playersDropTab = (b as HTMLElement).dataset.pzptab as 'plaza' | 'friends';
+    void paintPlayersDrop();
+  }));
+  fr.bindFriendActions(drop, () => { void paintPlayersDrop(); });
 }
 
 function closePlayersDrop() {

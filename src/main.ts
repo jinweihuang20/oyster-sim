@@ -34,7 +34,7 @@ import {
   renderEquip, renderClothShop, shareOutfit, askSet, openEquip,
 } from './shop';
 import {
-  Social, initAnnounce, featAnnounce, featDots, initNotices, refreshNotices, initAdminTools, syncAdminBtn, initFeedback, openFb, fbShow,
+  Social, initAnnounce, featAnnounce, featDots, initNotices, refreshNotices, initAdminTools, syncAdminBtn, initFriends, initFeedback, openFb, fbShow,
   initAchievements, achS, AS, ACHS, achTitle, achAdd, achBump, achShiftGot, clearAchShiftGot,
   achCheck, achDot, achOpen, achShift, type AchSave,
   type EvCfg, type EvOdd,
@@ -5602,7 +5602,28 @@ bindRoom({
 $('oRank').onclick = () => Social.open(); $('rRank').onclick = () => Social.open();
 Social.init({ id: statsId, test: __PREVIEW__ || params.get('stattest') === '1', LS, nick: () => myName(), setNick: v => { const c = cleanName(v); save.name = c === '剝蚵人' ? undefined : c; persist(); drawName(); }, inTut: () => !!tut || !!SHOT, on: () => mix.feed && !SHOT, toast: t => toast(t, '#f2b705'),
   label: (k, i) => k === 'pearl' ? `剝到了${RAR[i]?.name ?? '珍珠'}！` : k === 'legend' ? `挖到傳說的「${ODD[i]?.name ?? '寶物'}」！` : k === 'odd' ? `開到「${ODD[i]?.name ?? '奇物'}」` : k === 'ach' ? `達成金牌成就「${ACHS[i]?.n ?? '成就'}」！` : `解鎖了新地點 ${(LOCS[i]?.n ?? '').replace(/^\S+\s/, '')}！`, title: () => achTitle(), foil: () => gearOn('nameFrame') });
-Social.startPresence(() => state === 'play');
+Social.startPresence(
+  () => state === 'play',
+  () => {
+    if (isDeathmatchActive()) return 'dm';
+    if (isPlazaActive() || plazaMode) return 'plaza';
+    if (isRoomActive()) return 'room';
+    if (state === 'play') return 'yard';
+    return 'menu';
+  },
+);
+initFriends({
+  id: statsId,
+  nick: () => myName(),
+  toast: (t, c) => toast(t, c || '#9be37a'),
+  presenceWhere: () => {
+    if (isDeathmatchActive()) return 'dm';
+    if (isPlazaActive() || plazaMode) return 'plaza';
+    if (isRoomActive()) return 'room';
+    if (state === 'play') return 'yard';
+    return 'menu';
+  },
+});
 void Social.maybeAnnounceFirstPlay(() => !save.tutDone && (save.days ?? 0) < 1 && !SHOT);
 $('tutReplay').onclick = () => { $('settings').classList.remove('show'); if (state === 'play' && !tut && !confirm('這一班會放棄，確定要重看教學嗎？')) return; if (state === 'play' && !tut) { state = 'menu'; syncShiftUi(); } const run = () => enterWorkShed(() => tutStart()); if (!save.tutDone) ensureNameThen(run); else run(); };
 (window as any).__oy = { get phase() { return phase; }, get umb() { return { held: umbHeld, t: umbT, vis: umb.visible }; }, get tut() { return tut && TUT[tut.i].id; }, get npcN() { return npcs.length; }, needle: () => needle(), get pryW() { return pryW(); }, PRY_C, get hold() { return hold; }, PERF0, PERF1, seamErr: () => seamErr(), get walking() { return walking; }, get money() { return save.money; }, get state() { return state; }, bowlScr: () => { const v = BOWL.clone().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, nudge: (a: number, b: number) => { tYaw = clamp(tYaw + a, -yl(), yl()); tPitch = clamp(tPitch + b, pitchLo(), pitchHi()); }, basinScr: () => { const m = basinOy[0]; if (!m) return null; const v = worldOf(m).project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, aimScr: () => { const v = aimPoint().project(camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; } };
@@ -5661,7 +5682,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['friends', 'friendsClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -6191,7 +6212,7 @@ function closeTopModal(): boolean {
     ['backMenu', 'bmStay'], ['sv', 'svClose'], ['ach', 'achClose'], ['evLb', 'evLbClose'], ['lb', 'lbClose'],
     ['fb', 'fbClose'], ['redeem', 'rdClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'],
     ['adminTools', 'adminToolsClose'],
-    ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose'],
+    ['shop', 'shopClose'], ['settings', 'setClose'], ['friends', 'friendsClose'], ['dex', 'dexClose'],
     ['nameAsk', 'naSkip'], ['paySum', 'psOk'], ['tagNote', 'tnOk'],
   ] as const) {
     if (shown(id)) { ($(close) as HTMLElement).click(); return true; }

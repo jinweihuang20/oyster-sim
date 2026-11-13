@@ -133,16 +133,22 @@ async function render() {
     const at = x.atitle ? `<em class="lbAt">${esc(x.atitle)}</em>` : '';
     return `<span class="lbWho">${at}<small class="lbId">#${esc(x.tag)}</small></span><b class="lbNick">${esc(x.nick)}</b>`;
   };
-  const row = (x: any) => `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
-    (x.me ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>` : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span>`) + '</div>';
+  const fr = await import('./friends');
+  await fr.loadFriends();
+  const row = (x: any) => {
+    const mark = !x.me ? fr.friendMark(x.tag, x.k) : '';
+    return `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${mark ? `<small class="lbFr">${esc(mark)}</small>` : ''}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
+      (x.me ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>` : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span><span class="lbFrAct">${fr.friendActionBtn(x.k, x.tag, x.nick)}</span>`) + '</div>';
+  };
   const rows = r.rows as any[];
   const emptyHint = board === 'seat' ? '把鄰居送到指定位子後就會出現成績！' : board.startsWith('dm') ? '死鬥結算後就會出現成績！' : '收工後就會出現你的成績！';
   list.innerHTML = rows.length ? rows.map(row).join('') + (r.mine && !rows.some(x => x.me) ? '<div class="lbGap"></div>' + row(r.mine) : '') : `<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>${emptyHint}</small></span></div>`;
-  list.querySelectorAll<HTMLButtonElement>('button[data-k]').forEach(b => b.onclick = async () => {
+  list.querySelectorAll<HTMLButtonElement>('button[data-k][data-r]').forEach(b => b.onclick = async () => {
     b.disabled = true; const ok = await post('/react', { k: b.dataset.k, kind: b.dataset.r });
     if (ok) { const n = b.lastChild as Text; n.textContent = String(Number(n.textContent) + 1); D.toast(b.dataset.r === 'like' ? '按讚送出！' : '丟一顆蚵殼過去！'); }
     else D.toast('慢一點，等一下再按');
   });
+  fr.bindFriendActions(list);
   $('lbMe').innerHTML = r.myTitle ? `<i class="ic ic-crown"></i> 你的稱號：${esc(r.myTitle)}` : '';
 }
 export function open() { ($('lbNick') as HTMLInputElement).value = D.nick() === '剝蚵人' ? '' : D.nick(); $('lb').classList.add('show'); render(); }
@@ -192,6 +198,7 @@ export async function claimGift(giftId: string | number): Promise<{ st: 'ok' | '
 
 // ---------- 線上人數（/s/presence、/s/online）。後端沒部署時看板直接隱藏 ----------
 let prsPlaying: () => boolean = () => false;
+let prsWhere: () => string = () => 'menu';
 let prsHook: () => void = () => { };
 export function onPresence(f: () => void) { prsHook = f; }
 function showOnline(r: any) {
@@ -211,7 +218,12 @@ function showOnline(r: any) {
 }
 async function presenceTick() {
   if (document.hidden) return;
-  const r = await fetch(API + '/presence', { method: 'POST', body: JSON.stringify({ pid: D.id, game: 'oyster', shucking: prsPlaying() }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(x => x.ok ? x.json() : null).catch(() => null);
+  const r = await fetch(API + '/presence', {
+    method: 'POST',
+    body: JSON.stringify({ pid: D.id, game: 'oyster', shucking: prsPlaying(), where: prsWhere() }),
+    headers: { 'Content-Type': 'text/plain' },
+    mode: 'cors',
+  }).then(x => x.ok ? x.json() : null).catch(() => null);
   showOnline(r);
   try { prsHook(); } catch { /* 忽略 */ }
 }
@@ -226,8 +238,9 @@ export async function maybeAnnounceFirstPlay(isFirst: () => boolean) {
   void postDiscordFirstPlay(D.nick(), { tag: myTagCache });
 }
 
-export function startPresence(playing: () => boolean) {
+export function startPresence(playing: () => boolean, where?: () => string) {
   prsPlaying = playing;
+  if (where) prsWhere = where;
   presenceTick(); setInterval(presenceTick, 25000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) presenceTick(); });
 }

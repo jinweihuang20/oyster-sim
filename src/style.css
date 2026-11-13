@@ -1489,6 +1489,50 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 #adminToolsBody .adminPg{justify-content:center}
 #adminToolsBody{max-height:min(70vh,580px)}
 #adminTools select[size]{min-height:110px}
+
+/* ===== 好友 ===== */
+#oFriends{position:relative}
+#oFriends .frDot{position:absolute;top:6px;right:10px;width:9px;height:9px;border-radius:50%;background:#e2382c;border:1.5px solid #fff;display:none}
+#friendsBody{text-align:left;max-height:min(62vh,520px);overflow:auto}
+#friendsBody .frAdd{display:flex;gap:8px;margin:0 0 12px}
+#friendsBody .frAdd input{flex:1;min-width:0;padding:8px 10px;border:1.5px solid rgba(31,42,54,.2);border-radius:8px;font:inherit}
+#friendsBody .frPrimary,#friendsBody .frActs button,.frAct{
+  min-height:36px;padding:6px 12px;border-radius:8px;border:1.5px solid rgba(31,42,54,.2);
+  background:#2a5a86;color:#fff;font-weight:800;cursor:pointer;font:inherit;white-space:nowrap
+}
+#friendsBody .frActs button:not(.frDm){background:#fff;color:#2a3440}
+#friendsBody .frSec{font:800 12px/1.2 var(--sign);color:#2a5a86;letter-spacing:.06em;margin:12px 0 6px}
+#friendsBody .frCard{padding:10px;margin:0 0 8px;border:1px solid rgba(31,42,54,.12);border-radius:12px;background:rgba(255,255,255,.5);display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+#friendsBody .frCard.dim{opacity:.65}
+#friendsBody .frWho{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;min-width:0}
+#friendsBody .frWho b{font-size:15px}
+#friendsBody .frWho small{opacity:.7}
+#friendsBody .frLoc{font-size:12px;opacity:.75;width:100%}
+#friendsBody .frDotLive{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex:none}
+#friendsBody .frDotLive.on{background:#22c55e;box-shadow:0 0 0 3px #22c55e33}
+#friendsBody .frActs{display:flex;gap:6px;flex-wrap:wrap}
+#friendsBody .frEmpty{opacity:.7;text-align:center;padding:16px 8px;font-size:14px}
+#friendsBody .frDm.hidden,#friendsBody .frDmBox.hidden{display:none!important}
+#friendsBody .frDmBox{margin-top:10px;border-top:1px solid rgba(31,42,54,.12);padding-top:10px}
+#friendsBody .frDmHead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+#friendsBody .frDmList{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+#friendsBody .frDmMsg{align-self:flex-start;background:rgba(42,90,134,.12);padding:6px 10px;border-radius:10px;max-width:90%}
+#friendsBody .frDmMsg.mine{align-self:flex-end;background:rgba(46,154,53,.18)}
+#friendsBody .frDmSend{display:flex;gap:8px}
+#friendsBody .frDmSend input{flex:1;padding:8px 10px;border-radius:8px;border:1.5px solid rgba(31,42,54,.2);font:inherit}
+.frBadge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(42,90,134,.15);color:#2a5a86;font-size:12px;font-weight:800}
+.frBadge.dim{opacity:.65}
+.lbFr{color:#2a5a86;font-weight:800;margin-left:4px}
+.lbFrAct{flex:none;display:flex;align-items:center}
+.lbFrAct .frAct,.lbFrAct .frBadge{font-size:12px;min-height:30px;padding:4px 8px}
+.pzPTabs{display:flex;gap:4px;margin:0 0 6px;padding:0 2px}
+.pzPTab{flex:1;min-height:32px;border:0;border-radius:8px;background:rgba(255,255,255,.08);color:#e8f6ff;font-weight:800;font-size:12px;cursor:pointer}
+.pzPTab.on{background:rgba(42,90,134,.95);color:#fff}
+.pzPRow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pzPRow .frAct,.pzPRow .frBadge{margin-left:auto;font-size:11px;min-height:28px;padding:3px 8px}
+.pzPFr{color:#ffd76a;font-weight:800}
+.pzPLoc{flex:none;font-size:12px;opacity:.85}
+.pzPEmpty{padding:12px 8px;text-align:center;opacity:.7;font-size:13px}
 #noticeBody{text-align:left;max-height:min(58vh,420px);overflow:auto;padding:2px 0 8px}
 #noticeBody .noticeEmpty{opacity:.7;font-size:14px;text-align:center;padding:18px 8px}
 #noticeBody .noticeCard{padding:10px 12px;margin:0 0 8px;border:1px solid rgba(31,42,54,.12);border-radius:12px;background:rgba(255,255,255,.45)}
