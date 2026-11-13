@@ -199,6 +199,7 @@ export class PlazaClient {
     const conn = new signalR.HubConnectionBuilder()
       .withUrl(plazaHubUrl(), { withCredentials: false })
       .withAutomaticReconnect(RECONNECT_DELAYS)
+      .withServerTimeout(90_000)
       .configureLogging(signalR.LogLevel.Warning)
       .build();
     this.conn = conn;
@@ -396,6 +397,12 @@ export class PlazaClient {
     try { await this.conn.invoke('LeaveSeat'); } catch { /* ignore */ }
   }
 
+  /** 主動離開：立刻清伺服器身影（不走切 App 休眠寬限） */
+  async depart() {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return;
+    try { await this.conn.invoke('Depart'); } catch { /* 舊服無此方法則靠 disconnect */ }
+  }
+
   async sync(x: number, z: number, yaw: number, phase: string, count: number, moving: boolean, umb = false, lookYaw = 0, pitch = 0) {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return;
     try { await this.conn.invoke('Sync', x, z, yaw, phase, count, moving, umb, lookYaw, pitch); } catch { /* ignore */ }
@@ -573,6 +580,10 @@ export class PlazaClient {
     this.intentionalStop = true;
     const c = this.conn; this.conn = null; this.token = '';
     if (!c) return;
+    // 先 Depart 再 stop，避免 OnDisconnected 把人標成休眠鬼魂
+    if (c.state === signalR.HubConnectionState.Connected) {
+      try { await c.invoke('Depart'); } catch { /* 舊服略過 */ }
+    }
     try { await c.stop(); } catch { /* ignore */ }
   }
 

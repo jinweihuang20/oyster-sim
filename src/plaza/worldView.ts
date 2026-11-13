@@ -1105,8 +1105,12 @@ function hashPid(pid: string) {
 
   void bubblesHost;
 
+  // 名牌／對話框略透，少擋視線（材質透明度；畫布底色仍偏實）
+  const PLAZA_TAG_A = 0.58;
+  const PLAZA_BUB_A = 0.52;
   // depthTest：對面座位 FP 時，後面玩家的名牌／泡泡才會被近處的頭擋住（預設關深度會永遠蓋在頭上）
   const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: LO ? 0.44 : 0.38, depthTest: true });
+  selfBubble.setOpacity(PLAZA_BUB_A);
   selfBubble.sprite.visible = false;
   root.add(selfBubble.sprite);
   let selfBubUntil = 0;
@@ -1122,6 +1126,7 @@ function hashPid(pid: string) {
       nameTone: isNpc ? 'npc' : 'player',
       depthTest: true,
     });
+    tag.setOpacity(PLAZA_TAG_A);
     tag.sprite.visible = false;
     root.add(tag.sprite);
     return tag;
@@ -1131,7 +1136,7 @@ function hashPid(pid: string) {
     if (tSec >= k.next) {
       if (!k.bub) k.bub = ensureBubble(true);
       k.bub.setText(k.lines[k.li++ % k.lines.length], true);
-      k.bub.setOpacity(1);
+      k.bub.setOpacity(PLAZA_BUB_A);
       k.until = tSec + 3.5;
       k.next = tSec + 9 + Math.random() * 6;
     }
@@ -1147,6 +1152,7 @@ function hashPid(pid: string) {
       nameTone: isNpc ? 'npc' : 'player',
       depthTest: true,
     });
+    el.setOpacity(PLAZA_BUB_A);
     el.sprite.visible = false;
     root.add(el.sprite);
     return el;
@@ -2058,7 +2064,7 @@ function hashPid(pid: string) {
     const short = text.length > 40 ? text.slice(0, 39) + '…' : text;
     if (opts.self) {
       selfBubble.setText(short, true);
-      selfBubble.setOpacity(1);
+      selfBubble.setOpacity(PLAZA_BUB_A);
       selfBubble.sprite.visible = true;
       selfBubUntil = until;
       return;
@@ -2073,7 +2079,7 @@ function hashPid(pid: string) {
     }
     if (!r) return;
     r.bubble.setText(short, true);
-    r.bubble.setOpacity(1);
+    r.bubble.setOpacity(PLAZA_BUB_A);
     r.bubble.sprite.visible = true;
     r.bubUntil = until;
   }
@@ -2438,7 +2444,7 @@ function hashPid(pid: string) {
           if ((r as any)._wishLine !== txt) {
             (r as any)._wishLine = txt;
             r.bubble.setText(txt, true);
-            r.bubble.setOpacity(1);
+            r.bubble.setOpacity(PLAZA_BUB_A);
           }
           placeAboveHead(r.bubble.sprite, r.rig.head, bubLift);
           r.bubble.sprite.visible = true;

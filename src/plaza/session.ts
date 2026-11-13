@@ -813,6 +813,8 @@ function wireClient(D: PlazaDeps) {
     },
     onJoined: (p) => {
       const n = normPlayer(p);
+      // 休眠重連同 pid：只更新，不當新進場（避免「離開／進來」連跳）
+      const existed = !!(snap && n.pid && snap.players.some(x => x.pid === n.pid));
       view?.applyPose(n, D.id);
       if (snap) {
         const i = snap.players.findIndex(x => x.connId === n.connId || (!!n.pid && x.pid === n.pid));
@@ -820,7 +822,7 @@ function wireClient(D: PlazaDeps) {
         snap.occupied = snap.players.filter((x) => !x.isNpc).length;
       }
       syncPlazaPeopleHud();
-      if (!n.isNpc && n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 進來廣場了`, '#9fe0ff');
+      if (!existed && !n.isNpc && n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 進來廣場了`, '#9fe0ff');
     },
     onLeft: (p) => {
       const n = normPlayer(p);
