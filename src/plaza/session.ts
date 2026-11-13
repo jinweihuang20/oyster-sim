@@ -1553,7 +1553,7 @@ async function paintPlayersDrop() {
       const inPz = plazaByTag.get(String(f.tag || ''));
       const meat = inPz ? (inPz.count | 0) : null;
       const loc = f.online ? (inPz ? '廣場中' : (f.whereZh || '線上')) : '離線';
-      return `<div class="pzPRow"><span class="frDotLive${f.online ? ' on' : ''}" title="${f.online ? '上線' : '離線'}"></span><span class="pzPName">${escHtml(f.nick)} <small>#${escHtml(f.tag)}</small></span>
+      return `<div class="pzPRow"><span class="pzPWho"><span class="frDotLive${f.online ? ' on' : ''}" title="${f.online ? '上線' : '離線'}"></span><span class="pzPName">${escHtml(f.nick)} <small>#${escHtml(f.tag)}</small></span></span>
         <span class="pzPLoc">${escHtml(loc)}${meat != null ? ` · <i class="ic ic-oyster"></i> ${meat}` : ''}</span></div>`;
     }).join('') : '<div class="pzPEmpty">還沒有好友</div>';
   }
@@ -1572,6 +1572,7 @@ function closePlayersDrop() {
   const btn = document.getElementById('pzPlayersBtn');
   wrap?.classList.remove('open');
   btn?.setAttribute('aria-expanded', 'false');
+  document.body.classList.remove('pzPlayersOpen');
 }
 
 export function plazaPlayersIsOpen() {
@@ -1631,6 +1632,7 @@ export function plazaTogglePlayers() {
     paintPlayersDrop();
     wrap.classList.add('open');
     btn.setAttribute('aria-expanded', 'true');
+    document.body.classList.add('pzPlayersOpen');
   } else closePlayersDrop();
 }
 
@@ -1664,6 +1666,7 @@ function placePlayersChrome() {
 
 function teardownPlayersChrome() {
   closePlayersDrop();
+  document.body.classList.remove('pzPlayersOpen');
   document.removeEventListener('pointerdown', onPlayersDocPointer, true);
   const cluster = document.getElementById('pzCamCluster');
   const cam = document.getElementById('camBtn');
