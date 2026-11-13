@@ -1625,18 +1625,23 @@ let reach = 0, scoopT = 0, scoopDur = 0.7;
 const scr = (o: THREE.Object3D) => { const p = worldOf(o).project(camera); return new THREE.Vector2(p.x * innerWidth, p.y * innerHeight); };
 const knifeTip = knife.children[1] as THREE.Object3D;
 const _seamA = new THREE.Vector3(), _seamB = new THREE.Vector2(), _seamK = new THREE.Vector2();
-/** 殼縫↔刀刃螢幕夾角可插區間（含近似垂直） */
+/** 縫本體朝向（切線）↔刀刃 夾角可插區間；約垂直＝刀尖對準縫 */
 const SEAM_ANG_LO = 70 * Math.PI / 180, SEAM_ANG_HI = 135 * Math.PI / 180;
-/** 殼縫相對蚵心 vs 刀刃朝向的絕對夾角，0…π */
+/** 縫切線 vs 刀刃的絕對夾角 0…π */
 function seamKnifeAng() {
-  const c = scr(oyster), m = scr(seamMark).sub(c);
+  const c = scr(oyster), rad = scr(seamMark).sub(c);
+  // 切線＝半徑轉 90°（殼縫標長軸）；先前誤用半徑會變成「要平行才過」而過嚴
+  const tanX = -rad.y, tanY = rad.x;
   knife.updateMatrixWorld(true);
   knife.localToWorld(_seamA.set(-0.15, 0, 0)).project(camera);
-  const tx = _seamA.x, ty = _seamA.y;
+  const tipX = _seamA.x, tipY = _seamA.y;
   knife.localToWorld(_seamA.set(0.06, 0, 0)).project(camera);
-  _seamB.set((tx - _seamA.x) * innerWidth, (ty - _seamA.y) * innerHeight);
-  const k = _seamB.lengthSq() > 4 ? _seamB : _seamK.copy(scr(knifeTip)).sub(c);
-  let d = Math.atan2(m.y, m.x) - Math.atan2(k.y, k.x);
+  let kx = (tipX - _seamA.x) * innerWidth, ky = (tipY - _seamA.y) * innerHeight;
+  if (kx * kx + ky * ky < 4) {
+    const tip = scr(knifeTip).sub(c);
+    kx = tip.x; ky = tip.y;
+  }
+  let d = Math.atan2(tanY, tanX) - Math.atan2(ky, kx);
   return Math.abs(Math.atan2(Math.sin(d), Math.cos(d)));
 }
 const seamOk = () => { const a = seamKnifeAng(); return a >= SEAM_ANG_LO && a <= SEAM_ANG_HI; };
