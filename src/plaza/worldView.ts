@@ -1105,7 +1105,8 @@ function hashPid(pid: string) {
 
   void bubblesHost;
 
-  const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: LO ? 0.44 : 0.38 });
+  // depthTest：對面座位 FP 時，後面玩家的名牌／泡泡才會被近處的頭擋住（預設關深度會永遠蓋在頭上）
+  const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: LO ? 0.44 : 0.38, depthTest: true });
   selfBubble.sprite.visible = false;
   root.add(selfBubble.sprite);
   let selfBubUntil = 0;
@@ -1119,6 +1120,7 @@ function hashPid(pid: string) {
       // 省電／手機低解析時略放大，字才清楚（Sprite 很小，耗電可忽略）
       worldH: LO ? 0.3 : 0.26,
       nameTone: isNpc ? 'npc' : 'player',
+      depthTest: true,
     });
     tag.sprite.visible = false;
     root.add(tag.sprite);
@@ -1143,6 +1145,7 @@ function hashPid(pid: string) {
     const el = makeWorldLabel(' ', 'bubble', {
       worldH: LO ? 0.44 : 0.38,
       nameTone: isNpc ? 'npc' : 'player',
+      depthTest: true,
     });
     el.sprite.visible = false;
     root.add(el.sprite);
