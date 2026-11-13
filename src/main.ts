@@ -1624,32 +1624,27 @@ let reach = 0, scoopT = 0, scoopDur = 0.7;
 // ----- 1. 找縫 -----
 const scr = (o: THREE.Object3D) => { const p = worldOf(o).project(camera); return new THREE.Vector2(p.x * innerWidth, p.y * innerHeight); };
 const knifeTip = knife.children[1] as THREE.Object3D;
-const _seamA = new THREE.Vector3(), _seamB = new THREE.Vector2(), _seamK = new THREE.Vector2();
-/** 縫線↔刀刃的無向夾角須接近垂直：≥70°（≤90°）。勿用 0…180 的有向差——135° 其實離「平行」只剩 45°，會誤判水平也過 */
-const SEAM_PERP_MIN = 70 * Math.PI / 180;
-/** 兩條線的無向夾角 0…π/2（平行=0，垂直=π/2） */
-function seamKnifeAng() {
-  const c = scr(oyster), rad = scr(seamMark).sub(c);
-  const tanX = -rad.y, tanY = rad.x;
-  knife.updateMatrixWorld(true);
-  knife.localToWorld(_seamA.set(-0.15, 0, 0)).project(camera);
-  const tipX = _seamA.x, tipY = _seamA.y;
-  knife.localToWorld(_seamA.set(0.06, 0, 0)).project(camera);
-  let kx = (tipX - _seamA.x) * innerWidth, ky = (tipY - _seamA.y) * innerHeight;
-  if (kx * kx + ky * ky < 4) {
-    const tip = scr(knifeTip).sub(c);
-    kx = tip.x; ky = tip.y;
-  }
-  let d = Math.atan2(tanY, tanX) - Math.atan2(ky, kx);
-  d = Math.abs(Math.atan2(Math.sin(d), Math.cos(d))); // 0…π
-  return Math.min(d, Math.PI - d); // 0…π/2
-}
-const seamOk = () => seamKnifeAng() >= SEAM_PERP_MIN;
-/** 偏離垂直可插區的弧度（已在區內為 0） */
+const _seamA = new THREE.Vector3(), _seamAim = new THREE.Vector2();
+/**
+ * 對準＝「蚵心→縫」與「蚵心→刀尖」方位接近（刀尖對準縫）。
+ * 勿比縫線 vs 刀刃夾角：刀刃投影常接近鉛直，水平縫會被誤判成垂直而過關。
+ */
 function seamErr() {
-  const a = seamKnifeAng();
-  return a >= SEAM_PERP_MIN ? 0 : SEAM_PERP_MIN - a;
+  const c = scr(oyster), m = scr(seamMark).sub(c);
+  const tip = scr(knifeTip);
+  _seamAim.set(tip.x - c.x, tip.y - c.y);
+  // 刀尖貼近蚵心時方位不穩：改用刀刃方向當瞄準朝向
+  if (_seamAim.lengthSq() < 100) {
+    knife.updateMatrixWorld(true);
+    knife.localToWorld(_seamA.set(-0.15, 0, 0)).project(camera);
+    const tx = _seamA.x, ty = _seamA.y;
+    knife.localToWorld(_seamA.set(0.06, 0, 0)).project(camera);
+    _seamAim.set((tx - _seamA.x) * innerWidth, (ty - _seamA.y) * innerHeight);
+  }
+  let d = Math.atan2(m.y, m.x) - Math.atan2(_seamAim.y, _seamAim.x);
+  return Math.atan2(Math.sin(d), Math.cos(d));
 }
+const seamOk = () => Math.abs(seamErr()) < tolNow();
 function tryInsert() {
   if (phase !== 'seam') return;
   // 不論準不準都播右手插刀動作（成功則留在縫裡，失敗則縮回）
@@ -1775,7 +1770,7 @@ const pryW = () => Math.min(0.6, Math.min(1.6, 1 + 0.15 * pryHits) * PRY[diff].w
 const PRY_SLOW = 0.56; // 整體放慢（0.8→0.56，再慢 30%）
 const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? (gearFx('glove')?.speedMul ?? 1.05) : 1) * knifeNow().speed * medM('speed') * fxAll().speed;
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
-const tolNow = () => DIFF[diff].tol * 1.65 * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
+const tolNow = () => DIFF[diff].tol * 1.4 * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : k.id === 'harbor' ? 1.12 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : k.id === 'harbor' ? 0.82 : 1); }
 
@@ -5296,7 +5291,7 @@ function frameBody() {
     hp = Math.min(100, hp + dt / 6 * medM('regen')); tickMeds(dt);
     if (phase === 'seam') {
       rotTipTick(rdt); if (rotKey) rotTipTouch(); rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
-      const e = seamErr(), inZ = seamOk(), close = inZ ? 1 : clamp(1 - e / 0.55, 0, 1);
+      const e = Math.abs(seamErr()), inZ = seamOk(), close = clamp(1 - e / (tolNow() * 3), 0, 1);
       (seamGlow.material as THREE.MeshBasicMaterial).opacity = gearOn('glasses') ? Math.min(1, 0.5 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.5) : 0.24 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.4;
       { const gl = gearOn('glasses') ? 1.6 : 1, gm = seamGlow.material as THREE.MeshBasicMaterial;
         if (inZ && !sweet) { sweetT = 0.25; navigator.vibrate?.(15); tone(1400, 0.05, 0.12, 'triangle', 0, 2100); }
