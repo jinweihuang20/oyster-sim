@@ -700,12 +700,14 @@ async function boot(D: PlazaDeps) {
   if (!r.ok) {
     // 連不上也照樣進廣場：先離線逛，背景持續重連
     netDown = true;
-    D.toast('廣場暫時連不上，先離線逛，連上會自動同步', '#ffb08a');
+    const why = (r.err || '').trim();
+    // preview／本機常見：CORS（請用 localhost 勿用 127.0.0.1）或正式 hub 被擋
+    D.toast(why ? `廣場連不上（${why}），先離線逛` : '廣場暫時連不上，先離線逛，連上會自動同步', '#ffb08a');
     setHud('離線中　可以先坐下自己剝、自己烤');
     D.enterWalk();
     showRoamUi();
     syncPlazaPeopleHud();
-    setNetBanner('連線失敗，正在重連…');
+    setNetBanner(why ? `連線失敗：${why}` : '連線失敗，正在重連…');
     scheduleManualReconnect(3000);
     return;
   }

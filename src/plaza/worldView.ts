@@ -195,6 +195,9 @@ export function createPlazaWorldView(
 ): PlazaWorldView {
   const LO = !!opts.lowDetail;
   const MOBILE = matchMedia('(pointer: coarse)').matches;
+  // 須在吸菸阿伯 ensureTag 之前宣告（阿伯建於函式中段，const 有 TDZ）
+  const PLAZA_TAG_A = 0.58;
+  const PLAZA_BUB_A = 0.52;
   const root = new THREE.Group(); root.name = 'plazaWorld'; scene.add(root);
   const { M, add } = makeMeshHelpers(scene, LO);
   const remotes = new Map<string, Remote>();
@@ -1105,10 +1108,8 @@ function hashPid(pid: string) {
 
   void bubblesHost;
 
-  // 名牌／對話框略透，少擋視線（材質透明度；畫布底色仍偏實）
-  const PLAZA_TAG_A = 0.58;
-  const PLAZA_BUB_A = 0.52;
   // depthTest：對面座位 FP 時，後面玩家的名牌／泡泡才會被近處的頭擋住（預設關深度會永遠蓋在頭上）
+  // 名牌／對話框略透（PLAZA_TAG_A／BUB_A 已於函式開頭宣告）
   const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: LO ? 0.44 : 0.38, depthTest: true });
   selfBubble.setOpacity(PLAZA_BUB_A);
   selfBubble.sprite.visible = false;
