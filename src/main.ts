@@ -434,24 +434,85 @@ function applyGloves() {
   applyGlasses();
 }
 function applyGlasses() { const g = gearOn('glasses'); (seamMark.material as THREE.MeshBasicMaterial).color.set(g ? 0xe8a050 : 0x7a4a1e); seamMark.scale.setScalar(g ? 1.7 : 1); seamGlow.scale.setScalar(g ? 1.6 : 1); document.getElementById('vign')?.classList.toggle('on', g && state === 'play'); }
-function makeHand(s: number) {
+/** palmDown：此手會以 Z+π 呈掌心向下，拇指改掛對側，翻轉後才在左側 */
+function makeHand(s: number, palmDown = false) {
   const h = new THREE.Group();
-  mesh(rcyl(0.05, 0.065, 0.7, 8), sleeve, [0, 0, 0.32], h).rotation.x = Math.PI / 2; // 長前臂延伸到畫面角落，兩手呈 A 字
-  mesh(rbox(0.11, 0.05, 0.13), handSkin, [0, 0, -0.1], h);
-  mesh(rcyl(0.068, 0.068, 0.06, 8), shirtCuff, [0, 0, 0.66], h).rotation.x = Math.PI / 2;
-  mesh(rcyl(0.062, 0.062, 0.035, 8), cuffMat, [0, 0, -0.03], h).rotation.x = Math.PI / 2;
-  for (let i = 0; i < 4; i++) { const f = mesh(rbox(0.022, 0.03, 0.07), handSkin, [-0.04 + i * 0.026, -0.01, -0.19], h); f.userData.finger = true; }
-  const th = mesh(rbox(0.03, 0.03, 0.07), handSkin, [s * -0.06, 0, -0.12], h); th.rotation.y = s * 0.6; th.userData.finger = true;
+  // [0] 袖／[1] 掌／[2] 衣袖口／[3] 手套袖口（順序給吸菸 FP 用，勿改）
+  mesh(rcyl(0.048, 0.058, 0.7, 8), sleeve, [0, 0, 0.32], h).rotation.x = Math.PI / 2;
+  const palmW = 0.096, palmH = 0.036, palmD = 0.108;
+  const palmY = -0.004, palmZ = -0.084;
+  mesh(rbox(palmW, palmH, palmD), handSkin, [0, palmY, palmZ], h);
+  mesh(rcyl(0.062, 0.062, 0.05, 8), shirtCuff, [0, 0, 0.66], h).rotation.x = Math.PI / 2;
+  mesh(rcyl(0.056, 0.056, 0.03, 8), cuffMat, [0, 0, -0.018], h).rotation.x = Math.PI / 2;
+  // 指根錨在掌遠端，彎曲繞指根轉（繞指中心轉會把交界抬離掌緣＝「太高」）
+  const knuckleY = palmY;
+  const knuckleZ = palmZ - palmD / 2 + 0.01;
+  const lens = [0.064, 0.074, 0.068, 0.052];
+  const xs = [-0.032, -0.011, 0.011, 0.031];
+  // 少彎、指尖略抬向鏡頭，FP 較看得見（不加長）
+  for (let i = 0; i < 4; i++) {
+    const len = lens[i];
+    const kn = new THREE.Group();
+    kn.position.set(xs[i], knuckleY, knuckleZ);
+    kn.rotation.x = 0.18 + i * 0.025;
+    h.add(kn);
+    const f = mesh(rbox(0.017, 0.02, len), handSkin, [0, 0, -len * 0.5], kn);
+    f.userData.finger = true;
+  }
+  // 拇指關節（最後一個 child）；左手空手／持蚵會改側，右手上抬抵刀柄
+  const side = palmDown ? -s : s;
+  // 右手：薄魚際貼掌緣過渡（勿鼓成肉瘤）
+  if (palmDown) {
+    const thenar = mesh(rbox(0.028, 0.018, 0.038), handSkin, [0.04, palmY, palmZ + 0.008], h);
+    thenar.rotation.set(0.08, 0.1, -0.25);
+    thenar.name = 'thenar';
+  }
+  const thKn = new THREE.Group();
+  thKn.name = 'thumbKn';
+  thKn.position.set(side * -0.055, knuckleY + 0.006, palmZ + 0.01);
+  thKn.rotation.set(0.25, side * 1.15, side * 0.55);
+  h.add(thKn);
+  // 指根略粗、與掌重疊；不再另加鼓包
+  const th = mesh(rbox(0.024, 0.026, 0.05), handSkin, [0, 0.001, -0.02], thKn);
+  th.userData.finger = true;
   return h;
 }
-const handL = makeHand(-1), handR = makeHand(1);
-[handL, handR].forEach(h => h.children.forEach(c => { const m = c as THREE.Mesh; if (m.material === handSkin && m.userData.finger) fingerMeshes.push(m); }));
+const handL = makeHand(-1), handR = makeHand(1, true);
+const thumbL = handL.getObjectByName('thumbKn') as THREE.Group;
+const thumbR = handR.getObjectByName('thumbKn') as THREE.Group;
+[handL, handR].forEach(h => h.traverse(c => {
+  const m = c as THREE.Mesh;
+  if ((m as any).isMesh && m.material === handSkin && m.userData.finger) fingerMeshes.push(m);
+}));
 const HL = new THREE.Vector3(-0.16, -0.24, -0.42);
-handL.position.copy(HL); handL.rotation.set(0.4, -0.5, 0.3);
-handR.position.set(0.2, -0.26, -0.45); handR.rotation.set(0.3, 0.5, -0.2);
+handL.position.copy(HL); handL.rotation.set(0.4, -0.5, 0.3); // 持蚵：掌心向上
+handR.position.set(0.2, -0.26, -0.45); handR.rotation.set(0.22, 0.35, Math.PI + 0.1); // 掌心向下、拇指在左
 handRig.add(handL, handR);
 let knifeK = 0; const _kt = new THREE.Vector3(), _kg = new THREE.Vector3(), _ko = new THREE.Vector3(0.05, 0.015, 0);
-const knife = new THREE.Group(); handR.add(knife); knife.position.set(-0.02, 0.03, -0.18); knife.rotation.set(0, 0.9, 0);
+/** 找縫點按：插刀再縮回（成功／滑開都播） */
+let stabT = 0; const STAB_DUR = 0.38;
+const knife = new THREE.Group(); handR.add(knife);
+// 右手 Z+π：局 +Y＝畫面下、局 −Y＝畫面上
+function knifeRestPose() {
+  knife.position.set(0.04, 0.028, -0.13); // 局 +Y → 刀子視覺下移
+  knife.rotation.set(0.55, Math.PI - 0.35, 0.25);
+}
+knifeRestPose();
+/** 左手拇指：持物時隱藏；空手翻掌後在右側，略朝指尖方向 */
+function poseThumbL(holding: boolean) {
+  thumbL.visible = !holding;
+  if (holding) return;
+  // 局 −X，翻掌後在右側；Z 略往 −Z（指尖向）挪一點
+  thumbL.position.set(-0.046, -0.002, -0.088);
+  thumbL.rotation.set(0.4, 0.65, 0.3);
+}
+/** 右手拇指：根部嵌入掌緣／薄魚際，尖端外探上抬抵刀柄 */
+function poseThumbR() {
+  thumbR.position.set(0.04, -0.004, -0.06);
+  thumbR.rotation.set(0.38, -0.65, -0.3);
+}
+poseThumbL(true);
+poseThumbR();
 mesh(rcyl(0.018, 0.02, 0.11, 6), mat(0x7a4a20), [0, 0, 0], knife).rotation.z = Math.PI / 2;
 mesh(rboxEnv(0.1, 0.006, 0.025), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [-0.1, 0, 0], knife);
 const oyster = new THREE.Group(); handL.add(oyster); oyster.position.set(0.02, 0.05, -0.16);
@@ -1566,10 +1627,22 @@ const knifeTip = knife.children[1] as THREE.Object3D;
 function seamErr() { const c = scr(oyster), m = scr(seamMark).sub(c), k = scr(knifeTip).sub(c); let d = Math.atan2(m.y, m.x) - Math.atan2(k.y, k.x); d = Math.atan2(Math.sin(d), Math.cos(d)); return d; }
 function tryInsert() {
   if (phase !== 'seam') return;
+  // 不論準不準都播右手插刀動作（成功則留在縫裡，失敗則縮回）
+  stabT = STAB_DUR;
   const d = DIFF[diff];
-  if (Math.abs(seamErr()) < tolNow()) { noise(0.06, 3000, 0.4); tone(320, 0.08, 0.2, 'triangle', 0, 200); toast('插進去了！', '#9be37a'); seamGlow.visible = false; seamRing.visible = false; sweet = false; setPhase('twist'); }
-  else if (Math.random() < slipNow()) { stabs++; dStat[diff][1]++; dStat[diff][2]++; flinch = 0.6; nag(NAG_STAB); hint.textContent = '刀子滑掉，割到手了！'; setPhase('busy'); bleed(16); hurt((10 + diff * 5) * (gearOn('glove') ? (gearFx('glove')?.dmgMul ?? 0.5) : 1), gearOn('glove') ? '哎呀！（有手套）' : '哎呀！'); if (hp > 0) later(0.7, () => setPhase('seam')); }
-  else { dStat[diff][1]++; tone(140, 0.08, 0.2, 'square'); hint.textContent = '沒對準縫，刀子滑開了！再找找看'; if (Math.random() < 0.3) nag(NAG_SLIP); shake = 0.08; }
+  if (Math.abs(seamErr()) < tolNow()) {
+    noise(0.06, 3000, 0.4); tone(320, 0.08, 0.2, 'triangle', 0, 200); toast('插進去了！', '#9be37a');
+    seamGlow.visible = false; seamRing.visible = false; sweet = false;
+    knifeK = 1; setPhase('twist');
+  } else if (Math.random() < slipNow()) {
+    stabs++; dStat[diff][1]++; dStat[diff][2]++; flinch = 0.6; nag(NAG_STAB);
+    hint.textContent = '刀子滑掉，割到手了！'; setPhase('busy'); bleed(16);
+    hurt((10 + diff * 5) * (gearOn('glove') ? (gearFx('glove')?.dmgMul ?? 0.5) : 1), gearOn('glove') ? '哎呀！（有手套）' : '哎呀！');
+    if (hp > 0) later(0.7, () => setPhase('seam'));
+  } else {
+    dStat[diff][1]++; tone(140, 0.08, 0.2, 'square'); hint.textContent = '沒對準縫，刀子滑開了！再找找看';
+    if (Math.random() < 0.3) nag(NAG_SLIP); shake = 0.08;
+  }
 }
 // ----- 2. 扭手腕 -----
 function twistInput(dx: number, dtMs: number) { if (swipePhase()) return;
@@ -5401,35 +5474,72 @@ function frameBody() {
   handL.position.set(HL.x + (narrow ? 0.12 : 0.05) * pe, HL.y + 0.06 * pe, HL.z);
   const restX = 0.75 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect + 0.3; // 平常囥佇畫面外
   leanFaces.forEach(f => { f.visible = pe > 0.02; f.position.x = f.userData.s * (restX + ((narrow ? 0.4 : 0.58) - restX) * pe); f.position.y = 0.05 - 0.08 * pe; f.rotation.z = -f.userData.s * 0.35 * pe; });
-  // 手勢：找縫（seam）右手維持原位；插刀後（twist）才靠過去撬
+  // 手勢：左手空手掌心向下、持蚵掌心向上；右手掌心向下；插刀時雙手 A 字
+  const holdOy = oyster.visible && oyster.parent === handL;
   const tw = phase === 'twist' ? strokeDir * Math.min(1, tension) : 0;
-  handR.position.y = -0.26; handR.rotation.z = -0.2 + tw * 0.4; handR.rotation.y = 0.5 + tw * 0.2; handR.position.x = 0.2 - (phase === 'twist' ? 0.07 : 0);
+  stabT = Math.max(0, stabT - rdt);
+  const stabU = stabT > 0 ? 1 - stabT / STAB_DUR : 0;
+  const jab = stabT > 0 ? Math.sin(stabU * Math.PI) : 0; // 0→1→0 插進再縮
+  const aPose = (phase === 'twist' || jab > 0.02) && holdOy ? Math.max(knifeK, jab) : 0;
+  handR.position.y = -0.26 + aPose * 0.04;
+  handR.position.x = 0.2 - aPose * 0.1 - (phase === 'twist' ? 0.02 : 0);
+  // 掌心向下；A 字時右手內收上挑（刀尖朝左下對準蚵）
+  handR.rotation.set(
+    0.22 + aPose * 0.35 + tw * 0.06,
+    0.35 - aPose * 0.25 + tw * 0.08,
+    Math.PI + 0.1 - aPose * 0.35 + tw * 0.15,
+  );
   if (phase === 'crab') handL.position.x += Math.sin(t * 30) * 0.02;
-  reach = Math.max(0, reach - rdt); const rk = Math.sin(Math.min(1, reach / 0.35) * Math.PI); handL.position.z -= rk * 0.18; handL.position.y -= rk * 0.12;
-  if (phase === 'scoop') { const sk = Math.sin(t * 11); handL.position.z -= 0.2 + sk * 0.05; handR.position.z = -0.6 + sk * 0.05; handL.position.y += 0.05; } else handR.position.z = -0.45;
+  // 伸向臉盆：以「往前伸」為主，左右／下移為輔；少轉腕以免像翻手臂
+  reach = Math.max(0, reach - rdt);
+  const rk = Math.sin(Math.min(1, reach / 0.35) * Math.PI);
+  handL.position.x -= rk * 0.05;
+  handL.position.y -= rk * 0.08;
+  handL.position.z -= rk * 0.32;
+  if (phase === 'scoop') { const sk = Math.sin(t * 11); handL.position.z -= 0.2 + sk * 0.05; handR.position.z = -0.6 + sk * 0.05; handL.position.y += 0.05; } else handR.position.z = -0.45 + jab * 0.06;
   applySmokeSitFpHands();
-  // 插刀後才把刀尖帶到殼縫；找縫階段右手不動
+  // 找縫點按：jab 把刀尖送到蚵；撬殼階段 knifeK 維持插入
   { const want = !plazaOnGrill() && phase === 'twist' && oyster.visible ? 1 : 0; knifeK += (want - knifeK) * Math.min(1, rdt * 8);
-    if (plazaOnGrill()) { knife.visible = false; knifeK = 0; }
-    if (knifeK > 0.01) { handRig.updateMatrixWorld(true); const tip = knife.localToWorld(_kt.set(-0.15, 0, 0)), goal = handL.localToWorld(_kg.copy(oyster.position).add(_ko));
-      handRig.worldToLocal(tip); handRig.worldToLocal(goal); handR.position.addScaledVector(goal.sub(tip), knifeK); }
-    // 撬殼綠區：右手＋刀顫動（找縫時不抖、維持原位）
+    if (plazaOnGrill()) { knife.visible = false; knifeK = 0; stabT = 0; }
+    const drive = Math.max(knifeK, jab);
+    if (drive > 0.01 && holdOy) {
+      handRig.updateMatrixWorld(true);
+      const tip = knife.localToWorld(_kt.set(-0.15, 0, 0)), goal = handL.localToWorld(_kg.copy(oyster.position).add(_ko));
+      handRig.worldToLocal(tip); handRig.worldToLocal(goal);
+      handR.position.addScaledVector(goal.sub(tip), drive);
+    }
     const pryReady = phase === 'twist' && (() => { const n = needle(), half = pryW() / 2; return n <= PRY_RED && Math.abs(n - PRY_C) <= half; })();
     if (pryReady) {
       const jx = Math.sin(t * 55) * 0.0022, jy = Math.cos(t * 63) * 0.0018;
       handR.position.x += jx; handR.position.y += jy;
       handR.rotation.z += Math.sin(t * 50) * 0.012;
-      knife.position.set(-0.02, 0.03 + Math.sin(t * 50) * 0.003, -0.18);
-      knife.rotation.set(0, 0.9, Math.sin(t * 48) * 0.015);
+      knife.position.set(0.04, 0.028 + Math.sin(t * 50) * 0.003, -0.13);
+      knife.rotation.set(0.55, Math.PI - 0.35, 0.25 + Math.sin(t * 48) * 0.015);
     } else {
-      knife.position.set(-0.02, 0.03, -0.18);
-      knife.rotation.set(0, 0.9, 0);
+      knifeRestPose();
     }
+    poseThumbR();
   }
   const ch = holding && phase === 'aim' ? Math.min(1, hold) : 0;
   if (!(smokeSitActive && !tpv)) {
-    if (phase === 'aim' || ch) { handL.position.y += 0.05 + ch * 0.06; handL.position.z -= ch * 0.05; handL.rotation.x = 0.4 - ch * 0.5; } else handL.rotation.x = 0.4;
-    if (flinch > 0) { handL.position.y -= flinch * 0.1; handL.rotation.z = 0.3 + flinch * 0.8; } else handL.rotation.z = 0.3;
+    poseThumbL(holdOy);
+    if (holdOy) {
+      // 掌心向上托蚵；伸手時姿勢幾乎不變，A 字時外展
+      handL.rotation.set(
+        0.4 - (phase === 'aim' || ch ? ch * 0.5 : 0) + aPose * 0.25 + rk * 0.08,
+        -0.5 - aPose * 0.35,
+        0.3 + aPose * 0.45,
+      );
+      if (aPose > 0.02) {
+        handL.position.x -= aPose * 0.04;
+        handL.position.y -= aPose * 0.02;
+      }
+    } else {
+      // 空手掌心下；伸出時只微微俯一點，不翻腕
+      handL.rotation.set(0.28 + rk * 0.18, -0.4, 0.3 + Math.PI);
+    }
+    if (phase === 'aim' || ch) { handL.position.y += 0.05 + ch * 0.06; handL.position.z -= ch * 0.05; }
+    if (flinch > 0) { handL.position.y -= flinch * 0.1; handL.rotation.z += flinch * 0.8; }
   } else {
     applySmokeSitFpHands();
   }
