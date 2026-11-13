@@ -9,8 +9,8 @@ import {
 } from './core';
 import {
   createSkyDome, SHELL_GEOS, HALF_GEOS, greyPick, shellM, basinShellM, BASIN_SHELL_COLS,
-  makeAma as makeAmaMesh, GOSSIP, PEEK, NAG_GIVEUP, NAG_STAB, NAG_CRACK, NAG_SLIP,
-  SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE, NPC_DIFF_T, NPC_DEF, type NpcDef,
+  makeAma as makeAmaMesh, dressYardNpc, GOSSIP, PEEK, NAG_GIVEUP, NAG_STAB, NAG_CRACK, NAG_SLIP,
+  SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE, NPC_DIFF_T, NPC_DEF, type NpcDef, type YardLook,
   DIFF, DIFF_W, LOCS, SEATS, type Seat,
   initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
@@ -363,11 +363,11 @@ const npcBowlFlGeo = new THREE.CylinderGeometry(0.088, 0.088, 0.012, 14);
 function makeNpc(d: NpcDef) {
   const a = makeAma(d.top, d.hair); const ang = Math.PI / 2 + d.a; const r = d.r ?? 1.9;
   a.g.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r); a.g.lookAt(0, 0, 0); a.g.rotateY(Math.PI); scene.add(a.g);
-  const oy = new THREE.Group(); oy.position.set(0, -0.15, -0.32); a.armL.add(oy);
+  const oy = new THREE.Group(); oy.position.set(0, -0.42, 0.02); a.armL.add(oy);
   mesh(halfGeo, shellM(0xe0dcd8), [0, 0, 0], oy);
   const meat = mesh(meatGeo, meatMat, [0, 0.025, 0], oy);
   const top = mesh(HALF_GEOS[npcs.length % 6], shellM(greyPick()), [0, 0.04, 0], oy);
-  const kn = new THREE.Group(); kn.position.set(0, -0.18, -0.34); a.armR.add(kn);
+  const kn = new THREE.Group(); kn.position.set(0, -0.42, 0.02); a.armR.add(kn);
   mesh(rboxEnv(0.03, 0.03, 0.09), mat(0x7a4a20), [0, 0, 0], kn);
   mesh(rboxEnv(0.02, 0.006, 0.09), mat(0xd0d0d8, { metalness: 0.8, roughness: 0.25 }), [0, 0, -0.09], kn);
   const bowlL = new THREE.Vector3(0.32, 0, -0.42); const bowl = a.g.localToWorld(bowlL.clone());
@@ -1125,21 +1125,8 @@ function grillAct(cx?: number, cy?: number) {
   void grillRaceAt(x, y);
 }
 
-// 每次上工隨機換阿婆衣服顏色與花樣
-const CLOTH = [0xe05a4a, 0x3f8ad0, 0x4fad6b, 0xe09830, 0x4a9ab8, 0xe07090, 0x2f9a9a, 0xc89040, 0x5a8fc0, 0xe0c341];
-function dressAma(n: Npc) {
-  const pick = () => CLOTH[Math.floor(Math.random() * CLOTH.length)]; const base = pick(); let acc = pick(); if (acc === base) acc = 0xf4ecd8;
-  const kind = Math.floor(Math.random() * 4), cv = document.createElement('canvas'); cv.width = cv.height = 64; const x = cv.getContext('2d')!;
-  const hex = (c: number) => '#' + c.toString(16).padStart(6, '0'); x.fillStyle = hex(base); x.fillRect(0, 0, 64, 64); x.fillStyle = hex(acc);
-  if (kind === 1) for (let y = 0; y < 64; y += 16) x.fillRect(0, y, 64, 6);
-  else if (kind === 2) for (let y = 4; y < 64; y += 16) for (let i = 4; i < 64; i += 16) { x.beginPath(); x.arc(i + (y % 32 ? 8 : 0), y, 3.5, 0, 7); x.fill(); }
-  else if (kind === 3) for (let k = 0; k < 7; k++) { const cx = Math.random() * 64, cy = Math.random() * 64; for (let a = 0; a < 5; a++) { x.beginPath(); x.arc(cx + Math.cos(a * 1.26) * 4, cy + Math.sin(a * 1.26) * 4, 3, 0, 7); x.fill(); } x.fillStyle = '#ffe680'; x.beginPath(); x.arc(cx, cy, 2, 0, 7); x.fill(); x.fillStyle = hex(acc); }
-  const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 1); tex.colorSpace = THREE.SRGBColorSpace;
-  const m = n.body.material as THREE.MeshStandardMaterial; m.map?.dispose(); m.map = tex; m.color.set(0xffffff); m.needsUpdate = true;
-  // 花布等到準心掃到身體才 upload 會卡一幀
+function warmNpcClothTex(tex: THREE.Texture) {
   try { renderer.initTexture(tex); } catch { /* */ }
-  for (const a of [n.armL, n.armR]) { const sl = a.children[0] as THREE.Mesh; (sl.material as THREE.MeshStandardMaterial).color.set(base); }
-  const PANTS = [0x3a5068, 0x4a5a68, 0x5a4a3a, 0x2a5a78, 0x4a6a5a, 0x586070]; (n.pants as THREE.MeshStandardMaterial).color.set(PANTS[Math.floor(Math.random() * PANTS.length)]);
 }
 /**
  * 強制把物件／場景畫進 GPU（含視錐外）。
@@ -1252,31 +1239,36 @@ initYardScene({
   water,
 });
 
-type Crew = { name: string; hair: number; look: 'ama' | 'agong' | 'dajie' | 'fisher' | 'ama2'; pal: number[] };
+type Crew = { name: string; hair: number; look: YardLook; pal: number[] };
 const CREW: Record<string, Crew[]> = {
-  home: [{ name: '快手阿桃', hair: 0x999999, look: 'ama', pal: [] }, { name: '講話阿春', hair: 0x333333, look: 'ama', pal: [] }, { name: '好奇阿嬌', hair: 0xcccccc, look: 'ama', pal: [] }],
-  wanggong: [{ name: '漁夫阿伯', hair: 0x555555, look: 'fisher', pal: [0x2a4a7a, 0x3a6a9a, 0xe8e0c8] }, { name: '燈塔阿公', hair: 0xdddddd, look: 'agong', pal: [0xe8e8e0, 0x6a7a8a, 0x8a5a3a] }, { name: '海口阿嬤', hair: 0xaaaaaa, look: 'ama2', pal: [0x4a6a9a, 0xc8d8e8, 0x2a5a7a] }],
-  dongshi: [{ name: '碼頭大姐', hair: 0x2a1a10, look: 'dajie', pal: [0xe07a4a, 0xf0c050, 0xd04a6a] }, { name: '蚵棚阿伯', hair: 0x444444, look: 'fisher', pal: [0x6a5a3a, 0x8a7a4a, 0x4a4a3a] }, { name: '愛聊阿嬤', hair: 0xbbbbbb, look: 'ama2', pal: [0xc06a8a, 0xe0a0b0, 0x8a4a6a] }],
-  budai: [{ name: '鹽田阿公', hair: 0xeeeeee, look: 'agong', pal: [0xf0f0f0, 0xc8c8c0, 0x6a6a5a] }, { name: '大廠組長大姐', hair: 0x1a1a1a, look: 'dajie', pal: [0x3a7a5a, 0x2a5a4a, 0xe8e8d8] }, { name: '老師傅阿伯', hair: 0x666666, look: 'fisher', pal: [0x4a4a5a, 0x5a5a6a, 0x7a6a4a] }],
+  home: [
+    { name: '快手阿桃', hair: 0x999999, look: 'ama', pal: [0xe87840, 0xfff3c8] },
+    { name: '講話阿春', hair: 0x333333, look: 'ama', pal: [0x3a9a6a, 0xffe59a] },
+    { name: '好奇阿嬌', hair: 0xcccccc, look: 'ama', pal: [0xe86878, 0xfff0f4] },
+  ],
+  wanggong: [
+    { name: '漁夫阿伯', hair: 0x555555, look: 'fisher', pal: [0x2a4a7a, 0xf2ebe0, 0xe8e0c8] },
+    { name: '燈塔阿公', hair: 0xdddddd, look: 'agong', pal: [0xe8e8e0, 0x6a7a8a, 0x8a5a3a] },
+    { name: '海口阿嬤', hair: 0xaaaaaa, look: 'ama2', pal: [0x4a6a9a, 0xc8d8e8, 0x2a5a7a] },
+  ],
+  dongshi: [
+    { name: '碼頭大姐', hair: 0x2a1a10, look: 'dajie', pal: [0xe07a4a, 0xf0c050, 0xd04a6a] },
+    { name: '蚵棚阿伯', hair: 0x444444, look: 'fisher', pal: [0x6a5a3a, 0xf0ebe0, 0x8a7a4a] },
+    { name: '愛聊阿嬤', hair: 0xbbbbbb, look: 'ama2', pal: [0xc06a8a, 0xe0a0b0, 0x8a4a6a] },
+  ],
+  budai: [
+    { name: '鹽田阿公', hair: 0xeeeeee, look: 'agong', pal: [0xf0f0f0, 0xc8c8c0, 0x6a6a5a] },
+    { name: '大廠組長大姐', hair: 0x1a1a1a, look: 'dajie', pal: [0x3a7a5a, 0xe8e8d8, 0x2a5a4a] },
+    { name: '老師傅阿伯', hair: 0x666666, look: 'fisher', pal: [0x4a4a5a, 0xf0ebe0, 0x7a6a4a] },
+  ],
 };
-const crewHats: THREE.Object3D[] = [];
 function applyCrew() {
   const id = locNow().id, set = CREW[id] ?? CREW.home;
   showLand();
-  crewHats.forEach(h => h.removeFromParent()); crewHats.length = 0;
   npcs.forEach((n, i) => {
-    const c = set[i % set.length], nm = i < set.length ? c.name : evExtraName(i - set.length) ?? c.name; n.name = nm; n.tag.setText(nm); n.tagTxt = nm;
-    const head = n.g.children.find(o => o instanceof THREE.Group && Math.abs(o.position.y - 1.02) < 0.01) as THREE.Group | undefined; if (!head) return;
-    const hair = head.children[1] as THREE.Mesh, bun = head.children[2] as THREE.Mesh;
-    (hair.material as THREE.MeshStandardMaterial).color.setHex(c.hair); (bun.material as THREE.MeshStandardMaterial).color.setHex(c.hair);
-    bun.visible = c.look === 'ama' || c.look === 'ama2'; hair.scale.set(1, c.look === 'agong' ? 0.6 : 1, 1);
-    let hat: THREE.Object3D | null = null;
-    if (c.look === 'fisher') { hat = new THREE.Group(); mesh(rcyl(0.16, 0.16, 0.08, 12), mat(c.pal[2] ?? 0xe8e0c8), [0, 0, 0], hat); mesh(rboxEnv(0.16, 0.015, 0.12), mat(c.pal[0]), [0, -0.035, 0.14], hat); hat.position.set(0, 0.12, 0); }
-    else if (c.look === 'agong') { hat = mesh(new THREE.ConeGeometry(0.3, 0.14, 14), mat(0xd8c080), [0, 0.16, 0]); } // 斗笠
-    else if (c.look === 'dajie') { hat = mesh(new THREE.TorusGeometry(0.15, 0.025, 6, 16), mat(c.pal[1]), [0, 0.06, 0]); hat.rotation.x = Math.PI / 2; } // 髮箍
-    else if (c.look === 'ama2') { hat = mesh(new THREE.SphereGeometry(0.165, 10, 6, 0, Math.PI * 2, 0, 1.2), mat(c.pal[1]), [0, 0.03, 0]); } // 頭巾
-    if (hat) { head.add(hat); crewHats.push(hat); }
-    if (c.pal.length) { const m = n.body.material as THREE.MeshStandardMaterial; const base = c.pal[Math.floor(Math.random() * 2)]; m.map?.dispose(); m.map = null; m.color.setHex(base); m.needsUpdate = true; for (const a of [n.armL, n.armR]) ((a.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(base); }
+    const c = set[i % set.length], nm = i < set.length ? c.name : evExtraName(i - set.length) ?? c.name;
+    n.name = nm; n.tag.setText(nm); n.tagTxt = nm;
+    dressYardNpc(n, c.look, c.hair, c.pal, { mat, mesh, skin }, warmNpcClothTex);
   });
 }
 updSky(); showLand(); applyCrew(); setInterval(updSky, 30000);
@@ -1285,7 +1277,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   $('nightTag').style.display = nightShift && !plazaMode ? '' : 'none';
   if (nightShift && !plazaMode) later(1.5, () => toast(`🌙 夜班上工！這一工收入 +${Math.round(eco.nightMult * 100)}%`, '#b8c8ff'));
   if (isRoomActive()) { npcs.length = 0; ALL_NPCS.forEach(n => { n.g.visible = false; n.tag.sprite.visible = false; n.bubble.sprite.visible = false; }); stools.forEach(g => { g.visible = false; if (g.userData.tag) g.userData.tag.visible = false; }); }
-  else { moonReset(); npcs.forEach(dressAma); applyCrew(); }
+  else { moonReset(); applyCrew(); }
   if (walking && !plazaMode && !isRoomActive()) { setWalking(false); on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
   state = 'play'; syncShiftUi(); clearAchShiftGot(); handPain = false; for (const k in medT) delete medT[k]; drawMeds(); timeLeft = shiftLen; hp = 100; dayCombo = 0;
   if (plazaMode && !plazaPlayAt) plazaPlayAt = performance.now();
@@ -1914,6 +1906,8 @@ function meatOnHead(n: Npc, m: THREE.Mesh) {
   meatHits++; addGrudge(n, 25); if (n.stuck) n.stuck.removeFromParent(); m.removeFromParent(); m.position.set(0, 0.15, 0); m.scale.setScalar(1.6); n.head.add(m); n.stuck = m;
   later(8, () => { if (n.stuck === m) { m.removeFromParent(); n.stuck = null; } });
   toast(`肉彈命中${n.name}！`, '#ffb070'); SFX.splat();
+  n.clutch = Math.max(n.clutch ?? 0, rnd(2.5, 4)); // 抱頭期間頭不轉
+  n.pause = Math.max(n.pause, n.clutch);
   anger(n, SCOLD_HIT, 0.85); updHud();
 }
 function anger(n: Npc, lines: string[], retaliate: number) {
@@ -2582,7 +2576,15 @@ function throwShell() {
   setPhase('busy'); later(0.6, goPick);
 }
 // ----- 7. 阿婆擲殼仔 + 雨傘 -----
-function windUp(n: Npc) { if (n.windup > 0 || state !== 'play' || stunned(n)) return; n.windup = Math.max(0.45, 1.0 - (n.grudge ?? 0) * 0.005); n.w0 = n.windup; n.warned = !gearOn('radio'); n.look = 1.6; if (n.warned) SFX.alert(); }
+function windUp(n: Npc) {
+  if (n.windup > 0 || state !== 'play' || stunned(n)) return;
+  n.windup = Math.max(0.45, 1.0 - (n.grudge ?? 0) * 0.005);
+  n.w0 = n.windup;
+  n.warned = !gearOn('radio');
+  n.look = Math.max(n.windup + 0.4, 1.6); // 蓄力全程盯著玩家
+  n.distract = 0;
+  if (n.warned) SFX.alert();
+}
 // 收音機開著：預警變晚（剩一半時間才出現，至少 0.5 秒）
 const warnLead = (n: Npc) => Math.min(n.w0 ?? n.windup, Math.max(0.5, (n.w0 ?? n.windup) * 0.5));
 function npcThrow(n: Npc) {
@@ -4938,13 +4940,46 @@ $('dexClose').onclick = () => $('dex').classList.remove('show');
 function npcShuck(n: Npc, dt: number, t: number) {
   if (n.pause > 0 || n.distract > 0 || n.angry > 0) n.pause -= dt; else n.cyc += dt / n.dur;
   const c = n.cyc;
+  // 肩 rotation.x（臂沿本地 -Y）：0=垂下，≈1.05=前下剝蚵，≈2.6=向前上舉，≈π=朝天
+  const ARM_REST = 1.05;
+  const ARM_UP = 2.55;
+  // 蓄力丟殼：停剝、雙手向上舉起（微抖）
+  if (n.windup > 0) {
+    const shake = Math.sin(t * 14) * 0.08;
+    n.armR.rotation.set(ARM_UP + shake, 0.1, 0.4);
+    n.armL.rotation.set(ARM_UP - shake * 0.5, -0.1, -0.4);
+    n.body.rotation.z = shake * 0.12;
+    if (n.bump && (n.bumpT = (n.bumpT ?? 0) - dt) <= 0) { n.head.remove(n.bump); n.bump = undefined; }
+    return;
+  }
   const prying = c > 0.15 && c < 0.6 && n.pause <= 0 && n.distract <= 0;
-  n.armR.rotation.x = n.windup > 0 ? -2.4 : n.angry > 0 ? -1.6 + Math.sin(t * 12) * 0.3 : prying ? -0.25 + Math.sin(t * 28) * 0.12 : -0.05;
+  n.armR.rotation.x = n.angry > 0 ? 1.85 + Math.sin(t * 12) * 0.2
+    : prying ? ARM_REST + Math.sin(t * 28) * 0.1
+    : ARM_REST;
+  n.armR.rotation.y = 0;
   n.armR.rotation.z = prying ? Math.sin(t * 14) * 0.08 : 0;
-  if ((n.scoopT ?? 0) > 0) { n.scoopT! -= dt; n.armL.rotation.x = n.armR.rotation.x = -0.9 + Math.sin(t * 8) * 0.2; n.body.rotation.x = 0.35; return; }
+  if ((n.scoopT ?? 0) > 0) {
+    n.scoopT! -= dt;
+    n.armL.rotation.set(0.7 + Math.sin(t * 8) * 0.15, 0, 0);
+    n.armR.rotation.set(0.7 + Math.sin(t * 8) * 0.15, 0, 0);
+    n.body.rotation.x = 0.35;
+    return;
+  }
   if (n.bump && (n.bumpT = (n.bumpT ?? 0) - dt) <= 0) { n.head.remove(n.bump); n.bump = undefined; }
-  if ((n.clutch ?? 0) > 0) { n.clutch! -= dt; n.armL.rotation.x = n.armR.rotation.x = -2.7; n.body.rotation.z = Math.sin(t * 18) * 0.08; return; }
-  n.armL.rotation.x = n.angry > 0 ? -1.4 : c < 0.15 ? -0.4 * (1 - c / 0.15) : -0.15;
+  if ((n.clutch ?? 0) > 0) {
+    n.clutch! -= dt;
+    // 抱頭：再舉高一點、往內靠（軀幹不抖）
+    n.armR.rotation.set(2.85, 0.35, 0.75);
+    n.armL.rotation.set(2.85, -0.35, -0.75);
+    n.body.rotation.z = 0;
+    return;
+  }
+  n.armL.rotation.x = n.angry > 0 ? 1.75
+    : c < 0.15 ? ARM_REST - 0.2 * (1 - c / 0.15)
+    : ARM_REST;
+  n.armL.rotation.y = 0;
+  n.armL.rotation.z = 0;
+  n.body.rotation.z = 0;
   if (c >= 0.6 && n.ev === 0) { n.ev = 1; n.top.rotation.z = -1.3; n.top.position.set(-0.05, 0.07, 0); }
   if (c >= 0.7 && n.ev === 1) { n.ev = 2; n.meat.visible = false; const m = new THREE.Mesh(meatGeo, meatMat);
     fly(m, worldOf(n.meat), n.bowl.clone().add(new THREE.Vector3(rnd(-0.06, 0.06), Math.min(n.bowlMeat.length, 30) * 0.002, rnd(-0.06, 0.06))), 0.35, 0.15, () => {
@@ -5300,13 +5335,38 @@ function frameBody() {
   for (const n of npcs) {
     n.look -= dt; n.bubT -= rdt;
     if (n.bubT <= 0 && n.bubble.sprite.visible) { n.bubble.setOpacity(0); n.bubble.sprite.visible = false; }
+    const clutching = (n.clutch ?? 0) > 0;
     const stand = n.angry > 0 || n.windup > 0 ? 1 : 0; n.baseY += (stand * 0.18 - n.baseY) * Math.min(1, rdt * 6); n.g.position.y = n.baseY;
-    const tgtY = n.look > 0 || stand ? Math.atan2(camera.position.x - n.g.position.x, camera.position.z - n.g.position.z) - n.g.rotation.y : 0;
-    const want = n.look > 0 || stand ? 1 : 0;
+    // 被擊中抱頭時身體可站，但頭不轉向玩家
+    const want = !clutching && (n.look > 0 || stand) ? 1 : 0;
     n.lean += (want - n.lean) * Math.min(1, rdt * 4);
-    n.head.rotation.set(n.pause > 0 ? -0.15 : 0.35 - n.lean * 0.3, 0, 0); n.body.rotation.x = n.lean * 0.15;
-    const face = THREE.MathUtils.lerp(0, Math.atan2(Math.sin(tgtY + Math.PI), Math.cos(tgtY + Math.PI)), n.lean);
-    n.head.rotation.y = n.distract > 0 && !stand ? n.turnDir * 1.3 : face;
+    n.head.rotation.z = 0;
+    n.body.rotation.x = n.lean * 0.15;
+    if (clutching) {
+      // 抱頭：頭維持正面，略低頭，不跟玩家轉
+      n.head.rotation.x += (-0.08 - n.head.rotation.x) * Math.min(1, rdt * 8);
+      let dy0 = -n.head.rotation.y;
+      dy0 = Math.atan2(Math.sin(dy0), Math.cos(dy0));
+      n.head.rotation.y += dy0 * Math.min(1, rdt * 12);
+    } else {
+      // 剝殼略低頭；看玩家／丟殼蓄力時抬頭對準玩家
+      const headPitch = n.pause > 0 ? -0.22
+        : n.windup > 0 ? 0.22
+        : -0.14 + n.lean * 0.28;
+      n.head.rotation.x = headPitch;
+      let wantYaw = 0;
+      if (n.distract > 0 && !stand) {
+        wantYaw = n.turnDir * 1.3;
+      } else if (n.lean > 0.01 || want) {
+        const raw = Math.atan2(camera.position.x - n.g.position.x, camera.position.z - n.g.position.z) - n.g.rotation.y;
+        let aim = Math.atan2(Math.sin(raw + Math.PI), Math.cos(raw + Math.PI));
+        aim = THREE.MathUtils.clamp(aim, -1.35, 1.35);
+        wantYaw = aim * (want ? 1 : n.lean);
+      }
+      let dy = wantYaw - n.head.rotation.y;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      n.head.rotation.y += dy * Math.min(1, rdt * 10);
+    }
     const g = n.grudge ?? 0;
     const tagTxt = n.name + (g >= 60 ? ' 😡' : g >= 25 ? ' 😠' : '');
     if (n.tagTxt !== tagTxt) { n.tagTxt = tagTxt; n.tag.setText(tagTxt); }
@@ -5341,22 +5401,21 @@ function frameBody() {
   handL.position.set(HL.x + (narrow ? 0.12 : 0.05) * pe, HL.y + 0.06 * pe, HL.z);
   const restX = 0.75 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect + 0.3; // 平常囥佇畫面外
   leanFaces.forEach(f => { f.visible = pe > 0.02; f.position.x = f.userData.s * (restX + ((narrow ? 0.4 : 0.58) - restX) * pe); f.position.y = 0.05 - 0.08 * pe; f.rotation.z = -f.userData.s * 0.35 * pe; });
-  // 手勢
+  // 手勢：找縫（seam）右手維持原位；插刀後（twist）才靠過去撬
   const tw = phase === 'twist' ? strokeDir * Math.min(1, tension) : 0;
-  handR.position.y = -0.26; handR.rotation.z = -0.2 + tw * 0.4; handR.rotation.y = 0.5 + tw * 0.2; handR.position.x = 0.2 - (phase === 'twist' || phase === 'seam' ? 0.07 : 0);
+  handR.position.y = -0.26; handR.rotation.z = -0.2 + tw * 0.4; handR.rotation.y = 0.5 + tw * 0.2; handR.position.x = 0.2 - (phase === 'twist' ? 0.07 : 0);
   if (phase === 'crab') handL.position.x += Math.sin(t * 30) * 0.02;
   reach = Math.max(0, reach - rdt); const rk = Math.sin(Math.min(1, reach / 0.35) * Math.PI); handL.position.z -= rk * 0.18; handL.position.y -= rk * 0.12;
   if (phase === 'scoop') { const sk = Math.sin(t * 11); handL.position.z -= 0.2 + sk * 0.05; handR.position.z = -0.6 + sk * 0.05; handL.position.y += 0.05; } else handR.position.z = -0.45;
   applySmokeSitFpHands();
-  // 找縫／撬殼：右手把刀尖帶到左手蚵仔的殼縫上（平滑靠近）
-  { const want = !plazaOnGrill() && (phase === 'seam' || phase === 'twist') && oyster.visible ? 1 : 0; knifeK += (want - knifeK) * Math.min(1, rdt * 8);
+  // 插刀後才把刀尖帶到殼縫；找縫階段右手不動
+  { const want = !plazaOnGrill() && phase === 'twist' && oyster.visible ? 1 : 0; knifeK += (want - knifeK) * Math.min(1, rdt * 8);
     if (plazaOnGrill()) { knife.visible = false; knifeK = 0; }
     if (knifeK > 0.01) { handRig.updateMatrixWorld(true); const tip = knife.localToWorld(_kt.set(-0.15, 0, 0)), goal = handL.localToWorld(_kg.copy(oyster.position).add(_ko));
       handRig.worldToLocal(tip); handRig.worldToLocal(goal); handR.position.addScaledVector(goal.sub(tip), knifeK); }
-    // 撬殼綠區／找縫對準：右手＋刀明顯顫動（刀尖鎖定後再抖，才看得到）
+    // 撬殼綠區：右手＋刀顫動（找縫時不抖、維持原位）
     const pryReady = phase === 'twist' && (() => { const n = needle(), half = pryW() / 2; return n <= PRY_RED && Math.abs(n - PRY_C) <= half; })();
-    const seamReady = phase === 'seam' && Math.abs(seamErr()) < tolNow();
-    if (pryReady || seamReady) {
+    if (pryReady) {
       const jx = Math.sin(t * 55) * 0.0022, jy = Math.cos(t * 63) * 0.0018;
       handR.position.x += jx; handR.position.y += jy;
       handR.rotation.z += Math.sin(t * 50) * 0.012;

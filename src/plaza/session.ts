@@ -1544,7 +1544,7 @@ async function paintPlayersDrop() {
       }),
     ];
     body = rows.map(r =>
-      `<div class="pzPRow${r.self ? ' self' : ''}"><span class="pzPName">${escHtml(r.name)}</span><span class="pzPMeat"><i class="ic ic-oyster"></i> ${r.meat}</span>${r.act || ''}</div>`,
+      `<div class="pzPRow${r.self ? ' self' : ''}"><span class="pzPName">${escHtml(r.name)}</span>${r.act || ''}<span class="pzPMeat"><i class="ic ic-oyster"></i> ${r.meat}</span></div>`,
     ).join('') || '<div class="pzPEmpty">廣場還沒有其他人</div>';
   } else {
     const friends = data?.friends ?? [];
