@@ -65,7 +65,7 @@ import {
   plazaMgFire, plazaMgReload, plazaMgFx, plazaMgMount, plazaAimMg, plazaOnMg,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
-  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, plazaLeaveAskIsOpen, plazaCloseLeaveAsk, seatPose, mgLeaveXZ, plazaPushOutfit, plazaPushCosmetics,
+  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, plazaLeaveAskIsOpen, plazaCloseLeaveAsk, plazaTogglePlayers, plazaPlayersIsOpen, plazaClosePlayers, seatPose, mgLeaveXZ, plazaPushOutfit, plazaPushCosmetics,
   plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryShowFlag, plazaTryRemoveFlag, plazaTryUpgradeFlag, plazaTrySelectFlag,
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
@@ -3125,6 +3125,13 @@ window.addEventListener('keydown', e => {
     plazaToggleMap();
     return;
   }
+  // 廣場：Tab 開／關玩家列表
+  if (state === 'play' && plazaMode && isPlazaActive() && !e.repeat && e.code === 'Tab') {
+    e.preventDefault();
+    if (document.pointerLockElement) document.exitPointerLock();
+    plazaTogglePlayers();
+    return;
+  }
   // 藥品／道具：N（原 M）
   if (state === 'play' && !tut && e.code === 'KeyN') { const L = $('medList'); if (document.pointerLockElement) document.exitPointerLock(); L.classList.toggle('show'); if (L.classList.contains('show')) renderMedList(); return; }
   if (state === 'play' && $('medList').classList.contains('show') && /^Digit[1-9]$/.test(e.code)) { const own = MEDS.filter(m => (save.meds[m.id] ?? 0) > 0); const m = own[+e.code.slice(5) - 1]; if (m) { useMed(m.id); renderMedList(); } return; }
@@ -6165,6 +6172,7 @@ initFeedback({
 function closeTopModal(): boolean {
   if (closeWeaponPreview()) return true;
   if (plazaLeaveAskIsOpen()) { plazaCloseLeaveAsk(); return true; }
+  if (plazaPlayersIsOpen()) { plazaClosePlayers(); return true; }
   if (plazaMapIsOpen()) { plazaCloseMap(); return true; }
   if (plazaChatIsOpen()) { plazaCloseChat(); return true; }
   for (const id of ['giftMsg', 'newMsg', 'featMsg', 'svMsg']) {

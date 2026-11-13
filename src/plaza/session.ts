@@ -703,9 +703,9 @@ async function boot(D: PlazaDeps) {
     const why = (r.err || '').trim();
     // preview／本機常見：CORS（請用 localhost 勿用 127.0.0.1）或正式 hub 被擋
     D.toast(why ? `廣場連不上（${why}），先離線逛` : '廣場暫時連不上，先離線逛，連上會自動同步', '#ffb08a');
-    setHud('離線中　可以先坐下自己剝、自己烤');
     D.enterWalk();
     showRoamUi();
+    setHud('離線中　可以先坐下自己剝、自己烤');
     syncPlazaPeopleHud();
     setNetBanner(why ? `連線失敗：${why}` : '連線失敗，正在重連…');
     scheduleManualReconnect(3000);
@@ -719,9 +719,10 @@ async function boot(D: PlazaDeps) {
   if (r.grills) view?.grill.syncAll(r.grills);
   applyChatHistory(r.chat);
   void plazaPushOutfit();
-  setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
+  // 先 enterWalk（掛 plazaMode／plazaRoam）再 sync，否則玩家鈕不會掛上
   D.enterWalk();
   showRoamUi();
+  setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
   syncPlazaPeopleHud();
   if (!plazaIoAnnounced) {
     plazaIoAnnounced = true;
@@ -1537,6 +1538,12 @@ function closePlayersDrop() {
   btn?.setAttribute('aria-expanded', 'false');
 }
 
+export function plazaPlayersIsOpen() {
+  return !!document.getElementById('pzPlayersWrap')?.classList.contains('open');
+}
+
+export function plazaClosePlayers() { closePlayersDrop(); }
+
 function onPlayersDocPointer(e: Event) {
   const wrap = document.getElementById('pzPlayersWrap');
   if (!wrap?.classList.contains('open')) return;
@@ -1555,13 +1562,11 @@ function ensurePlayersChrome() {
   if (!wrap) {
     wrap = document.createElement('div');
     wrap.id = 'pzPlayersWrap';
-    wrap.innerHTML = `<button id="pzPlayersBtn" type="button" aria-label="廣場玩家" aria-expanded="false" aria-haspopup="listbox">${PZ_PLAYERS_SVG}<span>玩家</span></button><div id="pzPlayersDrop" role="listbox" aria-label="廣場玩家列表"></div>`;
+    wrap.innerHTML = `<button id="pzPlayersBtn" type="button" aria-label="廣場玩家 (Tab)" aria-expanded="false" aria-haspopup="listbox" title="廣場玩家 (Tab)">${PZ_PLAYERS_SVG}<span>玩家</span><span class="key"> (Tab)</span></button><div id="pzPlayersDrop" role="listbox" aria-label="廣場玩家列表"></div>`;
     const btn = wrap.querySelector('#pzPlayersBtn') as HTMLButtonElement;
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      const open = !wrap!.classList.contains('open');
-      if (open) { paintPlayersDrop(); wrap!.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
-      else closePlayersDrop();
+      plazaTogglePlayers();
     });
     document.addEventListener('pointerdown', onPlayersDocPointer, true);
   }
@@ -1570,9 +1575,27 @@ function ensurePlayersChrome() {
     playersOrientBound = true;
     const reloc = () => { if (active) placePlayersChrome(); };
     matchMedia('(orientation: landscape)').addEventListener('change', reloc);
+    matchMedia('(pointer: fine)').addEventListener('change', reloc);
     addEventListener('orientationchange', () => setTimeout(reloc, 80));
   }
   return cluster;
+}
+
+/** 開／關廣場玩家下拉（按鈕與 Tab） */
+export function plazaTogglePlayers() {
+  if (!active) return;
+  placePlayersChrome();
+  const wrap = document.getElementById('pzPlayersWrap');
+  const btn = document.getElementById('pzPlayersBtn');
+  if (!wrap || !btn) return;
+  const open = !wrap.classList.contains('open');
+  if (open) {
+    plazaCloseMap();
+    plazaCloseChat();
+    paintPlayersDrop();
+    wrap.classList.add('open');
+    btn.setAttribute('aria-expanded', 'true');
+  } else closePlayersDrop();
 }
 
 function placePlayersChrome() {
@@ -1582,9 +1605,11 @@ function placePlayersChrome() {
   const cam = document.getElementById('camBtn');
   const land = matchMedia('(orientation: landscape)').matches;
   const coarse = matchMedia('(pointer: coarse)').matches;
-  const host = document.getElementById(coarse && land ? 'top' : 'stats');
+  const fine = matchMedia('(pointer: fine)').matches;
+  // 電腦／橫向：掛 #top（狀態列可見）；直向手機：跟視角鈕一起在 #stats
+  const host = document.getElementById(fine || land ? 'top' : 'stats');
   if (!host) return;
-  if (coarse && cam) {
+  if (coarse && cam && !fine) {
     if (cam.parentElement !== cluster) {
       if (cluster.parentElement !== host) {
         if (cam.parentElement === host) host.insertBefore(cluster, cam);

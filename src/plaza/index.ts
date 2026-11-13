@@ -8,7 +8,7 @@ export {
   tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaEndCleanup, plazaHideChrome,
   plazaFocusChat, plazaCloseChat, plazaChatIsOpen, plazaPushOutfit, plazaPushCosmetics,
   plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryShowFlag, plazaTryRemoveFlag, plazaTryUpgradeFlag, plazaTrySelectFlag,
-  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, plazaLeaveAskIsOpen, plazaCloseLeaveAsk,
+  plazaToggleMap, plazaCloseMap, plazaMapIsOpen, plazaLeaveAskIsOpen, plazaCloseLeaveAsk, plazaTogglePlayers, plazaPlayersIsOpen, plazaClosePlayers,
   type PlazaDeps,
 } from './session';
 export type { PlazaAimTarget, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent } from './types';

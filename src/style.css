@@ -1033,18 +1033,24 @@ body.plazaRoam.plazaMgSit #mgHud{display:flex}
 #mgHud .mgAmmo{min-width:4.5em;text-align:center;color:#9fe0ff}
 #mgHud.low .mgTime{color:#ff8a7a}
 #mgHud.empty .mgAmmo{color:#ffb08a}
-/* 廣場：視角左側玩家下拉（非彈窗） */
+/* 廣場：視角左側／狀態列右側玩家下拉（非彈窗） */
 #pzCamCluster{display:none;flex:none;align-items:center;gap:4px;position:relative;z-index:6;pointer-events:auto}
-body.plazaMode #pzCamCluster.on,body.plazaRoam #pzCamCluster.on{display:inline-flex}
+body.plazaMode #pzCamCluster.on,body.plazaRoam #pzCamCluster.on{display:inline-flex!important}
 #stats #pzCamCluster.on{margin-left:auto}
-#top #pzCamCluster.on{margin-left:2px}
+#top #pzCamCluster.on{margin-left:auto}
 #pzPlayersWrap{position:relative;flex:none;display:inline-flex}
 #pzPlayersBtn{
-  display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  display:inline-flex!important;align-items:center;justify-content:center;gap:4px;
   width:auto;min-width:40px;height:40px;min-height:40px;padding:0 10px;box-sizing:border-box;
   border-radius:10px;font-size:13px;font-weight:900;white-space:nowrap;
+  border:1.5px solid rgba(232,246,255,.4);
+  background:rgba(32,72,96,.78);color:#e8f6ff;
+  box-shadow:0 2px 10px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  cursor:pointer;pointer-events:auto;
 }
+#pzPlayersBtn:active{background:rgba(32,72,96,.92)}
 #pzPlayersBtn svg{width:18px;height:18px;flex:none}
+#pzPlayersBtn .key{display:none;opacity:.8;font-size:11px;font-weight:800}
 #pzPlayersDrop{
   display:none;position:absolute;top:calc(100% + 6px);right:0;
   min-width:min(72vw,240px);max-width:min(86vw,300px);max-height:min(48vh,280px);
@@ -1054,6 +1060,7 @@ body.plazaMode #pzCamCluster.on,body.plazaRoam #pzCamCluster.on{display:inline-f
   color:#e8f6ff;z-index:20;
 }
 #pzPlayersWrap.open #pzPlayersDrop{display:block}
+#pzPlayersWrap.open #pzPlayersBtn{background:rgba(42,90,134,.95);border-color:rgba(255,215,106,.55)}
 #pzPlayersDrop .pzPRow{
   display:flex;align-items:baseline;justify-content:space-between;gap:10px;
   padding:8px 10px;border-radius:8px;font-size:13px;font-weight:700;line-height:1.3;
@@ -1069,10 +1076,11 @@ body.plazaMode #pzCamCluster.on,body.plazaRoam #pzCamCluster.on{display:inline-f
   #pzPlayersBtn{width:auto;min-width:34px;height:34px;min-height:34px;padding:0 8px;border-radius:8px;font-size:12px}
   #pzPlayersBtn svg{width:16px;height:16px}
 }
-/* 電腦廣場：視角用 V，隱藏右下視角鈕；玩家列表仍顯示 */
+/* 電腦廣場：視角用 V，隱藏右下視角鈕；玩家鈕掛 #top 並顯示 Tab */
 @media (pointer:fine){
   body.plazaMode #camBtn,body.plazaRoam #camBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
-  #pzPlayersBtn{height:36px;min-height:36px;min-width:36px}
+  #pzPlayersBtn{height:36px;min-height:36px;min-width:auto;padding:0 12px}
+  #pzPlayersBtn .key{display:inline}
 }
 /* 橫向：視角改在上方 #top，勿再浮右下 */
 /* 方向搖桿貼近底部，略留空隙 */
@@ -1597,6 +1605,15 @@ body #locPick button.loc:not(.locPlaza):disabled,body #locPick button.loc.lock:n
 #top button,#top a{background:rgba(255,255,255,.10)!important;color:#f2f4f7!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:10px!important;box-shadow:none!important;text-shadow:none!important;transform:none}
 #top button:active{background:rgba(255,255,255,.22)!important}
 #top button .ic,#top a .ic{background-color:#f2f4f7}
+/* 廣場玩家鈕：蓋過頂列毛玻璃，電腦版一定看得到「玩家 (Tab)」 */
+#top #pzPlayersBtn,#stats #pzPlayersBtn{
+  display:inline-flex!important;align-items:center;gap:4px;
+  background:rgba(42,90,134,.88)!important;color:#e8f6ff!important;
+  border:1.5px solid rgba(255,215,106,.45)!important;border-radius:10px!important;
+  box-shadow:0 2px 10px rgba(0,0,0,.25)!important;font-weight:900!important;
+}
+#top #pzPlayersBtn:active,#stats #pzPlayersBtn:active{background:rgba(52,110,160,.95)!important}
+#pzPlayersWrap.open #pzPlayersBtn{background:rgba(52,110,160,.98)!important;border-color:rgba(255,215,106,.7)!important}
 
 /* ===== 說明區：臨時工／玩法清單／夜班 ===== */
 #overlay #tempRow button{background:#fbeee2!important;color:#b0522a!important;border:1.5px solid #e8b893!important;border-radius:10px!important;box-shadow:0 2px 6px rgba(120,60,20,.10)!important;text-shadow:none!important;font-weight:800}
