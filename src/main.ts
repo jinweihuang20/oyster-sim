@@ -1204,6 +1204,13 @@ function updSky() {
   skyDome.setSun(_skySun.copy(sun.position).normalize(), Math.min(1.15, sun.intensity / 1.15));
   skyDome.setClouds(mix.eco ? 0 : night ? 0.1 : dawnDusk ? 0.38 : 0.56);
   try { applyShedLook(); } catch { /* 尚未初始化 */ }
+  // 廣場期間 updSky→showLand／applyShedLook 可能又打開地標或重建棚，強制維持隱藏
+  if (plazaMode) {
+    for (const o of plazaHomeHide) o.visible = false;
+    for (const k in LAND) LAND[k].visible = false;
+    const sg = getShedG();
+    if (sg) sg.visible = false;
+  }
   refreshEconomyLabels();
 }
 
@@ -1471,7 +1478,7 @@ function fillBasin(animate: boolean) {
           : BASIN.clone().add(new THREE.Vector3(rnd(-0.25, 0.25), 0.35, rnd(-0.25, 0.25)));
       } else p0 = pileSpot();
       const slotW = basinMesh.localToWorld(local.clone());
-      fly(m, p0, slotW, 0.4 + i * 0.05, 0.4, () => {
+      fly(m, p0, slotW, 0.18 + i * 0.022, 0.28, () => {
         if (gen !== basinGen) { m.removeFromParent(); return; }
         basinMesh.add(m);
         m.position.copy(local);
@@ -1559,8 +1566,8 @@ function grab(m: THREE.Mesh) {
   m.position.copy(from);
   fly(m, from.clone(), () => worldOf(oyster), 0.3, 0.05, () => { scene.remove(m); noise(0.04, 2500, 0.25); holdOyster(m.userData.diff); });
 }
-function scoop() { if (basinOy.length >= basinCap()) return; setPhase('scoop'); scoopT = scoopDur = 1.5 * seatNow().scoop; noise(0.6, 900, 0.3); noise(0.6, 1600, 0.2); }
-let reach = 0, scoopT = 0, scoopDur = 1.5;
+function scoop() { if (basinOy.length >= basinCap()) return; setPhase('scoop'); scoopT = scoopDur = 0.7 * seatNow().scoop; noise(0.45, 900, 0.3); noise(0.45, 1600, 0.2); }
+let reach = 0, scoopT = 0, scoopDur = 0.7;
 // ----- 1. 找縫 -----
 const scr = (o: THREE.Object3D) => { const p = worldOf(o).project(camera); return new THREE.Vector2(p.x * innerWidth, p.y * innerHeight); };
 const knifeTip = knife.children[1] as THREE.Object3D;
@@ -2486,7 +2493,7 @@ function tickMgFireAfterCam() {
 }
 let plazaStealTgt: PlazaAimTarget | null = null;
 function startPlazaSteal() {
-  if (state !== 'play' || umbHeld || !canShowStealReticle()) return;
+  if (state !== 'play' || !canShowStealReticle()) return;
   if (performance.now() < plazaStealBanUntil) {
     toast(`偷被抓太多次，還要再等 ${Math.ceil((plazaStealBanUntil - performance.now()) / 1000)} 秒`, '#ffb08a');
     return;
@@ -2632,7 +2639,7 @@ function stealTarget() {
 }
 function startSteal() {
   if (plazaMode) { startPlazaSteal(); return; }
-  if (state !== 'play' || umbHeld || !canShowStealReticle() || evRun?.steal === 'no_steal') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n);
+  if (state !== 'play' || !canShowStealReticle() || evRun?.steal === 'no_steal') return; const n = stealTarget(); if (!n) return; stealNpc = n; stealT = 0; SFX.sneak(); if (!freeToSteal(n)) caughtBy(n);
 }
 function stopSteal() {
   if (plazaMode) { stopPlazaSteal(); return; }
@@ -2695,8 +2702,15 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     plazaPayWait = plazaReportEarn(earn, count, durSec).then(payout => {
       lastPay.earn = payout;
       creditLocal();
-      const note = payout !== earn ? `<p style="color:#9be37a">廣場結算 $${payout}（本機試算 $${earn}）</p>` : `<p style="color:#9be37a">廣場結算 $${payout}</p>`;
-      $('resBody')?.insertAdjacentHTML('beforeend', note + `<p style="font-size:13px;opacity:.8">身上共有 $${save.money}</p>`);
+      const payEl = document.getElementById('prPay');
+      const subEl = document.getElementById('prPaySub');
+      const walletEl = document.getElementById('prWallet');
+      if (payEl) payEl.textContent = `$${payout}`;
+      if (subEl) {
+        subEl.textContent = payout !== earn ? `已入帳（本機試算 $${earn}）` : '已入帳';
+        subEl.classList.add('ok');
+      }
+      if (walletEl) { walletEl.hidden = false; walletEl.textContent = `身上共有 $${save.money}`; }
       return payout;
     });
   } else {
@@ -2704,24 +2718,83 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     creditLocal();
     track('day', { loc: locNow().id, item: 't' + shiftLen, count, opened, missed, perfects, cracked, steals, caught, shellHits, earn, pearls: dayPearls.length + dayOdd.length, waste, combo: dayCombo, maxAnger: Math.round(dayMaxGrudge), double: dayMulti2, triple: dayMulti3, dur: durSec, dex: dexN(), seat: seatLabel, reason: handPain ? 'hand' : endReason, dstat: dstatStr() });
   }
-  $('resTitle').textContent = plazaMode ? (handPain ? '🩹 手痛收工' : '廣場休息一下～') : ev ? (evEarly ? `${ev.name}・提前完工！` : evDone ? `${ev.name}・完工` : `${ev.name}・提早收工`) : handPain ? '🩹 手痛收工' : queen ? '👑 今日剝蚵冠軍！' : '收工了～';
   const nightPct = Math.round(eco.nightMult * 100);
   const crumbPct = Math.round(eco.crumbRate * 100);
-  const dpayHint = eco.dpay.map((p, i) => `${DSHORT[i]}$${p}`).join('・');
-  const plazaEarnHtml = `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）` +
-    `${perfects ? `<br>完美／俐落 ${perfects} 次 × $${eco.perfectPay}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}` +
-    `<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}` +
-    `${penalty ? `<br>罰款／扣價 -$${penalty}` : ''}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +${nightPct}%：+$${nightBonus}` : ''}` +
-    `<br><b style="font-size:20px">這趟收入 $${earn}</b>（待伺服器確認）</p>` +
-    `<p style="font-size:13px;opacity:.8">玩了約 ${Math.floor(durSec / 60)} 分 ${durSec % 60} 秒</p>`;
-  const yardEarnHtml = `<p>蚵仔 ${count} 顆 = $${meatPay}（${dCnt.map((c, i) => `${DSHORT[i]}×${c}`).join(' ')}）<br><small>每顆 ${dpayHint}，殼屑 ${cracked} 顆只算 ${crumbPct}%${temp ? `，臨時工抽成 -$${eco.tempCut}／顆` : ''}</small>${perfects ? `<br>完美／俐落 ${perfects} 次 × $${eco.perfectPay}` : ''}${bowlBonus ? `<br>臉盆加價 +$${bowlBonus}` : ''}<br>珍珠／奇物 ${dayPearls.length + dayOdd.length} 件 = $${pearlMoney}<br>罰款／扣價 -$${penalty}${locBonus ? `<br>${LC.n} 工錢 ×${LC.m}：+$${locBonus}` : ''}${nightBonus ? `<br>🌙 夜班加成 +${nightPct}%：+$${nightBonus}` : ''}${bonus ? `<br>和平獎金 +$${bonus}` : ''}<br><b style="font-size:20px">今日收入 $${earn}</b></p>` +
-    `<p style="font-size:13px;opacity:.8">累積收入 $${save.money}・最佳紀錄 ${save.best} 顆・拿冠軍 ${save.queen} 次</p>`;
-  $('resBody').innerHTML = evHtml + (plazaMode ? '' : all.map((a, i) => `<div class="row"><span>${i + 1}. ${a.name}</span><b>${a.count} 顆入碗</b></div>`).join('')) +
-    `<p style="font-size:14px">開殼 ${opened}・入碗 ${count}・無入 ${missed}・浪費率 <b>${waste}%</b><br>殼屑 ${cracked}・完美／俐落 ${perfects}・放棄 ${abandoned}・割手 ${stabs}` +
-    (plazaMode ? '' : `<br>偷 ${steals}・被抓到 ${caught}・肉丟中阿婆 ${meatHits}・殼丟中阿婆 ${shellHits}<br>雨傘擋 ${blocks}・完美反彈 ${reflects}・被丟中 ${hitsTaken}・丟殼 ${thrown}・蚵仔掉地上 ${lost}`) +
-    `</p>` + (!plazaMode && titles.length ? `<p style="font-size:18px"><b>${titles.join('　')}</b></p>` : '') +
-    (plazaMode ? plazaEarnHtml : yardEarnHtml) +
-    `<p>${plazaMode ? '廣場休閒模式，不趕時間，想剝就剝～' : caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`}</p>`;
+  const finds = dayPearls.length + dayOdd.length;
+  const durTxt = durSec >= 60 ? `${Math.floor(durSec / 60)} 分 ${durSec % 60} 秒` : `${durSec} 秒`;
+  const tipYard = caught >= 2 ? '阿婆們：「明天你自己坐一邊！」' : waste >= 30 ? '阿婆們：「地上都是蚵仔肉，明天準一點！」' : queen ? '阿婆們：「哎唷，今天被你贏走了！」' : `${all[0].name}：「明天再來拚喔～」`;
+  $('resTitle').textContent = plazaMode
+    ? (handPain ? '手痛收工' : '廣場休息一下')
+    : ev ? (evEarly ? `${ev.name}・提前完工！` : evDone ? `${ev.name}・完工` : `${ev.name}・提早收工`)
+      : handPain ? '手痛收工' : queen ? '今日剝蚵冠軍' : '收工了';
+  const resEl = $('result');
+  resEl.classList.add('payRes');
+  resEl.classList.remove('plazaRes'); // 版型與廣場一致（同一套藍底主視覺）
+  const diffChips = dCnt.map((c, i) => (c > 0 ? `<span class="prDiff" data-d="${i}"><em>${DSHORT[i]}</em><b>${c}</b></span>` : '')).join('');
+  const extraLines: string[] = [];
+  if (perfects) extraLines.push(`<div class="prLine"><span>完美／俐落</span><b>${perfects} × $${eco.perfectPay}</b></div>`);
+  if (bowlBonus) extraLines.push(`<div class="prLine"><span>臉盆加價</span><b>+$${bowlBonus}</b></div>`);
+  if (steals || caught) extraLines.push(`<div class="prLine"><span>偷蚵仔／被抓</span><b>${steals}／${caught}</b></div>`);
+  if (finds) extraLines.push(`<div class="prLine"><span>珍珠／奇物</span><b>${finds} 件 · $${pearlMoney}</b></div>`);
+  if (penalty) extraLines.push(`<div class="prLine bad"><span>罰款／扣價</span><b>-$${penalty}</b></div>`);
+  if (locBonus) extraLines.push(`<div class="prLine"><span>${esc(LC.n)} ×${LC.m}</span><b>+$${locBonus}</b></div>`);
+  if (nightBonus) extraLines.push(`<div class="prLine"><span>夜班 +${nightPct}%</span><b>+$${nightBonus}</b></div>`);
+  if (bonus) extraLines.push(`<div class="prLine"><span>和平獎金</span><b>+$${bonus}</b></div>`);
+  if (!plazaMode && cracked) extraLines.push(`<div class="prLine muted"><span>殼屑（${crumbPct}%）</span><b>${cracked}</b></div>`);
+  if (!plazaMode && temp) extraLines.push(`<div class="prLine muted"><span>臨時工抽成</span><b>-$${eco.tempCut}／顆</b></div>`);
+  if (waste) extraLines.push(`<div class="prLine muted"><span>浪費率</span><b>${waste}%</b></div>`);
+  const RZ_RES: Record<string, string> = { common: '普通', uncommon: '少見', rare: '稀有', legend: '傳說' };
+  const tallyIds = (xs: number[]) => {
+    const m = new Map<number, number>();
+    for (const i of xs) m.set(i, (m.get(i) ?? 0) + 1);
+    return [...m.entries()];
+  };
+  const lootParts: string[] = [];
+  for (const [i, n] of tallyIds(dayPearls)) {
+    const r = RAR[i]; if (!r) continue;
+    const col = r.css === '#3a3548' ? '#6a5a9a' : r.css;
+    lootParts.push(`<div class="prLootItem"><div class="prLootMain"><span class="prLootName" style="color:${col}">${r.emo} ${esc(r.name)}${n > 1 ? ` ×${n}` : ''}</span><b>$${r.price * n}</b></div></div>`);
+  }
+  for (const [i, n] of tallyIds(dayOdd)) {
+    const o = ODD[i]; if (!o) continue;
+    const rr = rarOf(o.weight);
+    lootParts.push(
+      `<div class="prLootItem odd">` +
+        `<div class="prLootMain"><span class="prLootName" style="color:${o.color}">${o.emoji ?? ''} ${esc(o.name)}${n > 1 ? ` ×${n}` : ''} <span class="rb r-${rr}">${RZ_RES[rr]}</span></span><b>$${o.price * n}</b></div>` +
+        `<small>「${esc(o.line)}」</small>` +
+      `</div>`,
+    );
+  }
+  const lootHtml = lootParts.length
+    ? `<div class="prLoot"><div class="prLootH">尋寶詳情</div>${lootParts.join('')}</div>`
+    : '';
+  const paySub = plazaMode ? '待伺服器確認' : '本班已入帳';
+  const tip = plazaMode ? '休閒模式，不趕時間，想剝就剝～' : tipYard;
+  const walletInit = plazaMode
+    ? `<p class="prWallet" id="prWallet" hidden></p>`
+    : `<p class="prWallet" id="prWallet">身上共有 $${save.money}</p>`;
+  // 主視覺收入 → 統計格（含偷）→ 難度 → 明細 → 尋寶詳情 → 提示／錢包
+  $('resBody').innerHTML =
+    (evHtml || '') +
+    `<div class="prHero">` +
+      `<div class="prPay" id="prPay">$${earn}</div>` +
+      `<div class="prPaySub${plazaMode ? '' : ' ok'}" id="prPaySub">${paySub}</div>` +
+      `<div class="prDur">玩了 ${durTxt}</div>` +
+    `</div>` +
+    `<div class="prStats">` +
+      `<div class="prStat"><b>${count}</b><span>入碗</span></div>` +
+      `<div class="prStat"><b>${opened}</b><span>開殼</span></div>` +
+      `<div class="prStat"><b>${steals}<small>/${caught}</small></b><span>偷／抓</span></div>` +
+      `<div class="prStat"><b>${finds}</b><span>尋寶</span></div>` +
+    `</div>` +
+    (diffChips ? `<div class="prDiffs">${diffChips}</div>` : '') +
+    `<div class="prBreak">` +
+      `<div class="prLine"><span>蚵肉</span><b>${count} 顆 · $${meatPay}</b></div>` +
+      extraLines.join('') +
+    `</div>` +
+    lootHtml +
+    `<p class="prTip">${tip}</p>` +
+    walletInit;
   if (achShiftGot.length && !plazaMode) $('resBody').insertAdjacentHTML('afterbegin', `<div class="resAch"><b><i class="ic ic-trophy"></i> 這一工達成的成就</b><ul>${achShiftGot.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`);
   if (ev) { evLastId = ev.id; evRun = null; evToken = null; shiftLen = SHIFT; } else evLastId = null;
   const againBtn = $('again');
@@ -2896,7 +2969,7 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const swipePhase = () => phase === 'twist' || phase === 'crab';
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
-  if (state !== 'play') return; audio().resume(); if (umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
+  if (state !== 'play') return; audio().resume();
   // 奇物展示：點一下跳過阿婆湊近觀看
   if (skipOddShow()) return;
   if (moonAimOn) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
@@ -3081,7 +3154,6 @@ window.addEventListener('keydown', e => {
     if (e.code === 'KeyR') { e.preventDefault(); if (!e.repeat) void tryMgReload(); return; }
   }
   if (e.code === 'Space' && plazaMode && walking) { if (!e.repeat) plazaJump(); return; }
-  if (e.code === 'Space' && !e.repeat && umbHeld) { hint.textContent = '撐著傘不能剝蚵，先放開雨傘'; return; }
   if (e.code === 'Space' && !e.repeat) { if (phase === 'grillPlace') toast('點烤網上想放的位置', '#ffd76a'); else if (plazaOnGrill() && (phase === 'pick' || phase === 'empty' || phase === 'busy')) void grillRaceAt(innerWidth / 2, innerHeight / 2); else if (phase === 'pick') pickAt(innerWidth / 2, innerHeight / 2); else if (isGrillPhase()) grillAct(); else if (phase === 'seam') tryInsert(); else if (swipePhase()) pry(e.timeStamp); else if (phase === 'aim' && tapAim) { if (!tutMeat()) toss(true); } else if (phase === 'aim') { holding = true; hold = 0; } }
   if (e.code === 'KeyA' || e.code === 'KeyD' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
     const l = e.code === 'KeyA' || e.code === 'ArrowLeft';
@@ -3133,6 +3205,7 @@ $('bmGo').onclick = () => { void (async () => {
   $('backMenu').classList.remove('show'); if (state !== 'play' || tut) return;
   if (isRoomActive()) { await closeRoom(true); return; }
   const wasPlaza = plazaMode;
+  // 廣場還沒開班：無結算，直接回主畫面
   if (wasPlaza && !plazaShiftStarted()) {
     returnToMainMenu(async () => {
       plazaShellGen++; setPlazaMode(false); plazaPlayAt = 0; plazaHideYard(false);
@@ -3142,26 +3215,9 @@ $('bmGo').onclick = () => { void (async () => {
     });
     return;
   }
-  endReason = 'quit'; endDay();
-  $('result').classList.remove('show');
-  const P = lastPay;
-  const showPay = () => {
-      if (!(P.gross || P.pen)) return;
-      const r = (ic: string, l: string, v: string, c = '') => `<div class="row"><span><i class="ic ic-${ic}"></i> ${l}</span><b${c}>${v}</b></div>`;
-      $('psBody').innerHTML = r('oyster', '收入', `+$${P.gross}`) + (P.pen ? r('warn', '罰款／扣價', `-$${P.pen}`, ' style="color:#ff8a7a"') + r('coin', '淨收入', `$${P.earn}`) : '') + `<p style="font-size:14px;opacity:.85">已入帳，身上共有 $${save.money}</p>`;
-      $('paySum').classList.add('show');
-  };
-  // 從廣場進來的工寮：提早下班直接回廣場門口
-  if (!wasPlaza && shedTrip) { returnToPlazaFromShed(); setTimeout(showPay, 900); return; }
-  returnToMainMenu(async () => {
-    if (wasPlaza) {
-      await plazaPayWait?.catch(() => 0); setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0; plazaHideYard(false);
-      await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door'); clearPlazaLeaveUi();
-      void refreshPlazaOnlineAfterLeave();
-    }
-  }, {
-    then: showPay,
-  });
+  // 坐著／開班中離開：先秀新結算；回主畫面／回廣場改由 #resMenu 觸發（勿再跳舊 paySum）
+  endReason = 'quit';
+  endDay();
 })(); };
 $('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) { nameWait = false; setTimeout(namePrompt, 300); } }; btn('standBtn', standUp); btn('sitBtn', () => {
   if (plazaMode) {
@@ -3820,8 +3876,14 @@ function plazaHideYard(hide: boolean) {
     plazaHomeHide = [];
     const baseCone = typeof pileHit !== 'undefined' ? pileHit : null;
     const landGs = Object.values(LAND);
-    // 工寮木柱／厝頂／時鐘／碼頭漁船／水體／地標也藏：否則穿廣場走道；廣場改用北側碼頭船
-    for (const o of [pile, ground, water, baseCone, getShedG(), clockG, harborDock, ...boats, ...landGs, ...stools, ...ALL_NPCS.map(n => n.g)]) {
+    // 工寮木柱／厝頂／時鐘／碼頭漁船／水體／地標／阿婆碗也藏：否則穿廣場走道；廣場改用北側碼頭船
+    const npcBits: THREE.Object3D[] = [];
+    for (const n of ALL_NPCS) {
+      npcBits.push(n.g);
+      if (n.bowlM) npcBits.push(n.bowlM);
+      for (const m of n.bowlMeat ?? []) npcBits.push(m);
+    }
+    for (const o of [pile, ground, water, baseCone, getShedG(), clockG, harborDock, ...boats, ...landGs, ...stools, ...npcBits]) {
       if (!o || (o as any).__plazaHid) continue;
       (o as any).__plazaHid = o.visible; o.visible = false; plazaHomeHide.push(o);
     }
@@ -3830,6 +3892,8 @@ function plazaHideYard(hide: boolean) {
     tpCam.far = 120; tpCam.updateProjectionMatrix();
     // 依當下時間套天色（勿強制白天，否則 30s 後 updSky 會突然跳變）
     updSky();
+    // updSky→showLand 會把當前地標又 visible=true；進廣場後再蓋一次
+    for (const o of plazaHomeHide) o.visible = false;
     const f = scene.fog as THREE.Fog; f.near = 20; f.far = 64;
   } else {
     for (const o of plazaHomeHide) { o.visible = !!(o as any).__plazaHid; delete (o as any).__plazaHid; }
@@ -5080,7 +5144,7 @@ function frameBody() {
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
     if (evRun?.infHp) hp = 100;
     updBlood(rdt);
-    if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.6, goPick); setPhase('busy'); } }
+    if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.28, goPick); setPhase('busy'); } }
     tickFx(rdt); if (phase === 'aim' && tapAim && down?.drag) tossT0 = performance.now() - 600; // 拖畫面找阿婆時先不自動入碗
     if (phase === 'aim' && tapAim && !tutMeat() && performance.now() - tossT0 > 2000) toss(false);
     if (phase === 'empty' && !(tut && (TUT[tut.i].id === 'empty' || TUT[tut.i].id === 'shell'))) { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
@@ -5245,7 +5309,7 @@ function frameBody() {
   handR.position.y = -0.26; handR.rotation.z = -0.2 + tw * 0.4; handR.rotation.y = 0.5 + tw * 0.2; handR.position.x = 0.2 - (phase === 'twist' || phase === 'seam' ? 0.07 : 0);
   if (phase === 'crab') handL.position.x += Math.sin(t * 30) * 0.02;
   reach = Math.max(0, reach - rdt); const rk = Math.sin(Math.min(1, reach / 0.35) * Math.PI); handL.position.z -= rk * 0.18; handL.position.y -= rk * 0.12;
-  if (phase === 'scoop') { const sk = Math.sin(t * 6); handL.position.z -= 0.2 + sk * 0.05; handR.position.z = -0.6 + sk * 0.05; handL.position.y += 0.05; } else handR.position.z = -0.45;
+  if (phase === 'scoop') { const sk = Math.sin(t * 11); handL.position.z -= 0.2 + sk * 0.05; handR.position.z = -0.6 + sk * 0.05; handL.position.y += 0.05; } else handR.position.z = -0.45;
   applySmokeSitFpHands();
   // 找縫／撬殼：右手把刀尖帶到左手蚵仔的殼縫上（平滑靠近）
   { const want = !plazaOnGrill() && (phase === 'seam' || phase === 'twist') && oyster.visible ? 1 : 0; knifeK += (want - knifeK) * Math.min(1, rdt * 8);
@@ -5614,7 +5678,7 @@ function npcTip(n: Npc) {
 <li><b>會讓她生氣</b>：用殼丟中她（+35，丟歪打中 +30）、偷她的肉（+12，被抓到再 +20）。</li>
 <li><b>越生氣越常丟你</b>：怒氣越高，她丟殼的頻率越高、準備時間越短；怒氣到 90 會連丟 3 顆殼。</li>
 <li><b>怎麼讓她消氣</b>：8 秒內不要再丟她或偷她，之後怒氣每秒降 2.5。<b>起來走動</b>時氣消得快：只要 2 秒、之後每秒降 7.5。</li>
-<li><b>被丟的時候</b>：看到 ⚠ 就趕快按住「雨傘」擋（電腦可按住 R；放開就收起來，撐傘時不能剝蚵）；連續擋下 3 次，阿婆們會暫時比較少丟。</li>
+<li><b>被丟的時候</b>：看到 ⚠ 就趕快按住「雨傘」擋（電腦可按住 R；放開就收起來）；撐傘時仍可剝蚵、偷肉等，只是一手忙擋殼。</li>
 <li><b>真的被盯上</b>：可以按「換位置」（電腦按 G），換到比較不容易被丟中的位子。</li></ul><p style="opacity:.7;font-size:12px">點這裡關閉</p>`;
   el.classList.add('show');
 }

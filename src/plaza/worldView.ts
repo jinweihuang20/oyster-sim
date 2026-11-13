@@ -2284,7 +2284,7 @@ function hashPid(pid: string) {
       const rj = r as any;
       const dist2 = (r.x - cx) * (r.x - cx) + (r.z - cz) * (r.z - cz);
       const tier = cullTier(Math.sqrt(dist2), eco);
-      // mid+：停細動畫；不隱形（廣場改便宜插值／站樁）
+      // mid+：停甩殼／頭瞄等細動畫；不隱形。腳步／跳躍不論遠近都播
       const far = tier === 'mid' || tier === 'far' || tier === 'hide';
       if ((r.phase || '') === 'jump' && !r.seated) { if (!rj.jt) rj.jt = performance.now(); }
       let jumpElapsed = -1;
@@ -2295,8 +2295,8 @@ function hashPid(pid: string) {
           jumpElapsed = -1;
         }
       }
-      // 遠距：只更新座標，略過走路／甩臂細動畫
-      if (!far) {
+      // 腳步：不論距離（遠距滑行無跨步＝違體驗）
+      {
         // 平滑速度：用 ~200ms 視窗位移（單幀 lerp 殘差常→0，會誤判成沒在走）
         const nowMs = performance.now();
         type Hist = { t: number; x: number; z: number };
@@ -2320,7 +2320,6 @@ function hashPid(pid: string) {
         rj._walkOn = walkOn;
         const gaitSp = walkOn ? Math.max(moveSp, r.moving ? 0.9 : 0.55) : moveSp;
         const walkAmp = Math.min(1, gaitSp / 1.2);
-        // mid 仍播走路（只在 far 省）；否則中距會整段滑行無跨步
         const wantWalk = !r.seated && jumpElapsed < 0 && walkOn;
         if (!r.seated && jumpElapsed >= 0) {
           posePlazaJump(r.rig, jumpElapsed);
@@ -2347,6 +2346,9 @@ function hashPid(pid: string) {
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
           rj._loco = 'walk';
         }
+      }
+      // mid+：甩殼／頭瞄等細動畫仍可省
+      if (!far) {
         if (r.throwT > 0) {
           r.throwT -= dt;
           poseThrow(r);
