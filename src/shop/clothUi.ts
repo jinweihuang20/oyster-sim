@@ -370,7 +370,12 @@ function currentOutfit() {
 }
 function boardInnerHtml() {
   const st = eqStats();
-  return `<div class="eqBoardT">目前加成</div>${st.length ? `<div class="eqStats">${st.map(x => { const [a, b] = x.split('|'); return `<div><small>${a}</small><b>${b}</b></div>`; }).join('')}</div>` : '<p class="eqNone">現在穿的都是基本款，還沒有加成。去服飾店挑幾件吧。</p>'}`;
+  const title = `<div class="eqBoardT"><span>目前加成</span>${st.length ? `<span class="eqBoardN">${st.length}</span>` : ''}</div>`;
+  if (!st.length) return title + '<p class="eqNone">現在穿的都是基本款，還沒有加成。去服飾店挑幾件吧。</p>';
+  return title + `<div class="eqStats">${st.map(x => {
+    const [a, b] = x.split('|');
+    return `<div class="eqStat"><span class="eqStatK">${a}</span><span class="eqStatV">${b}</span></div>`;
+  }).join('')}</div>`;
 }
 function ownedPxLabel(id: string, price: number, worn = false) {
   const label = worn ? '已穿戴' : '已擁有';

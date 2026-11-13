@@ -3461,8 +3461,14 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   el.querySelectorAll<HTMLElement>('.loc[data-loc]').forEach(b => b.addEventListener('click', () => mark(b.dataset.loc), { capture: true }));
   bindLocPlazaPeek(el);
   requestAnimationFrame(() => {
-    el.querySelector('.loc.cur')?.scrollIntoView({ block: 'nearest', inline: 'center' });
-    requestAnimationFrame(() => el.querySelector<HTMLElement>('.locRow')?.dispatchEvent(new Event('scroll')));
+    const row = el.querySelector<HTMLElement>('.locRow');
+    const cur = el.querySelector<HTMLElement>('.loc.cur');
+    // 只捲 .locRow，避免 scrollIntoView 連整頁／浮層一起往左跳
+    if (row && cur && row.scrollWidth > row.clientWidth + 2) {
+      const left = cur.offsetLeft - (row.clientWidth - cur.offsetWidth) / 2;
+      row.scrollTo({ left: Math.max(0, Math.min(left, row.scrollWidth - row.clientWidth)) });
+    }
+    requestAnimationFrame(() => row?.dispatchEvent(new Event('scroll')));
   });
   if (ROOM_ENABLED) el.querySelectorAll<HTMLButtonElement>('[data-room]').forEach(b => b.onclick = ev => {
     ev.stopPropagation(); audio();
@@ -5462,8 +5468,8 @@ function showPlazaGuide() {
       return;
     }
     syncPlazaGuideHint();
-    const card = document.querySelector('.locPlaza');
-    card?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    const row = document.querySelector<HTMLElement>('#locPick .locRow');
+    if (row) row.scrollTo({ left: 0 });
     setTimeout(() => { giftAlert(); svAlert(); featAnnounce(); newAnnounce(); }, 300);
   };
   m.querySelectorAll('.gmX,.gmNo').forEach(b => b.addEventListener('click', () => close(false)));
