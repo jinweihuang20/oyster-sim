@@ -1399,11 +1399,28 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 #menuTop .calBtn.due .calDot,#menuTop .noticeBtn.unread .noticeDot{display:block}
 #menuTop{justify-content:flex-start}#menuTop #meLine{margin-right:auto}#menuTop .calBtn{margin-left:0}
 #adminTools .adminToolsHint{font-size:13px;opacity:.8;margin:0 0 10px;line-height:1.45;text-align:left}
-#adminToolsBody{text-align:left;max-height:min(60vh,480px);overflow:auto}
+#adminToolsBody{text-align:left;max-height:min(62vh,520px);overflow:auto}
 #adminToolsBody .adminGrp{margin:0 0 12px}
 #adminToolsBody .adminGrpH{font:800 12px/1.2 var(--sign);color:#2a5a86;letter-spacing:.06em;margin:0 0 6px}
 #adminToolsBody .adminGrid{margin:0}
 #overlay .sysGrid>#oAdmin{background:#1d2a33;color:#ffd76a}
+#adminToolsBody .adminBar{display:flex;align-items:center;gap:10px;margin:0 0 10px;position:sticky;top:0;background:var(--paint);padding:6px 0;z-index:2}
+#adminToolsBody .adminBack,#adminToolsBody .adminLink{border:0;background:transparent;color:#2a5a86;font-weight:800;cursor:pointer;padding:4px 0}
+#adminToolsBody .adminPrimary{margin-top:8px;min-height:42px;font-weight:800;background:linear-gradient(#5fd35a,#2e9a35);color:#fff;border:2px solid var(--ink);border-radius:8px;padding:8px 14px}
+#adminToolsBody .adminForm,#adminToolsBody .adminLogin{display:flex;flex-direction:column;gap:8px;margin:0 0 12px}
+#adminToolsBody .adminForm label,#adminToolsBody .adminLogin label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700;color:#3a4652}
+#adminToolsBody input,#adminToolsBody textarea,#adminToolsBody select{padding:8px 10px;border:1.5px solid rgba(31,42,54,.2);border-radius:8px;font:inherit;background:#fff}
+#adminToolsBody .adminRow{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+#adminToolsBody .adminRow input{flex:1;min-width:120px}
+#adminToolsBody .adminCard{padding:10px;margin:0 0 8px;border:1px solid rgba(31,42,54,.12);border-radius:12px;background:rgba(255,255,255,.5);display:flex;flex-direction:column;gap:4px}
+#adminToolsBody .adminCard.dim{opacity:.55}
+#adminToolsBody .adminCard b{font-size:14px}
+#adminToolsBody .adminCard small{opacity:.7;font-size:11px}
+#adminToolsBody .adminMeta,#adminToolsBody .adminNote{font-size:12px;opacity:.75;margin:6px 0}
+#adminToolsBody .adminMsg{font-size:13px;font-weight:700;color:#1f7a3a;margin:0 0 8px}
+#adminToolsBody .adminMsg.bad{color:#d2463a}
+#adminToolsBody .adminPre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:4px 0;max-height:160px;overflow:auto}
+#adminToolsBody .shopRow label{flex-direction:row;align-items:center;gap:8px}
 #noticeBody{text-align:left;max-height:min(58vh,420px);overflow:auto;padding:2px 0 8px}
 #noticeBody .noticeEmpty{opacity:.7;font-size:14px;text-align:center;padding:18px 8px}
 #noticeBody .noticeCard{padding:10px 12px;margin:0 0 8px;border:1px solid rgba(31,42,54,.12);border-radius:12px;background:rgba(255,255,255,.45)}
