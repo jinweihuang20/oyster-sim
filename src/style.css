@@ -2819,16 +2819,16 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
   }
   #equip .eqDock button{min-height:40px!important;font-size:13px!important}
 
-  /* —— 3. 結算：薪資｜統計並排 —— */
-  #result.panel{
+  /* —— 3. 結算：薪資｜統計並排（僅 .show 時顯示，勿覆寫 display:none） —— */
+  #result.panel.show{
     display:flex!important;flex-direction:column!important;
     max-height:calc(100dvh - var(--sa-top) - var(--sa-bottom) - 16px)!important;
     overflow:hidden!important;padding:12px 14px!important;box-sizing:border-box!important;
   }
-  #result #resTitle{flex:none;font-size:18px!important;margin:0 0 8px!important}
-  #result > .sysGrid{flex:none;gap:6px!important;margin:0 0 8px!important}
-  #result > .sysGrid>button{min-height:48px!important;font-size:12px!important;padding:6px 2px!important}
-  #result #resBody{
+  #result.panel.show #resTitle{flex:none;font-size:18px!important;margin:0 0 8px!important}
+  #result.panel.show > .sysGrid{flex:none;gap:6px!important;margin:0 0 8px!important}
+  #result.panel.show > .sysGrid>button{min-height:48px!important;font-size:12px!important;padding:6px 2px!important}
+  #result.panel.show #resBody{
     flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;
   }
   #result.payRes #resBody{
@@ -2852,8 +2852,8 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
     grid-template-columns:1fr 1fr!important;align-content:center!important;gap:8px!important;
   }
   #result.payRes .prPay{font-size:clamp(28px,5vw,40px)!important}
-  #result #resActs{flex:none;margin-top:10px!important}
-  #result #again,#result #resMenu{min-height:44px!important;font-size:15px!important}
+  #result.panel.show #resActs{flex:none;margin-top:10px!important}
+  #result.panel.show #again,#result.panel.show #resMenu{min-height:44px!important;font-size:15px!important}
 
   /* —— 4. 列表多欄 —— */
   #shopList .petList{
