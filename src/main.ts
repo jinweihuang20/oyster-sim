@@ -1624,7 +1624,19 @@ let reach = 0, scoopT = 0, scoopDur = 0.7;
 // ----- 1. 找縫 -----
 const scr = (o: THREE.Object3D) => { const p = worldOf(o).project(camera); return new THREE.Vector2(p.x * innerWidth, p.y * innerHeight); };
 const knifeTip = knife.children[1] as THREE.Object3D;
-function seamErr() { const c = scr(oyster), m = scr(seamMark).sub(c), k = scr(knifeTip).sub(c); let d = Math.atan2(m.y, m.x) - Math.atan2(k.y, k.x); d = Math.atan2(Math.sin(d), Math.cos(d)); return d; }
+const _seamA = new THREE.Vector3(), _seamB = new THREE.Vector2(), _seamK = new THREE.Vector2();
+/** 比對殼縫相對蚵心 vs 刀刃螢幕朝向（刀改姿後尖端貼蚵，舊「尖−蚵心」角會過敏感） */
+function seamErr() {
+  const c = scr(oyster), m = scr(seamMark).sub(c);
+  knife.updateMatrixWorld(true);
+  knife.localToWorld(_seamA.set(-0.15, 0, 0)).project(camera);
+  const tx = _seamA.x, ty = _seamA.y;
+  knife.localToWorld(_seamA.set(0.06, 0, 0)).project(camera);
+  _seamB.set((tx - _seamA.x) * innerWidth, (ty - _seamA.y) * innerHeight);
+  const k = _seamB.lengthSq() > 4 ? _seamB : _seamK.copy(scr(knifeTip)).sub(c);
+  let d = Math.atan2(m.y, m.x) - Math.atan2(k.y, k.x);
+  return Math.atan2(Math.sin(d), Math.cos(d));
+}
 function tryInsert() {
   if (phase !== 'seam') return;
   // 不論準不準都播右手插刀動作（成功則留在縫裡，失敗則縮回）
@@ -1750,7 +1762,7 @@ const pryW = () => Math.min(0.6, Math.min(1.6, 1 + 0.15 * pryHits) * PRY[diff].w
 const PRY_SLOW = 0.56; // 整體放慢（0.8→0.56，再慢 30%）
 const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? (gearFx('glove')?.speedMul ?? 1.05) : 1) * knifeNow().speed * medM('speed') * fxAll().speed;
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
-const tolNow = () => DIFF[diff].tol * 1.15 * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
+const tolNow = () => DIFF[diff].tol * 1.35 * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : k.id === 'harbor' ? 1.12 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : k.id === 'harbor' ? 0.82 : 1); }
 
@@ -5282,8 +5294,8 @@ function frameBody() {
         syncSeamOnTop(viewCam());
         seamRing.visible = inZ && seamMark.visible; seamRing.scale.setScalar(1 + snap * 0.8); (seamRing.material as THREE.MeshBasicMaterial).opacity = 0.85 - snap * 0.4; }
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
-      knife.position.y = 0.03 + (e < tolNow() * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
-    } else if (phase !== 'twist') knife.position.y = 0.03;
+      knife.position.y = 0.028 + (e < tolNow() * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
+    } else if (phase !== 'twist') knife.position.y = 0.028;
     if (phase === 'twist') { if (SHOT === 'pry') needleStart = performance.now() - (PRY_C / 2) / prySp() * 1000; const n = needle(), w = pryW(); zone.style.left = `${(PRY_C - w / 2) * 100}%`; zone.style.width = `${w * 100}%`; fill.style.width = '28px'; fill.style.marginLeft = `calc(${n * 100}% - 14px)`; fill.style.background = 'transparent'; fill.style.color = n > PRY_RED ? '#ff5a4a' : Math.abs(n - PRY_C) <= w / 2 ? '#d8ffb0' : '#fff4dc'; setInZ(n <= PRY_RED && Math.abs(n - PRY_C) <= w / 2 ? 'z' : ''); }
     if (phase === 'twist' || phase === 'crab') { ($('progFill') as HTMLElement).style.width = `${(phase === 'crab' ? crabShakes / 6 : progress) * 100}%`; }
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
