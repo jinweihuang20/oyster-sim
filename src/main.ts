@@ -1625,8 +1625,10 @@ let reach = 0, scoopT = 0, scoopDur = 0.7;
 const scr = (o: THREE.Object3D) => { const p = worldOf(o).project(camera); return new THREE.Vector2(p.x * innerWidth, p.y * innerHeight); };
 const knifeTip = knife.children[1] as THREE.Object3D;
 const _seamA = new THREE.Vector3(), _seamB = new THREE.Vector2(), _seamK = new THREE.Vector2();
-/** 殼縫相對蚵心的朝向須與刀刃螢幕朝向垂直（差 π/2）；用刀刃方向避免尖端貼蚵時過敏感 */
-function seamErr() {
+/** 殼縫↔刀刃螢幕夾角可插區間（含近似垂直） */
+const SEAM_ANG_LO = 70 * Math.PI / 180, SEAM_ANG_HI = 135 * Math.PI / 180;
+/** 殼縫相對蚵心 vs 刀刃朝向的絕對夾角，0…π */
+function seamKnifeAng() {
   const c = scr(oyster), m = scr(seamMark).sub(c);
   knife.updateMatrixWorld(true);
   knife.localToWorld(_seamA.set(-0.15, 0, 0)).project(camera);
@@ -1634,16 +1636,23 @@ function seamErr() {
   knife.localToWorld(_seamA.set(0.06, 0, 0)).project(camera);
   _seamB.set((tx - _seamA.x) * innerWidth, (ty - _seamA.y) * innerHeight);
   const k = _seamB.lengthSq() > 4 ? _seamB : _seamK.copy(scr(knifeTip)).sub(c);
-  // 對準：縫朝向 ⊥ 刀刃（減 π/2 後接近 0）
-  let d = Math.atan2(m.y, m.x) - Math.atan2(k.y, k.x) - Math.PI / 2;
-  return Math.atan2(Math.sin(d), Math.cos(d));
+  let d = Math.atan2(m.y, m.x) - Math.atan2(k.y, k.x);
+  return Math.abs(Math.atan2(Math.sin(d), Math.cos(d)));
+}
+const seamOk = () => { const a = seamKnifeAng(); return a >= SEAM_ANG_LO && a <= SEAM_ANG_HI; };
+/** 偏離可插區間的弧度（區間內為 0） */
+function seamErr() {
+  const a = seamKnifeAng();
+  if (a < SEAM_ANG_LO) return SEAM_ANG_LO - a;
+  if (a > SEAM_ANG_HI) return a - SEAM_ANG_HI;
+  return 0;
 }
 function tryInsert() {
   if (phase !== 'seam') return;
   // 不論準不準都播右手插刀動作（成功則留在縫裡，失敗則縮回）
   stabT = STAB_DUR;
   const d = DIFF[diff];
-  if (Math.abs(seamErr()) < tolNow()) {
+  if (seamOk()) {
     noise(0.06, 3000, 0.4); tone(320, 0.08, 0.2, 'triangle', 0, 200); toast('插進去了！', '#9be37a');
     seamGlow.visible = false; seamRing.visible = false; sweet = false;
     knifeK = 1; setPhase('twist');
@@ -5284,18 +5293,17 @@ function frameBody() {
     hp = Math.min(100, hp + dt / 6 * medM('regen')); tickMeds(dt);
     if (phase === 'seam') {
       rotTipTick(rdt); if (rotKey) rotTipTouch(); rot += rotKey * rdt * 2.5; oyster.rotation.y = rot;
-      const e = Math.abs(seamErr()), d = DIFF[diff], close = clamp(1 - e / (tolNow() * 3), 0, 1);
-      (seamGlow.material as THREE.MeshBasicMaterial).opacity = gearOn('glasses') ? Math.min(1, 0.5 + 0.06 * Math.sin(performance.now() * 0.0042) + clamp(1 - e / (tolNow() * 5), 0, 1) * 0.5) : 0.24 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.4;
-      { const inZ = e < tolNow(), gl = gearOn('glasses') ? 1.6 : 1, gm = seamGlow.material as THREE.MeshBasicMaterial;
+      const e = seamErr(), inZ = seamOk(), close = inZ ? 1 : clamp(1 - e / 0.55, 0, 1);
+      (seamGlow.material as THREE.MeshBasicMaterial).opacity = gearOn('glasses') ? Math.min(1, 0.5 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.5) : 0.24 + 0.06 * Math.sin(performance.now() * 0.0042) + close * 0.4;
+      { const gl = gearOn('glasses') ? 1.6 : 1, gm = seamGlow.material as THREE.MeshBasicMaterial;
         if (inZ && !sweet) { sweetT = 0.25; navigator.vibrate?.(15); tone(1400, 0.05, 0.12, 'triangle', 0, 2100); }
         sweet = inZ; sweetT = Math.max(0, sweetT - rdt); const snap = sweetT / 0.25;
         gm.color.set(inZ ? 0xd8ff80 : 0xffc878); if (inZ) gm.opacity = gearOn('glasses') ? 1 : 0.8;
         seamGlow.scale.setScalar(gl * (inZ ? 1.5 + snap * 0.6 : 1));
-        // 先決定朝向／蓋過手刀，再設綠環（否則 seamMark.visible 會用到舊值）
         syncSeamOnTop(viewCam());
         seamRing.visible = inZ && seamMark.visible; seamRing.scale.setScalar(1 + snap * 0.8); (seamRing.material as THREE.MeshBasicMaterial).opacity = 0.85 - snap * 0.4; }
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
-      knife.position.y = 0.028 + (e < tolNow() * 1.5 ? Math.sin(t * 50) * 0.004 : 0);
+      knife.position.y = 0.028 + (inZ ? Math.sin(t * 50) * 0.004 : 0);
     } else if (phase !== 'twist') knife.position.y = 0.028;
     if (phase === 'twist') { if (SHOT === 'pry') needleStart = performance.now() - (PRY_C / 2) / prySp() * 1000; const n = needle(), w = pryW(); zone.style.left = `${(PRY_C - w / 2) * 100}%`; zone.style.width = `${w * 100}%`; fill.style.width = '28px'; fill.style.marginLeft = `calc(${n * 100}% - 14px)`; fill.style.background = 'transparent'; fill.style.color = n > PRY_RED ? '#ff5a4a' : Math.abs(n - PRY_C) <= w / 2 ? '#d8ffb0' : '#fff4dc'; setInZ(n <= PRY_RED && Math.abs(n - PRY_C) <= w / 2 ? 'z' : ''); }
     if (phase === 'twist' || phase === 'crab') { ($('progFill') as HTMLElement).style.width = `${(phase === 'crab' ? crabShakes / 6 : progress) * 100}%`; }
