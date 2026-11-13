@@ -1466,6 +1466,29 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 #adminToolsBody .adminMsg.bad{color:#d2463a}
 #adminToolsBody .adminPre{white-space:pre-wrap;word-break:break-word;font-size:12px;margin:4px 0;max-height:160px;overflow:auto}
 #adminToolsBody .shopRow label{flex-direction:row;align-items:center;gap:8px}
+#adminToolsBody .adminTap{width:100%;text-align:left;cursor:pointer;font:inherit;color:inherit}
+#adminToolsBody .adminTap:active{background:rgba(42,90,134,.12)}
+#adminToolsBody .adminChk{flex-direction:row!important;align-items:center;gap:8px;font-weight:700}
+#adminToolsBody .adminActions{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;align-items:center}
+#adminToolsBody .adminActions button,#adminToolsBody .adminCard>button,#adminToolsBody .adminPg button{min-height:36px;padding:6px 12px;border-radius:8px;border:1.5px solid rgba(31,42,54,.2);background:#fff;font-weight:700;cursor:pointer}
+#adminToolsBody .adminWho{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#adminToolsBody .adminWho .adminPrimary{margin:0 0 0 auto}
+#adminToolsBody .adminChip{font-size:12px;font-weight:800;padding:2px 8px;border-radius:999px;background:#94a3b8;color:#fff}
+#adminToolsBody .adminChip.on{background:#16a34a}
+#adminToolsBody .adminKpis{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;margin:8px 0;opacity:.85}
+#adminToolsBody .adminTabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+#adminToolsBody .adminTabs button{min-height:34px;padding:6px 10px;border-radius:8px;border:1.5px solid rgba(31,42,54,.18);background:rgba(255,255,255,.55);font-weight:700;cursor:pointer}
+#adminToolsBody .adminTabs button.on{background:#2a5a86;color:#fff;border-color:#2a5a86}
+#adminToolsBody .adminGrid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:8px}
+#adminToolsBody .adminTag{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:6px;background:#64748b;color:#fff;font-size:11px;font-weight:800}
+#adminToolsBody .adminUl{margin:4px 0 0;padding-left:18px;font-size:13px}
+#adminToolsBody .adminMuted{opacity:.7}
+#adminToolsBody .adminMini{font-size:13px;padding:4px 0;border-bottom:1px solid rgba(31,42,54,.08)}
+#adminToolsBody .adminMini.mine{color:#2a5a86;font-weight:700}
+#adminToolsBody .adminChat{max-height:180px;overflow:auto;margin-top:8px;background:rgba(255,255,255,.35);border-radius:8px;padding:6px 8px}
+#adminToolsBody .adminPg{justify-content:center}
+#adminToolsBody{max-height:min(70vh,580px)}
+#adminTools select[size]{min-height:110px}
 #noticeBody{text-align:left;max-height:min(58vh,420px);overflow:auto;padding:2px 0 8px}
 #noticeBody .noticeEmpty{opacity:.7;font-size:14px;text-align:center;padding:18px 8px}
 #noticeBody .noticeCard{padding:10px 12px;margin:0 0 8px;border:1px solid rgba(31,42,54,.12);border-radius:12px;background:rgba(255,255,255,.45)}
