@@ -137,7 +137,7 @@ async function render() {
   await fr.loadFriends();
   const row = (x: any) => {
     return `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}"><span class="lbR">${x.rank}</span><span class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</span><span class="lbV">${unit}${x.v}</span>` +
-      (x.me ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>` : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span><span class="lbFrAct">${fr.friendActionBtn(x.k, x.tag, x.nick)}</span>`) + '</div>';
+      (x.me ? `<span class="lbSide"><span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span></span>` : `<span class="lbSide"><span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span><span class="lbFrAct">${fr.friendActionBtn(x.k, x.tag, x.nick)}</span></span>`) + '</div>';
   };
   const rows = r.rows as any[];
   const emptyHint = board === 'seat' ? '把鄰居送到指定位子後就會出現成績！' : board.startsWith('dm') ? '死鬥結算後就會出現成績！' : '收工後就會出現你的成績！';

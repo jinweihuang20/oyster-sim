@@ -1053,7 +1053,7 @@ body.plazaMode #pzCamCluster.on,body.plazaRoam #pzCamCluster.on{display:inline-f
 #pzPlayersBtn .key{display:none;opacity:.8;font-size:11px;font-weight:800}
 #pzPlayersDrop{
   display:none;position:absolute;top:calc(100% + 6px);right:0;
-  min-width:min(72vw,240px);max-width:min(86vw,300px);max-height:min(48vh,280px);
+  min-width:min(78vw,280px);max-width:min(90vw,340px);max-height:min(48vh,280px);
   overflow:auto;padding:6px;border-radius:12px;
   background:rgba(22,28,36,.92);border:1.5px solid rgba(232,246,255,.28);
   box-shadow:0 8px 22px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
@@ -1508,8 +1508,6 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 #friendsBody .frWho b{font-size:15px}
 #friendsBody .frWho small{opacity:.7}
 #friendsBody .frLoc{font-size:12px;opacity:.75;width:100%}
-#friendsBody .frDotLive{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex:none}
-#friendsBody .frDotLive.on{background:#22c55e;box-shadow:0 0 0 3px #22c55e33}
 #friendsBody .frActs{display:flex;gap:6px;flex-wrap:wrap}
 #friendsBody .frEmpty{opacity:.7;text-align:center;padding:16px 8px;font-size:14px}
 #friendsBody .frDm.hidden,#friendsBody .frDmBox.hidden{display:none!important}
@@ -1523,8 +1521,14 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 .frBadge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(42,90,134,.15);color:#2a5a86;font-size:12px;font-weight:800}
 .frBadge.dim{opacity:.65}
 .lbFr{color:#2a5a86;font-weight:800;margin-left:4px}
-.lbFrAct{flex:none;display:flex;align-items:center}
-.lbFrAct .frAct,.lbFrAct .frBadge{font-size:12px;min-height:30px;padding:4px 8px}
+.lbSide{display:flex;align-items:center;gap:6px;flex-shrink:0;justify-self:end}
+.lbFrAct{flex:none;display:inline-flex;align-items:center;max-width:none}
+.lbFrAct .frAct,.lbFrAct .frBadge{
+  font-size:12px;min-height:30px;padding:4px 8px;white-space:nowrap;writing-mode:horizontal-tb;
+  flex-shrink:0;line-height:1.2
+}
+.frDotLive{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex:none;align-self:center}
+.frDotLive.on{background:#22c55e;box-shadow:0 0 0 3px #22c55e33}
 .pzPTabs{display:flex;gap:4px;margin:0 0 6px;padding:0 2px}
 .pzPTab{flex:1;min-height:32px;border:0;border-radius:8px;background:rgba(255,255,255,.08);color:#e8f6ff;font-weight:800;font-size:12px;cursor:pointer}
 .pzPTab.on{background:rgba(42,90,134,.95);color:#fff}
@@ -1533,6 +1537,9 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 .pzPFr{color:#ffd76a;font-weight:800}
 .pzPLoc{flex:none;font-size:12px;opacity:.85}
 .pzPEmpty{padding:12px 8px;text-align:center;opacity:.7;font-size:13px}
+#pzPlayersDrop .pzPRow{align-items:center}
+#pzPlayersDrop .frDotLive{box-shadow:none}
+#pzPlayersDrop .frDotLive.on{box-shadow:0 0 0 3px #22c55e44}
 #noticeBody{text-align:left;max-height:min(58vh,420px);overflow:auto;padding:2px 0 8px}
 #noticeBody .noticeEmpty{opacity:.7;font-size:14px;text-align:center;padding:18px 8px}
 #noticeBody .noticeCard{padding:10px 12px;margin:0 0 8px;border:1px solid rgba(31,42,54,.12);border-radius:12px;background:rgba(255,255,255,.45)}

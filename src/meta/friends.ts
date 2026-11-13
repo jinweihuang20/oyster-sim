@@ -26,6 +26,31 @@ export type FriendReq = { id: number; k: string; nick: string; tag: string; onli
 
 let cache: { friends: FriendRow[]; incoming: FriendReq[]; outgoing: FriendReq[]; at: number } | null = null;
 let idSet = { ks: new Set<string>(), tags: new Set<string>(), at: 0 };
+/** 已送出、尚在等對方接受的 k；對方接受後從名單消失並變成好友 → 紅點 */
+let watchOutgoing = new Set<string>();
+let acceptedPing = false;
+const outWatchKey = () => `oyster-fr-watch:${D?.id || ''}`;
+
+function loadWatchOutgoing() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(outWatchKey()) || '[]');
+    watchOutgoing = new Set(Array.isArray(raw) ? raw.map(String) : []);
+  } catch { watchOutgoing = new Set(); }
+}
+function saveWatchOutgoing() {
+  try { localStorage.setItem(outWatchKey(), JSON.stringify([...watchOutgoing])); } catch { /* */ }
+}
+
+function noteFriendList(friends: FriendRow[], outgoing: FriendReq[]) {
+  for (const o of outgoing) watchOutgoing.add(o.k);
+  for (const f of friends) {
+    if (watchOutgoing.has(f.k)) {
+      acceptedPing = true;
+      watchOutgoing.delete(f.k);
+    }
+  }
+  saveWatchOutgoing();
+}
 
 const get = (p: string) => fetch(API + p, { mode: 'cors', cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
 async function post(p: string, data: object) {
@@ -81,6 +106,7 @@ export async function loadFriends(force = false) {
     tags: new Set(cache.friends.map(f => String(f.tag || '').replace(/^#/, '')).filter(Boolean)),
     at: Date.now(),
   };
+  noteFriendList(cache.friends, cache.outgoing);
   syncDot();
   return cache;
 }
@@ -90,10 +116,15 @@ export function incomingCount() { return cache?.incoming.length ?? 0; }
 function syncDot() {
   const btn = document.getElementById('oFriends');
   if (!btn) return;
-  const n = incomingCount();
-  btn.classList.toggle('hasReq', n > 0);
+  const show = incomingCount() > 0 || acceptedPing;
+  btn.classList.toggle('hasReq', show);
   const dot = btn.querySelector('.frDot') as HTMLElement | null;
-  if (dot) dot.style.display = n > 0 ? '' : 'none';
+  if (dot) dot.style.display = show ? '' : 'none';
+}
+
+function clearFriendDot() {
+  acceptedPing = false;
+  syncDot();
 }
 
 const errZh: Record<string, string> = {
@@ -280,6 +311,7 @@ export async function openFriends() {
   const body = document.getElementById('friendsBody');
   if (body) body.innerHTML = '<p class="frEmpty">讀取中…</p>';
   await loadFriends(true);
+  clearFriendDot();
   paintPanel();
 }
 
@@ -321,13 +353,15 @@ export function bindFriendActions(root: ParentNode, onChange?: () => void) {
 
 export function initFriends(d: Deps) {
   D = d;
+  loadWatchOutgoing();
   document.getElementById('oFriends')?.addEventListener('click', () => void openFriends());
   document.getElementById('friendsClose')?.addEventListener('click', () => closeFriends());
   void refreshFriendIds(true);
+  void loadFriends(true);
   setInterval(() => { if (!document.hidden) void refreshFriendIds(true); }, 45_000);
   setInterval(() => {
     if (document.hidden) return;
-    if (document.getElementById('friends')?.classList.contains('show')) void loadFriends(true).then(paintPanel);
+    if (document.getElementById('friends')?.classList.contains('show')) void loadFriends(true).then(() => { clearFriendDot(); paintPanel(); });
     else void loadFriends(false);
   }, 20_000);
 }
