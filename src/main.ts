@@ -1770,7 +1770,7 @@ const pryW = () => Math.min(0.6, Math.min(1.6, 1 + 0.15 * pryHits) * PRY[diff].w
 const PRY_SLOW = 0.56; // 整體放慢（0.8→0.56，再慢 30%）
 const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? (gearFx('glove')?.speedMul ?? 1.05) : 1) * knifeNow().speed * medM('speed') * fxAll().speed;
 const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
-const tolNow = () => DIFF[diff].tol * 1.4 * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
+const tolNow = () => DIFF[diff].tol * 1.85 * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : k.id === 'harbor' ? 1.12 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : k.id === 'harbor' ? 0.82 : 1); }
 
@@ -5296,10 +5296,10 @@ function frameBody() {
       { const gl = gearOn('glasses') ? 1.6 : 1, gm = seamGlow.material as THREE.MeshBasicMaterial;
         if (inZ && !sweet) { sweetT = 0.25; navigator.vibrate?.(15); tone(1400, 0.05, 0.12, 'triangle', 0, 2100); }
         sweet = inZ; sweetT = Math.max(0, sweetT - rdt); const snap = sweetT / 0.25;
-        gm.color.set(inZ ? 0xd8ff80 : 0xffc878); if (inZ) gm.opacity = gearOn('glasses') ? 1 : 0.8;
+        gm.color.set(inZ ? 0xd8ff80 : 0xffc878); if (inZ) gm.opacity = gearOn('glasses') ? 0.55 : 0.42;
         seamGlow.scale.setScalar(gl * (inZ ? 1.5 + snap * 0.6 : 1));
         syncSeamOnTop(viewCam());
-        seamRing.visible = inZ && seamMark.visible; seamRing.scale.setScalar(1 + snap * 0.8); (seamRing.material as THREE.MeshBasicMaterial).opacity = 0.85 - snap * 0.4; }
+        seamRing.visible = inZ && seamMark.visible; seamRing.scale.setScalar(1 + snap * 0.8); (seamRing.material as THREE.MeshBasicMaterial).opacity = 0.55 - snap * 0.25; }
       const tk = Math.floor(rot / 0.25); if (tk !== lastTick) { lastTick = tk; tone(1800 + close * 1200, 0.025, 0.03 + close * 0.08, 'square'); }
       knife.position.y = 0.028 + (inZ ? Math.sin(t * 50) * 0.004 : 0);
     } else if (phase !== 'twist') knife.position.y = 0.028;
