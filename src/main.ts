@@ -3248,7 +3248,10 @@ if (matchMedia('(pointer:coarse)').matches) {
     const cam = $('camBtn');
     const land = matchMedia('(orientation: landscape)').matches;
     const host = land ? $('top') : $('stats');
-    if (cam.parentElement !== host) host.appendChild(cam);
+    // 廣場玩家鈕與視角綁成一組時整組搬
+    const cluster = document.getElementById('pzCamCluster');
+    const node = cluster && cam.parentElement === cluster ? cluster : cam;
+    if (node.parentElement !== host) host.appendChild(node);
   };
   placeCamBtn();
   matchMedia('(orientation: landscape)').addEventListener('change', placeCamBtn);

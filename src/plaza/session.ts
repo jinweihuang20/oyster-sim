@@ -1428,6 +1428,7 @@ function syncPlazaPeopleHud() {
     h.style.display = 'none';
     h.removeAttribute('title');
     h.setAttribute('aria-label', '目前線上人數');
+    teardownPlayersChrome();
     return;
   }
   const n = snap
@@ -1446,6 +1447,118 @@ function syncPlazaPeopleHud() {
     top.title = h.title;
     top.setAttribute('aria-label', h.title);
   }
+  placePlayersChrome();
+  if (document.getElementById('pzPlayersWrap')?.classList.contains('open')) paintPlayersDrop();
+}
+
+const PZ_PLAYERS_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.8.1 5 2.4 5 5.8"/></svg>`;
+
+function escHtml(s: string) {
+  return s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+}
+
+function paintPlayersDrop() {
+  const drop = document.getElementById('pzPlayersDrop');
+  if (!drop) return;
+  const selfId = deps?.id ?? '';
+  const humans = (snap?.players ?? []).filter(p => !p.isNpc);
+  const others = humans
+    .filter(p => p.pid !== selfId)
+    .slice()
+    .sort((a, b) => plazaDisplayName(a.nick, a.tag).localeCompare(plazaDisplayName(b.nick, b.tag), 'zh'));
+  const selfSnap = humans.find(p => p.pid === selfId);
+  const selfName = plazaDisplayName(deps?.nick?.() ?? selfSnap?.nick, myTag() || selfSnap?.tag);
+  const selfMeat = deps?.getBowlStock?.() ?? selfSnap?.count ?? 0;
+  const rows: { name: string; meat: number; self: boolean }[] = [
+    { name: `${selfName}（你）`, meat: selfMeat, self: true },
+    ...others.map(p => ({ name: plazaDisplayName(p.nick, p.tag), meat: p.count | 0, self: false })),
+  ];
+  drop.innerHTML = rows.map(r =>
+    `<div class="pzPRow${r.self ? ' self' : ''}"><span class="pzPName">${escHtml(r.name)}</span><span class="pzPMeat"><i class="ic ic-oyster"></i> ${r.meat}</span></div>`,
+  ).join('');
+}
+
+function closePlayersDrop() {
+  const wrap = document.getElementById('pzPlayersWrap');
+  const btn = document.getElementById('pzPlayersBtn');
+  wrap?.classList.remove('open');
+  btn?.setAttribute('aria-expanded', 'false');
+}
+
+function onPlayersDocPointer(e: Event) {
+  const wrap = document.getElementById('pzPlayersWrap');
+  if (!wrap?.classList.contains('open')) return;
+  if (e.target instanceof Node && wrap.contains(e.target)) return;
+  closePlayersDrop();
+}
+
+let playersOrientBound = false;
+function ensurePlayersChrome() {
+  let cluster = document.getElementById('pzCamCluster');
+  if (!cluster) {
+    cluster = document.createElement('div');
+    cluster.id = 'pzCamCluster';
+  }
+  let wrap = document.getElementById('pzPlayersWrap');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.id = 'pzPlayersWrap';
+    wrap.innerHTML = `<button id="pzPlayersBtn" type="button" aria-label="廣場玩家" aria-expanded="false" aria-haspopup="listbox">${PZ_PLAYERS_SVG}<span>玩家</span></button><div id="pzPlayersDrop" role="listbox" aria-label="廣場玩家列表"></div>`;
+    const btn = wrap.querySelector('#pzPlayersBtn') as HTMLButtonElement;
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const open = !wrap!.classList.contains('open');
+      if (open) { paintPlayersDrop(); wrap!.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
+      else closePlayersDrop();
+    });
+    document.addEventListener('pointerdown', onPlayersDocPointer, true);
+  }
+  if (wrap.parentElement !== cluster) cluster.insertBefore(wrap, cluster.firstChild);
+  if (!playersOrientBound) {
+    playersOrientBound = true;
+    const reloc = () => { if (active) placePlayersChrome(); };
+    matchMedia('(orientation: landscape)').addEventListener('change', reloc);
+    addEventListener('orientationchange', () => setTimeout(reloc, 80));
+  }
+  return cluster;
+}
+
+function placePlayersChrome() {
+  if (!active) { teardownPlayersChrome(); return; }
+  const cluster = ensurePlayersChrome();
+  cluster.classList.add('on');
+  const cam = document.getElementById('camBtn');
+  const land = matchMedia('(orientation: landscape)').matches;
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const host = document.getElementById(coarse && land ? 'top' : 'stats');
+  if (!host) return;
+  if (coarse && cam) {
+    if (cam.parentElement !== cluster) {
+      if (cluster.parentElement !== host) {
+        if (cam.parentElement === host) host.insertBefore(cluster, cam);
+        else host.appendChild(cluster);
+      } else if (cam.parentElement === host) {
+        host.insertBefore(cluster, cam);
+      }
+      cluster.appendChild(cam);
+    } else if (cluster.parentElement !== host) {
+      host.appendChild(cluster);
+    }
+  } else if (cluster.parentElement !== host) {
+    host.appendChild(cluster);
+  }
+}
+
+function teardownPlayersChrome() {
+  closePlayersDrop();
+  document.removeEventListener('pointerdown', onPlayersDocPointer, true);
+  const cluster = document.getElementById('pzCamCluster');
+  const cam = document.getElementById('camBtn');
+  if (cluster && cam && cam.parentElement === cluster) {
+    cluster.parentElement?.insertBefore(cam, cluster);
+  }
+  document.getElementById('pzPlayersWrap')?.remove();
+  cluster?.remove();
 }
 
 /** 連線狀態條：坐下時也顯示（不跟 #pzHud 一起藏） */
@@ -1789,6 +1902,7 @@ function plazaAskLeave() {
   if (!ui) return;
   plazaCloseMap();
   plazaCloseChat();
+  closePlayersDrop();
   ui.querySelector('#pzLeaveAsk')?.classList.add('open');
 }
 function plazaLeaveNow() {
@@ -1804,6 +1918,7 @@ export function plazaToggleMap() {
   if (!panel) return;
   if (panel.classList.contains('open')) { plazaCloseMap(); return; }
   plazaCloseChat();
+  closePlayersDrop();
   panel.classList.add('open');
   refreshPlazaMap();
 }

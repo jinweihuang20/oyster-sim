@@ -1033,9 +1033,46 @@ body.plazaRoam.plazaMgSit #mgHud{display:flex}
 #mgHud .mgAmmo{min-width:4.5em;text-align:center;color:#9fe0ff}
 #mgHud.low .mgTime{color:#ff8a7a}
 #mgHud.empty .mgAmmo{color:#ffb08a}
-/* 電腦廣場：視角用 V，隱藏右下視角鈕 */
+/* 廣場：視角左側玩家下拉（非彈窗） */
+#pzCamCluster{display:none;flex:none;align-items:center;gap:4px;position:relative;z-index:6;pointer-events:auto}
+body.plazaMode #pzCamCluster.on,body.plazaRoam #pzCamCluster.on{display:inline-flex}
+#stats #pzCamCluster.on{margin-left:auto}
+#top #pzCamCluster.on{margin-left:2px}
+#pzPlayersWrap{position:relative;flex:none;display:inline-flex}
+#pzPlayersBtn{
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  width:auto;min-width:40px;height:40px;min-height:40px;padding:0 10px;box-sizing:border-box;
+  border-radius:10px;font-size:13px;font-weight:900;white-space:nowrap;
+}
+#pzPlayersBtn svg{width:18px;height:18px;flex:none}
+#pzPlayersDrop{
+  display:none;position:absolute;top:calc(100% + 6px);right:0;
+  min-width:min(72vw,240px);max-width:min(86vw,300px);max-height:min(48vh,280px);
+  overflow:auto;padding:6px;border-radius:12px;
+  background:rgba(22,28,36,.92);border:1.5px solid rgba(232,246,255,.28);
+  box-shadow:0 8px 22px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  color:#e8f6ff;z-index:20;
+}
+#pzPlayersWrap.open #pzPlayersDrop{display:block}
+#pzPlayersDrop .pzPRow{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  padding:8px 10px;border-radius:8px;font-size:13px;font-weight:700;line-height:1.3;
+}
+#pzPlayersDrop .pzPRow.self{background:rgba(42,90,134,.35)}
+#pzPlayersDrop .pzPRow + .pzPRow{margin-top:2px}
+#pzPlayersDrop .pzPName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pzPlayersDrop .pzPMeat{flex:none;font-variant-numeric:tabular-nums;color:#ffd76a;font-weight:900}
+#pzPlayersDrop .pzPEmpty{padding:12px 10px;opacity:.7;font-size:13px;text-align:center}
+#stats #camBtn.hudCam{margin-left:0}
+#top #camBtn.hudCam{margin-left:0!important}
+@media (pointer:coarse) and (orientation:landscape){
+  #pzPlayersBtn{width:auto;min-width:34px;height:34px;min-height:34px;padding:0 8px;border-radius:8px;font-size:12px}
+  #pzPlayersBtn svg{width:16px;height:16px}
+}
+/* 電腦廣場：視角用 V，隱藏右下視角鈕；玩家列表仍顯示 */
 @media (pointer:fine){
   body.plazaMode #camBtn,body.plazaRoam #camBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
+  #pzPlayersBtn{height:36px;min-height:36px;min-width:36px}
 }
 /* 橫向：視角改在上方 #top，勿再浮右下 */
 /* 方向搖桿貼近底部，略留空隙 */
