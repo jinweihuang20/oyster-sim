@@ -301,3 +301,29 @@ export async function announceRename(oldNick: string) {
   if (!myTagCache) { try { await me(); } catch { /* */ } }
   void postDiscordRename(oldNick, D.nick(), { tag: myTagCache });
 }
+
+// ---------- 遊戲公告 ----------
+export type NoticeItem = { id: number; title: string; body: string; start: number; end: number; updated: number };
+/** 進行中公告；連不上回傳 undefined */
+export async function noticesActive(): Promise<{ notices: NoticeItem[]; serverTime: number } | undefined> {
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 6000);
+  try {
+    const r = await fetch(API + '/notices?game=oyster-sim', { mode: 'cors', cache: 'no-store', signal: ac.signal });
+    if (!r.ok) return undefined;
+    const j = await r.json();
+    if (!j || typeof j.serverTime !== 'number' || !Array.isArray(j.notices)) return undefined;
+    const notices: NoticeItem[] = [];
+    for (const x of j.notices) {
+      if (!x || typeof x.id !== 'number' || typeof x.title !== 'string' || typeof x.body !== 'string') continue;
+      notices.push({
+        id: x.id,
+        title: x.title,
+        body: x.body,
+        start: Number(x.start) || 0,
+        end: Number(x.end) || 0,
+        updated: Number(x.updated) || 0,
+      });
+    }
+    return { notices, serverTime: j.serverTime };
+  } catch { return undefined; } finally { clearTimeout(t); }
+}

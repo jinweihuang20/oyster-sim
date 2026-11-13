@@ -1392,11 +1392,26 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 #overlay #titleSign h1{box-shadow:inset 0 0 0 2px #a5713f,inset 0 0 0 3px #2a1608,0 3px 8px rgba(0,0,0,.28)!important}
 
 /* 每日簽到 */
-#menuTop .calBtn{position:relative;margin:0 6px 0 auto;width:36px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid var(--ink);border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.2);background:#1d2a33;color:#ffd76a;touch-action:manipulation}
-#menuTop .calBtn .ic{font-size:18px}
-#menuTop .calBtn .calDot{display:none;position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#e2382c;border:1.5px solid var(--paint)}
-#menuTop .calBtn.due .calDot{display:block}
+#menuTop .calBtn,#menuTop .noticeBtn{position:relative;margin:0 6px 0 0;width:36px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid var(--ink);border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.2);background:#1d2a33;color:#ffd76a;touch-action:manipulation;flex:0 0 36px}
+#menuTop .calBtn{margin:0 6px 0 auto}
+#menuTop .calBtn .ic,#menuTop .noticeBtn .ic{font-size:18px}
+#menuTop .calBtn .calDot,#menuTop .noticeBtn .noticeDot{display:none;position:absolute;top:-4px;right:-4px;width:10px;height:10px;border-radius:50%;background:#e2382c;border:1.5px solid var(--paint)}
+#menuTop .calBtn.due .calDot,#menuTop .noticeBtn.unread .noticeDot{display:block}
 #menuTop{justify-content:flex-start}#menuTop #meLine{margin-right:auto}#menuTop .calBtn{margin-left:0}
+#adminTools .adminToolsHint{font-size:13px;opacity:.8;margin:0 0 10px;line-height:1.45;text-align:left}
+#adminToolsBody{text-align:left;max-height:min(60vh,480px);overflow:auto}
+#adminToolsBody .adminGrp{margin:0 0 12px}
+#adminToolsBody .adminGrpH{font:800 12px/1.2 var(--sign);color:#2a5a86;letter-spacing:.06em;margin:0 0 6px}
+#adminToolsBody .adminGrid{margin:0}
+#overlay .sysGrid>#oAdmin{background:#1d2a33;color:#ffd76a}
+#noticeBody{text-align:left;max-height:min(58vh,420px);overflow:auto;padding:2px 0 8px}
+#noticeBody .noticeEmpty{opacity:.7;font-size:14px;text-align:center;padding:18px 8px}
+#noticeBody .noticeCard{padding:10px 12px;margin:0 0 8px;border:1px solid rgba(31,42,54,.12);border-radius:12px;background:rgba(255,255,255,.45)}
+#noticeBody .noticeCard.new{border-color:rgba(226,56,44,.35);box-shadow:inset 3px 0 0 #e2382c}
+#noticeBody .noticeCard h3{margin:0 0 4px;font:800 15px/1.3 var(--sign);color:#1f2a36;display:flex;align-items:center;gap:6px}
+#noticeBody .noticeNew{font-size:10px;font-weight:800;padding:1px 5px;border-radius:6px;background:#e2382c;color:#fff}
+#noticeBody .noticeCard time{display:block;font-size:11px;color:#5a6672;margin:0 0 6px}
+#noticeBody .noticeTxt{font-size:13px;line-height:1.55;color:#2a3540;white-space:pre-wrap;word-break:break-word}
 .dailyMsg .dcBox{position:relative;max-width:380px;width:100%;max-height:100%;overflow:auto;background:var(--paint) var(--grain);color:var(--ink);border:1.5px solid var(--ink);border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.35);padding:12px 14px 16px;text-align:center}
 .dcTitle{display:flex;align-items:center;justify-content:center;gap:6px;margin:2px 30px 12px;padding:6px 10px;background:#3b2a1c;color:#ffd76a;border:1.5px solid #1a120b;border-radius:6px;font-weight:900;font-size:18px;letter-spacing:.08em}
 .dcGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
@@ -1416,7 +1431,7 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
 /* ===== 糖果鍵（全站遊戲風 3D 按鈕）=====
    排除：死鬥 #dmRoot、廣場 #plazaRoot、遊戲中 HUD/觸控（#hud #btns #btnsL .mb #rotL #rotR #camBtn #joy）、Discord .dcBtn、BMC .bmcBtn、導覽 #hg
    角色：data-key=primary 綠／預設 港口藍／danger 紅／x 紅方鍵／disabled 灰（data-key 由 main.ts 依按鈕文字自動標記） */
-:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.eqHit,.eqCard,.eqTile,.eqInfoGo,#shedDoor *)){
+:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.noticeBtn,.eqHit,.eqCard,.eqTile,.eqInfoGo,#shedDoor *)){
   --k:#3d7fb8;--kd:#215582;--kb:#1b4466;
   background:linear-gradient(180deg,color-mix(in srgb,var(--k) 70%,#fff) 0%,var(--k) 55%,color-mix(in srgb,var(--k) 85%,#000) 100%)!important;
   color:#fff!important;border:1.5px solid var(--kb)!important;border-radius:8px!important;
@@ -1424,7 +1439,7 @@ html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
   text-shadow:0 1px 0 rgba(0,0,0,.35),0 0 1px rgba(0,0,0,.5)!important;font-weight:900;
   transform:none;transition:transform .08s cubic-bezier(.3,1.6,.5,1),box-shadow .08s!important;
 }
-:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.eqHit,.eqCard,.eqTile,.eqInfoGo,#shedDoor *)):active:not(:disabled){
+:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.noticeBtn,.eqHit,.eqCard,.eqTile,.eqInfoGo,#shedDoor *)):active:not(:disabled){
   transform:translateY(3px)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 var(--kd),0 1px 3px rgba(0,0,0,.15)!important;
 }
 body button#start,body button#again,body button.dcGo,body button[data-key="primary"]{--k:#3fae4a;--kd:#23752c;--kb:#1d5f25}
@@ -1435,7 +1450,7 @@ body button:disabled,body button.done{--k:#9a968e;--kd:#6e6a63;--kb:#5e5a54}
 body button#start.plazaGo{--k:#2f7fc0;--kd:#1c5585;--kb:#174870}
 
 /* ===== 米白紙卡（取代藍色漸層預設鍵）===== */
-:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.eqHit,.eqCard,.eqTile,.eqInfoGo,.loc,#start,#again,.dcGo,[data-key],:disabled)){
+:where(body) button:not(:where(#dmRoot *,#plazaRoot *,#hud *,#btns *,#btnsL *,#hg *,.mb,#rotL,#rotR,#camBtn,#joy *,.dcBtn,.bmcBtn,.calBtn,.noticeBtn,.eqHit,.eqCard,.eqTile,.eqInfoGo,.loc,#start,#again,.dcGo,[data-key],:disabled)){
   --kd:#cdbb94;
   background:#f6efdf!important;color:#3b2a1a!important;border:1.5px solid #d6c49c!important;border-radius:10px!important;
   box-shadow:inset 0 1px 0 #fffaf0,0 3px 0 #cdbb94,0 4px 8px rgba(60,40,10,.12)!important;text-shadow:none!important;
@@ -1455,9 +1470,9 @@ body button.loc.locPlaza{
 /* ===== 頂列統一高度：名字靠左，日曆小方鍵貼金額 ===== */
 #menuTop{display:flex!important;align-items:center!important;gap:8px!important}
 #menuTop #meLine{margin-right:auto!important}
-#menuTop #meLine,#menuTop #menuMoney,#menuTop #calBtn{height:36px!important;min-height:36px!important;box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;margin-top:0!important;margin-bottom:0!important;border-radius:9px!important}
-#menuTop #calBtn{width:36px!important;min-width:36px!important;padding:0!important;justify-content:center!important;flex:0 0 36px!important;position:relative}
-#menuTop #calBtn .ic{width:18px!important;height:18px!important}
+#menuTop #meLine,#menuTop #menuMoney,#menuTop #calBtn,#menuTop #oNotice{height:36px!important;min-height:36px!important;box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;margin-top:0!important;margin-bottom:0!important;border-radius:9px!important}
+#menuTop #calBtn,#menuTop #oNotice{width:36px!important;min-width:36px!important;padding:0!important;justify-content:center!important;flex:0 0 36px!important;position:relative}
+#menuTop #calBtn .ic,#menuTop #oNotice .ic{width:18px!important;height:18px!important}
 #menuTop #menuMoney{padding:0 12px!important}
 
 /* ===== 遊戲名：透明低調 ===== */

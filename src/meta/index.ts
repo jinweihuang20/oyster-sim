@@ -1,5 +1,7 @@
 export * as Social from './social';
 export { initAnnounce, featAnnounce, featDots } from './announce';
+export { initNotices, refreshNotices, openNotices, noticeDot, hasUnreadNotices } from './notices';
+export { initAdminTools, syncAdminBtn, openAdminTools, isAdminPlayer, ADMIN_PLAYER_TAG } from './adminTools';
 export { initFeedback, openFb, fbShow } from './feedback';
 export {
   initAchievements, achS, AS, ACHS, achTitle, achAdd, achBump, achShiftGot, clearAchShiftGot,

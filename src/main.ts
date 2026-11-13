@@ -34,7 +34,7 @@ import {
   renderEquip, renderClothShop, shareOutfit, askSet, openEquip,
 } from './shop';
 import {
-  Social, initAnnounce, featAnnounce, featDots, initFeedback, openFb, fbShow,
+  Social, initAnnounce, featAnnounce, featDots, initNotices, refreshNotices, initAdminTools, syncAdminBtn, initFeedback, openFb, fbShow,
   initAchievements, achS, AS, ACHS, achTitle, achAdd, achBump, achShiftGot, clearAchShiftGot,
   achCheck, achDot, achOpen, achShift, type AchSave,
   type EvCfg, type EvOdd,
@@ -4335,6 +4335,7 @@ function returnToMainMenu(work?: () => void | Promise<void>, opts?: { then?: () 
       renderLocs({ forcePlazaOnline: true });
       $('overlay').classList.add('show');
       $('overlay').scrollTop = 0;
+      void refreshNotices();
       const wait = Math.max(0, 900 - (performance.now() - at));
       setTimeout(() => {
         if (gen !== menuLoadGen) return;
@@ -4815,7 +4816,7 @@ btn('resMenu', () => {
   });
 });
 $('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
-$('eqBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); eqPick = null; openEquip(); };
+$('eqBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); eqPick = null; openEquip(); void refreshNotices(); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
 $('calBtn').onclick = () => { calTipOff(); openDaily(); }; renderDaily(); calTipCheck(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
 if (params.get('bonusdone') === '1') { save.bonusDay = todayKey(); renderDaily(); }
@@ -4844,8 +4845,8 @@ $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖�
     if (!r.ok) toast(r.err, '#ffb08a');
   };
 }
-$('shopBtn').onclick = () => { shopFromEquip = false; if (document.pointerLockElement) document.exitPointerLock(); openShopPx(); renderShop(); $('shop').classList.add('show'); };
-$('shopBtn2').onclick = () => { shopFromEquip = false; openShopPx(); renderShop(); $('shop').classList.add('show'); };
+$('shopBtn').onclick = () => { shopFromEquip = false; if (document.pointerLockElement) document.exitPointerLock(); openShopPx(); renderShop(); $('shop').classList.add('show'); void refreshNotices(); };
+$('shopBtn2').onclick = () => { shopFromEquip = false; openShopPx(); renderShop(); $('shop').classList.add('show'); void refreshNotices(); };
 $('shopClose').onclick = () => {
   $('shop').classList.remove('show');
   if (sleeveTry) { sleeveTry = null; applySleeve(); }
@@ -4862,6 +4863,7 @@ const refreshTag = () => Social.me().then(m => {
   if (m) myTag = m.tag;
   $('pidVal').textContent = pidText() || (m === null && !myTag ? '暫時連不上伺服器' : '讀取中…');
   ($('pidCopy') as HTMLButtonElement).style.display = myTag ? '' : 'none';
+  syncAdminBtn(myTag);
   if (m?.changed && !tagNoted) {
     tagNoted = true;
     $('tnBody').innerHTML = `<p>你的玩家號碼已更新為 <b>#${m.tag}</b>${m.oldTag ? `（原本是 #${m.oldTag}）` : ''}。</p><p style="font-size:14px;opacity:.85">原本的號碼跟其他玩家重複，為了排行榜和禮物不會弄錯人，系統幫你換了一個新號碼。錢和紀錄都不受影響。</p>`;
@@ -5649,7 +5651,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -6114,8 +6116,8 @@ $('camBtn').onclick = () => setTpv(!tpv);
 { const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) { c.checked = tpv; c.onchange = () => setTpv(c.checked); } }
 // iOS：面板顯示後才重畫一次內容，避免隱藏時插入的 SVG 不上色
 $('eqClose').onclick = () => { $('equip').classList.remove('show'); stopEqPreview(); if (eqFromRes) { eqFromRes = false; $('result').classList.add('show'); } };
-$('rEquip').onclick = () => { eqFromRes = true; $('result').classList.remove('show'); eqPick = null; openEquip(); };
-$('oEquip').onclick = () => { eqPick = null; openEquip(); };
+$('rEquip').onclick = () => { eqFromRes = true; $('result').classList.remove('show'); eqPick = null; openEquip(); void refreshNotices(); };
+$('oEquip').onclick = () => { eqPick = null; openEquip(); void refreshNotices(); };
 function shopTabs() {
   const list = $('shopList'), kids = Array.from(list.children); const groups: HTMLElement[] = []; let cur: HTMLElement | null = null; const head = document.createElement('div');
   for (const k of kids) { if (k.tagName === 'H3') { cur = document.createElement('div'); cur.className = 'stab'; groups.push(cur); } (cur ?? head).appendChild(k); }
@@ -6176,7 +6178,8 @@ function closeTopModal(): boolean {
   // 由上到下：確認框／子面板先關
   for (const [id, close] of [
     ['backMenu', 'bmStay'], ['sv', 'svClose'], ['ach', 'achClose'], ['evLb', 'evLbClose'], ['lb', 'lbClose'],
-    ['fb', 'fbClose'], ['redeem', 'rdClose'], ['equip', 'eqClose'], ['gift', 'giftClose'],
+    ['fb', 'fbClose'], ['redeem', 'rdClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'],
+    ['adminTools', 'adminToolsClose'],
     ['shop', 'shopClose'], ['settings', 'setClose'], ['dex', 'dexClose'],
     ['nameAsk', 'naSkip'], ['paySum', 'psOk'], ['tagNote', 'tnOk'],
   ] as const) {
@@ -6313,6 +6316,10 @@ initAnnounce({
   LS, LS_P, $: (id) => $(id), esc, bootQuiet: () => !!bootQuiet(), menuModalBusy: () => !!menuModalBusy(), Social,
   giftAlert, svAlert, newAnnounce,
 });
+initNotices({ LS, esc, bootQuiet: () => !!bootQuiet() });
+void refreshNotices(true);
+initAdminTools();
+syncAdminBtn(myTag);
 
 (window as any).__pity = { LEGEND_PITY, LEGEND_ODD, get dry() { return save.legendDry ?? 0; }, set dry(v: number) { save.legendDry = v; }, roll: () => rollFind(), sync: () => legendSync(), give: (i: number) => { save.odd[i]++; }, odd: () => save.odd.slice() };
 
