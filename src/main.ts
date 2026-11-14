@@ -2784,8 +2784,19 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   }
   const evHtml = ev ? evFinish(ev, evDone, evEarly) : '';
   const creditLocal = () => {
-    save.money += lastPay.earn; persist();
-    if (!tut && !SHOT) Social.addPlayIncome(Math.max(0, lastPay.earn), { oysters: count, pearls: save.dex.reduce((a, b) => a + b, 0) });
+    const got = Math.max(0, lastPay.earn);
+    save.money += got;
+    save.earn = (save.earn ?? 0) + got;
+    if (!save.bowlByDiff) save.bowlByDiff = [0, 0, 0, 0];
+    for (let i = 0; i < 4; i++) save.bowlByDiff[i] = (save.bowlByDiff[i] ?? 0) + (dCnt[i] ?? 0);
+    persist();
+    if (!tut && !SHOT) {
+      const b = save.bowlByDiff;
+      Social.addPlayIncome(got, {
+        oysters: count, pearls: save.dex.reduce((a, b0) => a + b0, 0),
+        earn: save.earn, oy0: b[0], oy1: b[1], oy2: b[2], oy3: b[3],
+      });
+    }
   };
   if (roomPlay) {
     persist();
@@ -3984,7 +3995,7 @@ const go = (len: number) => {
 $('t60').onclick = () => go(60); $('t120').onclick = () => go(120);
 function launchDeathmatch(mode: DmMode) {
   $('overlay').classList.remove('show');
-  openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })(), grantOdd: (i) => { if (!Number.isInteger(i) || i < 0 || i >= ODD.length || ODD[i].limited) return null; save.odd[i] = (save.odd[i] ?? 0) + 1; if (rarOf(ODD[i].weight) === 'legend') { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(ODD[i].weight), via: 'dm' }); return { name: ODD[i].name, line: ODD[i].line, n: save.odd[i], color: ODD[i].color }; }, ownedWeapons: ownedWeaponIds(), equippedWeapon: weaponNow(), setEquippedWeapon: (id) => { if (!isWeaponId(id) || !ownsWeapon(id)) return; save.shop.equipped.weapon = id; persist(); },     grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); Social.addPlayIncome(n); track('dm_reward', { amount: n, via, mode: via === 'dm-horde' ? 'horde' : 'ffa', money: save.money }); },
+  openDeathmatch({ audio: () => audio(), sfxOut: () => sfxG, gore: () => mix.gore, makeAma: (t, h) => makeAma(t, h), shellGeos: SHELL_GEOS, shellMat: pileMat, greyPick, barnGeo: BARN_GEO, barnMat: BARN_MAT, placeBarn, umb: umbNow(), model: (() => { const m = umb.clone(true); m.visible = true; m.scale.setScalar(1); return m; })(), grantOdd: (i) => { if (!Number.isInteger(i) || i < 0 || i >= ODD.length || ODD[i].limited) return null; save.odd[i] = (save.odd[i] ?? 0) + 1; if (rarOf(ODD[i].weight) === 'legend') { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(ODD[i].weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(ODD[i].weight), via: 'dm' }); return { name: ODD[i].name, line: ODD[i].line, n: save.odd[i], color: ODD[i].color }; }, ownedWeapons: ownedWeaponIds(), equippedWeapon: weaponNow(), setEquippedWeapon: (id) => { if (!isWeaponId(id) || !ownsWeapon(id)) return; save.shop.equipped.weapon = id; persist(); },     grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; save.earn = (save.earn ?? 0) + n; persist(); Social.addPlayIncome(n, { earn: save.earn }); track('dm_reward', { amount: n, via, mode: via === 'dm-horde' ? 'horde' : 'ffa', money: save.money }); },
     reportMatchStart: (m) => {
       statsSid = crypto.randomUUID?.() ?? statsId + '-dm-' + Date.now();
       track('dm_start', { item: 'dm-' + m, mode: m });

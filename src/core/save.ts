@@ -12,6 +12,10 @@ export type Save = {
   name?: string; locSeen?: string[]; gear?: Record<string, boolean>; radioSt?: number; ach?: AchSave;
   redeemed: string[]; meds: Record<string, number>; trial?: { id: string; left: number }; equip?: Record<string, string>;
   namePrompted?: number; tpv?: number; legendDry?: number; legendN?: number;
+  /** 生涯玩法收入（工寮／廣場收工、死鬥獎金）；不含禮物／簽到／成就金 */
+  earn: number;
+  /** 生涯各難度入碗蚵肉數 [易, 普通, 硬, 超硬] */
+  bowlByDiff: [number, number, number, number];
   /** 上次離開廣場的站位（含坐著離開時記住的椅旁站點） */
   plazaSpawn?: { x: number; z: number; yaw: number; pileId?: number; slot?: number };
   /** 已成功進過廣場（舊存檔有 plazaSpawn 也會補上） */
@@ -30,6 +34,7 @@ export type SaveStorage = {
 export function defaultSave(): Save {
   return {
     v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: START_MONEY, days: 0, queen: 0,
+    earn: 0, bowlByDiff: [0, 0, 0, 0],
     life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {},
     // 第一次遊玩預設穿著：男生短髮＋基本頭巾／袖套／衣服／褲／鞋
     equip: {
@@ -47,6 +52,8 @@ export function loadSave(LS: SaveStorage): Save {
   const arr4 = (a: any) => [0, 1, 2, 3].map(i => num(Array.isArray(a) ? a[i] : 0));
   const out: Save = { ...d, dex: arr4(raw.dex), odd: ODD.map((_, i) => num(Array.isArray(raw.odd) ? raw.odd[i] : 0)), best: num(raw.best), money: num(raw.money), days: num(raw.days), queen: num(raw.queen) };
   for (const k of LIFE_KEYS) out.life[k] = num(raw.life?.[k]);
+  out.earn = Math.max(0, Math.floor(num(raw.earn)));
+  out.bowlByDiff = [0, 1, 2, 3].map(i => Math.max(0, Math.floor(num(Array.isArray(raw.bowlByDiff) ? raw.bowlByDiff[i] : 0)))) as [number, number, number, number];
   if (raw.titles && typeof raw.titles === 'object') for (const [k0, v] of Object.entries(raw.titles)) { const k = k0 === '👑 今日蚵后' ? '👑 今日剝蚵冠軍' : k0; out.titles[k] = (out.titles[k] ?? 0) + num(v); }
   if (raw.namePrompted) out.namePrompted = 1;
   if (raw.tpv) out.tpv = 1;

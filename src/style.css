@@ -1010,7 +1010,17 @@ body:has(.panel.sheet.show) #feed{display:none!important}
   box-shadow:inset 0 1px 3px rgba(40,30,15,.12)!important;
 }
 #shopTabs button{flex:1 1 calc(25% - 5px)!important}
-#lbTabs button{flex:1 1 calc(33.33% - 5px)!important;grid-column:auto!important}
+#lbTabs button{flex:1 1 calc(25% - 5px)!important;grid-column:auto!important}
+#lbPick{display:flex;align-items:stretch;width:100%;margin:0;box-sizing:border-box}
+#lbPick.one{opacity:.92}
+#lbBoard{
+  flex:1;width:100%;min-width:0;height:36px;padding:6px 10px;
+  font-size:14px;font-weight:700;color:#3a2410;line-height:1.2;
+  background:linear-gradient(180deg,#fffaf0 0%,#f3ead8 100%);
+  border:1.5px solid #d9cbb0;border-radius:10px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.8),0 1px 3px rgba(40,30,15,.08);
+}
+#lbBoard:disabled{opacity:.85;cursor:default}
 #lbView button{flex:0 1 auto;min-width:4.5em!important;padding:5px 12px!important}
 :is(#shopTabs,#lbTabs,#lbView) button.on{
   color:#fff!important;border-color:#3d6f9a!important;text-shadow:none;
@@ -1027,7 +1037,8 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 @media (max-width:500px){
   :is(#shopTabs,#lbTabs,#lbView) button{min-height:30px!important;padding:4px 7px!important;font-size:11px!important}
   #shopTabs button{flex:1 1 calc(33.33% - 5px)!important}
-  #lbTabs button{flex:1 1 calc(50% - 5px)!important}
+  #lbTabs button{flex:1 1 calc(25% - 5px)!important;padding:4px 4px!important}
+  #lbBoard{height:34px;font-size:13px}
 }
 
 #medList{width:min(360px,92vw)!important;max-width:360px!important}
@@ -2965,7 +2976,7 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
   }
   #lbList .lbRow{margin:0!important;padding:8px 10px!important}
   #lbList .lbGap,#lbList .lbEmpty,#lbList .lbMsg{grid-column:1/-1!important}
-  #lb .pb > #lbTabs,#lb .pb > #lbView,#lb .pb > #lbMe,
+  #lb .pb > #lbTabs,#lb .pb > #lbPick,#lb .pb > #lbView,#lb .pb > #lbMe,
   #lb .pb > .lbSec,#lb .pb > #lbNickRow,#lb .pb > .lbNote{grid-column:1/-1}
 
   #noticeBody{
@@ -3058,18 +3069,18 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
   #fbForm > p:last-of-type{grid-column:2!important;grid-row:8!important;margin:0!important}
 }
 
-/* 手機橫式排行榜：左分類（榜種＋今天／本週）、右內容 */
+/* 手機橫式排行榜：左分類／下拉／今天本週，右內容 */
 @media (pointer:coarse) and (orientation:landscape){
   #lb.sheet.show > .pb{
     display:grid!important;
     grid-template-columns:minmax(6.75rem,9.25rem) minmax(0,1fr)!important;
-    grid-template-rows:auto minmax(0,1fr) auto auto auto!important;
+    grid-template-rows:auto auto minmax(0,1fr) auto auto auto!important;
     column-gap:10px!important;row-gap:6px!important;
     align-items:stretch!important;min-height:0!important;
     height:100%!important;
   }
   #lb.sheet.show > .pb > #lbTabs{
-    grid-column:1!important;grid-row:1 / span 2!important;
+    grid-column:1!important;grid-row:1!important;
     display:flex!important;flex-direction:column!important;flex-wrap:nowrap!important;
     gap:4px!important;align-self:stretch!important;justify-content:flex-start!important;
     margin:0!important;padding:0 2px 0 0!important;min-height:0!important;
@@ -3080,6 +3091,13 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
     min-width:0!important;min-height:34px!important;
     padding:6px 8px!important;font-size:11px!important;line-height:1.2!important;
     white-space:normal!important;text-align:left!important;justify-content:flex-start!important;
+  }
+  #lb.sheet.show > .pb > #lbPick{
+    grid-column:1!important;grid-row:2!important;
+    margin:0!important;padding:4px 2px 0 0!important;width:100%!important;
+  }
+  #lb.sheet.show > .pb > #lbBoard{
+    height:34px!important;font-size:12px!important;padding:4px 6px!important;
   }
   #lb.sheet.show > .pb > #lbView{
     grid-column:1!important;grid-row:3 / span 2!important;
@@ -3097,7 +3115,7 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
     margin:0!important;text-align:left!important;font-size:12px!important;
   }
   #lb.sheet.show > .pb > #lbList{
-    grid-column:2!important;grid-row:2!important;
+    grid-column:2!important;grid-row:2 / span 2!important;
     display:flex!important;flex-direction:column!important;gap:6px!important;
     min-height:0!important;height:auto!important;max-height:none!important;
     overflow-x:hidden!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch;
@@ -3106,16 +3124,16 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
   #lb.sheet.show > .pb > #lbList .lbRow{margin:0!important}
   #lb.sheet.show > .pb > #lbList .lbEmpty{min-height:120px!important}
   #lb.sheet.show > .pb > .lbSec{
-    grid-column:2!important;grid-row:3!important;
+    grid-column:2!important;grid-row:4!important;
     margin:0!important;padding-top:6px!important;font-size:11px!important;
   }
   #lb.sheet.show > .pb > #lbNickRow{
-    grid-column:2!important;grid-row:4!important;margin:0!important;
+    grid-column:2!important;grid-row:5!important;margin:0!important;
   }
   #lb.sheet.show > .pb > #lbNick{height:36px!important;font-size:14px!important}
   #lb.sheet.show > .pb > #lbNickSave{height:36px!important;min-height:36px!important;flex-basis:72px!important}
   #lb.sheet.show > .pb > .lbNote{
-    grid-column:1 / -1!important;grid-row:5!important;
+    grid-column:1 / -1!important;grid-row:6!important;
     margin:0!important;font-size:10px!important;line-height:1.35!important;
     opacity:.7;max-height:2.7em;overflow:hidden;
   }

@@ -77,21 +77,40 @@ export function syncTitle() { if (D?.on()) post('/score', { scores: {} }); }
 export function report(kind: 'pearl' | 'legend' | 'odd' | 'port' | 'ach', item: number) { if (D?.on() && !D.inTut()) post('/event', { kind, item }); }
 
 // ---------- 排行榜 ----------
-const BOARDS = [
-  ['income', '今日收入', '$'],
-  ['oysters', '單班最多蚵仔', ''],
-  ['pearls', '珍珠收藏', ''],
-  ['dmKills', '死鬥-混戰', ''],
-  ['dmWaves', '死鬥-圍毆', ''],
-  ['seat', '送座位', ''],
-] as const;
-let board = 'income', view: 'daily' | 'weekly' = 'daily';
-export function submit(s: { income?: number; oysters?: number; pearls?: number; dmKills?: number; dmWaves?: number }) {
+type BoardId = 'income' | 'earn' | 'oysters' | 'oy0' | 'oy1' | 'oy2' | 'oy3' | 'pearls' | 'dmKills' | 'dmWaves' | 'seat';
+const BOARDS: { id: BoardId; label: string; unit: string }[] = [
+  { id: 'income', label: '今日收入', unit: '$' },
+  { id: 'oysters', label: '單班最多蚵仔', unit: '' },
+  { id: 'pearls', label: '珍珠收藏', unit: '' },
+  { id: 'earn', label: '生涯收入', unit: '$' },
+  { id: 'oy0', label: '入碗數-易', unit: '' },
+  { id: 'oy1', label: '入碗數-普通', unit: '' },
+  { id: 'oy2', label: '入碗數-硬', unit: '' },
+  { id: 'oy3', label: '入碗數-超硬', unit: '' },
+  { id: 'dmKills', label: '混戰擊殺', unit: '' },
+  { id: 'dmWaves', label: '圍毆過關', unit: '' },
+  { id: 'seat', label: '送座位', unit: '' },
+];
+const CATS: { id: string; label: string; boards: BoardId[] }[] = [
+  { id: 'daily', label: '日常', boards: ['income', 'oysters', 'pearls'] },
+  { id: 'career', label: '生涯', boards: ['earn', 'oy0', 'oy1', 'oy2', 'oy3'] },
+  { id: 'dm', label: '死鬥', boards: ['dmKills', 'dmWaves'] },
+  { id: 'plaza', label: '廣場', boards: ['seat'] },
+];
+const CAREER = new Set<BoardId>(['earn', 'oy0', 'oy1', 'oy2', 'oy3']);
+const boardMeta = (id: BoardId) => BOARDS.find(b => b.id === id)!;
+const catOf = (id: BoardId) => CATS.find(c => c.boards.includes(id)) ?? CATS[0];
+let board: BoardId = 'income', cat = 'daily', view: 'daily' | 'weekly' = 'daily';
+export type ScorePayload = {
+  income?: number; oysters?: number; pearls?: number; dmKills?: number; dmWaves?: number;
+  earn?: number; oy0?: number; oy1?: number; oy2?: number; oy3?: number;
+};
+export function submit(s: ScorePayload) {
   return post('/score', { scores: s }).then(() => { lastRank = 0; checkPassed(); });
 }
 
 /** 客戶端玩法收入（工寮／廣場剝蚵、死鬥獎金）累加到今日收入。伺服器發放的送座位／好友房不要走這裡，以免重覆入帳。 */
-export function addPlayIncome(amount: number, extra?: { oysters?: number; pearls?: number }) {
+export function addPlayIncome(amount: number, extra?: Omit<ScorePayload, 'income'>) {
   const n = Math.max(0, Math.floor(amount));
   const td = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
   let inc = 0;
@@ -111,23 +130,38 @@ async function checkPassed() {
   }
   lastRank = rank;
 }
+function syncPick() {
+  const cur = CATS.find(c => c.id === cat) ?? CATS[0];
+  cat = cur.id;
+  if (!cur.boards.includes(board)) board = cur.boards[0];
+  $('lbTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b as HTMLElement).dataset.c === cat));
+  const sel = $('lbBoard') as HTMLSelectElement;
+  const multi = cur.boards.length > 1;
+  sel.innerHTML = cur.boards.map(id => `<option value="${id}">${esc(boardMeta(id).label)}</option>`).join('');
+  sel.value = board;
+  sel.disabled = !multi;
+  $('lbPick').classList.toggle('one', !multi);
+}
 async function render() {
   const list = $('lbList');
-  $('lbTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b as HTMLElement).dataset.b === board));
+  syncPick();
   const viewBtns = Array.from($('lbView').querySelectorAll('button') as NodeListOf<HTMLButtonElement>);
-  if (board === 'seat') {
+  const career = CAREER.has(board);
+  if (career) {
+    viewBtns.forEach((b, i) => { b.textContent = '總榜'; b.style.display = i === 0 ? '' : 'none'; });
+  } else if (board === 'seat') {
     const labels = ['今日榜', '總榜'] as const;
-    viewBtns.forEach((b, i) => { b.textContent = labels[i] ?? b.textContent; });
+    viewBtns.forEach((b, i) => { b.textContent = labels[i] ?? b.textContent; b.style.display = ''; });
   } else {
     const labels = ['今天', '本週'] as const;
-    viewBtns.forEach((b, i) => { b.textContent = labels[i] ?? b.textContent; });
+    viewBtns.forEach((b, i) => { b.textContent = labels[i] ?? b.textContent; b.style.display = ''; });
   }
-  const apiView = board === 'seat' && view === 'weekly' ? 'all' : view;
-  viewBtns.forEach(b => b.classList.toggle('on', b.dataset.v === view));
+  const apiView = career || (board === 'seat' && view === 'weekly') ? 'all' : view;
+  viewBtns.forEach(b => b.classList.toggle('on', career ? b.dataset.v === 'daily' : b.dataset.v === view));
   list.innerHTML = '<div class="lbEmpty"><i class="ic ic-timer"></i><span>讀取中…</span></div>';
   const r = await get(`/top?board=${board}&view=${apiView}&n=20&me=${D.id}${tq()}`);
   if (!r) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; return; }
-  const unit = BOARDS.find(b => b[0] === board)![2];
+  const unit = boardMeta(board).unit;
   const foilOn = (x: any) => !!(x.foil || (x.me && D.foil?.()));
   const nameInner = (x: any) => {
     const at = x.atitle ? `<em class="lbAt">${esc(x.atitle)}</em>` : '';
@@ -152,7 +186,9 @@ async function render() {
     return `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}${medal ? ` top${rank}` : ''}">${rankEl}<div class="lbBody"><div class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</div><div class="lbFoot">${score}<div class="lbSide">${side}</div></div></div></div>`;
   };
   const rows = r.rows as any[];
-  const emptyHint = board === 'seat' ? '把鄰居送到指定位子後就會出現成績！' : board.startsWith('dm') ? '死鬥結算後就會出現成績！' : '收工後就會出現你的成績！';
+  const emptyHint = board === 'seat' ? '把鄰居送到指定位子後就會出現成績！'
+    : career ? '收工累積後就會出現你的生涯成績！'
+    : board.startsWith('dm') ? '死鬥結算後就會出現成績！' : '收工後就會出現你的成績！';
   list.innerHTML = rows.length ? rows.map(row).join('') + (r.mine && !rows.some(x => x.me) ? '<div class="lbGap"></div>' + row(r.mine) : '') : `<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>${emptyHint}</small></span></div>`;
   list.querySelectorAll<HTMLButtonElement>('button[data-k][data-r]').forEach(b => b.onclick = async () => {
     b.disabled = true; const ok = await post('/react', { k: b.dataset.k, kind: b.dataset.r });
@@ -162,7 +198,7 @@ async function render() {
   fr.bindFriendActions(list);
   $('lbMe').innerHTML = r.myTitle ? `<i class="ic ic-crown"></i> 你的稱號：${esc(r.myTitle)}` : '';
 }
-export function open() { ($('lbNick') as HTMLInputElement).value = D.nick() === '剝蚵人' ? '' : D.nick(); $('lb').classList.add('show'); render(); }
+export function open() { ($('lbNick') as HTMLInputElement).value = D.nick() === '剝蚵人' ? '' : D.nick(); cat = catOf(board).id; $('lb').classList.add('show'); render(); }
 
 export function init(d: Deps) {
   D = d;
@@ -182,8 +218,19 @@ export function init(d: Deps) {
   x.addEventListener('pointercancel', () => { down = false; });
   for (const t of ['click', 'touchstart', 'touchend', 'mousedown', 'mouseup']) x.addEventListener(t, stop);
   if (/[?&]feedtest=1/.test(location.search)) { queue.push('<b>測試蚵民</b><small>#0001</small> 剝到了黑珍珠！', '<b>第二則</b><small>#0002</small> 開到「舊懷錶」'); setTimeout(showNext, 500); }
-  $('lbTabs').innerHTML = BOARDS.map(b => `<button data-b="${b[0]}">${b[1]}</button>`).join('');
-  $('lbTabs').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.onclick = () => { board = b.dataset.b!; render(); });
+  $('lbTabs').innerHTML = CATS.map(c => `<button type="button" data-c="${c.id}">${c.label}</button>`).join('');
+  $('lbTabs').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.onclick = () => {
+    cat = b.dataset.c!;
+    const next = CATS.find(c => c.id === cat);
+    if (next && !next.boards.includes(board)) board = next.boards[0];
+    view = 'daily';
+    render();
+  });
+  ($('lbBoard') as HTMLSelectElement).onchange = () => {
+    board = ($('lbBoard') as HTMLSelectElement).value as BoardId;
+    cat = catOf(board).id;
+    render();
+  };
   $('lbView').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.onclick = () => { view = b.dataset.v as any; render(); });
   $('lbClose').onclick = () => $('lb').classList.remove('show');
   const ni = $('lbNick') as HTMLInputElement;
