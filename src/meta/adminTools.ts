@@ -141,7 +141,7 @@ function fillEco(src: any) {
     startMoney: Number(src.startMoney ?? 10000),
     return7: Number(src.return7 ?? 10000),
     return30: Number(src.return30 ?? 30000),
-    locMult: { ...(src.locMult ?? { home: 1, wanggong: 1.2, dongshi: 1.4, budai: 1.7 }) },
+    locMult: { ...(src.locMult ?? { home: 1, wanggong: 1.2, dongshi: 1.4, budai: 2 }) },
     rarPrices: [...(src.rarPrices ?? [200, 600, 1800, 6000])],
     plazaMaxEarn: Number(src.plazaMaxEarn ?? 99_999_999),
     plazaCapBase: Number(src.plazaCapBase ?? 80),

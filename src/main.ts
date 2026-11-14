@@ -2767,7 +2767,10 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     if (worked && shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
     if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
   }
-  const LC = locNow(), base0 = meatPay + perfects * eco.perfectPay + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (LC.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * eco.nightMult) : 0;
+  const LC = locNow();
+  // 廣場工錢倍率跟布袋蚵寮大廠同一檔（預設 ×2）
+  const payLoc = plazaMode ? (LOCS.find(l => l.id === 'budai') ?? LC) : LC;
+  const base0 = meatPay + perfects * eco.perfectPay + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (payLoc.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * eco.nightMult) : 0;
   const ev = evRun, evDone = !!ev && endReason !== 'quit' && !handPain, evEarly = evDone && endReason === 'early', evCash = ev && evDone ? Math.max(0, ev.bonus) + (evEarly ? Math.max(0, ev.earlyBonus) : 0) : 0;
   const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty) + evCash; lastPay = { gross: base0 + locBonus + nightBonus + bonus + evCash, pen: penalty, earn };
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
@@ -2843,7 +2846,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   if (steals || caught) extraLines.push(`<div class="prLine"><span>偷蚵仔／被抓</span><b>${steals}／${caught}</b></div>`);
   if (finds) extraLines.push(`<div class="prLine"><span>珍珠／奇物</span><b>${finds} 件 · $${pearlMoney}</b></div>`);
   if (penalty) extraLines.push(`<div class="prLine bad"><span>罰款／扣價</span><b>-$${penalty}</b></div>`);
-  if (locBonus) extraLines.push(`<div class="prLine"><span>${esc(LC.n)} ×${LC.m}</span><b>+$${locBonus}</b></div>`);
+  if (locBonus) extraLines.push(`<div class="prLine"><span>${esc(plazaMode ? `🦪 蚵仔廣場 ×${payLoc.m}` : `${payLoc.n} ×${payLoc.m}`)}</span><b>+$${locBonus}</b></div>`);
   if (nightBonus) extraLines.push(`<div class="prLine"><span>夜班 +${nightPct}%</span><b>+$${nightBonus}</b></div>`);
   if (bonus) extraLines.push(`<div class="prLine"><span>和平獎金</span><b>+$${bonus}</b></div>`);
   if (!plazaMode && cracked) extraLines.push(`<div class="prLine muted"><span>殼屑（${crumbPct}%）</span><b>${cracked}</b></div>`);
@@ -3484,11 +3487,11 @@ function paintPlazaOnlineUi() {
   if (!el || plazaOnlineN == null) return;
   const n = plazaOnlineN;
   const btn = el.querySelector('.locPlaza');
-  const card = el.querySelector('.locPlaza .lm');
+  const online = el.querySelector('.locPlaza .pzOnline');
   const ld = el.querySelector('.locPlaza .ld');
   const head = el.querySelector('.locHead small');
   if (btn) btn.classList.toggle('live', n > 0);
-  if (card) card.innerHTML = `<i class="pzDot" aria-hidden="true"></i>${n} 人在線`;
+  if (online) online.innerHTML = `<i class="pzDot" aria-hidden="true"></i>${n} 人在線`;
   if (ld) ld.innerHTML = plazaCountLabel();
   if (isPlazaPicked() && head) head.textContent = plazaHeadCountTxt();
 }
@@ -3547,19 +3550,20 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   const lockedPick = !plazaCur && locPickedLocked();
   const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && save.locs!.includes(l.id);
   const anyNew = LOCS.some(isNew);
+  const plazaM = (LOCS.find(l => l.id === 'budai') ?? LOCS[0]).m;
   const headTxt = plazaCur
-    ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場</b><small>${plazaHeadCountTxt()}</small>`
+    ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場 ×${plazaM.toFixed(1)}</b><small>${plazaHeadCountTxt()}</small>`
     : `<b><i class="ic ic-pin"></i> 上工地點：${lockedPick ? '🔒 ' : ''}${cl!.n} ×${cl!.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>${lockedPick ? '此地點尚未解鎖・可先選看看或花錢提早解鎖' : `👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}`}</small>`;
   const pzN = plazaOnlineN;
   const pzLive = pzN != null && pzN > 0;
-  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}${pzLive ? ' live' : ''}" data-loc="plaza"><span class="pzTag">多人</span><span class="ln">🦪 蚵仔廣場</span><span class="lm">${pzN != null ? `<i class="pzDot" aria-hidden="true"></i>${pzN} 人在線` : '連線中…'}</span><small>點一下選這裡</small><small class="ld">${plazaCountLabel()}</small></button>`;
+  const plazaCard = `<button class="loc locPlaza ${plazaCur ? 'cur' : ''}${pzLive ? ' live' : ''}" data-loc="plaza"><span class="pzTag">多人</span><span class="ln">🦪 蚵仔廣場</span><span class="lm">工錢 ×${plazaM.toFixed(1)}</span><span class="pzOnline">${pzN != null ? `<i class="pzDot" aria-hidden="true"></i>${pzN} 人在線` : '連線中…'}</span><small class="ld">${plazaCountLabel()}</small></button>`;
   const roomCard = ROOM_ENABLED
     ? `<div class="loc locRoom"><span class="pzTag">好友</span><span class="ln">好友房</span><small class="ld">開一間房間，和朋友在同一個場景剝蚵</small><span class="rmBtns"><button type="button" data-room="create">開房間</button><button type="button" data-room="join">加入房間</button></span></div>`
     : '';
   el.innerHTML = `<div class="locHead">${headTxt}</div><div class="locRowWrap"><span class="locPlazaPeek" hidden role="button" tabindex="0" aria-label="回到蚵仔廣場">← 蚵仔廣場</span><div class="locRow">` + plazaCard + roomCard + LOCS.map(l => {
     const own = l.need === 0 || save.locs!.includes(l.id), cur = !plazaCur && save.loc === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
-    if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small>點一下選這裡</small><small class="ld">${l.d}</small></button>`;
+    if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small class="ld">${l.d}</small></button>`;
     const pr = l.price ? px('loc-' + l.id, l.price) : 0;
     return `<button type="button" class="loc locked${cur ? ' cur' : ''}" data-loc="${l.id}">${head}<small><i class="ic ic-lock"></i> 解鎖條件：入碗 ${tot}/${l.need} 顆</small>${pr ? `<span class="lbuy" data-lbuy="${l.id}" role="button">花 $${pr} 提早解鎖</span>` : ''}<small class="ld">${l.d}</small></button>`;
   }).join('') + '</div></div>';

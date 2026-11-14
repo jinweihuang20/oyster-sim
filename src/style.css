@@ -1093,7 +1093,8 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
   letter-spacing:.06em;line-height:1.2;transform:rotate(-3deg)
 }
 #locPick .loc.locPlaza .ln{font-weight:900;letter-spacing:.03em;text-shadow:1px 1px 0 rgba(0,0,0,.35)}
-#locPick .loc.locPlaza .lm{
+#locPick .loc.locPlaza .lm{color:#ffe08a!important;font-weight:900}
+#locPick .loc.locPlaza .pzOnline{
   display:inline-flex;align-items:center;gap:5px;align-self:flex-start;
   margin-top:2px;padding:2px 8px;background:rgba(0,0,0,.28);border:2px solid var(--ink);
   color:#9be37a!important;font-weight:900;font-size:13px;letter-spacing:.02em
@@ -1103,14 +1104,15 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
   box-shadow:0 0 0 2px rgba(155,227,122,.35);flex:none
 }
 #locPick .loc.locPlaza.live .pzDot{animation:pzPulse 1.2s ease-in-out infinite}
-#locPick .loc.locPlaza.live .lm{color:#b8ff8a!important;border-color:#9be37a}
+#locPick .loc.locPlaza.live .pzOnline{color:#b8ff8a!important;border-color:#9be37a}
 #locPick .loc.locPlaza small{color:rgba(255,253,247,.9);font-weight:700}
 #locPick .loc.locPlaza .ld{opacity:.92;color:#d8f5c8}
 #locPick .loc.locPlaza.cur{
   background:#1f7a4a var(--grain)!important;
   box-shadow:4px 4px 0 var(--ink), inset 0 0 0 3px #9be37a!important
 }
-#locPick .loc.locPlaza.cur .lm{background:rgba(0,0,0,.35);color:#ffe08a!important;border-color:#ffe08a}
+#locPick .loc.locPlaza.cur .lm{color:#ffe08a!important}
+#locPick .loc.locPlaza.cur .pzOnline{background:rgba(0,0,0,.35);color:#b8ff8a!important;border-color:#9be37a}
 #locPick .loc.locPlaza:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)!important}
 @keyframes pzPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.85)}}
 /* 廣場玩家頭上名字 */
