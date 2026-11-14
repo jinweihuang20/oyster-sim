@@ -78,7 +78,7 @@ export function toast(t: string, c = '#ffe080', sec = 1.1, place: ToastPlace = '
   }
   toastEl.classList.add('on');
   toastT = Math.max(0.6, sec);
-  if (place !== 'top' && toastDeps.isPlazaMode()) {
+  if (toastDeps.isPlazaMode()) {
     try { toastDeps.onPlazaToast?.(); } catch { /* Social 尚未 init */ }
   }
 }

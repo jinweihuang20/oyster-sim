@@ -24,26 +24,27 @@ export function makeCareerMarquee(lowDetail: boolean): CareerMarquee {
   const boardW = Math.min(11.2, wallA1 - wallA0 - 1.4);
   const boardH = 0.72;
   const y = 3.15;
-  const zFace = WALK_BOUND - 0.05;
+  // 牆內側面在 WALK_BOUND；螢幕必須凸出在廣場側，外框退到牆內，避免框體蓋住畫面
+  const zScreen = WALK_BOUND - 0.08;
+  const zFrame = WALK_BOUND + 0.02;
 
   const frameMat = new THREE.MeshStandardMaterial({
     color: 0x1c1c20,
     metalness: 0.55,
     roughness: 0.48,
   });
-  const frameGeo = new THREE.BoxGeometry(boardW + 0.14, boardH + 0.14, 0.07);
+  const frameGeo = new THREE.BoxGeometry(boardW + 0.16, boardH + 0.16, 0.08);
   const frame = new THREE.Mesh(frameGeo, frameMat);
-  frame.position.set(midX, y, zFace + 0.03);
+  frame.position.set(midX, y, zFrame);
   frame.castShadow = false;
   frame.receiveShadow = false;
   group.add(frame);
 
-  // 兩側掛架
   const bracketMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.5, roughness: 0.55 });
   const bracketGeo = new THREE.BoxGeometry(0.08, 0.36, 0.1);
   for (const sx of [-boardW * 0.42, boardW * 0.42]) {
     const b = new THREE.Mesh(bracketGeo, bracketMat);
-    b.position.set(midX + sx, y + boardH * 0.55, zFace + 0.02);
+    b.position.set(midX + sx, y + boardH * 0.55, zFrame);
     group.add(b);
   }
 
@@ -61,12 +62,14 @@ export function makeCareerMarquee(lowDetail: boolean): CareerMarquee {
   const screenMat = new THREE.MeshBasicMaterial({
     map: tex,
     toneMapped: false,
-    transparent: false,
+    side: THREE.DoubleSide,
+    depthWrite: true,
   });
-  const screenGeo = new THREE.PlaneGeometry(boardW, boardH);
+  // 薄盒：不靠旋轉朝向，廣場側一定看得到貼圖
+  const screenGeo = new THREE.BoxGeometry(boardW - 0.04, boardH - 0.04, 0.03);
   const screen = new THREE.Mesh(screenGeo, screenMat);
-  screen.position.set(midX, y, zFace);
-  screen.rotation.y = Math.PI; // 面向廣場內側（-Z）
+  screen.position.set(midX, y, zScreen);
+  screen.renderOrder = 2;
   group.add(screen);
 
   let disposed = false;
@@ -74,7 +77,7 @@ export function makeCareerMarquee(lowDetail: boolean): CareerMarquee {
   let text = '　　生涯排行讀取中…　　';
   let textW = 0;
   let paintAcc = 0;
-  let refreshAcc = REFRESH_SEC; // 進場立刻拉
+  let refreshAcc = REFRESH_SEC;
   let fetching = false;
 
   function measureAndPaint() {
@@ -86,10 +89,9 @@ export function makeCareerMarquee(lowDetail: boolean): CareerMarquee {
     ctx.font = `bold ${fontPx}px "Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif`;
     textW = Math.max(ctx.measureText(text).width, 1);
 
-    ctx.fillStyle = '#070e06';
+    ctx.fillStyle = '#041008';
     ctx.fillRect(0, 0, cw, ch);
-    // 細橫線模擬 LED 掃描
-    ctx.fillStyle = '#0a1408';
+    ctx.fillStyle = '#0a1a0c';
     for (let row = 0; row < ch; row += 3) ctx.fillRect(0, row, cw, 1);
 
     ctx.save();
@@ -98,25 +100,22 @@ export function makeCareerMarquee(lowDetail: boolean): CareerMarquee {
     ctx.clip();
     const loop = textW + GAP_PX;
     const x0 = labelW - (scroll % loop);
-    ctx.fillStyle = '#6dff5c';
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#9dff88';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = '#2a8a22';
-    ctx.shadowBlur = lowDetail ? 0 : 6;
     ctx.fillText(text, x0, ch * 0.52);
     ctx.fillText(text, x0 + loop, ch * 0.52);
     ctx.restore();
 
-    // 左側固定標題
-    ctx.fillStyle = '#0c180a';
+    ctx.fillStyle = '#0c1c0e';
     ctx.fillRect(0, 0, labelW, ch);
-    ctx.strokeStyle = '#2a5a22';
+    ctx.strokeStyle = '#3a7a32';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(labelW - 1, 4);
     ctx.lineTo(labelW - 1, ch - 4);
     ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#b8ff9a';
+    ctx.fillStyle = '#d4ffc4';
     ctx.font = `bold ${Math.floor(ch * 0.36)}px "Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif`;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
@@ -134,8 +133,7 @@ export function makeCareerMarquee(lowDetail: boolean): CareerMarquee {
       const lines = await fetchCareerTop3();
       if (disposed) return;
       if (lines.length) text = `　　${lines.join('　　｜　　')}　　`;
-      else if (!text.includes('讀取中')) { /* 保留舊文 */ }
-      else text = '　　生涯排行暫時連不上　　';
+      else if (text.includes('讀取中')) text = '　　生涯排行暫時連不上　　';
       measureAndPaint();
     } finally {
       fetching = false;
