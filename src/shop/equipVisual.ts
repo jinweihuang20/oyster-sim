@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rbox, rcyl, crease } from '../core/geo';
 import type { PlayerRig } from '../dm/character';
-import { rebuildAvatarMerged } from '../dm/avatarMerge';
+import { NO_MERGE, rebuildAvatarMerged } from '../dm/avatarMerge';
 
 /** 服飾視覺（與 main EQUIP id 對齊；只負責外觀） */
 export type EquipVis = {
@@ -627,6 +627,7 @@ function resetSurf(m: THREE.MeshStandardMaterial) {
 
 function paintMat(m: THREE.MeshStandardMaterial, e: EquipVis) {
   resetSurf(m);
+  m.visible = true;
   m.map = makeEqTexture(e);
   m.color.set(0xffffff);
   if (e.id === 'sl_neon') {
@@ -716,6 +717,8 @@ function ensureDet(parent: THREE.Object3D, key: string): THREE.Group {
     parent.add(g);
     parent.userData[key] = g;
   }
+  // 袖套／上臂細節不參與肢體 merge：合併失敗時來源會被藏住，第三人稱袖套會整段消失
+  if (key === DET.sleeve || key === DET.upper) g.userData[NO_MERGE] = 1;
   clearGroup(g);
   return g;
 }
@@ -1668,6 +1671,7 @@ function buildBodyDetails(rig: PlayerRig, body: EquipVis) {
 
 function buildSleeveDetails(rig: PlayerRig, hand: EquipVis) {
   const texM = SM(`slv-${hand.id}`, 0xffffff, { map: makeEqTexture(hand), roughness: 0.78, emissive: hand.id === 'sl_neon' ? 0x1a6a40 : 0x000000, emissiveIntensity: hand.id === 'sl_neon' ? 0.3 : 0 });
+  texM.visible = true;
   const cuffCol =
     hand.id === 'sl_dragon' ? 0xe8b830 :
     hand.id === 'sl_neon' ? 0xe8f8f0 :
@@ -1679,18 +1683,45 @@ function buildSleeveDetails(rig: PlayerRig, hand: EquipVis) {
     roughness: hand.id === 'sl_dragon' ? 0.4 : 0.82,
     metalness: hand.id === 'sl_dragon' ? 0.35 : 0.04,
   });
-  // 袖身略往肘延伸，蓋住小臂上端膚色面（同貼圖）
-  const coverG = G('slv-cover', () => rbox(0.108, 0.24, 0.108));
-  const cuffG = G('slv-cuff', () => rcyl(0.058, 0.055, 0.036, 8));
-  const stripeG = G('slv-stripe', () => rbox(0.02, 0.22, 0.112));
+  cuffM.visible = true;
+  // 袖身略往肘延伸，蓋住小臂上端膚色面（同貼圖）；略粗於小臂，避免被臂 mesh 吃掉
+  const coverG = G('slv-cover2', () => rbox(0.118, 0.26, 0.118));
+  const cuffG = G('slv-cuff2', () => rcyl(0.062, 0.058, 0.04, 8));
+  const stripeG = G('slv-stripe2', () => rbox(0.022, 0.24, 0.122));
   for (const arm of [rig.lowerL, rig.lowerR]) {
     if (!arm) continue;
+    arm.visible = true;
     const g = ensureDet(arm, DET.sleeve);
-    add(g, coverG, texM, [0, -0.02, 0]);
-    add(g, cuffG, cuffM, [0, 0.10, 0]);
-    if (hand.id === 'sl_neon') add(g, stripeG, SM('slv-white', 0xe8f8f0), [0.03, -0.02, 0]);
-    if (hand.id === 'sl_nightwrap') add(g, stripeG, SM('slv-indigo', 0x2a4a7a), [0.03, -0.02, 0]);
-    if (hand.id === 'sl_rain') add(g, G('slv-ref', () => rbox(0.11, 0.018, 0.11)), SM('slv-ref', 0xe8e6d8, { roughness: 0.4 }), [0, 0.04, 0]);
+    g.visible = true;
+    const cover = add(g, coverG, texM, [0, -0.01, 0]);
+    cover.visible = true;
+    cover.renderOrder = 2;
+    const cuff = add(g, cuffG, cuffM, [0, 0.11, 0]);
+    cuff.visible = true;
+    cuff.renderOrder = 2;
+    if (hand.id === 'sl_neon') {
+      const s = add(g, stripeG, SM('slv-white', 0xe8f8f0), [0.03, -0.01, 0]);
+      s.visible = true; s.renderOrder = 2;
+    }
+    if (hand.id === 'sl_nightwrap') {
+      const s = add(g, stripeG, SM('slv-indigo', 0x2a4a7a), [0.03, -0.01, 0]);
+      s.visible = true; s.renderOrder = 2;
+    }
+    if (hand.id === 'sl_rain') {
+      const s = add(g, G('slv-ref2', () => rbox(0.12, 0.02, 0.12)), SM('slv-ref', 0xe8e6d8, { roughness: 0.4 }), [0, 0.04, 0]);
+      s.visible = true; s.renderOrder = 2;
+    }
+  }
+  // 上臂本體也強制顯示（貼袖套材質）
+  for (const arm of [rig.upperL, rig.upperR]) {
+    if (!arm) continue;
+    arm.visible = true;
+    arm.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) {
+        o.visible = true;
+        delete o.userData.mergeSource;
+      }
+    });
   }
 }
 
@@ -1840,8 +1871,9 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
     if (legs.id === 'lg_none') for (const m of mats.legs) paintSolid(m, SKIN_HEX);
     else for (const m of mats.legs) paintMat(m, legs);
   }
-  // 紺青短打：手臂強制裸膚，不套袖套細節
-  const bareArms = hand.id === 'hn_none' || body.id === 'bd_nightshort' || ((shirtless || sleeveless) && hand.id === 'hn_basic');
+  // 短袖／無袖＋基本袖：裸臂；真正的 sl_* 袖套仍要顯示（小偷套夜行手袖等）
+  const bareArms = hand.id === 'hn_none'
+    || ((shirtless || sleeveless || body.id === 'bd_nightshort') && hand.id === 'hn_basic');
   if (body.id === 'bd_hawaii') {
     for (const m of mats.sleeve) paintMat(m, body);
   } else if (bareArms) {

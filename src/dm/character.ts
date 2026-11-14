@@ -105,7 +105,9 @@ export function makePlayerAvatar(
 
   const skinM = std(SKIN);
   const shirtM = std(look.shirt);
-  const sleeveM = std(look.shirt);
+  // 上臂＋小臂各一份袖套材質（小臂勿共用 skinM，否則只靠細節 mesh，一旦沒畫出來就整段裸膚）
+  const sleeveMU = std(look.shirt);
+  const sleeveML = std(look.shirt);
   const pantsM = std(look.pants ?? 0x3a5068);
   const hairM = std(look.hair);
   const shoeM = std(0x333333);
@@ -158,10 +160,12 @@ export function makePlayerAvatar(
     add(box(thick, len, thick), mat, [0, 0, 0], g);
     return g;
   };
-  const upperR = mkSeg(0.26, sleeveM, 0.1);
-  const lowerR = mkSeg(0.24, skinM, 0.09);
-  const upperL = mkSeg(0.26, sleeveM, 0.1);
-  const lowerL = mkSeg(0.24, skinM, 0.09);
+  const upperR = mkSeg(0.26, sleeveMU, 0.1);
+  const lowerR = mkSeg(0.24, sleeveML, 0.09);
+  const upperL = mkSeg(0.26, sleeveMU, 0.1);
+  const lowerL = mkSeg(0.24, sleeveML, 0.09);
+  // 手臂永不參與 merge：袖套貼圖／小臂細節一藏進 mergeSource 就容易整段消失
+  for (const g of [upperL, lowerL, upperR, lowerR]) g.userData[NO_MERGE] = 1;
 
   const makeLeg = (side: number) => {
     const thigh = new THREE.Group(); thigh.position.set(side * 0.11, 0.72, 0); root.add(thigh);
@@ -181,7 +185,7 @@ export function makePlayerAvatar(
     upperL, lowerL, upperR, lowerR, handL, handR,
     outfitMats: {
       body: [shirtM],
-      sleeve: [sleeveM],
+      sleeve: [sleeveMU, sleeveML],
       legs: [pantsM],
       feet: [shoeM, soleM],
       hair: [hairM],

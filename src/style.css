@@ -3138,16 +3138,41 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
     max-height:none!important;margin:0!important;
     align-self:stretch!important;
   }
+  /* 加成改緊湊膠囊列，少占高度，把空間留給換裝列表 */
   #eqBody > .eqBoard{
     grid-column:2!important;grid-row:1!important;
-    margin:0!important;padding:8px 10px!important;
-    max-height:min(42vh,220px);overflow:auto;-webkit-overflow-scrolling:touch;
+    margin:0!important;padding:6px 8px!important;
+    max-height:none!important;overflow:visible!important;
+    align-self:start!important;
   }
-  #eqBody > .eqBoard .eqBoardT{margin:0 0 4px!important;padding-bottom:4px!important;font-size:12px!important}
-  #eqBody > .eqBoard .eqStat{padding:6px 0!important}
-  #eqBody > .eqBoard .eqStatK{font-size:12px!important}
-  #eqBody > .eqBoard .eqStatV{font-size:14px!important;max-width:62%}
-  #eqBody > .eqBoard .eqNone{font-size:12px!important}
+  #eqBody > .eqBoard .eqBoardT{
+    margin:0 0 4px!important;padding:0!important;border:0!important;
+    font-size:11px!important;letter-spacing:.04em!important;gap:6px!important;
+  }
+  #eqBody > .eqBoard .eqBoardN{
+    min-width:1.15em!important;height:1.15em!important;padding:0 5px!important;font-size:10px!important;
+  }
+  #eqBody > .eqBoard .eqStats{
+    display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;
+    gap:4px!important;align-items:flex-start!important;
+  }
+  #eqBody > .eqBoard .eqStat{
+    flex:0 1 auto!important;display:inline-flex!important;align-items:baseline!important;
+    gap:4px!important;max-width:100%!important;min-width:0!important;
+    margin:0!important;padding:3px 8px!important;
+    border:1px solid rgba(42,90,134,.22)!important;border-radius:999px!important;
+    background:rgba(42,90,134,.06)!important;box-shadow:none!important;
+  }
+  #eqBody > .eqBoard .eqStatK{
+    flex:none!important;font-size:11px!important;font-weight:700!important;color:#5a6672!important;
+    white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important;
+  }
+  #eqBody > .eqBoard .eqStatV{
+    flex:1 1 auto!important;min-width:0!important;max-width:none!important;
+    font:800 12px/1.25 var(--sign)!important;color:#1f2a36!important;text-align:left!important;
+    white-space:normal!important;overflow-wrap:anywhere!important;
+  }
+  #eqBody > .eqBoard .eqNone{font-size:11px!important;margin:0!important;line-height:1.35!important}
   #eqBody > #eqPickPane{
     grid-column:2!important;grid-row:2!important;
     min-height:0!important;overflow:auto;-webkit-overflow-scrolling:touch;

@@ -70,6 +70,7 @@ export function migrateEquip() {
     if (s === 'body' && cur === 'bd_nude') cur = NONE_ID.body;
     if (cur === 'none') cur = NONE_ID[s];
     save.equip[s] = cur;
+    // 缺欄位或無效 id → 預設件（頭髮固定男生短髮 hr_basic）
     if (!save.equip[s] || !eqOwned(save.equip[s])) save.equip[s] = defaultEquipId(s);
   }
 }
@@ -102,7 +103,7 @@ export function applySleeve() {
   const s = trying ? EQUIP.find(x => x.id === trying)! : equipNow('hand');
   const body = equipNow('body');
   const shirtless = body.id === 'bd_bikini' || body.id === 'bd_none';
-  const sleeveless = body.id === 'bd_singlet';
+  const sleeveless = body.id === 'bd_singlet' || body.id === 'bd_nightshort';
   const bare = !trying && (s.id === 'hn_none' || ((shirtless || sleeveless) && s.id === 'hn_basic'));
   if (bare) {
     D.sleeve.map?.dispose();
@@ -221,7 +222,7 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
   const PF: Record<string, string> = { flower: 'url(#pFlower)', camo: 'url(#pCamo)', neon: 'url(#pNeon)', tattoo: 'url(#pTat)' };
   // ---- 手臂（在衣服後面）：肩到腕，手在末端 ----
   const shirtless = B.id === 'bd_bikini' || B.id === 'bd_none';
-  const sleeveless = B.id === 'bd_singlet';
+  const sleeveless = B.id === 'bd_singlet' || B.id === 'bd_nightshort';
   const bareArm = A.id === 'hn_none' || ((shirtless || sleeveless) && A.id === 'hn_basic');
   const armFill = bareArm ? SK : A.id === 'sl_flower' ? 'url(#pFlower)' : A.id === 'sl_redflower' ? 'url(#pFlowerR)' : A.id === 'sl_camo' ? 'url(#pCamo)' : A.id === 'sl_neon' ? 'url(#pNeon)' : A.id === 'sl_89' ? 'url(#pTat)' : A.base;
   const arm = (x1: number, x2: number) => { const d = `M${x1} 100L${x2} 160`, dx = x2 - x1, len = Math.hypot(dx, 60), nx = -60 / len, ny = dx / len;
@@ -312,7 +313,8 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     : L.id === 'lg_none'
       ? `<path d="${P}" fill="${SK}" ${ol}/><path d="M56 182h48l-4 22H60Z" fill="#d8d0c4" ${ol}/>`
       : (legs[L.id] ?? legs.lg_basic);
-  return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${arm(50, 34)}${arm(110, 126)}${legsDraw}${body[B.id] ?? body.bd_basic}${face}${hairDraw}${hd[H.id] ?? ''}${feet[F.id] ?? feet.ft_basic}</svg>`;
+  // 手臂畫在長髮之後，避免披肩／辮子蓋住袖套顏色
+  return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${legsDraw}${body[B.id] ?? body.bd_basic}${face}${hairDraw}${hd[H.id] ?? ''}${arm(50, 34)}${arm(110, 126)}${feet[F.id] ?? feet.ft_basic}</svg>`;
 }
 // 裝備面板：中間大角色＋兩側方格（左：頭髮／頭／衣服，右：手／褲子／鞋子）
 const EQ_LEFT: Slot[] = ['hair', 'head', 'body'];

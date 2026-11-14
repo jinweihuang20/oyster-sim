@@ -82,7 +82,16 @@ export const EQUIP: Eq[] = [
   { slot: 'legs', id: 'lg_none', n: '不穿', price: 0, eff: '不穿長褲，改成簡單內褲', base: '#e8bc98', pat: 'plain', fx: {} },
   { slot: 'feet', id: 'ft_none', n: '不穿', price: 0, eff: '打赤腳', base: '#e8bc98', pat: 'plain', fx: {} },
 ];
-export const defaultEquipId = (slot: Slot) => EQUIP.find(e => e.slot === slot && e.price === 0 && !isNoneId(e.id))!.id;
+/** 第一次遊玩／缺欄位時的預設穿著（髮型＝男生短髮） */
+export const DEFAULT_EQUIP_ID: Record<Slot, string> = {
+  hair: 'hr_basic',
+  head: 'hd_basic',
+  hand: 'hn_basic',
+  body: 'bd_basic',
+  legs: 'lg_basic',
+  feet: 'ft_basic',
+};
+export const defaultEquipId = (slot: Slot) => DEFAULT_EQUIP_ID[slot];
 export const SETS: { id: string; n: string; need: string[]; eff: string; fx: Fx }[] = [
   { id: 'typhoon', n: '颱風天套', need: ['hd_hat', 'bd_rain', 'lg_rain', 'ft_boots'], eff: '被丟殼的機率再 -30%、受到的傷害再 -10%', fx: { throw: 0.7, dmg: 0.9 } },
   { id: 'temple', n: '廟會套', need: ['hd_crown', 'bd_vest', 'sl_dragon', 'ft_gold'], eff: '珍珠率再 +5%、每碗再多 $2', fx: { pearl: 1.05, bowl: 2 } },

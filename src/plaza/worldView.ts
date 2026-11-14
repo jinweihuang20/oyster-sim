@@ -2003,7 +2003,8 @@ function hashPid(pid: string) {
     } else if (seated) {
       // 髮蓋頂 ≈ y=1.44（坐姿 root.y=-0.16）；z=-0.1 往臉前靠
       // 戴帽子要再抬 headTopLift 量，否則被帽頂擋到
-      const headId = (r.rig.outfitKey ?? '').split('|')[0] ?? '';
+      // outfitKey = hair|head|hand|body|legs|feet
+      const headId = (r.rig.outfitKey ?? '').split('|')[1] ?? '';
       const hatLift = headTopLift(headId);
       mesh.position.set(0, 1.44 + hatLift + Math.sin(bob) * 0.015, -0.1);
       mesh.rotation.set(0, 0, 0);
@@ -2430,7 +2431,7 @@ function hashPid(pid: string) {
       // 有寵物且坐著時寵物會停在頭上（y≈1.44），名牌 / 聊天泡泡要往上讓位
       // 戴帽子時寵物再抬 headTopLift，名牌同步加抬，否則被帽頂＋寵物一起擋到
       const petOnHead = !!(r as any)._petMesh && !!r.seated;
-      const remoteHeadId = petOnHead ? ((r.rig.outfitKey ?? '').split('|')[0] ?? '') : '';
+      const remoteHeadId = petOnHead ? ((r.rig.outfitKey ?? '').split('|')[1] ?? '') : '';
       const remoteHatLift = headTopLift(remoteHeadId);
       const tagLift = petOnHead ? 0.52 + remoteHatLift : 0.22;
       const bubLift = petOnHead ? 0.72 + remoteHatLift : 0.42;

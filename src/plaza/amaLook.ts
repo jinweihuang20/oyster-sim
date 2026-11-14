@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { rboxEnv } from '../core/geo';
 import { applyOutfitToRig, clearOutfitDetails } from '../shop/equipVisual';
 import type { PlayerRig } from '../dm/character';
-import { rebuildAvatarMerged } from '../dm/avatarMerge';
+import { NO_MERGE, rebuildAvatarMerged } from '../dm/avatarMerge';
 
 /** 比玩家略矮、骨架略小 */
 export const AMA_SCALE = 0.88;
@@ -382,6 +382,7 @@ export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook, pid?: string) {
       const cover = new THREE.Mesh(sharedSleeveGeo, sm);
       // +Y 朝手腕：袖套偏肘、露出一點腕
       cover.position.set(0, -0.015, 0);
+      cover.userData[NO_MERGE] = 1;
       arm.add(cover);
       arm.userData.amaSleeve = 1;
     }

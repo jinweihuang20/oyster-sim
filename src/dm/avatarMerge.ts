@@ -134,7 +134,16 @@ function mergeGroup(group: THREE.Object3D, exclude: Set<THREE.Object3D>) {
   group.updateWorldMatrix(true, true);
   const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
 
-  type Bucket = { key: string; mat: THREE.Material; geos: THREE.BufferGeometry[]; toDispose: THREE.BufferGeometry[]; ro: number; cast: boolean; recv: boolean };
+  type Bucket = {
+    key: string;
+    mat: THREE.Material;
+    geos: THREE.BufferGeometry[];
+    toDispose: THREE.BufferGeometry[];
+    sources: THREE.Mesh[];
+    ro: number;
+    cast: boolean;
+    recv: boolean;
+  };
   const buckets = new Map<string, Bucket>();
 
   for (const mesh of sources) {
@@ -149,7 +158,7 @@ function mergeGroup(group: THREE.Object3D, exclude: Set<THREE.Object3D>) {
     const mat = materialForBucket(key, srcMat, mesh.renderOrder);
     let b = buckets.get(key);
     if (!b) {
-      b = { key, mat, geos: [], toDispose: [], ro, cast: false, recv: false };
+      b = { key, mat, geos: [], toDispose: [], sources: [], ro, cast: false, recv: false };
       buckets.set(key, b);
     }
     b.cast = b.cast || mesh.castShadow;
@@ -162,6 +171,7 @@ function mergeGroup(group: THREE.Object3D, exclude: Set<THREE.Object3D>) {
     baked.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, mesh.matrixWorld));
     b.geos.push(baked);
     b.toDispose.push(baked);
+    b.sources.push(mesh);
 
     mesh.userData[SOURCE] = true;
     mesh.visible = false;
@@ -178,7 +188,14 @@ function mergeGroup(group: THREE.Object3D, exclude: Set<THREE.Object3D>) {
       combined = null;
     }
     b.toDispose.forEach(g => g.dispose());
-    if (!combined) continue;
+    // 合併失敗時要把來源 mesh 重新顯示，否則袖套／髮片會整組消失
+    if (!combined) {
+      for (const mesh of b.sources) {
+        mesh.visible = true;
+        delete mesh.userData[SOURCE];
+      }
+      continue;
+    }
     const mesh = new THREE.Mesh(combined, b.mat);
     mesh.name = MERGED;
     mesh.userData[MERGED] = true;
@@ -188,6 +205,20 @@ function mergeGroup(group: THREE.Object3D, exclude: Set<THREE.Object3D>) {
     mesh.frustumCulled = true;
     group.add(mesh);
   }
+}
+
+/** 手臂曾被 merge 藏起來的來源 mesh 全部恢復顯示，並清掉舊的合併 mesh。 */
+function restoreArmMeshes(group: THREE.Object3D | undefined) {
+  if (!group) return;
+  disposeMergedIn(group);
+  group.traverse((o) => {
+    if (!isMesh(o)) return;
+    if (o.userData[SOURCE] || o.visible === false) {
+      // 基本髮塊不在手臂上；手臂上被 merge 藏住的一律救回
+      o.visible = true;
+      delete o.userData[SOURCE];
+    }
+  });
 }
 
 /** 依四肢／頭／軀幹把靜態小塊合成較少的 mesh；動畫仍轉骨骼群組。換裝後請再呼叫。 */
@@ -204,8 +235,9 @@ export function rebuildAvatarMerged(rig: PlayerRig | null | undefined) {
   mergeGroup(rig.torso, exclude);
   mergeGroup(rig.head, new Set([rig.hatG].filter(Boolean)));
   mergeGroup(rig.hatG, new Set());
+  // 手臂／手不合併：袖套貼圖與小臂細節一被藏進 mergeSource，合併失敗或換裝後就整段消失
   for (const g of [rig.upperL, rig.lowerL, rig.upperR, rig.lowerR, rig.handL, rig.handR]) {
-    if (g) mergeGroup(g, new Set());
+    restoreArmMeshes(g);
   }
   for (const g of [rig.legL, rig.legR]) {
     if (!g) continue;
