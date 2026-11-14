@@ -50,7 +50,7 @@ export const ECO_DEFAULTS: EconomyCfg = {
   return30: 30_000,
   locMult: { home: 1, wanggong: 1.2, dongshi: 1.4, budai: 1.7 },
   rarPrices: [200, 600, 1800, 6000],
-  plazaMaxEarn: 10_000,
+  plazaMaxEarn: 1_000_000,
   plazaCapBase: 80,
   plazaCapDurSec: 1800,
   plazaCapPerSec: 12,
@@ -152,10 +152,7 @@ export function syncEconomyTables(
   for (let i = 0; i < Math.min(4, rar.length); i++) rar[i].price = eco.rarPrices[i];
 }
 
-export function plazaSoftCapClient(oysters: number, durationSec: number): number {
-  const dur = Math.max(0, Math.min(14_400, Math.floor(durationSec)));
-  const soft = eco.plazaCapBase
-    + Math.min(dur, eco.plazaCapDurSec) * eco.plazaCapPerSec
-    + Math.min(Math.max(0, oysters), eco.plazaCapOystersMax) * eco.plazaCapPerOyster;
-  return Math.min(eco.plazaMaxEarn, soft);
+/** 廣場離線備援上限：soft 公式已停用，只取絕對天花板。 */
+export function plazaSoftCapClient(_oysters: number, _durationSec: number): number {
+  return eco.plazaMaxEarn;
 }

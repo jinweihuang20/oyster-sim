@@ -143,7 +143,7 @@ function fillEco(src: any) {
     return30: Number(src.return30 ?? 30000),
     locMult: { ...(src.locMult ?? { home: 1, wanggong: 1.2, dongshi: 1.4, budai: 1.7 }) },
     rarPrices: [...(src.rarPrices ?? [200, 600, 1800, 6000])],
-    plazaMaxEarn: Number(src.plazaMaxEarn ?? 10000),
+    plazaMaxEarn: Number(src.plazaMaxEarn ?? 1_000_000),
     plazaCapBase: Number(src.plazaCapBase ?? 80),
     plazaCapDurSec: Number(src.plazaCapDurSec ?? 1800),
     plazaCapPerSec: Number(src.plazaCapPerSec ?? 12),
@@ -728,14 +728,10 @@ async function renderEconomy() {
       <div class="adminCard"><b>珍珠售價</b>
         <div class="adminGrid2">${RAR.map((n, i) => `<label>${n} $<input data-rar="${i}" type="number" value="${cfg.rarPrices[i]}"></label>`).join('')}</div>
       </div>
-      <div class="adminCard"><b>廣場 softCap</b>
+      <div class="adminCard"><b>廣場結算上限</b>
+        <p class="adminHint">時長／入碗 softCap 已停用；入帳＝本機試算，只砍絕對天花板。</p>
         <div class="adminGrid2">
-          <label>結算上限 $<input data-k="plazaMaxEarn" type="number" value="${cfg.plazaMaxEarn}"></label>
-          <label>基數 $<input data-k="plazaCapBase" type="number" value="${cfg.plazaCapBase}"></label>
-          <label>計時秒上限 <input data-k="plazaCapDurSec" type="number" value="${cfg.plazaCapDurSec}"></label>
-          <label>每秒加給 <input data-k="plazaCapPerSec" type="number" value="${cfg.plazaCapPerSec}"></label>
-          <label>蚵數上限 <input data-k="plazaCapOystersMax" type="number" value="${cfg.plazaCapOystersMax}"></label>
-          <label>每蚵加給 <input data-k="plazaCapPerOyster" type="number" value="${cfg.plazaCapPerOyster}"></label>
+          <label>絕對天花板 $<input data-k="plazaMaxEarn" type="number" value="${cfg.plazaMaxEarn}"></label>
         </div>
       </div>`;
 
