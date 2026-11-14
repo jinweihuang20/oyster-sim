@@ -3,8 +3,9 @@
 export const DIFF = [
   { n: '易', css: '#9be37a', tol: 0.45, need: 2, lo: 0.12, hi: 0.85, slip: 0.1, scale: 0.7, rough: 0 },
   { n: '普通', css: '#f5d9a8', tol: 0.33, need: 3, lo: 0.18, hi: 0.72, slip: 0.2, scale: 0.85, rough: 2 },
-  { n: '硬', css: '#ffa860', tol: 0.24, need: 5, lo: 0.25, hi: 0.62, slip: 0.35, scale: 0.95, rough: 4 },
-  { n: '超硬', css: '#ff6a5a', tol: 0.17, need: 7, lo: 0.3, hi: 0.55, slip: 0.5, scale: 0.95, rough: 6 },
+  // 硬／超硬 tol 再放寬（找縫仍略嚴於普通；難度主要在撬／割手）
+  { n: '硬', css: '#ffa860', tol: 0.32, need: 5, lo: 0.25, hi: 0.62, slip: 0.35, scale: 0.95, rough: 4 },
+  { n: '超硬', css: '#ff6a5a', tol: 0.27, need: 7, lo: 0.3, hi: 0.55, slip: 0.5, scale: 0.95, rough: 6 },
 ];
 export const DIFF_W = [30, 40, 22, 8];
 

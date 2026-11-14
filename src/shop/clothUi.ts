@@ -520,7 +520,9 @@ function goShop() {
   D.openShopPx();
   $('equip').classList.remove('show');
   D.stopEqPreview();
-  if (D.getEqPick()) D.setClothTab(D.getEqPick()!);
+  // 服飾店不賣頭髮；從裝備頁頭髮進來時改開「頭」分類
+  const pick = D.getEqPick();
+  if (pick) D.setClothTab(pick === 'hair' ? 'head' : pick);
   D.renderShop();
   const gs = Array.from(document.querySelectorAll('#shopList .stab'));
   const i = gs.findIndex(g => g.querySelector('.slGrid'));
@@ -577,10 +579,14 @@ export function renderEquip() {
   hydrateEquipThumbs($('eqBody'));
 }
 
+/** 雜貨店服飾分類：不含頭髮（髮型在裝備頁免費換） */
+const SHOP_SLOTS: [Slot, string][] = SLOTS.filter(([s]) => s !== 'hair');
+
 export function renderClothShop() {
   if (D.getSleeveTry()) { D.setSleeveTry(null); applySleeve(); }
+  if (D.getClothTab() === 'hair') D.setClothTab('head');
   const items = EQUIP.filter(e => e.slot === D.getClothTab() && (e.price > 0 || isNoneId(e.id))).sort((a, b) => Number(isNoneId(b.id)) - Number(isNoneId(a.id)) || a.price - b.price);
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-equip"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。點商品圖片可試穿，還沒買也能看。</p><div class="clTabs">${SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === D.getClothTab() ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-equip"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。點商品圖片可試穿，還沒買也能看。</p><div class="clTabs">${SHOP_SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === D.getClothTab() ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
     return `<div class="slCard${cur ? ' on' : ''}"><button type="button" class="slPeek" data-sltry="${s.id}" aria-label="試穿 ${s.n}">${eqIcon(s)}<b>${s.n}</b><em class="slPeekT">點我看穿著樣子</em></button><small>${s.eff}</small>${D.pxCd(s.id)}<div class="slBtns">${own ? `${ownedPxLabel(s.id, s.price, cur)}<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${D.getSave().money < D.px(s.id, s.price) ? 'disabled' : ''}>${D.pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
   $('shopList').querySelectorAll('button[data-ctab]').forEach(b => (b as HTMLButtonElement).onclick = () => { D.setClothTab(b.getAttribute('data-ctab') as Slot); D.renderShop(); });
   $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
