@@ -4903,6 +4903,16 @@ $('start').onclick = () => {
   const begin = () => enterWorkShed(() => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); });
   if (!save.tutDone) ensureNameThen(begin); else begin();
 };
+/** 一進遊戲直接進廣場（主選單「回主選單」仍可回來；截圖 shot 模式略過） */
+if (!SHOT) {
+  const bootIntoPlaza = () => {
+    if (state !== 'menu' || isPlazaActive() || isDeathmatchActive()) return;
+    if (!$('overlay')?.classList.contains('show')) return;
+    if (save.loc !== 'plaza') { save.loc = 'plaza'; persist(); }
+    launchPlaza();
+  };
+  requestAnimationFrame(() => setTimeout(bootIntoPlaza, 80));
+}
 btn('again', () => {
   if (evLastId != null) { void evAgain(); return; }
   else if (plazaMode) return; // 廣場休閒：離開後回主選單，不跑再次上工
