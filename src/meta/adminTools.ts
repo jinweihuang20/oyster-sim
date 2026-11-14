@@ -30,6 +30,7 @@ const LOCS = [
   { id: 'wanggong', n: '王功漁港' },
   { id: 'dongshi', n: '東石碼頭' },
   { id: 'budai', n: '布袋大廠' },
+  { id: 'plaza', n: '蚵仔廣場' },
 ];
 const STEAL: Record<string, string> = { normal: '一般（可剝可偷）', steal_only: '只能用偷的', no_steal: '不能偷' };
 const QTYPES: { v: string; n: string }[] = [
@@ -141,7 +142,7 @@ function fillEco(src: any) {
     startMoney: Number(src.startMoney ?? 10000),
     return7: Number(src.return7 ?? 10000),
     return30: Number(src.return30 ?? 30000),
-    locMult: { ...(src.locMult ?? { home: 1, wanggong: 1.2, dongshi: 1.4, budai: 2 }) },
+    locMult: { home: 1, wanggong: 1.2, dongshi: 1.4, budai: 2, plaza: 2, ...(src.locMult ?? {}) },
     rarPrices: [...(src.rarPrices ?? [200, 600, 1800, 6000])],
     plazaMaxEarn: Number(src.plazaMaxEarn ?? 99_999_999),
     plazaCapBase: Number(src.plazaCapBase ?? 80),

@@ -12,6 +12,6 @@ export {
   DAILY_PAYS, todayKey, dayDiff,
 } from './save';
 export {
-  eco, ECO_DEFAULTS, fetchEconomy, applyEconomy, syncEconomyTables, plazaSoftCapClient, type EconomyCfg,
+  eco, ECO_DEFAULTS, fetchEconomy, applyEconomy, syncEconomyTables, plazaSoftCapClient, plazaPayMult, type EconomyCfg,
 } from './economy';
 export { installNoZoom } from './nozoom';

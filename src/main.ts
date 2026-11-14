@@ -4,7 +4,7 @@ import {
   initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl, setGeoLowDetail,
   importMove, escapeInApp, type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY,
   defaultSave, loadSave as loadSaveFrom, writeSave, todayKey, dayDiff, installNoZoom,
-  eco, fetchEconomy, syncEconomyTables,
+  eco, fetchEconomy, syncEconomyTables, plazaPayMult,
   cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink, installCloudLifecycle, onCloudStatus,
 } from './core';
 import {
@@ -2768,9 +2768,9 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
   }
   const LC = locNow();
-  // 廣場工錢倍率跟布袋蚵寮大廠同一檔（預設 ×2）
-  const payLoc = plazaMode ? (LOCS.find(l => l.id === 'budai') ?? LC) : LC;
-  const base0 = meatPay + perfects * eco.perfectPay + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (payLoc.m - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * eco.nightMult) : 0;
+  const plazaM = plazaPayMult();
+  const locM = plazaMode ? plazaM : LC.m;
+  const base0 = meatPay + perfects * eco.perfectPay + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (locM - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * eco.nightMult) : 0;
   const ev = evRun, evDone = !!ev && endReason !== 'quit' && !handPain, evEarly = evDone && endReason === 'early', evCash = ev && evDone ? Math.max(0, ev.bonus) + (evEarly ? Math.max(0, ev.earlyBonus) : 0) : 0;
   const earn = Math.max(0, base0 + locBonus + nightBonus + bonus - penalty) + evCash; lastPay = { gross: base0 + locBonus + nightBonus + bonus + evCash, pen: penalty, earn };
   const waste = opened + wasteShells ? Math.round((missed + wasteShells) / (opened + wasteShells) * 100) : 0;
@@ -2846,7 +2846,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
   if (steals || caught) extraLines.push(`<div class="prLine"><span>偷蚵仔／被抓</span><b>${steals}／${caught}</b></div>`);
   if (finds) extraLines.push(`<div class="prLine"><span>珍珠／奇物</span><b>${finds} 件 · $${pearlMoney}</b></div>`);
   if (penalty) extraLines.push(`<div class="prLine bad"><span>罰款／扣價</span><b>-$${penalty}</b></div>`);
-  if (locBonus) extraLines.push(`<div class="prLine"><span>${esc(plazaMode ? `🦪 蚵仔廣場 ×${payLoc.m}` : `${payLoc.n} ×${payLoc.m}`)}</span><b>+$${locBonus}</b></div>`);
+  if (locBonus) extraLines.push(`<div class="prLine"><span>${esc(plazaMode ? `🦪 蚵仔廣場 ×${plazaM}` : `${LC.n} ×${LC.m}`)}</span><b>+$${locBonus}</b></div>`);
   if (nightBonus) extraLines.push(`<div class="prLine"><span>夜班 +${nightPct}%</span><b>+$${nightBonus}</b></div>`);
   if (bonus) extraLines.push(`<div class="prLine"><span>和平獎金</span><b>+$${bonus}</b></div>`);
   if (!plazaMode && cracked) extraLines.push(`<div class="prLine muted"><span>殼屑（${crumbPct}%）</span><b>${cracked}</b></div>`);
@@ -3550,7 +3550,7 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   const lockedPick = !plazaCur && locPickedLocked();
   const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && save.locs!.includes(l.id);
   const anyNew = LOCS.some(isNew);
-  const plazaM = (LOCS.find(l => l.id === 'budai') ?? LOCS[0]).m;
+  const plazaM = plazaPayMult();
   const headTxt = plazaCur
     ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場 ×${plazaM.toFixed(1)}</b><small>${plazaHeadCountTxt()}</small>`
     : `<b><i class="ic ic-pin"></i> 上工地點：${lockedPick ? '🔒 ' : ''}${cl!.n} ×${cl!.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>${lockedPick ? '此地點尚未解鎖・可先選看看或花錢提早解鎖' : `👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}`}</small>`;

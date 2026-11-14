@@ -48,7 +48,7 @@ export const ECO_DEFAULTS: EconomyCfg = {
   startMoney: 10_000,
   return7: 10_000,
   return30: 30_000,
-  locMult: { home: 1, wanggong: 1.2, dongshi: 1.4, budai: 2 },
+  locMult: { home: 1, wanggong: 1.2, dongshi: 1.4, budai: 2, plaza: 2 },
   rarPrices: [200, 600, 1800, 6000],
   plazaMaxEarn: 99_999_999,
   plazaCapBase: 80,
@@ -155,4 +155,10 @@ export function syncEconomyTables(
 /** 廣場離線備援上限：soft 公式已停用，只取絕對天花板。 */
 export function plazaSoftCapClient(_oysters: number, _durationSec: number): number {
   return eco.plazaMaxEarn;
+}
+
+/** 蚵仔廣場工錢倍率（後台 locMult.plaza，可與大廠分開調）。 */
+export function plazaPayMult(): number {
+  const m = eco.locMult.plaza;
+  return typeof m === 'number' && Number.isFinite(m) && m >= 0.1 && m <= 10 ? m : ECO_DEFAULTS.locMult.plaza;
 }
