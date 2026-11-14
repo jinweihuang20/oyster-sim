@@ -219,7 +219,15 @@ async function render() {
     else D.toast('慢一點，等一下再按');
   });
   fr.bindFriendActions(list);
-  $('lbMe').innerHTML = r.myTitle ? `<i class="ic ic-crown"></i> 你的稱號：${esc(r.myTitle)}` : '';
+  {
+    const mine = r.mine as { rank?: number } | null | undefined;
+    const rankN = Number(mine?.rank);
+    const rankTxt = Number.isFinite(rankN) && rankN > 0
+      ? `你目前第 <b>${esc(rankN)}</b> 名`
+      : '你尚未上榜';
+    const titleTxt = r.myTitle ? `<span class="lbMeTitle"><i class="ic ic-crown"></i> ${esc(r.myTitle)}</span>` : '';
+    $('lbMe').innerHTML = `<span class="lbMeRank">${rankTxt}</span>${titleTxt ? ` · ${titleTxt}` : ''}`;
+  }
 }
 export function open() { ($('lbNick') as HTMLInputElement).value = D.nick() === '剝蚵人' ? '' : D.nick(); cat = catOf(board).id; $('lb').classList.add('show'); render(); }
 
