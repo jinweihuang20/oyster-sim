@@ -3,7 +3,7 @@ import { makePlayerAvatar, posePlazaHangArms, type PlayerRig } from '../dm/chara
 import { makeMeshHelpers } from '../dm/mesh';
 import { applyOutfitToRig, type OutfitIds } from './equipVisual';
 
-export type EqSlot = 'head' | 'hand' | 'body' | 'legs' | 'feet';
+export type EqSlot = 'hair' | 'head' | 'hand' | 'body' | 'legs' | 'feet';
 
 /**
  * 裝備頁全身預覽。
@@ -17,7 +17,9 @@ let camera: THREE.PerspectiveCamera | null = null;
 let rig: PlayerRig | null = null;
 let hostEl: HTMLElement | null = null;
 let raf = 0;
-let yawT = 0;
+/** 玩家拖曳累積的左右轉角 */
+let userYaw = YAW0;
+let drag: { id: number; x: number; yaw0: number } | null = null;
 const _v = new THREE.Vector3();
 const _box = new THREE.Box3();
 const _tmp = new THREE.Vector3();
@@ -27,6 +29,46 @@ function placeRig(yaw: number) {
   rig.outer.scale.setScalar(1);
   rig.outer.position.set(0, 0, 0);
   rig.outer.rotation.set(0, yaw, 0);
+}
+
+function onFigPointerDown(e: PointerEvent) {
+  if (e.button !== 0 || !hostEl) return;
+  e.preventDefault();
+  hostEl.setPointerCapture(e.pointerId);
+  drag = { id: e.pointerId, x: e.clientX, yaw0: userYaw };
+  hostEl.classList.add('drag');
+}
+function onFigPointerMove(e: PointerEvent) {
+  if (!drag || e.pointerId !== drag.id) return;
+  // 往右拖＝角色逆時針（看右側）
+  userYaw = drag.yaw0 + (e.clientX - drag.x) * 0.012;
+  placeRig(userYaw);
+}
+function onFigPointerUp(e: PointerEvent) {
+  if (!drag || e.pointerId !== drag.id) return;
+  drag = null;
+  hostEl?.classList.remove('drag');
+}
+function bindFigDrag(host: HTMLElement) {
+  if (hostEl === host && host.dataset.eqDrag === '1') return;
+  unbindFigDrag();
+  host.dataset.eqDrag = '1';
+  host.addEventListener('pointerdown', onFigPointerDown);
+  host.addEventListener('pointermove', onFigPointerMove);
+  host.addEventListener('pointerup', onFigPointerUp);
+  host.addEventListener('pointercancel', onFigPointerUp);
+  host.addEventListener('lostpointercapture', onFigPointerUp);
+}
+function unbindFigDrag() {
+  if (!hostEl || hostEl.dataset.eqDrag !== '1') return;
+  hostEl.removeEventListener('pointerdown', onFigPointerDown);
+  hostEl.removeEventListener('pointermove', onFigPointerMove);
+  hostEl.removeEventListener('pointerup', onFigPointerUp);
+  hostEl.removeEventListener('pointercancel', onFigPointerUp);
+  hostEl.removeEventListener('lostpointercapture', onFigPointerUp);
+  delete hostEl.dataset.eqDrag;
+  hostEl.classList.remove('drag');
+  drag = null;
 }
 
 /** 全身入鏡：畫面中人物偏下，腳靠近地墊陰影 */
@@ -55,6 +97,7 @@ function hatWorldCenter(out: THREE.Vector3) {
 function disposePreview() {
   if (raf) cancelAnimationFrame(raf);
   raf = 0;
+  unbindFigDrag();
   if (renderer) {
     renderer.dispose();
     renderer.domElement.remove();
@@ -67,6 +110,8 @@ function disposePreview() {
   camera = null;
   renderer = null;
   hostEl = null;
+  userYaw = YAW0;
+  drag = null;
 }
 
 function ensure() {
@@ -91,6 +136,7 @@ function ensure() {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
   renderer.domElement.className = 'eqFig';
+  // 事件掛在外層 eqFigW；canvas 穿透即可
   renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;pointer-events:none';
 }
 
@@ -113,6 +159,8 @@ function anchorWorld(slot: EqSlot, out: THREE.Vector3): THREE.Vector3 {
   if (!rig) return out.set(0, 1, 0);
   rig.outer.updateMatrixWorld(true);
   switch (slot) {
+    case 'hair':
+      return rig.head.getWorldPosition(out).add(_tmp.set(0, 0.12, 0.06));
     case 'head':
       return hatWorldCenter(out);
     case 'body':
@@ -139,7 +187,7 @@ function updateGuideDom() {
   if (!rig || !camera || !hostEl) return;
   const stage = hostEl.closest('.eqStage') as HTMLElement | null;
   if (!stage) return;
-  for (const s of ['head', 'hand', 'body', 'legs', 'feet'] as EqSlot[]) {
+  for (const s of ['hair', 'head', 'hand', 'body', 'legs', 'feet'] as EqSlot[]) {
     const p = worldToStagePct(anchorWorld(s, _v), stage, hostEl);
     if (!p) continue;
     const hit = stage.querySelector<HTMLElement>(`.eqHit[data-slot="${s}"]`);
@@ -152,8 +200,7 @@ function loop() {
   if (!renderer || !scene || !camera || !rig || !hostEl?.isConnected) return;
   if (!document.getElementById('equip')?.classList.contains('show')) return;
   const w = hostEl.clientWidth, h = hostEl.clientHeight;
-  yawT += 0.01;
-  placeRig(YAW0 + Math.sin(yawT) * 0.04);
+  placeRig(userYaw);
   if (w > 2 && h > 2) {
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.25));
     renderer.setSize(w, h, false);
@@ -171,9 +218,10 @@ export function syncEqPreview(host: HTMLElement, outfit: OutfitIds) {
   if (!renderer || !rig) return;
   hostEl = host;
   host.replaceChildren(renderer.domElement);
+  bindFigDrag(host);
   applyOutfitToRig(rig, outfit);
   posePlazaHangArms(rig);
-  placeRig(YAW0);
+  placeRig(userYaw);
   if (!raf) raf = requestAnimationFrame(loop);
   requestAnimationFrame(() => {
     if (hostEl && hostEl.clientWidth > 2) {
@@ -187,7 +235,7 @@ export function refreshEqPreview(outfit: OutfitIds) {
   if (!rig || !hostEl?.isConnected) return;
   applyOutfitToRig(rig, outfit);
   posePlazaHangArms(rig);
-  placeRig(YAW0);
+  placeRig(userYaw);
   updateGuideDom();
 }
 

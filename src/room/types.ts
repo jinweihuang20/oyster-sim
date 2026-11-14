@@ -14,7 +14,7 @@ export type RoomBody = {
   phase: string; x: number; z: number; yaw: number;
   seated: boolean; moving: boolean; umb: boolean;
   lookYaw: number; pitch: number;
-  head: string; hand: string; body: string; legs: string; feet: string;
+  hair: string; head: string; hand: string; body: string; legs: string; feet: string;
   carriedBy: string; cosmetics: string;
 };
 
@@ -86,6 +86,7 @@ export function normBody(p: any): RoomBody {
     umb: bool(p?.umb ?? p?.Umb),
     lookYaw: num(p?.lookYaw ?? p?.LookYaw),
     pitch: num(p?.pitch ?? p?.Pitch),
+    hair: str(p?.hair ?? p?.Hair) || 'hr_basic',
     head: str(p?.head ?? p?.Head) || 'hd_basic',
     hand: str(p?.hand ?? p?.Hand) || 'hn_basic',
     body: str(p?.body ?? p?.Body) || 'bd_basic',

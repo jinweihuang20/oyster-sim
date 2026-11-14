@@ -57,6 +57,7 @@ export function makeAma(top: number, hair: number, D: NpcMeshDeps): YardNpcMesh 
 
   const head = new THREE.Group(); head.position.set(0, 1.06 + Y, 0.02); g.add(head);
   mesh(rboxNpc(0.3, 0.3, 0.3), skinM, [0, 0, 0], head);
+  for (const s of [-1, 1]) mesh(rboxNpc(0.042, 0.08, 0.052), skinM, [s * 0.172, 0.0, 0.01], head);
   const hairTop = mesh(rboxNpc(0.32, 0.1, 0.32), hairM, [0, 0.12, 0], head);
   const hairBack = mesh(rboxNpc(0.32, 0.12, 0.1), hairM, [0, 0.02, 0.12], head);
   const bun = mesh(rboxNpc(0.14, 0.12, 0.14), hairM, [0, 0.14, 0.16], head);

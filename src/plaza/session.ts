@@ -81,7 +81,7 @@ export type PlazaDeps = {
   /** 是否第三人稱（走動時用來決定要不要鎖頭／俯仰同步） */
   getTpv?: () => boolean;
   /** 目前五件裝備 id（進場／換裝同步） */
-  getOutfit?: () => { head: string; hand: string; body: string; legs: string; feet: string };
+  getOutfit?: () => { hair: string; head: string; hand: string; body: string; legs: string; feet: string };
   /** 目前廣場外觀旗標（進場／開關後同步） */
   getCosmetics?: () => string;
   /** 本機是否已買廣場旗幟 */
@@ -745,7 +745,7 @@ async function boot(D: PlazaDeps) {
 export async function plazaPushOutfit() {
   if (!client?.connected || !deps?.getOutfit) return;
   const o = deps.getOutfit();
-  await client.setOutfit(o.head, o.hand, o.body, o.legs, o.feet);
+  await client.setOutfit(o.head, o.hand, o.body, o.legs, o.feet, o.hair);
   await plazaPushCosmetics();
 }
 
@@ -1007,6 +1007,7 @@ function normPlayer(p: any): PlazaPlayer {
     umb: !!(p?.umb ?? p?.Umb),
     lookYaw: Number(p?.lookYaw ?? p?.LookYaw ?? 0),
     pitch: Number(p?.pitch ?? p?.Pitch ?? 0),
+    hair: p?.hair ?? p?.Hair ?? 'hr_basic',
     head: p?.head ?? p?.Head ?? 'hd_basic',
     hand: p?.hand ?? p?.Hand ?? 'hn_basic',
     body: p?.body ?? p?.Body ?? 'bd_basic',

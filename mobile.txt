@@ -1,0 +1,83 @@
+
+和 Gemini 的對話
+Iphone 16 螢幕上半部發熱 是什麼部位
+
+
+
+iPhone 16 螢幕上半部（特別是偏左側、音量鍵附近到鏡頭模組下方）發熱，對應到的主要是主機板（Logic Board）的位置。
+
+iPhone 16 的內部構造將絕大多數的高發熱核心零件都集中在機身上半部（中上半段），具體包含以下幾個關鍵元件：
+
+A18 處理器與記憶體（SoC / RAM）：負責運算、遊戲、影片剪輯與 AI 處理的核心晶片，高負載運作時這裡最容易產生熱能。
+
+5G 數據機與射頻晶片（Modem / RF 模組）：負責 5G/4G 行動網路、Wi-Fi 與藍牙連線。當手機處於訊號微弱處（例如地下室、高鐵上或電梯內）持續搜尋基地台，或使用 5G 熱點分享時，這塊區域會明顯發燙。   
+iFixit
+
+電源管理晶片（PMIC）：負責分配電力與處理快充轉換，在邊充電邊使用手機時，主機板區域也會跟著升溫。
+
+相機感光元件與影像處理相關元件：長時間錄影（特別是 4K 高畫質）或開啟相機取景時，鏡頭模組周邊與主機板會同步發熱。
+
+簡單判斷發熱是否正常
+正常現象：在玩大型 3D 遊戲、長時間錄影、使用 5G 網路下載大檔案、開啟個人熱點，或剛更新完 iOS 系統在背景跑資料索引時，上半部有明顯溫熱感是正常的散熱表現。
+
+建議留意的情況：如果只是待機或單純滑網頁，沒有開啟耗電 App，該位置卻持續異常燙手且伴隨電量快速下降，可以嘗試重新開機，或到「設定」＞「電池」檢查是否有特定 App 在背景異常耗電。
+
+需要幫你確認是哪種使用情境下發熱，或提供降低手機發熱的設定調整建議嗎？
+
+Three.js 3D網頁遊戲在手機上跑 要如何優化程式碼或是場景設定 讓手機發熱量降低
+
+在手機上運行 Three.js 3D 網頁遊戲時，造成手機上半部（SoC / GPU / RAM）發熱的主因通常是「過高的像素填充率（Fill-rate）」、「過度頻繁的 Draw Calls」以及「不間斷的無上限渲染迴圈」。
+
+針對手機端（尤其是 iOS Safari / WebKit 環境），可以從以下幾個最有效的維度來降低運算負載與發熱量：
+
+1. 限制 Pixel Ratio（最立竿見影）
+手機螢幕的 window.devicePixelRatio 通常高達 3（如 iPhone 16），如果直接設定 renderer.setPixelRatio(window.devicePixelRatio)，GPU 必須渲染 9 倍的像素量，這會瞬間讓手機 GPU 滿載發燙。
+
+建議做法：在手機端將 DPR 限制在 1.5 到 2 之間，肉眼幾乎看不出鋸齒差異，但 GPU 負載會直接砍半以上。
+
+JavaScript
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
+2. 材質與光影降級（大幅減少 Fragment Shader 計算）
+PBR 材質（MeshStandardMaterial、MeshPhysicalMaterial）與即時陰影在手機 GPU 上非常耗電。
+
+材質降級：
+
+非核心反光物件，盡量改用 MeshLambertMaterial 或 MeshPhongMaterial，甚至在特定風格下用 MeshBasicMaterial 搭配烘焙好的貼圖（Baked Texture）。
+
+避免在手機上大量使用帶有清漆（Clearcoat）、透射（Transmission）的 MeshPhysicalMaterial。
+
+陰影（Shadow）優化：
+
+盡量減少產生即時陰影的燈光數量（手機端最好只保留 1 盞主平行光 DirectionalLight 投射陰影）。
+
+縮小陰影貼圖解析度：light.shadow.mapSize.set(1024, 1024)（甚至 512），並縮小陰影相機的視錐範圍（left/right/top/bottom），讓解析度集中。
+
+如果場景物件不會移動，設定 renderer.shadowMap.autoUpdate = false，僅在場景變動時手動觸發 renderer.shadowMap.needsUpdate = true。
+
+角色腳底陰影可用一張簡單的半透明黑圓圈貼圖（Blob Shadow）代替即時投影。
+
+3. 控制 Draw Calls 與幾何體複雜度
+CPU 與 GPU 之間的通訊（Draw Calls）過多會讓 A18 處理器與匯流排持續高頻運作。
+
+合併靜態網格：不會動的背景物件，使用 BufferGeometryUtils.mergeGeometries() 合併成單一 Mesh。
+
+大量重複物件使用 InstancedMesh：例如草地、粒子、障礙物或重複道具，務必使用 THREE.InstancedMesh（可將上百個 Draw Calls 壓縮成 1 個）。
+
+幾何體頂點數與 LOD：手機小螢幕上細節不需要太高，減少球體/圓柱體的分段數（Segments），遠處物件可使用 THREE.LOD 切換低模。
+
+4. 貼圖（Texture）尺寸與記憶體頻寬優化
+高解析度貼圖會佔用大量記憶體頻寬（RAM 讀寫也是發熱源之一）。
+
+限制貼圖解析度：手機端貼圖長寬盡量控制在 512x512 或 1024x1024 以內，避免 2K/4K 貼圖。
+
+使用壓縮紋理（KTX2 / Basis Universal）：相較於 PNG/JPG 解壓後佔用龐大 VRAM，KTX2 格式能直接在手機 GPU 上硬體解碼，大幅降低頻寬與耗電。
+
+關閉不必要的 Mipmap 或調整過濾：對不需要縮放的 UI 或像素貼圖關閉 generateMipmaps = false。
+
+5. 渲染迴圈（Render Loop）與後處理（Post-processing）控制
+審慎使用後處理（EffectComposer）：手機上跑 Bloom（泛光）、SSAO、DOF（景深）或抗鋸齒（SMAA/MSAA）非常吃效能。若必須使用，確保 EffectComposer 的 RenderTarget 也是低解析度，且避免多層 Pass 疊加。此外，在初始化 WebGLRenderer 時，若已限制 DPR 到 1.5~2，可測試關閉原生 antialias: false 觀察發熱改善程度。
+
+分頁隱藏時暫停渲染：務必監聽 visibilitychange 事件，當玩家切換分頁或鎖定螢幕時停止 requestAnimationFrame 與物理運算，避免在背景空轉發熱。
+
+JavaScript

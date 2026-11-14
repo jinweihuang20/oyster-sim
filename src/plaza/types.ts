@@ -20,6 +20,7 @@ export type PlazaPlayer = {
   /** 視角俯仰 */
   pitch?: number;
   /** 裝備 id（與 EQUIP／equipVisual 對齊） */
+  hair?: string;
   head?: string;
   hand?: string;
   body?: string;

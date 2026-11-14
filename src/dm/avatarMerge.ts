@@ -95,6 +95,8 @@ function collect(group: THREE.Object3D, exclude: Set<THREE.Object3D>) {
     if (o.userData[MERGED] || hasNoMerge(o)) return;
     if (Array.isArray(o.material)) return;
     if (underExcluded(o, group, exclude)) return;
+    // 光頭會把基本髮塊藏起來。合成不看 visible，否則這層皮色蓋會被烤回頭上。
+    if (o.userData.baseHair && !o.visible) return;
     out.push(o);
   });
   return out;

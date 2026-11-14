@@ -81,8 +81,8 @@ export class RoomClient {
   }
   claimSeat(slot: number) { return this.inv('ClaimSeat', slot); }
   leaveSeat() { return this.inv('LeaveSeat'); }
-  setOutfit(head: string, hand: string, body: string, legs: string, feet: string) {
-    return this.inv('SetOutfit', head, hand, body, legs, feet);
+  setOutfit(head: string, hand: string, body: string, legs: string, feet: string, hair = 'hr_basic') {
+    return this.inv('SetOutfit', head, hand, body, legs, feet, hair);
   }
   setCosmetics(cosmetics: string) { return this.inv('SetCosmetics', cosmetics); }
   carryNpc(npcConnId: string) { return this.inv('CarryNpc', npcConnId); }

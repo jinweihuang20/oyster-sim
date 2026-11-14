@@ -1,4 +1,4 @@
-export type Slot = 'head' | 'hand' | 'body' | 'legs' | 'feet';
+export type Slot = 'hair' | 'head' | 'hand' | 'body' | 'legs' | 'feet';
 export type Fx = { bowl?: number; keep?: number; speed?: number; pearl?: number; nag?: number; throw?: number; dmg?: number; luck?: number; steal?: number };
 export type StealKind = 'plaza' | 'yard';
 export const STEAL_HOLD_BASE = { plaza: 1.8, yard: 0.9 } as const;
@@ -18,10 +18,25 @@ export function walkSpeedMul(ids: readonly string[]): number {
   return Math.max(0.1, 1 + sum);
 }
 export type Eq = { id: string; slot: Slot; n: string; price: number; eff: string; base: string; pat: string; fx: Fx };
-export const SLOTS: [Slot, string][] = [['head', '頭'], ['hand', '手'], ['body', '衣服'], ['legs', '褲子'], ['feet', '鞋子']];
-export const NONE_ID: Record<Slot, string> = { head: 'hd_none', hand: 'hn_none', body: 'bd_none', legs: 'lg_none', feet: 'ft_none' };
+export const SLOTS: [Slot, string][] = [['hair', '頭髮'], ['head', '頭'], ['hand', '手'], ['body', '衣服'], ['legs', '褲子'], ['feet', '鞋子']];
+export const NONE_ID: Record<Slot, string> = { hair: 'hr_none', head: 'hd_none', hand: 'hn_none', body: 'bd_none', legs: 'lg_none', feet: 'ft_none' };
 export const isNoneId = (id?: string | null) => !!id && (id === 'none' || id.endsWith('_none'));
 export const EQUIP: Eq[] = [
+  { slot: 'hair', id: 'hr_basic', n: '男生短髮', price: 0, eff: '短寸兩側漸短，眉上側掃瀏海', base: '#5a3a28', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_mlong', n: '男生長髮', price: 0, eff: '肩長波浪，額前不遮眼', base: '#3a2818', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_bob', n: '女生短髮', price: 0, eff: '空氣瀏海鮑伯，露出耳朵', base: '#2a1a12', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_long', n: '女生長髮', price: 0, eff: '波浪披肩，額前不遮眼', base: '#4a2e20', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_reggae', n: '雷鬼', price: 0, eff: '頭頂髒辮，兩側剃短', base: '#2a1a10', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_spike', n: '刺蝟', price: 0, eff: '幾何尖刺外張，額前全露', base: '#2e2418', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_samurai', n: '武士頭', price: 0, eff: '兩側剃短，頭頂紮髻', base: '#2a1c12', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_afro', n: '爆炸頭', price: 0, eff: '圓潤蓬鬆捲，額前全露', base: '#2c1a10', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_mohawk', n: '飛機頭', price: 0, eff: '兩側剃短，中央尖脊', base: '#2a2218', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_lowbun', n: '低丸子頭', price: 0, eff: '後頸低髻，簾式瀏海不遮眼', base: '#3a2418', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_twinbraid', n: '雙麻花辮', price: 0, eff: '中分雙辮垂肩，眉上碎瀏海', base: '#4a2e1c', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_halfbun', n: '半丸子頭', price: 0, eff: '上半紮髻，下半披肩', base: '#3a2818', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_wolf', n: '狼尾剪', price: 0, eff: '層次中長，外翻碎翹', base: '#2e2016', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_sidebraid', n: '側編麻花', price: 0, eff: '單辮披肩，額前全露', base: '#3a2618', pat: 'plain', fx: {} },
+  { slot: 'hair', id: 'hr_none', n: '光頭', price: 0, eff: '不留頭髮', base: '#e8bc98', pat: 'plain', fx: {} },
   { slot: 'head', id: 'hd_basic', n: '花布頭巾', price: 0, eff: '基本款', base: '#c84a5a', pat: 'flower', fx: {} },
   { slot: 'head', id: 'hd_hat', n: '斗笠', price: 3000, eff: '殼比較難砸到臉，被丟殼的機率 -10%', base: '#d8b46a', pat: 'plain', fx: { throw: 0.9 } },
   { slot: 'head', id: 'hd_fisher', n: '漁夫帽', price: 9000, eff: '帽簷壓低，阿婆唸你的機率 -10%', base: '#4a6a8a', pat: 'plain', fx: { nag: 0.9 } },

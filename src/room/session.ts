@@ -29,7 +29,7 @@ export type RoomHooks = {
   getPhase: () => string;
   getMoving: () => boolean;
   getUmb: () => boolean;
-  getOutfit: () => { head: string; hand: string; body: string; legs: string; feet: string };
+  getOutfit: () => { hair: string; head: string; hand: string; body: string; legs: string; feet: string };
   getCosmetics: () => string;
   isWalking: () => boolean;
 };
@@ -465,7 +465,7 @@ async function pushOutfit() {
   if (!client || !hooks || outfitSent) return;
   outfitSent = true;
   const o = hooks.getOutfit();
-  await client.setOutfit(o.head, o.hand, o.body, o.legs, o.feet);
+  await client.setOutfit(o.head, o.hand, o.body, o.legs, o.feet, o.hair);
   await client.setCosmetics(hooks.getCosmetics());
 }
 

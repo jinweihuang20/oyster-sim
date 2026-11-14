@@ -24,6 +24,7 @@ let io: IntersectionObserver | null = null;
 
 function baseOutfit(slot: Slot, id: string): OutfitIds {
   return {
+    hair: slot === 'hair' ? id : 'hr_basic',
     head: slot === 'head' ? id : 'hd_none',
     hand: slot === 'hand' ? id : 'hn_none',
     body: slot === 'body' ? id : 'bd_basic',
@@ -132,6 +133,15 @@ function isolateSlot(slot: Slot, itemId: string) {
   const legMats = rig.outfitMats.legs;
   const feetMats = rig.outfitMats.feet;
 
+  if (slot === 'hair') {
+    const keep: THREE.Object3D[] = [];
+    const hairDet = rig.head.userData.eqHairDet as THREE.Object3D | undefined;
+    if (hairDet) keep.push(hairDet);
+    if (itemId !== 'hr_none') rig.head.traverse(o => { if (o.userData.baseHair) keep.push(o); });
+    hideMeshesExceptUnder(rig.outer, keep);
+    return;
+  }
+
   if (slot === 'head') {
     hideMeshesExceptUnder(rig.outer, rig.hatG ? [rig.hatG] : []);
     return;
@@ -216,17 +226,21 @@ function frameVisible(slot: Slot) {
   camera.aspect = TW / TH;
   camera.near = 0.08;
   camera.far = 20;
-  const pad = slot === 'feet' || slot === 'head' ? 1.28 : 1.36;
+  const pad = slot === 'feet' || slot === 'head' || slot === 'hair' ? 1.28 : 1.36;
   const dist = (maxDim * 0.5 * pad) / Math.tan((fov * Math.PI / 180) / 2);
   if (slot === 'feet') camera.position.set(look.x + dist * 0.18, look.y + dist * 0.78, look.z + dist * 0.66);
-  else if (slot === 'head') camera.position.set(look.x + dist * 0.2, look.y + dist * 0.28, look.z + dist * 0.96);
+  else if (slot === 'head' || slot === 'hair') camera.position.set(look.x + dist * 0.2, look.y + dist * 0.28, look.z + dist * 0.96);
   else camera.position.set(look.x + dist * 0.32, look.y + dist * 0.14, look.z + dist * 0.96);
   camera.lookAt(look);
   camera.updateProjectionMatrix();
 }
 
+/** 髮型幾何大改時遞增，避免縮圖快取還是舊拼湊版 */
+const THUMB_V = 4;
+
 function renderThumb(id: string): string | null {
-  const hit = cache.get(id);
+  const key = `${id}@${THUMB_V}`;
+  const hit = cache.get(key);
   if (hit) return hit;
   if (isNoneId(id)) return null;
   if (!ensure() || !renderer || !rig || !scene || !camera) return null;
@@ -240,7 +254,7 @@ function renderThumb(id: string): string | null {
   frameVisible(item.slot);
   renderer.render(scene, camera);
   const url = renderer.domElement.toDataURL('image/png');
-  cache.set(id, url);
+  cache.set(key, url);
   return url;
 }
 

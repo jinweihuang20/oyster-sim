@@ -89,7 +89,7 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
     if (b.isNpc) { dressPlazaAma(rig, look); applyAmaAppearance(rig); }
     else {
       applyOutfitToRig(rig, normalizeOutfitIds({
-        head: b.head, hand: b.hand, body: b.body, legs: b.legs, feet: b.feet,
+        hair: b.hair, head: b.head, hand: b.hand, body: b.body, legs: b.legs, feet: b.feet,
       }));
     }
     root.add(rig.outer);
@@ -118,7 +118,7 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
     r.carriedBy = b.carriedBy;
     r.tx = b.x; r.tz = b.z; r.tyaw = b.yaw; r.tLookYaw = b.lookYaw;
     if (!b.isNpc) {
-      const next = normalizeOutfitIds({ head: b.head, hand: b.hand, body: b.body, legs: b.legs, feet: b.feet });
+      const next = normalizeOutfitIds({ hair: b.hair, head: b.head, hand: b.hand, body: b.body, legs: b.legs, feet: b.feet });
       if (r.rig.outfitKey !== outfitKey(next)) applyOutfitToRig(r.rig, next);
     }
     const label = b.isNpc ? `${b.nick}${b.seated && b.meat ? '・' + b.meat + ' 顆' : ''}` : `${b.nick}${b.tag ? ' #' + b.tag : ''}${b.meat ? '・' + b.meat + ' 顆' : ''}`;

@@ -4625,6 +4625,7 @@ function launchPlaza() {
     getPitch: () => (tpv ? 0 : pitch),
     getTpv: () => tpv,
     getOutfit: () => ({
+      hair: equipNow('hair').id,
       head: equipNow('head').id,
       hand: equipNow('hand').id,
       body: equipNow('body').id,
@@ -5761,6 +5762,7 @@ bindRoom({
   },
   getUmb: () => umbHeld || umbT > 0,
   getOutfit: () => ({
+    hair: equipNow('hair').id,
     head: equipNow('head').id,
     hand: equipNow('hand').id,
     body: equipNow('body').id,
@@ -6087,7 +6089,7 @@ function ensurePlazaMe(): PlayerRig {
   const { M, add } = makeMeshHelpers(scene, matchMedia('(pointer: coarse)').matches);
   plazaMe = makePlayerAvatar({ shirt: 0xc45c26, hair: 0x222222, pants: 0x2a2a40 }, M, add, false);
   applyOutfitToRig(plazaMe, {
-    head: equipNow('head').id, hand: equipNow('hand').id,
+    hair: equipNow('hair').id, head: equipNow('head').id, hand: equipNow('hand').id,
     body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
   });
   posePlazaHangArms(plazaMe);
@@ -6126,7 +6128,7 @@ function applyOutfit3() {
   });
   // 廣場本機第三人稱 avatar 同步服飾
   const outfit = {
-    head: equipNow('head').id, hand: equipNow('hand').id,
+    hair: equipNow('hair').id, head: equipNow('head').id, hand: equipNow('hand').id,
     body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
   };
   if (plazaMe) { applyOutfitToRig(plazaMe, outfit); invalidateLocalAvatarCache(); }

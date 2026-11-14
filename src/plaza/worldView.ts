@@ -1813,7 +1813,7 @@ function hashPid(pid: string) {
         }
       } else {
         applyOutfitToRig(rig, normalizeOutfitIds({
-          head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
+          hair: p.hair, head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
         }));
       }
       root.add(rig.outer);
@@ -1936,7 +1936,7 @@ function hashPid(pid: string) {
     if (r.seated && r.awaitingPose) revealRemoteIfReady(r);
     if (!r.isNpc) {
       const next = normalizeOutfitIds({
-        head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
+        hair: p.hair, head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
       });
       if (r.rig.outfitKey !== outfitKey(next)) applyOutfitToRig(r.rig, next);
     }

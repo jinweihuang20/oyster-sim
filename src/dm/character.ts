@@ -119,10 +119,12 @@ export function makePlayerAvatar(
 
   const head = new THREE.Group(); head.position.set(0, 0.54, 0); torso.add(head);
   add(box(0.28, 0.28, 0.28), skinM, [0, 0, 0], head);
-  // 薄髮帽：只比頭大一點避免額前共面閃爍；瀏海停在眼睛上方
-  add(box(0.30, 0.088, 0.30), hairM, [0, 0.111, 0], head);
-  // 後腦勺髮塊：只覆蓋頭頂後半，前面（-Z）仍露臉
-  add(box(0.30, 0.10, 0.08), hairM, [0, 0.03, 0.12], head);
+  for (const s of [-1, 1]) add(box(0.04, 0.075, 0.05), skinM, [s * 0.162, 0.0, 0.01], head);
+  // 基本髮塊（userData.baseHair）：裝備系統會隱藏並改掛培根／雷鬼等細節；未套裝時當短髮底
+  const hairTop = add(box(0.30, 0.088, 0.30), hairM, [0, 0.111, 0], head);
+  hairTop.userData.baseHair = true;
+  const hairBack = add(box(0.30, 0.10, 0.08), hairM, [0, 0.03, 0.12], head);
+  hairBack.userData.baseHair = true;
   // 五官貼在臉前面約 0.004，厚度 0.006，避免太凸和共面閃爍
   for (const s of [-1, 1]) add(box(0.05, 0.05, 0.006), std(0x111111), [s * 0.07, 0.02, -0.147], head);
   add(box(0.1, 0.03, 0.006), std(0xa04040), [0, -0.08, -0.147], head);

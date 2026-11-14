@@ -23,7 +23,7 @@ export type ClothUiDeps = {
   pxCd: (k: string) => string;
   pxHtml: (k: string, base: number, pre?: string) => string;
   payFor: (k: string, base: number, name: string) => Promise<number | null>;
-  syncEqPreview: (el: HTMLElement, outfit: { head: string; hand: string; body: string; legs: string; feet: string }) => void;
+  syncEqPreview: (el: HTMLElement, outfit: { hair: string; head: string; hand: string; body: string; legs: string; feet: string }) => void;
   stopEqPreview: () => void;
   myName: () => string;
   statsId: string;
@@ -123,6 +123,7 @@ let eqSvgN = 0;
 export function eqSvg(e: Eq, w = 72, grey = false) {
   const s = '#1b1b1b', f = grey ? '#a8a8a8' : e.base;
   const P: Record<Slot, string> = {
+    hair: `<path d="M16 42Q18 14 36 12Q54 14 56 42Q46 28 36 30Q26 28 16 42Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M22 34q14 10 28 0" fill="none" stroke="${s}" stroke-width="2"/>`,
     head: `<path d="M10 40Q36 6 62 40Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M6 40H66" stroke="${s}" stroke-width="2.5"/>`,
     hand: `<rect x="6" y="18" width="44" height="22" rx="8" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
     body: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/>`,
@@ -159,6 +160,21 @@ export function eqSvg(e: Eq, w = 72, grey = false) {
     bd_nightshort: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M30 16l6 10 6-10" fill="${f}" stroke="${s}" stroke-width="2"/><path d="M28 48h16" stroke="#1a2438" stroke-width="3"/>`,
     lg_tied: `<path d="M20 8h32l4 50H40l-4-30-4 30H16Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 50h16M38 50h16" stroke="#1a2438" stroke-width="5"/>`,
     ft_tabi: `<path d="M10 40q0-10 10-12h8v18H10Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M30 30h16q10 2 14 12v4H30Z" fill="${f}" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M28 28v18" stroke="#e8e2d4" stroke-width="2"/>`,
+    hr_basic: `<path d="M24 30Q26 16 36 14Q46 16 48 30Q42 24 36 24Q30 24 24 30Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M28 26q10 6 18-2" fill="none" stroke="${s}" stroke-width="2"/><path d="M34 8l2 10h-4Z M40 9l2.5 9h-4Z M30 10l2 8h-3Z" fill="${f}" stroke="${s}" stroke-width="1.2" stroke-linejoin="round"/>`,
+    hr_mlong: `<path d="M20 36Q22 14 36 12Q50 14 52 36Q44 28 36 28Q28 28 20 36Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M22 34q-2 10 4 18M50 34q2 10-4 18M28 36q-1 12 3 16M44 36q1 12-3 16" stroke="${f}" stroke-width="5" stroke-linecap="round"/><path d="M26 30q14 8 28 0" fill="none" stroke="${s}" stroke-width="1.8"/>`,
+    hr_samurai: `<path d="M28 28Q30 18 36 16Q42 18 44 28Q40 24 36 24Q32 24 28 28Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><circle cx="36" cy="10" r="6" fill="${f}" stroke="${s}" stroke-width="2"/><path d="M36 16v-2" stroke="${s}" stroke-width="2.5"/>`,
+    hr_bob: `<path d="M18 42Q16 18 36 10Q56 18 54 42Q48 50 36 48Q24 50 18 42Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M22 34Q36 44 50 34" fill="none" stroke="${s}" stroke-width="2" stroke-linecap="round"/>`,
+    hr_long: `<path d="M18 38Q20 12 36 10Q52 12 54 38Q46 28 36 28Q26 28 18 38Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M20 36q-4 8 2 20M52 36q4 8-2 20M28 40q-2 14 4 22M44 40q2 14-4 22" stroke="${f}" stroke-width="6" stroke-linecap="round"/><path d="M24 32q14 8 28 0" fill="none" stroke="${s}" stroke-width="1.8"/>`,
+    hr_reggae: `<path d="M28 26Q30 14 36 12Q42 14 44 26Q40 22 36 22Q32 22 28 26Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M30 28v4H42v-4" fill="${f}" stroke="${s}" stroke-width="1.5"/><path d="M32 32v18M36 30v22M40 32v18" stroke="${f}" stroke-width="4.5" stroke-linecap="round"/><path d="M32 32v18M36 30v22M40 32v18" stroke="${s}" stroke-width="1.2" fill="none"/>`,
+    hr_spike: `<path d="M30 28Q32 18 36 16Q40 18 42 28Q38 24 36 24Q34 24 30 28Z" fill="${f}" stroke="${s}" stroke-width="2"/><path d="M36 0l4 18h-8Z M28 4l4 16h-6Z M44 4l4 16h-6Z M22 12l4 14h-5Z M50 12l4 14h-5Z M32 2l3 14h-5Z M40 2l3 14h-5Z" fill="${f}" stroke="${s}" stroke-width="1.3" stroke-linejoin="round"/>`,
+    hr_afro: `<circle cx="36" cy="22" r="16" fill="${f}" stroke="${s}" stroke-width="2.5"/><circle cx="24" cy="20" r="7" fill="${f}" stroke="${s}" stroke-width="1.5"/><circle cx="48" cy="20" r="7" fill="${f}" stroke="${s}" stroke-width="1.5"/><circle cx="36" cy="10" r="6" fill="${f}" stroke="${s}" stroke-width="1.5"/><path d="M26 34Q36 28 46 34" fill="none" stroke="${s}" stroke-width="2"/>`,
+    hr_mohawk: `<path d="M32 30Q34 22 36 20Q38 22 40 30Q38 26 36 26Q34 26 32 30Z" fill="${f}" stroke="${s}" stroke-width="2"/><path d="M36 0l3.5 20h-7Z M36 4l3 16h-6Z M36 8l2.5 14h-5Z M36 12l2 12h-4Z" fill="${f}" stroke="${s}" stroke-width="1.2" stroke-linejoin="round"/>`,
+    hr_lowbun: `<path d="M22 30Q24 14 36 12Q48 14 50 30Q42 24 36 24Q30 24 22 30Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M26 28q-2 6 2 10M46 28q2 6-2 10" fill="none" stroke="${s}" stroke-width="2"/><circle cx="36" cy="46" r="7" fill="${f}" stroke="${s}" stroke-width="2"/>`,
+    hr_twinbraid: `<path d="M24 28Q26 14 36 12Q46 14 48 28Q40 22 36 22Q32 22 24 28Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M28 26q8 4 16 0" fill="none" stroke="${s}" stroke-width="1.8"/><path d="M24 30q-2 8 0 18M24 32q2 8 0 16M48 30q2 8 0 18M48 32q-2 8 0 16" stroke="${f}" stroke-width="4" stroke-linecap="round"/><path d="M24 30q-2 8 0 18M48 30q2 8 0 18" stroke="${s}" stroke-width="1.2" fill="none"/>`,
+    hr_halfbun: `<path d="M22 34Q24 16 36 14Q48 16 50 34Q42 26 36 26Q30 26 22 34Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><circle cx="36" cy="10" r="6" fill="${f}" stroke="${s}" stroke-width="2"/><path d="M36 16v-2" stroke="${s}" stroke-width="2"/><path d="M24 34q-2 10 4 16M48 34q2 10-4 16" stroke="${f}" stroke-width="5" stroke-linecap="round"/>`,
+    hr_wolf: `<path d="M22 32Q24 14 36 12Q48 14 50 32Q42 24 36 24Q30 24 22 32Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M28 26q8 4 16 0" fill="none" stroke="${s}" stroke-width="1.8"/><path d="M18 36l6 10h-4Z M54 36l-6 10h4Z M24 42l5 12h-4Z M48 42l-5 12h4Z M36 40l3 14h-6Z" fill="${f}" stroke="${s}" stroke-width="1.2" stroke-linejoin="round"/>`,
+    hr_sidebraid: `<path d="M22 30Q24 14 36 12Q48 14 50 30Q42 24 36 24Q30 24 22 30Z" fill="${f}" stroke="${s}" stroke-width="2.5"/><path d="M42 28q4 6 6 16q2 10 0 18" stroke="${f}" stroke-width="6" stroke-linecap="round"/><path d="M42 28q4 6 6 16q2 10 0 18" stroke="${s}" stroke-width="1.4" fill="none"/><path d="M44 34q3 4 4 10M46 42q2 6 1 12" stroke="${s}" stroke-width="1.2" fill="none"/>`,
+    hr_none: `<circle cx="36" cy="32" r="16" fill="#e8bc98" stroke="${s}" stroke-width="2.5"/>`,
     hd_none: `<circle cx="36" cy="32" r="16" fill="#e8bc98" stroke="${s}" stroke-width="2.5"/><path d="M20 32Q20 14 36 14Q52 14 52 32Q44 22 36 24Q28 22 20 32Z" fill="#222" stroke="${s}" stroke-width="2"/>`,
     hn_none: `<rect x="6" y="18" width="44" height="22" rx="8" fill="#e8bc98" stroke="${s}" stroke-width="2.5"/><path d="M50 22h10a7 7 0 0 1 0 14H50" fill="#e8b890" stroke="${s}" stroke-width="2.5"/>`,
     bd_none: `<path d="M22 10L8 20l6 10 6-4v30h32V26l6 4 6-10-14-10-6 6h-16Z" fill="#e8bc98" stroke="${s}" stroke-width="2.5" stroke-linejoin="round"/><path d="M26 28l8 8M34 28l-8 8M40 28l8 8M48 28l-8 8" stroke="${grey ? '#888' : '#2a2a2a'}" stroke-width="2.6" stroke-linecap="round"/>`,
@@ -178,6 +194,7 @@ export function eqSlotOutline(slot: Slot, w = 56) {
   const s = '#2a3440';
   const o = `fill="none" stroke="${s}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"`;
   const P: Record<Slot, string> = {
+    hair: `<path d="M18 44Q20 16 36 14Q52 16 54 44Q44 30 36 32Q28 30 18 44" ${o}/><path d="M24 36q12 8 24 0" ${o}/>`,
     head: `<path d="M16 44Q36 10 56 44" ${o}/><path d="M10 44H62" ${o}/>`,
     body: `<path d="M22 12L10 22l6 10 6-4v28h28V28l6 4 6-10-12-10-6 6H28Z" ${o}/>`,
     hand: `<rect x="10" y="20" width="38" height="20" rx="7" ${o}/><path d="M48 24h10a6 6 0 0 1 0 12H48" ${o}/>`,
@@ -188,7 +205,7 @@ export function eqSlotOutline(slot: Slot, w = 56) {
 }
 // 全身人形（裝備面板與分享卡共用的配色）
 export function figSvg() {
-  const k = '#1b1b1b', SK = '#e8b890', H = equipNow('head'), A = equipNow('hand'), B = equipNow('body'), L = equipNow('legs'), F = equipNow('feet');
+  const k = '#1b1b1b', SK = '#e8b890', HR = equipNow('hair'), H = equipNow('head'), A = equipNow('hand'), B = equipNow('body'), L = equipNow('legs'), F = equipNow('feet');
   const ol = `stroke="${k}" stroke-width="3" stroke-linejoin="round"`;
   // 圖樣：每個人形只出現一次，id 固定
   const fl = (id: string, c: string) => `<pattern id="${id}" width="14" height="14" patternUnits="userSpaceOnUse"><rect width="14" height="14" fill="${c}"/><g fill="#fff3c8"><circle cx="4" cy="4" r="1.8"/><circle cx="7" cy="4" r="1.8"/><circle cx="5.5" cy="1.6" r="1.8"/><circle cx="5.5" cy="6.4" r="1.8"/></g><circle cx="5.5" cy="4" r="1.2" fill="#3a8a4a"/><circle cx="11" cy="11" r="1.5" fill="#fff3c8"/></pattern>`;
@@ -260,17 +277,46 @@ ${fl('pFlower', '#e86a8a')}${fl('pFlowerR', '#c84a5a')}
     hd_purple: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="#6a2a78" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#6a2a78" ${ol}/>`,
     hd_karakusa: `<path d="M56 62Q56 34 80 34Q104 34 104 62Q92 48 80 50Q68 48 56 62Z" fill="url(#pKara)" ${ol}/><path d="M102 56l14 6-6 6zM102 58l10 14-8 0z" fill="#e8e2d4" ${ol}/>` };
   const face = `<circle cx="80" cy="66" r="24" fill="${SK}" ${ol}/><circle cx="71" cy="66" r="2.6" fill="${k}"/><circle cx="89" cy="66" r="2.6" fill="${k}"/><path d="M73 76q7 6 14 0" fill="none" stroke="${k}" stroke-width="2.2" stroke-linecap="round"/><circle cx="66" cy="73" r="3" fill="#f0a090" opacity=".7"/><circle cx="94" cy="73" r="3" fill="#f0a090" opacity=".7"/>`;
+  const hairCol = HR.base;
+  const hairDraw = HR.id === 'hr_none' ? ''
+    : HR.id === 'hr_long'
+      ? `<path d="M54 70Q56 32 80 26Q104 32 106 70Q96 54 80 52Q64 54 54 70Z" fill="${hairCol}" ${ol}/><path d="M52 68q-6 18 4 48M108 68q6 18-4 48M66 74q-4 28 6 50M94 74q4 28-6 50" stroke="${hairCol}" stroke-width="11" stroke-linecap="round"/><path d="M60 54q20 12 40 0" fill="none" stroke="${hairCol}" stroke-width="3.5"/>`
+      : HR.id === 'hr_mlong'
+        ? `<path d="M56 66Q58 34 80 28Q102 34 104 66Q94 52 80 50Q66 52 56 66Z" fill="${hairCol}" ${ol}/><path d="M54 64q-4 14 4 36M106 64q4 14-4 36M68 68q-2 18 4 28M92 68q2 18-4 28" stroke="${hairCol}" stroke-width="9" stroke-linecap="round"/><path d="M62 52q18 10 36 0" fill="none" stroke="${hairCol}" stroke-width="3"/>`
+      : HR.id === 'hr_samurai'
+        ? `<path d="M68 48Q70 36 80 32Q90 36 92 48Q86 44 80 44Q74 44 68 48Z" fill="${hairCol}" ${ol}/><circle cx="80" cy="18" r="10" fill="${hairCol}" ${ol}/><path d="M80 28v-4" stroke="${hairCol}" stroke-width="5"/>`
+      : HR.id === 'hr_bob'
+        ? `<path d="M52 76Q50 36 80 26Q110 36 108 76Q98 86 80 82Q62 86 52 76Z" fill="${hairCol}" ${ol}/><path d="M60 52Q80 60 100 52" fill="none" stroke="${hairCol}" stroke-width="3.5" stroke-linecap="round"/>`
+      : HR.id === 'hr_reggae'
+        ? `<path d="M70 42Q72 30 80 28Q88 30 90 42Q84 36 80 36Q76 36 70 42Z" fill="${hairCol}" ${ol}/><path d="M72 48h16v6H72Z" fill="${hairCol}" ${ol}/><path d="M74 54v48M80 52v54M86 54v48" stroke="${hairCol}" stroke-width="7" stroke-linecap="round"/>`
+        : HR.id === 'hr_spike'
+          ? `<path d="M72 46Q74 36 80 32Q86 36 88 46Q84 42 80 42Q76 42 72 46Z" fill="${hairCol}" ${ol}/><path d="M80 2l6 28h-12Z M70 6l5 24h-8Z M90 6l5 24h-8Z M62 14l5 20h-7Z M98 14l5 20h-7Z M76 4l4 22h-7Z M84 4l4 22h-7Z" fill="${hairCol}" ${ol}/>`
+          : HR.id === 'hr_afro'
+            ? `<circle cx="80" cy="36" r="28" fill="${hairCol}" ${ol}/><circle cx="58" cy="34" r="12" fill="${hairCol}" ${ol}/><circle cx="102" cy="34" r="12" fill="${hairCol}" ${ol}/><circle cx="80" cy="16" r="10" fill="${hairCol}" ${ol}/><path d="M62 54Q80 46 98 54" fill="none" stroke="${hairCol}" stroke-width="3"/>`
+            : HR.id === 'hr_mohawk'
+              ? `<path d="M74 48Q76 38 80 34Q84 38 86 48Q84 44 80 44Q76 44 74 48Z" fill="${hairCol}" ${ol}/><path d="M80 4l5 30h-10Z M80 10l4 26h-8Z M80 16l3.5 22h-7Z M80 22l3 18h-6Z" fill="${hairCol}" ${ol}/>`
+              : HR.id === 'hr_lowbun'
+                ? `<path d="M56 66Q58 34 80 28Q102 34 104 66Q94 52 80 50Q66 52 56 66Z" fill="${hairCol}" ${ol}/><path d="M62 54q10 8 18 0M80 54q10 8 18 0" fill="none" stroke="${hairCol}" stroke-width="3"/><circle cx="80" cy="88" r="12" fill="${hairCol}" ${ol}/>`
+                : HR.id === 'hr_twinbraid'
+                  ? `<path d="M56 64Q58 34 80 28Q102 34 104 64Q94 50 80 48Q66 50 56 64Z" fill="${hairCol}" ${ol}/><path d="M62 52q18 8 36 0" fill="none" stroke="${hairCol}" stroke-width="3"/><path d="M58 66q-4 20 0 44M102 66q4 20 0 44" stroke="${hairCol}" stroke-width="9" stroke-linecap="round"/>`
+                  : HR.id === 'hr_halfbun'
+                    ? `<path d="M56 68Q58 36 80 30Q102 36 104 68Q94 54 80 52Q66 54 56 68Z" fill="${hairCol}" ${ol}/><circle cx="80" cy="18" r="10" fill="${hairCol}" ${ol}/><path d="M80 28v-4" stroke="${hairCol}" stroke-width="5"/><path d="M54 68q-4 16 4 36M106 68q4 16-4 36" stroke="${hairCol}" stroke-width="8" stroke-linecap="round"/>`
+                    : HR.id === 'hr_wolf'
+                      ? `<path d="M54 66Q56 34 80 28Q104 34 106 66Q96 52 80 50Q64 52 54 66Z" fill="${hairCol}" ${ol}/><path d="M62 52q18 8 36 0" fill="none" stroke="${hairCol}" stroke-width="3"/><path d="M48 70l8 18h-6Z M112 70l-8 18h6Z M58 82l7 22h-5Z M102 82l-7 22h5Z M80 78l4 24h-8Z" fill="${hairCol}" ${ol}/>`
+                      : HR.id === 'hr_sidebraid'
+                        ? `<path d="M56 64Q58 34 80 28Q102 34 104 64Q94 50 80 48Q66 50 56 64Z" fill="${hairCol}" ${ol}/><path d="M90 58q8 14 10 36q2 20-2 36" stroke="${hairCol}" stroke-width="10" stroke-linecap="round"/>`
+                        : `<path d="M66 48Q68 34 80 30Q92 34 94 48Q88 42 80 42Q72 42 66 48Z" fill="${hairCol}" ${ol}/><path d="M70 46q14 6 22-2" fill="none" stroke="${hairCol}" stroke-width="3"/><path d="M78 14l3 14h-5Z M86 15l3 12h-5Z M72 16l2.5 11h-4Z" fill="${hairCol}" ${ol}/>`;
   void PF;
   const legsDraw = B.id === 'bd_bikini'
     ? `<path d="${P}" fill="${SK}" ${ol}/><path d="M56 182h48l-4 20H60Z" fill="#e84a5c" ${ol}/>`
     : L.id === 'lg_none'
       ? `<path d="${P}" fill="${SK}" ${ol}/><path d="M56 182h48l-4 22H60Z" fill="#d8d0c4" ${ol}/>`
       : (legs[L.id] ?? legs.lg_basic);
-  return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${arm(50, 34)}${arm(110, 126)}${legsDraw}${body[B.id] ?? body.bd_basic}${face}${hd[H.id] ?? ''}${feet[F.id] ?? feet.ft_basic}</svg>`;
+  return `<svg viewBox="0 0 160 300" class="eqFig">${defs}${hood}${arm(50, 34)}${arm(110, 126)}${legsDraw}${body[B.id] ?? body.bd_basic}${face}${hairDraw}${hd[H.id] ?? ''}${feet[F.id] ?? feet.ft_basic}</svg>`;
 }
-// 裝備面板：中間大角色＋兩側方格（左：頭／衣服／手，右：褲子／鞋子）
-const EQ_LEFT: Slot[] = ['head', 'body', 'hand'];
-const EQ_RIGHT: Slot[] = ['legs', 'feet'];
+// 裝備面板：中間大角色＋兩側方格（左：頭髮／頭／衣服，右：手／褲子／鞋子）
+const EQ_LEFT: Slot[] = ['hair', 'head', 'body'];
+const EQ_RIGHT: Slot[] = ['hand', 'legs', 'feet'];
 let eqListOpen = false;
 
 function slotLabel(s: Slot) { return SLOTS.find(x => x[0] === s)![1]; }
@@ -364,7 +410,7 @@ export function eqStats(): string[] {
 }
 function currentOutfit() {
   return {
-    head: equipNow('head').id, hand: equipNow('hand').id,
+    hair: equipNow('hair').id, head: equipNow('head').id, hand: equipNow('hand').id,
     body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
   };
 }
@@ -557,7 +603,7 @@ function closeTryModal() {
 function openTryModal(item: Eq) {
   closeTryModal();
   const outfit = {
-    head: equipNow('head').id, hand: equipNow('hand').id,
+    hair: equipNow('hair').id, head: equipNow('head').id, hand: equipNow('hand').id,
     body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id,
     [item.slot]: item.id,
   };

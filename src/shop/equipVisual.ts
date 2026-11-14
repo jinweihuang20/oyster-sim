@@ -5,13 +5,14 @@ import { rebuildAvatarMerged } from '../dm/avatarMerge';
 
 /** 服飾視覺（與 main EQUIP id 對齊；只負責外觀） */
 export type EquipVis = {
-  slot: 'head' | 'hand' | 'body' | 'legs' | 'feet';
+  slot: 'hair' | 'head' | 'hand' | 'body' | 'legs' | 'feet';
   id: string;
   base: string;
   pat: 'plain' | 'flower' | 'rain' | 'camo' | 'neon' | 'tattoo' | 'dragon' | 'karakusa';
 };
 
 export type OutfitIds = {
+  hair: string;
   head: string;
   hand: string;
   body: string;
@@ -21,6 +22,21 @@ export type OutfitIds = {
 
 /** 全服飾 id 白名單（server／client 共用語意） */
 export const EQUIP_VIS: EquipVis[] = [
+  { slot: 'hair', id: 'hr_basic', base: '#5a3a28', pat: 'plain' },
+  { slot: 'hair', id: 'hr_mlong', base: '#3a2818', pat: 'plain' },
+  { slot: 'hair', id: 'hr_bob', base: '#2a1a12', pat: 'plain' },
+  { slot: 'hair', id: 'hr_long', base: '#4a2e20', pat: 'plain' },
+  { slot: 'hair', id: 'hr_reggae', base: '#2a1a10', pat: 'plain' },
+  { slot: 'hair', id: 'hr_spike', base: '#2e2418', pat: 'plain' },
+  { slot: 'hair', id: 'hr_samurai', base: '#2a1c12', pat: 'plain' },
+  { slot: 'hair', id: 'hr_afro', base: '#2c1a10', pat: 'plain' },
+  { slot: 'hair', id: 'hr_mohawk', base: '#2a2218', pat: 'plain' },
+  { slot: 'hair', id: 'hr_lowbun', base: '#3a2418', pat: 'plain' },
+  { slot: 'hair', id: 'hr_twinbraid', base: '#4a2e1c', pat: 'plain' },
+  { slot: 'hair', id: 'hr_halfbun', base: '#3a2818', pat: 'plain' },
+  { slot: 'hair', id: 'hr_wolf', base: '#2e2016', pat: 'plain' },
+  { slot: 'hair', id: 'hr_sidebraid', base: '#3a2618', pat: 'plain' },
+  { slot: 'hair', id: 'hr_none', base: '#e8bc98', pat: 'plain' },
   { slot: 'head', id: 'hd_basic', base: '#c84a5a', pat: 'flower' },
   { slot: 'head', id: 'hd_hat', base: '#d8b46a', pat: 'plain' },
   { slot: 'head', id: 'hd_fisher', base: '#4a6a8a', pat: 'plain' },
@@ -69,10 +85,10 @@ export const EQUIP_VIS: EquipVis[] = [
 
 const BY_ID = new Map(EQUIP_VIS.map(e => [e.id, e]));
 const DEFAULTS: OutfitIds = {
-  head: 'hd_basic', hand: 'hn_basic', body: 'bd_basic', legs: 'lg_basic', feet: 'ft_basic',
+  hair: 'hr_basic', head: 'hd_basic', hand: 'hn_basic', body: 'bd_basic', legs: 'lg_basic', feet: 'ft_basic',
 };
 
-const NONE_OF: OutfitIds = { head: 'hd_none', hand: 'hn_none', body: 'bd_none', legs: 'lg_none', feet: 'ft_none' };
+const NONE_OF: OutfitIds = { hair: 'hr_none', head: 'hd_none', hand: 'hn_none', body: 'bd_none', legs: 'lg_none', feet: 'ft_none' };
 
 function aliasEquipId(slot: keyof OutfitIds, id?: string) {
   if (!id) return id;
@@ -92,6 +108,7 @@ export function normalizeOutfitIds(raw?: Partial<OutfitIds> | null): OutfitIds {
     return e && e.slot === slot ? e.id : DEFAULTS[slot];
   };
   return {
+    hair: pick('hair', raw?.hair),
     head: pick('head', raw?.head),
     hand: pick('hand', raw?.hand),
     body: pick('body', raw?.body),
@@ -101,7 +118,7 @@ export function normalizeOutfitIds(raw?: Partial<OutfitIds> | null): OutfitIds {
 }
 
 export function outfitKey(o: OutfitIds) {
-  return `${o.head}|${o.hand}|${o.body}|${o.legs}|${o.feet}`;
+  return `${o.hair}|${o.head}|${o.hand}|${o.body}|${o.legs}|${o.feet}`;
 }
 
 /** 頭盔/帽子超出髮蓋頂的高度（公尺）；寵物疊坐頭頂時要往上讓這個量，不然會被擋住 */
@@ -668,6 +685,7 @@ const DET = {
   upper: 'eqUpperDet',
   leg: 'eqLegDet',
   shin: 'eqShinDet',
+  hair: 'eqHairDet',
 } as const;
 
 /** 清掉玩家服飾加裝（帽子除外）。阿婆／阿伯套完基本外觀後要呼叫，避免領子、袖套蓋到他們自己的衣服。 */
@@ -682,12 +700,689 @@ export function clearOutfitDetails(rig: PlayerRig) {
     [rig.legR, DET.leg],
     [rig.shinL, DET.shin],
     [rig.shinR, DET.shin],
+    [rig.head, DET.hair],
   ];
   for (const [p, k] of pairs) {
     if (!p) continue;
     const g = p.userData[k] as THREE.Group | undefined;
     if (g) clearGroup(g);
   }
+}
+
+function setBaseHairVisible(head: THREE.Object3D, on: boolean) {
+  head.traverse(o => {
+    if ((o as THREE.Mesh).isMesh && o.userData.baseHair) o.visible = on;
+  });
+}
+
+/**
+ * 頭 ≈ 0.28（臉 -Z）。髮型＝側視剪影一次擠出成「單一片」立體，
+ * 像 RO 立繪厚度，不再用多塊方／球拼。
+ * 剪影座標：x 前(-)後(+)，y 上；擠出寬度≈頭寬。
+ */
+function hairSilhouette(pts: [number, number][], width = 0.32) {
+  const sh = new THREE.Shape();
+  for (let i = 0; i < pts.length; i++) {
+    const [x, y] = pts[i];
+    if (i === 0) sh.moveTo(x, y);
+    else sh.lineTo(x, y);
+  }
+  sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh, {
+    depth: width,
+    bevelEnabled: true,
+    bevelThickness: 0.028,
+    bevelSize: 0.022,
+    bevelSegments: 2,
+    curveSegments: 4,
+  });
+  g.translate(0, 0, -width * 0.5);
+  // 擠出軸 Z → 左右 X；剪影 x → 世界 -Z（臉朝前）
+  g.rotateY(-Math.PI / 2);
+  return crease(g);
+}
+
+/** 剪影款（目前長髮改走 buildLongHair） */
+const HAIR_PROFILE: Record<string, [number, number][]> = {};
+
+const UP = new THREE.Vector3(0, 1, 0);
+
+/** 刺底在頭皮上，尖端沿 dir 伸出。四角錐，稜朝外才有刺蝟剪影。 */
+function addHairSpike(
+  parent: THREE.Object3D,
+  mat: THREE.Material,
+  spec: readonly [number, number, number, number, number, number, number, number],
+) {
+  const [x, y, z, dx, dy, dz, len, rad] = spec;
+  const d = new THREE.Vector3(dx, dy, dz).normalize();
+  const geo = G(`hr-spike-c-${len}-${rad}`, () => crease(new THREE.ConeGeometry(rad, len, 4)));
+  const mesh = add(parent, geo, mat, [x + d.x * len * 0.5, y + d.y * len * 0.5, z + d.z * len * 0.5]);
+  const aim = new THREE.Quaternion().setFromUnitVectors(UP, d);
+  const twist = new THREE.Quaternion().setFromAxisAngle(UP, Math.PI / 4);
+  mesh.quaternion.copy(aim).multiply(twist);
+}
+
+/**
+ * 全蓋款（短髮／長髮）：頭頂、兩側上緣、後腦互相重疊，縫不透頭皮。
+ * 前緣停在眉上，不蓋眼睛。光頭不呼叫。
+ */
+function addHairScalp(parent: THREE.Object3D, mat: THREE.Material) {
+  add(parent, G('hr-scalp-top3', () => rbox(0.30, 0.06, 0.28)), mat, [0, 0.152, 0.01]);
+  add(parent, G('hr-scalp-back3', () => rbox(0.28, 0.18, 0.075)), mat, [0, 0.07, 0.148]);
+  add(parent, G('hr-scalp-side3', () => rbox(0.055, 0.12, 0.24)), mat, [-0.152, 0.10, 0.02]);
+  add(parent, G('hr-scalp-side3', () => rbox(0.055, 0.12, 0.24)), mat, [0.152, 0.10, 0.02]);
+  add(parent, G('hr-scalp-corner3', () => rbox(0.09, 0.09, 0.07)), mat, [-0.12, 0.12, 0.125]);
+  add(parent, G('hr-scalp-corner3', () => rbox(0.09, 0.09, 0.07)), mat, [0.12, 0.12, 0.125]);
+}
+
+/**
+ * fade／undercut 頭頂殼：蓋滿有髮的頂區，側上緣與後頂和頂蓋重疊。
+ * 耳朵高度以下留空＝剃短。
+ */
+function addCrownShell(parent: THREE.Object3D, mat: THREE.Material, key: string) {
+  // 頂蓋往前接到髮際；側邊極薄貼頭（頭寬 0.28 → 面在 ±0.14）
+  add(parent, G(`${key}-top3`, () => rbox(0.26, 0.055, 0.28)), mat, [0, 0.152, -0.01]);
+  add(parent, G(`${key}-front3`, () => rbox(0.20, 0.04, 0.08)), mat, [0, 0.14, -0.12]);
+  add(parent, G(`${key}-back3`, () => rbox(0.24, 0.09, 0.07)), mat, [0, 0.12, 0.138]);
+  add(parent, G(`${key}-side3`, () => rbox(0.018, 0.055, 0.20)), mat, [-0.145, 0.13, 0.0]);
+  add(parent, G(`${key}-side3`, () => rbox(0.018, 0.055, 0.20)), mat, [0.145, 0.13, 0.0]);
+  add(parent, G(`${key}-corner3`, () => rbox(0.06, 0.06, 0.05)), mat, [-0.11, 0.13, 0.12]);
+  add(parent, G(`${key}-corner3`, () => rbox(0.06, 0.06, 0.05)), mat, [0.11, 0.13, 0.12]);
+}
+
+/**
+ * 刺蝟：動畫風幾何尖刺。往上／外放射，稜角清楚。
+ * 頭頂前緣蓋滿髮際；眼睛仍露；後腦與兩側短收。
+ */
+function buildSpikeHair(parent: THREE.Object3D, mat: THREE.Material) {
+  // 頂蓋從前髮際鋪到後頂；側邊極薄貼頭
+  add(parent, G('hr-spike-cap5', () => rbox(0.24, 0.04, 0.26)), mat, [0, 0.155, 0.0]);
+  add(parent, G('hr-spike-front5', () => rbox(0.18, 0.035, 0.07)), mat, [0, 0.14, -0.12]);
+  add(parent, G('hr-spike-nape5', () => rbox(0.14, 0.035, 0.04)), mat, [0, 0.12, 0.14]);
+  add(parent, G('hr-spike-fade5', () => rbox(0.016, 0.03, 0.12)), mat, [-0.144, 0.132, 0.02]);
+  add(parent, G('hr-spike-fade5', () => rbox(0.016, 0.03, 0.12)), mat, [0.144, 0.132, 0.02]);
+  // 側刺少外張，貼齊頭側
+  const spikes: [number, number, number, number, number, number, number, number][] = [
+    [0.0, 0.165, -0.08, 0.05, 0.85, -0.5, 0.18, 0.032],
+    [-0.045, 0.165, -0.07, -0.22, 0.9, -0.35, 0.16, 0.028],
+    [0.05, 0.165, -0.07, 0.22, 0.9, -0.38, 0.17, 0.028],
+    [-0.07, 0.16, -0.02, -0.35, 0.9, -0.08, 0.13, 0.024],
+    [0.07, 0.16, -0.02, 0.35, 0.9, -0.08, 0.13, 0.024],
+    [-0.04, 0.17, 0.02, -0.15, 0.96, 0.1, 0.14, 0.026],
+    [0.04, 0.17, 0.02, 0.15, 0.96, 0.1, 0.14, 0.026],
+    [0.0, 0.17, 0.05, 0, 0.9, 0.3, 0.15, 0.028],
+    [-0.055, 0.16, 0.06, -0.2, 0.9, 0.3, 0.11, 0.022],
+    [0.055, 0.16, 0.06, 0.2, 0.9, 0.3, 0.11, 0.022],
+    [0.0, 0.155, 0.1, 0, 0.75, 0.55, 0.10, 0.022],
+  ];
+  for (const s of spikes) addHairSpike(parent, mat, s);
+}
+
+/**
+ * 雷鬼：undercut 髒辮。頭頂從前髮際蓋滿，後頂束起垂下。
+ */
+function buildDreadHair(parent: THREE.Object3D, mat: THREE.Material) {
+  addCrownShell(parent, mat, 'hr-dread');
+  add(parent, G('hr-dread-knot', () => rbox(0.10, 0.06, 0.08)), mat, [0, 0.125, 0.125]);
+  addDread(parent, mat, [-0.045, 0.135, 0.125], [1, 0, 0.12], 0.10, 0.018);
+  addDread(parent, mat, [-0.035, 0.115, 0.13], [1, -0.08, 0.1], 0.09, 0.016);
+  // 前頂也有辮根，避免前額禿
+  const onTop: [number, number, number, number, number, number, number, number][] = [
+    [0.0, 0.16, -0.1, 0, 0.4, 0.9, 0.14, 0.028],
+    [-0.06, 0.16, -0.08, 0.15, 0.35, 0.9, 0.15, 0.026],
+    [0.06, 0.16, -0.08, -0.15, 0.35, 0.9, 0.15, 0.026],
+    [-0.06, 0.17, -0.02, 0.18, -0.05, 0.9, 0.16, 0.028],
+    [0.06, 0.17, -0.02, -0.18, -0.05, 0.9, 0.16, 0.028],
+    [-0.03, 0.18, 0.02, 0.08, -0.1, 0.9, 0.14, 0.030],
+    [0.03, 0.18, 0.02, -0.08, -0.1, 0.9, 0.14, 0.030],
+    [0.0, 0.185, 0.05, 0, -0.15, 0.9, 0.12, 0.032],
+  ];
+  for (const s of onTop) addDread(parent, mat, [s[0], s[1], s[2]], [s[3], s[4], s[5]], s[6], s[7]);
+  const hang: [number, number, number, number, number, number, number, number][] = [
+    [0.0, 0.10, 0.145, 0, -1, 0.35, 0.42, 0.032],
+    [-0.04, 0.10, 0.135, -0.1, -1, 0.3, 0.38, 0.028],
+    [0.04, 0.10, 0.135, 0.1, -1, 0.3, 0.40, 0.028],
+    [-0.07, 0.11, 0.125, -0.15, -1, 0.22, 0.34, 0.026],
+    [0.07, 0.11, 0.125, 0.15, -1, 0.22, 0.36, 0.026],
+    [0.0, 0.09, 0.16, 0, -1, 0.45, 0.46, 0.030],
+  ];
+  for (const s of hang) addDread(parent, mat, [s[0], s[1], s[2]], [s[3], s[4], s[5]], s[6], s[7]);
+}
+
+/** 辮根在 base，沿 dir 垂下。上端較細。 */
+function addDread(
+  parent: THREE.Object3D,
+  mat: THREE.Material,
+  base: [number, number, number],
+  dir: [number, number, number],
+  len: number,
+  rad: number,
+) {
+  const d = new THREE.Vector3(...dir).normalize();
+  const geo = G(`hr-dread-${len}-${rad}`, () => rcyl(rad * 0.72, rad, len, 6));
+  const mesh = add(parent, geo, mat, [
+    base[0] + d.x * len * 0.5,
+    base[1] + d.y * len * 0.5,
+    base[2] + d.z * len * 0.5,
+  ]);
+  mesh.quaternion.setFromUnitVectors(UP, d);
+}
+
+/**
+ * 男生短髮：短寸 crop。兩側漸短、頭頂略亂尖、側掃瀏海在眉上。
+ * 眼睛與耳朵全露；不要頭盔罩。
+ */
+function buildCropHair(parent: THREE.Object3D, mat: THREE.Material) {
+  // 短剪影：瀏海停眉上，後腦收短，寬度略小於耳距
+  add(parent, G('hr-crop-soft', () => {
+    const sh = new THREE.Shape();
+    sh.moveTo(-0.14, 0.095);
+    sh.quadraticCurveTo(-0.15, 0.14, -0.06, 0.195);
+    sh.quadraticCurveTo(0.02, 0.215, 0.10, 0.175);
+    sh.quadraticCurveTo(0.145, 0.10, 0.135, 0.04);
+    sh.quadraticCurveTo(0.12, -0.01, 0.05, -0.03);
+    sh.quadraticCurveTo(0.0, -0.035, -0.05, -0.01);
+    sh.quadraticCurveTo(-0.10, 0.05, -0.14, 0.095);
+    const g = new THREE.ExtrudeGeometry(sh, {
+      depth: 0.28,
+      bevelEnabled: true,
+      bevelThickness: 0.022,
+      bevelSize: 0.018,
+      bevelSegments: 2,
+      curveSegments: 8,
+    });
+    g.translate(0, 0, -0.14);
+    g.rotateY(-Math.PI / 2);
+    return crease(g);
+  }), mat, [0, 0.02, 0]);
+  // 側掃瀏海：眉上、往一側偏
+  add(parent, G('hr-crop-bang', () => rbox(0.12, 0.035, 0.03)), mat, [0.02, 0.085, -0.152]);
+  add(parent, G('hr-crop-bangTip', () => rbox(0.05, 0.04, 0.028)), mat, [0.08, 0.075, -0.148]);
+  // 頭頂略亂的短刺（比刺蝟短）
+  const tufts: [number, number, number, number, number, number, number, number][] = [
+    [0.02, 0.175, -0.04, 0.12, 0.95, -0.25, 0.08, 0.024],
+    [-0.04, 0.17, -0.02, -0.1, 0.97, -0.12, 0.07, 0.022],
+    [0.05, 0.17, 0.0, 0.15, 0.96, -0.08, 0.075, 0.022],
+    [0, 0.17, 0.04, 0, 0.98, 0.1, 0.065, 0.020],
+    [-0.05, 0.165, 0.05, -0.12, 0.96, 0.15, 0.06, 0.018],
+  ];
+  for (const s of tufts) addHairSpike(parent, mat, s);
+}
+
+/**
+ * 後腦全蓋：頭頂殼之外再加厚後牆與後頸，不透頭皮。
+ */
+function addFullBackCover(parent: THREE.Object3D, mat: THREE.Material, key: string) {
+  addHairScalp(parent, mat);
+  add(parent, G(`${key}-backWall`, () => rbox(0.30, 0.20, 0.09)), mat, [0, 0.02, 0.155]);
+  add(parent, G(`${key}-nape`, () => rbox(0.26, 0.14, 0.08)), mat, [0, -0.06, 0.14]);
+  add(parent, G(`${key}-napeLow`, () => rbox(0.22, 0.10, 0.07)), mat, [0, -0.14, 0.12]);
+  add(parent, G(`${key}-sideBack`, () => rbox(0.06, 0.16, 0.12)), mat, [-0.15, 0.0, 0.08]);
+  add(parent, G(`${key}-sideBack`, () => rbox(0.06, 0.16, 0.12)), mat, [0.15, 0.0, 0.08]);
+}
+
+/**
+ * 沿路徑做連續麻花：中軸柱＋重疊球節（球與球、球與柱都交疊，不分離）。
+ * 路徑應從後腦底部往前延伸。
+ */
+function addBraidChain(
+  parent: THREE.Object3D,
+  mat: THREE.Material,
+  key: string,
+  points: readonly [number, number, number][],
+  rad: number,
+) {
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]!;
+    const b = points[i + 1]!;
+    const dir = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    const len = dir.length();
+    if (len < 1e-5) continue;
+    dir.multiplyScalar(1 / len);
+    const spine = add(
+      parent,
+      G(`${key}-spine-${rad}`, () => rcyl(rad * 0.72, rad * 0.72, len * 1.12, 6)),
+      mat,
+      [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5, (a[2] + b[2]) * 0.5],
+    );
+    spine.quaternion.setFromUnitVectors(UP, dir);
+  }
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i]!;
+    const side = i % 2 === 0 ? 1 : -1;
+    add(
+      parent,
+      G(`${key}-ball-${rad}`, () => crease(new THREE.SphereGeometry(rad * 1.05, 6, 5))),
+      mat,
+      [p[0] + side * rad * 0.22, p[1], p[2]],
+    );
+    add(
+      parent,
+      G(`${key}-ballCore-${rad}`, () => crease(new THREE.SphereGeometry(rad * 0.85, 6, 5))),
+      mat,
+      [p[0] - side * rad * 0.12, p[1], p[2]],
+    );
+  }
+}
+
+/**
+ * 低丸子頭：後頸低髻＋兩側簾式瀏海。髮際乾淨，耳與眼全露。
+ */
+function buildLowBunHair(parent: THREE.Object3D, mat: THREE.Material) {
+  addFullBackCover(parent, mat, 'hr-lowbun');
+  // 簾式瀏海：分左右、停眉上
+  add(parent, G('hr-lowbun-bangL', () => rbox(0.06, 0.05, 0.035)), mat, [-0.07, 0.095, -0.145]);
+  add(parent, G('hr-lowbun-bangR', () => rbox(0.06, 0.05, 0.035)), mat, [0.07, 0.095, -0.145]);
+  add(parent, G('hr-lowbun-bangTipL', () => rbox(0.04, 0.06, 0.028)), mat, [-0.095, 0.07, -0.13]);
+  add(parent, G('hr-lowbun-bangTipR', () => rbox(0.04, 0.06, 0.028)), mat, [0.095, 0.07, -0.13]);
+  // 後腦收束到後頸低髻（與後蓋重疊）
+  add(parent, G('hr-lowbun-gather', () => rbox(0.16, 0.10, 0.08)), mat, [0, -0.04, 0.145]);
+  add(parent, G('hr-lowbun-stem', () => rcyl(0.035, 0.045, 0.05, 6)), mat, [0, -0.10, 0.15]);
+  add(parent, G('hr-lowbun-bun', () => crease(new THREE.SphereGeometry(0.075, 8, 6))), mat, [0, -0.14, 0.15]);
+  add(parent, G('hr-lowbun-bunTip', () => crease(new THREE.SphereGeometry(0.04, 6, 5))), mat, [0, -0.18, 0.145]);
+}
+
+/**
+ * 雙麻花辮：中分、眉上碎瀏海；辮根在後腦底部，往前披到肩胸。
+ */
+function buildTwinBraidHair(parent: THREE.Object3D, mat: THREE.Material) {
+  addFullBackCover(parent, mat, 'hr-twin');
+  // 中分短碎瀏海（嚴格眉上）
+  add(parent, G('hr-twin-bangL', () => rbox(0.055, 0.035, 0.03)), mat, [-0.05, 0.10, -0.148]);
+  add(parent, G('hr-twin-bangR', () => rbox(0.055, 0.035, 0.03)), mat, [0.05, 0.10, -0.148]);
+  add(parent, G('hr-twin-part', () => rbox(0.02, 0.03, 0.04)), mat, [0, 0.145, -0.12]);
+  // 後頸總根，再分左右繞到胸前
+  add(parent, G('hr-twin-root', () => rbox(0.14, 0.08, 0.08)), mat, [0, -0.08, 0.13]);
+  for (const s of [-1, 1]) {
+    add(parent, G('hr-twin-base', () => rbox(0.06, 0.07, 0.07)), mat, [s * 0.06, -0.10, 0.10]);
+    // 後腦底 → 側肩 → 胸前垂下（-Z 在身體前方可見）
+    const chain: [number, number, number][] = [
+      [s * 0.05, -0.10, 0.13],
+      [s * 0.12, -0.12, 0.07],
+      [s * 0.16, -0.14, 0.01],
+      [s * 0.17, -0.16, -0.06],
+      [s * 0.15, -0.20, -0.12],
+      [s * 0.13, -0.26, -0.15],
+      [s * 0.12, -0.34, -0.16],
+      [s * 0.11, -0.42, -0.16],
+      [s * 0.10, -0.50, -0.15],
+      [s * 0.09, -0.58, -0.14],
+    ];
+    addBraidChain(parent, mat, `hr-twin-${s}`, chain, 0.032);
+  }
+}
+
+/**
+ * 半丸子頭：頭頂小髻＋下半肩長披落；額與眼全露。
+ */
+function buildHalfBunHair(parent: THREE.Object3D, mat: THREE.Material) {
+  addFullBackCover(parent, mat, 'hr-half');
+  // 上半收成頂髻
+  add(parent, G('hr-half-top', () => rbox(0.22, 0.045, 0.22)), mat, [0, 0.155, 0.0]);
+  add(parent, G('hr-half-front', () => rbox(0.14, 0.03, 0.05)), mat, [0, 0.135, -0.12]);
+  add(parent, G('hr-half-stem', () => rcyl(0.025, 0.032, 0.04, 6)), mat, [0, 0.19, 0.02]);
+  add(parent, G('hr-half-bun', () => crease(new THREE.SphereGeometry(0.055, 8, 6))), mat, [0, 0.235, 0.02]);
+  // 下半肩長層：後腦與兩側垂落（與後蓋重疊）
+  add(parent, G('hr-half-back', () => {
+    const sh = new THREE.Shape();
+    sh.moveTo(-0.10, 0.10);
+    sh.quadraticCurveTo(-0.02, 0.14, 0.10, 0.10);
+    sh.quadraticCurveTo(0.14, 0.0, 0.13, -0.14);
+    sh.quadraticCurveTo(0.10, -0.30, 0.0, -0.32);
+    sh.quadraticCurveTo(-0.10, -0.30, -0.13, -0.14);
+    sh.quadraticCurveTo(-0.14, 0.0, -0.10, 0.10);
+    const g = new THREE.ExtrudeGeometry(sh, {
+      depth: 0.26,
+      bevelEnabled: true,
+      bevelThickness: 0.02,
+      bevelSize: 0.016,
+      bevelSegments: 2,
+      curveSegments: 6,
+    });
+    g.translate(0, 0, -0.08);
+    g.rotateY(-Math.PI / 2);
+    return crease(g);
+  }), mat, [0, -0.02, 0.08]);
+  for (const s of [-1, 1]) {
+    const strand = add(parent, G('hr-half-side', () => rbox(0.05, 0.20, 0.06)), mat, [s * 0.14, -0.14, 0.02]);
+    strand.rotation.z = s * 0.18;
+  }
+}
+
+/**
+ * 狼尾剪：肩長層次、末端外翻碎翹；眉上碎瀏海，眼臉全露。
+ */
+function buildWolfHair(parent: THREE.Object3D, mat: THREE.Material) {
+  addFullBackCover(parent, mat, 'hr-wolf');
+  add(parent, G('hr-wolf-soft', () => {
+    const sh = new THREE.Shape();
+    sh.moveTo(-0.13, 0.095);
+    sh.quadraticCurveTo(-0.14, 0.15, -0.05, 0.21);
+    sh.quadraticCurveTo(0.04, 0.23, 0.12, 0.17);
+    sh.quadraticCurveTo(0.16, 0.08, 0.15, -0.02);
+    sh.quadraticCurveTo(0.14, -0.14, 0.10, -0.24);
+    sh.quadraticCurveTo(0.04, -0.30, -0.02, -0.26);
+    sh.quadraticCurveTo(-0.06, -0.14, -0.08, -0.02);
+    sh.quadraticCurveTo(-0.10, 0.05, -0.13, 0.095);
+    const g = new THREE.ExtrudeGeometry(sh, {
+      depth: 0.30,
+      bevelEnabled: true,
+      bevelThickness: 0.022,
+      bevelSize: 0.016,
+      bevelSegments: 2,
+      curveSegments: 8,
+    });
+    g.translate(0, 0, -0.14);
+    g.rotateY(-Math.PI / 2);
+    return crease(g);
+  }), mat, [0, 0.02, 0]);
+  // 眉上碎瀏海
+  add(parent, G('hr-wolf-bang', () => rbox(0.14, 0.03, 0.028)), mat, [0, 0.095, -0.15]);
+  add(parent, G('hr-wolf-bangTip', () => rbox(0.04, 0.035, 0.024)), mat, [-0.06, 0.085, -0.145]);
+  add(parent, G('hr-wolf-bangTip', () => rbox(0.04, 0.035, 0.024)), mat, [0.05, 0.088, -0.145]);
+  // 層次外翻尖束
+  const tufts: [number, number, number, number, number, number, number, number][] = [
+    [-0.12, 0.02, -0.02, -0.7, -0.2, -0.4, 0.09, 0.022],
+    [0.12, 0.02, -0.02, 0.7, -0.2, -0.4, 0.09, 0.022],
+    [-0.11, -0.08, 0.02, -0.65, -0.45, 0.1, 0.10, 0.024],
+    [0.11, -0.08, 0.02, 0.65, -0.45, 0.1, 0.10, 0.024],
+    [-0.08, -0.16, 0.04, -0.45, -0.7, 0.2, 0.09, 0.022],
+    [0.08, -0.16, 0.04, 0.45, -0.7, 0.2, 0.09, 0.022],
+    [0.0, -0.18, 0.08, 0, -0.6, 0.6, 0.10, 0.024],
+    [-0.05, 0.12, 0.08, -0.3, 0.2, 0.8, 0.08, 0.02],
+    [0.05, 0.12, 0.08, 0.3, 0.2, 0.8, 0.08, 0.02],
+  ];
+  for (const s of tufts) addHairSpike(parent, mat, s);
+}
+
+/**
+ * 側編麻花：辮根在後腦底部，往前披一肩；額前梳起，耳眼全露。
+ */
+function buildSideBraidHair(parent: THREE.Object3D, mat: THREE.Material) {
+  addFullBackCover(parent, mat, 'hr-side');
+  // 額前梳起、無瀏海蓋臉
+  add(parent, G('hr-side-sweep', () => rbox(0.16, 0.035, 0.05)), mat, [0.02, 0.14, -0.12]);
+  add(parent, G('hr-side-sweepL', () => rbox(0.05, 0.04, 0.04)), mat, [-0.1, 0.12, -0.1]);
+  // 後頸總根 → 右肩繞到胸前
+  add(parent, G('hr-side-gather', () => rbox(0.14, 0.09, 0.09)), mat, [0.02, -0.08, 0.13]);
+  const chain: [number, number, number][] = [
+    [0.03, -0.10, 0.13],
+    [0.10, -0.12, 0.07],
+    [0.15, -0.14, 0.01],
+    [0.16, -0.16, -0.06],
+    [0.14, -0.20, -0.12],
+    [0.12, -0.26, -0.15],
+    [0.11, -0.34, -0.16],
+    [0.10, -0.42, -0.16],
+    [0.09, -0.50, -0.15],
+    [0.08, -0.58, -0.14],
+    [0.07, -0.66, -0.13],
+  ];
+  addBraidChain(parent, mat, 'hr-side', chain, 0.034);
+  // 左肩側披落，蓋住左後側
+  const loose = add(parent, G('hr-side-loose', () => rbox(0.055, 0.22, 0.06)), mat, [-0.13, -0.10, 0.04]);
+  loose.rotation.z = -0.2;
+  const loose2 = add(parent, G('hr-side-loose2', () => rbox(0.05, 0.18, 0.05)), mat, [-0.12, -0.18, 0.06]);
+  loose2.rotation.z = -0.15;
+}
+
+/**
+ * 爆炸頭：圓潤蓬鬆 afro。幾何小塊堆成雲狀球體，停在眉上；額、眼、臉全露。
+ */
+function buildAfroHair(parent: THREE.Object3D, mat: THREE.Material) {
+  // 頭頂銜接，避免雲體與頭皮脫縫
+  add(parent, G('hr-afro-cap', () => rbox(0.22, 0.04, 0.22)), mat, [0, 0.155, 0.0]);
+  add(parent, G('hr-afro-front', () => rbox(0.14, 0.03, 0.05)), mat, [0, 0.14, -0.11]);
+  // 主雲體：低面數球，扁圓、底緣停眉上
+  add(parent, G('hr-afro-cloud', () => {
+    const g = crease(new THREE.SphereGeometry(0.20, 8, 6));
+    g.scale(1.15, 0.95, 1.1);
+    return g;
+  }), mat, [0, 0.28, 0.0]);
+  // 幾何捲塊：四面／低面球疊出雲邊與質感
+  const curls: [number, number, number, number][] = [
+    [0.0, 0.36, -0.06, 0.09],
+    [-0.12, 0.30, -0.04, 0.085],
+    [0.12, 0.30, -0.04, 0.085],
+    [-0.14, 0.26, 0.06, 0.08],
+    [0.14, 0.26, 0.06, 0.08],
+    [-0.08, 0.32, 0.12, 0.08],
+    [0.08, 0.32, 0.12, 0.08],
+    [0.0, 0.28, 0.16, 0.075],
+    [-0.10, 0.22, -0.08, 0.07],
+    [0.10, 0.22, -0.08, 0.07],
+    [0.0, 0.22, -0.12, 0.065],
+    [-0.16, 0.24, 0.0, 0.07],
+    [0.16, 0.24, 0.0, 0.07],
+    [0.0, 0.40, 0.02, 0.07],
+  ];
+  for (const [x, y, z, r] of curls) {
+    add(parent, G(`hr-afro-curl-${r}`, () => crease(new THREE.SphereGeometry(r, 6, 5))), mat, [x, y, z]);
+  }
+}
+
+/**
+ * 飛機頭：兩側剃短，中央一脊幾何尖刺從額際到後頸。
+ * 額、眼、臉全露；尖刺稜角清楚，不用大塊方磚。
+ */
+function buildMohawkHair(parent: THREE.Object3D, mat: THREE.Material) {
+  // 中央窄脊底座（從前髮際到後腦）
+  add(parent, G('hr-mohawk-ridge', () => rbox(0.055, 0.04, 0.28)), mat, [0, 0.155, 0.0]);
+  add(parent, G('hr-mohawk-front', () => rbox(0.045, 0.03, 0.05)), mat, [0, 0.14, -0.13]);
+  add(parent, G('hr-mohawk-nape', () => rbox(0.04, 0.03, 0.04)), mat, [0, 0.12, 0.14]);
+  // 極薄側 fade，表示剃短但不佔體積
+  add(parent, G('hr-mohawk-fade', () => rbox(0.012, 0.022, 0.10)), mat, [-0.09, 0.135, 0.0]);
+  add(parent, G('hr-mohawk-fade', () => rbox(0.012, 0.022, 0.10)), mat, [0.09, 0.135, 0.0]);
+  // 中央尖脊：從前到後一排向上／略後仰的刺
+  const spikes: [number, number, number, number, number, number, number, number][] = [
+    [0, 0.16, -0.12, 0, 0.85, -0.45, 0.13, 0.028],
+    [0, 0.165, -0.08, 0, 0.95, -0.25, 0.16, 0.030],
+    [0, 0.17, -0.04, 0, 1.0, -0.1, 0.18, 0.032],
+    [0, 0.175, 0.0, 0, 1.0, 0.05, 0.19, 0.032],
+    [0, 0.17, 0.04, 0, 0.98, 0.2, 0.17, 0.030],
+    [0, 0.165, 0.08, 0, 0.9, 0.35, 0.14, 0.028],
+    [0, 0.155, 0.12, 0, 0.75, 0.55, 0.11, 0.024],
+  ];
+  for (const s of spikes) addHairSpike(parent, mat, s);
+}
+
+/**
+ * 武士頭：現代 undercut ＋頭頂緊紮小髻。
+ * 兩側／耳上剃短；額前全露；頭髮往後收成頂髻。
+ */
+function buildSamuraiHair(parent: THREE.Object3D, mat: THREE.Material) {
+  // 頂蓋從前髮際鋪滿再往後收；側邊極薄貼頭
+  add(parent, G('hr-sam-top3', () => rbox(0.24, 0.045, 0.26)), mat, [0, 0.155, 0.0]);
+  add(parent, G('hr-sam-front3', () => rbox(0.18, 0.035, 0.07)), mat, [0, 0.14, -0.12]);
+  add(parent, G('hr-sam-fade3', () => rbox(0.016, 0.032, 0.14)), mat, [-0.144, 0.132, 0.0]);
+  add(parent, G('hr-sam-fade3', () => rbox(0.016, 0.032, 0.14)), mat, [0.144, 0.132, 0.0]);
+  // 後頂收束
+  add(parent, G('hr-sam-back3', () => rbox(0.16, 0.06, 0.07)), mat, [0, 0.135, 0.13]);
+  add(parent, G('hr-sam-gather3', () => rbox(0.08, 0.05, 0.08)), mat, [0, 0.155, 0.10]);
+  // 髻柱＋緊湊頂髻
+  add(parent, G('hr-sam-stem', () => rcyl(0.022, 0.028, 0.045, 6)), mat, [0, 0.19, 0.08]);
+  add(parent, G('hr-sam-bun', () => crease(new THREE.SphereGeometry(0.055, 8, 6))), mat, [0, 0.23, 0.08]);
+  add(parent, G('hr-sam-bunTip', () => crease(new THREE.SphereGeometry(0.028, 6, 5))), mat, [0, 0.265, 0.07]);
+}
+
+/**
+ * 男生長髮：肩長波浪。額前連成一體、不中分；臉與眼睛全露；肩上分層。
+ */
+function buildMaleLongHair(parent: THREE.Object3D, mat: THREE.Material) {
+  add(parent, G('hr-mlong-soft2', () => {
+    const sh = new THREE.Shape();
+    // 額際整片停眉上；後片到肩
+    sh.moveTo(-0.12, 0.095);
+    sh.quadraticCurveTo(-0.135, 0.15, -0.05, 0.21);
+    sh.quadraticCurveTo(0.04, 0.23, 0.12, 0.17);
+    sh.quadraticCurveTo(0.16, 0.08, 0.15, -0.04);
+    sh.quadraticCurveTo(0.14, -0.16, 0.10, -0.26);
+    sh.quadraticCurveTo(0.04, -0.32, -0.02, -0.28);
+    sh.quadraticCurveTo(-0.05, -0.16, -0.06, -0.04);
+    sh.quadraticCurveTo(-0.08, 0.04, -0.12, 0.095);
+    const g = new THREE.ExtrudeGeometry(sh, {
+      depth: 0.29,
+      bevelEnabled: true,
+      bevelThickness: 0.026,
+      bevelSize: 0.02,
+      bevelSegments: 2,
+      curveSegments: 8,
+    });
+    g.translate(0, 0, -0.145);
+    g.rotateY(-Math.PI / 2);
+    return crease(g);
+  }), mat, [0, 0.02, 0]);
+  // 肩上幾何分股
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const strand = add(
+        parent,
+        G(`hr-mlong-strand-${i}`, () => rbox(0.035, 0.14 + i * 0.02, 0.045)),
+        mat,
+        [s * (0.11 + i * 0.025), -0.16 - i * 0.04, 0.02 + i * 0.02],
+      );
+      strand.rotation.z = s * (0.2 + i * 0.08);
+      strand.rotation.x = 0.12 + i * 0.06;
+    }
+  }
+}
+
+/**
+ * 女生長髮：波浪披肩。額前連成一體、不中分；不蓋眼；肩上有層次捲。
+ */
+function buildLongHair(parent: THREE.Object3D, mat: THREE.Material) {
+  add(parent, G('hr-long-soft2', () => {
+    const sh = new THREE.Shape();
+    // 額際整片停眉上，不中分；後片波浪垂到胸前
+    sh.moveTo(-0.13, 0.095);
+    sh.quadraticCurveTo(-0.145, 0.15, -0.06, 0.22);
+    sh.quadraticCurveTo(0.04, 0.245, 0.13, 0.18);
+    sh.quadraticCurveTo(0.175, 0.08, 0.16, -0.06);
+    sh.quadraticCurveTo(0.155, -0.20, 0.13, -0.34);
+    sh.quadraticCurveTo(0.08, -0.48, 0.0, -0.45);
+    sh.quadraticCurveTo(-0.04, -0.32, -0.05, -0.16);
+    sh.quadraticCurveTo(-0.06, -0.04, -0.10, 0.05);
+    sh.quadraticCurveTo(-0.12, 0.08, -0.13, 0.095);
+    const g = new THREE.ExtrudeGeometry(sh, {
+      depth: 0.30,
+      bevelEnabled: true,
+      bevelThickness: 0.03,
+      bevelSize: 0.024,
+      bevelSegments: 3,
+      curveSegments: 10,
+    });
+    g.translate(0, 0, -0.15);
+    g.rotateY(-Math.PI / 2);
+    return crease(g);
+  }), mat, [0, 0.02, 0]);
+  // 肩上層次捲
+  for (const s of [-1, 1]) {
+    const curl = add(parent, G('hr-long-curl', () => rbox(0.07, 0.16, 0.09)), mat, [s * 0.145, -0.28, 0.04]);
+    curl.rotation.z = s * 0.35;
+    curl.rotation.x = 0.2;
+    const curl2 = add(parent, G('hr-long-curl2', () => rbox(0.055, 0.12, 0.07)), mat, [s * 0.12, -0.38, 0.08]);
+    curl2.rotation.z = s * 0.4;
+    curl2.rotation.x = 0.35;
+  }
+}
+
+/**
+ * 女生短髮：單一弧線剪影擠出成圓潤鮑伯。
+ * 平滑瀏海與下巴線，自然頂部弧度；寬度略小於耳距，耳朵會露出。
+ */
+function buildBobHair(parent: THREE.Object3D, mat: THREE.Material) {
+  add(parent, G('hr-bob-soft2', () => {
+    const sh = new THREE.Shape();
+    // 側視：前(-)後(+)。瀏海底停在眉上（y≥0.08），眼睛 y≈0.02 要露出。
+    sh.moveTo(-0.15, 0.09);
+    sh.quadraticCurveTo(-0.16, 0.15, -0.08, 0.21);
+    sh.quadraticCurveTo(0.02, 0.245, 0.11, 0.20);
+    sh.quadraticCurveTo(0.175, 0.12, 0.165, 0.02);
+    sh.quadraticCurveTo(0.16, -0.08, 0.08, -0.145);
+    sh.quadraticCurveTo(0.0, -0.165, -0.06, -0.10);
+    sh.quadraticCurveTo(-0.10, -0.02, -0.12, 0.06);
+    sh.quadraticCurveTo(-0.14, 0.08, -0.15, 0.09);
+    const g = new THREE.ExtrudeGeometry(sh, {
+      depth: 0.29,
+      bevelEnabled: true,
+      bevelThickness: 0.028,
+      bevelSize: 0.022,
+      bevelSegments: 3,
+      curveSegments: 10,
+    });
+    g.translate(0, 0, -0.145);
+    g.rotateY(-Math.PI / 2);
+    return crease(g);
+  }), mat, [0, 0.02, 0]);
+}
+
+/** 頭髮：剪影款一個擠出 mesh；其餘各自組 */
+function buildHair(rig: PlayerRig, hair: EquipVis) {
+  const g = ensureDet(rig.head, DET.hair);
+  setBaseHairVisible(rig.head, false);
+  if (hair.id === 'hr_none') return;
+  const mat = rig.outfitMats.hair[0];
+  if (!mat) return;
+  if (hair.id === 'hr_basic') {
+    buildCropHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_mlong') {
+    buildMaleLongHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_samurai') {
+    buildSamuraiHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_afro') {
+    buildAfroHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_mohawk') {
+    buildMohawkHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_lowbun') {
+    buildLowBunHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_twinbraid') {
+    buildTwinBraidHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_halfbun') {
+    buildHalfBunHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_wolf') {
+    buildWolfHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_sidebraid') {
+    buildSideBraidHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_bob') {
+    buildBobHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_long') {
+    buildLongHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_spike') {
+    buildSpikeHair(g, mat);
+    return;
+  }
+  if (hair.id === 'hr_reggae') {
+    buildDreadHair(g, mat);
+    return;
+  }
+  const profile = HAIR_PROFILE[hair.id];
+  if (!profile) return;
+  addHairScalp(g, mat);
+  add(g, hairSilhouette(profile, 0.32), mat, [0, 0.02, 0]);
 }
 
 function add(
@@ -884,6 +1579,7 @@ function buildBodyDetails(rig: PlayerRig, body: EquipVis) {
       add(ug, G('haw-cuff', () => rcyl(0.07, 0.068, 0.028, 8)), cuffM, [0, 0.11, 0]);
     }
   } else if (body.id === 'bd_nightshort') {
+    // 短打只穿軀幹：手臂不加袖／袖口（保持裸臂）
     const cloth = texM;
     const dark = solid(0x1a2438, 'ns-dark', { roughness: 0.82 });
     const cream = solid(0xe8e2d4, 'ns-tie', { roughness: 0.7 });
@@ -893,13 +1589,6 @@ function buildBodyDetails(rig: PlayerRig, body: EquipVis) {
     add(g, G('ns-tie', () => rbox(0.055, 0.016, 0.016)), cream, [-0.05, 0.05, -0.122]);
     add(g, G('ns-tie', () => rbox(0.055, 0.016, 0.016)), cream, [0.05, 0.05, -0.122]);
     add(g, G('ns-knot', () => rbox(0.03, 0.03, 0.02)), cream, [0, 0.05, -0.128]);
-    const cuffM = solid(0x1a2438, 'ns-cuff', { roughness: 0.8 });
-    for (const arm of [rig.upperL, rig.upperR]) {
-      if (!arm) continue;
-      const ug = ensureDet(arm, DET.upper);
-      add(ug, G('ns-slv', () => rbox(0.125, 0.15, 0.125)), cloth, [0, 0.02, 0]);
-      add(ug, G('ns-cuff', () => rcyl(0.07, 0.068, 0.026, 8)), cuffM, [0, 0.105, 0]);
-    }
   } else if (body.id === 'bd_none') {
     // 衣服不穿：膚色軀幹上的 X 字胸貼（沿用原本裸體外觀）
     const tape = solid(0x2a2a2a, 'nude-x', { roughness: 0.88, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
@@ -1065,6 +1754,7 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   const o = normalizeOutfitIds(raw);
   const mats = rig.outfitMats;
   if (!mats) return o;
+  const hair = BY_ID.get(o.hair)!;
   const head = BY_ID.get(o.head)!;
   const hand = BY_ID.get(o.hand)!;
   const body = BY_ID.get(o.body)!;
@@ -1072,7 +1762,7 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   const feet = BY_ID.get(o.feet)!;
   const SKIN_HEX = '#e8bc98';
   const shirtless = body.id === 'bd_bikini' || body.id === 'bd_none';
-  const sleeveless = body.id === 'bd_singlet';
+  const sleeveless = body.id === 'bd_singlet' || body.id === 'bd_nightshort';
   if (body.id === 'bd_bikini') {
     for (const m of mats.body) paintSolid(m, SKIN_HEX);
     for (const m of mats.legs) paintSolid(m, SKIN_HEX);
@@ -1085,7 +1775,8 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
     if (legs.id === 'lg_none') for (const m of mats.legs) paintSolid(m, SKIN_HEX);
     else for (const m of mats.legs) paintMat(m, legs);
   }
-  const bareArms = hand.id === 'hn_none' || ((shirtless || sleeveless) && hand.id === 'hn_basic');
+  // 紺青短打：手臂強制裸膚，不套袖套細節
+  const bareArms = hand.id === 'hn_none' || body.id === 'bd_nightshort' || ((shirtless || sleeveless) && hand.id === 'hn_basic');
   if (body.id === 'bd_hawaii') {
     for (const m of mats.sleeve) paintMat(m, body);
   } else if (bareArms) {
@@ -1096,12 +1787,13 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
   paintFeet(mats, feet);
   for (const m of mats.hair) {
     resetSurf(m);
-    m.color.setHex(0x222222);
+    m.color.set(hair.id === 'hr_none' ? SKIN_HEX : hair.base);
     m.needsUpdate = true;
   }
+  buildHair(rig, hair);
   if (rig.hatG) buildHat(rig.hatG, head);
   buildBodyDetails(rig, body);
-  if (body.id !== 'bd_hawaii' && body.id !== 'bd_nightshort') {
+  if (body.id !== 'bd_hawaii') {
     for (const arm of [rig.upperL, rig.upperR]) if (arm) ensureDet(arm, DET.upper);
   }
   if (bareArms) {

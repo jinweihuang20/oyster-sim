@@ -853,8 +853,9 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .eqStage{position:relative;width:100%;max-width:400px;margin:0 auto;aspect-ratio:3/4;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);overflow:hidden;background:#4a433a;isolation:isolate;z-index:1}
 .eqShed{position:absolute;inset:0;width:100%;height:100%;z-index:0}
 /* 人物在地墊／陰影之上；預覽區延伸到陰影帶，避免腳被地板 SVG 蓋住 */
-.eqFigW{position:absolute;left:20%;right:20%;top:3%;bottom:5%;transform:none;aspect-ratio:auto;width:auto;height:auto;max-height:none;overflow:visible;pointer-events:none;z-index:2}
-.eqFigW .eqFig{position:absolute;inset:0;width:100%;height:100%;display:block}
+.eqFigW{position:absolute;left:20%;right:20%;top:3%;bottom:5%;transform:none;aspect-ratio:auto;width:auto;height:auto;max-height:none;overflow:visible;pointer-events:auto;touch-action:none;cursor:grab;z-index:2;-webkit-user-select:none;user-select:none}
+.eqFigW.drag{cursor:grabbing}
+.eqFigW .eqFig{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
 .eqCol{position:absolute;top:6%;bottom:8%;width:17.5%;display:flex;flex-direction:column;justify-content:space-evenly;align-items:stretch;gap:8px;z-index:5;pointer-events:none}
 .eqCol.l{left:2.5%}.eqCol.r{right:2.5%;padding-top:18%;padding-bottom:6%;justify-content:space-evenly}
 .eqLines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
