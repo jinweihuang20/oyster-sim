@@ -31,8 +31,6 @@ export function defaultSave(): Save {
   return {
     v: SAVE_V, redeemed: [], meds: {}, dex: [0, 0, 0, 0], odd: ODD.map(() => 0), best: 0, money: START_MONEY, days: 0, queen: 0,
     life: Object.fromEntries(LIFE_KEYS.map(k => [k, 0])) as Life, titles: {}, shop: { owned: [], equipped: {} }, locs: [], gear: {},
-    // 進遊戲預設進廣場
-    loc: 'plaza',
     // 第一次遊玩預設穿著：男生短髮＋基本頭巾／袖套／衣服／褲／鞋
     equip: {
       hair: 'hr_basic', head: 'hd_basic', hand: 'hn_basic',
@@ -65,7 +63,7 @@ export function loadSave(LS: SaveStorage): Save {
   out.bonusN = num(raw.bonusN); out.tutDone = num(raw.tutDone);
   if (raw.meds && typeof raw.meds === 'object') for (const [k, v] of Object.entries(raw.meds)) out.meds[k] = Math.max(0, Math.floor(num(v)));
   out.locs = Array.isArray(raw.locs) ? raw.locs.filter((x: any) => typeof x === 'string') : [];
-  out.loc = typeof raw.loc === 'string' && raw.loc ? raw.loc : 'plaza';
+  if (typeof raw.loc === 'string') out.loc = raw.loc;
   out.gear = {}; if (raw.gear && typeof raw.gear === 'object') for (const [k, v] of Object.entries(raw.gear)) out.gear[k] = !!v;
   if (typeof raw.name === 'string' && raw.name.trim()) out.name = raw.name.slice(0, 16);
   if (Array.isArray(raw.locSeen)) out.locSeen = raw.locSeen.filter((x: any) => typeof x === 'string');

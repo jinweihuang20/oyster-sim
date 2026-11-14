@@ -36,6 +36,9 @@ const faded = new Map<THREE.Mesh, FadeRec>();
 const want = new Set<THREE.Mesh>();
 const ignoreRoots: THREE.Object3D[] = [];
 let scanAcc = SCAN_GAP;
+/** 連續失敗時冷卻，避免每幀 console.error 刷爆主控台 */
+let errCooldown = 0;
+let errLogged = false;
 
 const SKIP_NAME = new Set([
   'skyDome', 'sky', 'cigSmoke', 'charcoalFire', 'avatarCigarette', 'seatCushion',
@@ -75,6 +78,14 @@ function skipObject(o: THREE.Object3D): boolean {
   return false;
 }
 
+/** 幾何已 dispose／缺 position 時 raycast 會丟例外 */
+function meshRaycastable(mesh: THREE.Mesh): boolean {
+  const g = mesh.geometry as THREE.BufferGeometry | undefined;
+  if (!g || (g as { disposed?: boolean }).disposed) return false;
+  const pos = g.attributes?.position;
+  return !!(pos && pos.array && pos.count > 0);
+}
+
 function isGroundHit(h: THREE.Intersection): boolean {
   if (h.point.y < 0.28) return true;
   const ny = h.normal ? h.normal.y : (h.face ? h.face.normal.y : 0);
@@ -83,7 +94,13 @@ function isGroundHit(h: THREE.Intersection): boolean {
 
 function prepareSnaps(mesh: THREE.Mesh): MatSnap[] | null {
   const cached = mesh.userData._tpOccSnaps as MatSnap[] | undefined;
-  if (cached) return cached;
+  if (cached) {
+    // 材質被換裝／合併換掉後快取失效，避免對已脫離的 mat 設 opacity
+    const raw = mesh.material;
+    const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    if (cached.length === list.length && cached.every((s, i) => s.mat === list[i])) return cached;
+    delete mesh.userData._tpOccSnaps;
+  }
   const raw = mesh.material;
   if (!raw) return null;
   const list = Array.isArray(raw) ? raw : [raw];
@@ -91,7 +108,12 @@ function prepareSnaps(mesh: THREE.Mesh): MatSnap[] | null {
   const cloned: THREE.Material[] = [];
   for (const m of list) {
     if (!m || !('opacity' in m)) return null;
-    const c = m.clone() as MatSnap['mat'];
+    let c: MatSnap['mat'];
+    try {
+      c = m.clone() as MatSnap['mat'];
+    } catch {
+      return null;
+    }
     c.transparent = true;
     c.opacity = 1;
     c.side = THREE.DoubleSide;
@@ -99,7 +121,7 @@ function prepareSnaps(mesh: THREE.Mesh): MatSnap[] | null {
     snaps.push({ mat: c, depthWrite: m.depthWrite !== false, side: m.side, primed: false });
     cloned.push(c);
   }
-  mesh.material = Array.isArray(raw) ? cloned : cloned[0];
+  mesh.material = Array.isArray(raw) ? cloned : cloned[0]!;
   mesh.userData._tpOccSnaps = snaps;
   return snaps;
 }
@@ -107,6 +129,7 @@ function prepareSnaps(mesh: THREE.Mesh): MatSnap[] | null {
 function applyWallStyle(rec: FadeRec) {
   const op = 1 - rec.k * 0.8;
   for (const s of rec.snaps) {
+    if (!s.mat) continue;
     if (!s.primed && rec.k > 0.02) {
       s.mat.needsUpdate = true;
       s.primed = true;
@@ -120,6 +143,7 @@ function applyWallStyle(rec: FadeRec) {
 
 function restoreRec(rec: FadeRec) {
   for (const s of rec.snaps) {
+    if (!s.mat) continue;
     s.mat.opacity = 1;
     s.mat.transparent = true;
     s.mat.depthWrite = s.depthWrite;
@@ -143,11 +167,20 @@ export function tickTpCamOcclude(
   focus: THREE.Vector3,
   enabled: boolean,
 ) {
+  if (errCooldown > 0) {
+    errCooldown -= dt;
+    return;
+  }
   try {
     tickInner(dt, scene, camera, focus, enabled);
   } catch (e) {
-    console.error('tpCamOcclude', e);
+    if (!errLogged) {
+      errLogged = true;
+      console.error('tpCamOcclude', e);
+    }
     clearTpCamOcclude();
+    // 短暫冷卻，避免每幀刷錯
+    errCooldown = 1.5;
   }
 }
 
@@ -165,12 +198,17 @@ function collectRoots(scene: THREE.Scene, camera: THREE.Camera): THREE.Object3D[
 
 function addHits(roots: THREE.Object3D[], maxAdd: number) {
   if (maxAdd <= 0) return 0;
-  const hits = ray.intersectObjects(roots, true);
+  let hits: THREE.Intersection[];
+  try {
+    hits = ray.intersectObjects(roots, true);
+  } catch {
+    return 0;
+  }
   let n = 0;
   for (const h of hits) {
     if (n >= maxAdd) break;
     const mesh = h.object as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.geometry) continue;
+    if (!mesh.isMesh || !meshRaycastable(mesh)) continue;
     if (skipObject(mesh)) continue;
     if (isGroundHit(h)) continue;
     if (!prepareSnaps(mesh)) continue;
@@ -183,10 +221,11 @@ function addHits(roots: THREE.Object3D[], maxAdd: number) {
 function castBundle(roots: THREE.Object3D[], a: THREE.Vector3, b: THREE.Vector3, left: number): number {
   dir.subVectors(b, a);
   const len = dir.length();
-  if (len < 0.35) return left;
+  if (!Number.isFinite(len) || len < 0.35) return left;
   dir.multiplyScalar(1 / len);
-  right.crossVectors(dir, WORLD_UP).normalize();
-  if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
+  right.crossVectors(dir, WORLD_UP);
+  if (right.lengthSq() < 1e-8) right.set(1, 0, 0);
+  else right.normalize();
   up.crossVectors(right, dir).normalize();
   const offsets: [number, number][] = [
     [0, 0],
@@ -198,7 +237,7 @@ function castBundle(roots: THREE.Object3D[], a: THREE.Vector3, b: THREE.Vector3,
     aim.copy(b).addScaledVector(right, ox).addScaledVector(up, oy);
     dir.subVectors(aim, a);
     const dlen = dir.length();
-    if (dlen < 0.35) continue;
+    if (!Number.isFinite(dlen) || dlen < 0.35) continue;
     dir.multiplyScalar(1 / dlen);
     ray.set(a, dir);
     ray.near = 0.08;
@@ -212,6 +251,7 @@ function scanWant(scene: THREE.Scene, camera: THREE.Camera, focus: THREE.Vector3
   want.clear();
   from.copy(camera.position);
   to.copy(focus);
+  if (![from.x, from.y, from.z, to.x, to.y, to.z].every(Number.isFinite)) return;
   if (from.distanceTo(to) < 0.35) return;
   const roots = collectRoots(scene, camera);
   let left = MAX_HITS;
@@ -246,6 +286,12 @@ function tickInner(
   }
 
   for (const mesh of want) {
+    if (!meshRaycastable(mesh) || !mesh.parent) {
+      want.delete(mesh);
+      const old = faded.get(mesh);
+      if (old) { try { restoreRec(old); } catch { /* */ } faded.delete(mesh); }
+      continue;
+    }
     let rec = faded.get(mesh);
     if (!rec) {
       const snaps = mesh.userData._tpOccSnaps as MatSnap[] | undefined;

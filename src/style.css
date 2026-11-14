@@ -698,7 +698,8 @@ body.tutOn #feed{display:none!important}
 #settings .setBody label.row{display:grid!important;grid-template-columns:1fr 58%;align-items:center;column-gap:12px;width:auto!important;min-height:44px!important;margin:0!important;padding:4px 0!important;font-size:15px!important;box-sizing:border-box}
 #settings .setBody label.row:first-child{padding-top:0!important}
 #settings .rl{text-align:left}
-#settings .setBody label.row input[type=text],#settings .setBody label.row input[type=range]{width:100%!important;box-sizing:border-box;margin:0;min-width:0;justify-self:stretch}
+#settings .setBody label.row input[type=text],#settings .setBody label.row input[type=range],#settings .setBody label.row select{width:100%!important;box-sizing:border-box;margin:0;min-width:0;justify-self:stretch}
+#settings .setBody label.row select{height:40px;padding:6px 8px;font-size:16px;font-weight:700;color:#3a2410;background:#fff8e8;border:2px solid #d9952b;border-radius:8px}
 #settings .setBody input#myName{padding:6px 8px!important;font-size:16px;height:40px}
 #settings .setBody label.row input[type=checkbox]{justify-self:end;width:26px;height:26px;margin:0}
 #settings .setSec{margin:16px 0 8px;font-weight:900;font-size:13px;letter-spacing:.1em;color:var(--iron);text-align:left}
@@ -2991,6 +2992,7 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
   }
   #settings .setBody label.row:has(input[type=text]),
   #settings .setBody label.row:has(input[type=range]),
+  #settings .setBody label.row:has(select),
   #settings .setBody label.row:has(#v_eco),
   #settings .setBody .pidRow,
   #settings .setBody .brightRow{width:100%!important;display:grid!important}

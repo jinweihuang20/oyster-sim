@@ -808,32 +808,35 @@ function addHairSpike(
   mesh.quaternion.copy(aim).multiply(twist);
 }
 
+/** 髮塊用較小圓角，避免 rbox 圓角在頂－側接縫挖出縫隙露頭皮 */
+const hairBox = (w: number, h: number, d: number) => rbox(w, h, d, 2, 0.06);
+
 /**
- * 全蓋款（短髮／長髮）：頭頂、兩側上緣、後腦互相重疊，縫不透頭皮。
- * 前緣停在眉上，不蓋眼睛。光頭不呼叫。
+ * 全蓋款底層：頭頂／兩側／後腦本體互相延伸交疊（頭寬 0.28、面 ±0.14）。
+ * 只放大既有髮塊範圍，不另塞銜接補丁。前緣停眉上。
  */
 function addHairScalp(parent: THREE.Object3D, mat: THREE.Material) {
-  add(parent, G('hr-scalp-top3', () => rbox(0.30, 0.06, 0.28)), mat, [0, 0.152, 0.01]);
-  add(parent, G('hr-scalp-back3', () => rbox(0.28, 0.18, 0.075)), mat, [0, 0.07, 0.148]);
-  add(parent, G('hr-scalp-side3', () => rbox(0.055, 0.12, 0.24)), mat, [-0.152, 0.10, 0.02]);
-  add(parent, G('hr-scalp-side3', () => rbox(0.055, 0.12, 0.24)), mat, [0.152, 0.10, 0.02]);
-  add(parent, G('hr-scalp-corner3', () => rbox(0.09, 0.09, 0.07)), mat, [-0.12, 0.12, 0.125]);
-  add(parent, G('hr-scalp-corner3', () => rbox(0.09, 0.09, 0.07)), mat, [0.12, 0.12, 0.125]);
+  // 頂蓋加厚並往前／側伸出，包住頭頂與額上緣
+  add(parent, G('hr-scalp-top6', () => hairBox(0.36, 0.10, 0.34)), mat, [0, 0.138, 0.0]);
+  add(parent, G('hr-scalp-back6', () => hairBox(0.34, 0.24, 0.10)), mat, [0, 0.04, 0.145]);
+  // 側板加高到頂蓋中線以上，前後也拉長
+  add(parent, G('hr-scalp-side6', () => hairBox(0.08, 0.20, 0.30)), mat, [-0.16, 0.09, 0.0]);
+  add(parent, G('hr-scalp-side6', () => hairBox(0.08, 0.20, 0.30)), mat, [0.16, 0.09, 0.0]);
+  add(parent, G('hr-scalp-corner6', () => hairBox(0.12, 0.14, 0.12)), mat, [-0.13, 0.11, 0.115]);
+  add(parent, G('hr-scalp-corner6', () => hairBox(0.12, 0.14, 0.12)), mat, [0.13, 0.11, 0.115]);
 }
 
 /**
- * fade／undercut 頭頂殼：蓋滿有髮的頂區，側上緣與後頂和頂蓋重疊。
- * 耳朵高度以下留空＝剃短。
+ * fade／undercut 頭頂殼：把頂蓋與側上緣加寬加高到彼此交疊；耳下仍剃短。
  */
 function addCrownShell(parent: THREE.Object3D, mat: THREE.Material, key: string) {
-  // 頂蓋往前接到髮際；側邊極薄貼頭（頭寬 0.28 → 面在 ±0.14）
-  add(parent, G(`${key}-top3`, () => rbox(0.26, 0.055, 0.28)), mat, [0, 0.152, -0.01]);
-  add(parent, G(`${key}-front3`, () => rbox(0.20, 0.04, 0.08)), mat, [0, 0.14, -0.12]);
-  add(parent, G(`${key}-back3`, () => rbox(0.24, 0.09, 0.07)), mat, [0, 0.12, 0.138]);
-  add(parent, G(`${key}-side3`, () => rbox(0.018, 0.055, 0.20)), mat, [-0.145, 0.13, 0.0]);
-  add(parent, G(`${key}-side3`, () => rbox(0.018, 0.055, 0.20)), mat, [0.145, 0.13, 0.0]);
-  add(parent, G(`${key}-corner3`, () => rbox(0.06, 0.06, 0.05)), mat, [-0.11, 0.13, 0.12]);
-  add(parent, G(`${key}-corner3`, () => rbox(0.06, 0.06, 0.05)), mat, [0.11, 0.13, 0.12]);
+  add(parent, G(`${key}-top6`, () => hairBox(0.34, 0.08, 0.32)), mat, [0, 0.145, -0.01]);
+  add(parent, G(`${key}-front6`, () => hairBox(0.26, 0.06, 0.10)), mat, [0, 0.132, -0.13]);
+  add(parent, G(`${key}-back6`, () => hairBox(0.30, 0.12, 0.09)), mat, [0, 0.112, 0.135]);
+  add(parent, G(`${key}-side6`, () => hairBox(0.06, 0.10, 0.26)), mat, [-0.152, 0.118, 0.0]);
+  add(parent, G(`${key}-side6`, () => hairBox(0.06, 0.10, 0.26)), mat, [0.152, 0.118, 0.0]);
+  add(parent, G(`${key}-corner6`, () => hairBox(0.10, 0.09, 0.08)), mat, [-0.12, 0.125, 0.118]);
+  add(parent, G(`${key}-corner6`, () => hairBox(0.10, 0.09, 0.08)), mat, [0.12, 0.125, 0.118]);
 }
 
 /**
@@ -841,13 +844,8 @@ function addCrownShell(parent: THREE.Object3D, mat: THREE.Material, key: string)
  * 頭頂前緣蓋滿髮際；眼睛仍露；後腦與兩側短收。
  */
 function buildSpikeHair(parent: THREE.Object3D, mat: THREE.Material) {
-  // 頂蓋從前髮際鋪到後頂；側邊極薄貼頭
-  add(parent, G('hr-spike-cap5', () => rbox(0.24, 0.04, 0.26)), mat, [0, 0.155, 0.0]);
-  add(parent, G('hr-spike-front5', () => rbox(0.18, 0.035, 0.07)), mat, [0, 0.14, -0.12]);
-  add(parent, G('hr-spike-nape5', () => rbox(0.14, 0.035, 0.04)), mat, [0, 0.12, 0.14]);
-  add(parent, G('hr-spike-fade5', () => rbox(0.016, 0.03, 0.12)), mat, [-0.144, 0.132, 0.02]);
-  add(parent, G('hr-spike-fade5', () => rbox(0.016, 0.03, 0.12)), mat, [0.144, 0.132, 0.02]);
-  // 側刺少外張，貼齊頭側
+  // 頂蓋與側上緣加寬交疊後再插刺（不做額外補丁塊）
+  addCrownShell(parent, mat, 'hr-spike');
   const spikes: [number, number, number, number, number, number, number, number][] = [
     [0.0, 0.165, -0.08, 0.05, 0.85, -0.5, 0.18, 0.032],
     [-0.045, 0.165, -0.07, -0.22, 0.9, -0.35, 0.16, 0.028],
@@ -919,32 +917,31 @@ function addDread(
  * 眼睛與耳朵全露；不要頭盔罩。
  */
 function buildCropHair(parent: THREE.Object3D, mat: THREE.Material) {
-  // 短剪影：瀏海停眉上，後腦收短，寬度略小於耳距
-  add(parent, G('hr-crop-soft', () => {
+  // 單片剪影加寬過頭（頭 0.28），頂／側一體蓋住頭皮，不另補方塊
+  add(parent, G('hr-crop-soft2', () => {
     const sh = new THREE.Shape();
-    sh.moveTo(-0.14, 0.095);
-    sh.quadraticCurveTo(-0.15, 0.14, -0.06, 0.195);
-    sh.quadraticCurveTo(0.02, 0.215, 0.10, 0.175);
-    sh.quadraticCurveTo(0.145, 0.10, 0.135, 0.04);
-    sh.quadraticCurveTo(0.12, -0.01, 0.05, -0.03);
-    sh.quadraticCurveTo(0.0, -0.035, -0.05, -0.01);
-    sh.quadraticCurveTo(-0.10, 0.05, -0.14, 0.095);
+    sh.moveTo(-0.145, 0.09);
+    sh.quadraticCurveTo(-0.16, 0.145, -0.06, 0.205);
+    sh.quadraticCurveTo(0.02, 0.225, 0.11, 0.18);
+    sh.quadraticCurveTo(0.155, 0.10, 0.145, 0.03);
+    sh.quadraticCurveTo(0.13, -0.02, 0.05, -0.04);
+    sh.quadraticCurveTo(0.0, -0.045, -0.05, -0.015);
+    sh.quadraticCurveTo(-0.11, 0.045, -0.145, 0.09);
     const g = new THREE.ExtrudeGeometry(sh, {
-      depth: 0.28,
+      depth: 0.34,
       bevelEnabled: true,
-      bevelThickness: 0.022,
-      bevelSize: 0.018,
+      bevelThickness: 0.024,
+      bevelSize: 0.02,
       bevelSegments: 2,
       curveSegments: 8,
     });
-    g.translate(0, 0, -0.14);
+    g.translate(0, 0, -0.17);
     g.rotateY(-Math.PI / 2);
     return crease(g);
   }), mat, [0, 0.02, 0]);
-  // 側掃瀏海：眉上、往一側偏
-  add(parent, G('hr-crop-bang', () => rbox(0.12, 0.035, 0.03)), mat, [0.02, 0.085, -0.152]);
-  add(parent, G('hr-crop-bangTip', () => rbox(0.05, 0.04, 0.028)), mat, [0.08, 0.075, -0.148]);
-  // 頭頂略亂的短刺（比刺蝟短）
+  // 側掃瀏海：往上接到頂髮
+  add(parent, G('hr-crop-bang2', () => rbox(0.14, 0.055, 0.04)), mat, [0.02, 0.105, -0.155]);
+  add(parent, G('hr-crop-bangTip2', () => rbox(0.055, 0.05, 0.032)), mat, [0.08, 0.09, -0.15]);
   const tufts: [number, number, number, number, number, number, number, number][] = [
     [0.02, 0.175, -0.04, 0.12, 0.95, -0.25, 0.08, 0.024],
     [-0.04, 0.17, -0.02, -0.1, 0.97, -0.12, 0.07, 0.022],
@@ -960,11 +957,11 @@ function buildCropHair(parent: THREE.Object3D, mat: THREE.Material) {
  */
 function addFullBackCover(parent: THREE.Object3D, mat: THREE.Material, key: string) {
   addHairScalp(parent, mat);
-  add(parent, G(`${key}-backWall`, () => rbox(0.30, 0.20, 0.09)), mat, [0, 0.02, 0.155]);
-  add(parent, G(`${key}-nape`, () => rbox(0.26, 0.14, 0.08)), mat, [0, -0.06, 0.14]);
-  add(parent, G(`${key}-napeLow`, () => rbox(0.22, 0.10, 0.07)), mat, [0, -0.14, 0.12]);
-  add(parent, G(`${key}-sideBack`, () => rbox(0.06, 0.16, 0.12)), mat, [-0.15, 0.0, 0.08]);
-  add(parent, G(`${key}-sideBack`, () => rbox(0.06, 0.16, 0.12)), mat, [0.15, 0.0, 0.08]);
+  add(parent, G(`${key}-backWall6`, () => hairBox(0.34, 0.22, 0.10)), mat, [0, 0.02, 0.152]);
+  add(parent, G(`${key}-nape6`, () => hairBox(0.30, 0.16, 0.09)), mat, [0, -0.06, 0.138]);
+  add(parent, G(`${key}-napeLow6`, () => hairBox(0.26, 0.12, 0.08)), mat, [0, -0.14, 0.118]);
+  add(parent, G(`${key}-sideBack6`, () => hairBox(0.08, 0.20, 0.14)), mat, [-0.155, 0.0, 0.08]);
+  add(parent, G(`${key}-sideBack6`, () => hairBox(0.08, 0.20, 0.14)), mat, [0.155, 0.0, 0.08]);
 }
 
 /**
@@ -1016,11 +1013,12 @@ function addBraidChain(
  */
 function buildLowBunHair(parent: THREE.Object3D, mat: THREE.Material) {
   addFullBackCover(parent, mat, 'hr-lowbun');
-  // 簾式瀏海：分左右、停眉上
-  add(parent, G('hr-lowbun-bangL', () => rbox(0.06, 0.05, 0.035)), mat, [-0.07, 0.095, -0.145]);
-  add(parent, G('hr-lowbun-bangR', () => rbox(0.06, 0.05, 0.035)), mat, [0.07, 0.095, -0.145]);
-  add(parent, G('hr-lowbun-bangTipL', () => rbox(0.04, 0.06, 0.028)), mat, [-0.095, 0.07, -0.13]);
-  add(parent, G('hr-lowbun-bangTipR', () => rbox(0.04, 0.06, 0.028)), mat, [0.095, 0.07, -0.13]);
+  // 額前髮際從頂蓋往下延伸到眉上
+  add(parent, G('hr-lowbun-front6', () => hairBox(0.28, 0.10, 0.07)), mat, [0, 0.12, -0.145]);
+  add(parent, G('hr-lowbun-bangL3', () => hairBox(0.08, 0.09, 0.05)), mat, [-0.08, 0.11, -0.15]);
+  add(parent, G('hr-lowbun-bangR3', () => hairBox(0.08, 0.09, 0.05)), mat, [0.08, 0.11, -0.15]);
+  add(parent, G('hr-lowbun-bangTipL3', () => hairBox(0.05, 0.08, 0.036)), mat, [-0.11, 0.08, -0.135]);
+  add(parent, G('hr-lowbun-bangTipR3', () => hairBox(0.05, 0.08, 0.036)), mat, [0.11, 0.08, -0.135]);
   // 後腦收束到後頸低髻（與後蓋重疊）
   add(parent, G('hr-lowbun-gather', () => rbox(0.16, 0.10, 0.08)), mat, [0, -0.04, 0.145]);
   add(parent, G('hr-lowbun-stem', () => rcyl(0.035, 0.045, 0.05, 6)), mat, [0, -0.10, 0.15]);
@@ -1033,10 +1031,11 @@ function buildLowBunHair(parent: THREE.Object3D, mat: THREE.Material) {
  */
 function buildTwinBraidHair(parent: THREE.Object3D, mat: THREE.Material) {
   addFullBackCover(parent, mat, 'hr-twin');
-  // 中分短碎瀏海（嚴格眉上）
-  add(parent, G('hr-twin-bangL', () => rbox(0.055, 0.035, 0.03)), mat, [-0.05, 0.10, -0.148]);
-  add(parent, G('hr-twin-bangR', () => rbox(0.055, 0.035, 0.03)), mat, [0.05, 0.10, -0.148]);
-  add(parent, G('hr-twin-part', () => rbox(0.02, 0.03, 0.04)), mat, [0, 0.145, -0.12]);
+  // 額前髮際：從頂蓋往下延伸到眉上（連續一塊，不是另塞補丁）
+  add(parent, G('hr-twin-front6', () => hairBox(0.30, 0.11, 0.08)), mat, [0, 0.12, -0.145]);
+  add(parent, G('hr-twin-bangL3', () => hairBox(0.09, 0.09, 0.05)), mat, [-0.06, 0.11, -0.15]);
+  add(parent, G('hr-twin-bangR3', () => hairBox(0.09, 0.09, 0.05)), mat, [0.06, 0.11, -0.15]);
+  add(parent, G('hr-twin-part3', () => hairBox(0.04, 0.07, 0.07)), mat, [0, 0.14, -0.12]);
   // 後頸總根＋辮
   add(parent, G('hr-twin-root', () => rbox(0.14, 0.08, 0.08)), mat, [0, -0.08, 0.13]);
   for (const s of [-1, 1]) {
@@ -1063,9 +1062,9 @@ function buildTwinBraidHair(parent: THREE.Object3D, mat: THREE.Material) {
  */
 function buildHalfBunHair(parent: THREE.Object3D, mat: THREE.Material) {
   addFullBackCover(parent, mat, 'hr-half');
-  // 上半收成頂髻
-  add(parent, G('hr-half-top', () => rbox(0.22, 0.045, 0.22)), mat, [0, 0.155, 0.0]);
-  add(parent, G('hr-half-front', () => rbox(0.14, 0.03, 0.05)), mat, [0, 0.135, -0.12]);
+  // 上半收成頂髻：頂／前延伸接到底蓋
+  add(parent, G('hr-half-top2', () => rbox(0.28, 0.055, 0.26)), mat, [0, 0.152, 0.0]);
+  add(parent, G('hr-half-front2', () => rbox(0.2, 0.055, 0.07)), mat, [0, 0.13, -0.13]);
   add(parent, G('hr-half-stem', () => rcyl(0.025, 0.032, 0.04, 6)), mat, [0, 0.19, 0.02]);
   add(parent, G('hr-half-bun', () => crease(new THREE.SphereGeometry(0.055, 8, 6))), mat, [0, 0.235, 0.02]);
   // 下半肩長層：後腦與兩側垂落（與後蓋重疊）
@@ -1090,7 +1089,7 @@ function buildHalfBunHair(parent: THREE.Object3D, mat: THREE.Material) {
     return crease(g);
   }), mat, [0, -0.02, 0.08]);
   for (const s of [-1, 1]) {
-    const strand = add(parent, G('hr-half-side', () => rbox(0.05, 0.20, 0.06)), mat, [s * 0.14, -0.14, 0.02]);
+    const strand = add(parent, G('hr-half-side2', () => rbox(0.06, 0.24, 0.08)), mat, [s * 0.15, -0.12, 0.02]);
     strand.rotation.z = s * 0.18;
   }
 }
@@ -1122,10 +1121,10 @@ function buildWolfHair(parent: THREE.Object3D, mat: THREE.Material) {
     g.rotateY(-Math.PI / 2);
     return crease(g);
   }), mat, [0, 0.02, 0]);
-  // 眉上碎瀏海
-  add(parent, G('hr-wolf-bang', () => rbox(0.14, 0.03, 0.028)), mat, [0, 0.095, -0.15]);
-  add(parent, G('hr-wolf-bangTip', () => rbox(0.04, 0.035, 0.024)), mat, [-0.06, 0.085, -0.145]);
-  add(parent, G('hr-wolf-bangTip', () => rbox(0.04, 0.035, 0.024)), mat, [0.05, 0.088, -0.145]);
+  // 眉上碎瀏海：往上接到頂髮
+  add(parent, G('hr-wolf-bang2', () => rbox(0.16, 0.06, 0.04)), mat, [0, 0.12, -0.15]);
+  add(parent, G('hr-wolf-bangTip2', () => rbox(0.05, 0.05, 0.03)), mat, [-0.06, 0.095, -0.145]);
+  add(parent, G('hr-wolf-bangTip2', () => rbox(0.05, 0.05, 0.03)), mat, [0.05, 0.098, -0.145]);
   // 層次外翻尖束
   const tufts: [number, number, number, number, number, number, number, number][] = [
     [-0.12, 0.02, -0.02, -0.7, -0.2, -0.4, 0.09, 0.022],
@@ -1177,16 +1176,14 @@ function buildSideBraidHair(parent: THREE.Object3D, mat: THREE.Material) {
  * 包覆基準同前（嵌進頭上半、眉上／耳上界線）；外圍半徑放大成飽滿近正圓雲球。
  */
 function buildAfroHair(parent: THREE.Object3D, mat: THREE.Material) {
-  // 頭皮銜接基準不變
-  add(parent, G('hr-afro-cap6', () => rbox(0.26, 0.05, 0.24)), mat, [0, 0.14, 0.02]);
-  add(parent, G('hr-afro-back6', () => rbox(0.26, 0.16, 0.08)), mat, [0, 0.04, 0.145]);
-  add(parent, G('hr-afro-nape6', () => rbox(0.22, 0.10, 0.07)), mat, [0, -0.04, 0.13]);
-  add(parent, G('hr-afro-side6', () => rbox(0.06, 0.12, 0.18)), mat, [-0.15, 0.08, 0.02]);
-  add(parent, G('hr-afro-side6', () => rbox(0.06, 0.12, 0.18)), mat, [0.15, 0.08, 0.02]);
-  // 前額髮際：下緣嚴格眉上
-  add(parent, G('hr-afro-brow6', () => rbox(0.20, 0.04, 0.055)), mat, [0, 0.105, -0.145]);
+  // 本體頂／側／後延伸交疊，球簇從這層長出去
+  add(parent, G('hr-afro-cap8', () => rbox(0.32, 0.07, 0.28)), mat, [0, 0.14, 0.02]);
+  add(parent, G('hr-afro-back8', () => rbox(0.30, 0.18, 0.09)), mat, [0, 0.04, 0.145]);
+  add(parent, G('hr-afro-nape8', () => rbox(0.26, 0.12, 0.08)), mat, [0, -0.04, 0.13]);
+  add(parent, G('hr-afro-side8', () => rbox(0.08, 0.16, 0.22)), mat, [-0.155, 0.08, 0.02]);
+  add(parent, G('hr-afro-side8', () => rbox(0.08, 0.16, 0.22)), mat, [0.155, 0.08, 0.02]);
+  add(parent, G('hr-afro-brow8', () => rbox(0.24, 0.06, 0.07)), mat, [0, 0.115, -0.145]);
 
-  // 球心約在頭顱上半中心；外殼半徑 ~0.30，約略正圓向外炸開
   const CX = 0, CY = 0.16, CZ = 0.04;
   const shellR = 0.30;
 
@@ -1295,15 +1292,8 @@ function buildMohawkHair(parent: THREE.Object3D, mat: THREE.Material) {
  * 兩側／耳上剃短；額前全露；頭髮往後收成頂髻。
  */
 function buildSamuraiHair(parent: THREE.Object3D, mat: THREE.Material) {
-  // 頂蓋從前髮際鋪滿再往後收；側邊極薄貼頭
-  add(parent, G('hr-sam-top3', () => rbox(0.24, 0.045, 0.26)), mat, [0, 0.155, 0.0]);
-  add(parent, G('hr-sam-front3', () => rbox(0.18, 0.035, 0.07)), mat, [0, 0.14, -0.12]);
-  add(parent, G('hr-sam-fade3', () => rbox(0.016, 0.032, 0.14)), mat, [-0.144, 0.132, 0.0]);
-  add(parent, G('hr-sam-fade3', () => rbox(0.016, 0.032, 0.14)), mat, [0.144, 0.132, 0.0]);
-  // 後頂收束
-  add(parent, G('hr-sam-back3', () => rbox(0.16, 0.06, 0.07)), mat, [0, 0.135, 0.13]);
-  add(parent, G('hr-sam-gather3', () => rbox(0.08, 0.05, 0.08)), mat, [0, 0.155, 0.10]);
-  // 髻柱＋緊湊頂髻
+  addCrownShell(parent, mat, 'hr-sam');
+  add(parent, G('hr-sam-gather5', () => rbox(0.1, 0.06, 0.09)), mat, [0, 0.155, 0.10]);
   add(parent, G('hr-sam-stem', () => rcyl(0.022, 0.028, 0.045, 6)), mat, [0, 0.19, 0.08]);
   add(parent, G('hr-sam-bun', () => crease(new THREE.SphereGeometry(0.055, 8, 6))), mat, [0, 0.23, 0.08]);
   add(parent, G('hr-sam-bunTip', () => crease(new THREE.SphereGeometry(0.028, 6, 5))), mat, [0, 0.265, 0.07]);
@@ -1313,26 +1303,26 @@ function buildSamuraiHair(parent: THREE.Object3D, mat: THREE.Material) {
  * 男生長髮：肩長波浪。額前連成一體、不中分；臉與眼睛全露；肩上分層。
  */
 function buildMaleLongHair(parent: THREE.Object3D, mat: THREE.Material) {
-  add(parent, G('hr-mlong-soft2', () => {
+  add(parent, G('hr-mlong-soft3', () => {
     const sh = new THREE.Shape();
-    // 額際整片停眉上；後片到肩
-    sh.moveTo(-0.12, 0.095);
-    sh.quadraticCurveTo(-0.135, 0.15, -0.05, 0.21);
-    sh.quadraticCurveTo(0.04, 0.23, 0.12, 0.17);
-    sh.quadraticCurveTo(0.16, 0.08, 0.15, -0.04);
-    sh.quadraticCurveTo(0.14, -0.16, 0.10, -0.26);
+    // 額際整片停眉上；後片到肩；擠出寬過頭皮
+    sh.moveTo(-0.13, 0.09);
+    sh.quadraticCurveTo(-0.15, 0.15, -0.05, 0.22);
+    sh.quadraticCurveTo(0.04, 0.24, 0.13, 0.175);
+    sh.quadraticCurveTo(0.17, 0.08, 0.155, -0.04);
+    sh.quadraticCurveTo(0.145, -0.16, 0.10, -0.26);
     sh.quadraticCurveTo(0.04, -0.32, -0.02, -0.28);
     sh.quadraticCurveTo(-0.05, -0.16, -0.06, -0.04);
-    sh.quadraticCurveTo(-0.08, 0.04, -0.12, 0.095);
+    sh.quadraticCurveTo(-0.09, 0.04, -0.13, 0.09);
     const g = new THREE.ExtrudeGeometry(sh, {
-      depth: 0.29,
+      depth: 0.34,
       bevelEnabled: true,
       bevelThickness: 0.026,
       bevelSize: 0.02,
       bevelSegments: 2,
       curveSegments: 8,
     });
-    g.translate(0, 0, -0.145);
+    g.translate(0, 0, -0.17);
     g.rotateY(-Math.PI / 2);
     return crease(g);
   }), mat, [0, 0.02, 0]);
@@ -1355,27 +1345,27 @@ function buildMaleLongHair(parent: THREE.Object3D, mat: THREE.Material) {
  * 女生長髮：波浪披肩。額前連成一體、不中分；不蓋眼；肩上有層次捲。
  */
 function buildLongHair(parent: THREE.Object3D, mat: THREE.Material) {
-  add(parent, G('hr-long-soft2', () => {
+  add(parent, G('hr-long-soft3', () => {
     const sh = new THREE.Shape();
-    // 額際整片停眉上，不中分；後片波浪垂到胸前
-    sh.moveTo(-0.13, 0.095);
-    sh.quadraticCurveTo(-0.145, 0.15, -0.06, 0.22);
-    sh.quadraticCurveTo(0.04, 0.245, 0.13, 0.18);
-    sh.quadraticCurveTo(0.175, 0.08, 0.16, -0.06);
+    // 額際整片停眉上；擠出寬過頭皮，頂側一體
+    sh.moveTo(-0.14, 0.09);
+    sh.quadraticCurveTo(-0.155, 0.15, -0.06, 0.23);
+    sh.quadraticCurveTo(0.04, 0.25, 0.14, 0.185);
+    sh.quadraticCurveTo(0.18, 0.08, 0.165, -0.06);
     sh.quadraticCurveTo(0.155, -0.20, 0.13, -0.34);
     sh.quadraticCurveTo(0.08, -0.48, 0.0, -0.45);
     sh.quadraticCurveTo(-0.04, -0.32, -0.05, -0.16);
-    sh.quadraticCurveTo(-0.06, -0.04, -0.10, 0.05);
-    sh.quadraticCurveTo(-0.12, 0.08, -0.13, 0.095);
+    sh.quadraticCurveTo(-0.06, -0.04, -0.11, 0.05);
+    sh.quadraticCurveTo(-0.13, 0.08, -0.14, 0.09);
     const g = new THREE.ExtrudeGeometry(sh, {
-      depth: 0.30,
+      depth: 0.35,
       bevelEnabled: true,
       bevelThickness: 0.03,
       bevelSize: 0.024,
       bevelSegments: 3,
       curveSegments: 10,
     });
-    g.translate(0, 0, -0.15);
+    g.translate(0, 0, -0.175);
     g.rotateY(-Math.PI / 2);
     return crease(g);
   }), mat, [0, 0.02, 0]);
@@ -1395,26 +1385,26 @@ function buildLongHair(parent: THREE.Object3D, mat: THREE.Material) {
  * 平滑瀏海與下巴線，自然頂部弧度；寬度略小於耳距，耳朵會露出。
  */
 function buildBobHair(parent: THREE.Object3D, mat: THREE.Material) {
-  add(parent, G('hr-bob-soft2', () => {
+  add(parent, G('hr-bob-soft3', () => {
     const sh = new THREE.Shape();
-    // 側視：前(-)後(+)。瀏海底停在眉上（y≥0.08），眼睛 y≈0.02 要露出。
-    sh.moveTo(-0.15, 0.09);
-    sh.quadraticCurveTo(-0.16, 0.15, -0.08, 0.21);
-    sh.quadraticCurveTo(0.02, 0.245, 0.11, 0.20);
-    sh.quadraticCurveTo(0.175, 0.12, 0.165, 0.02);
-    sh.quadraticCurveTo(0.16, -0.08, 0.08, -0.145);
+    // 側視：前(-)後(+)。瀏海停眉上；擠出寬過頭皮，頂側一體
+    sh.moveTo(-0.155, 0.088);
+    sh.quadraticCurveTo(-0.17, 0.15, -0.08, 0.22);
+    sh.quadraticCurveTo(0.02, 0.25, 0.12, 0.205);
+    sh.quadraticCurveTo(0.185, 0.12, 0.17, 0.02);
+    sh.quadraticCurveTo(0.165, -0.08, 0.08, -0.145);
     sh.quadraticCurveTo(0.0, -0.165, -0.06, -0.10);
-    sh.quadraticCurveTo(-0.10, -0.02, -0.12, 0.06);
-    sh.quadraticCurveTo(-0.14, 0.08, -0.15, 0.09);
+    sh.quadraticCurveTo(-0.11, -0.02, -0.13, 0.06);
+    sh.quadraticCurveTo(-0.15, 0.08, -0.155, 0.088);
     const g = new THREE.ExtrudeGeometry(sh, {
-      depth: 0.29,
+      depth: 0.34,
       bevelEnabled: true,
       bevelThickness: 0.028,
       bevelSize: 0.022,
       bevelSegments: 3,
       curveSegments: 10,
     });
-    g.translate(0, 0, -0.145);
+    g.translate(0, 0, -0.17);
     g.rotateY(-Math.PI / 2);
     return crease(g);
   }), mat, [0, 0.02, 0]);

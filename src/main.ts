@@ -577,10 +577,10 @@ const leanFaces: THREE.Group[] = [];
 for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x3a9a6a : 0xe86878, s < 0 ? 0x444444 : 0xc8c8c8).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
-type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean; eco: boolean; rotTip: boolean; bright: number };
-const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE, rotTip: true, bright: BRIGHT_DEF };
+type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean; eco: boolean; rotTip: boolean; bright: number; boot: 'menu' | 'plaza' };
+const MIX_DEF = { master: 0.8, amb: 0.6, sfx: 0.8, mute: false, music: 0.35, gore: true, stats: true, feed: true, sens: 1, invX: false, invY: false, eco: COARSE, rotTip: true, bright: BRIGHT_DEF, boot: 'menu' as const };
 const mix: Mix = (() => { let raw: any = {}; try { raw = JSON.parse(LS.getItem('oyster-mix') || '{}') || {}; } catch { raw = {}; }
-  const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; m.bright = clampBright(m.bright); return m; })();
+  const m: any = { ...MIX_DEF }; for (const k of Object.keys(MIX_DEF) as (keyof typeof MIX_DEF)[]) if (typeof raw[k] === typeof MIX_DEF[k]) m[k] = raw[k]; m.bright = clampBright(m.bright); if (m.boot !== 'plaza') m.boot = 'menu'; return m; })();
 /** 陰影不每幀重算：廣場／坐下環視時鏡頭一轉就整張 shadow map 重畫會超卡 */
 let shadowAcc = 0;
 function applyPlazaShadowMode() {
@@ -4903,8 +4903,8 @@ $('start').onclick = () => {
   const begin = () => enterWorkShed(() => { evRun = null; shiftLen = SHIFT; audio(); if (!save.tutDone) tutStart(); else startDay(); });
   if (!save.tutDone) ensureNameThen(begin); else begin();
 };
-/** 一進遊戲直接進廣場（主選單「回主選單」仍可回來；截圖 shot 模式略過） */
-if (!SHOT) {
+/** 設定「開遊戲後進廣場」時自動進廣場（預設主畫面；截圖 shot 模式略過） */
+if (!SHOT && mix.boot === 'plaza') {
   const bootIntoPlaza = () => {
     if (state !== 'menu' || isPlazaActive() || isDeathmatchActive()) return;
     if (!$('overlay')?.classList.contains('show')) return;
@@ -5031,6 +5031,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
 { const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toast(mix.eco ? '已開省電：降解析・關陰影・簡材質／少燈・降面（重新整理後 AA／精度／GPU／網格才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU／網格才會變）', '#9be37a'); }; }
+{ const b = $('v_boot') as HTMLSelectElement; b.value = mix.boot; b.onchange = () => { mix.boot = b.value === 'plaza' ? 'plaza' : 'menu'; applyMix(); toast(mix.boot === 'plaza' ? '下次開遊戲會進廣場' : '下次開遊戲會進主畫面', '#9ad0ff'); }; }
 { const el = $('v_bright') as HTMLInputElement; const pct = $('v_brightPct'); const syncBrightUi = () => { el.value = String(Math.round(mix.bright * 100)); pct.textContent = `${Math.round(mix.bright * 100)}%`; };
   const applyBright = (n: number, save: boolean) => { mix.bright = setSceneBrightness(n); syncBrightUi(); if (save) applyMix(); };
   syncBrightUi();
@@ -5620,7 +5621,8 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     if (plazaMode && isPlazaActive()) tickPlazaTpOcclude(rdt, cam, occFocus);
     tickTpCamOcclude(rdt, scene, cam, occFocus, tpOnNow);
   } catch (e) {
-    console.error('tpOcclude', e);
+    // 內層已限流；這裡只擋未預期外洩，避免每幀刷
+    if (!tpOccOuterLogged) { tpOccOuterLogged = true; console.error('tpOcclude', e); }
   }
   camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
   // 廣場關掉工寮中央點光（棚頂吊燈／環境光夠）；工寮內省電再壓亮度
@@ -6085,7 +6087,7 @@ mesh(rbox(0.34, 0.12, 0.36), pm.legs, [0, 0.42, -0.1], meSeatLegs);
 for (const sx of [-0.09, 0.09]) { mesh(rcyl(0.055, 0.045, 0.32, 6), pm.legs, [sx, 0.2, -0.28], meSeatLegs); mesh(rbox(0.1, 0.05, 0.2), pm.feet, [sx, 0.03, -0.34], meSeatLegs); }
 // 站著走路用的腿：髖關節為軸，前後擺
 const meLeg = (sx: number) => { const g = new THREE.Group(); g.position.set(sx, 0.86, 0); me3.add(g); mesh(rcyl(0.065, 0.05, 0.8, 6), pm.legs, [0, -0.4, 0], g); mesh(rbox(0.11, 0.06, 0.22), pm.feet, [0, -0.83, -0.05], g); g.visible = false; return g; };
-const meLegL = meLeg(-0.09), meLegR = meLeg(0.09); let walkPh = 0; const lastWalk = new THREE.Vector3(); let tpWas = false; const tpLook = new THREE.Vector3(); const tpOccFocus = new THREE.Vector3();
+const meLegL = meLeg(-0.09), meLegR = meLeg(0.09); let walkPh = 0; const lastWalk = new THREE.Vector3(); let tpWas = false; const tpLook = new THREE.Vector3(); const tpOccFocus = new THREE.Vector3(); let tpOccOuterLogged = false;
 const meHead = new THREE.Group(); meHead.position.set(0, 1.02, 0); meTorso.add(meHead);
 mesh(new THREE.SphereGeometry(0.15, 10, 8), pm.skin, [0, 0, 0], meHead);
 mesh(new THREE.SphereGeometry(0.16, 10, 8, 0, Math.PI * 2, 0, 1.3), pm.head, [0, 0.03, 0], meHead);

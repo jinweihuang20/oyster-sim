@@ -304,6 +304,7 @@ export function createPlazaWorldView(
   root.add(bigShed.group);
   const tpOccludeMats = bigShed.tpOccludeMats;
   let tpOccludeK = 0;
+  let tpOccludeErrLogged = false;
   const _tpOccRay = new THREE.Raycaster();
   const _tpOccFrom = new THREE.Vector3();
   const _tpOccDir = new THREE.Vector3();
@@ -2261,7 +2262,7 @@ function hashPid(pid: string) {
         m.depthWrite = op > 0.82;
       }
     } catch (e) {
-      console.error('applyTpOcclude', e);
+      if (!tpOccludeErrLogged) { tpOccludeErrLogged = true; console.error('applyTpOcclude', e); }
     }
   }
 
