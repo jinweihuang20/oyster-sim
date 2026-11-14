@@ -133,6 +133,47 @@ export function headTopLift(headId: string): number {
   return HEAD_TOP_LIFT[headId] ?? 0;
 }
 
+/** 戴帽時頭頂壓扁強度：仍建原髮型，只縮頭頂 */
+export type HairCover = 'none' | 'soft' | 'full';
+
+/** 依帽子決定壓扁強度。none＝不穿；soft＝頭巾／金冠；full＝斗笠／草帽／漁夫／安全帽 */
+export function hairCoverFor(headId: string): HairCover {
+  if (headId === 'hd_none') return 'none';
+  if (headId === 'hd_basic' || headId === 'hd_purple' || headId === 'hd_karakusa' || headId === 'hd_crown') {
+    return 'soft';
+  }
+  return 'full';
+}
+
+/**
+ * 戴帽時仍建原本髮型，只把頭頂壓進帽冠；剪影不變。
+ * pivot 約在頭皮，下半披落／辮子縮幅較小。
+ */
+function applyHairHatSquash(g: THREE.Object3D, cover: HairCover, hairId: string) {
+  if (cover === 'none') {
+    g.scale.set(1, 1, 1);
+    g.position.set(0, 0, 0);
+    return;
+  }
+  // 一般髮型幾乎不縮（帽子蓋住即可）；高／大體積才明顯壓進帽冠
+  const bulky = hairId === 'hr_afro' || hairId === 'hr_mohawk' || hairId === 'hr_spike' || hairId === 'hr_samurai';
+  let sy: number;
+  let sxz: number;
+  if (!bulky) {
+    sy = cover === 'soft' ? 0.97 : 0.92;
+    sxz = cover === 'soft' ? 0.99 : 0.96;
+  } else if (hairId === 'hr_afro') {
+    sy = cover === 'soft' ? 0.70 : 0.48;
+    sxz = cover === 'soft' ? 0.78 : 0.68;
+  } else {
+    sy = cover === 'soft' ? 0.80 : 0.62;
+    sxz = cover === 'soft' ? 0.92 : 0.86;
+  }
+  const pivotY = 0.04;
+  g.scale.set(sxz, sy, sxz);
+  g.position.set(0, pivotY * (1 - sy), 0);
+}
+
 const REPEAT: Record<string, [number, number]> = {
   hd_basic: [2, 2],
   sl_flower: [2, 2],
@@ -707,6 +748,8 @@ export function clearOutfitDetails(rig: PlayerRig) {
     const g = p.userData[k] as THREE.Group | undefined;
     if (g) clearGroup(g);
   }
+  // 清掉裝備髮型後還原頭上的基本髮塊（廣場 NPC 白髮／灰髮靠這層）
+  setBaseHairVisible(rig.head, true);
 }
 
 function setBaseHairVisible(head: THREE.Object3D, on: boolean) {
@@ -991,7 +1034,7 @@ function buildTwinBraidHair(parent: THREE.Object3D, mat: THREE.Material) {
   add(parent, G('hr-twin-bangL', () => rbox(0.055, 0.035, 0.03)), mat, [-0.05, 0.10, -0.148]);
   add(parent, G('hr-twin-bangR', () => rbox(0.055, 0.035, 0.03)), mat, [0.05, 0.10, -0.148]);
   add(parent, G('hr-twin-part', () => rbox(0.02, 0.03, 0.04)), mat, [0, 0.145, -0.12]);
-  // 後頸總根，再分左右繞到胸前
+  // 後頸總根＋辮
   add(parent, G('hr-twin-root', () => rbox(0.14, 0.08, 0.08)), mat, [0, -0.08, 0.13]);
   for (const s of [-1, 1]) {
     add(parent, G('hr-twin-base', () => rbox(0.06, 0.07, 0.07)), mat, [s * 0.06, -0.10, 0.10]);
@@ -1374,73 +1417,37 @@ function buildBobHair(parent: THREE.Object3D, mat: THREE.Material) {
   }), mat, [0, 0.02, 0]);
 }
 
-/** 頭髮：剪影款一個擠出 mesh；其餘各自組 */
-function buildHair(rig: PlayerRig, hair: EquipVis) {
+/** 頭髮：一律建原本剪影；戴帽時再壓扁頭頂，不換成另一套帽下造型。 */
+function buildHair(rig: PlayerRig, hair: EquipVis, cover: HairCover = 'none') {
   const g = ensureDet(rig.head, DET.hair);
   setBaseHairVisible(rig.head, false);
-  if (hair.id === 'hr_none') return;
+  if (hair.id === 'hr_none') {
+    applyHairHatSquash(g, 'none', hair.id);
+    return;
+  }
   const mat = rig.outfitMats.hair[0];
   if (!mat) return;
-  if (hair.id === 'hr_basic') {
-    buildCropHair(g, mat);
-    return;
+  if (hair.id === 'hr_basic') buildCropHair(g, mat);
+  else if (hair.id === 'hr_mlong') buildMaleLongHair(g, mat);
+  else if (hair.id === 'hr_samurai') buildSamuraiHair(g, mat);
+  else if (hair.id === 'hr_afro') buildAfroHair(g, mat);
+  else if (hair.id === 'hr_mohawk') buildMohawkHair(g, mat);
+  else if (hair.id === 'hr_lowbun') buildLowBunHair(g, mat);
+  else if (hair.id === 'hr_twinbraid') buildTwinBraidHair(g, mat);
+  else if (hair.id === 'hr_halfbun') buildHalfBunHair(g, mat);
+  else if (hair.id === 'hr_wolf') buildWolfHair(g, mat);
+  else if (hair.id === 'hr_sidebraid') buildSideBraidHair(g, mat);
+  else if (hair.id === 'hr_bob') buildBobHair(g, mat);
+  else if (hair.id === 'hr_long') buildLongHair(g, mat);
+  else if (hair.id === 'hr_spike') buildSpikeHair(g, mat);
+  else if (hair.id === 'hr_reggae') buildDreadHair(g, mat);
+  else {
+    const profile = HAIR_PROFILE[hair.id];
+    if (!profile) return;
+    addHairScalp(g, mat);
+    add(g, hairSilhouette(profile, 0.32), mat, [0, 0.02, 0]);
   }
-  if (hair.id === 'hr_mlong') {
-    buildMaleLongHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_samurai') {
-    buildSamuraiHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_afro') {
-    buildAfroHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_mohawk') {
-    buildMohawkHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_lowbun') {
-    buildLowBunHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_twinbraid') {
-    buildTwinBraidHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_halfbun') {
-    buildHalfBunHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_wolf') {
-    buildWolfHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_sidebraid') {
-    buildSideBraidHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_bob') {
-    buildBobHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_long') {
-    buildLongHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_spike') {
-    buildSpikeHair(g, mat);
-    return;
-  }
-  if (hair.id === 'hr_reggae') {
-    buildDreadHair(g, mat);
-    return;
-  }
-  const profile = HAIR_PROFILE[hair.id];
-  if (!profile) return;
-  addHairScalp(g, mat);
-  add(g, hairSilhouette(profile, 0.32), mat, [0, 0.02, 0]);
+  applyHairHatSquash(g, cover, hair.id);
 }
 
 function add(
@@ -1848,8 +1855,9 @@ export function applyOutfitToRig(rig: PlayerRig, raw: Partial<OutfitIds> | null 
     m.color.set(hair.id === 'hr_none' ? SKIN_HEX : hair.base);
     m.needsUpdate = true;
   }
-  buildHair(rig, hair);
+  // 先帽後髮：依帽子遮罩等級建「帽下版」髮型，避免髮穿出帽冠
   if (rig.hatG) buildHat(rig.hatG, head);
+  buildHair(rig, hair, hairCoverFor(head.id));
   buildBodyDetails(rig, body);
   if (body.id !== 'bd_hawaii') {
     for (const arm of [rig.upperL, rig.upperR]) if (arm) ensureDet(arm, DET.upper);
