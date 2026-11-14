@@ -5,7 +5,7 @@ export type { EvCfg, EvOdd } from './eventsTypes';
 export type EventsHost = {
   $: (id: string) => HTMLElement;
   persist: () => void;
-  toast: (t: string, c?: string) => void;
+  toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void;
   track: (t: string, d?: Record<string, unknown>) => void;
   esc: (s: string) => string;
   Social: typeof SocialNS;
@@ -112,16 +112,16 @@ export function evFetchFrom(r: Awaited<ReturnType<typeof H.Social.evActive>>) {
 }
 // 參加活動：先跟伺服器拿場次 token（次數上限由伺服器判斷），拿到才開工
 export async function evStart(): Promise<boolean> {
-  const ev = evCfg; if (!ev || Date.now() + evSkew >= ev.end) { evRender(); H.toast('活動已經結束了'); return false; }
-  if (!H.save.tutDone) { H.toast('先完成教學再來參加活動喔'); return false; }
-  if (ev.left === 0) { H.toast('這個活動的次數用完了'); return false; }
+  const ev = evCfg; if (!ev || Date.now() + evSkew >= ev.end) { evRender(); H.toast('活動已經結束了', undefined, 3, 'top'); return false; }
+  if (!H.save.tutDone) { H.toast('先完成教學再來參加活動喔', undefined, 3, 'top'); return false; }
+  if (ev.left === 0) { H.toast('這個活動的次數用完了', undefined, 3, 'top'); return false; }
   if (H.evBusy) return false; H.evBusy = true;
   const b = document.getElementById('evGo') as HTMLButtonElement | null; if (b) b.disabled = true;
   const r = await H.Social.evStart(ev.id); H.evBusy = false;
   if (r.st !== 'ok') {
-    if (r.st === 'limit') { ev.left = 0; H.toast('這個活動的次數用完了'); evRender(); }
-    else if (r.st === 'ended') { H.toast('活動已經結束了'); evFetch(); }
-    else { H.toast('連不上活動伺服器，等一下再試'); evRender(); }
+    if (r.st === 'limit') { ev.left = 0; H.toast('這個活動的次數用完了', undefined, 3, 'top'); evRender(); }
+    else if (r.st === 'ended') { H.toast('活動已經結束了', undefined, 3, 'top'); evFetch(); }
+    else { H.toast('連不上活動伺服器，等一下再試', undefined, 3, 'top'); evRender(); }
     return false;
   }
   ev.left = r.left; H.evToken = r.token; H.evRun = ev; H.shiftLen = Math.max(10, Math.min(1800, Math.round(ev.dur))); H.audio(); H.startDay();
@@ -132,8 +132,8 @@ export async function evAgain() {
   if (H.evBusy) return;
   const id = H.evLastId; const ab = H.$('again') as HTMLButtonElement; ab.disabled = true;
   const r = await H.Social.evActive(); ab.disabled = false;
-  const toMenu = (m: string) => { if (m) H.toast(m); H.evLastId = null; H.$('result').classList.remove('show'); H.returnToMainMenu(); };
-  if (!r) { H.toast('連不上活動伺服器，等一下再試'); return; }
+  const toMenu = (m: string) => { if (m) H.toast(m, undefined, 3, 'top'); H.evLastId = null; H.$('result').classList.remove('show'); H.returnToMainMenu(); };
+  if (!r) { H.toast('連不上活動伺服器，等一下再試', undefined, 3, 'top'); return; }
   if (!evValid(r.event) || r.event.id !== id) { toMenu('活動已經結束了'); return; }
   evFetchFrom(r);
   if (evCfg?.left === 0) { toMenu('這個活動的次數用完了'); return; }

@@ -2,7 +2,7 @@ import { postDiscordFeedback } from '../core/discord';
 
 export type FeedbackDeps = {
   $: (id: string) => HTMLElement;
-  toast: (t: string, c?: string) => void;
+  toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void;
   getState: () => string;
   getLocId: () => string;
   getDays: () => number;
@@ -107,7 +107,7 @@ export function initFeedback(deps: FeedbackDeps) {
         ta.value = ''; fbCount(); fbMood = 0;
         document.querySelectorAll('[data-mood].sel').forEach(x => x.classList.remove('sel'));
         $('fbMoodTxt').textContent = ''; fbShow(true); fbCool();
-      } else { fbLast = 0; fbCool(); D.toast('送出失敗，稍後再試'); }
+      } else { fbLast = 0; fbCool(); D.toast('送出失敗，稍後再試', undefined, 3, 'top'); }
     });
   };
   (window as any).__fbDone = () => fbShow(true);

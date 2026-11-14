@@ -4,7 +4,7 @@ import { evLeft } from './events';
 export type SurveyHost = {
   $: (id: string) => HTMLElement;
   persist: () => void;
-  toast: (t: string, c?: string) => void;
+  toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void;
   esc: (s: string) => string;
   Social: typeof SocialNS;
   SFX: { jingle: (up?: boolean) => void; pop: () => void };
@@ -113,7 +113,7 @@ export function svAlert() {
   m.querySelector('.gmMute')?.addEventListener('click', () => {
     svMutePendingAlerts();
     close();
-    H.toast('之後不會再提醒這幾份問卷（有新問卷還會提示）');
+    H.toast('之後不會再提醒這幾份問卷（有新問卷還會提示）', undefined, 3, 'top');
   });
   m.querySelector('.gmYes')?.addEventListener('click', () => {
     close();
@@ -125,7 +125,7 @@ export function svAlert() {
 }
 export function svOpen(id: number) {
   const s = svList.find(x => x.id === id);
-  if (!s || s.done || svClaimed(id)) { H.toast('這份問卷你填過了'); svRender(); return; }
+  if (!s || s.done || svClaimed(id)) { H.toast('這份問卷你填過了', undefined, 2.5, 'top'); svRender(); return; }
   document.getElementById('svMsg')?.remove();
   svOpenId = id;
   const body = H.$('svBody');
@@ -180,14 +180,14 @@ async function svDoSubmit() {
     if (r.money > 0) H.save.money += r.money;
     s.done = true; H.persist(); H.renderDaily();
     H.$('sv').classList.remove('show'); svOpenId = null; svRender();
-    H.toast(r.money > 0 ? `問卷送出了！領到 $${r.money}` : '問卷送出了，多謝幫忙！', '#9fe0ff');
+    H.toast(r.money > 0 ? `問卷送出了！領到 $${r.money}` : '問卷送出了，多謝幫忙！', '#9fe0ff', 3, 'top');
     try { H.SFX.jingle(); } catch { /* */ }
     return;
   }
-  if (r.st === 'already') { s.done = true; H.save.svClaim ??= []; if (!H.save.svClaim.includes(s.id)) { H.save.svClaim.push(s.id); H.persist(); } H.$('sv').classList.remove('show'); svRender(); H.toast('這份問卷你填過了'); return; }
-  if (r.st === 'ended') { H.toast('問卷已經結束了'); H.$('sv').classList.remove('show'); svFetch(); return; }
+  if (r.st === 'already') { s.done = true; H.save.svClaim ??= []; if (!H.save.svClaim.includes(s.id)) { H.save.svClaim.push(s.id); H.persist(); } H.$('sv').classList.remove('show'); svRender(); H.toast('這份問卷你填過了', undefined, 2.5, 'top'); return; }
+  if (r.st === 'ended') { H.toast('問卷已經結束了', undefined, 3, 'top'); H.$('sv').classList.remove('show'); svFetch(); return; }
   if (r.st === 'bad') { if (errEl) { errEl.style.display = ''; errEl.textContent = r.error ?? '答案有問題，再檢查一下'; } return; }
-  H.toast('連不上伺服器，等一下再試');
+  H.toast('連不上伺服器，等一下再試', undefined, 3, 'top');
 }
 export function setSvPrompted(v: boolean) { svPrompted = v; }
 

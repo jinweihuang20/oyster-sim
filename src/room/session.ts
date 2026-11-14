@@ -6,7 +6,7 @@ import { ROOM_SCENES, roomModeLabel, roomSceneName, roomZhErr, type RoomBody, ty
 export type RoomHooks = {
   id: string;
   nick: () => string;
-  toast: (t: string, c?: string) => void;
+  toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void;
   audio: () => void;
   enterScene: (scene: string, then: () => void) => void;
   applyScene: (scene: string) => void;
@@ -104,7 +104,7 @@ function hideModal() {
 }
 
 function showSetup(kind: 'create' | 'join') {
-  if (!hooks?.canEnter()) { hooks?.toast('現在沒辦法開房間', '#ff8a7a'); return; }
+  if (!hooks?.canEnter()) { hooks?.toast('現在沒辦法開房間', '#ff8a7a', 3, 'top'); return; }
   const el = ensureModal();
   if (kind === 'join') {
     el.innerHTML = `<div class="rmCard"><h3>加入房間</h3>
@@ -172,8 +172,8 @@ async function ensureClient() {
     onState: applySnap,
     onPose: (b) => { view?.applyPose(b); updateCarried(b); },
     onPoses: (list) => { list.forEach(b => { view?.applyPose(b); updateCarried(b); }); },
-    onKicked: () => { hooks?.toast('你被請出房間了', '#ff8a7a'); void kickedOut(); },
-    onClose: () => { if (snap) hooks?.toast('好友房連線中斷', '#ff8a7a'); },
+    onKicked: () => { hooks?.toast('你被請出房間了', '#ff8a7a', 3, 'top'); void kickedOut(); },
+    onClose: () => { if (snap) hooks?.toast('好友房連線中斷', '#ff8a7a', 3, 'top'); },
   });
   client = c;
   return c;
@@ -184,28 +184,28 @@ async function doCreate(scene: string, seats: number, mode: string, durationSec:
   try {
     const c = await ensureClient();
     const r = await c.create(h.id, h.nick(), scene, seats, mode, durationSec, goalMeat, npcCount);
-    if (!r.ok || !r.snap) { h.toast(roomZhErr(r.err), '#ff8a7a'); return; }
+    if (!r.ok || !r.snap) { h.toast(roomZhErr(r.err), '#ff8a7a', 3, 'top'); return; }
     c.token = r.token || '';
     hideModal();
     enterWith(r.snap);
   } catch {
-    h.toast('暫時連不上房間伺服器', '#ff8a7a');
+    h.toast('暫時連不上房間伺服器', '#ff8a7a', 3, 'top');
   }
 }
 
 async function doJoin(code: string) {
   const h = hooks; if (!h) return;
   const raw = code.trim().toUpperCase();
-  if (raw.length !== 6) { h.toast('房間代碼要 6 個字', '#ff8a7a'); return; }
+  if (raw.length !== 6) { h.toast('房間代碼要 6 個字', '#ff8a7a', 2.5, 'top'); return; }
   try {
     const c = await ensureClient();
     const r = await c.join(h.id, h.nick(), raw);
-    if (!r.ok || !r.snap) { h.toast(roomZhErr(r.err), '#ff8a7a'); return; }
+    if (!r.ok || !r.snap) { h.toast(roomZhErr(r.err), '#ff8a7a', 3, 'top'); return; }
     c.token = r.token || '';
     hideModal();
     enterWith(r.snap);
   } catch {
-    h.toast('暫時連不上房間伺服器', '#ff8a7a');
+    h.toast('暫時連不上房間伺服器', '#ff8a7a', 3, 'top');
   }
 }
 
@@ -258,7 +258,7 @@ async function onResults(s: RoomSnap) {
     h.grantPayout(r.payout ?? 0);
     if (r.snap) { snap = r.snap; renderHud(r.snap); }
   } else {
-    h.toast(roomZhErr(r?.err), '#ff8a7a');
+    h.toast(roomZhErr(r?.err), '#ff8a7a', 3, 'top');
     renderHud(s);
   }
 }
@@ -499,7 +499,7 @@ export async function roomTrySit() {
   if (!p || !client) return false;
   if (p.kind === 'sit' && p.slot != null) {
     const r = await client.claimSeat(p.slot);
-    if (!r.ok) { hooks?.toast(roomZhErr(r.err), '#ff8a7a'); return false; }
+    if (!r.ok) { hooks?.toast(roomZhErr(r.err), '#ff8a7a', 3, 'top'); return false; }
     const total = roomPhysicalSeats(snap!.seats, snap!.npcCount ?? 0);
     const pose = roomSeatPose(p.slot, total);
     hooks?.applySeatPose(pose.x, pose.z, pose.yaw);
@@ -508,14 +508,14 @@ export async function roomTrySit() {
   }
   if (p.kind === 'carry' && p.npcConnId) {
     const r = await client.carryNpc(p.npcConnId);
-    if (!r.ok) { hooks?.toast(roomZhErr(r.err), '#ff8a7a'); return false; }
+    if (!r.ok) { hooks?.toast(roomZhErr(r.err), '#ff8a7a', 3, 'top'); return false; }
     carriedConn = p.npcConnId;
     if (r.snap) applySnap(r.snap);
     return true;
   }
   if (p.kind === 'place' && p.npcConnId && p.slot != null) {
     const r = await client.placeNpc(p.npcConnId, p.slot);
-    if (!r.ok) { hooks?.toast(roomZhErr(r.err), '#ff8a7a'); return false; }
+    if (!r.ok) { hooks?.toast(roomZhErr(r.err), '#ff8a7a', 3, 'top'); return false; }
     carriedConn = '';
     if (r.snap) applySnap(r.snap);
     return true;
@@ -526,7 +526,7 @@ export async function roomTrySit() {
 export async function roomStandWalk() {
   if (!client || !roomSeated()) return;
   const r = await client.leaveSeat();
-  if (!r.ok) { hooks?.toast(roomZhErr(r.err), '#ff8a7a'); return; }
+  if (!r.ok) { hooks?.toast(roomZhErr(r.err), '#ff8a7a', 3, 'top'); return; }
   hooks?.afterStand();
   if (r.snap) applySnap(r.snap);
 }
@@ -555,6 +555,6 @@ export function roomSyncPose() { roomTick(0.05); }
 async function act(fn: () => Promise<{ ok: boolean; err?: string; snap?: RoomSnap }>) {
   if (!client) return;
   const r = await fn();
-  if (!r.ok) hooks?.toast(roomZhErr(r.err), '#ff8a7a');
+  if (!r.ok) hooks?.toast(roomZhErr(r.err), '#ff8a7a', 3, 'top');
   else if (r.snap) applySnap(r.snap);
 }

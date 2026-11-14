@@ -11,7 +11,7 @@ export const FRIENDS_DM_ENABLED = false;
 type Deps = {
   id: string;
   nick: () => string;
-  toast: (t: string, c?: string) => void;
+  toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void;
   presenceWhere: () => string;
 };
 
@@ -154,7 +154,7 @@ const errZh: Record<string, string> = {
 
 export async function requestFriend(target: string): Promise<boolean> {
   const t = target.trim();
-  if (!t) { D.toast('請輸入玩家號碼', '#ff8a7a'); return false; }
+  if (!t) { D.toast('請輸入玩家號碼', '#ff8a7a', 2.5, 'top'); return false; }
   const { ok, j } = await post('/friends/request', { target: t });
   if (ok && j?.ok) {
     await loadFriends(true);
@@ -163,36 +163,38 @@ export async function requestFriend(target: string): Promise<boolean> {
         ? `已和 ${j.nick || ''}#${j.tag || ''} 成為好友`
         : `已向 ${j.nick || ''}#${j.tag || ''} 送出好友申請`,
       '#9be37a',
+      3,
+      'top',
     );
     return true;
   }
-  D.toast(errZh[j?.error] || '申請失敗，稍後再試', '#ff8a7a');
+  D.toast(errZh[j?.error] || '申請失敗，稍後再試', '#ff8a7a', 3, 'top');
   return false;
 }
 
 export async function acceptFriend(k: string) {
   const { ok, j } = await post('/friends/accept', { k });
   if (ok && j?.ok) {
-    D.toast(`已和 ${j.nick || ''}#${j.tag || ''} 成為好友`, '#9be37a');
+    D.toast(`已和 ${j.nick || ''}#${j.tag || ''} 成為好友`, '#9be37a', 3, 'top');
     await loadFriends(true);
     return true;
   }
-  D.toast(errZh[j?.error] || '接受失敗', '#ff8a7a');
+  D.toast(errZh[j?.error] || '接受失敗', '#ff8a7a', 3, 'top');
   return false;
 }
 
 export async function declineFriend(k: string) {
   const { ok } = await post('/friends/decline', { k });
-  if (ok) { D.toast('已拒絕／取消', '#ffd76a'); await loadFriends(true); return true; }
-  D.toast('操作失敗', '#ff8a7a');
+  if (ok) { D.toast('已拒絕／取消', '#ffd76a', 2.5, 'top'); await loadFriends(true); return true; }
+  D.toast('操作失敗', '#ff8a7a', 3, 'top');
   return false;
 }
 
 export async function removeFriend(k: string, label: string) {
   if (!confirm(`確定要解除和 ${label} 的好友？`)) return false;
   const { ok } = await post('/friends/remove', { k });
-  if (ok) { D.toast('已解除好友', '#ffd76a'); await loadFriends(true); return true; }
-  D.toast('解除失敗', '#ff8a7a');
+  if (ok) { D.toast('已解除好友', '#ffd76a', 2.5, 'top'); await loadFriends(true); return true; }
+  D.toast('解除失敗', '#ff8a7a', 3, 'top');
   return false;
 }
 
@@ -314,7 +316,7 @@ async function openDm(k: string, title: string) {
     if (!text || !dmWith) return;
     const { ok, j: r } = await post('/friends/dm', { to: dmWith, text });
     if (ok && r?.ok) { inp.value = ''; void openDm(dmWith, title); }
-    else D.toast(errZh[r?.error] || '送出失敗', '#ff8a7a');
+    else D.toast(errZh[r?.error] || '送出失敗', '#ff8a7a', 3, 'top');
   };
 }
 

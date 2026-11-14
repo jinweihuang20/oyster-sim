@@ -91,8 +91,13 @@ button{background:#d9952b;color:#2a1600;border:0;border-radius:14px;padding:8px 
 #reticle.steal.hot .retPalm .ic,#reticle.steal.hot .retStealLab{color:#9be37a}
 #reticle.steal:not(.hot) .retPalm .ic,#reticle.steal:not(.hot) .retStealLab{color:#ff9a8a}
 #gauge.aim{border-color:#9fe0ff}#gauge.aim #zone{background:rgba(120,220,255,.7)}
-#toast{position:absolute;top:40%;width:100%;text-align:center;font-size:30px;font-weight:900;color:#ffe080;opacity:0;transition:opacity .25s;text-shadow:0 2px 6px #000;pointer-events:none;z-index:6;padding:0 12px;box-sizing:border-box}
+/* 放在 body（不在 #hud 裡），才蓋得過主選單 overlay */
+#toast{position:fixed;left:0;right:0;top:40%;width:100%;text-align:center;font-size:30px;font-weight:900;color:#ffe080;opacity:0;transition:opacity .25s,transform .25s;text-shadow:0 2px 6px #000;pointer-events:none;z-index:13500;padding:0 12px;box-sizing:border-box}
 #toast.on{opacity:1}
+/* 畫面上方橫幅（系統／狀態提示；點一下可關） */
+#toast.top{top:calc(var(--sa-top,0px) + 12px);left:50%;right:auto;width:auto;max-width:min(92vw,420px);transform:translate(-50%,-8px);padding:10px 16px;font-size:15px;font-weight:800;letter-spacing:.02em;line-height:1.35;text-align:center;color:#1a140c;background:rgba(246,239,223,.96);border:1.5px solid #d6c49c;border-radius:12px;box-shadow:0 4px 14px rgba(22,25,29,.18);text-shadow:none;pointer-events:none}
+#toast.top.on{transform:translate(-50%,0);pointer-events:auto;cursor:pointer;-webkit-tap-highlight-color:transparent}
+@media (max-width:600px){#toast.top{font-size:14px;padding:9px 14px;max-width:min(94vw,380px)}}
 /* 廣場：提示頂距由 --plaza-toast-top（placeFeed）決定，貼在 HUD／跑馬燈下方 */
 body.plazaMode #toast{top:var(--plaza-toast-top,calc(var(--sa-top,0px) + 118px));font-size:22px;font-weight:900;letter-spacing:.02em;text-shadow:0 1px 4px #000c,0 0 10px #0008;line-height:1.35}
 @media (pointer:coarse){body.plazaMode #toast{font-size:17px}}
@@ -480,7 +485,7 @@ body.tutOn .ntag{display:none!important}
 @media (pointer:coarse) and (orientation:portrait){
  #top{position:absolute}
  #top #nightTag{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:4px;font-size:12px;padding:1px 8px;border-radius:10px;background:rgba(20,12,6,.6);pointer-events:none}
- #top #setBtn,#top #shopBtn,#top #dexBtn,#top #eqBtn{position:relative;z-index:2;flex-shrink:0}
+ #top #setBtn,#top #shopBtn,#top #dexBtn,#top #eqBtn,#top #rankBtn{position:relative;z-index:2;flex-shrink:0}
  #top #timer,#top #count,#top #pearls{flex-shrink:1;min-width:0}
 }
 
@@ -1132,8 +1137,10 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 
 /* 廣場：狀態列蓋過 #plazaRoot(9000)，避免地圖鈕擋到 #top／#stats */
 body.plazaMode #top,body.plazaMode #stats,body.plazaRoam #top,body.plazaRoam #stats{z-index:9100}
-#top #eqBtn{display:none}
+#top #eqBtn,#top #rankBtn{display:none}
 body.plazaMode #top #eqBtn,body.plazaRoam #top #eqBtn{display:inline-block}
+body.plazaMode #top #rankBtn,body.plazaRoam #top #rankBtn{display:inline-flex!important;align-items:center;justify-content:center}
+body.plazaMode #hpWrap,body.plazaRoam #hpWrap{display:none!important}
 body.plazaMode #top #dexBtn,body.plazaRoam #top #dexBtn{display:none!important}
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
@@ -2336,7 +2343,7 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
 }
 
 /* 廣場裡開商店／圖鑑／裝備要蓋過廣場名牌、HUD 與按鈕 */
-body:is(.plazaMode,.plazaRoam) :is(#shop,#dex,#equip).show{z-index:9600!important}
+body:is(.plazaMode,.plazaRoam) :is(#shop,#dex,#equip,#lb).show{z-index:9600!important}
 /* 旗幟樣式：選中的要一眼看得出來 */
 #shop .flagShop .flagChip{min-height:34px!important;min-width:0!important;opacity:.78}
 #shop .flagShop .flagChip.on{opacity:1;background:#2a5a86!important;border-color:#e9d9a8!important;color:#fff!important;font-weight:700;box-shadow:0 0 0 2px rgba(233,217,168,.55),0 2px 8px rgba(0,0,0,.25)!important;padding-left:24px!important;position:relative}

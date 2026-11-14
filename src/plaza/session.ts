@@ -26,7 +26,7 @@ import { pileDiffOf, pileDiffName, parsePileDiffs, weightsFor, PILE_DIFF_MIXED }
 export type PlazaDeps = {
   id: string;
   nick: () => string;
-  toast: (t: string, c?: string) => void;
+  toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void;
   audio: () => void;
   scene: THREE.Scene;
   camera: () => THREE.Camera;
@@ -679,7 +679,7 @@ function applySeatWishEnd(e: PlazaSeatWishEnd) {
       deps?.grantMoney?.(pay, 'seat-wish');
       deps?.toast(`送到了，拿到 $${pay.toLocaleString('zh-TW')}`, '#9be37a');
     } else if (e.capped) {
-      deps?.toast('今日獎金已達上限', '#ffd76a');
+      deps?.toast('今日獎金已達上限', '#ffd76a', 3, 'top');
     } else {
       deps?.toast('送到了', '#9be37a');
     }
@@ -702,7 +702,7 @@ async function boot(D: PlazaDeps) {
     netDown = true;
     const why = (r.err || '').trim();
     // preview／本機常見：CORS（請用 localhost 勿用 127.0.0.1）或正式 hub 被擋
-    D.toast(why ? `廣場連不上（${why}），先離線逛` : '廣場暫時連不上，先離線逛，連上會自動同步', '#ffb08a');
+    D.toast(why ? `廣場連不上（${why}），先離線逛` : '廣場暫時連不上，先離線逛，連上會自動同步', '#ffb08a', 3, 'top');
     D.enterWalk();
     showRoamUi();
     setHud('離線中　可以先坐下自己剝、自己烤');
@@ -734,7 +734,7 @@ async function boot(D: PlazaDeps) {
     if (!active) return;
     // 進場例外：仍放行離線逛，避免卡在「正在入場」
     netDown = true;
-    D.toast('廣場入場異常，先離線逛', '#ffb08a');
+    D.toast('廣場入場異常，先離線逛', '#ffb08a', 3, 'top');
     try { setHud('離線中　可以先坐下自己剝、自己烤'); } catch { /* */ }
     try { D.enterWalk(); showRoamUi(); syncPlazaPeopleHud(); setNetBanner('連線異常，正在重連…'); } catch { void abortEnter(D, 'boot_fail'); return; }
     scheduleManualReconnect(3000);
@@ -776,7 +776,7 @@ async function doManualReconnect() {
   }
   if (!r.ok) {
     setNetBanner(`重連失敗，稍後再試…`);
-    deps.toast('廣場重連失敗，持續嘗試中', '#ffb08a');
+    deps.toast('廣場重連失敗，持續嘗試中', '#ffb08a', 3, 'top');
     scheduleManualReconnect(Math.min(20000, 4000 + Math.random() * 2000));
   }
 }
@@ -817,7 +817,7 @@ async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?
         deps.enterMgSit(mySlot, expireAt, ammo, mgFromMeat);
       } else if (shiftStarted && !isLeisurePile(myPile)) deps.refillBasin?.();
       flashNetOk('已重連，位子還在');
-      deps.toast('已重連，位子還在', '#9be37a');
+      deps.toast('已重連，位子還在', '#9be37a', 2.5, 'top');
       setHud(plazaHudPeople(snap));
       return;
     }
@@ -827,12 +827,12 @@ async function restoreAfterRejoin(s?: PlazaSnapshot, chat?: PlazaChat[], grills?
     syncSeatChrome();
     deps.goWalk();
     flashNetOk('已重連');
-    deps.toast(r.err === 'taken' ? '已重連，原位子有人了，請另找空位' : '已重連，請重新找位子坐下', '#ffd76a');
+    deps.toast(r.err === 'taken' ? '已重連，原位子有人了，請另找空位' : '已重連，請重新找位子坐下', '#ffd76a', 3, 'top');
     setHud(`${plazaHudPeople(snap)}　靠近空位坐下`);
     return;
   }
   flashNetOk('廣場已重新連線');
-  deps.toast('廣場已重新連線', '#9be37a');
+  deps.toast('廣場已重新連線', '#9be37a', 2.5, 'top');
   if (!seated) setHud(`${plazaHudPeople(snap)}　靠近空位坐下`);
 }
 
@@ -870,7 +870,7 @@ function wireClient(D: PlazaDeps) {
         snap.occupied = snap.players.filter((x) => !x.isNpc).length;
       }
       syncPlazaPeopleHud();
-      if (!existed && !n.isNpc && n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 進來廣場了`, '#9fe0ff');
+      if (!existed && !n.isNpc && n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 進來廣場了`, '#9fe0ff', 2.5, 'top');
     },
     onLeft: (p) => {
       const n = normPlayer(p);
@@ -880,7 +880,7 @@ function wireClient(D: PlazaDeps) {
         snap.occupied = snap.players.filter((x) => !x.isNpc).length;
       }
       syncPlazaPeopleHud();
-      if (!n.isNpc && n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 離開廣場了`, '#ffb08a');
+      if (!n.isNpc && n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 離開廣場了`, '#ffb08a', 2.5, 'top');
     },
     onSeatChanged: (p) => { mergePlayer(normPlayer(p)); view?.applyPose(normPlayer(p), D.id); },
     onPose: (p) => { const n = normPlayer(p); mergePlayer(n); view?.applyPose(n, D.id); },
@@ -928,7 +928,7 @@ function wireClient(D: PlazaDeps) {
       if (!active) return;
       netDown = true;
       setNetBanner(`連線不穩，正在重連（第 ${attempt} 次）…`);
-      if (attempt === 1) D.toast('廣場連線中斷，正在重連…', '#ffb08a');
+      if (attempt === 1) D.toast('廣場連線中斷，正在重連…', '#ffb08a', 3, 'top');
     },
     onSocketReconnected: () => {
       if (!active) return;
@@ -940,13 +940,13 @@ function wireClient(D: PlazaDeps) {
       if (!active) return;
       netDown = true;
       setNetBanner(`重連中（第 ${attempt ?? '?'} 次）…`);
-      D.toast(zhErr(err) || '重連失敗，繼續嘗試', '#ffb08a');
+      D.toast(zhErr(err) || '重連失敗，繼續嘗試', '#ffb08a', 3, 'top');
     },
     onClose: () => {
       if (!active) return;
       netDown = true;
       setNetBanner('連線中斷，正在重連…');
-      D.toast('廣場連線中斷，正在重連…', '#ffb08a');
+      D.toast('廣場連線中斷，正在重連…', '#ffb08a', 3, 'top');
       scheduleManualReconnect(1500);
     },
   });
@@ -1334,7 +1334,7 @@ async function pullMyFlag() {
   try {
     const r = await plazaTryRemoveFlag();
     if (!r.ok) { deps.toast(r.err === 'not_planted' ? '你的旗還沒插在廣場上' : r.err === 'nosup' ? '這台伺服器還沒開放收旗' : flagSlowText(r.err, r.waitMs, 'remove'), '#ffb08a'); return; }
-    deps.toast('旗收起來了，文字和升級都會保留', '#9be37a');
+    deps.toast('旗收起來了，文字和升級都會保留', '#9be37a', 3, 'top');
     deps.track('flag_pull', {});
   } finally { pullBusy = false; }
 }
@@ -1396,7 +1396,7 @@ async function plantMyFlag() {
       myFlagText = r.flag.text;
       upsertFlag(r.flag);
     }
-    deps.toast('旗插好了', '#9be37a');
+    deps.toast('旗插好了', '#9be37a', 2.5, 'top');
     deps.track('flag_plant', {});
   } finally {
     plantBusy = false;

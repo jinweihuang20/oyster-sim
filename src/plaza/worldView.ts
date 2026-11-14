@@ -24,6 +24,7 @@ import {
   type PlazaSeatRef,
 } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
+import { makeCareerMarquee } from './careerMarquee';
 import { makeInstancedPlazaChairs, makeInstancedPads, type ChairPose } from './instancedProps';
 import { bakeStaticLighting } from './bakeLighting';
 import { mergeStaticMeshes, countMeshes } from './mergeStatic';
@@ -302,6 +303,8 @@ export function createPlazaWorldView(
   // 廣場大棚（鏽鐵皮＋外圈木柱；厝頂／高樑可第三人稱半透明）— 進場必建
   const bigShed = makePlazaBigShed(M, add, LO);
   root.add(bigShed.group);
+  const careerMarquee = makeCareerMarquee(LO);
+  root.add(careerMarquee.group);
   const tpOccludeMats = bigShed.tpOccludeMats;
   let tpOccludeK = 0;
   let tpOccludeErrLogged = false;
@@ -2499,6 +2502,7 @@ function hashPid(pid: string) {
       cafe?.tick(tSec, fdt);
       flags.tick(fdt, camera);
       if (!eco) bigShed.tick(fdt);
+      careerMarquee.tick(fdt);
       tickRemoteExhales(fdt);
     }
     // 遠端吸菸：手持菸（掛腕）＋菸頭薄煙；不再用頭側飄煙以免看起來沒拿菸
@@ -2624,6 +2628,7 @@ function hashPid(pid: string) {
     disposePileDiffSigns();
     flags.dispose();
     grill.dispose();
+    try { careerMarquee.dispose(); } catch { /* */ }
     for (const f of fireFx) f.dispose();
     fireFx.length = 0;
     try { smokeArea?.ambientSmoke.dispose(); } catch { /* */ }

@@ -4,7 +4,7 @@ export type Med = { id: string; n: string; emo: string; price: number; dur: numb
 
 export type MedsDeps = {
   $: (id: string) => HTMLElement;
-  toast: (t: string, c?: string) => void;
+  toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void;
   track: (t: string, d?: Record<string, unknown>) => void;
   persist: () => void;
   getSave: () => { meds: Record<string, number>; money: number };
@@ -57,7 +57,7 @@ export function tickMeds(dt: number) {
   for (const k in medT) {
     const was = medT[k] > 0;
     medT[k] = Math.max(0, medT[k] - dt);
-    if (was && medT[k] <= 0) { ch = true; const m = MEDS.find(x => x.id === k); if (m) D.toast(`${m.emo}${m.n} 效果結束了`, '#cfc3ff'); }
+    if (was && medT[k] <= 0) { ch = true; const m = MEDS.find(x => x.id === k); if (m) D.toast(`${m.n} 效果結束了`, '#cfc3ff', 2.5, 'top'); }
   }
   medDrawT -= dt;
   if (ch || medDrawT <= 0) { medDrawT = 1; drawMeds(); }

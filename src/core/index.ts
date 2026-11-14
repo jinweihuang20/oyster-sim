@@ -14,4 +14,8 @@ export {
 export {
   eco, ECO_DEFAULTS, fetchEconomy, applyEconomy, syncEconomyTables, plazaSoftCapClient, plazaPayMult, type EconomyCfg,
 } from './economy';
+export {
+  writeShiftDraft, clearShiftDraft, takeShiftDraft, computeDraftEarn,
+  type ShiftDraftBody, type ShiftDraftMode,
+} from './shiftDraft';
 export { installNoZoom } from './nozoom';

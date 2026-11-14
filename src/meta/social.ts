@@ -1,7 +1,7 @@
 // 全服彈幕＋全球排行榜（後端：StatsServer /s/*）。後端關機時全部安靜失敗。
 import { postDiscordFirstPlay, postDiscordRename } from '../core/discord';
 const API = 'https://game-status.gwtech.org/s';
-type Deps = { id: string; test: boolean; nick: () => string; setNick: (v: string) => void; inTut: () => boolean; on: () => boolean; label: (kind: string, item: number) => string; title?: () => string; foil?: () => boolean; toast: (t: string) => void; LS: { getItem(k: string): string | null; setItem(k: string, v: string): void } };
+type Deps = { id: string; test: boolean; nick: () => string; setNick: (v: string) => void; inTut: () => boolean; on: () => boolean; label: (kind: string, item: number) => string; title?: () => string; foil?: () => boolean; toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void; LS: { getItem(k: string): string | null; setItem(k: string, v: string): void } };
 let D: Deps;
 const $ = (id: string) => document.getElementById(id)!;
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
@@ -109,6 +109,29 @@ export function submit(s: ScorePayload) {
   return post('/score', { scores: s }).then(() => { lastRank = 0; checkPassed(); });
 }
 
+/** 廣場南牆跑馬燈：生涯各榜前三（view=all） */
+export async function fetchCareerTop3(): Promise<string[]> {
+  if (!D) return [];
+  const ids: BoardId[] = ['earn', 'oy0', 'oy1', 'oy2', 'oy3'];
+  const fmt = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toLocaleString('en-US') : String(v ?? '');
+  };
+  return Promise.all(ids.map(async id => {
+    const meta = boardMeta(id);
+    const r = await get(`/top?board=${id}&view=all&n=3${tq()}`);
+    const rows = Array.isArray(r?.rows) ? (r.rows as { nick?: string; tag?: string; v?: number; rank?: number }[]) : [];
+    if (!rows.length) return `【${meta.label}】尚無紀錄`;
+    const parts = rows.slice(0, 3).map((x, i) => {
+      const score = meta.unit === '$' ? `$${fmt(x.v)}` : fmt(x.v);
+      const nick = String(x.nick ?? '？');
+      const tag = String(x.tag ?? '????');
+      return `${i + 1}.${nick}#${tag} ${score}`;
+    });
+    return `【${meta.label}】${parts.join('　')}`;
+  }));
+}
+
 /** 客戶端玩法收入（工寮／廣場剝蚵、死鬥獎金）累加到今日收入。伺服器發放的送座位／好友房不要走這裡，以免重覆入帳。 */
 export function addPlayIncome(amount: number, extra?: Omit<ScorePayload, 'income'>) {
   const n = Math.max(0, Math.floor(amount));
@@ -126,7 +149,7 @@ async function checkPassed() {
   const rank = r.mine.rank as number;
   if (lastRank && rank > lastRank && !D.inTut()) {
     const above = (r.rows as any[]).find(x => x.rank === rank - 1);
-    D.toast(above ? `${above.nick}#${above.tag} 超過你了！` : '有人超過你了！');
+    D.toast(above ? `${above.nick}#${above.tag} 超過你了！` : '有人超過你了！', undefined, 3, 'top');
   }
   lastRank = rank;
 }
@@ -235,7 +258,7 @@ export function init(d: Deps) {
   $('lbClose').onclick = () => $('lb').classList.remove('show');
   const ni = $('lbNick') as HTMLInputElement;
   ni.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); ni.blur(); } });
-  $('lbNickSave').onclick = async () => { D.setNick(ni.value); ni.value = D.nick() === '剝蚵人' ? '' : D.nick(); await post('/score', { scores: {} }); D.toast('名字改好了'); render(); };
+  $('lbNickSave').onclick = async () => { D.setNick(ni.value); ni.value = D.nick() === '剝蚵人' ? '' : D.nick(); await post('/score', { scores: {} }); D.toast('名字改好了', undefined, 2, 'top'); render(); };
   setInterval(poll, 25_000); setTimeout(poll, 3000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) showNext(); });
 }

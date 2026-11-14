@@ -49,7 +49,7 @@ export type YardShopDeps = {
   onPetChange?: () => void;
   getPlayerId: () => string;
   getNick: () => string;
-  toast: (t: string, c?: string) => void;
+  toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void;
   getShopTab: () => number;
   onFlagChange?: () => void;
   showFlag?: (on: boolean) => Promise<{ ok: boolean; err?: string; mine?: PlazaFlagState | null; waitMs?: number }>;
@@ -449,7 +449,7 @@ function bindFlagShop(mine: PlazaFlagState | null) {
         D.toast(m[r.err || ''] ?? flagSlowText(r.err, r.waitMs, on ? 'plant' : 'remove'), '#ffb08a');
         return;
       }
-      D.toast(on ? '旗子插回原本的位置了' : '旗子收起來了，文字和升級都會保留', '#9be37a');
+      D.toast(on ? '旗子插回原本的位置了' : '旗子收起來了，文字和升級都會保留', '#9be37a', 3, 'top');
       renderFlagShop(r.mine ?? mine);
     } finally { if (b.isConnected) b.disabled = false; }
   });
