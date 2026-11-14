@@ -289,13 +289,19 @@ function dressAmaHat(rig: PlayerRig, ama: AmaFarmLook) {
 /** 套花布衫、袖套、白髮包髻；帽子較少且讓髮髻露在後面。少數 pid 改穿比基尼。 */
 export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook, pid?: string) {
   if (amaWearsBikini(pid)) {
-    // 比基尼本體由 applyOutfitToRig 建；勿 clearOutfitDetails
+    // 比基尼本體由 applyOutfitToRig 建；勿整套 clearOutfitDetails（會清掉比基尼細節）
     applyOutfitToRig(rig, {
       head: ama.head === 'none' ? 'hd_none' : ama.head,
       hand: 'hn_basic',
       body: 'bd_bikini',
       legs: 'lg_none',
       feet: 'ft_basic',
+    });
+    // 只清裝備髮型並還原基本髮塊，保留白髮＋包髻
+    const hairDet = rig.head.userData.eqHairDet as THREE.Group | undefined;
+    if (hairDet) while (hairDet.children.length) hairDet.remove(hairDet.children[hairDet.children.length - 1]!);
+    rig.head.traverse(o => {
+      if ((o as THREE.Mesh).isMesh && o.userData.baseHair) o.visible = true;
     });
     paintAmaHair(rig, ama);
     dressAmaHat(rig, ama);
