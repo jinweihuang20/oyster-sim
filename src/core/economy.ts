@@ -50,7 +50,7 @@ export const ECO_DEFAULTS: EconomyCfg = {
   return30: 30_000,
   locMult: { home: 1, wanggong: 1.2, dongshi: 1.4, budai: 1.7 },
   rarPrices: [200, 600, 1800, 6000],
-  plazaMaxEarn: 1_000_000,
+  plazaMaxEarn: 99_999_999,
   plazaCapBase: 80,
   plazaCapDurSec: 1800,
   plazaCapPerSec: 12,
