@@ -1127,37 +1127,95 @@ function buildSideBraidHair(parent: THREE.Object3D, mat: THREE.Material) {
 }
 
 /**
- * 爆炸頭：圓潤蓬鬆 afro。幾何小塊堆成雲狀球體，停在眉上；額、眼、臉全露。
+ * 爆炸頭：復古迪斯可超大圓 afro（低面球簇）。
+ * 包覆基準同前（嵌進頭上半、眉上／耳上界線）；外圍半徑放大成飽滿近正圓雲球。
  */
 function buildAfroHair(parent: THREE.Object3D, mat: THREE.Material) {
-  // 頭頂銜接，避免雲體與頭皮脫縫
-  add(parent, G('hr-afro-cap', () => rbox(0.22, 0.04, 0.22)), mat, [0, 0.155, 0.0]);
-  add(parent, G('hr-afro-front', () => rbox(0.14, 0.03, 0.05)), mat, [0, 0.14, -0.11]);
-  // 主雲體：低面數球，扁圓、底緣停眉上
-  add(parent, G('hr-afro-cloud', () => {
-    const g = crease(new THREE.SphereGeometry(0.20, 8, 6));
-    g.scale(1.15, 0.95, 1.1);
-    return g;
-  }), mat, [0, 0.28, 0.0]);
-  // 幾何捲塊：四面／低面球疊出雲邊與質感
-  const curls: [number, number, number, number][] = [
-    [0.0, 0.36, -0.06, 0.09],
-    [-0.12, 0.30, -0.04, 0.085],
-    [0.12, 0.30, -0.04, 0.085],
-    [-0.14, 0.26, 0.06, 0.08],
-    [0.14, 0.26, 0.06, 0.08],
-    [-0.08, 0.32, 0.12, 0.08],
-    [0.08, 0.32, 0.12, 0.08],
-    [0.0, 0.28, 0.16, 0.075],
-    [-0.10, 0.22, -0.08, 0.07],
-    [0.10, 0.22, -0.08, 0.07],
-    [0.0, 0.22, -0.12, 0.065],
-    [-0.16, 0.24, 0.0, 0.07],
-    [0.16, 0.24, 0.0, 0.07],
-    [0.0, 0.40, 0.02, 0.07],
+  // 頭皮銜接基準不變
+  add(parent, G('hr-afro-cap6', () => rbox(0.26, 0.05, 0.24)), mat, [0, 0.14, 0.02]);
+  add(parent, G('hr-afro-back6', () => rbox(0.26, 0.16, 0.08)), mat, [0, 0.04, 0.145]);
+  add(parent, G('hr-afro-nape6', () => rbox(0.22, 0.10, 0.07)), mat, [0, -0.04, 0.13]);
+  add(parent, G('hr-afro-side6', () => rbox(0.06, 0.12, 0.18)), mat, [-0.15, 0.08, 0.02]);
+  add(parent, G('hr-afro-side6', () => rbox(0.06, 0.12, 0.18)), mat, [0.15, 0.08, 0.02]);
+  // 前額髮際：下緣嚴格眉上
+  add(parent, G('hr-afro-brow6', () => rbox(0.20, 0.04, 0.055)), mat, [0, 0.105, -0.145]);
+
+  // 球心約在頭顱上半中心；外殼半徑 ~0.30，約略正圓向外炸開
+  const CX = 0, CY = 0.16, CZ = 0.04;
+  const shellR = 0.30;
+
+  // 核心：略大、填滿內側，避免貼頭皮扁塌
+  const cores: [number, number, number, number, number, number, number][] = [
+    [CX, CY, CZ, 0.20, 1.15, 1.08, 1.12],
+    [CX, CY + 0.04, CZ + 0.06, 0.16, 1.1, 1.05, 1.08],
+    [CX - 0.10, CY, CZ + 0.02, 0.14, 1.05, 1.05, 1.05],
+    [CX + 0.10, CY, CZ + 0.02, 0.14, 1.05, 1.05, 1.05],
+    [CX, CY - 0.04, CZ + 0.08, 0.13, 1.08, 1.0, 1.05],
   ];
-  for (const [x, y, z, r] of curls) {
-    add(parent, G(`hr-afro-curl-${r}`, () => crease(new THREE.SphereGeometry(r, 6, 5))), mat, [x, y, z]);
+  for (const [x, y, z, r, sx, sy, sz] of cores) {
+    add(parent, G(`hr-afro-core7-${r}`, () => {
+      const g = crease(new THREE.SphereGeometry(r, 7, 5));
+      g.scale(sx, sy, sz);
+      return g;
+    }), mat, [x, y, z]);
+  }
+
+  // 球殼取樣：均勻方位角＋仰角，外輪廓趨近正圓；前下半裁掉以免蓋眼／蓋耳
+  const shell: [number, number, number, number][] = [];
+  const rings = [
+    { elev: 1.15, n: 1, rad: 0.10 },   // 正頂
+    { elev: 0.85, n: 6, rad: 0.095 },
+    { elev: 0.50, n: 8, rad: 0.09 },
+    { elev: 0.15, n: 8, rad: 0.09 },
+    { elev: -0.20, n: 8, rad: 0.085 }, // 約耳上／後頸上高度
+  ];
+  for (const ring of rings) {
+    for (let i = 0; i < ring.n; i++) {
+      const az = (i / ring.n) * Math.PI * 2 + ring.elev * 0.3;
+      const ce = Math.cos(ring.elev);
+      const x = CX + Math.cos(az) * shellR * ce;
+      const y = CY + Math.sin(ring.elev) * shellR;
+      const z = CZ + Math.sin(az) * shellR * ce;
+      // 前下：擋掉會蓋眼／臉的點（y 低且 z 過前）
+      if (z < -0.12 && y < 0.14) continue;
+      // 兩側下緣：維持耳上（y 太低且 |x| 大）
+      if (y < 0.05 && Math.abs(x) > 0.12) continue;
+      shell.push([x, y, z, ring.rad]);
+    }
+  }
+  // 補填頂側凹陷（花椰菜縫）
+  const fillers: [number, number, number, number][] = [
+    [CX - 0.14, CY + 0.18, CZ - 0.02, 0.09],
+    [CX + 0.14, CY + 0.18, CZ - 0.02, 0.09],
+    [CX - 0.18, CY + 0.10, CZ + 0.06, 0.09],
+    [CX + 0.18, CY + 0.10, CZ + 0.06, 0.09],
+    [CX - 0.16, CY + 0.06, CZ - 0.04, 0.08],
+    [CX + 0.16, CY + 0.06, CZ - 0.04, 0.08],
+    [CX, CY + 0.22, CZ + 0.10, 0.095],
+    [CX, CY + 0.12, CZ + 0.22, 0.09],
+    [CX - 0.12, CY + 0.04, CZ + 0.18, 0.085],
+    [CX + 0.12, CY + 0.04, CZ + 0.18, 0.085],
+    // 前額雲緣（仍 ≥ 眉上）
+    [CX, CY + 0.02, CZ - 0.14, 0.07],
+    [CX - 0.09, CY + 0.04, CZ - 0.12, 0.065],
+    [CX + 0.09, CY + 0.04, CZ - 0.12, 0.065],
+  ];
+  for (const c of fillers) shell.push(c);
+
+  for (const [x, y, z, r] of shell) {
+    add(parent, G(`hr-afro-curl7-${r}`, () => crease(new THREE.SphereGeometry(r, 6, 5))), mat, [x, y, z]);
+  }
+
+  const facets: [number, number, number, number][] = [
+    [CX - 0.14, CY + 0.14, CZ + 0.10, 0.08],
+    [CX + 0.14, CY + 0.14, CZ + 0.10, 0.08],
+    [CX, CY + 0.20, CZ + 0.06, 0.085],
+    [CX - 0.10, CY + 0.08, CZ + 0.16, 0.075],
+    [CX + 0.10, CY + 0.08, CZ + 0.16, 0.075],
+    [CX, CY + 0.06, CZ + 0.20, 0.08],
+  ];
+  for (const [x, y, z, r] of facets) {
+    add(parent, G(`hr-afro-facet7-${r}`, () => crease(new THREE.IcosahedronGeometry(r, 0))), mat, [x, y, z]);
   }
 }
 
