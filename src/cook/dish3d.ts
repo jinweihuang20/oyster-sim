@@ -146,13 +146,6 @@ export function buildDish(id: number, combo?: Combo): THREE.Group {
       glaze.rotation.x = -Math.PI / 2; glaze.scale.setScalar(0.7); glaze.position.y = top + 0.001; g.add(glaze);
     }
   }
-  if (loose && !c.top && !c.egg && !c.sauce) {
-    // 空氣：只有幾縷煙
-    for (let i = 0; i < 3; i++) {
-      const m = new THREE.Mesh(G.blob, mat('#ffffff', { opacity: 0.25 }));
-      m.scale.set(0.12, 0.18, 0.12); m.position.set((r() - 0.5) * 0.5, 0.25 + i * 0.22, (r() - 0.5) * 0.5); g.add(m);
-    }
-  }
   g.userData.dishId = id;
   return g;
 }
