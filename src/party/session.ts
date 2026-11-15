@@ -127,12 +127,16 @@ function renderPartyHud(s: PartySnap) {
   const n = s.occupied || s.players.length;
   const cap = s.capacity || PARTY_CAPACITY;
   el.innerHTML = `<div class="ptHudIn">
-    <span class="ptLab">休閒房 <b>${esc(s.code)}</b>・${n}/${cap}</span>
-    <span class="ptActsHud">
-      <button type="button" id="ptCopy" title="複製邀請網址">複製網址</button>
+    <div class="ptMeta">
+      <span class="ptBadge">休閒房</span>
+      <span class="ptCode">${esc(s.code)}</span>
+      <span class="ptCount">${n}/${cap}</span>
+    </div>
+    <div class="ptActsHud">
+      <button type="button" id="ptCopy" title="複製邀請網址">網址</button>
       <button type="button" id="ptInvite" title="邀請好友">邀請</button>
-      <button type="button" id="ptLeave">離開</button>
-    </span>
+      <button type="button" id="ptLeave" class="ptLeave">離開</button>
+    </div>
   </div>`;
   el.classList.add('on');
   el.querySelector('#ptCopy')?.addEventListener('click', () => { void copyInvite(s.code); });

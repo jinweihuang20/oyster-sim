@@ -2657,23 +2657,64 @@ input[type=range]#rmEdSeats,input[type=range]#rmEdDur,input[type=range]#rmEdGoal
 #partyModal .ptFrRow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.04)}
 #partyModal .ptFrRow button{flex:none;min-height:36px;padding:4px 12px}
 #partyModal .ptEmpty{opacity:.75;font-size:13px;padding:8px 0}
+/* 休閒房 HUD：掛在 #top／#stats 下方精簡列，不擋頂部雜貨／裝備／設定 */
 #partyHud{
-  position:fixed;z-index:9200;top:calc(var(--sa-top) + 8px);left:50%;transform:translateX(-50%);
-  width:min(96vw,440px);display:none;pointer-events:none
+  position:fixed;z-index:9050;
+  /* 預設對齊手機：#stats 約在 sa-top+58 */
+  top:calc(var(--sa-top) + 96px);left:50%;transform:translateX(-50%);
+  width:auto;max-width:min(96vw,400px);display:none;pointer-events:none
 }
 #partyHud.on{display:block;pointer-events:auto}
 #partyHud .ptHudIn{
-  display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
-  padding:8px 12px;border-radius:12px;background:rgba(12,18,26,.82);
-  border:1px solid #3a5470;color:#e8edf2;font-weight:800
+  display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:nowrap;
+  padding:3px 6px 3px 8px;border-radius:10px;
+  background:rgba(22,28,36,.55);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,.18);color:#f2f4f7;
+  box-shadow:0 4px 14px rgba(0,0,0,.22);font-size:12px;font-weight:800;line-height:1.2
 }
-#partyHud .ptLab b{color:#9be37a;letter-spacing:.06em}
-#partyHud .ptActsHud{display:flex;gap:6px;flex-wrap:wrap}
+#partyHud .ptMeta{display:inline-flex;align-items:center;gap:6px;min-width:0;white-space:nowrap}
+#partyHud .ptBadge{
+  flex:none;padding:2px 6px;border-radius:6px;font-size:10px;font-weight:900;letter-spacing:.04em;
+  background:rgba(42,90,134,.55);border:1px solid rgba(154,200,240,.35);color:#cfe8ff
+}
+#partyHud .ptCode{color:#9be37a;letter-spacing:.1em;font-variant-numeric:tabular-nums;font-size:13px}
+#partyHud .ptCount{opacity:.85;font-variant-numeric:tabular-nums;font-size:11px;color:#d7e2ec}
+#partyHud .ptActsHud{display:inline-flex;gap:4px;flex:none}
 #partyHud .ptActsHud button{
-  pointer-events:auto;min-height:32px;padding:4px 10px;border-radius:8px;border:1px solid #4a6a88;
-  background:#243448;color:#e8edf2;font-weight:800;font-size:12px;cursor:pointer
+  pointer-events:auto;min-height:28px;padding:2px 8px;border-radius:7px;
+  border:1px solid rgba(255,255,255,.22);background:rgba(36,52,72,.72);
+  color:#e8edf2;font-weight:800;font-size:11px;cursor:pointer;white-space:nowrap
 }
+#partyHud .ptActsHud button.ptLeave{background:rgba(90,40,36,.55);border-color:rgba(255,160,140,.35);color:#ffd0c4}
 body.partyMode #partyHud.on{display:block}
+/* 頂部狀態列永遠蓋過休閒房列（點擊／視線優先） */
+body.partyMode #top,body.partyMode #stats{z-index:9100}
+/* 休閒房改走 #partyHud 離開／邀請；藏廣場左上地圖＋離開，避免再擋頂列 */
+body.partyMode #pzLeftFabs{display:none!important}
+/* 休閒房：提示／toast 再往下，避開精簡列 */
+body.partyMode{
+  --plaza-toast-top:calc(var(--sa-top,0px) + 138px);
+}
+body.partyMode #hint{top:calc(var(--sa-top) + 132px)!important}
+@media (pointer:coarse){
+  #partyHud .ptHudIn{gap:6px;padding:3px 5px 3px 7px}
+  #partyHud .ptActsHud button{min-height:32px;padding:3px 9px;font-size:12px}
+}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
+  /* 矮橫向：#stats 常藏，列貼在 #top 下即可 */
+  #partyHud{top:calc(var(--sa-top) + 46px);max-width:min(70vw,360px)}
+  #partyHud .ptBadge{display:none}
+  #partyHud .ptCode{font-size:12px}
+  #partyHud .ptActsHud button{min-height:28px;font-size:11px;padding:2px 7px}
+  body.partyMode{--plaza-toast-top:calc(var(--sa-top,0px) + 84px)}
+  body.partyMode #hint{top:calc(var(--sa-top) + 78px)!important}
+}
+@media (pointer:fine){
+  /* 桌面 #stats 在 top:86px，休閒房列要再往下 */
+  #partyHud{top:calc(var(--sa-top) + 130px)}
+  body.partyMode{--plaza-toast-top:calc(var(--sa-top,0px) + 172px)}
+  body.partyMode #hint{top:calc(var(--sa-top) + 166px)!important}
+}
 
 /* 1v1 單挑競速 */
 #raceModal{position:fixed;inset:0;z-index:13050;display:none;align-items:center;justify-content:center;background:rgba(8,12,18,.55);padding:16px}

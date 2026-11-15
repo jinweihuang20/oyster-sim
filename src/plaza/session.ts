@@ -233,11 +233,38 @@ export function plazaScoopWeights(): number[] {
   return weightsFor(kind < 0 ? PILE_DIFF_MIXED : kind);
 }
 
+/** 休閒房圍牆半寬（與 worldView partyHalf 對齊，略內縮當可走界） */
+const PARTY_WALK_HALF = 6.4;
+
 /** @deprecated 對稱邊界；走動請用 plazaWalkRect */
-export function plazaWalkBound() { return WALK_BOUND; }
-export function plazaWalkRect() { return plazaWalkBounds(); }
-/** 東延咖啡前庭夾限（在矩形夾限之後呼叫） */
-export function plazaWalkClamp(p: { x: number; z: number }) { plazaClampWalk(p); }
+export function plazaWalkBound() { return partyMode ? PARTY_WALK_HALF : WALK_BOUND; }
+export function plazaWalkRect() {
+  if (partyMode) {
+    const c = pileCenter(CENTER_PILE_ID);
+    return {
+      minX: c.x - PARTY_WALK_HALF,
+      maxX: c.x + PARTY_WALK_HALF,
+      minZ: c.z - PARTY_WALK_HALF,
+      maxZ: c.z + PARTY_WALK_HALF,
+    };
+  }
+  if (raceMode) {
+    const c = pileCenter(0);
+    const h = 3.1;
+    return { minX: c.x - h, maxX: c.x + h, minZ: c.z - h, maxZ: c.z + h };
+  }
+  return plazaWalkBounds();
+}
+/** 東延咖啡前庭夾限（在矩形夾限之後呼叫）；休閒房／單挑只夾矩形 */
+export function plazaWalkClamp(p: { x: number; z: number }) {
+  if (partyMode || raceMode) {
+    const r = plazaWalkRect();
+    p.x = Math.max(r.minX, Math.min(r.maxX, p.x));
+    p.z = Math.max(r.minZ, Math.min(r.maxZ, p.z));
+    return;
+  }
+  plazaClampWalk(p);
+}
 export function plazaPileObs(): [number, number, number][] {
   const out = pileObstacles();
   for (const p of plazaShedPosts()) out.push([p.x, p.z, 0.22]);
@@ -324,6 +351,8 @@ function seatLabel(pileId: number, slot: number) {
 }
 
 function pileDiffSeatSuffix(pileId: number): string {
+  // 休閒場景（廣場／休閒房）不顯示難易度；僅單挑保留
+  if (!raceMode) return '';
   const name = pileDiffName(pileDiffOf(pileId, snap?.pileDiffs));
   return name ? `（${name}）` : '';
 }

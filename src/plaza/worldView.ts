@@ -202,6 +202,8 @@ export function createPlazaWorldView(
   const LO = !!opts.lowDetail;
   const raceArena = !!opts.raceArena;
   const partyArena = !!opts.partyArena;
+  /** 休閒場景（公開廣場／多人休閒房）：藏難易度牌與 NPC；單挑擂台除外 */
+  const leisureHideNpc = !raceArena;
   const MOBILE = matchMedia('(pointer: coarse)').matches;
   // 須在吸菸阿伯 ensureTag 之前宣告（阿伯建於函式中段，const 有 TDZ）
   const PLAZA_TAG_A = 0.58;
@@ -282,7 +284,9 @@ export function createPlazaWorldView(
   const partyCenter = pileCenter(CENTER_PILE_ID);
   const arenaOnly = raceArena || partyArena;
   const arenaCenter = raceArena ? raceCenter : partyCenter;
-  const floorSpan = raceArena ? 7.2 : partyArena ? 10.5 : WALK_BOUND * 2.4;
+  // 休閒房：地板／牆一起放大，活動空間比單挑擂台寬很多
+  const partyHalf = 6.8;
+  const floorSpan = raceArena ? 7.2 : partyArena ? partyHalf * 2 + 0.6 : WALK_BOUND * 2.4;
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(floorSpan, floorSpan, LO ? 12 : (arenaOnly ? 24 : 48), LO ? 12 : (arenaOnly ? 24 : 48)),
     floorMat,
@@ -451,15 +455,34 @@ export function createPlazaWorldView(
     bakeZone(pile);
   }
 
-  /** 競速擂台：矮牆圍住 pile0，營造一對一局限空間 */
-  function buildRaceArenaBooth(c: THREE.Vector3) {
+  /**
+   * 擂台／休閒房圍牆。
+   * party：牆往外推、半透明（第三人稱不擋鏡頭）；race：不透明小擂台。
+   */
+  function buildRaceArenaBooth(c: THREE.Vector3, kind: 'race' | 'party' = 'race') {
     const booth = new THREE.Group();
-    booth.name = 'raceArenaBooth';
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0x3a4a5c });
-    const rimMat = new THREE.MeshLambertMaterial({ color: 0x6a7e94 });
-    const half = 3.35;
-    const h = 2.55;
-    const t = 0.22;
+    booth.name = kind === 'party' ? 'partyArenaBooth' : 'raceArenaBooth';
+    const seeThru = kind === 'party';
+    const wallMat = seeThru
+      ? new THREE.MeshLambertMaterial({
+        color: 0x6a90b0,
+        transparent: true,
+        opacity: 0.28,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      : new THREE.MeshLambertMaterial({ color: 0x3a4a5c });
+    const rimMat = seeThru
+      ? new THREE.MeshLambertMaterial({
+        color: 0x9ec8e8,
+        transparent: true,
+        opacity: 0.45,
+        depthWrite: false,
+      })
+      : new THREE.MeshLambertMaterial({ color: 0x6a7e94 });
+    const half = kind === 'party' ? partyHalf : 3.35;
+    const h = kind === 'party' ? 2.35 : 2.55;
+    const t = seeThru ? 0.14 : 0.22;
     const walls: [number, number, number, number, number, number][] = [
       [half * 2 + t, h, t, 0, h / 2, -half],
       [half * 2 + t, h, t, 0, h / 2, half],
@@ -469,18 +492,21 @@ export function createPlazaWorldView(
     for (const [w, hh, d, x, y, z] of walls) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), wallMat);
       m.position.set(c.x + x, y, c.z + z);
+      m.renderOrder = seeThru ? 2 : 0;
       booth.add(m);
     }
     for (const [x, z] of [[0, -half], [0, half], [-half, 0], [half, 0]] as const) {
       const rim = new THREE.Mesh(new THREE.BoxGeometry(x === 0 ? half * 2 : t * 1.4, 0.08, z === 0 ? half * 2 : t * 1.4), rimMat);
       rim.position.set(c.x + x, h + 0.02, c.z + z);
+      rim.renderOrder = seeThru ? 2 : 0;
       booth.add(rim);
     }
-    // 提亮：主燈＋補光
-    const lamp = new THREE.PointLight(0xffe6c0, LO ? 1.6 : 2.2, 12, 1.4);
-    lamp.position.set(c.x, 2.55, c.z);
+    // 提亮：主燈＋補光（休閒房空間大，燈距略拉長）
+    const lampR = kind === 'party' ? 18 : 12;
+    const lamp = new THREE.PointLight(0xffe6c0, LO ? 1.6 : 2.2, lampR, 1.4);
+    lamp.position.set(c.x, kind === 'party' ? 3.1 : 2.55, c.z);
     booth.add(lamp);
-    const fill = new THREE.PointLight(0xd8ecff, LO ? 0.7 : 1.0, 10, 1.6);
+    const fill = new THREE.PointLight(0xd8ecff, LO ? 0.7 : 1.0, kind === 'party' ? 14 : 10, 1.6);
     fill.position.set(c.x, 1.8, c.z);
     booth.add(fill);
     const hemi = new THREE.HemisphereLight(0xfff2dc, 0x4a5a6a, LO ? 0.55 : 0.75);
@@ -553,6 +579,7 @@ export function createPlazaWorldView(
   };
 
   function spawnStallKeepers() {
+    if (leisureHideNpc) return;
     if (stallKeepers.length) return;
     PLAZA_STALL_SITES.filter((s) => KEEPER_LINES[s.id]).forEach((site, idx) => {
       const look = AMA_LOOKS[(idx * 3 + 1) % AMA_LOOKS.length];
@@ -729,7 +756,7 @@ export function createPlazaWorldView(
       buildRaceArenaBooth(raceCenter);
     } else if (partyArena) {
       buildOnePile(CENTER_PILE_ID);
-      buildRaceArenaBooth(partyCenter);
+      buildRaceArenaBooth(partyCenter, 'party');
     } else for (const q of [0, 1, 2, 3] as const) buildQuadrant(q);
     if (!raceArena && !partyArena) for (const id of ['southGrill', 'ambiance', 'westSmoke', 'eastStreet', 'northShed'] as PlazaZoneId[]) {
       buildZone(id);
@@ -867,8 +894,8 @@ export function createPlazaWorldView(
   root.add(smokeNpcRig.outer);
   const smokeNpcTag = ensureTag('阿伯', true);
   smokeNpcTag.sprite.position.set(smokeNpcPose.pos.x, CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95, smokeNpcPose.pos.z);
-  smokeNpcTag.sprite.visible = !raceArena;
-  if (raceArena || partyArena) smokeNpcRig.outer.visible = false;
+  smokeNpcTag.sprite.visible = !leisureHideNpc;
+  if (leisureHideNpc) smokeNpcRig.outer.visible = false;
   const smokeNpc: SmokeNpc = {
     rig: smokeNpcRig,
     tag: smokeNpcTag,
@@ -891,6 +918,7 @@ export function createPlazaWorldView(
     return 8 + (h % 70) / 10; // 8.0–14.9
   }
   function tickSmokeNpc(dt: number, tSec: number, eco: boolean, cx: number, cz: number) {
+    if (leisureHideNpc) return;
     const sn = smokeNpc;
     const dist = Math.hypot(sn.rig.outer.position.x - cx, sn.rig.outer.position.z - cz);
     const tier = cullTier(dist, eco);
@@ -1021,6 +1049,8 @@ export function createPlazaWorldView(
     return sprite;
   }
   for (let i = 0; i < PILE_COUNT; i++) {
+    // 休閒場景不建難易度牌
+    if (leisureHideNpc) break;
     let kind = pileDiffOf(i, DEFAULT_PILE_DIFFS);
     // 競速小場：剝蚵堆一律標「綜合」
     if (raceArena && kind >= 0) kind = PILE_DIFF_MIXED;
@@ -1030,6 +1060,7 @@ export function createPlazaWorldView(
     pileDiffSprites.push({ pileId: i, kind, sprite });
   }
   function applyPileDiffs(diffs?: number[] | null) {
+    if (leisureHideNpc) return;
     for (const s of pileDiffSprites) {
       const kind = pileDiffOf(s.pileId, diffs);
       if (kind === s.kind) continue;
@@ -1044,6 +1075,10 @@ export function createPlazaWorldView(
     }
   }
   function tickPileDiffSigns(cx: number, cz: number) {
+    if (leisureHideNpc) {
+      for (const s of pileDiffSprites) s.sprite.visible = false;
+      return;
+    }
     const span = PILE_DIFF_FADE_END - PILE_DIFF_FADE_START;
     // 自己坐著時不顯示難度牌（擋視線；坐下提示已帶難度）
     const hideAll = selfSeated;
@@ -1860,6 +1895,12 @@ function hashPid(pid: string) {
   function ensure(p: PlazaPlayer, selfPid: string): Remote | null {
     if (!p || !p.pid || p.pid === selfPid) return null;
     const pid = p.pid;
+    // 休閒場景：不顯示阿婆／阿伯等 NPC
+    if (leisureHideNpc && (p.isNpc || pid.startsWith('npc-'))) {
+      const old = findRemoteByPid(pid);
+      if (old) destroyRemote(old);
+      return null;
+    }
     // 已移除的蚵堆（舊版伺服器仍會送那堆的阿婆）：不畫、清掉殘留
     if ((p.isNpc || pid.startsWith('npc-')) && p.pileId != null && pileIsRemoved(p.pileId)) {
       const old = findRemoteByPid(pid);
@@ -2631,7 +2672,7 @@ function hashPid(pid: string) {
         if (runFx) selfCig.tick(tSec, fdt);
       }
     }
-    for (const k of stallKeepers) {
+    if (!leisureHideNpc) for (const k of stallKeepers) {
       const dx = k.rig.outer.position.x - cx, dz = k.rig.outer.position.z - cz;
       const kd2 = dx * dx + dz * dz;
       const kt = cullTier(Math.sqrt(kd2), eco);
@@ -2646,7 +2687,7 @@ function hashPid(pid: string) {
     for (const r of remotes.values()) {
       if (isAberRemote(r)) { serverAber = true; break; }
     }
-    if (serverAber) {
+    if (leisureHideNpc || serverAber) {
       smokeNpc.rig.outer.visible = false;
       smokeNpc.tag.sprite.visible = false;
     } else {
