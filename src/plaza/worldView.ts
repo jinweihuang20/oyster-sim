@@ -164,6 +164,7 @@ export type PlazaWorldView = {
   setSeatWishes: (list: PlazaSeatWish[], selfConnId?: string) => void;
   /** 北碼頭工寮門口：鎖定／玩家站在圈內 */
   setShedDoorState: (loc: string, st: { locked: boolean; active: boolean }) => void;
+  setFoodStallActive: (on: boolean) => void;
   /** 機關槍座架 */
   mgMounts: THREE.Group[];
   aimMg: (slot: number, yaw: number, pitch: number) => void;
@@ -576,6 +577,7 @@ export function createPlazaWorldView(
   const KEEPER_LINES: Record<string, string[]> = {
     bbq: ['烤肉喔！剛烤好的！', '香腸一支三十，兩支五十五！', '來喔來喔，烤玉米也有！', '要辣的跟我說喔～'],
     'drink-s': ['冰涼的青草茶喔！', '剝蚵剝到口渴了吧？來一杯！', '冬瓜茶、楊桃汁，現倒現喝！', '大杯的才三十喔！'],
+    food: ['青菜今天早上剛到喔！', '要煎蚵仔煎，粉跟蛋這裡都有！', '甜辣醬、沙茶醬，愛哪個自己挑！', '蛋跟菜放三天就不新鮮了，別囤太多喔～'],
   };
 
   function spawnStallKeepers() {
@@ -2828,6 +2830,7 @@ function hashPid(pid: string) {
       shedDoorState.set(loc, st);
       shedRow?.setDoorState(loc, st);
     },
+    setFoodStallActive: (on) => ambiance?.setFoodActive(on),
     mgMounts, aimMg, mgFx, mgHitTargets, tick,
     tickTpOcclude: (dt, camera, focus) => applyTpOcclude(dt, camera, focus),
     dispose: disposeAll,

@@ -20,7 +20,8 @@ import {
   tickTpCamOcclude, clearTpCamOcclude, setTpCamOccludeIgnore,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
-import { initFood, openFood, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
+import { initFood, openFood, openFoodStall, renderFoodStall, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
+import { foodStallSpawn } from './plaza/layout';
 import {
   checkCode, REDEEM_MESSAGES, type RedeemCodeDef, applyOutfitToRig, headTopLift,
   syncEqPreview, refreshEqPreview, stopEqPreview, ODD,
@@ -4823,6 +4824,7 @@ function clearPlazaLeaveUi() {
   handRig.visible = true;
   document.body.classList.remove('plazaRoam', 'plazaSmokeSit', 'plazaMgSit');
   clearMgSitLocal();
+  document.getElementById('foodStall')?.classList.remove('show');
   const info = document.getElementById('seatInfo');
   if (info) info.innerHTML = '';
   const sit = document.getElementById('sitBtn');
@@ -5149,6 +5151,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       return locOwned(l) ? `${name}・工錢 ×${l.m.toFixed(1)}` : `${name}　入碗 ${save.life.inBowl ?? 0}/${l.need} 顆解鎖`;
     },
     openShedDoor: (loc) => openShedDoor(loc),
+    openFoodStall: () => openFoodStall(),
     onShellThrow: (e) => {
       // 自己丟的已經在本地飛過；別人的殼（含打向自己）播飛行動畫＋甩臂
       try {
@@ -6587,7 +6590,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['friends', 'friendsClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose'], ['food', 'foodClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['friends', 'friendsClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose'], ['food', 'foodClose'], ['foodStall', 'foodStallClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -6691,8 +6694,29 @@ initMeds({
 initMedsUi();
 initFood({
   getSave: () => save, persist, track, pop: (t, c) => petToast(t, c), toastTop: (t) => toastTop(t, TOP_SEC.info),
-  isTut: () => !!tut, px, pxCd, pxHtml, payFor, renderShop, jingle: () => { if (ac) SFX.jingle(); },
+  isTut: () => !!tut, px, pxCd, pxHtml, payFor, jingle: () => { if (ac) SFX.jingle(); },
+  inPlaza: () => foodPlazaOk(),
+  goStall: () => goFoodStall(),
+  refreshPrices: () => { void fetchPrices().then(r => { if (r === 'changed' && $('foodStall').classList.contains('show')) renderFoodStall(); }); },
+  onMoney: () => updHud(),
 });
+/** 一般廣場、站著走動中（休閒房／競速不開食材攤） */
+function foodPlazaOk() { return plazaMode && isPlazaActive() && state === 'play' && !isPlazaRaceMode() && !isPlazaPartyMode(); }
+/** 「前往廣場」：主選單直接進廣場並站到食材攤前；已在廣場就走過去 */
+function goFoodStall() {
+  const closeAll = () => ['food', 'shop', 'foodStall'].forEach(id => $(id).classList.remove('show'));
+  if (foodPlazaOk()) {
+    if (plazaSeated()) { toast('先站起來，再走到食材攤', '#ffd76a'); return; }
+    const sp = foodStallSpawn(); walkPos.set(sp.x, walkPos.y, sp.z); tYaw = yaw = sp.yaw;
+    closeAll(); return;
+  }
+  if (plazaMode || state === 'play' || isDeathmatchActive() || isPlazaActive()) { toast('收工回主選單後再去廣場', '#ffd76a'); return; }
+  if (!$('overlay').classList.contains('show')) { toast('回到主選單後再去廣場', '#ffd76a'); return; }
+  if (!save.tutDone) { toast('先完成教學再去廣場', '#ffd76a'); return; }
+  closeAll();
+  save.loc = 'plaza'; save.plazaSpawn = foodStallSpawn(); persist();
+  launchPlaza();
+}
 $('oFood').onclick = () => openFood();
 
 // 第一次教學開始前取名字（只出現一次）；關面板後再進工寮／教學

@@ -24,7 +24,7 @@ export type WalkSeatDeps = {
   /** 廣場地面高度（高台／樓梯） */
   plazaGroundY?: (x: number, z: number) => number;
   plazaNearSeat: () => { pileId: number; slot: number } | null;
-  plazaNearPrompt?: () => { kind: 'sit' | 'carry' | 'place' | 'shed'; info: string; btn: string; icon?: string; altBtn?: string; altIcon?: string; pileId?: number; slot?: number } | null;
+  plazaNearPrompt?: () => { kind: 'sit' | 'carry' | 'place' | 'shed' | 'shop'; info: string; btn: string; icon?: string; altBtn?: string; altIcon?: string; pileId?: number; slot?: number } | null;
   isRoomMode?: () => boolean;
   /** 裝備走路速度倍率（分趾布鞋等） */
   walkSpeedMul?: () => number;

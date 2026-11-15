@@ -3,7 +3,7 @@ import type { MatFn } from '../dm/weapons';
 import { rboxEnv, rcyl } from '../core/geo';
 import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
 import { makePlazaTidalFlat } from './tidalFlat';
-import { NORTH_DOCK } from './layout';
+import { NORTH_DOCK, FOOD_STALL, FOOD_RING, FOOD_RING_R } from './layout';
 
 type AddFn = (
   geo: THREE.BufferGeometry,
@@ -21,7 +21,8 @@ export type PlazaStallKind =
   | 'cart'
   | 'noodle'
   | 'seafood'
-  | 'sweet';
+  | 'sweet'
+  | 'food';
 
 /** 外圈攤位：面向廣場中心；避開蚵堆／棚柱（半徑約 10.6） */
 export const PLAZA_STALL_SITES: readonly {
@@ -41,6 +42,8 @@ export const PLAZA_STALL_SITES: readonly {
   { id: 'fruit', x: -4.0, z: -9.6, kind: 'fruit', radius: 1.05 },
   { id: 'snack-n', x: 1.2, z: -9.65, kind: 'snack', radius: 1.05 },
   { id: 'cart-n', x: 5.5, z: -9.45, kind: 'cart', radius: 0.8 },
+  // 東：食材攤（賣蚵仔煎的備料；見 layout FOOD_STALL）
+  { id: 'food', x: FOOD_STALL.x, z: FOOD_STALL.z, kind: 'food', radius: FOOD_STALL.r },
 ];
 
 /** 走動／生成點用碰撞圓 */
@@ -61,6 +64,7 @@ export function makePlazaAmbiance(
   lights: THREE.PointLight[];
   obstacles: [number, number, number][];
   tick: (tSec: number, dt: number) => void;
+  setFoodActive: (on: boolean) => void;
 } {
   const root = new THREE.Group();
   root.name = 'plazaAmbiance';
@@ -83,9 +87,12 @@ export function makePlazaAmbiance(
       case 'noodle': buildNoodle(g, M, add, segs); break;
       case 'seafood': buildSeafood(g, M, add, segs); break;
       case 'sweet': buildSweet(g, M, add, segs); break;
+      case 'food': buildFood(g, M, add, segs, lowDetail); break;
     }
   }
 
+  const foodRing = makeFoodRing();
+  root.add(foodRing.group);
   root.add(makePlazaHarbor(M, add, segs, lowDetail));
   if (!opts?.skipTidal) root.add(makePlazaTidalFlat(M, add, lowDetail).group);
 
@@ -93,7 +100,8 @@ export function makePlazaAmbiance(
     group: root,
     lights,
     obstacles: plazaStallObstacles(),
-    tick: (tSec, dt) => { for (const f of fires) f.tick(tSec, dt); },
+    tick: (tSec, dt) => { for (const f of fires) f.tick(tSec, dt); foodRing.tick(tSec); },
+    setFoodActive: (on) => foodRing.setActive(on),
   };
 }
 
@@ -319,4 +327,95 @@ function buildSweet(g: THREE.Group, M: MatFn, add: AddFn, segs: number) {
     add(new THREE.SphereGeometry(0.05, 5, 4), M(sweet[i % 3]), [-0.3 + i * 0.12, 0.72, 0], g, false);
   }
   add(rcyl(0.12, 0.11, 0.26, segs), M(0xd04040), [0.5, 0.13, -0.55], g, false);
+}
+
+const FOOD_ACCENT = 0x2a5a86;
+const SIGN_FONT = '"Noto Sans TC","Microsoft JhengHei","PingFang TC",system-ui,sans-serif';
+
+/** 食材攤招牌：與工寮招牌同款（米白底、深色細框、深字＋藍色小字） */
+function foodSignTex(lowDetail: boolean) {
+  const W = lowDetail ? 256 : 512, H = W / 4;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d')!;
+  const pad = W * 0.012, r = H * 0.12;
+  c.fillStyle = '#efe9dc';
+  c.beginPath();
+  c.moveTo(pad + r, pad); c.arcTo(W - pad, pad, W - pad, H - pad, r); c.arcTo(W - pad, H - pad, pad, H - pad, r);
+  c.arcTo(pad, H - pad, pad, pad, r); c.arcTo(pad, pad, W - pad, pad, r); c.closePath(); c.fill();
+  c.lineWidth = W * 0.008; c.strokeStyle = '#16191d'; c.stroke();
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillStyle = '#1b2430'; c.font = `900 ${Math.round(H * 0.42)}px ${SIGN_FONT}`;
+  c.fillText('食材攤', W / 2, H * 0.4);
+  c.fillStyle = '#2a5a86'; c.font = `700 ${Math.round(H * 0.2)}px ${SIGN_FONT}`;
+  c.fillText('粉・菜・蛋・醬料', W / 2, H * 0.78);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.needsUpdate = true;
+  return t;
+}
+
+/** 食材攤：方塊木台＋藍色遮棚＋菜籃／蛋盒／粉袋／醬料瓶；正面（-z）朝廣場中心 */
+function buildFood(g: THREE.Group, M: MatFn, add: AddFn, segs: number, lowDetail: boolean) {
+  const wood = M(0x7a6a52, { roughness: 0.9 });
+  const top = M(0xd9cfbd, { roughness: 0.85 });
+  // 四柱＋平頂遮棚
+  for (const sx of [-0.85, 0.85] as const) for (const sz of [-0.42, 0.42] as const) add(rboxEnv(0.08, 2.05, 0.08), wood, [sx, 1.02, sz], g, true);
+  add(rboxEnv(1.95, 0.06, 1.05), M(FOOD_ACCENT, { roughness: 0.75 }), [0, 2.06, 0], g, false);
+  // 遮棚前緣垂片（白藍相間的方塊）
+  for (let i = 0; i < 6; i++) add(rboxEnv(0.32, 0.16, 0.03), M(i % 2 ? 0xf2f0ea : FOOD_ACCENT), [-0.8 + i * 0.32, 1.95, -0.53], g, false);
+  // 檯子
+  add(rboxEnv(1.7, 0.78, 0.72), wood, [0, 0.39, 0], g, true);
+  add(rboxEnv(1.78, 0.05, 0.8), top, [0, 0.8, 0], g, false);
+  // 青菜籃
+  add(rboxEnv(0.42, 0.14, 0.3), M(0x8a7a5a), [-0.6, 0.9, -0.08], g, false);
+  for (let i = 0; i < 4; i++) add(rboxEnv(0.09, 0.1, 0.24), M(i % 2 ? 0x5fa84a : 0x4a8f3a), [-0.74 + i * 0.095, 1.0, -0.08], g, false);
+  // 蛋盒
+  add(rboxEnv(0.36, 0.06, 0.24), M(0xc8b896), [-0.12, 0.86, -0.12], g, false);
+  for (let i = 0; i < 6; i++) add(rboxEnv(0.07, 0.08, 0.07), M(0xf2e6c8), [-0.24 + (i % 3) * 0.12, 0.92, -0.18 + Math.floor(i / 3) * 0.12], g, false);
+  // 地瓜粉袋
+  add(rboxEnv(0.24, 0.3, 0.16), M(0xe9e4d8), [0.3, 0.98, 0.1], g, false);
+  add(rboxEnv(0.24, 0.05, 0.1), M(FOOD_ACCENT), [0.3, 1.02, 0.015], g, false);
+  // 醬料瓶：甜辣／醬油膏／番茄／沙茶
+  const sauce = [0xe8708a, 0x3a3a3a, 0xd8342c, 0xb8662e] as const;
+  for (let i = 0; i < 4; i++) {
+    const x = 0.5 + (i % 2) * 0.13, z = -0.2 + Math.floor(i / 2) * 0.13;
+    add(rboxEnv(0.08, 0.2, 0.08), M(sauce[i]), [x, 0.93, z], g, false);
+    add(rboxEnv(0.05, 0.04, 0.05), M(0xf2f0ea), [x, 1.05, z], g, false);
+  }
+  // 地上紙箱
+  add(rboxEnv(0.4, 0.3, 0.32), M(0xb89a6a), [0.62, 0.15, -0.6], g, false);
+  // 招牌：掛在遮棚前方，朝廣場（-z）
+  const sign = new THREE.MeshBasicMaterial({ map: foodSignTex(lowDetail), color: 0xe8e8e8 });
+  const m = add(new THREE.PlaneGeometry(1.6, 0.4), sign, [0, 2.32, -0.5], g, false);
+  m.rotation.y = Math.PI;
+  void segs;
+}
+
+/** 食材攤前的圓圈（細環＋淡底＋指向攤子的箭頭）；名稱沿用 shedRing 讓合併略過 */
+function makeFoodRing() {
+  const rg = new THREE.Group();
+  rg.name = 'shedRing';
+  rg.position.set(FOOD_RING.x, 0.014, FOOD_RING.z);
+  rg.rotation.y = Math.atan2(FOOD_STALL.x - FOOD_RING.x, FOOD_STALL.z - FOOD_RING.z) + Math.PI;
+  const ringMat = new THREE.MeshBasicMaterial({ color: FOOD_ACCENT, transparent: true, opacity: 0.85, depthWrite: false });
+  const fillMat = new THREE.MeshBasicMaterial({ color: FOOD_ACCENT, transparent: true, opacity: 0.12, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(FOOD_RING_R - 0.06, FOOD_RING_R, 48), ringMat); ring.rotation.x = -Math.PI / 2; rg.add(ring);
+  const fill = new THREE.Mesh(new THREE.CircleGeometry(FOOD_RING_R - 0.06, 40), fillMat); fill.rotation.x = -Math.PI / 2; fill.position.y = -0.002; rg.add(fill);
+  const chev = new THREE.PlaneGeometry(0.26, 0.045);
+  for (const s of [-1, 1]) {
+    const c = new THREE.Mesh(chev, ringMat);
+    c.rotation.x = -Math.PI / 2;
+    c.rotation.z = -s * Math.PI / 4; // 兩撇組成指向攤子（本地 -Z）的箭頭
+    c.position.set(s * 0.085, 0.001, 0);
+    rg.add(c);
+  }
+  rg.renderOrder = 2;
+  let active = false;
+  return {
+    group: rg,
+    setActive(on: boolean) {
+      if (on === active) return; active = on;
+      ringMat.opacity = on ? 1 : 0.85; fillMat.opacity = on ? 0.22 : 0.12;
+      if (!on) rg.scale.setScalar(1);
+    },
+    tick(t: number) { if (active) rg.scale.setScalar(1 + Math.sin(t * 4) * 0.025); },
+  };
 }

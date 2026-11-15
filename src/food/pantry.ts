@@ -15,8 +15,15 @@ export type FoodDeps = {
   pxCd: (id: string) => string;
   pxHtml: (id: string, price: number) => string;
   payFor: (id: string, price: number, name: string) => Promise<number | null>;
-  renderShop: () => void;
   jingle: () => void;
+  /** 目前在一般廣場（食材攤只在這裡開） */
+  inPlaza: () => boolean;
+  /** 前往廣場／走到食材攤 */
+  goStall: () => void;
+  /** 開食材攤時向伺服器拿一次價格（後台改價／特價） */
+  refreshPrices: () => void;
+  /** 買完更新畫面上的錢 */
+  onMoney: () => void;
 };
 
 let D: FoodDeps;
@@ -28,6 +35,7 @@ export function initFood(deps: FoodDeps) {
   D = deps;
   purgeFood();
   document.getElementById('foodClose')?.addEventListener('click', () => document.getElementById('food')?.classList.remove('show'));
+  document.getElementById('foodStallClose')?.addEventListener('click', () => document.getElementById('foodStall')?.classList.remove('show'));
   setInterval(() => { if (!document.hidden) purgeFood(); }, 60_000);
 }
 
@@ -98,7 +106,7 @@ const leftTxt = (ms: number) => {
   const h = Math.max(0, Math.ceil(ms / 3600_000));
   return h >= 24 ? `${Math.floor(h / 24)} 天${h % 24 ? ` ${h % 24} 小時` : ''}後壞掉` : `${h} 小時後壞掉`;
 };
-const lifeTxt = (f: Food) => f.life ? `可放 ${f.life / 24} 天` : '不會壞';
+export const lifeTxt = (f: Food) => f.life ? `可放 ${f.life / 24} 天` : '不會壞';
 
 function rowHtml(f: Food) {
   const n = foodCount(f.id), now = Date.now();
@@ -112,36 +120,62 @@ function rowHtml(f: Food) {
 export function foodPanelHtml() {
   const kinds = FOODS.filter(f => foodCount(f.id) > 0).length;
   const cats: FoodCat[] = ['main', 'extra', 'base', 'egg', 'sauce'];
-  return `<div class="fdHead"><div class="fdTease"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M5 10v9h14v-9M4 10l2-5h12l2 5"/><path d="M10 19v-5h4v5"/></svg><span>蚵仔煎攤即將開張</span></div><p class="fdSub">先把食材備起來，開張後可以煎出 50 種不同的蚵仔煎。現有 ${kinds}/${FOODS.length} 種食材，目前只能收集和查看。</p></div>`
+  return `<div class="fdHead"><div class="fdTease"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M5 10v9h14v-9M4 10l2-5h12l2 5"/><path d="M10 19v-5h4v5"/></svg><span>蚵仔煎攤即將開張</span></div><p class="fdSub">先把食材備起來，開張後可以煎出 50 種不同的蚵仔煎。現有 ${kinds}/${FOODS.length} 種食材，目前只能收集和查看。</p><div class="fdGuide sm"><p>地瓜粉、青菜、雞蛋和醬料在<b>廣場食材攤</b>買得到。</p>${goBtn()}</div></div>`
     + cats.map(c => `<div class="fdCat">${CAT_N[c]}</div>` + FOODS.filter(f => f.cat === c).map(rowHtml).join('')).join('');
 }
 
 export function renderFoodPanel() {
   const L = document.getElementById('foodList'); if (!L || !document.getElementById('food')?.classList.contains('show')) return;
-  L.innerHTML = foodPanelHtml();
+  L.innerHTML = foodPanelHtml(); bindGo(L);
 }
 export function openFood() {
   purgeFood();
   const p = document.getElementById('food'), L = document.getElementById('foodList'); if (!p || !L) return;
-  L.innerHTML = foodPanelHtml(); p.classList.add('show'); p.scrollTop = 0;
+  L.innerHTML = foodPanelHtml(); bindGo(L); p.classList.add('show'); p.scrollTop = 0;
 }
 
-/** 雜貨店「食材」分頁：不限購，阿婆祕傳醬買不到 */
+const GO_IC = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6-5.5-6-10a6 6 0 0 1 12 0c0 4.5-6 10-6 10z"/><circle cx="12" cy="11" r="2"/></svg>';
+/** 「前往廣場」：在廣場裡會直接走到食材攤 */
+const goBtn = () => `<button type="button" class="fdGo" data-fdgo>${GO_IC}${D.inPlaza() ? '走到食材攤' : '前往廣場'}</button>`;
+function bindGo(root: ParentNode) {
+  root.querySelectorAll<HTMLButtonElement>('button[data-fdgo]').forEach(b => b.onclick = e => { e.stopPropagation(); D.goStall(); });
+}
+
+/** 雜貨店「食材」分頁：只放指引，食材只在廣場食材攤賣 */
 export function renderFoodShop() {
   const list = document.getElementById('shopList'); if (!list) return;
-  const sell = FOODS.filter(f => f.price);
+  list.insertAdjacentHTML('beforeend', `<h3><i class="ic ic-bowl"></i> 食材</h3><div class="fdGuide"><p>食材請到<b>廣場食材攤</b>購買，地瓜粉、青菜、雞蛋和四種醬料都有，不限量。</p>${goBtn()}</div>`);
+  bindGo(list);
+}
+
+function stallHtml() {
   const money = D.getSave().money;
-  list.insertAdjacentHTML('beforeend', `<h3><i class="ic ic-bowl"></i> 食材</h3><p class="medIntro">蚵仔煎攤的備料，先收集起來；青菜和雞蛋可放 3 天，粉和醬不會壞。蚵仔、蝦仁、花枝和阿婆祕傳醬買不到，要靠剝蚵、撈蚵和丟中阿婆拿到。</p><div class="medGrid">`
-    + sell.map(f => { const k = 'food-' + f.id; return `<div class="medCard fdCard"><div class="medTop"><b class="medName"><span class="fdIc sm" style="--fc:${f.color}">${foodSvg(f, 16)}</span>${f.n}</b>${D.pxCd(k)}<span class="medMeta">${lifeTxt(f)}・持有 ${foodCount(f.id)}</span></div><div class="buyRow">${qtyHtml(k)}<button class="medBuy" data-fbuy="${f.id}" ${money < D.px(k, f.price!) ? 'disabled' : ''}>${D.pxHtml(k, f.price!)}</button></div></div>`; }).join('') + '</div>');
+  return `<p class="medIntro">蚵仔煎攤的備料，先收集起來；青菜和雞蛋可放 3 天，粉和醬不會壞。蚵仔、蝦仁、花枝要靠剝蚵和撈蚵，阿婆祕傳醬要丟中阿婆才有。</p><div class="medGrid">`
+    + FOODS.filter(f => f.price).map(f => { const k = 'food-' + f.id; return `<div class="medCard fdCard"><div class="medTop"><b class="medName"><span class="fdIc sm" style="--fc:${f.color}">${foodSvg(f, 16)}</span>${f.n}</b>${D.pxCd(k)}<span class="medMeta">${lifeTxt(f)}・持有 ${foodCount(f.id)}</span></div><div class="buyRow">${qtyHtml(k)}<button class="medBuy" data-fbuy="${f.id}" ${money < D.px(k, f.price!) ? 'disabled' : ''}>${D.pxHtml(k, f.price!)}</button></div></div>`; }).join('') + '</div>';
+}
+
+/** 廣場食材攤面板（不限購）；只在廣場、站在攤前圓圈時打開 */
+export function renderFoodStall() {
+  const list = document.getElementById('foodStallList'); if (!list) return;
+  const sv = document.getElementById('foodStallMoney'); if (sv) sv.textContent = `$${D.getSave().money}`;
+  list.innerHTML = stallHtml();
   list.querySelectorAll<HTMLButtonElement>('button[data-fbuy]').forEach(b => {
     const f = FOOD_BY_ID[b.dataset.fbuy!]; const k = 'food-' + f.id;
     bindQty(b.closest('.medCard')!, k, () => D.px(k, f.price!), () => D.getSave().money, b);
     b.onclick = async () => {
+      if (!D.inPlaza()) { renderFoodStall(); return; }
       const pr = await D.payFor(k, f.price!, f.n); if (pr == null) return;
       const s = D.getSave(); const n = Math.min(getQty(k), Math.floor(s.money / pr)); if (n < 1) return;
       s.money -= pr * n; D.track('buy', { item: k, price: pr * n, qty: n });
       addFood(f.id, n, 'buy', 0, true); D.jingle(); D.pop(`買了 ${f.n} ×${n}`, '#bfe0ff');
-      resetQty(k); D.renderShop();
+      resetQty(k); renderFoodStall(); D.onMoney();
     };
   });
+}
+export function openFoodStall() {
+  if (!D.inPlaza()) { D.toastTop('食材攤在廣場，進廣場後走到攤子前面就能買'); return; }
+  purgeFood();
+  const p = document.getElementById('foodStall'); if (!p) return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  D.refreshPrices(); renderFoodStall(); p.classList.add('show'); p.scrollTop = 0;
 }

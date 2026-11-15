@@ -21,8 +21,8 @@ export type Food = {
 const H = 3600_000;
 export const FOODS: Food[] = [
   // 基底（每份都要）
-  { id: 'flour', n: '地瓜粉', cat: 'base', icon: 'sack', color: '#e9e4d8', life: 0, price: 15, how: '雜貨店購買' },
-  { id: 'veg', n: '青菜', cat: 'base', icon: 'leaf', color: '#5fa84a', life: 72, price: 10, how: '雜貨店購買' },
+  { id: 'flour', n: '地瓜粉', cat: 'base', icon: 'sack', color: '#e9e4d8', life: 0, price: 15, how: '廣場食材攤購買' },
+  { id: 'veg', n: '青菜', cat: 'base', icon: 'leaf', color: '#5fa84a', life: 72, price: 10, how: '廣場食材攤購買' },
   // 主料 5 種
   { id: 'oyster', n: '一般蚵仔', cat: 'main', icon: 'oyster', color: '#c9c2b0', life: 48, quality: true, how: '剝蚵入碗時有機會多留一份' },
   { id: 'bigoy', n: '大蚵', cat: 'main', icon: 'oyster', color: '#b8ad94', life: 48, soon: true, how: '即將開放' },
@@ -30,12 +30,12 @@ export const FOODS: Food[] = [
   { id: 'shrimp', n: '蝦仁', cat: 'extra', icon: 'shrimp', color: '#f19a8a', life: 48, how: '撈蚵仔時有機會撈到' },
   { id: 'squid', n: '花枝', cat: 'extra', icon: 'squid', color: '#f3efe6', life: 48, how: '撈蚵仔時有機會撈到' },
   // 蛋
-  { id: 'egg', n: '雞蛋', cat: 'egg', icon: 'egg', color: '#f2c94c', life: 72, price: 8, how: '雜貨店購買' },
+  { id: 'egg', n: '雞蛋', cat: 'egg', icon: 'egg', color: '#f2c94c', life: 72, price: 8, how: '廣場食材攤購買' },
   // 醬料 5 種
-  { id: 'sweet', n: '甜辣醬', cat: 'sauce', icon: 'bottle', color: '#e8708a', life: 0, price: 20, how: '雜貨店購買' },
-  { id: 'garlic', n: '蒜蓉醬油膏', cat: 'sauce', icon: 'bottle', color: '#5a3a2a', life: 0, price: 20, how: '雜貨店購買' },
-  { id: 'ketchup', n: '番茄醬', cat: 'sauce', icon: 'bottle', color: '#d8342c', life: 0, price: 35, how: '雜貨店購買' },
-  { id: 'shacha', n: '沙茶醬', cat: 'sauce', icon: 'jar', color: '#b8662e', life: 0, price: 40, how: '雜貨店購買' },
+  { id: 'sweet', n: '甜辣醬', cat: 'sauce', icon: 'bottle', color: '#e8708a', life: 0, price: 20, how: '廣場食材攤購買' },
+  { id: 'garlic', n: '蒜蓉醬油膏', cat: 'sauce', icon: 'bottle', color: '#5a3a2a', life: 0, price: 20, how: '廣場食材攤購買' },
+  { id: 'ketchup', n: '番茄醬', cat: 'sauce', icon: 'bottle', color: '#d8342c', life: 0, price: 35, how: '廣場食材攤購買' },
+  { id: 'shacha', n: '沙茶醬', cat: 'sauce', icon: 'jar', color: '#b8662e', life: 0, price: 40, how: '廣場食材攤購買' },
   { id: 'amasauce', n: '阿婆祕傳醬', cat: 'sauce', icon: 'jar', color: '#d9a520', life: 0, how: '用殼丟中阿婆有機會掉落' },
 ];
 export const FOOD_BY_ID: Record<string, Food> = Object.fromEntries(FOODS.map(f => [f.id, f]));

@@ -6,7 +6,7 @@ import {
   isSmokePile, isLeisurePile, isRestPile, isMgPile, plazaSmokeObstacles, isPlazaAber, SMOKE_PILE_ID, SMOKE_ABER_SLOT,
   MG_PILE_ID, MG_SIT_PRICE, MG_SIT_AMMO, MG_SIT_MS, CENTER_PILE_ID, CENTER_SEAT_COUNT,
   type PlazaSeatRef, type PlazaSpawnMemory,
-  SHED_DOORS, shedDoorAt, plazaShedObstacles,
+  SHED_DOORS, shedDoorAt, plazaShedObstacles, foodStallAt,
 } from './layout';
 import { plazaShedPosts } from './props';
 import { shedName } from './shedRow';
@@ -127,6 +127,8 @@ export type PlazaDeps = {
   shedUnlocked?: (loc: string) => boolean;
   shedPromptInfo?: (loc: string) => string;
   openShedDoor?: (loc: string) => void;
+  /** 站在食材攤圓圈按「逛食材攤」 */
+  openFoodStall?: () => void;
   /** 自己裝備了寵物（坐姿時寵物在頭頂、聊天泡泡要讓位） */
   hasOwnPet?: () => boolean;
   /** 自己頭上帽子高出髮蓋頂的量（公尺）；有寵物+坐姿時聊天泡泡要再多抬這麼多 */
@@ -181,6 +183,8 @@ let nearCarry: { connId: string; nick: string } | null = null;
 let nearPlace: PlazaSeatRef | null = null;
 /** 站在哪間工寮的門口圓圈內 */
 let nearShed: string | null = null;
+/** 站在食材攤圓圈內（一般廣場才有，休閒房／競速不開） */
+let nearFood = false;
 /** 新伺服器 Join 會帶 carryNpc；舊服沒有則不顯示抱起／放下 */
 let carryNpcOk = false;
 /** 新伺服器 Join 會帶 flags 陣列；舊服沒有則不顯示插旗 */
@@ -358,7 +362,7 @@ function pileDiffSeatSuffix(pileId: number): string {
 }
 
 export type PlazaNearPrompt = {
-  kind: 'sit' | 'carry' | 'place' | 'shed';
+  kind: 'sit' | 'carry' | 'place' | 'shed' | 'shop';
   info: string;
   btn: string;
   /** 按鈕線條圖示 class（預設椅子） */
@@ -388,6 +392,7 @@ export function plazaNearPrompt(): PlazaNearPrompt | null {
       shedLoc: nearShed,
     };
   }
+  if (nearFood) return { kind: 'shop', info: '食材攤・地瓜粉、青菜、雞蛋和醬料', btn: '逛食材攤', icon: 'ic-bowl' };
   if (carryNpcOk && myCarriedNpc()) {
     if (!nearPlace) return null;
     const w = seatWishes.find(x => x.npcConnId === myCarriedNpc()!.connId);
@@ -419,6 +424,8 @@ export function plazaNearPrompt(): PlazaNearPrompt | null {
 export function plazaNearSeat() { return nearPlace ?? near; }
 /** 目前站在哪間工寮門口（沒有則 null） */
 export function plazaNearShed() { return active && !seated ? nearShed : null; }
+/** 目前站在食材攤圓圈內 */
+export function plazaNearFood() { return active && !seated && nearFood; }
 /** 點擊射線打到哪一堆（給補蚵用） */
 export function plazaHitPile(raycaster: THREE.Raycaster): number | null {
   return view?.hitPile(raycaster) ?? null;
@@ -681,7 +688,7 @@ function forceResetPlazaLocal() {
   try { ui?.remove(); } catch { /* */ }
   ui = null;
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear();
-  deps = null; near = null; nearShed = null; nearCarry = null; nearPlace = null;
+  deps = null; near = null; nearShed = null; nearFood = false; nearCarry = null; nearPlace = null;
   carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
   teardownPlayersChrome();
@@ -697,7 +704,7 @@ export function openPlaza(D: PlazaDeps) {
   partyMode = !!(!raceMode && (D.party?.code || D.party?.create));
   raceBooting = !!D.race?.code;
   seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
   raceFairSeed = 0; raceFillGen = 0;
   if (raceMode) {
     document.body.classList.add('raceMode');
@@ -752,7 +759,7 @@ async function abortEnter(D: PlazaDeps, err?: string) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
   removeFlagBtn();
   D.onEnterFail?.(err);
 }
@@ -1978,21 +1985,23 @@ function markCarryUnsupported(err?: string) {
 /** 走動時更新附近空位／可抱的阿婆（資訊只走遊戲 #seatCard） */
 export function plazaUpdateNear(wx: number, wz: number) {
   if (!active || seated) {
-    near = null; nearCarry = null; nearPlace = null; nearShed = null;
+    near = null; nearCarry = null; nearPlace = null; nearShed = null; nearFood = false;
     view?.highlightNear(null);
     return null;
   }
   near = null; nearCarry = null; nearPlace = null;
   // 競速：關工寮門／抱人；不可換位（開局已對座）
   if (raceMode) {
-    nearShed = null;
+    nearShed = null; nearFood = false;
     near = null;
     view?.highlightNear(null);
     return null;
   }
   // 工寮門口圓圈在碼頭上，離座位很遠：站進圈內就只提示進工寮
   nearShed = shedDoorAt(wx, wz);
-  if (nearShed) { view?.highlightNear(null); return null; }
+  if (nearShed) { nearFood = false; view?.highlightNear(null); return null; }
+  nearFood = !partyMode && foodStallAt(wx, wz);
+  if (nearFood) { view?.highlightNear(null); return null; }
   if (carryNpcOk && myCarriedNpc()) {
     const n = nearestFreePlaceSeat(wx, wz, takenSet(true), SIT_DIST);
     nearPlace = n ? { pileId: n.pileId, slot: n.slot } : null;
@@ -2062,6 +2071,7 @@ export async function plazaTrySit(mgPay: PlazaMgPay = 'auto'): Promise<boolean> 
     deps.openShedDoor?.(nearShed);
     return false;
   }
+  if (nearFood) { deps.openFoodStall?.(); return false; }
   if (carryNpcOk && myCarriedNpc()) {
     const seat = nearPlace ?? (() => {
       const n = nearestFreePlaceSeat(deps!.getWalkXZ().x, deps!.getWalkXZ().z, takenSet(true), SIT_DIST);
@@ -2359,7 +2369,8 @@ export function tickPlaza(dt: number) {
     }
   }
   if (!seated) plazaUpdateNear(p.x, p.z);
-  else nearShed = null;
+  else { nearShed = null; nearFood = false; }
+  view?.setFoodStallActive(nearFood);
   if (view) for (const d of SHED_DOORS) view.setShedDoorState(d.loc, { locked: !(deps.shedUnlocked?.(d.loc) ?? true), active: nearShed === d.loc });
   placeChatFab();
   if (plazaMapIsOpen()) refreshPlazaMap();
@@ -2447,7 +2458,7 @@ export async function closePlaza(leaveSeat = true) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearShed = null; nearFood = false; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
   try { document.body.classList.remove('raceMode', 'partyMode'); } catch { /* */ }
   if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null, tag: myTag() });

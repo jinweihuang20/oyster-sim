@@ -202,6 +202,22 @@ export function plazaShedObstacles(): [number, number, number][] {
   if (!home) return [];
   return [[home.x - 1.12, SHED_FRONT_Z + 0.24, 0.3], [home.x + 1.12, SHED_FRONT_Z + 0.24, 0.3]];
 }
+/**
+ * 廣場食材攤：東排已移除蚵堆（pile 11）旁、樸子腳圓桌西側；在後端「東南店家前不能插旗」區內（x ≥ 4.6、z ≥ -1.5），不會跟旗子重疊。
+ * 攤子朝廣場中心，圓圈在攤前（中心側）。
+ */
+export const FOOD_STALL = { x: 9.6, z: 2.6, r: 1.05 } as const;
+export const FOOD_RING_R = 0.72;
+const FOOD_OUT = Math.atan2(FOOD_STALL.x, FOOD_STALL.z);
+export const FOOD_RING = { x: FOOD_STALL.x - Math.sin(FOOD_OUT) * 1.75, z: FOOD_STALL.z - Math.cos(FOOD_OUT) * 1.75 } as const;
+/** 站在食材攤圓圈內 */
+export function foodStallAt(x: number, z: number): boolean {
+  return Math.hypot(x - FOOD_RING.x, z - FOOD_RING.z) <= FOOD_RING_R;
+}
+/** 前往食材攤的站位：圓圈中心、面向攤子 */
+export function foodStallSpawn(): { x: number; z: number; yaw: number } {
+  return { x: FOOD_RING.x, z: FOOD_RING.z, yaw: Math.atan2(FOOD_RING.x - FOOD_STALL.x, FOOD_RING.z - FOOD_STALL.z) };
+}
 /** 站在哪個工寮的門口圓圈內 */
 export function shedDoorAt(x: number, z: number): string | null {
   for (const d of SHED_DOORS) if (Math.hypot(x - d.x, z - SHED_RING_Z) <= SHED_RING_R) return d.loc;

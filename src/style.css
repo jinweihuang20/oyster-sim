@@ -3493,3 +3493,16 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
 .fdExp{display:block;font-size:11.5px;color:#7a858f;margin-top:1px}
 .fdExp.warn{color:#c0392b;font-weight:700}
 .fdRow.soon .fdHow{color:#2a5a86;font-weight:700}
+/* 廣場食材攤 */
+#foodStall,#foodStall.sheet,#foodStall.panel.sheet{z-index:12000!important}
+body:has(#foodStall.show) #pbd.show{z-index:11990!important}
+#foodStall h2.shopH{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:nowrap;padding-right:56px}
+#foodStallMoneyW{display:flex;align-items:center;gap:6px;margin-left:auto;padding:2px 8px;font-size:14px;font-weight:900;white-space:nowrap;background:#fff;color:#2a5a86;border:1px solid #c7d5e3;border-radius:8px;box-shadow:0 1px 4px rgba(20,40,60,.1)}
+#foodStallMoneyW b{color:#2a5a86}
+#foodStall #foodStallClose{display:block;margin:12px auto 0}
+.fdGuide{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;border:1px solid #d5dde6;border-radius:10px;padding:10px 12px;margin:6px 0;box-shadow:0 2px 8px rgba(20,40,60,.08);text-align:left}
+.fdGuide p{flex:1 1 180px;margin:0;font-size:13px;line-height:1.5;color:#3c4652}
+.fdGuide b{color:#2a5a86}
+.fdGuide.sm{margin:8px 0 0;padding:0;border:0;box-shadow:none;background:none}
+.panel .fdGo,.fdGo{display:inline-flex;align-items:center;gap:5px;flex:none;margin:0;padding:6px 12px;font-size:13px;font-weight:800;color:#fff;background:#2a5a86;border:1px solid #1f4566;border-radius:8px;box-shadow:0 1px 4px rgba(20,40,60,.18);cursor:pointer}
+.fdGo:active{transform:translateY(1px)}
