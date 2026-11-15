@@ -17,7 +17,8 @@ import {
 import { makeMeshHelpers } from '../dm/mesh';
 import { makePlazaShedRow } from './shedRow';
 import {
-  PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey,
+  PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, CENTER_PILE_ID, CENTER_SEAT_COUNT, playerSlotsOf,
+  WALK_BOUND, PLAZA_LAMP_XZ, pileCenter, seatPose, seatKey,
   pileHasNpc, pileIsGrill, pileIsRemoved, isSmokePile, isLeisurePile, isRestPile, isMgPile,
   MG_PILE_ID, MG_DECK_Y, SMOKE_PILE_ID, SMOKE_SEAT_COUNT, SMOKE_ABER_SLOT, smokeNpcSeatPose, isPlazaAber, plazaGroundY,
   CAFE_SMOKE_PILE_ID, CAFE_SMOKE_SEAT_COUNT, SEAFOOD_PILE_ID, SEAFOOD_SEAT_COUNT, HQ_SEAT_SLOT,
@@ -189,6 +190,8 @@ export type PlazaWorldOpts = {
   warmGpu?: (root: THREE.Object3D) => void;
   /** 1v1 競速：只留 pile0 對座擂台，藏大廣場 */
   raceArena?: boolean;
+  /** 多人休閒房：只留中央 pile5 八座 */
+  partyArena?: boolean;
 };
 
 export function createPlazaWorldView(
@@ -198,6 +201,7 @@ export function createPlazaWorldView(
 ): PlazaWorldView {
   const LO = !!opts.lowDetail;
   const raceArena = !!opts.raceArena;
+  const partyArena = !!opts.partyArena;
   const MOBILE = matchMedia('(pointer: coarse)').matches;
   // 須在吸菸阿伯 ensureTag 之前宣告（阿伯建於函式中段，const 有 TDZ）
   const PLAZA_TAG_A = 0.58;
@@ -275,14 +279,17 @@ export function createPlazaWorldView(
       color: 0xffffff,
     });
   const raceCenter = pileCenter(0);
-  const floorSpan = raceArena ? 7.2 : WALK_BOUND * 2.4;
+  const partyCenter = pileCenter(CENTER_PILE_ID);
+  const arenaOnly = raceArena || partyArena;
+  const arenaCenter = raceArena ? raceCenter : partyCenter;
+  const floorSpan = raceArena ? 7.2 : partyArena ? 10.5 : WALK_BOUND * 2.4;
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(floorSpan, floorSpan, LO ? 12 : (raceArena ? 24 : 48), LO ? 12 : (raceArena ? 24 : 48)),
+    new THREE.PlaneGeometry(floorSpan, floorSpan, LO ? 12 : (arenaOnly ? 24 : 48), LO ? 12 : (arenaOnly ? 24 : 48)),
     floorMat,
   );
   floor.name = 'plazaFloor';
   floor.rotation.x = -Math.PI / 2;
-  floor.position.set(raceArena ? raceCenter.x : 0, 0.002, raceArena ? raceCenter.z : 0);
+  floor.position.set(arenaOnly ? arenaCenter.x : 0, 0.002, arenaOnly ? arenaCenter.z : 0);
   floor.receiveShadow = !LO;
   root.add(floor);
 
@@ -297,10 +304,15 @@ export function createPlazaWorldView(
       const pose = seatPose(0, s);
       chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(0, s) });
     }
+  } else if (partyArena) {
+    for (let s = 0; s < CENTER_SEAT_COUNT; s++) {
+      const pose = seatPose(CENTER_PILE_ID, s);
+      chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(CENTER_PILE_ID, s) });
+    }
   } else {
     for (let i = 0; i < PILE_COUNT; i++) {
       if (pileIsRemoved(i)) continue;
-      const seatN = SLOTS_PER_PILE + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
+      const seatN = playerSlotsOf(i) + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
       for (let s = 0; s < seatN; s++) {
         const pose = seatPose(i, s);
         chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(i, s) });
@@ -321,7 +333,7 @@ export function createPlazaWorldView(
   root.add(bigShed.group);
   const careerMarquee = makeCareerMarquee(LO);
   root.add(careerMarquee.group);
-  if (raceArena) {
+  if (raceArena || partyArena) {
     bigShed.group.visible = false;
     careerMarquee.group.visible = false;
   }
@@ -715,8 +727,11 @@ export function createPlazaWorldView(
     if (raceArena) {
       buildOnePile(0);
       buildRaceArenaBooth(raceCenter);
+    } else if (partyArena) {
+      buildOnePile(CENTER_PILE_ID);
+      buildRaceArenaBooth(partyCenter);
     } else for (const q of [0, 1, 2, 3] as const) buildQuadrant(q);
-    if (!raceArena) for (const id of ['southGrill', 'ambiance', 'westSmoke', 'eastStreet', 'northShed'] as PlazaZoneId[]) {
+    if (!raceArena && !partyArena) for (const id of ['southGrill', 'ambiance', 'westSmoke', 'eastStreet', 'northShed'] as PlazaZoneId[]) {
       buildZone(id);
     }
     pendingQuadrants.length = 0;
@@ -755,7 +770,7 @@ export function createPlazaWorldView(
   }
 
   function tickZoneStreamer(dt: number, x: number, z: number, seated: boolean) {
-    if (raceArena) return;
+    if (raceArena || partyArena) return;
     walkX = x; walkZ = z;
     seatedZone = seated ? zoneAt(x, z) : null;
     streamProbeT -= dt;
@@ -853,7 +868,7 @@ export function createPlazaWorldView(
   const smokeNpcTag = ensureTag('阿伯', true);
   smokeNpcTag.sprite.position.set(smokeNpcPose.pos.x, CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95, smokeNpcPose.pos.z);
   smokeNpcTag.sprite.visible = !raceArena;
-  if (raceArena) smokeNpcRig.outer.visible = false;
+  if (raceArena || partyArena) smokeNpcRig.outer.visible = false;
   const smokeNpc: SmokeNpc = {
     rig: smokeNpcRig,
     tag: smokeNpcTag,

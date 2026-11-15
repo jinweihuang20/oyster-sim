@@ -3,6 +3,7 @@ import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShell
 import { normSeatWish, normSeatWishEnd } from './types';
 import { normFlagDto, type PlazaFlagState } from './flags';
 import { raceHubUrl } from '../race/hubClient';
+import { partyHubUrl } from '../party/hubClient';
 
 export type PlazaHubHandlers = {
   onRoster?: (snap: PlazaSnapshot) => void;
@@ -52,6 +53,8 @@ export type PlazaHubHandlers = {
   /** 1v1 競速：State／Results（Race hub） */
   onRaceState?: (snap: any) => void;
   onRaceResults?: (r: any) => void;
+  /** 休閒房：State（Party hub；形狀同 roster snap） */
+  onPartyState?: (snap: any) => void;
 };
 
 const DEFAULT_HUB = 'https://game-status.gwtech.org/hubs/plaza';
@@ -186,6 +189,9 @@ export class PlazaClient {
   nick = '';
   /** 非空＝連 Race hub，Join(code,pid,nick) */
   raceCode = '';
+  /** 非空＝連 Party hub；partyCreate＝開房 */
+  partyCode = '';
+  partyCreate = false;
   private handlers: PlazaHubHandlers = {};
   private intentionalStop = false;
   private reconnectAttempt = 0;
@@ -195,17 +201,28 @@ export class PlazaClient {
 
   get connectionId() { return this.conn?.connectionId ?? ''; }
   get isRace() { return !!this.raceCode; }
+  get isParty() { return !!this.partyCode || this.partyCreate; }
 
-  async connect(pid: string, nick: string, opts?: { keepAttempt?: boolean; raceCode?: string }): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; chat?: PlazaChat[]; grills?: PlazaGrillOyster[]; carryNpc?: boolean }> {
+  async connect(pid: string, nick: string, opts?: {
+    keepAttempt?: boolean;
+    raceCode?: string;
+    partyCode?: string;
+    partyCreate?: boolean;
+  }): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; chat?: PlazaChat[]; grills?: PlazaGrillOyster[]; carryNpc?: boolean }> {
     this.pid = pid;
     this.nick = nick;
     if (opts?.raceCode !== undefined) this.raceCode = opts.raceCode || '';
+    if (opts?.partyCode !== undefined) this.partyCode = opts.partyCode || '';
+    if (opts?.partyCreate !== undefined) this.partyCreate = !!opts.partyCreate;
+    // race／party 互斥
+    if (this.raceCode) { this.partyCode = ''; this.partyCreate = false; }
+    if (this.partyCode || this.partyCreate) this.raceCode = '';
     this.intentionalStop = false;
     if (!opts?.keepAttempt) this.reconnectAttempt = 0;
     // 進場／重連清線：不要 Depart（舊服無此方法；且 await 失敗會卡住「正在入場」）
     await this.disconnect({ depart: false });
     this.intentionalStop = false;
-    const url = this.raceCode ? raceHubUrl() : plazaHubUrl();
+    const url = this.raceCode ? raceHubUrl() : (this.isParty ? partyHubUrl() : plazaHubUrl());
     const conn = new signalR.HubConnectionBuilder()
       .withUrl(url, { withCredentials: false })
       .withAutomaticReconnect(RECONNECT_DELAYS)
@@ -327,7 +344,10 @@ export class PlazaClient {
       try { this.handlers.onFlagUpsert?.(normFlagDto(e)); } catch (err) { console.error('FlagUpsert', err); }
     });
     conn.on('State', (e: any) => {
-      try { this.handlers.onRaceState?.(e); } catch (err) { console.error('RaceState', err); }
+      try {
+        if (this.isParty) this.handlers.onPartyState?.(e);
+        else this.handlers.onRaceState?.(e);
+      } catch (err) { console.error('State', err); }
     });
     conn.on('Results', (e: any) => {
       try { this.handlers.onRaceResults?.(e); } catch (err) { console.error('RaceResults', err); }
@@ -337,16 +357,26 @@ export class PlazaClient {
   private async joinHub(): Promise<{ ok: boolean; err?: string; snap?: PlazaSnapshot; token?: string; chat?: PlazaChat[]; grills?: PlazaGrillOyster[]; carryNpc?: boolean; flags?: PlazaFlagState[]; wishes?: PlazaSeatWish[] }> {
     if (!this.conn) return { ok: false, err: 'no_conn' };
     try {
-      const r = this.raceCode
-        ? await this.conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot }>('Join', this.raceCode, this.pid, this.nick)
-        : await this.conn.invoke<{ ok: boolean; err?: string; token?: string; snap?: PlazaSnapshot; chat?: any[]; grills?: any[] }>('Join', this.pid, this.nick);
+      let r: any;
+      if (this.partyCreate && !this.partyCode) {
+        r = await this.conn.invoke('Create', this.pid, this.nick);
+        if (r?.ok && (r.code || r.Code)) {
+          this.partyCode = String(r.code ?? r.Code);
+          this.partyCreate = false;
+        }
+      } else if (this.partyCode) {
+        r = await this.conn.invoke('Join', this.partyCode, this.pid, this.nick);
+      } else if (this.raceCode) {
+        r = await this.conn.invoke('Join', this.raceCode, this.pid, this.nick);
+      } else {
+        r = await this.conn.invoke('Join', this.pid, this.nick);
+      }
       if (!r?.ok) return { ok: false, err: r?.err || 'join_fail' };
       this.token = r.token || '';
       this.reconnectAttempt = 0;
-      if (this.raceCode) {
+      if (this.raceCode || this.partyCode) {
         const raw = (r as any).chat ?? (r as any).Chat ?? [];
         const chat = Array.isArray(raw) ? raw.map(normChatDto) : [];
-        // RaceSnap → 廣場 snapshot 形狀（只靠 players）
         return { ok: true, snap: r.snap as any, token: this.token, chat, grills: [], carryNpc: false, flags: [], wishes: [] };
       }
       const raw = (r as any).chat ?? (r as any).Chat ?? [];
@@ -395,7 +425,12 @@ export class PlazaClient {
     this.handlers.onReconnecting?.(this.reconnectAttempt);
     const pid = this.pid, nick = this.nick;
     if (!pid) return { ok: false, err: 'no_pid' };
-    const r = await this.connect(pid, nick, { keepAttempt: true, raceCode: this.raceCode || undefined });
+    const r = await this.connect(pid, nick, {
+      keepAttempt: true,
+      raceCode: this.raceCode || undefined,
+      partyCode: this.partyCode || undefined,
+      partyCreate: false,
+    });
     if (r.ok) this.handlers.onRejoined?.(r.snap, r.chat, (r as any).grills, (r as any).flags, (r as any).wishes);
     else this.handlers.onRejoinFail?.(r.err, this.reconnectAttempt);
     return r;

@@ -1,5 +1,5 @@
 export {
-  openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, setRaceFairSeed, raceBeginBasinFill, plazaSeated, plazaSittingBusy, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
+  openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, isPlazaPartyMode, setRaceFairSeed, raceBeginBasinFill, plazaSeated, plazaSittingBusy, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaRandomSpawn, plazaResolveEnterSpawn, plazaNearSeat, plazaNearShed, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk,
   plazaHitPile, plazaMyPileOrigin,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,

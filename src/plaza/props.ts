@@ -4,7 +4,7 @@ import type { MatFn } from '../dm/weapons';
 import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
 import {
   PILE_SPACING, PLAZA_LAMP_XZ, WALK_BOUND, pileCenter, seatPose, CAFE_OPENING, CAFE_SOUTH_WALL_END,
-  PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, pileHasNpc, pileIsRemoved,
+  PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, playerSlotsOf, pileHasNpc, pileIsRemoved,
 } from './layout';
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
@@ -322,7 +322,7 @@ function shedPostClear(x: number, z: number, pad = 0.28) {
     if (pileIsRemoved(i)) continue;
     const c = pileCenter(i);
     if (Math.hypot(x - c.x, z - c.z) < 1.05 + pad) return false;
-    const seatN = SLOTS_PER_PILE + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
+    const seatN = playerSlotsOf(i) + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
     for (let s = 0; s < seatN; s++) {
       const seat = seatPose(i, s).pos;
       if (Math.hypot(x - seat.x, z - seat.z) < 0.4 + pad) return false;

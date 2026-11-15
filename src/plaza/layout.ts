@@ -2,6 +2,11 @@ import * as THREE from 'three';
 
 export const PILE_COUNT = 16;
 export const SLOTS_PER_PILE = 4;
+/** 廣場中央蚵堆（休閒房唯一桌）；玩家座擴成 8 */
+export const CENTER_PILE_ID = 5;
+export const CENTER_SEAT_COUNT = 8;
+export const isCenterPile = (pileId: number) => pileId === CENTER_PILE_ID;
+export const playerSlotsOf = (pileId: number) => (isCenterPile(pileId) ? CENTER_SEAT_COUNT : SLOTS_PER_PILE);
 /** 已移除的蚵堆（東側第 4／8／12 堆＝pileId 3／7／11）；保留 id 空間，不建 mesh／不給入座 */
 export const REMOVED_PILE_IDS: readonly number[] = [3, 7, 11];
 export const pileIsRemoved = (pileId: number) => REMOVED_PILE_IDS.includes(pileId);
@@ -157,7 +162,9 @@ export function smokeNpcSeatPose() {
   const yaw = Math.atan2(pos.x - center.x, pos.z - center.z);
   return { pos, yaw, center, angle: a };
 }
-export const PLAZA_CAPACITY = (PILE_COUNT - REMOVED_PILE_IDS.length) * SLOTS_PER_PILE;
+/** 容量：中央堆 8 座，其餘活躍堆各 4 座 */
+export const PLAZA_CAPACITY =
+  (PILE_COUNT - REMOVED_PILE_IDS.length - 1) * SLOTS_PER_PILE + CENTER_SEAT_COUNT;
 export const PILE_SPACING = 5.2;
 /** 椅子離堆心距離（貼近蚵堆；身體靠 hangArms／後仰避免埋進堆裡） */
 export const SEAT_RADIUS = 1.38;
@@ -304,10 +311,14 @@ export function seatPose(pileId: number, slot: number) {
     return { pos, yaw, center, angle: a };
   }
   const center = pileCenter(pileId);
-  const npc = slot >= SLOTS_PER_PILE;
+  const playerSlots = playerSlotsOf(pileId);
+  const npc = slot >= playerSlots;
+  // 中央 8 座：每 45°；一般堆 4 座：每 90° 從 π/4 起
   const a = npc
-    ? (Math.max(0, slot - SLOTS_PER_PILE) % NPC_SLOTS_PER_PILE) * Math.PI
-    : slot * (Math.PI / 2) + Math.PI / 4;
+    ? (Math.max(0, slot - playerSlots) % NPC_SLOTS_PER_PILE) * Math.PI
+    : isCenterPile(pileId)
+      ? slot * (Math.PI / 4) + Math.PI / 8
+      : slot * (Math.PI / 2) + Math.PI / 4;
   const radius = npc ? NPC_SEAT_RADIUS : SEAT_RADIUS;
   const pos = new THREE.Vector3(
     center.x + Math.sin(a) * radius,
@@ -338,9 +349,10 @@ export function nearestFreeSeat(x: number, z: number, taken: Set<string>, maxDis
   };
   for (let p = 0; p < PILE_COUNT; p++) {
     if (pileIsRemoved(p)) continue;
-    for (let s = 0; s < SLOTS_PER_PILE; s++) consider(p, s);
+    const n = playerSlotsOf(p);
+    for (let s = 0; s < n; s++) consider(p, s);
     if (pileHasNpc(p)) {
-      for (let s = SLOTS_PER_PILE; s < SLOTS_PER_PILE + NPC_SLOTS_PER_PILE; s++) consider(p, s);
+      for (let s = n; s < n + NPC_SLOTS_PER_PILE; s++) consider(p, s);
     }
   }
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);
@@ -363,9 +375,10 @@ export function nearestFreePlaceSeat(x: number, z: number, taken: Set<string>, m
   };
   for (let p = 0; p < PILE_COUNT; p++) {
     if (pileIsRemoved(p)) continue;
-    for (let s = 0; s < SLOTS_PER_PILE; s++) consider(p, s);
+    const n = playerSlotsOf(p);
+    for (let s = 0; s < n; s++) consider(p, s);
     if (pileHasNpc(p)) {
-      for (let s = SLOTS_PER_PILE; s < SLOTS_PER_PILE + NPC_SLOTS_PER_PILE; s++) consider(p, s);
+      for (let s = n; s < n + NPC_SLOTS_PER_PILE; s++) consider(p, s);
     }
   }
   for (let s = 0; s < SMOKE_SEAT_COUNT; s++) consider(SMOKE_PILE_ID, s);

@@ -51,6 +51,10 @@ import {
   bindRace, openRaceMenu, startRaceQueue, clearRaceUi, setRaceSnap, applyRaceResults,
   isRaceInputLocked, isRaceLobbyWait, currentRaceSnap, normRaceSnap, normRaceResults, type RaceMatched,
 } from './race';
+import {
+  bindParty, openPartyMenu, clearPartyUi, applyPartyState, consumePartyDeepLink,
+  startPartyInvitePoll, currentPartyCode,
+} from './party';
 import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
 import {
@@ -62,7 +66,7 @@ import {
 import { makeMeshHelpers } from './dm/mesh';
 import {
   plazaNearShed, SHED_DOORS, shedReturnSpawn, shedName,
-  openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, raceBeginBasinFill, tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaSettleRaceMeat, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
+  openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, isPlazaPartyMode, raceBeginBasinFill, tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaSettleRaceMeat, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile, isMgPile,
   MG_MAG_PRICE, MG_MAG_AMMO, MG_AMMO_MAX, MG_SIT_MS,
@@ -3078,6 +3082,8 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     updHud();
     plazaEndCleanup();
     clearPlazaLeaveUi();
+    clearRaceUi();
+    clearPartyUi();
     on('quitBtn', false); on('standBtn', false); on('throwBtn', false); on('umbBtn', false); on('stealBtn', false); on('sitBtn', false); on('giveUp', false); on('medBtn', false); on('camBtn', false);
     const menuBtn = $('resMenu');
     if (menuBtn) { menuBtn.innerHTML = pendingShed ? `<i class="ic ic-pin"></i> 前往 ${shedName(pendingShed.loc)} 上工` : `<i class="ic ic-home"></i> 回主選單`; (menuBtn as HTMLButtonElement).disabled = true; }
@@ -3510,10 +3516,14 @@ $('bmGo').onclick = () => { void (async () => {
   const wasPlaza = plazaMode;
   // 廣場還沒開班：無結算，直接回主畫面
   if (wasPlaza && !plazaShiftStarted()) {
+    clearRaceUi();
+    clearPartyUi();
     returnToMainMenu(async () => {
       plazaShellGen++; setPlazaMode(false); plazaPlayAt = 0; plazaHideYard(false);
       await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door');
       clearPlazaLeaveUi();
+      clearRaceUi();
+      clearPartyUi();
       void refreshPlazaOnlineAfterLeave();
     });
     return;
@@ -4191,6 +4201,7 @@ function launchDeathmatch(mode: DmMode) {
   duckAmb();
 }
 $('oRace').onclick = () => { audio(); openRaceMenu(); };
+$('oParty').onclick = () => { audio(); openPartyMenu(); };
 $('oDmFfa').onclick = () => launchDeathmatch('ffa');
 $('oDmHorde').onclick = () => launchDeathmatch('horde');
 function plazaHideYard(hide: boolean) {
@@ -4792,8 +4803,10 @@ function returnToPlazaFromShed() {
   shiftLen = SHIFT; updSky();
   launchPlaza();
 }
-function launchPlaza(race?: RaceMatched) {
+function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: boolean } }) {
   if (isDeathmatchActive() || isPlazaActive()) return;
+  const party = opts && 'party' in opts ? opts.party : undefined;
+  const race = party ? undefined : (opts as RaceMatched | undefined);
   if (race) raceEarnSettled = false;
   // 先蓋住工寮場景，連線完成再進廣場
   showPlazaLoading(true);
@@ -4844,6 +4857,13 @@ function launchPlaza(race?: RaceMatched) {
           // 勝負獎金＋剝蚵工錢：趁還連著 Race hub 先入帳推後台
           void settleRaceShiftEarn().catch(() => 0);
         } catch (err) { console.error(err); }
+      },
+    } : undefined,
+    party: party ? {
+      code: party.code,
+      create: party.create,
+      onState: (raw) => {
+        try { applyPartyState(raw); } catch (err) { console.error(err); }
       },
     } : undefined,
     getWalkXZ: () => (walking ? { x: walkPos.x, z: walkPos.z } : { x: SEAT.x, z: SEAT.z }),
@@ -4984,26 +5004,30 @@ function launchPlaza(race?: RaceMatched) {
         showPlazaLoading(false);
         plazaShellGen++;
         const wasRace = isPlazaRaceMode();
+        const wasParty = isPlazaPartyMode();
         if (state === 'play' && plazaMode && plazaShiftStarted()) { endReason = 'quit'; endDay(); return; }
         returnToMainMenu(async () => {
           setPlazaMode(false); plazaPlayAt = 0; plazaHideYard(false);
           await closePlaza().catch(() => 0); applySeat(save.seat ?? 'door');
           clearPlazaLeaveUi();
           clearRaceUi();
-          if (!wasRace) void refreshPlazaOnlineAfterLeave();
+          clearPartyUi();
+          if (!wasRace && !wasParty) void refreshPlazaOnlineAfterLeave();
         });
       })();
     },
     onEnterFail: () => {
       plazaShellGen++;
       const wasRace = isPlazaRaceMode();
+      const wasParty = isPlazaPartyMode();
       returnToMainMenu(() => {
         setPlazaMode(false); plazaPlayAt = 0;
         plazaHideYard(false);
         applySeat(save.seat ?? 'door');
         clearPlazaLeaveUi();
         clearRaceUi();
-        if (!wasRace) void syncPlazaOnlineUi(true);
+        clearPartyUi();
+        if (!wasRace && !wasParty) void syncPlazaOnlineUi(true);
       });
     },
     enterWalk: () => {
@@ -5023,7 +5047,12 @@ function launchPlaza(race?: RaceMatched) {
       showPlazaLoading(false);
       updHud();
       markPlazaVisited();
-      toastTop(isPlazaRaceMode() ? '單挑競速・對座剝蚵，可偷／丟／傘' : '蚵仔廣場・休閒剝蚵，隨便坐、不趕時間', TOP_SEC.info);
+      toastTop(
+        isPlazaRaceMode() ? '單挑競速・對座剝蚵，可偷／丟／傘'
+          : isPlazaPartyMode() ? `休閒房${currentPartyCode() ? '・' + currentPartyCode() : ''}・中央八座，可換位`
+            : '蚵仔廣場・休閒剝蚵，隨便坐、不趕時間',
+        TOP_SEC.info,
+      );
       if (isPlazaRaceMode()) refreshPet();
     },
     beginShift: () => {
@@ -5205,6 +5234,8 @@ btn('resMenu', () => {
       await closePlaza().catch(() => 0);
       applySeat(save.seat ?? 'door');
       clearPlazaLeaveUi();
+      clearRaceUi();
+      clearPartyUi();
       void refreshPlazaOnlineAfterLeave();
     }
   }, {
@@ -6052,6 +6083,7 @@ async function settleRaceShiftEarn() {
 
 function leaveRaceToMenu(then?: () => void) {
   clearRaceUi();
+  clearPartyUi();
   // 不要走 endDay 工班結算面板；剝蚵工錢在斷線前結清
   returnToMainMenu(async () => {
     try { $('result').classList.remove('show'); } catch { /* */ }
@@ -6064,6 +6096,7 @@ function leaveRaceToMenu(then?: () => void) {
     applySeat(save.seat ?? 'door');
     clearPlazaLeaveUi();
     clearRaceUi();
+    clearPartyUi();
     raceEarnSettled = false;
   }, then ? { then } : undefined);
 }
@@ -6085,6 +6118,30 @@ bindRace({
     toastTop(`競速獎勵 +$${v}`, TOP_SEC.info);
   },
 });
+bindParty({
+  id: statsId,
+  nick: () => myName(),
+  toast: (t, c, sec, place) => toast(t, c, sec ?? (place === 'top' ? TOP_SEC.info : 1.1), place ?? 'mid'),
+  audio: () => audio(),
+  canEnter: () => state === 'menu' && !tut && !isPlazaActive() && !isDeathmatchActive() && !isRoomActive(),
+  busyToast: () => toastTop('請先離開目前場景再進休閒房', TOP_SEC.info),
+  enterParty: (opts) => { launchPlaza({ party: opts }); },
+  leaveParty: () => { leaveRaceToMenu(); },
+});
+{
+  const deep = consumePartyDeepLink();
+  if (deep) {
+    const tryJoin = () => {
+      if (state === 'menu' && !tut && !isPlazaActive() && !isDeathmatchActive() && !isRoomActive()) {
+        launchPlaza({ party: { code: deep } });
+        return;
+      }
+      toastTop('請先離開目前場景再進休閒房', TOP_SEC.info);
+    };
+    setTimeout(tryJoin, 600);
+  }
+  startPartyInvitePoll();
+}
 bindRoom({
   id: statsId,
   nick: () => myName(),
@@ -6189,6 +6246,7 @@ Social.startPresence(
   () => state === 'play',
   () => {
     if (isDeathmatchActive()) return 'dm';
+    if (isPlazaPartyMode()) return 'party';
     if (isPlazaActive() || plazaMode) return 'plaza';
     if (isRoomActive()) return 'room';
     if (state === 'play') return 'yard';
@@ -6201,6 +6259,7 @@ initFriends({
   toast: (t, c, sec, place) => toast(t, c || '#9be37a', sec ?? (place === 'top' ? TOP_SEC.info : 1.1), place ?? 'mid'),
   presenceWhere: () => {
     if (isDeathmatchActive()) return 'dm';
+    if (isPlazaPartyMode()) return 'party';
     if (isPlazaActive() || plazaMode) return 'plaza';
     if (isRoomActive()) return 'room';
     if (state === 'play') return 'yard';

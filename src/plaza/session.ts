@@ -4,7 +4,7 @@ import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds, plazaClampWalk, plazaCafeObstacles,
   seatPose, seatKey, nearestFreeSeat, nearestFreePlaceSeat, pileObstacles, pileCenter, randomWalkSpawn, resolveWalkSpawn,
   isSmokePile, isLeisurePile, isRestPile, isMgPile, plazaSmokeObstacles, isPlazaAber, SMOKE_PILE_ID, SMOKE_ABER_SLOT,
-  MG_PILE_ID, MG_SIT_PRICE, MG_SIT_AMMO, MG_SIT_MS,
+  MG_PILE_ID, MG_SIT_PRICE, MG_SIT_AMMO, MG_SIT_MS, CENTER_PILE_ID, CENTER_SEAT_COUNT,
   type PlazaSeatRef, type PlazaSpawnMemory,
   SHED_DOORS, shedDoorAt, plazaShedObstacles,
 } from './layout';
@@ -143,11 +143,19 @@ export type PlazaDeps = {
     onState?: (snap: any) => void;
     onResults?: (r: any) => void;
   };
+  /** 多人休閒房：連 Party hub、中央八座 */
+  party?: {
+    code?: string;
+    create?: boolean;
+    onState?: (snap: any) => void;
+  };
 };
 
 let active = false;
 /** 1v1 競速（獨立 Race hub） */
 let raceMode = false;
+/** 多人休閒房（獨立 Party hub；與 raceMode 互斥） */
+let partyMode = false;
 /** 雙方共用蚵仔 RNG 種子；0＝未就緒 */
 let raceFairSeed = 0;
 /** 第幾次補盆（雙方同步遞增） */
@@ -192,6 +200,7 @@ let chatPeekTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const isPlazaActive = () => active;
 export const isPlazaRaceMode = () => raceMode;
+export const isPlazaPartyMode = () => partyMode;
 export function setRaceFairSeed(seed: number) {
   const s = (seed >>> 0) || 1;
   // 同一場重連／重複 State：不要把補盆代數歸零，否則雙方序列會岔開
@@ -633,7 +642,7 @@ function zhNpcErr(e: string | undefined, who: string) {
 function zhErr(e?: string) { return plazaZhErr(e); }
 
 function forceResetPlazaLocal() {
-  active = false; raceMode = false; raceFairSeed = 0; raceFillGen = 0; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
+  active = false; raceMode = false; partyMode = false; raceFairSeed = 0; raceFillGen = 0; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
   chatUnread = 0; hideChatPeek();
   clearReconnectTimer();
   const old = client; client = null;
@@ -648,13 +657,17 @@ function forceResetPlazaLocal() {
   removeFlagBtn();
   teardownPlayersChrome();
   syncPlazaPeopleHud();
-  try { document.body.classList.remove('raceMode'); } catch { /* */ }
+  try { document.body.classList.remove('raceMode', 'partyMode'); } catch { /* */ }
 }
 
 export function openPlaza(D: PlazaDeps) {
   // 上次入場半殘（active 卡住）時同步清掉再進，避免按鈕沒反應
   if (active) forceResetPlazaLocal();
-  active = true; raceMode = !!D.race?.code; raceBooting = !!D.race?.code; seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
+  active = true;
+  raceMode = !!D.race?.code;
+  partyMode = !!(!raceMode && (D.party?.code || D.party?.create));
+  raceBooting = !!D.race?.code;
+  seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
   raceFairSeed = 0; raceFillGen = 0;
   if (raceMode) {
@@ -662,10 +675,15 @@ export function openPlaza(D: PlazaDeps) {
     const fs = Number(D.race?.fairSeed ?? 0) | 0;
     if (fs) setRaceFairSeed(fs);
   }
+  if (partyMode) document.body.classList.add('partyMode');
   D.audio();
   try {
     client = new PlazaClient();
     if (D.race?.code) client.raceCode = D.race.code;
+    if (partyMode) {
+      if (D.party?.code) client.partyCode = D.party.code;
+      if (D.party?.create) client.partyCreate = true;
+    }
     view = createPlazaWorldView(D.scene, D.bubbles, {
       shellGeo: D.shellGeo,
       shellMat: D.shellMat,
@@ -678,6 +696,7 @@ export function openPlaza(D: PlazaDeps) {
       getRenderer: () => D.renderer,
       warmGpu: root => D.warmGpu?.(root),
       raceArena: raceMode,
+      partyArena: partyMode,
     });
     buildUi();
     wireClient(D);
@@ -747,13 +766,17 @@ function applySeatWishEnd(e: PlazaSeatWishEnd) {
 
 async function boot(D: PlazaDeps) {
   try {
-  setHud(raceMode ? '進入對戰…' : '連線中…');
-  const r = await client!.connect(D.id, D.nick(), raceMode && D.race?.code ? { raceCode: D.race.code } : undefined);
+  setHud(raceMode ? '進入對戰…' : partyMode ? '進入休閒房…' : '連線中…');
+  const r = await client!.connect(D.id, D.nick(), raceMode && D.race?.code
+    ? { raceCode: D.race.code }
+    : partyMode
+      ? { partyCode: D.party?.code, partyCreate: !!D.party?.create }
+      : undefined);
   if (!active || !client) return; // 入場中被取消
   if (!r.ok) {
-    if (raceMode) {
+    if (raceMode || partyMode) {
       raceBooting = false;
-      D.toast(zhErr(r.err) || '進對戰失敗', '#ff8a7a', 3, 'top');
+      D.toast(zhErr(r.err) || (partyMode ? '進休閒房失敗' : '進對戰失敗'), '#ff8a7a', 3, 'top');
       void abortEnter(D, r.err || 'join_fail');
       return;
     }
@@ -775,19 +798,21 @@ async function boot(D: PlazaDeps) {
     const fs = Number((r.snap as any).fairSeed ?? (r.snap as any).FairSeed ?? 0) | 0;
     if (fs) setRaceFairSeed(fs);
   }
-  carryNpcOk = raceMode ? false : !!(r as any).carryNpc;
-  if (!raceMode) applyJoinFlags((r as any).flags);
+  carryNpcOk = (raceMode || partyMode) ? false : !!(r as any).carryNpc;
+  if (!raceMode && !partyMode) applyJoinFlags((r as any).flags);
   if (snap) view?.syncRoster(snap, D.id);
-  if (!raceMode) applySeatWishes((r as any).wishes);
-  if (!raceMode && r.grills) view?.grill.syncAll(r.grills);
+  if (!raceMode && !partyMode) applySeatWishes((r as any).wishes);
+  if (!raceMode && !partyMode && r.grills) view?.grill.syncAll(r.grills);
   applyChatHistory(r.chat);
   void plazaPushOutfit();
+  // 休閒房：先寫 HUD 代碼，再 enterWalk（toast 才帶得上房號）
+  if (partyMode && D.party?.onState && r.snap) D.party.onState(r.snap);
   // 先 enterWalk（掛 plazaMode／plazaRoam）再 sync，否則玩家鈕不會掛上
   D.enterWalk();
   showRoamUi();
   if (raceMode) {
     setHud('單挑競速・對座剝蚵');
-    // enterWalk 之後才套座位（State 在 Join 當下可能已搶先套過，會被走动沖掉）
+    // enterWalk 之後才套座位（State 在 Join 當下可能已搶先套過，會被走動沖掉）
     seated = false;
     shiftStarted = false;
     myPile = null;
@@ -799,11 +824,19 @@ async function boot(D: PlazaDeps) {
     if (!seated) applyRaceSeatFromSnap(D, true);
     if (!seated) await forceRaceSit(D);
     if (D.race?.onState && r.snap) D.race.onState(r.snap);
+  } else if (partyMode) {
+    setHud('休閒房・中央八座');
+    seated = false;
+    shiftStarted = false;
+    myPile = null;
+    mySlot = null;
+    applyPartySeatFromSnap(D, true);
+    if (!seated) await forcePartySit(D);
   } else {
     setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
   }
   syncPlazaPeopleHud();
-  if (!raceMode && !plazaIoAnnounced) {
+  if (!raceMode && !partyMode && !plazaIoAnnounced) {
     plazaIoAnnounced = true;
     const online = snap?.occupied ?? snap?.players?.filter((p) => !p.isNpc).length ?? null;
     void postDiscordPlazaPresence(D.nick(), 'join', { online, tag: myTag() });
@@ -811,8 +844,8 @@ async function boot(D: PlazaDeps) {
   } catch (e) {
     console.error('plaza boot', e);
     if (!active) return;
-    if (raceMode) {
-      D.toast('進對戰異常', '#ff8a7a', 3, 'top');
+    if (raceMode || partyMode) {
+      D.toast(partyMode ? '進休閒房異常' : '進對戰異常', '#ff8a7a', 3, 'top');
       void abortEnter(D, 'boot_fail');
       return;
     }
@@ -872,6 +905,37 @@ async function forceRaceSit(D: PlazaDeps) {
     return;
   }
   D.toast('對戰座位坐不上，請靠近藍色板凳再坐', '#ffb08a', 3, 'top');
+}
+
+/** 休閒房：對齊伺服器已自動入座的中央桌 */
+function applyPartySeatFromSnap(D: PlazaDeps, force = false) {
+  if (!snap || (seated && !force)) return;
+  const cid = client?.connectionId || '';
+  const me = snap.players.find(p => (!!p.pid && p.pid === D.id) || (!!cid && p.connId === cid));
+  if (!me || me.pileId < 0 || me.slot < 0) return;
+  applyRaceSitLocal(D, me.pileId, me.slot);
+}
+
+/** 快照沒座位時：搶中央 pile5 空位 */
+async function forcePartySit(D: PlazaDeps) {
+  if (!client?.connected || seated) return;
+  const taken = new Set(
+    (snap?.players ?? [])
+      .filter(p => p.seated && p.pileId === CENTER_PILE_ID && p.slot >= 0 && p.slot < CENTER_SEAT_COUNT)
+      .map(p => p.slot),
+  );
+  for (let slot = 0; slot < CENTER_SEAT_COUNT; slot++) {
+    if (taken.has(slot)) continue;
+    const r = await client.claimSeat(CENTER_PILE_ID, slot, 0);
+    if (!r.ok) continue;
+    if (r.snap) {
+      snap = normalizeSnap(r.snap);
+      view?.syncRoster(snap, D.id);
+    }
+    applyRaceSitLocal(D, CENTER_PILE_ID, slot);
+    return;
+  }
+  D.toast('休閒房座位坐不上，請靠近板凳再坐', '#ffb08a', 3, 'top');
 }
 
 /** 把本機目前裝備推到廣場（進場／換裝／重連後） */
@@ -1102,6 +1166,17 @@ function wireClient(D: PlazaDeps) {
         D.race?.onResults?.(raw);
       } catch (err) { console.error('onRaceResults', err); }
     },
+    onPartyState: (raw) => {
+      if (!partyMode || !active) return;
+      try {
+        const ns = normalizeSnap(raw);
+        snap = ns;
+        view?.syncRoster(ns, D.id);
+        syncPlazaPeopleHud();
+        if (!seated) applyPartySeatFromSnap(D);
+        D.party?.onState?.(raw);
+      } catch (err) { console.error('onPartyState', err); }
+    },
   });
 }
 
@@ -1117,7 +1192,7 @@ function normalizeSnap(s: any): PlazaSnapshot {
     pileCount: s?.pileCount ?? s?.PileCount ?? PILE_COUNT,
     slotsPerPile: s?.slotsPerPile ?? s?.SlotsPerPile ?? SLOTS_PER_PILE,
     occupied,
-    capacity: s?.capacity ?? s?.Capacity ?? (raceMode ? 2 : PLAZA_CAPACITY),
+    capacity: s?.capacity ?? s?.Capacity ?? (raceMode ? 2 : partyMode ? CENTER_SEAT_COUNT : PLAZA_CAPACITY),
     pileDiffs: (() => {
       const d = parsePileDiffs(s?.pileDiffs ?? s?.PileDiffs);
       // 競速固定綜合堆，雙方難度權重一致
@@ -1133,7 +1208,8 @@ function normalizeSnap(s: any): PlazaSnapshot {
 function plazaHudPeople(s?: PlazaSnapshot | null) {
   const humans = s?.players?.filter((p) => !p.isNpc) ?? [];
   const n = humans.length > 0 ? humans.length : (s?.occupied ?? 0);
-  const cap = s?.capacity ?? PLAZA_CAPACITY;
+  const cap = s?.capacity ?? (partyMode ? CENTER_SEAT_COUNT : PLAZA_CAPACITY);
+  if (partyMode) return `休閒房・目前 ${n}/${cap}`;
   return `廣場休閒・目前 ${n} 人（可坐 ${cap}）`;
 }
 function mergePlayer(n: PlazaPlayer) {
@@ -1314,9 +1390,9 @@ function buildUi() {
 <button id="pzChatFab" type="button" aria-label="聊天">聊天<span class="key"> (ENTER)</span><span class="pzBadge" aria-hidden="true">0</span></button>
 <button id="pzChatPeek" type="button" aria-label="打開聊天"></button>
 <div id="pzChat">
-  <div id="pzChatHd"><span>${raceMode ? '對戰聊天' : '廣場聊天'}</span><button id="pzChatMin" type="button" aria-label="縮小">–</button></div>
+  <div id="pzChatHd"><span>${raceMode ? '對戰聊天' : partyMode ? '休閒房聊天' : '廣場聊天'}</span><button id="pzChatMin" type="button" aria-label="縮小">–</button></div>
   <div id="pzLog"></div>
-  <div id="pzRow"><input id="pzIn" maxlength="80" placeholder="${raceMode ? '跟對手說…' : '跟廣場打招呼…'}"/><button id="pzSend" type="button">送</button></div>
+  <div id="pzRow"><input id="pzIn" maxlength="80" placeholder="${raceMode ? '跟對手說…' : partyMode ? '跟房內說…' : '跟廣場打招呼…'}"/><button id="pzSend" type="button">送</button></div>
 </div>
 <div id="pzMap" role="dialog" aria-label="廣場地圖">
   <div id="pzMapHd"><span>廣場地圖</span><button id="pzMapClose" type="button">關閉</button></div>
@@ -1905,7 +1981,7 @@ export function plazaUpdateNear(wx: number, wz: number) {
     }
   }
   const n = nearestFreeSeat(wx, wz, takenSet(true), SIT_DIST);
-  near = n ? { pileId: n.pileId, slot: n.slot } : null;
+  near = n && (!partyMode || n.pileId === CENTER_PILE_ID) ? { pileId: n.pileId, slot: n.slot } : null;
   view?.highlightNear(near);
   return near;
 }
@@ -1970,6 +2046,9 @@ export async function plazaTrySit(mgPay: PlazaMgPay = 'auto'): Promise<boolean> 
   if (!seat) { deps.toast('靠近空的藍色板凳再坐', '#ffb08a'); return false; }
   if (raceMode) {
     deps.toast('競速不能換位置', '#ffb08a'); return false;
+  }
+  if (partyMode && seat.pileId !== CENTER_PILE_ID) {
+    deps.toast('休閒房只能坐中央那桌', '#ffb08a'); return false;
   }
   sittingBusy = true;
   const mg = raceMode ? false : isMgPile(seat.pileId);
@@ -2313,7 +2392,7 @@ export async function closePlaza(leaveSeat = true) {
   if (!active) return;
   const nick = deps?.nick() ?? '剝蚵人';
   const online = snap?.occupied ?? snap?.players?.filter((p) => !p.isNpc).length ?? null;
-  const announceLeave = plazaIoAnnounced;
+  const announceLeave = plazaIoAnnounced && !raceMode && !partyMode;
   // 先記住離開站位（含坐著離開的椅旁點），再清狀態
   if (deps?.persistPlazaSpawn) {
     if (seated && myPile != null && mySlot != null) {
@@ -2330,7 +2409,7 @@ export async function closePlaza(leaveSeat = true) {
       deps.persistPlazaSpawn({ x: p.x, z: p.z, yaw: deps.getYaw() });
     }
   }
-  active = false; raceMode = false; raceFairSeed = 0; raceFillGen = 0; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
+  active = false; raceMode = false; partyMode = false; raceFairSeed = 0; raceFillGen = 0; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
   chatUnread = 0; hideChatPeek();
   clearReconnectTimer();
   syncPlazaPeopleHud();
@@ -2341,7 +2420,7 @@ export async function closePlaza(leaveSeat = true) {
   ui?.remove(); ui = null;
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
-  try { document.body.classList.remove('raceMode'); } catch { /* */ }
+  try { document.body.classList.remove('raceMode', 'partyMode'); } catch { /* */ }
   if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null, tag: myTag() });
 }
 
