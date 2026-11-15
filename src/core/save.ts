@@ -4,6 +4,8 @@ import type { AchSave } from '../meta/achievements';
 export const SAVE_V = 3;
 export const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
 export type Life = Record<typeof LIFE_KEYS[number], number>;
+/** 食材一批：id、數量、取得時間（ms，算保存期限）、品質（1＝完整） */
+export type FoodBatch = { id: string; n: number; at: number; q?: number };
 export type Save = {
   v: number; dex: number[]; odd: number[]; best: number; money: number; days: number; queen: number; life: Life;
   titles: Record<string, number>; shop: { owned: string[]; equipped: Record<string, string> };
@@ -22,6 +24,10 @@ export type Save = {
   plazaVisited?: number;
   /** 教學結束後的廣場導引已顯示過 */
   plazaGuideSeen?: number;
+  /** 食材（每批記取得時間，過期自動清） */
+  food?: FoodBatch[];
+  /** 拿過的食材種類（第一次取得提示用） */
+  foodSeen?: string[];
 };
 
 export const START_MONEY = 10000;
@@ -93,6 +99,15 @@ export function loadSave(LS: SaveStorage): Save {
   }
   if (num(raw.plazaVisited) || out.plazaSpawn) out.plazaVisited = 1;
   if (num(raw.plazaGuideSeen)) out.plazaGuideSeen = 1;
+  if (Array.isArray(raw.food)) {
+    out.food = [];
+    for (const b of raw.food.slice(-300)) {
+      if (!b || typeof b.id !== 'string' || b.id.length > 16) continue;
+      const n = Math.floor(num(b.n)), at = num(b.at), q = Math.floor(num(b.q));
+      if (n > 0 && at > 0) out.food.push(q === 1 ? { id: b.id, n, at, q } : { id: b.id, n, at });
+    }
+  }
+  if (Array.isArray(raw.foodSeen)) out.foodSeen = raw.foodSeen.filter((x: unknown) => typeof x === 'string').slice(0, 40);
   return out;
 }
 

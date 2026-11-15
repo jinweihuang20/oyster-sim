@@ -16,6 +16,8 @@ export type DailyDeps = {
   legendTotal: () => number;
   audio: () => void;
   tone: (freq: number, dur: number, vol: number, type?: OscillatorType, delay?: number, glideTo?: number) => void;
+  /** 第 7 天食材福袋，回傳說明 */
+  foodBag: () => string;
 };
 
 let D: DailyDeps;
@@ -45,7 +47,7 @@ export function renderDaily() {
   document.getElementById('calBtn')?.classList.toggle('due', !done);
   const box = document.getElementById('dailyMsg'); if (!box) return;
   const got = done ? (save.streakDay ?? 1) : nextStreak() - 1, today = done ? got : got + 1;
-  box.querySelector('.dcGrid')!.innerHTML = [1, 2, 3, 4, 5, 6, 7].map(i => `<div class="dcCell${i <= got ? ' got' : ''}${i === today && !done ? ' now' : ''}${i === 7 ? ' big' : ''}"><span class="dcD">第 ${i} 天</span><i class="ic ${i <= got ? 'ic-check' : i === 7 ? 'ic-gift' : 'ic-coin'}"></i><b>$${(eco.dailyPays[i - 1] ?? 0).toLocaleString('zh-TW')}</b>${i === 7 ? '<small>另送傳說奇物</small>' : ''}</div>`).join('');
+  box.querySelector('.dcGrid')!.innerHTML = [1, 2, 3, 4, 5, 6, 7].map(i => `<div class="dcCell${i <= got ? ' got' : ''}${i === today && !done ? ' now' : ''}${i === 7 ? ' big' : ''}"><span class="dcD">第 ${i} 天</span><i class="ic ${i <= got ? 'ic-check' : i === 7 ? 'ic-gift' : 'ic-coin'}"></i><b>$${(eco.dailyPays[i - 1] ?? 0).toLocaleString('zh-TW')}</b>${i === 7 ? '<small>另送傳說奇物＋食材福袋</small>' : ''}</div>`).join('');
   const btn = box.querySelector<HTMLButtonElement>('.dcGo')!; btn.disabled = done; btn.textContent = done ? '今天領過了' : '領取';
   box.querySelector('.dcNote')!.textContent = done ? `已連續上工 ${got} 天，明天再來` : today === 7 ? '今天是第 7 天大獎！' : `再 ${7 - today} 天拿第 7 天大獎・斷一天會從第 1 天重來`;
 }
@@ -85,13 +87,14 @@ export function claimDaily(ev?: Event) {
   const n = nextStreak(), amt = eco.dailyPays[n - 1];
   save.bonusDay = save.lastBonusDay = todayKey(); save.streakDay = n; save.bonusN = (save.bonusN ?? 0) + 1; save.money += amt;
   const item = n === 7 ? dailyItem() : '';
+  const bag = n === 7 ? D.foodBag() : '';
   D.persist(); D.renderDex();
   D.track('daily_bonus', { amount: amt, streak: n, money: save.money });
   try { D.audio(); for (let k = 0; k < 3; k++) D.tone(1200 + k * 250, 0.15, 0.09, 'square', k * 0.07, 1800 + k * 250); } catch { /* 無音訊 */ }
   const r = (document.querySelector('#dailyMsg .dcGo') ?? $('calBtn')).getBoundingClientRect(); coinFlyTo(r);
   const plus = document.createElement('div'); plus.className = 'coinplus'; plus.textContent = `+$${amt}`; plus.style.left = `${r.left + r.width / 2}px`; plus.style.top = `${r.top}px`; document.body.appendChild(plus); setTimeout(() => plus.remove(), 1500);
   ev?.stopPropagation(); renderDaily();
-  if (item) D.giftMsg(true, '連續上工 7 天！', [`上工費 +$${amt}`, `阿姨另外送你：${item}`, `身上有 $${save.money}`]);
+  if (item) D.giftMsg(true, '連續上工 7 天！', [`上工費 +$${amt}`, `阿姨另外送你：${item}`, ...(bag ? [bag] : []), `身上有 $${save.money}`]);
 }
 
 /** 老玩家回歸：離開 7 天以上回來，每 7 天最多領一次 */

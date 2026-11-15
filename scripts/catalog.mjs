@@ -31,7 +31,7 @@ function fxStats(fx) {
   return o;
 }
 
-export function buildCatalog(src, version = '', oddSrc = src, wpnSrc = '', petSrc = '') {
+export function buildCatalog(src, version = '', oddSrc = src, wpnSrc = '', petSrc = '', foodSrc = '') {
   const DIFF_W = ev(src, 'DIFF_W');
   const items = [];
   ev(src, 'RAR').forEach((p, i) => items.push({ id: `pearl-${i}`, name: p.name, category: 'pearl', rarity: rarOf(p.w), weight: p.w, price: p.price, limited: false }));
@@ -84,6 +84,9 @@ export function buildCatalog(src, version = '', oddSrc = src, wpnSrc = '', petSr
       stats: { n: p.n, desc: p.desc, eff: p.eff, tickSec: p.fx?.tickSec, perTick: p.fx?.perTick, meatDiff: p.fx?.meatDiff },
     }));
   }
+  if (foodSrc) {
+    ev(foodSrc, 'FOODS').forEach(f => { if (f.price) items.push({ id: 'food-' + f.id, name: f.n, category: 'food', price: f.price, limited: false }); });
+  }
   ev(src, 'LOCS', { DIFF_W }).forEach(l => items.push({ id: 'loc-' + l.id, loc: l.id, name: l.n, category: 'location', price: l.price, need: l.need, limited: false }));
   ev(src, 'SEATS').forEach(s => items.push({ id: s.id, name: s.n, category: 'seat', price: 0, limited: false }));
   if (wpnSrc) {
@@ -106,6 +109,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const odd = readFileSync(new URL('../src/shop/oddities.ts', import.meta.url), 'utf8');
   const wpn = readFileSync(new URL('../src/dm/weapons.ts', import.meta.url), 'utf8');
   const pet = readFileSync(new URL('../src/shop/pets.ts', import.meta.url), 'utf8');
-  const c = buildCatalog(main, '', odd, wpn, pet);
+  const food = readFileSync(new URL('../src/food/ingredients.ts', import.meta.url), 'utf8');
+  const c = buildCatalog(main, '', odd, wpn, pet, food);
   console.log(JSON.stringify(c, null, 1));
 }

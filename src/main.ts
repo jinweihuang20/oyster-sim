@@ -20,6 +20,7 @@ import {
   tickTpCamOcclude, clearTpCamOcclude, setTpCamOccludeIgnore,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
+import { initFood, openFood, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
 import {
   checkCode, REDEEM_MESSAGES, type RedeemCodeDef, applyOutfitToRig, headTopLift,
   syncEqPreview, refreshEqPreview, stopEqPreview, ODD,
@@ -739,6 +740,7 @@ initDaily({
   legendTotal: () => legendTotal(),
   audio,
   tone,
+  foodBag: () => dailyFoodBag(),
 });
 persist();
 let dry = 0;
@@ -1949,7 +1951,7 @@ initYardShop({
   clearBowlMeat: () => { if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; } },
   renderClothShop,
   renderMedShop,
-  renderItemShop: () => renderItemShop(),
+  renderItemShop: () => { renderItemShop(); renderFoodShop(); },
   shopTabs: () => shopTabs(),
   getShopTab: () => shopTab,
   newDecor: () => newDecor(),
@@ -2107,6 +2109,7 @@ function toss(tapped: boolean) {
   SFX.whoosh(); if (quick) { perfects++; $('gtag').textContent = ''; }
   fly(m, from, land, 0.45, 0.3, () => {
     count++; bowlStock++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(eco.dpay[md] * eco.crumbRate)) : eco.dpay[md]) - (shiftLen < SHIFT ? eco.tempCut : 0)) + (quick ? eco.quickBonus : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    rollShuck(!wasCracked);
     burst(land.clone().setY(BOWL.y + 0.02), 8, 0xbfe4f2, 1);
     if (!wasCracked) burst(land.clone().setY(BOWL.y + 0.05), 6, 0xffd23a, 1.4);
     if (quick) { tone(980, 0.06, 0.18, 'triangle', 0, 520); tone(1568, 0.08, 0.1, 'sine', 0.05); } else SFX.plop();
@@ -2821,7 +2824,7 @@ function throwShell() {
   if (target) {
     noteHostileThrow();
     const t = target;
-    fly(sh, from, () => worldOf(t.head), 0.5, 0.3, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟中${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 35); npcHurt(t); updHud(); });
+    fly(sh, from, () => worldOf(t.head), 0.5, 0.3, () => { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟中${t.name}！`, '#ffb070'); anger(t, SCOLD_SHELL, 0.6); addGrudge(t, 35); npcHurt(t); updHud(); rollAma(); });
   } else {
     // 沒準星瞄人：丟地上，不再隨機「丟歪打中」（會冤枉破和平）
     if (phase === 'seam') { abandoned++; wasteShells++; }
@@ -5858,7 +5861,7 @@ function frameBody(ts?: number) {
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
     if (evRun?.infHp) hp = 100;
     updBlood(rdt);
-    if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.28, goPick); setPhase('busy'); } }
+    if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); rollScoop(plazaMode ? 'plaza' : locNow().id); on('prog', false); later(0.28, goPick); setPhase('busy'); } }
     tickFx(rdt); if (phase === 'aim' && tapAim && down?.drag) tossT0 = performance.now() - 600; // 拖畫面找阿婆時先不自動入碗
     if (phase === 'aim' && tapAim && !tutMeat() && performance.now() - tossT0 > 2000) toss(false);
     if (phase === 'empty' && !(tut && (TUT[tut.i].id === 'empty' || TUT[tut.i].id === 'shell'))) { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
@@ -6584,7 +6587,7 @@ frame();
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['friends', 'friendsClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['friends', 'friendsClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose'], ['food', 'foodClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -6686,6 +6689,11 @@ initMeds({
   px, pxCd, pxHtml, payFor, renderShop,
 });
 initMedsUi();
+initFood({
+  getSave: () => save, persist, track, pop: (t, c) => petToast(t, c), toastTop: (t) => toastTop(t, TOP_SEC.info),
+  isTut: () => !!tut, px, pxCd, pxHtml, payFor, renderShop, jingle: () => { if (ac) SFX.jingle(); },
+});
+$('oFood').onclick = () => openFood();
 
 // 第一次教學開始前取名字（只出現一次）；關面板後再進工寮／教學
 let nameAfter: (() => void) | null = null;
