@@ -1,6 +1,6 @@
 /** 寵物 3D 檢視：全畫面 overlay，可拖曳旋轉；離開點叉或背景 */
 import * as THREE from 'three';
-import { findPet, makeOysterBaby } from './pets';
+import { findPet, makePet, petPreviewFrame } from './pets';
 
 let el: HTMLDivElement | null = null;
 let renderer: THREE.WebGLRenderer | null = null;
@@ -83,11 +83,12 @@ export function openPetPreview(petId: string) {
     scene.add(new THREE.HemisphereLight(0xfff5e8, 0x3a5568, 1));
     const sun = new THREE.DirectionalLight(0xffe4c0, 1.15);
     sun.position.set(1.6, 2.4, 2.2); scene.add(sun);
-    camera = new THREE.PerspectiveCamera(30, 1, 0.1, 10);
-    camera.position.set(0, 0.17, 0.95);
-    camera.lookAt(0, 0.13, 0);
-    if (petId === 'pt_oyster_baby') mesh = makeOysterBaby();
-    if (mesh) { mesh.scale.setScalar(1.5); scene.add(mesh); }
+    const fr = petPreviewFrame(petId);
+    camera = new THREE.PerspectiveCamera(fr.fov, 1, 0.1, 10);
+    camera.position.copy(fr.pos);
+    camera.lookAt(fr.look);
+    mesh = makePet(petId);
+    if (mesh) { mesh.scale.setScalar(petId === "pt_akang" ? 1.35 : 1.5); scene.add(mesh); }
     yawUser = 0; yawAuto = 0; lastT = 0;
     raf = requestAnimationFrame(loop);
   } catch {

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey, headTopLift } from '../shop/equipVisual';
-import { makeOysterBaby } from '../shop/pets';
+import { makePet, petRidesHead, petWorldScale, tickPetAnim } from '../shop/pets';
 import {
   AMA_LOOKS, AMA_SCALE, AMA_SIT_LIFT, AMA_CARRY_TILT, AMA_CARRY_Y, AMA_CARRY_FWD, AMA_CARRY_ROLL, AMA_CARRY_LIE_BACK, AMA_CARRY_LIE_Y,
   amaCarrySide, pickAmaLook, amaShirtHex,
@@ -2097,9 +2097,9 @@ function hashPid(pid: string) {
     (r as any)._petId = petId;
     if (!petId) return;
     let mesh: THREE.Group | null = null;
-    if (petId === 'pt_oyster_baby') mesh = makeOysterBaby();
+    mesh = makePet(petId);
     if (!mesh) return;
-    mesh.scale.setScalar(0.7);
+    mesh.scale.setScalar(petWorldScale(petId));
     // 掛到 outer（自然跟著玩家 x/z/yaw），再由 updateRemotePet 控制 local 位置
     r.rig.outer.add(mesh);
     (r as any)._petMesh = mesh;
@@ -2119,6 +2119,27 @@ function hashPid(pid: string) {
     const bob0 = (r as any)._petBob ?? 0;
     const bob = bob0 + dt * (moving ? 7 : 2.2);
     (r as any)._petBob = bob;
+    const groundPet = !!mesh.userData.groundPet;
+    if (groundPet) {
+      // 阿康貼地：走在身後偏右，坐／躺在椅子右側，不跟著玩家躺平、也不跳
+      if (lying) {
+        // outer 已躺平：local +X＝右手、local -Z＝朝上。反轉 x 讓阿康站直貼地，不要跟著躺
+        mesh.position.set(0.5, 0, 0.16);
+        mesh.rotation.set(-Math.PI / 2, 0, 0);
+      } else if (seated) {
+        mesh.position.set(0.55, 0, 0.32);
+        mesh.rotation.set(0, 0, 0);
+      } else {
+        const targetDist = moving ? 0.85 : 0.45;
+        const curDist = (r as any)._petDist ?? targetDist;
+        const nextDist = curDist + (targetDist - curDist) * 0.08;
+        (r as any)._petDist = nextDist;
+        mesh.position.set(0.28, 0, nextDist);
+        mesh.rotation.set(0, 0, 0);
+      }
+      tickPetAnim(mesh, { walk: moving && !seated && !lying, speed: moving ? 2 : 0, sleep: false, dt });
+      return;
+    }
     if (lying) {
       // 躺姿：mesh 是 outer 的 child。outer 已 R_y(bodyYaw)*R_x(π/2)：
       //   outer local +X → 世界右手邊；outer local -Z → 世界 +Y（上）
@@ -2556,7 +2577,7 @@ function hashPid(pid: string) {
       r.tag.sprite.visible = show;
       // 有寵物且坐著時寵物會停在頭上（y≈1.44），名牌 / 聊天泡泡要往上讓位
       // 戴帽子時寵物再抬 headTopLift，名牌同步加抬，否則被帽頂＋寵物一起擋到
-      const petOnHead = !!(r as any)._petMesh && !!r.seated;
+      const petOnHead = !!(r as any)._petMesh && !!r.seated && petRidesHead((r as any)._petId);
       const remoteHeadId = petOnHead ? ((r.rig.outfitKey ?? '').split('|')[1] ?? '') : '';
       const remoteHatLift = headTopLift(remoteHeadId);
       const tagLift = petOnHead ? 0.52 + remoteHatLift : 0.22;

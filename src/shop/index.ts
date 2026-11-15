@@ -4,7 +4,7 @@ export { applyOutfitToRig, clearOutfitDetails, headTopLift } from './equipVisual
 export { syncEqPreview, refreshEqPreview, stopEqPreview } from './equipPreview';
 export { openClothTryPreview, closeClothTryPreview } from './tryPreview';
 export { ODD } from './oddities';
-export { PETS, defaultPetId, findPet, makeOysterBaby, type Pet, type PetFx } from './pets';
+export { PETS, defaultPetId, findPet, makeOysterBaby, makePet, makeAkang, petRidesHead, petWorldScale, tickPetAnim, petPreviewFrame, petThumbFrame, type Pet, type PetFx, type PetAnimState } from './pets';
 export { renderPetThumb } from './petThumb';
 export { openPetPreview, closePetPreview } from './petPreview';
 export { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, stealHoldSeconds, WALK_SPEED_BONUS, walkSpeedMul } from './shopEquip';

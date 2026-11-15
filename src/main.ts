@@ -26,7 +26,7 @@ import {
   type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS,
   initMeds, initMedsUi, MEDS, medT, medM, medA, tickMeds, drawMeds, useMed, renderMedList, renderMedShop,
   initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, FLAG_PRICE_ITEMS, gearFx,
-  gearOn, knifeNow, umbNow, bowlNow, petNow, makeOysterBaby,
+  gearOn, knifeNow, umbNow, bowlNow, petNow, makePet, petRidesHead, petWorldScale, tickPetAnim,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor, fetchItemStats, onItemStatApply,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
   renderShop, getShopNewIds,
@@ -354,10 +354,10 @@ function refreshPet() {
   petCurId = wantId;
   petAcc = 0; petSleeping = false;
   if (!wantId) return;
-  if (wantId === 'pt_oyster_baby') petMesh = makeOysterBaby();
+  petMesh = makePet(wantId);
   if (petMesh) {
-    // 肩上較小一隻，才不會蓋住頭
-    petMesh.scale.setScalar(0.7);
+    // 蚵仔寶寶較小以免擋頭；阿康站腳邊用原尺寸
+    petMesh.scale.setScalar(petWorldScale(wantId));
     petAnchor.add(petMesh);
   }
   // 廣場模式下，也把寵物放到 cosmetics 字串，讓別人看得到
@@ -4078,7 +4078,7 @@ function moonHit(n: Npc) {
 /** 寵物位置：躺=右側同躺；坐=頭頂；走動=身後彈跳。給 petTick 參考 */
 let petWalkingMode = false;
 let petLyingMode = false;
-/** 身後距離平滑：走動 1.0m，靜止湊近到 0.4m */
+/** 身後距離平滑：走動 1.0m，靜止湊近到 0.4m（阿康略短） */
 let petDistCur = 1.0;
 /** 把 petAnchor 擺到當前玩家世界位置／朝向。頭頂 ≈ feet+1.78；身後 +0.55、離地 0.3；躺姿 → 右手邊同躺 */
 function updatePetAnchor() {
@@ -4099,6 +4099,28 @@ function updatePetAnchor() {
   }
   petWalkingMode = isWalk;
   petLyingMode = isLie;
+  const groundPet = !!petMesh.userData.groundPet;
+  const gy = (plazaMode ? plazaGroundY(bx, bz) : 0);
+  if (groundPet) {
+    // 阿康：一律貼地。走在身後偏右；坐在椅子右側（避開前方桌子）；躺也站在右側
+    const s = Math.sin(byaw), c = Math.cos(byaw);
+    if (isLie) {
+      const rx = c, rz = -s;
+      petAnchor.position.set(bx + rx * 0.5, gy + by, bz + rz * 0.5);
+    } else if (isWalk) {
+      const movingRecent = performance.now() - walkMovingT < 200;
+      const target = movingRecent ? 0.85 : 0.45;
+      petDistCur += (target - petDistCur) * 0.08;
+      const side = 0.28;
+      petAnchor.position.set(bx + s * petDistCur + c * side, gy + by, bz + c * petDistCur - s * side);
+    } else {
+      const side = 0.55, back = 0.32;
+      petAnchor.position.set(bx + c * side + s * back, gy, bz - s * side + c * back);
+    }
+    petAnchor.rotation.set(0, byaw, 0);
+    petMesh.position.set(0, 0, 0);
+    return;
+  }
   if (isLie) {
     // 躺姿：pet 放到玩家右手邊，和玩家一樣躺著面朝天
     // 玩家躺著時 outer.rotation=(π/2, bodyYaw, 0)；右手邊 = (cos(bodyYaw), 0, -sin(bodyYaw))
@@ -4148,15 +4170,24 @@ function petTick(dt: number) {
     return !pileIsGrill(s.pileId) && !isSmokePile(s.pileId) && !isMgPile(s.pileId);
   })();
   const canProduce = show && (!plazaMode || plazaShellSeat);
-  petAnchor.visible = show;
+  // 第一人稱剝蚵時，腳邊的阿康會擋視線，先藏起來（第三人稱仍看得到）
+  const hideFp = !!petMesh.userData.groundPet && !tpv && !petWalkingMode && !petLyingMode;
+  petAnchor.visible = show && !hideFp;
   if (!show) { petAcc = 0; setPetSleeping(false); return; }
   // AFK：距上次任何輸入 10 秒 → 睡著暫停
   const idleMs = performance.now() - lastInteractAt;
   const afk = idleMs > 10000;
   setPetSleeping(afk);
-  // 真的在走（身後、最近 200ms 有位移）→ 高頻彈跳；躺著不動；其他（站著／坐著／睡覺）→ 微漂浮
   const actuallyMoving = petWalkingMode && (performance.now() - walkMovingT < 200);
-  if (petLyingMode) {
+  if (petMesh.userData.tickAnim) {
+    tickPetAnim(petMesh, {
+      walk: actuallyMoving && !afk,
+      speed: actuallyMoving ? Math.max(walkMotion.spd, 0.8) : 0,
+      sleep: afk,
+      dt,
+    });
+  } else if (petLyingMode) {
+    // 真的在走（身後、最近 200ms 有位移）→ 高頻彈跳；躺著不動；其他（站著／坐著／睡覺）→ 微漂浮
     petMesh.position.y = 0;
   } else if (actuallyMoving && !afk) {
     petBob += dt * 7;
@@ -4957,7 +4988,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
     },
     getUmb: () => umbHeld || umbT > 0,
     getEco: () => mix.eco,
-    hasOwnPet: () => !!(petNow() && !(mgActive || plazaOnMg()) && !isPlazaRaceMode()),
+    hasOwnPet: () => !!(petNow() && petRidesHead(petNow()!.id) && !(mgActive || plazaOnMg()) && !isPlazaRaceMode()),
     selfHatLift: () => headTopLift(equipNow('head').id),
     getPlazaSpawn: () => save.plazaSpawn,
     persistPlazaSpawn: (spawn) => { save.plazaSpawn = spawn; persist(); },

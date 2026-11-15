@@ -276,7 +276,7 @@ export function renderShop() {
   renderFlagShop();
   // 寵物：買了可以開關；只能同時裝備一隻（放在 renderFlagShop 之後，才不會把旗幟拉進寵物 tab）
   const curPet = D.getSave().shop.equipped.pet;
-  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 寵物</h3><p style="font-size:12px;opacity:.8"><b style="color:#d9952b">點縮圖可開啟 3D 檢視</b>。寵物會站在你的右肩，剝蚵仔時會跟著你產出效果。買了可以在這裡開關；同時只能帶一隻。你超過 10 秒都沒操作，寵物會睡著暫停效果。</p>` +
+  $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 寵物</h3><p style="font-size:12px;opacity:.8"><b style="color:#d9952b">點縮圖可開啟 3D 檢視</b>。寵物會跟著你，剝蚵仔時會產出效果。買了可以在這裡開關；同時只能帶一隻。你超過 10 秒都沒操作，寵物會睡著暫停效果。</p>` +
     '<div class="petList">' + PETS.map(p => {
       const save = D.getSave();
       const own = save.shop.owned.includes(p.id);

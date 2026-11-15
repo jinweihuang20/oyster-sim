@@ -1,6 +1,6 @@
 /** 商店卡片的寵物 3D 縮圖：共用一台離屏 renderer，依 id 快取 dataURL（啟動後畫一次就夠） */
 import * as THREE from 'three';
-import { findPet, makeOysterBaby } from './pets';
+import { findPet, makePet, petThumbFrame } from './pets';
 
 const TW = 160, TH = 160;
 const cache = new Map<string, string>();
@@ -35,6 +35,7 @@ function ensure(): boolean {
     const cam = new THREE.PerspectiveCamera(32, TW / TH, 0.1, 10);
     cam.position.set(0, 0.17, 0.78);
     cam.lookAt(0, 0.13, 0);
+    cam.userData.ready = true;
     renderer = gl; scene = sc; camera = cam;
     return true;
   } catch {
@@ -48,11 +49,17 @@ export function renderPetThumb(petId: string): string | null {
   const p = findPet(petId); if (!p) return null;
   if (!ensure() || !renderer || !scene || !camera) return null;
   let mesh: THREE.Group | null = null;
-  if (petId === 'pt_oyster_baby') mesh = makeOysterBaby();
+  mesh = makePet(petId);
   if (!mesh) return null;
+  const fr = petThumbFrame(petId);
+  camera.fov = fr.fov;
+  camera.position.copy(fr.pos);
+  camera.lookAt(fr.look);
+  camera.updateProjectionMatrix();
   scene.add(mesh);
   // 面向相機（模型前方為 -z，相機在 +z 側），再微轉 ~10° 做 3/4 視角
-  mesh.rotation.y = Math.PI + 0.18;
+  // 阿康再略轉向右，讓右耳缺角入鏡
+  mesh.rotation.y = Math.PI + (petId === 'pt_akang' ? 0.42 : 0.18);
   try {
     renderer.render(scene, camera);
     const url = renderer.domElement.toDataURL('image/png');
