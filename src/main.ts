@@ -3255,7 +3255,7 @@ function renderDex() {
 renderDex();
 
 // ---------- 操作 ----------
-let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; leftNoLook?: boolean; leftRotZone?: boolean; lx: number; lt: number; swiped?: boolean } | null = null;
+let down: { x: number; y: number; id: number; drag: boolean; yaw: number; pitch: number; tp?: number; rotMode: boolean; leftNoLook?: boolean; leftRotZone?: boolean; lx: number; lt: number; swiped?: boolean; lx0?: number; ly0?: number; lookOn?: boolean } | null = null;
 /** 手機橫向＋坐下＋第一人稱（不含機關槍／吸菸／烤蚵桌——烤桌左側仍可轉視角） */
 function landFpSitPeeling() {
   if (!(COARSE && !walking && !tpv && state === 'play')) return false;
@@ -3451,18 +3451,25 @@ window.addEventListener('pointermove', e => {
   }
   if (down.rotMode) { rot += (e.clientX - down.lx) * 0.012; down.lx = e.clientX; rotTipTouch(); if (Math.abs(dx) > 8) { down.drag = true; rotTipDragged(); } return; }
   if (down.leftNoLook) return; // 找縫＋橫向左半邊：不轉視角
-  // 拿蚵觸控：微滑才升格「認真拖」，其餘坐下已 drag 立刻轉頭
+  // 拿蚵觸控：微滑超過死區才開始轉頭，避免點蚵被帶走
   const dragSlop = phase === 'pick' && e.pointerType !== 'mouse' ? 16 : 0;
-  if (dragSlop > 0 && !down.drag && Math.hypot(dx, dy) > dragSlop) { down.drag = true; holding = false; hold = 0; gauge.classList.remove('on'); }
-  if (phase === 'pick' && e.pointerType !== 'mouse' && Math.hypot(dx, dy) <= dragSlop) {
-    // 仍在點選死區：先別轉頭，避免點蚵被帶走
-  } else if (down.drag) {
+  if (!down.lookOn && dragSlop > 0) {
+    if (Math.hypot(dx, dy) <= dragSlop) return; // 仍在點選死區：先別轉頭
+    // 剛越過死區：把轉頭起點改成「現在的手指＋現在的視角」，不補轉死區那段，避免鏡頭先停再暴跳
+    // 月球瞄準按下時 drag=false：越過死區才算拖（放開不當點選）
+    down.drag = true; down.lookOn = true; down.lx0 = e.clientX; down.ly0 = e.clientY;
+    down.yaw = tYaw; down.pitch = tPitch; down.tp = tpPitch;
+    holding = false; hold = 0; gauge.classList.remove('on');
+  }
+  if (down.drag) {
+    down.lookOn = true;
     // 手機／觸控拖曳：只改 yaw／pitch，鏡頭統一在 frame 寫入（避免與 pe／puff 搶寫頓挫）
+    const lxd = e.clientX - (down.lx0 ?? down.x), lyd = e.clientY - (down.ly0 ?? down.y);
     const k = 0.006 * mix.sens;
     const xS = mix.invX ? -1 : 1;
-    tYaw = clamp(down.yaw - dx * k * xS, -yl(), yl());
-    if (plazaTpWalkLockPitch() && tpPitchFree()) tpPitch = clamp((down.tp ?? tpPitch) + dy * k * 0.8, 0.05, 1.1);
-    tPitch = plazaTpWalkLockPitch() ? PLAZA_WALK_PITCH : clamp(down.pitch - dy * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
+    tYaw = clamp(down.yaw - lxd * k * xS, -yl(), yl());
+    if (plazaTpWalkLockPitch() && tpPitchFree()) tpPitch = clamp((down.tp ?? tpPitch) + lyd * k * 0.8, 0.05, 1.1);
+    tPitch = plazaTpWalkLockPitch() ? PLAZA_WALK_PITCH : clamp(down.pitch - lyd * k * (mix.invY ? -1 : 1), pitchLo(), pitchHi());
     yaw = tYaw; pitch = tPitch;
   }
 });
@@ -5757,8 +5764,8 @@ if (COARSE) {
   addEventListener('blur', () => { mobilePtrHeld = 0; });
 }
 // 主迴圈出錯也不能停：停了計時、暫停、預警都會卡住
-function frame() { try { frameBody(); } catch (e) { if (frameErr++ < 3) console.error('frame', e); scheduleFrame(); } }
-function frameBody() {
+function frame(ts?: number) { try { frameBody(ts); } catch (e) { if (frameErr++ < 3) console.error('frame', e); scheduleFrame(); } }
+function frameBody(ts?: number) {
   if (document.hidden) {
     clock.getDelta();
     if (state === 'play' && !pauseAt) {
@@ -5772,10 +5779,12 @@ function frameBody() {
   // 選單／暫停約 15fps；遊玩 60（手機靜止 1.5 秒後 30 降溫）。發熱改靠降 DPR／關陰影（mobile.txt）
   const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15
     : (COARSE && !mobileBusy(now) ? 1000 / 30 : 1000 / 60);
-  const since = now - lastDrawAt;
-  if (since < minMs - 1.5) { scheduleFrame(); return; }
+  // 限幀用 rAF 時間戳（對齊 vsync）：performance.now() 會受回呼延遲抖動，60Hz 螢幕上偶爾被誤判「太早」而多掉一幀
+  const fts = typeof ts === 'number' && ts > 0 ? ts : now;
+  const since = fts - lastDrawAt;
+  if (since < minMs - 3) { scheduleFrame(); return; }
   // 餘數回扣：90Hz 等非整數倍螢幕平均仍接近 60fps
-  lastDrawAt = since < minMs * 2 ? now - (since % minMs) * (since >= minMs ? 1 : 0) : now;
+  lastDrawAt = since < minMs * 2 ? fts - (since % minMs) * (since >= minMs ? 1 : 0) : fts;
   if (isDeathmatchActive()) { clock.getDelta(); scheduleFrame(); return; }
   if (shedAnim.length) { const t = now / 1000; for (const f of shedAnim) f(t); }
   if (paused) {
