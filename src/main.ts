@@ -20,7 +20,7 @@ import {
   tickTpCamOcclude, clearTpCamOcclude, setTpCamOccludeIgnore,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
-import { initCook, openCook, closeCook, cookPanelOpen, openDex as openCookDex } from './cook/cookUi';
+import { initCook, openCook, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView } from './cook/cookUi';
 import { initFood, openFood, openFoodStall, renderFoodStall, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
 import { foodStallSpawn } from './plaza/layout';
 import {
@@ -5504,7 +5504,7 @@ btn('resMenu', () => {
     },
   });
 });
-$('dexBtn').onclick = () => { renderDex(); $('dex').classList.add('show'); };
+$('dexBtn').onclick = () => { renderDex(); dexTab('pearl'); $('dex').classList.add('show'); };
 $('eqBtn').onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); eqPick = null; openEquip(); void refreshNotices(); };
 $('setBtn').onclick = () => { $('settings').classList.add('show'); void refreshTag(); };
 $('calBtn').onclick = () => { calTipOff(); openDaily(); }; renderDaily(); calTipCheck(); document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDaily(); });
@@ -5587,7 +5587,7 @@ document.addEventListener('pointerlockchange', () => { const l = document.pointe
   $('v_brightReset').onclick = () => applyBright(BRIGHT_DEF, true);
 }
 window.addEventListener('pointerdown', () => audio(), { once: true });
-$('dexClose').onclick = () => $('dex').classList.remove('show');
+$('dexClose').onclick = () => closeCookDexView();
 
 // ---------- 阿婆真正咧剝 ----------
 function npcShuck(n: Npc, dt: number, t: number) {

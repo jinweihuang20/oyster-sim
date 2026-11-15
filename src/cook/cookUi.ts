@@ -39,7 +39,7 @@ const fmtDate = (t: number) => { const d = new Date(t); return `${d.getFullYear(
 export function initCook(deps: CookDeps) {
   D = deps;
   $('cookClose').addEventListener('click', () => closeCook(true));
-  $('cookDexClose').addEventListener('click', () => closeDex());
+  document.querySelectorAll<HTMLButtonElement>('#dexTabs button').forEach(b => b.onclick = () => dexTab(b.dataset.t === 'cook' ? 'cook' : 'pearl'));
 }
 
 /* ───────── 煎台 ───────── */
@@ -257,116 +257,184 @@ async function doDisplay(b: HTMLButtonElement) {
   else { b.disabled = false; D.toast('展示失敗，再試一次', '#ffb08a'); }
 }
 
-/* ───────── 圖鑑 ───────── */
+/* ───────── 圖鑑（平鋪：一格一種，共 2,304 格，依編號排；只畫看得到的幾列） ───────── */
 
-let dexLevel = 1, dexTop = 0, dexBatter = 2, dexEgg = 1, dexId = -1;
-let fUn = false, fHidden = false, fq = '';
+type DexFilter = 'all' | 'got' | 'un' | 'hid';
+let dexLevel: 'list' | 'detail' = 'list';
+let dexId = -1;
+let dexFilter: DexFilter = 'all';
+let fq = '';
+let dexIds: number[] = [];
+let dexScroll = 0;
 let stopDexView: (() => void) | null = null;
+let virtRaf = 0;
+let thumbRaf = 0;
+const thumbQ: { id: number; el: HTMLElement }[] = [];
 /** 從展示盤打開：顯示主人名字 */
 let dexOwner = '';
 
 export function openDex(id?: number, owner = '') {
   dexOwner = owner;
-  if (id != null && id >= 0) { const c = comboOf(id); dexTop = c.top; dexBatter = c.batter; dexEgg = c.egg; dexId = id; dexLevel = 3; }
-  else dexLevel = 1;
-  $('cookDex').classList.add('show');
-  renderDex();
+  if (id != null && id >= 0) { dexId = id; dexLevel = 'detail'; }
+  else dexLevel = 'list';
+  $('dex').classList.add('show');
+  dexTab('cook');
 }
-export function closeDex() { stopDexView?.(); stopDexView = null; $('cookDex').classList.remove('show'); }
-export function dexOpen() { return $('cookDex').classList.contains('show'); }
+
+/** 圖鑑分頁：珍珠和奇物（原本的）／蚵仔煎 */
+export function dexTab(t: 'pearl' | 'cook') {
+  document.querySelectorAll<HTMLButtonElement>('#dexTabs button').forEach(b => { const on = b.dataset.t === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+  ($('dexList') as HTMLElement).hidden = t !== 'pearl';
+  ($('cookDexBody') as HTMLElement).hidden = t !== 'cook';
+  if (t === 'cook') renderDex();
+  else { stopDexView?.(); stopDexView = null; cancelAnimationFrame(virtRaf); cancelAnimationFrame(thumbRaf); thumbQ.length = 0; }
+}
+export function closeDex() {
+  stopDexView?.(); stopDexView = null;
+  cancelAnimationFrame(virtRaf); cancelAnimationFrame(thumbRaf); thumbQ.length = 0;
+  $('dex').classList.remove('show');
+}
+export function dexOpen() { return $('dex').classList.contains('show') && !($('cookDexBody') as HTMLElement).hidden; }
 
 const SIL = `<span class="dxSil">${IC.dish}</span>`;
-const thumb = (id: number) => { const u = dishThumb(id); return u ? `<img src="${u}" alt="" draggable="false">` : SIL; };
-const groupCount = (top: number) => { let n = 0; for (const k of Object.keys(dex())) if (comboOf(Number(k)).top === top) n++; return n; };
-const topLabel = (top: number) => topName(top) || '不放配料';
+const SIL_Q = `<span class="dxSil q">${IC.dish}<b>？</b></span>`;
+const no = (id: number) => `No.${String(id + 1).padStart(4, '0')}`;
 
 function dexHead() {
   const n = dexCount(), t = cookTitle(n), next = COOK_TITLES.find(m => m.n > n);
   return `<div class="dxTotal"><div><b>已收集 ${n.toLocaleString()}／${COMBO_TOTAL.toLocaleString()}</b>${t ? `<span class="dxTitle">${t}</span>` : ''}</div><div class="dxBar"><i style="width:${(n / COMBO_TOTAL) * 100}%"></i></div>${next ? `<small>再收集 ${next.n - n} 種可得稱號「${next.t}」</small>` : '<small>所有稱號都拿到了</small>'}</div>`;
 }
-function filters() {
-  return `<div class="dxFilt"><label class="dxSearch">${IC.search}<input id="dxQ" type="search" placeholder="搜尋名稱，例：沙茶花枝" value="${esc(fq)}"></label><div class="dxTog"><button type="button" class="ckChip sm${fUn ? ' on' : ''}" data-f="un">未收集</button><button type="button" class="ckChip sm${fHidden ? ' on' : ''}" data-f="hid">隱藏款</button></div></div>`;
+function filtersHtml() {
+  const F: [DexFilter, string][] = [['all', '全部'], ['got', '已收集'], ['un', '未收集'], ['hid', '隱藏款']];
+  return `<div class="dxFilt"><label class="dxSearch">${IC.search}<input id="dxQ" type="search" placeholder="搜尋已收集的名稱或編號" value="${esc(fq)}"></label><div class="dxTog">${F.map(([k, l]) => `<button type="button" class="ckChip sm${dexFilter === k ? ' on' : ''}" data-f="${k}">${l}</button>`).join('')}</div></div>`;
+}
+
+function computeIds() {
+  const q = fq.trim();
+  const qNo = /^(no\.?)?\s*0*(\d{1,4})$/i.exec(q);
+  const out: number[] = [];
+  const pool = dexFilter === 'hid' ? SPECIAL_IDS : null;
+  const N = pool ? pool.length : COMBO_TOTAL;
+  for (let k = 0; k < N; k++) {
+    const id = pool ? pool[k] : k;
+    const got = has(id);
+    if (dexFilter === 'got' && !got) continue;
+    if (dexFilter === 'un' && got) continue;
+    if (q) {
+      if (qNo) { if (id + 1 !== Number(qNo[2])) continue; }
+      else if (!got || !comboName(id).includes(q)) continue; // 名稱只搜已收集的
+    }
+    out.push(id);
+  }
+  dexIds = out;
+}
+
+function cellHtml(id: number) {
+  const got = has(id), sp = !!specialOf(id);
+  if (got) return `<button type="button" class="dxCell" data-id="${id}"><span class="dxTh" data-th="${id}">${SIL}</span><span class="dxNm">${esc(comboName(id))}</span>${sp ? '<i class="dxSp">隱藏款</i>' : ''}</button>`;
+  return `<button type="button" class="dxCell un" data-id="${id}">${sp ? SIL_Q : SIL}<span class="dxNm"><small>${no(id)}</small>？？？</span></button>`;
+}
+
+function cols() {
+  const w = document.getElementById('dxVirt')?.clientWidth ?? 300;
+  return w >= 560 ? 5 : w >= 420 ? 4 : 3;
 }
 
 function renderDex() {
   stopDexView?.(); stopDexView = null;
+  cancelAnimationFrame(virtRaf); cancelAnimationFrame(thumbRaf); thumbQ.length = 0;
   const B = $('cookDexBody');
-  let html = '';
-  if (dexLevel === 1) {
-    html = dexHead() + filters();
-    if (fq.trim() || fHidden) {
-      const q = fq.trim();
-      const ids: number[] = [];
-      const pool = fHidden ? SPECIAL_IDS : Array.from({ length: COMBO_TOTAL }, (_, i) => i);
-      for (const id of pool) {
-        if (fUn && has(id)) continue;
-        // 隱藏款沒收集前不給搜名字
-        const nm = specialOf(id) && !has(id) ? '' : comboName(id);
-        if (q && !nm.includes(q)) continue;
-        ids.push(id); if (ids.length >= 60) break;
-      }
-      html += ids.length ? `<div class="dxList">${ids.map(id => { const hid = !!specialOf(id) && !has(id); return `<button type="button" class="dxItem${has(id) ? '' : ' un'}" data-id="${id}">${has(id) ? thumb(id) : SIL}<span>${hid ? '？？？（隱藏款）' : esc(comboName(id))}</span></button>`; }).join('')}</div>` : '<p class="dxEmpty">沒有符合的蚵仔煎</p>';
-    } else {
-      const tops = Array.from({ length: 16 }, (_, i) => i).filter(t => !fUn || groupCount(t) < 144);
-      html += `<div class="dxCards">${tops.map(t => {
-        const n = groupCount(t);
-        const first = Object.keys(dex()).map(Number).find(id => comboOf(id).top === t);
-        return `<button type="button" class="dxCard" data-top="${t}">${first != null ? thumb(first) : SIL}<b>${topLabel(t)}</b><span class="dxMini"><i style="width:${(n / 144) * 100}%"></i></span><small>${n}／144</small></button>`;
-      }).join('')}</div>`;
+  if (dexLevel === 'list') {
+    computeIds();
+    B.innerHTML = dexHead() + filtersHtml()
+      + (dexIds.length ? `<div id="dxVirt" class="dxVirt"><div id="dxSpace" class="dxSpace"><div id="dxRows" class="dxRows"></div></div></div>` : '<p class="dxEmpty">沒有符合的蚵仔煎</p>');
+    bindDexList(B);
+    const V = document.getElementById('dxVirt');
+    if (V) {
+      V.scrollTop = dexScroll;
+      V.onscroll = () => { dexScroll = V.scrollTop; cancelAnimationFrame(virtRaf); virtRaf = requestAnimationFrame(drawRows); };
+      drawRows();
     }
-  } else if (dexLevel === 2) {
-    html = `<div class="dxNav"><button type="button" class="ckLink" data-nav="1">${IC.back}全部</button><b>${topLabel(dexTop)}</b><small>${groupCount(dexTop)}／144</small></div>`
-      + `<div class="dxSeg">${BATTERS.map((b, i) => `<button type="button" class="${i === dexBatter ? 'on' : ''}" data-b="${i}">${b === '不加粉漿' ? '無粉漿' : b}</button>`).join('')}</div>`
-      + `<div class="dxSeg">${['無蛋', '加蛋'].map((e, i) => `<button type="button" class="${i === dexEgg ? 'on' : ''}" data-e="${i}">${e}</button>`).join('')}</div>`
-      + `<div class="dxGrid"><span></span>${SAUCES.map(s => `<span class="dxCol">${s.short || '無醬'}</span>`).join('')}`
-      + DONES.map((d, di) => `<span class="dxRow">${d}</span>` + SAUCES.map((_, si) => {
-        const id = comboId({ top: dexTop, batter: dexBatter, egg: dexEgg, done: di, sauce: si });
-        const got = has(id);
-        if (fUn && got) return '<span class="dxCell gone"></span>';
-        return `<button type="button" class="dxCell${got ? '' : ' un'}" data-id="${id}" aria-label="${got ? esc(comboName(id)) : '未收集'}">${got ? thumb(id) : SIL}</button>`;
-      }).join('')).join('') + '</div>';
-  } else {
-    const id = dexId, got = has(id), sp = specialOf(id), hid = !!sp && !got;
-    html = `<div class="dxNav"><button type="button" class="ckLink" data-nav="2">${IC.back}${topLabel(comboOf(id).top)}</button></div>`
-      + `<div class="ckViewW big${got ? '' : ' un'}"><canvas id="dxView" width="256" height="256"></canvas>${got ? '' : '<span class="dxLock">還沒煎過</span>'}</div>`
-      + `<div class="ckName">${hid ? '？？？' : esc(comboName(id))}${sp ? '<span class="ckTag">隱藏款</span>' : ''}</div>`
-      + (dexOwner ? `<p class="ckDesc">${esc(dexOwner)} 展示的作品</p>` : '')
-      + (sp && got ? `<p class="ckDesc">${esc(sp.desc)}</p>` : '')
-      + `<ul class="ckFeat">${hid ? '<li>條件保密，煎出來才知道</li>' : comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
-      + `<p class="ckSum">${got ? `第一次煎出：${fmtDate(dex()[String(id)])}` : '還沒收集'}</p>`
-      + `<div class="ckAct"><button type="button" class="ckBtn pri" data-ck="follow"${hid ? ' disabled' : ''}>照這樣煎</button></div>`
-      + (seat == null ? '<p class="ckHint">' + IC.info + '到廣場東北角烹煮區，站上煎台位子後可以用</p>' : '');
+    return;
   }
-  B.innerHTML = html;
-  B.scrollTop = dexLevel === 3 ? 0 : B.scrollTop;
-  bindDex(B);
-  if (dexLevel === 3) {
-    const cv = document.getElementById('dxView') as HTMLCanvasElement | null;
-    if (cv && !(specialOf(dexId) && !has(dexId))) stopDexView = mountDishViewer(cv, dexId);
-  }
-}
-
-function bindDex(B: HTMLElement) {
-  B.querySelectorAll<HTMLButtonElement>('[data-top]').forEach(b => b.onclick = () => {
-    dexTop = Number(b.dataset.top); dexLevel = 2;
-    // 預設切到這組最近收集的那種粉漿／蛋
-    let best = -1, bt = 0;
-    for (const [k, t] of Object.entries(dex())) { const c = comboOf(Number(k)); if (c.top === dexTop && t > bt) { bt = t; best = Number(k); } }
-    if (best >= 0) { const c = comboOf(best); dexBatter = c.batter; dexEgg = c.egg; }
-    renderDex();
-  });
-  B.querySelectorAll<HTMLButtonElement>('[data-id]').forEach(b => b.onclick = () => { dexId = Number(b.dataset.id); const c = comboOf(dexId); dexTop = c.top; dexBatter = c.batter; dexEgg = c.egg; dexOwner = ''; dexLevel = 3; renderDex(); });
-  B.querySelectorAll<HTMLButtonElement>('[data-b]').forEach(b => b.onclick = () => { dexBatter = Number(b.dataset.b); renderDex(); });
-  B.querySelectorAll<HTMLButtonElement>('[data-e]').forEach(b => b.onclick = () => { dexEgg = Number(b.dataset.e); renderDex(); });
-  B.querySelectorAll<HTMLButtonElement>('[data-nav]').forEach(b => b.onclick = () => { dexLevel = Number(b.dataset.nav); renderDex(); });
-  B.querySelectorAll<HTMLButtonElement>('[data-f]').forEach(b => b.onclick = () => { if (b.dataset.f === 'un') fUn = !fUn; else fHidden = !fHidden; renderDex(); });
-  const q = document.getElementById('dxQ') as HTMLInputElement | null;
-  if (q) {
-    let t = 0;
-    q.oninput = () => { clearTimeout(t); t = window.setTimeout(() => { fq = q.value; renderDex(); const n = document.getElementById('dxQ') as HTMLInputElement | null; if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 250); };
-  }
+  const id = dexId, got = has(id), sp = specialOf(id), hid = !!sp && !got;
+  B.innerHTML = `<div class="dxNav"><button type="button" class="ckLink" data-nav="list">${IC.back}圖鑑</button><small>${no(id)}</small></div>`
+    + `<div class="ckViewW big${got ? '' : ' un'}"><canvas id="dxView" width="256" height="256"></canvas>${got ? '' : '<span class="dxLock">還沒煎過</span>'}</div>`
+    + `<div class="ckName">${hid ? '？？？' : esc(comboName(id))}${sp ? '<span class="ckTag">隱藏款</span>' : ''}</div>`
+    + (dexOwner ? `<p class="ckDesc">${esc(dexOwner)} 展示的作品</p>` : '')
+    + (sp && got ? `<p class="ckDesc">${esc(sp.desc)}</p>` : '')
+    + `<ul class="ckFeat">${hid ? '<li>條件保密，煎出來才知道</li>' : comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
+    + `<p class="ckSum">${got ? `第一次煎出：${fmtDate(dex()[String(id)])}` : '還沒收集'}</p>`
+    + `<div class="ckAct"><button type="button" class="ckBtn pri" data-ck="follow"${hid ? ' disabled' : ''}>照這樣煎</button></div>`
+    + (seat == null ? '<p class="ckHint">' + IC.info + '到廣場東北角烹煮區，站上煎台位子後可以用</p>' : '');
+  B.scrollTop = 0;
+  B.querySelector<HTMLButtonElement>('[data-nav]')!.onclick = () => { dexLevel = 'list'; dexOwner = ''; renderDex(); };
   B.querySelector<HTMLButtonElement>('[data-ck="follow"]')?.addEventListener('click', () => {
     if (seat == null) { D.toast('到廣場烹煮區站上煎台位子，再按「照這樣煎」', '#ffd76a'); return; }
     closeDex(); resetSel(dexId); render();
   });
+  const cv = document.getElementById('dxView') as HTMLCanvasElement | null;
+  if (cv && !hid) stopDexView = mountDishViewer(cv, id);
+}
+
+/** 只畫看得到的列（上下各多留 2 列） */
+function drawRows() {
+  const V = document.getElementById('dxVirt'), S = document.getElementById('dxSpace'), R = document.getElementById('dxRows');
+  if (!V || !S || !R) return;
+  const c = cols(), gap = 6;
+  const cw = (V.clientWidth - gap * (c - 1)) / c;
+  const rowH = Math.round(cw + 40 + gap);
+  const rows = Math.ceil(dexIds.length / c);
+  S.style.height = `${rows * rowH}px`;
+  const r0 = Math.max(0, Math.floor(V.scrollTop / rowH) - 2);
+  const r1 = Math.min(rows, Math.ceil((V.scrollTop + V.clientHeight) / rowH) + 2);
+  const key = `${c}:${r0}:${r1}:${dexIds.length}`;
+  if (R.dataset.k === key) return;
+  R.dataset.k = key;
+  R.style.transform = `translateY(${r0 * rowH}px)`;
+  R.style.gridTemplateColumns = `repeat(${c}, minmax(0, 1fr))`;
+  R.style.setProperty('--rowh', `${rowH - gap}px`);
+  R.innerHTML = dexIds.slice(r0 * c, r1 * c).map(cellHtml).join('');
+  // 縮圖：可見格子逐格補（一幀一張，避免卡）
+  thumbQ.length = 0;
+  R.querySelectorAll<HTMLElement>('[data-th]').forEach(el => thumbQ.push({ id: Number(el.dataset.th), el }));
+  cancelAnimationFrame(thumbRaf);
+  const pump = () => {
+    const t0 = performance.now();
+    while (thumbQ.length && performance.now() - t0 < 8) {
+      const { id, el } = thumbQ.shift()!;
+      if (!el.isConnected) continue;
+      const u = dishThumb(id);
+      if (u) el.innerHTML = `<img src="${u}" alt="" draggable="false">`;
+    }
+    if (thumbQ.length) thumbRaf = requestAnimationFrame(pump);
+  };
+  thumbRaf = requestAnimationFrame(pump);
+}
+
+function bindDexList(B: HTMLElement) {
+  B.querySelectorAll<HTMLButtonElement>('[data-f]').forEach(b => b.onclick = () => { dexFilter = b.dataset.f as DexFilter; dexScroll = 0; renderDex(); });
+  const R = document.getElementById('dxRows');
+  R?.addEventListener('click', e => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-id]'); if (!b) return;
+    dexId = Number(b.dataset.id); dexOwner = ''; dexLevel = 'detail'; renderDex();
+  });
+  const q = document.getElementById('dxQ') as HTMLInputElement | null;
+  if (q) {
+    let t = 0;
+    q.oninput = () => {
+      clearTimeout(t);
+      t = window.setTimeout(() => {
+        fq = q.value; dexScroll = 0; renderDex();
+        const n = document.getElementById('dxQ') as HTMLInputElement | null;
+        if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
+      }, 250);
+    };
+  }
+  window.addEventListener('resize', onDexResize);
+}
+function onDexResize() {
+  if (!dexOpen() || dexLevel !== 'list') { window.removeEventListener('resize', onDexResize); return; }
+  const R = document.getElementById('dxRows'); if (R) R.dataset.k = '';
+  drawRows();
 }
