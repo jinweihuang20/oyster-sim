@@ -4,7 +4,7 @@ import {
   initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl, setGeoLowDetail,
   importMove, escapeInApp, type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY,
   defaultSave, loadSave as loadSaveFrom, writeSave, todayKey, dayDiff, installNoZoom,
-  eco, fetchEconomy, syncEconomyTables, plazaPayMult, plazaLeisureLocMult,
+  eco, fetchEconomy, syncEconomyTables, plazaPayMult, plazaNoAdminLocMult,
   writeShiftDraft, clearShiftDraft, takeShiftDraft,
   cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink, installCloudLifecycle, onCloudStatus,
 } from './core';
@@ -1257,9 +1257,21 @@ function grillAct(cx?: number, cy?: number) {
 function warmNpcClothTex(tex: THREE.Texture) {
   try { renderer.initTexture(tex); } catch { /* */ }
 }
+function warmMaterialTextures(mat: THREE.Material | THREE.Material[]) {
+  const list = Array.isArray(mat) ? mat : mat ? [mat] : [];
+  for (const m of list) {
+    if (!m) continue;
+    const any = m as unknown as Record<string, unknown>;
+    for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap', 'bumpMap', 'displacementMap', 'envMap', 'lightMap']) {
+      const tex = any[k] as THREE.Texture | null | undefined;
+      if (tex && (tex as THREE.Texture).isTexture) try { renderer.initTexture(tex); } catch { /* */ }
+    }
+  }
+}
 /**
  * 強制把物件／場景畫進 GPU（含視錐外）。
  * compile 參數為 (scene, camera)；visible=false 的節點 compile 會跳過，所以先打開再還原。
+ * 坐下環視卡頓多半是「準心掃到某網格／貼圖才第一次 upload」——這裡一次餵完。
  */
 function warmGpuRoot(root: THREE.Object3D) {
   const cam = viewCam();
@@ -1269,18 +1281,36 @@ function warmGpuRoot(root: THREE.Object3D) {
     saved.push({ o, v: o.visible, f: o.frustumCulled });
     o.visible = true;
     o.frustumCulled = false;
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh && mesh.material) warmMaterialTextures(mesh.material);
+    const spr = o as THREE.Sprite;
+    if (spr.isSprite && spr.material) warmMaterialTextures(spr.material);
   });
   const prevAuto = renderer.shadowMap.autoUpdate;
   const prevNeed = renderer.shadowMap.needsUpdate;
+  const prevRx = cam.rotation.x, prevRy = cam.rotation.y, prevRz = cam.rotation.z;
   renderer.shadowMap.autoUpdate = false;
   renderer.shadowMap.needsUpdate = false;
   try {
     cam.updateMatrixWorld(true);
     try { renderer.compile(root === scene ? scene : root, cam); } catch { /* */ }
     renderer.setRenderTarget(null);
-    // 實際 render 一幀才會把幾何／變體著色器塞進 GPU（離屏 RT 會編出另一套）
-    renderer.render(root === scene ? scene : scene, cam);
+    // 實際 render 才會把幾何／貼圖塞進 GPU；多轉幾個朝向減少驅動延後編譯
+    const lookSamples: [number, number][] = [
+      [prevRx, prevRy],
+      [prevRx, prevRy + 0.85],
+      [prevRx, prevRy - 0.85],
+      [Math.min(0.45, prevRx + 0.35), prevRy],
+      [Math.max(-0.9, prevRx - 0.35), prevRy + 0.4],
+    ];
+    for (const [rx, ry] of lookSamples) {
+      cam.rotation.set(rx, ry, prevRz);
+      cam.updateMatrixWorld(true);
+      renderer.render(scene, cam);
+    }
   } catch { /* */ }
+  cam.rotation.set(prevRx, prevRy, prevRz);
+  cam.updateMatrixWorld(true);
   renderer.shadowMap.autoUpdate = prevAuto;
   renderer.shadowMap.needsUpdate = prevNeed;
   for (const s of saved) {
@@ -1289,6 +1319,19 @@ function warmGpuRoot(root: THREE.Object3D) {
   }
 }
 function warmSceneGpu() { warmGpuRoot(scene); }
+/** 坐下後再補暖：進場當幀常還沒建完遠端／道具，環視才第一次撞到 */
+let _sitWarmGen = 0;
+function scheduleSitLookWarm() {
+  const gen = ++_sitWarmGen;
+  const run = () => {
+    if (gen !== _sitWarmGen || state !== 'play' || walking || tpv) return;
+    try { warmSceneGpu(); } catch { /* */ }
+  };
+  requestAnimationFrame(() => {
+    run();
+    requestAnimationFrame(run);
+  });
+}
 let nightShift = false, walkHintShown = false, saltNext = false;
 function drawRadio() { const b = document.getElementById('radioBtn'); if (!b) return; const show = state === 'play' && !tut && !plazaMode && save.shop.owned.includes('radio'); b.style.display = show ? '' : 'none'; const on = gearOn('radio'); b.classList.toggle('off', !on); b.innerHTML = COARSE ? '<i class="ic ic-radio"></i><i class="led"></i>' : `<i class="ic ic-radio"></i> ${on ? STATIONS[radioSt()].n : '關'}`; b.title = on ? `收音機：${STATIONS[radioSt()].n}` : '收音機：關（點按鈕切換）'; }
 // 收音機按鈕循環：關 → 懷舊歌謠台 → 廣播電台 → 台語老歌 → 關
@@ -1452,6 +1495,8 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
       n.tag.sprite.visible = tagWas[i]!;
       n.bubble.sprite.visible = bubWas[i]!;
     });
+    // 坐下第一人稱環視：再補暖（遠端／道具常晚一幀）
+    if (!walking && !tpv) scheduleSitLookWarm();
   });
 }
 /** HUD dirty：避免每幀寫 DOM／innerHTML 觸發強制重排 */
@@ -2878,9 +2923,9 @@ function bumpShiftDraft() {
       count: Math.max(0, Math.floor(count)),
       dCnt: [dCnt[0] | 0, dCnt[1] | 0, dCnt[2] | 0, dCnt[3] | 0],
       night: nightShift ? 1 : 0,
-      // 休閒廣場／休閒房不吃地點倍率；單挑仍用 plazaPayMult
+      // 公開廣場吃後台倍率；單挑／多人休閒房結算 ×1
       locM: mode === 'plaza'
-        ? (isPlazaRaceMode() ? plazaPayMult() : plazaLeisureLocMult())
+        ? ((isPlazaRaceMode() || isPlazaPartyMode()) ? plazaNoAdminLocMult() : plazaPayMult())
         : locNow().m,
       perfectPay: eco.perfectPay,
       nightMult: eco.nightMult,
@@ -2936,9 +2981,9 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
   }
   const LC = locNow();
-  // 休閒廣場／多人休閒房：不吃地點倍率；夜班仍加。單挑另走 settleRaceShiftEarn。
+  // 公開廣場：後台倍率；單挑／多人休閒房：×1（夜班仍加）。單挑剝蚵工錢另走 settleRaceShiftEarn。
   const plazaM = plazaMode
-    ? (isPlazaRaceMode() ? plazaPayMult() : plazaLeisureLocMult())
+    ? ((isPlazaRaceMode() || isPlazaPartyMode()) ? plazaNoAdminLocMult() : plazaPayMult())
     : 1;
   const locM = plazaMode ? plazaM : LC.m;
   const base0 = meatPay + perfects * eco.perfectPay + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (locM - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * eco.nightMult) : 0;
@@ -3735,8 +3780,8 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   const lockedPick = !plazaCur && locPickedLocked();
   const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && save.locs!.includes(l.id);
   const anyNew = LOCS.some(isNew);
-  // 休閒廣場不吃地點倍率（夜班另計）；選卡顯示 ×1
-  const plazaM = plazaLeisureLocMult();
+  // 公開廣場選卡／結算顯示後台倍率（單挑／多人休閒房結算另關）
+  const plazaM = plazaPayMult();
   const headTxt = plazaCur
     ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場 ×${plazaM.toFixed(1)}</b><small>${plazaHeadCountTxt()}</small>`
     : `<b><i class="ic ic-pin"></i> 上工地點：${lockedPick ? '🔒 ' : ''}${cl!.n} ×${cl!.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>${lockedPick ? '此地點尚未解鎖・可先選看看或花錢提早解鎖' : `👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}`}</small>`;
@@ -5073,6 +5118,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       if (isPlazaRaceMode()) setPlazaSeatPropsVisible(true);
       plazaEnsureFpView();
       startDay();
+      scheduleSitLookWarm();
       on('standBtn', canStand);
       if (isPlazaRaceMode()) {
         on('medBtn', false);
@@ -5096,6 +5142,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
       if (isPlazaRaceMode()) setPlazaSeatPropsVisible(true);
       plazaEnsureFpView();
+      scheduleSitLookWarm();
       on('standBtn', !isPlazaRaceMode()); on('umbBtn', true); on('medBtn', !isPlazaRaceMode());
       // 換位：手上那顆（含撬到一半）放回原堆，盆子換成新桌難度並補滿
       oysterToHand(); oyster.visible = false; on('prog', false); setPhase('busy');
@@ -5119,6 +5166,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       clearMgSitLocal();
       tYaw = yaw = 0; tPitch = pitch = -0.35;
       plazaEnsureFpView();
+      scheduleSitLookWarm();
       setSmokeSitHands(true);
       on('standBtn', true); on('throwBtn', false); on('stealBtn', false);
       on('umbBtn', false); on('medBtn', true); on('quitBtn', true); on('camBtn', COARSE);
@@ -5135,6 +5183,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       clearMgSitLocal();
       tYaw = yaw = 0; tPitch = pitch = -0.3;
       plazaEnsureFpView();
+      scheduleSitLookWarm();
       handRig.visible = false;
       on('standBtn', true); on('throwBtn', false); on('stealBtn', false);
       on('umbBtn', false); on('medBtn', true); on('quitBtn', true); on('camBtn', COARSE);
@@ -5155,6 +5204,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       setPlazaSeatPropsVisible(false);
       tYaw = yaw = 0; tPitch = pitch = -0.12; // 死鬥同款：pitch<0 略往下看廣場
       plazaEnsureFpView();
+      scheduleSitLookWarm();
       handRig.visible = false;
       // 倒數固定本機 90 秒，不吃伺服器絕對時間戳（時鐘差／舊後端會變成 ~20 秒）
       mgActive = true; mgSlot = slot; mgExpireAt = Date.now() + MG_SIT_MS; mgAmmo = ammo; mgMeatAmmo = !!fromMeat; mgFireHeld = false;
@@ -5924,7 +5974,13 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     // 內層已限流；這裡只擋未預期外洩，避免每幀刷
     if (!tpOccOuterLogged) { tpOccOuterLogged = true; console.error('tpOcclude', e); }
   }
-  camera.fov = baseFov - pe * (narrow ? 10 : 22); camera.updateProjectionMatrix();
+  {
+    const nextFov = baseFov - pe * (narrow ? 10 : 22);
+    if (Math.abs(camera.fov - nextFov) > 0.01) {
+      camera.fov = nextFov;
+      camera.updateProjectionMatrix();
+    }
+  }
   // 廣場關掉工寮中央點光（棚頂吊燈／環境光夠）；工寮內省電再壓亮度
   lamp.intensity = plazaMode
     ? 0
@@ -6039,7 +6095,8 @@ async function settleRaceShiftEarn() {
   if (raceEarnSettled || !plazaMode || !isPlazaRaceMode()) return;
   raceEarnSettled = true;
   const pearlMoney = pearlMoneyNow();
-  const plazaM = plazaPayMult();
+  // 單挑剝蚵工錢：不吃後台廣場倍率；夜班仍加
+  const plazaM = plazaNoAdminLocMult();
   const base0 = meatPay + perfects * eco.perfectPay + bowlBonus + pearlMoney;
   const locBonus = Math.round(base0 * (plazaM - 1));
   const nightBonus = nightShift ? Math.round((base0 + locBonus) * eco.nightMult) : 0;
@@ -6590,6 +6647,8 @@ function setTpv(v: boolean) {
   }
   save.tpv = v ? 1 : 0; persist(); applyOutfit3(); drawCamBtn();
   const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) c.checked = v;
+  // 切回第一人稱坐下：補暖，避免環視第一次掃到才卡
+  if (!v && state === 'play' && !walking) scheduleSitLookWarm();
 }
 tpvApi.set = setTpv;
 function drawCamBtn() { const b = document.getElementById('camBtn'); if (!b) return; b.classList.toggle('tpOn', tpv); b.title = tpv ? '視角：第三人稱（V）' : '視角：第一人稱（V）'; }

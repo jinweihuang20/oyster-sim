@@ -182,7 +182,7 @@ export function makeWorldLabel(
     const aspect = w / Math.max(1, h);
     sprite.scale.set(worldH * aspect, worldH, 1);
     mat.opacity = opacity;
-    mat.needsUpdate = true;
+    // 勿設 mat.needsUpdate：改 opacity／map 不需重編著色器，否則環視掃到名牌會卡一幀
     // 每次重畫都 upload：否則改字／首次入鏡才上傳會在準心掃到時卡一幀
     uploadLabelTex(tex);
     texUploaded = true;
@@ -209,7 +209,6 @@ export function makeWorldLabel(
     }
     opacity = next;
     mat.opacity = opacity;
-    mat.needsUpdate = true;
   };
   const dispose = () => {
     mat.map?.dispose();

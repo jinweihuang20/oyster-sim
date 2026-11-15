@@ -462,9 +462,24 @@ export class PlazaClient {
     try { await this.conn.invoke('Depart'); } catch { /* 舊服無此方法則靠 disconnect */ }
   }
 
+  /** 環視時 ~10Hz Sync；勿堆疊 await，否則回包擠在主執行緒會頓一下 */
+  private _syncBusy = false;
+  private _syncPend: [number, number, number, string, number, boolean, boolean, number, number] | null = null;
   async sync(x: number, z: number, yaw: number, phase: string, count: number, moving: boolean, umb = false, lookYaw = 0, pitch = 0) {
     if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return;
-    try { await this.conn.invoke('Sync', x, z, yaw, phase, count, moving, umb, lookYaw, pitch); } catch { /* ignore */ }
+    this._syncPend = [x, z, yaw, phase, count, moving, umb, lookYaw, pitch];
+    if (this._syncBusy) return;
+    this._syncBusy = true;
+    try {
+      while (this._syncPend) {
+        const args = this._syncPend;
+        this._syncPend = null;
+        if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) break;
+        try { await this.conn.invoke('Sync', ...args); } catch { /* ignore */ }
+      }
+    } finally {
+      this._syncBusy = false;
+    }
   }
 
   async setOutfit(head: string, hand: string, body: string, legs: string, feet: string, hair = 'hr_basic') {

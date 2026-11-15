@@ -164,15 +164,15 @@ export function plazaSoftCapClient(_oysters: number, _durationSec: number): numb
 }
 
 /**
- * 廣場相關工錢倍率（後台 locMult.plaza）。
- * 目前僅單挑競速結算使用；公開廣場／多人休閒房不吃地點倍率（見 plazaLeisureLocMult）。
+ * 公開廣場工錢倍率（後台 locMult.plaza，選卡顯示與結算皆用）。
+ * 單挑競速／多人休閒房結算不吃此倍率（見 plazaNoAdminLocMult）。
  */
 export function plazaPayMult(): number {
   const m = eco.locMult.plaza;
   return typeof m === 'number' && Number.isFinite(m) && m >= 0.1 && m <= 10 ? m : ECO_DEFAULTS.locMult.plaza;
 }
 
-/** 休閒廣場／多人休閒房：地點倍率固定 ×1（夜班加成仍可套）。 */
-export function plazaLeisureLocMult(): number {
+/** 單挑競速／多人休閒房：地點倍率固定 ×1（夜班加成仍可套）。 */
+export function plazaNoAdminLocMult(): number {
   return 1;
 }
