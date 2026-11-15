@@ -1104,7 +1104,48 @@ button:has(.saleTag){padding-left:8px!important;padding-right:8px!important}
 #newMsg .nmTx{margin:8px 0;font-size:15px;line-height:1.5}
 #featMsg .featList{margin:10px 0 4px;padding-left:1.2em;font-size:14px;line-height:1.55;text-align:left}
 #featMsg .featList li{margin:6px 0}
-#oDmFfa,#oDmHorde{position:relative}
+#oRace,#oDmFfa,#oDmHorde{position:relative}
+/* 單挑競速：主選單強調鈕（蓋過米白紙卡） */
+#overlay .sysGrid>#oRace,
+body.menuOn #overlay .sysGrid>#oRace{
+  --k:#2f9a55;--kd:#1d6e3a;--kb:#16572e;
+  position:relative!important;overflow:visible!important;
+  background:
+    radial-gradient(circle at 18% 18%,rgba(255,230,120,.55) 0 2px,transparent 3px),
+    radial-gradient(circle at 82% 22%,rgba(255,255,255,.35) 0 1.5px,transparent 3px),
+    linear-gradient(180deg,#4ecf78 0%,#2f9a55 55%,#238a48 100%)!important;
+  color:#fff!important;
+  border:2px solid #0f3d22!important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.55),
+    0 0 0 2px rgba(255,210,90,.55),
+    0 3px 0 #1d6e3a,
+    0 6px 14px rgba(30,90,50,.35)!important;
+  text-shadow:0 1px 0 rgba(0,0,0,.35)!important;
+  font-weight:900!important;
+  animation:oRaceGlow 2.2s ease-in-out infinite;
+}
+#overlay .sysGrid>#oRace::before{
+  content:"1v1";
+  position:absolute;top:-8px;left:50%;transform:translateX(-50%) rotate(-6deg);
+  z-index:2;padding:1px 7px;border-radius:8px;
+  background:#ffd25a;color:#2a1600;border:1.5px solid #2a1600;
+  font:900 10px/1.2 var(--sign);letter-spacing:.04em;
+  box-shadow:0 2px 0 rgba(0,0,0,.25);pointer-events:none;white-space:nowrap;
+}
+#overlay .sysGrid>#oRace .ic{
+  color:#fff!important;background-color:#fff!important;filter:drop-shadow(0 1px 0 rgba(0,0,0,.25));
+}
+#overlay .sysGrid>#oRace:active{
+  transform:translateY(2px)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 2px rgba(255,210,90,.4),0 1px 0 #1d6e3a,0 2px 6px rgba(30,90,50,.3)!important;
+  animation:none;
+}
+@keyframes oRaceGlow{
+  0%,100%{box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 0 0 2px rgba(255,210,90,.45),0 3px 0 #1d6e3a,0 6px 14px rgba(30,90,50,.32)}
+  50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.65),0 0 0 3px rgba(255,220,110,.85),0 3px 0 #1d6e3a,0 8px 18px rgba(255,200,80,.35)}
+}
+@media (prefers-reduced-motion:reduce){#overlay .sysGrid>#oRace{animation:none}}
 /* 蚵仔廣場地點卡：歡樂多人招牌 */
 #locPick .loc.locPlaza{
   position:relative;overflow:visible;padding-top:12px!important;
@@ -2550,6 +2591,65 @@ input[type=range]#rmEdSeats,input[type=range]#rmEdDur,input[type=range]#rmEdGoal
   #roomLayer .rmList{max-height:min(36vh,160px)}
 }
 
+/* 1v1 單挑競速 */
+#raceModal{position:fixed;inset:0;z-index:13050;display:none;align-items:center;justify-content:center;background:rgba(8,12,18,.55);padding:16px}
+#raceModal.show{display:flex}
+#raceModal .rcCard{
+  width:min(92vw,380px);padding:16px 18px;border-radius:14px;
+  background:linear-gradient(165deg,#1a2838 0%,#121c28 100%);
+  border:1px solid #3a5470;color:#e8edf2;box-shadow:0 12px 40px rgba(0,0,0,.45)
+}
+#raceModal h3{margin:0 0 8px;font-size:20px}
+#raceModal p{margin:6px 0;font-size:13px;font-weight:700;color:#e8edf2}
+#raceModal .rcNote{opacity:.8;font-weight:600;font-size:12px}
+#raceModal .rcModes{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+#raceModal .rcActs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+#raceModal button{
+  flex:1;min-height:44px;padding:8px 12px;border-radius:10px;border:2px solid #4a6a88;
+  background:#243448;color:#e8edf2;font-weight:800;font-size:14px;cursor:pointer
+}
+#raceModal button.rcPri{background:#2a6a4a;border-color:#4aad78}
+#raceModal .rcSpin{
+  width:28px;height:28px;margin:12px auto;border:3px solid #3a5470;border-top-color:#9be37a;
+  border-radius:50%;animation:rcSpin .8s linear infinite
+}
+@keyframes rcSpin{to{transform:rotate(360deg)}}
+#raceHud{
+  position:fixed;z-index:9200;top:calc(var(--sa-top) + 8px);left:50%;transform:translateX(-50%);
+  width:min(96vw,420px);display:none;pointer-events:none
+}
+#raceHud.on{display:block}
+#raceHud .rcHudIn{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 12px;border-radius:12px;background:rgba(12,18,26,.82);
+  border:1px solid #3a5470;color:#e8edf2;font-weight:800;font-variant-numeric:tabular-nums
+}
+#raceHud .rcMid{opacity:.95;font-size:15px}
+#raceHud .rcYou{color:#9be37a}
+#raceHud .rcOpp{color:#ffb08a}
+body.raceMode #raceHud.on{display:block}
+body.raceMode #standBtn,
+body.raceMode #camBtn,
+body.raceMode #pzCamCluster,
+body.raceMode #medBtn,
+body.raceMode #medList,
+body.raceMode #medAct{display:none!important;visibility:hidden!important;pointer-events:none!important}
+#raceCount{
+  position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);
+  z-index:12500;display:none;pointer-events:none;
+  font-size:clamp(64px,18vw,120px);font-weight:900;line-height:1;color:#fff;
+  text-shadow:0 4px 18px rgba(0,0,0,.55),0 0 2px #0a121c;
+  letter-spacing:.04em;text-align:center
+}
+#raceCount.on{display:block;animation:rcCountPop .28s ease-out}
+#raceCount.go{font-size:clamp(40px,12vw,72px);color:#9be37a}
+@keyframes rcCountPop{from{transform:translate(-50%,-50%) scale(.7);opacity:.35}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+body.raceWait #throwBtn,
+body.raceWait #stealBtn,
+body.raceWait #umbBtn,
+body.raceWait #gauge,
+body.raceWait #diff{visibility:hidden!important;pointer-events:none!important}
+
 /* 設定：畫面亮度 */
 #settings .setBody .brightRow{display:grid!important;grid-template-columns:1fr 58%;align-items:center;column-gap:12px;width:auto!important;min-height:44px!important;margin:0!important;padding:4px 0!important;font-size:15px!important;box-sizing:border-box}
 #settings .brightCtl{display:flex;align-items:center;gap:8px;min-width:0}
@@ -2681,12 +2781,12 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
   body.menuOn #overlay.panel.show .sysGrid>button span,
   body.menuOn #overlay.panel.show .sysGrid>a span{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 
-  /* 上工地點：上緣對齊右側「死鬥・圍毆」（第 2 顆可見鈕；禮物隱藏時） */
+  /* 上工地點：上緣對齊右側「死鬥・圍毆」（單挑／混戰／圍毆＝第 3 顆可見鈕；禮物隱藏時） */
   body.menuOn #overlay.panel.show #locPick{
     --hubRailTop:calc(var(--sa-top,0px) + 56px);
     --hubBtnH:54px;
     --hubBtnGap:6px;
-    --hubHordeTop:calc(var(--hubRailTop) + var(--hubBtnH) + var(--hubBtnGap));
+    --hubHordeTop:calc(var(--hubRailTop) + 2 * (var(--hubBtnH) + var(--hubBtnGap)));
     position:absolute!important;z-index:3;
     left:calc(var(--sa-left,0px) + 16px)!important;
     right:calc(var(--sa-right,0px) + 98px)!important;

@@ -131,9 +131,29 @@ export type PlazaDeps = {
   hasOwnPet?: () => boolean;
   /** 自己頭上帽子高出髮蓋頂的量（公尺）；有寵物+坐姿時聊天泡泡要再多抬這麼多 */
   selfHatLift?: () => number;
+  /** 1v1 競速：連 Race hub、關休閒玩法 */
+  race?: {
+    code: string;
+    mode: string;
+    param?: number;
+    goalMeat?: number;
+    durationSec?: number;
+    /** 雙方共用蚵仔抽取種子 */
+    fairSeed?: number;
+    onState?: (snap: any) => void;
+    onResults?: (r: any) => void;
+  };
 };
 
 let active = false;
+/** 1v1 競速（獨立 Race hub） */
+let raceMode = false;
+/** 雙方共用蚵仔 RNG 種子；0＝未就緒 */
+let raceFairSeed = 0;
+/** 第幾次補盆（雙方同步遞增） */
+let raceFillGen = 0;
+/** 競速入場中：先忽略 State 搶套座位，等 enterWalk 後再強制坐好 */
+let raceBooting = false;
 /** 已成功進場並公告過（離場才再公告；重連／連線失敗不重複） */
 let plazaIoAnnounced = false;
 let client: PlazaClient | null = null;
@@ -171,12 +191,34 @@ let chatUnread = 0;
 let chatPeekTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const isPlazaActive = () => active;
+export const isPlazaRaceMode = () => raceMode;
+export function setRaceFairSeed(seed: number) {
+  const s = (seed >>> 0) || 1;
+  // 同一場重連／重複 State：不要把補盆代數歸零，否則雙方序列會岔開
+  if (raceFairSeed === s) return;
+  raceFairSeed = s;
+  raceFillGen = 0;
+}
+export function raceBeginBasinFill(): (() => number) | null {
+  if (!raceMode || !raceFairSeed) return null;
+  let s = (raceFairSeed ^ Math.imul(raceFillGen + 1, 0x9e3779b9)) >>> 0;
+  if (!s) s = 1;
+  raceFillGen++;
+  return () => {
+    // mulberry32
+    s |= 0; s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
 export const plazaSeated = () => seated;
 export const plazaSittingBusy = () => sittingBusy;
 export const plazaShiftStarted = () => shiftStarted;
 export function plazaMySeat() { return myPile != null && mySlot != null ? { pileId: myPile, slot: mySlot } : null; }
-/** 坐下撈一把時用的桌種權重；無座或非剝蚵堆當綜合 */
+/** 坐下撈一把時用的桌種權重；無座或非剝蚵堆當綜合；競速固定綜合 */
 export function plazaScoopWeights(): number[] {
+  if (raceMode) return weightsFor(PILE_DIFF_MIXED);
   const seat = plazaMySeat();
   const kind = pileDiffOf(seat ? seat.pileId : -1, snap?.pileDiffs);
   return weightsFor(kind < 0 ? PILE_DIFF_MIXED : kind);
@@ -485,6 +527,7 @@ export async function plazaStealFrom(targetConnId: string, caught = false) {
 
 /** 共烤：放生蚵上烤網（lx/lz 相對堆心） */
 export async function plazaGrillPlace(lx: number, lz: number, diff: number) {
+  if (raceMode) return { ok: false as const, err: 'not_grill', oyster: undefined };
   if (myPile != null && view?.grill.tooClose(myPile, lx, lz)) return { ok: false as const, err: 'grill_overlap', oyster: undefined };
   if (!client?.connected) {
     // 離線單機烤：本機建一顆，烤熟／掀殼由烤網畫面自己推進
@@ -523,6 +566,7 @@ const ERR_ZH: Record<string, string> = {
   taken: '這個位子有人了',
   full: '廣場滿了，等有人離開再來',
   bad_seat: '位子不對',
+  locked_seat: '競速不能換位置',
   not_joined: '還沒連上廣場',
   no_seat: '請先選位子',
   slow: '太快了，稍等一下',
@@ -589,7 +633,7 @@ function zhNpcErr(e: string | undefined, who: string) {
 function zhErr(e?: string) { return plazaZhErr(e); }
 
 function forceResetPlazaLocal() {
-  active = false; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
+  active = false; raceMode = false; raceFairSeed = 0; raceFillGen = 0; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
   chatUnread = 0; hideChatPeek();
   clearReconnectTimer();
   const old = client; client = null;
@@ -604,16 +648,24 @@ function forceResetPlazaLocal() {
   removeFlagBtn();
   teardownPlayersChrome();
   syncPlazaPeopleHud();
+  try { document.body.classList.remove('raceMode'); } catch { /* */ }
 }
 
 export function openPlaza(D: PlazaDeps) {
   // 上次入場半殘（active 卡住）時同步清掉再進，避免按鈕沒反應
   if (active) forceResetPlazaLocal();
-  active = true; seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
+  active = true; raceMode = !!D.race?.code; raceBooting = !!D.race?.code; seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
+  raceFairSeed = 0; raceFillGen = 0;
+  if (raceMode) {
+    document.body.classList.add('raceMode');
+    const fs = Number(D.race?.fairSeed ?? 0) | 0;
+    if (fs) setRaceFairSeed(fs);
+  }
   D.audio();
   try {
     client = new PlazaClient();
+    if (D.race?.code) client.raceCode = D.race.code;
     view = createPlazaWorldView(D.scene, D.bubbles, {
       shellGeo: D.shellGeo,
       shellMat: D.shellMat,
@@ -621,10 +673,11 @@ export function openPlaza(D: PlazaDeps) {
       lowDetail: matchMedia('(pointer: coarse)').matches || !!D.getEco?.(),
       eco: () => !!D.getEco?.(),
       getTpv: () => !!D.getTpv?.(),
-      hasOwnPet: () => !!D.hasOwnPet?.(),
+      hasOwnPet: () => raceMode ? false : !!D.hasOwnPet?.(),
       selfHatLift: () => D.selfHatLift?.() ?? 0,
       getRenderer: () => D.renderer,
       warmGpu: root => D.warmGpu?.(root),
+      raceArena: raceMode,
     });
     buildUi();
     wireClient(D);
@@ -694,10 +747,16 @@ function applySeatWishEnd(e: PlazaSeatWishEnd) {
 
 async function boot(D: PlazaDeps) {
   try {
-  setHud('連線中…');
-  const r = await client!.connect(D.id, D.nick());
+  setHud(raceMode ? '進入對戰…' : '連線中…');
+  const r = await client!.connect(D.id, D.nick(), raceMode && D.race?.code ? { raceCode: D.race.code } : undefined);
   if (!active || !client) return; // 入場中被取消
   if (!r.ok) {
+    if (raceMode) {
+      raceBooting = false;
+      D.toast(zhErr(r.err) || '進對戰失敗', '#ff8a7a', 3, 'top');
+      void abortEnter(D, r.err || 'join_fail');
+      return;
+    }
     // 連不上也照樣進廣場：先離線逛，背景持續重連
     netDown = true;
     const why = (r.err || '').trim();
@@ -711,20 +770,40 @@ async function boot(D: PlazaDeps) {
     scheduleManualReconnect(3000);
     return;
   }
-  snap = r.snap ?? null;
-  carryNpcOk = !!(r as any).carryNpc;
-  applyJoinFlags((r as any).flags);
+  snap = r.snap ? normalizeSnap(r.snap) : null;
+  if (raceMode && r.snap) {
+    const fs = Number((r.snap as any).fairSeed ?? (r.snap as any).FairSeed ?? 0) | 0;
+    if (fs) setRaceFairSeed(fs);
+  }
+  carryNpcOk = raceMode ? false : !!(r as any).carryNpc;
+  if (!raceMode) applyJoinFlags((r as any).flags);
   if (snap) view?.syncRoster(snap, D.id);
-  applySeatWishes((r as any).wishes);
-  if (r.grills) view?.grill.syncAll(r.grills);
+  if (!raceMode) applySeatWishes((r as any).wishes);
+  if (!raceMode && r.grills) view?.grill.syncAll(r.grills);
   applyChatHistory(r.chat);
   void plazaPushOutfit();
   // 先 enterWalk（掛 plazaMode／plazaRoam）再 sync，否則玩家鈕不會掛上
   D.enterWalk();
   showRoamUi();
-  setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
+  if (raceMode) {
+    setHud('單挑競速・對座剝蚵');
+    // enterWalk 之後才套座位（State 在 Join 當下可能已搶先套過，會被走动沖掉）
+    seated = false;
+    shiftStarted = false;
+    myPile = null;
+    mySlot = null;
+    applyRaceSeatFromSnap(D, true);
+    if (!seated) await forceRaceSit(D);
+    raceBooting = false;
+    // boot 結束後若 State 早到時被 raceBooting 擋住，補坐一次
+    if (!seated) applyRaceSeatFromSnap(D, true);
+    if (!seated) await forceRaceSit(D);
+    if (D.race?.onState && r.snap) D.race.onState(r.snap);
+  } else {
+    setHud(`${plazaHudPeople(snap)}　隨便坐、不趕時間`);
+  }
   syncPlazaPeopleHud();
-  if (!plazaIoAnnounced) {
+  if (!raceMode && !plazaIoAnnounced) {
     plazaIoAnnounced = true;
     const online = snap?.occupied ?? snap?.players?.filter((p) => !p.isNpc).length ?? null;
     void postDiscordPlazaPresence(D.nick(), 'join', { online, tag: myTag() });
@@ -732,6 +811,11 @@ async function boot(D: PlazaDeps) {
   } catch (e) {
     console.error('plaza boot', e);
     if (!active) return;
+    if (raceMode) {
+      D.toast('進對戰異常', '#ff8a7a', 3, 'top');
+      void abortEnter(D, 'boot_fail');
+      return;
+    }
     // 進場例外：仍放行離線逛，避免卡在「正在入場」
     netDown = true;
     D.toast('廣場入場異常，先離線逛', '#ffb08a', 3, 'top');
@@ -739,6 +823,55 @@ async function boot(D: PlazaDeps) {
     try { D.enterWalk(); showRoamUi(); syncPlazaPeopleHud(); setNetBanner('連線異常，正在重連…'); } catch { void abortEnter(D, 'boot_fail'); return; }
     scheduleManualReconnect(3000);
   }
+}
+
+/** 競速開局：伺服器已坐 pile0 對座，本機對齊姿勢並開工班 */
+function applyRaceSeatFromSnap(D: PlazaDeps, force = false) {
+  if (!snap || (seated && !force)) return;
+  const cid = client?.connectionId || '';
+  const me = snap.players.find(p => (!!p.pid && p.pid === D.id) || (!!cid && p.connId === cid));
+  if (!me || me.pileId < 0 || me.slot < 0) return;
+  applyRaceSitLocal(D, me.pileId, me.slot);
+}
+
+function applyRaceSitLocal(D: PlazaDeps, pileId: number, slot: number) {
+  myPile = pileId;
+  mySlot = slot;
+  const pose = seatPose(pileId, slot);
+  D.applySeatPose(pose.pos, pose.yaw);
+  view?.highlight(pileId, slot);
+  seated = true;
+  near = null;
+  syncSeatChrome();
+  if (!shiftStarted) {
+    shiftStarted = true;
+    D.beginShift(pileId, slot);
+  } else {
+    D.resumeSit(pileId, slot);
+  }
+}
+
+/** 快照沒座位時：向伺服器搶 pile0 對座 */
+async function forceRaceSit(D: PlazaDeps) {
+  if (!client?.connected || seated) return;
+  const taken = new Set(
+    (snap?.players ?? [])
+      .filter(p => p.seated && p.pileId === 0 && (p.slot === 0 || p.slot === 2))
+      .map(p => p.slot),
+  );
+  const prefer = taken.has(0) ? 2 : 0;
+  const order = prefer === 0 ? [0, 2] : [2, 0];
+  for (const slot of order) {
+    const r = await client.claimSeat(0, slot, 0);
+    if (!r.ok) continue;
+    if (r.snap) {
+      snap = normalizeSnap(r.snap);
+      view?.syncRoster(snap, D.id);
+    }
+    applyRaceSitLocal(D, 0, slot);
+    return;
+  }
+  D.toast('對戰座位坐不上，請靠近藍色板凳再坐', '#ffb08a', 3, 'top');
 }
 
 /** 把本機目前裝備推到廣場（進場／換裝／重連後） */
@@ -946,8 +1079,28 @@ function wireClient(D: PlazaDeps) {
       if (!active) return;
       netDown = true;
       setNetBanner('連線中斷，正在重連…');
-      D.toast('廣場連線中斷，正在重連…', '#ffb08a', 3, 'top');
+      D.toast(raceMode ? '對戰連線中斷，正在重連…' : '廣場連線中斷，正在重連…', '#ffb08a', 3, 'top');
       scheduleManualReconnect(1500);
+    },
+    onRaceState: (raw) => {
+      if (!raceMode || !active) return;
+      try {
+        const ns = normalizeSnap(raw);
+        snap = ns;
+        view?.syncRoster(ns, D.id);
+        syncPlazaPeopleHud();
+        // boot 期間忽略搶套座位（否則會先 beginShift，再被 enterWalk 沖掉 walking／seatRig／phase）
+        if (!raceBooting && !seated) applyRaceSeatFromSnap(D);
+        const fs = Number(raw?.fairSeed ?? raw?.FairSeed ?? 0) | 0;
+        if (fs && !raceFairSeed) setRaceFairSeed(fs);
+        D.race?.onState?.(raw);
+      } catch (err) { console.error('onRaceState', err); }
+    },
+    onRaceResults: (raw) => {
+      if (!raceMode || !active) return;
+      try {
+        D.race?.onResults?.(raw);
+      } catch (err) { console.error('onRaceResults', err); }
     },
   });
 }
@@ -964,8 +1117,15 @@ function normalizeSnap(s: any): PlazaSnapshot {
     pileCount: s?.pileCount ?? s?.PileCount ?? PILE_COUNT,
     slotsPerPile: s?.slotsPerPile ?? s?.SlotsPerPile ?? SLOTS_PER_PILE,
     occupied,
-    capacity: s?.capacity ?? s?.Capacity ?? PLAZA_CAPACITY,
-    pileDiffs: parsePileDiffs(s?.pileDiffs ?? s?.PileDiffs),
+    capacity: s?.capacity ?? s?.Capacity ?? (raceMode ? 2 : PLAZA_CAPACITY),
+    pileDiffs: (() => {
+      const d = parsePileDiffs(s?.pileDiffs ?? s?.PileDiffs);
+      // 競速固定綜合堆，雙方難度權重一致
+      if (raceMode) {
+        for (let i = 0; i < d.length; i++) if (d[i] >= 0) d[i] = PILE_DIFF_MIXED;
+      }
+      return d;
+    })(),
   };
 }
 
@@ -1154,9 +1314,9 @@ function buildUi() {
 <button id="pzChatFab" type="button" aria-label="聊天">聊天<span class="key"> (ENTER)</span><span class="pzBadge" aria-hidden="true">0</span></button>
 <button id="pzChatPeek" type="button" aria-label="打開聊天"></button>
 <div id="pzChat">
-  <div id="pzChatHd"><span>廣場聊天</span><button id="pzChatMin" type="button" aria-label="縮小">–</button></div>
+  <div id="pzChatHd"><span>${raceMode ? '對戰聊天' : '廣場聊天'}</span><button id="pzChatMin" type="button" aria-label="縮小">–</button></div>
   <div id="pzLog"></div>
-  <div id="pzRow"><input id="pzIn" maxlength="80" placeholder="跟廣場打招呼…"/><button id="pzSend" type="button">送</button></div>
+  <div id="pzRow"><input id="pzIn" maxlength="80" placeholder="${raceMode ? '跟對手說…' : '跟廣場打招呼…'}"/><button id="pzSend" type="button">送</button></div>
 </div>
 <div id="pzMap" role="dialog" aria-label="廣場地圖">
   <div id="pzMapHd"><span>廣場地圖</span><button id="pzMapClose" type="button">關閉</button></div>
@@ -1718,6 +1878,13 @@ export function plazaUpdateNear(wx: number, wz: number) {
     return null;
   }
   near = null; nearCarry = null; nearPlace = null;
+  // 競速：關工寮門／抱人；不可換位（開局已對座）
+  if (raceMode) {
+    nearShed = null;
+    near = null;
+    view?.highlightNear(null);
+    return null;
+  }
   // 工寮門口圓圈在碼頭上，離座位很遠：站進圈內就只提示進工寮
   nearShed = shedDoorAt(wx, wz);
   if (nearShed) { view?.highlightNear(null); return null; }
@@ -1798,11 +1965,14 @@ export async function plazaTrySit(mgPay: PlazaMgPay = 'auto'): Promise<boolean> 
     if (!seat) { deps.toast(`靠近空位再放下${npcWho(myCarriedNpc())}`, '#ffb08a'); return false; }
     return plazaDoPlace(seat);
   }
-  if (carryNpcOk && nearCarry) return plazaDoCarry(nearCarry.connId);
+  if (!raceMode && carryNpcOk && nearCarry) return plazaDoCarry(nearCarry.connId);
   const seat = near ?? nearestFreeSeat(deps.getWalkXZ().x, deps.getWalkXZ().z, takenSet(true), SIT_DIST);
   if (!seat) { deps.toast('靠近空的藍色板凳再坐', '#ffb08a'); return false; }
+  if (raceMode) {
+    deps.toast('競速不能換位置', '#ffb08a'); return false;
+  }
   sittingBusy = true;
-  const mg = isMgPile(seat.pileId);
+  const mg = raceMode ? false : isMgPile(seat.pileId);
   let paidMgMoney = false;
   /** 用碗內蚵肉當子彈：彈藥＝目前庫存；發射時才從碗扣 */
   let meatAmmo = 0;
@@ -1875,6 +2045,10 @@ export async function plazaTrySit(mgPay: PlazaMgPay = 'auto'): Promise<boolean> 
 /** 站起：釋座並恢復走動（工班繼續） */
 export async function plazaStandWalk() {
   if (!deps || !active || !seated) return;
+  if (raceMode) {
+    deps.toast('競速不能換位置', '#ffb08a');
+    return;
+  }
   // 先 goWalk（仍留著 myPile／mySlot 算站起點），再清座位並通知伺服器
   seated = false;
   mgFromMeat = false;
@@ -2118,6 +2292,23 @@ export async function plazaReportEarn(raw: number, oysters: number, durationSec:
   return r.payout;
 }
 
+/**
+ * 競速剝蚵工錢：成功則伺服器 AddIncome 入榜；失敗回本機試算（呼叫端再 addPlayIncome）。
+ * 勝負獎金另由 FinishLocked 發放，不走這裡。
+ */
+export async function plazaSettleRaceMeat(raw: number, oysters: number, durationSec: number): Promise<{ payout: number; server: boolean }> {
+  const soft = Math.max(0, Math.min(plazaSoftCapClient(oysters, durationSec), Math.floor(raw)));
+  if (!client || !deps) return { payout: soft, server: false };
+  const r = await client.reportEarn(Math.floor(raw), oysters, durationSec);
+  if (!r.ok) {
+    deps.toast(zhErr(r.err) + '（剝蚵工錢暫用本機）', '#ffb08a');
+    return { payout: soft, server: false };
+  }
+  const payout = Math.max(0, Math.floor(r.payout ?? 0));
+  deps.track('race_meat', { amount: payout, via: 'race' });
+  return { payout, server: true };
+}
+
 export async function closePlaza(leaveSeat = true) {
   if (!active) return;
   const nick = deps?.nick() ?? '剝蚵人';
@@ -2139,7 +2330,7 @@ export async function closePlaza(leaveSeat = true) {
       deps.persistPlazaSpawn({ x: p.x, z: p.z, yaw: deps.getYaw() });
     }
   }
-  active = false; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
+  active = false; raceMode = false; raceFairSeed = 0; raceFillGen = 0; seated = false; shiftStarted = false; netDown = false; plazaIoAnnounced = false;
   chatUnread = 0; hideChatPeek();
   clearReconnectTimer();
   syncPlazaPeopleHud();
@@ -2150,6 +2341,7 @@ export async function closePlaza(leaveSeat = true) {
   ui?.remove(); ui = null;
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearShed = null; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
+  try { document.body.classList.remove('raceMode'); } catch { /* */ }
   if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null, tag: myTag() });
 }
 

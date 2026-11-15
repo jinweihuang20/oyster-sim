@@ -1,11 +1,11 @@
 export {
-  openPlaza, closePlaza, isPlazaActive, plazaSeated, plazaSittingBusy, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
+  openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, setRaceFairSeed, raceBeginBasinFill, plazaSeated, plazaSittingBusy, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaRandomSpawn, plazaResolveEnterSpawn, plazaNearSeat, plazaNearShed, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk,
   plazaHitPile, plazaMyPileOrigin,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
   plazaMgFire, plazaMgHit, plazaMgReload, plazaAimMg, plazaMgFx, plazaMgMount, plazaMgHitTargets, plazaOnMg,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillHit, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
-  tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaEndCleanup, plazaHideChrome,
+  tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaSettleRaceMeat, plazaEndCleanup, plazaHideChrome,
   plazaFocusChat, plazaCloseChat, plazaChatIsOpen, plazaPushOutfit, plazaPushCosmetics,
   plazaRefreshFlagUi, plazaTrySetFlagText, plazaTryShowFlag, plazaTryRemoveFlag, plazaTryUpgradeFlag, plazaTrySelectFlag,
   plazaToggleMap, plazaCloseMap, plazaMapIsOpen, plazaLeaveAskIsOpen, plazaCloseLeaveAsk, plazaTogglePlayers, plazaPlayersIsOpen, plazaClosePlayers,

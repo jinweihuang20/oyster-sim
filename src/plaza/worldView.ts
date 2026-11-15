@@ -39,7 +39,7 @@ import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot, PlazaSeatWish } from './types';
-import { pileDiffOf, DEFAULT_PILE_DIFFS, PILE_DIFF_NAMES } from './pileDiff';
+import { pileDiffOf, DEFAULT_PILE_DIFFS, PILE_DIFF_NAMES, PILE_DIFF_MIXED } from './pileDiff';
 import { plazaDisplayName } from './types';
 import { GOLD_SMOKE_TINT, parseCosmetics } from './cosmetics';
 import { createPlazaFlagView } from './flagView';
@@ -187,6 +187,8 @@ export type PlazaWorldOpts = {
   getRenderer?: () => THREE.WebGLRenderer | null | undefined;
   /** 正確預熱（含 hidden 臉盆）；優先於 getRenderer.compile */
   warmGpu?: (root: THREE.Object3D) => void;
+  /** 1v1 競速：只留 pile0 對座擂台，藏大廣場 */
+  raceArena?: boolean;
 };
 
 export function createPlazaWorldView(
@@ -195,6 +197,7 @@ export function createPlazaWorldView(
   opts: PlazaWorldOpts,
 ): PlazaWorldView {
   const LO = !!opts.lowDetail;
+  const raceArena = !!opts.raceArena;
   const MOBILE = matchMedia('(pointer: coarse)').matches;
   // 須在吸菸阿伯 ensureTag 之前宣告（阿伯建於函式中段，const 有 TDZ）
   const PLAZA_TAG_A = 0.58;
@@ -271,10 +274,15 @@ export function createPlazaWorldView(
       metalness: 0.02,
       color: 0xffffff,
     });
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(WALK_BOUND * 2.4, WALK_BOUND * 2.4, LO ? 36 : 48, LO ? 36 : 48), floorMat);
+  const raceCenter = pileCenter(0);
+  const floorSpan = raceArena ? 7.2 : WALK_BOUND * 2.4;
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(floorSpan, floorSpan, LO ? 12 : (raceArena ? 24 : 48), LO ? 12 : (raceArena ? 24 : 48)),
+    floorMat,
+  );
   floor.name = 'plazaFloor';
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = 0.002;
+  floor.position.set(raceArena ? raceCenter.x : 0, 0.002, raceArena ? raceCenter.z : 0);
   floor.receiveShadow = !LO;
   root.add(floor);
 
@@ -283,28 +291,40 @@ export function createPlazaWorldView(
   const builtQuadrants = new Set<0 | 1 | 2 | 3>();
 
   // 椅子姿態：全部從 layout 預先登錄（mesh 可晚到；不擋進場）
-  for (let i = 0; i < PILE_COUNT; i++) {
-    if (pileIsRemoved(i)) continue;
-    const seatN = SLOTS_PER_PILE + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
-    for (let s = 0; s < seatN; s++) {
-      const pose = seatPose(i, s);
-      chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(i, s) });
+  if (raceArena) {
+    // 對座 0／2；不放相鄰椅，強化一對一
+    for (const s of [0, 2]) {
+      const pose = seatPose(0, s);
+      chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(0, s) });
+    }
+  } else {
+    for (let i = 0; i < PILE_COUNT; i++) {
+      if (pileIsRemoved(i)) continue;
+      const seatN = SLOTS_PER_PILE + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);
+      for (let s = 0; s < seatN; s++) {
+        const pose = seatPose(i, s);
+        chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(i, s) });
+      }
+    }
+    for (let s = 0; s < SMOKE_SEAT_COUNT; s++) {
+      const pose = seatPose(SMOKE_PILE_ID, s);
+      chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(SMOKE_PILE_ID, s) });
+    }
+    {
+      const pose = smokeNpcSeatPose();
+      chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(SMOKE_PILE_ID, SMOKE_ABER_SLOT) });
     }
   }
-  for (let s = 0; s < SMOKE_SEAT_COUNT; s++) {
-    const pose = seatPose(SMOKE_PILE_ID, s);
-    chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(SMOKE_PILE_ID, s) });
-  }
-  {
-    const pose = smokeNpcSeatPose();
-    chairPoses.push({ x: pose.pos.x, z: pose.pos.z, yaw: pose.yaw, key: seatKey(SMOKE_PILE_ID, SMOKE_ABER_SLOT) });
-  }
 
-  // 廣場大棚（鏽鐵皮＋外圈木柱；厝頂／高樑可第三人稱半透明）— 進場必建
+  // 廣場大棚（鏽鐵皮＋外圈木柱；厝頂／高樑可第三人稱半透明）— 進場必建（競速擂台隱藏）
   const bigShed = makePlazaBigShed(M, add, LO);
   root.add(bigShed.group);
   const careerMarquee = makeCareerMarquee(LO);
   root.add(careerMarquee.group);
+  if (raceArena) {
+    bigShed.group.visible = false;
+    careerMarquee.group.visible = false;
+  }
   const tpOccludeMats = bigShed.tpOccludeMats;
   let tpOccludeK = 0;
   let tpOccludeErrLogged = false;
@@ -417,6 +437,44 @@ export function createPlazaWorldView(
     if (fx) fireFx.push(fx);
     mergeStaticMeshes(pile, { skip: skipMerge, name: `pileMerged_${i}` });
     bakeZone(pile);
+  }
+
+  /** 競速擂台：矮牆圍住 pile0，營造一對一局限空間 */
+  function buildRaceArenaBooth(c: THREE.Vector3) {
+    const booth = new THREE.Group();
+    booth.name = 'raceArenaBooth';
+    const wallMat = new THREE.MeshLambertMaterial({ color: 0x3a4a5c });
+    const rimMat = new THREE.MeshLambertMaterial({ color: 0x6a7e94 });
+    const half = 3.35;
+    const h = 2.55;
+    const t = 0.22;
+    const walls: [number, number, number, number, number, number][] = [
+      [half * 2 + t, h, t, 0, h / 2, -half],
+      [half * 2 + t, h, t, 0, h / 2, half],
+      [t, h, half * 2, -half, h / 2, 0],
+      [t, h, half * 2, half, h / 2, 0],
+    ];
+    for (const [w, hh, d, x, y, z] of walls) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), wallMat);
+      m.position.set(c.x + x, y, c.z + z);
+      booth.add(m);
+    }
+    for (const [x, z] of [[0, -half], [0, half], [-half, 0], [half, 0]] as const) {
+      const rim = new THREE.Mesh(new THREE.BoxGeometry(x === 0 ? half * 2 : t * 1.4, 0.08, z === 0 ? half * 2 : t * 1.4), rimMat);
+      rim.position.set(c.x + x, h + 0.02, c.z + z);
+      booth.add(rim);
+    }
+    // 提亮：主燈＋補光
+    const lamp = new THREE.PointLight(0xffe6c0, LO ? 1.6 : 2.2, 12, 1.4);
+    lamp.position.set(c.x, 2.55, c.z);
+    booth.add(lamp);
+    const fill = new THREE.PointLight(0xd8ecff, LO ? 0.7 : 1.0, 10, 1.6);
+    fill.position.set(c.x, 1.8, c.z);
+    booth.add(fill);
+    const hemi = new THREE.HemisphereLight(0xfff2dc, 0x4a5a6a, LO ? 0.55 : 0.75);
+    hemi.position.set(c.x, 3, c.z);
+    booth.add(hemi);
+    root.add(booth);
   }
 
   function buildQuadrant(q: 0 | 1 | 2 | 3) {
@@ -654,8 +712,11 @@ export function createPlazaWorldView(
 
   /** 進場：整場先建齊（須在 allPads／paintInstancedPads 之後，否則 flushPads 會炸） */
   {
-    for (const q of [0, 1, 2, 3] as const) buildQuadrant(q);
-    for (const id of ['southGrill', 'ambiance', 'westSmoke', 'eastStreet', 'northShed'] as PlazaZoneId[]) {
+    if (raceArena) {
+      buildOnePile(0);
+      buildRaceArenaBooth(raceCenter);
+    } else for (const q of [0, 1, 2, 3] as const) buildQuadrant(q);
+    if (!raceArena) for (const id of ['southGrill', 'ambiance', 'westSmoke', 'eastStreet', 'northShed'] as PlazaZoneId[]) {
       buildZone(id);
     }
     pendingQuadrants.length = 0;
@@ -694,6 +755,7 @@ export function createPlazaWorldView(
   }
 
   function tickZoneStreamer(dt: number, x: number, z: number, seated: boolean) {
+    if (raceArena) return;
     walkX = x; walkZ = z;
     seatedZone = seated ? zoneAt(x, z) : null;
     streamProbeT -= dt;
@@ -790,7 +852,8 @@ export function createPlazaWorldView(
   root.add(smokeNpcRig.outer);
   const smokeNpcTag = ensureTag('阿伯', true);
   smokeNpcTag.sprite.position.set(smokeNpcPose.pos.x, CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95, smokeNpcPose.pos.z);
-  smokeNpcTag.sprite.visible = true;
+  smokeNpcTag.sprite.visible = !raceArena;
+  if (raceArena) smokeNpcRig.outer.visible = false;
   const smokeNpc: SmokeNpc = {
     rig: smokeNpcRig,
     tag: smokeNpcTag,
@@ -943,7 +1006,9 @@ export function createPlazaWorldView(
     return sprite;
   }
   for (let i = 0; i < PILE_COUNT; i++) {
-    const kind = pileDiffOf(i, DEFAULT_PILE_DIFFS);
+    let kind = pileDiffOf(i, DEFAULT_PILE_DIFFS);
+    // 競速小場：剝蚵堆一律標「綜合」
+    if (raceArena && kind >= 0) kind = PILE_DIFF_MIXED;
     const sprite = makePileDiffSprite(i, kind);
     if (!sprite) continue;
     root.add(sprite);
@@ -1968,6 +2033,7 @@ function hashPid(pid: string) {
 
   /** 遠端寵物：依 petId 掛／拆模型到 rig.shoulderR */
   function syncRemotePet(r: Remote, petId: string) {
+    if (raceArena) petId = '';
     const curId: string = (r as any)._petId ?? '';
     const curMesh: THREE.Group | undefined = (r as any)._petMesh;
     if (curId === petId) return;

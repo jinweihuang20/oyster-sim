@@ -27,6 +27,8 @@ export type EconomyCfg = {
   plazaCapPerSec: number;
   plazaCapOystersMax: number;
   plazaCapPerOyster: number;
+  raceWinPay: number;
+  raceLosePay: number;
 };
 
 export const ECO_DEFAULTS: EconomyCfg = {
@@ -56,6 +58,8 @@ export const ECO_DEFAULTS: EconomyCfg = {
   plazaCapPerSec: 12,
   plazaCapOystersMax: 400,
   plazaCapPerOyster: 20,
+  raceWinPay: 300,
+  raceLosePay: 80,
 };
 
 /** 執行期設定（啟動後可被伺服器覆蓋） */
@@ -116,6 +120,8 @@ export function applyEconomy(raw: Partial<EconomyCfg> | null | undefined) {
   eco.plazaCapPerSec = Math.floor(num(raw.plazaCapPerSec, d.plazaCapPerSec, 0, 1e5));
   eco.plazaCapOystersMax = Math.floor(num(raw.plazaCapOystersMax, d.plazaCapOystersMax, 0, 10000));
   eco.plazaCapPerOyster = Math.floor(num(raw.plazaCapPerOyster, d.plazaCapPerOyster, 0, 1e5));
+  eco.raceWinPay = Math.floor(num(raw.raceWinPay, d.raceWinPay, 0, 1e7));
+  eco.raceLosePay = Math.floor(num(raw.raceLosePay, d.raceLosePay, 0, 1e7));
   if (raw.locMult && typeof raw.locMult === 'object') {
     for (const [k, v] of Object.entries(raw.locMult)) {
       const n = Number(v);
