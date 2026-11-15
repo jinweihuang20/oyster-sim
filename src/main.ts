@@ -1957,7 +1957,9 @@ function revealOdd(i: number) { react3('cheer');
   oddShowI = i === 3 ? -1 : i;
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
   label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.color; label.classList.add('on');
-  npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
+  // 單挑：不播阿婆轉頭／喊話（擂台無阿婆；湊近臉特效另在 frame 關掉）
+  if (!isPlazaRaceMode()) npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
+  else leanFaces.forEach(f => { f.visible = false; });
   if (i === 3) { later(0.6, () => { if (gen !== oddShowGen) return; flinch = 1; SFX.pinch(); bleed(8); hurt(4, '夾！'); crabShakes = 0; strokeDir = 0; strokeLen = 0; setPhase('crab'); }); }
   else later(2.2, () => {
     if (gen !== oddShowGen) return;
@@ -3083,8 +3085,10 @@ function revealPearl(r: number) { react3('cheer');
   pearlMesh.visible = true; ding(r);
   label.innerHTML = `${RAR[r].name}！<small>${save.dex[r] === 1 ? '🆕 第一次找到！' : `你的第 ${save.dex[r]} 個`}</small><small>${['阿婆們都轉頭來看了！', '哇～粉紅色的，好漂亮！', '金光閃閃，今天發了！', '黑珍珠！！整個漁港都轟動了！'][r]}</small>`;
   label.style.color = RAR[r].css === '#3a3548' ? '#c9b8ff' : RAR[r].css; label.classList.add('on');
-  const cries = ['哎唷！珍珠！', '給我看看！', '好運喔你！', '老天爺保佑！'];
-  npcs.forEach((n, i) => { n.look = 2.6; say(n, cries[(i + r) % cries.length], 2.6); });
+  if (!isPlazaRaceMode()) {
+    const cries = ['哎唷！珍珠！', '給我看看！', '好運喔你！', '老天爺保佑！'];
+    npcs.forEach((n, i) => { n.look = 2.6; say(n, cries[(i + r) % cries.length], 2.6); });
+  } else leanFaces.forEach(f => { f.visible = false; });
 }
 function renderDex() {
   const RZ: Record<string, string> = { common: '普通', uncommon: '少見', rare: '稀有', legend: '傳說' };
@@ -5733,7 +5737,9 @@ function frameBody() {
   oyster.scale.setScalar(DIFF[diff].scale * (1 + pe * (narrow ? 0.25 : 0.6)));
   handL.position.set(HL.x + (narrow ? 0.12 : 0.05) * pe, HL.y + 0.06 * pe, HL.z);
   const restX = 0.75 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect + 0.3; // 平常囥佇畫面外
-  leanFaces.forEach(f => { f.visible = pe > 0.02; f.position.x = f.userData.s * (restX + ((narrow ? 0.4 : 0.58) - restX) * pe); f.position.y = 0.05 - 0.08 * pe; f.rotation.z = -f.userData.s * 0.35 * pe; });
+  // 單挑擂台無阿婆場：隱藏「湊近來看」臉特效（奇物／珍珠共用 pearlShow）
+  const leanOn = pe > 0.02 && !isPlazaRaceMode();
+  leanFaces.forEach(f => { f.visible = leanOn; if (!leanOn) return; f.position.x = f.userData.s * (restX + ((narrow ? 0.4 : 0.58) - restX) * pe); f.position.y = 0.05 - 0.08 * pe; f.rotation.z = -f.userData.s * 0.35 * pe; });
   // 手勢：左手空手掌心向下、持蚵掌心向上；右手掌心向下；插刀時雙手 A 字
   const holdOy = oyster.visible && oyster.parent === handL;
   const tw = phase === 'twist' ? strokeDir * Math.min(1, tension) : 0;
