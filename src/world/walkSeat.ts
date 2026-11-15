@@ -61,6 +61,8 @@ export type WalkSeatDeps = {
   getTpv: () => boolean;
   setTpv: (v: boolean) => void;
   saveTpv: () => boolean;
+  /** 工寮坐下：第一人稱＋清環視殘值，視角朝座位正前方 */
+  ensureSitFpForward?: () => void;
   drawCamBtn: () => void;
   drawRadio: () => void;
   applySeat: (id: string) => void;
@@ -176,7 +178,12 @@ export function sitDown(id: string) {
   D.stools.forEach(g => g.userData.tag.visible = false);
   if (id !== D.getSaveSeat()) D.track('seat', { seat: id });
   D.applySeat(id); D.persist(); D.handRig.visible = true;
-  D.setTYaw(0); D.setYaw(0); D.setTPitch(-0.85); D.setPitch(-0.85);
+  // 工寮換位坐下：第一人稱＋視角強制朝座位正前方（清 flYaw／環視殘值）
+  if (D.ensureSitFpForward) D.ensureSitFpForward();
+  else {
+    D.setTYaw(0); D.setYaw(0); D.setTPitch(-0.85); D.setPitch(-0.85);
+    if (D.getTpv()) { D.setTpv(false); D.drawCamBtn(); }
+  }
   D.toast(`已坐下：${D.seatNow().n}`, '#9fe0ff'); D.SFX.pop(); D.later(0.3, D.goPick);
 }
 

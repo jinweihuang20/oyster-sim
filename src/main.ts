@@ -3642,6 +3642,13 @@ initWalkSeat({
   getPitch: () => pitch, setPitch: v => { pitch = v; },
   getTPitch: () => tPitch, setTPitch: v => { tPitch = v; },
   getTpv: () => tpv, setTpv: v => { tpvApi.set(v); }, saveTpv: () => !!save.tpv,
+  ensureSitFpForward: () => {
+    // 與進工寮／廣場坐下同款：強制第一人稱，並清掉走動環視殘值
+    flYaw = 0; flRet = 0; flHeld = false; flPtr = -1; flDragId = -1; flDown = null;
+    lookMx = lookMy = 0;
+    tYaw = yaw = 0; tPitch = pitch = -0.85;
+    if (tpv) setTpv(false); else drawCamBtn();
+  },
   drawCamBtn, drawRadio, applySeat, getSaveSeat: () => save.seat, persist, track, toast, SFX, later, goPick, setPhase, stopSteal,
   fly, worldOf, pileSpot, nag, pick, say, getNpcs: () => npcs,
   bumpAbandoned: () => { abandoned++; },
