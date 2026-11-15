@@ -9,6 +9,12 @@ export type PetFx = {
   perTick: number;
   /** 肉的難度（對應 eco.dpay index）：0=簡單 */
   meatDiff: 0 | 1 | 2 | 3;
+  /** 有殼朝你飛來時自動撐傘（不吃冷卻、不對手痠） */
+  autoUmb?: boolean;
+  /** 自動擋下時走完美反彈（ShellReflect） */
+  autoReflect?: boolean;
+  /** 每隔幾秒朝阿婆丟一顆殼；未設則不丟。睡著時不丟 */
+  throwAmaSec?: number;
 };
 export type Pet = {
   id: string;
@@ -34,9 +40,9 @@ export const PETS: Pet[] = [
     id: 'pt_akang',
     n: '阿康',
     price: 3333,
-    desc: '作者的狗狗，淺米黃的台灣犬混種，尾巴捲在背上，右耳少了一截。會跟著你，每 10 秒生出一塊簡單蚵仔肉丟進碗裡。超過 10 秒沒動作會睡著，動一下就會醒來繼續工作。',
-    eff: '每 10 秒碗裡 +1 塊簡單蚵仔肉（掛機自動暫停）',
-    fx: { tickSec: 10, perTick: 1, meatDiff: 0 },
+    desc: '作者的狗狗，淺米黃的台灣犬混種，尾巴捲在背上，右耳少了一截。會跟著你，每 10 秒生出一塊簡單蚵仔肉丟進碗裡。有殼朝你飛來時（其他人丟的或阿婆丟的）會自動撐傘、完美反彈回去，而且每 15 秒會朝阿婆丟一顆殼。超過 10 秒沒動作會睡著，睡著時停止產肉和丟殼（擋傘還是會擋）。',
+    eff: '每 10 秒碗裡 +1 塊簡單蚵仔肉；自動撐傘完美反彈朝你飛來的殼；每 15 秒朝阿婆丟殼（掛機停止產肉與丟殼）',
+    fx: { tickSec: 10, perTick: 1, meatDiff: 0, autoUmb: true, autoReflect: true, throwAmaSec: 15 },
   },
 ];
 
@@ -156,7 +162,7 @@ export function petWorldScale(id: string | null | undefined): number {
   return id === 'pt_akang' ? 1 : 0.7;
 }
 
-/** 商店／預覽鏡頭：讓不同體型都框得剛好 */
+/** 商店／預覽鏡頭：後備值；實際取景請用 fitPetCamera */
 export function petPreviewFrame(id: string): { pos: THREE.Vector3; look: THREE.Vector3; fov: number; dist?: number } {
   if (id === 'pt_akang') {
     return { pos: new THREE.Vector3(0.18, 0.2, 0.72), look: new THREE.Vector3(0, 0.13, 0), fov: 32 };
@@ -169,6 +175,73 @@ export function petThumbFrame(id: string): { pos: THREE.Vector3; look: THREE.Vec
     return { pos: new THREE.Vector3(0.16, 0.18, 0.62), look: new THREE.Vector3(0, 0.12, 0), fov: 34 };
   }
   return { pos: new THREE.Vector3(0, 0.17, 0.78), look: new THREE.Vector3(0, 0.13, 0), fov: 32 };
+}
+
+const _fitBox = new THREE.Box3();
+const _fitCenter = new THREE.Vector3();
+const _fitDir = new THREE.Vector3();
+
+function petFitVisible(o: THREE.Object3D) {
+  let p: THREE.Object3D | null = o;
+  while (p) {
+    if (!p.visible || p.name === 'petSleep') return false;
+    p = p.parent;
+  }
+  return true;
+}
+
+/**
+ * 依模型包圍盒／包圍球擺鏡頭（加邊距）。
+ * yawInvariant：以 Y 軸旋轉任意角度時全身仍入鏡（商店可拖曳預覽用）。
+ */
+export function fitPetCamera(
+  camera: THREE.PerspectiveCamera,
+  obj: THREE.Object3D,
+  opts?: { margin?: number; yawInvariant?: boolean; dir?: THREE.Vector3; fov?: number },
+) {
+  const margin = opts?.margin ?? 1.22;
+  if (opts?.fov != null) camera.fov = opts.fov;
+  obj.updateWorldMatrix(true, true);
+  _fitBox.makeEmpty();
+  obj.traverse(o => {
+    if (!petFitVisible(o)) return;
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.geometry) return;
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    const bb = m.geometry.boundingBox;
+    if (!bb || bb.isEmpty()) return;
+    _fitBox.union(bb.clone().applyMatrix4(m.matrixWorld));
+  });
+  if (_fitBox.isEmpty()) _fitBox.setFromObject(obj);
+  _fitBox.getCenter(_fitCenter);
+  let radius: number;
+  if (opts?.yawInvariant !== false) {
+    const min = _fitBox.min, max = _fitBox.max;
+    let r = 0;
+    for (const x of [min.x, max.x]) for (const z of [min.z, max.z]) r = Math.max(r, Math.hypot(x, z));
+    const midY = (min.y + max.y) * 0.5;
+    const halfH = (max.y - min.y) * 0.5;
+    radius = Math.hypot(r, halfH);
+    _fitCenter.set(0, midY, 0);
+  } else {
+    const sph = new THREE.Sphere();
+    _fitBox.getBoundingSphere(sph);
+    radius = sph.radius;
+    _fitCenter.copy(sph.center);
+  }
+  radius = Math.max(radius, 0.05) * margin;
+  const fov = camera.fov * Math.PI / 180;
+  const aspect = Math.max(0.001, camera.aspect);
+  const distV = radius / Math.sin(fov / 2);
+  const distH = radius / Math.sin(Math.atan(Math.tan(fov / 2) * aspect));
+  const dist = Math.max(distV, distH);
+  if (opts?.dir) _fitDir.copy(opts.dir).normalize();
+  else _fitDir.set(0.36, 0.28, 1).normalize();
+  camera.position.copy(_fitCenter).addScaledVector(_fitDir, dist);
+  camera.near = Math.max(0.02, dist * 0.08);
+  camera.far = Math.max(10, dist + radius * 6);
+  camera.lookAt(_fitCenter);
+  camera.updateProjectionMatrix();
 }
 
 /** 依 id 建立寵物模型；未知 id 回 null */
@@ -243,27 +316,29 @@ export function makeAkang(): THREE.Group {
     box(0.007, 0.007, 0.004, sparkM, s * 0.024, 0.02, -0.051, headG);
   }
 
-  // 立耳：寬底尖頂的三角楔，坐在頭頂上；右耳較短、耳尖外側缺一角
-  const earWedge = (notched: boolean, side: number, inner = false): THREE.ExtrudeGeometry => {
-    const baseW = inner ? 0.042 : 0.062;
-    const height = notched ? (inner ? 0.046 : 0.058) : (inner ? 0.07 : 0.088);
+  // 立耳：寬底尖頂三角楔坐在頭頂。左耳完整三角；右耳同底寬、頂端水平切平（梯形）
+  const EAR_BASE = 0.062;
+  const EAR_H = 0.088;
+  const EAR_CUT = 0.056; // 右耳切平高度（像把尖端剪掉）
+  const earWedge = (trap: boolean, inner = false): THREE.ExtrudeGeometry => {
+    const inset = inner ? 0.01 : 0;
+    const hw = (EAR_BASE - inset * 2) / 2;
+    const fullH = EAR_H - (inner ? 0.018 : 0);
+    const cutH = fullH * (EAR_CUT / EAR_H);
     const depth = inner ? 0.006 : 0.032;
-    const hw = baseW / 2;
     const s = new THREE.Shape();
-    if (!notched) {
+    if (!trap) {
       s.moveTo(-hw, 0);
       s.lineTo(hw, 0);
-      s.lineTo(0, height);
+      s.lineTo(0, fullH);
       s.closePath();
     } else {
-      // 外側（+X 為狗的右耳）切掉一角，整體較短
-      const o = side > 0 ? 1 : -1;
+      // 與左耳同一三角側邊，在 cutH 水平切平，成為完整梯形
+      const topW = hw * (1 - cutH / fullH);
       s.moveTo(-hw, 0);
       s.lineTo(hw, 0);
-      s.lineTo(o * hw * 0.2, height * 0.48);
-      s.lineTo(o * hw * 0.62, height * 0.38);
-      s.lineTo(o * hw * 0.04, height);
-      s.lineTo(-o * hw * 0.38, height * 0.5);
+      s.lineTo(topW, cutH);
+      s.lineTo(-topW, cutH);
       s.closePath();
     }
     const geo = new THREE.ExtrudeGeometry(s, {
@@ -276,11 +351,11 @@ export function makeAkang(): THREE.Group {
     geo.translate(0, 0, -depth / 2);
     return geo;
   };
-  const addEar = (x: number, notched: boolean) => {
+  const addEar = (x: number, trap: boolean) => {
     const eg = new THREE.Group();
     const side = x > 0 ? 1 : -1;
-    eg.add(new THREE.Mesh(earWedge(notched, side, false), tanM));
-    const inner = new THREE.Mesh(earWedge(notched, side, true), pinkM);
+    eg.add(new THREE.Mesh(earWedge(trap, false), tanM));
+    const inner = new THREE.Mesh(earWedge(trap, true), pinkM);
     inner.position.z = -0.014;
     eg.add(inner);
     // 坐在頭頂兩側，略向外張

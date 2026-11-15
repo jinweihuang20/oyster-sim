@@ -25,6 +25,16 @@ function num(v: unknown): number | undefined {
   }
   return undefined;
 }
+function flag(v: unknown): boolean | undefined {
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number' && Number.isFinite(v)) return v !== 0;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    if (s === 'true' || s === '1' || s === 'yes') return true;
+    if (s === 'false' || s === '0' || s === 'no') return false;
+  }
+  return undefined;
+}
 
 function applyFx(target: Fx, o: ItemStatFields) {
   const keys: (keyof Fx)[] = ['bowl', 'keep', 'speed', 'pearl', 'nag', 'throw', 'dmg', 'luck', 'steal'];
@@ -88,6 +98,10 @@ export function applyItemStats(items: ItemStatsMap | null | undefined) {
       const perTick = num(o.perTick); if (perTick != null && perTick >= 1) p.fx.perTick = Math.floor(perTick);
       const meatDiff = num(o.meatDiff);
       if (meatDiff != null) p.fx.meatDiff = Math.max(0, Math.min(3, Math.floor(meatDiff))) as 0 | 1 | 2 | 3;
+      const autoUmb = flag(o.autoUmb); if (autoUmb != null) p.fx.autoUmb = autoUmb;
+      const autoReflect = flag(o.autoReflect); if (autoReflect != null) p.fx.autoReflect = autoReflect;
+      const throwAmaSec = num(o.throwAmaSec);
+      if (throwAmaSec != null) p.fx.throwAmaSec = throwAmaSec > 0 ? throwAmaSec : undefined;
     } else if (kind === 'med') {
       const m = MEDS.find(x => x.id === id); if (!m) continue;
       const n = str(o.n); if (n) m.n = n;

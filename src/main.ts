@@ -1,4 +1,4 @@
-import { HQ_SEAT_SLOT } from './plaza/layout';
+import { HQ_SEAT_SLOT, isPlazaAber } from './plaza/layout';
 import { qtyHtml, bindQty, getQty, resetQty } from './shop/qty';
 import {
   initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl, setGeoLowDetail,
@@ -333,15 +333,27 @@ let petMesh: THREE.Group | null = null;
 let petCurId: string | null = null;
 /** 蓄積秒數；AFK 期間不累積 */
 let petAcc = 0;
+/** 寵物朝阿婆丟殼的蓄積秒數；睡著／不在工位時不累積 */
+let petThrowAcc = 0;
+/** 寵物自動撐傘剩餘秒數（不走手痠、不佔用玩家按住狀態） */
+let petUmbT = 0;
+const PET_UMB_FLASH = 1.15;
+/** 廣場 ThrowAt／ShellReflect 共用節流（對齊伺服器 400／280ms） */
+let lastPlazaShellNet = 0;
+const PLAZA_THROW_GAP_MS = 400;
+const PLAZA_REFLECT_GAP_MS = 280;
+type PendingPetReflect = { to: string; from: { x: number; y: number; z: number }; back: { x: number; y: number; z: number } };
+const petReflectQ: PendingPetReflect[] = [];
 /** 寵物睡覺狀態（AFK 時 true，掛機符號顯示） */
 let petSleeping = false;
 let petBob = 0;
+let petReactT = 0;
 function refreshPet() {
   // 單挑競速：禁用寵物外觀與效果（也不同步給對手看）
   if (isPlazaRaceMode()) {
     if (petMesh) { petAnchor.remove(petMesh); petMesh = null; }
     petCurId = null;
-    petAcc = 0;
+    petAcc = 0; petThrowAcc = 0; petUmbT = 0; petReactT = 0;
     petSleeping = false;
     petAnchor.visible = false;
     if (isPlazaActive()) void plazaPushCosmetics();
@@ -352,7 +364,7 @@ function refreshPet() {
   if (wantId === petCurId) return;
   if (petMesh) { petAnchor.remove(petMesh); petMesh = null; }
   petCurId = wantId;
-  petAcc = 0; petSleeping = false;
+  petAcc = 0; petThrowAcc = 0; petUmbT = 0; petReactT = 0; petSleeping = false;
   if (!wantId) return;
   petMesh = makePet(wantId);
   if (petMesh) {
@@ -2113,7 +2125,7 @@ function discardShell() {
     : pileSpot();
   const sh = new THREE.Mesh(halfGeo, shellBotMat);
   fly(sh, from, to, 0.6, 0.5, () => scene.remove(sh));
-  if (plazaMode) void plazaShellFx(from, to);
+  if (plazaMode) { stampPlazaNet(); void plazaShellFx(from, to); }
   setPhase('busy'); later(0.5, goPick);
 }
 // ----- 丟肉：拿著肉時點阿婆，把肉丟到她頭上（不算入碗、不算錢）-----
@@ -2371,6 +2383,7 @@ function plazaWarnStart(e: PlazaShellEvent) {
   const w: PlazaWarn = { e, left: PLAZA_WINDUP, w0: PLAZA_WINDUP, warned: !gearOn('radio'), gen: plazaShellGen };
   if (w.warned) SFX.alert();
   plazaWarns.push(w);
+  if (petAutoGuard().open) beginPetUmbGuard(Math.max(PET_UMB_FLASH, PLAZA_WINDUP + 0.7));
 }
 /** 每幀：倒數、收音機晚亮、時間到才飛殼並在落地時結算 */
 function plazaWarnTick(dt: number): PlazaWarn | null {
@@ -2412,9 +2425,11 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
   if (!plazaMode || state !== 'play' || !isPlazaActive()) return;
   if (!plazaShellCoordsOk(e)) return;
   try {
-    const U = umbNow(), up = umbT > 0 && umbAge() >= U.open, covered = up && Math.random() < U.cover;
+    const guard = petAutoGuard();
+    if (guard.open) { beginPetUmbGuard(); petBark(); }
+    const U = umbNow(), up = (umbT > 0 && umbAge() >= U.open) || guard.open, covered = guard.open || (up && Math.random() < U.cover);
     if (up && !covered) toast('傘縫裡鑽進來了！', '#ff9a8a');
-    if (covered && umbAge() - U.open < U.perf) {
+    if (covered && (guard.perfect || umbAge() - U.open < U.perf)) {
       reflects++; blockStreak++; umbHit3(new THREE.Vector3(e.toX, e.toY, e.toZ)); SFX.boing(); tone(1800, 0.08, 0.15, 'square');
       toast(`完美反彈！砸回 ${e.fromNick || '別人'}！✨`, '#ffe36a'); shake = 0.08;
       const from = { x: e.toX, y: e.toY, z: e.toZ };
@@ -2422,7 +2437,11 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
       const sh = new THREE.Mesh(halfGeo, shellBotMat);
       fly(sh, new THREE.Vector3(from.x, from.y, from.z), new THREE.Vector3(back.x, back.y, back.z), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); });
       // 通知原丟殼者：被反彈砸中（工寮反彈打中阿婆同概念）
-      if (e.fromConnId) void plazaShellReflect(e.fromConnId, from, back);
+      // 阿康連發時排隊，避開伺服器 280ms 節流把後續反彈丟掉
+      if (e.fromConnId) {
+        if (guard.perfect) queuePlazaReflect(e.fromConnId, from, back);
+        else void plazaShellReflect(e.fromConnId, from, back);
+      }
     } else if (covered) {
       blocks++; blockStreak++; SFX.boing(); toast(`擋住 ${e.fromNick || '別人'} 的殼！`, '#9be37a');
       if (e.fromConnId) void plazaShellBlocked(e.fromConnId);
@@ -2778,6 +2797,7 @@ function throwShell() {
         noteHostileThrow();
         const to = new THREE.Vector3(pt.head.x, pt.head.y, pt.head.z);
         fly(sh, from, to, 0.5, 0.3, () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); } catch { /* */ } });
+        stampPlazaNet();
         void plazaThrowAt(pt.connId, from, to);
       } else {
         // 沒瞄人：當丟地上／殼堆，不破和平
@@ -2785,6 +2805,7 @@ function throwShell() {
         const a = aimPoint(); a.y = 0.02;
         if (!finite3(a)) a.set(from.x, 0.02, from.z - 1);
         fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh)));
+        stampPlazaNet();
         void plazaShellFx(from, a);
       }
     } catch (err) {
@@ -2810,6 +2831,40 @@ function throwShell() {
   setPhase('busy'); later(0.6, goPick);
 }
 // ----- 7. 阿婆擲殼仔 + 雨傘 -----
+function petAutoGuard() {
+  const p = petNow();
+  if (!p || isPlazaRaceMode() || !petCurId) return { open: false, perfect: false };
+  const open = !!(p.fx.autoUmb || p.fx.autoReflect);
+  return { open, perfect: !!p.fx.autoReflect };
+}
+function beginPetUmbGuard(sec = PET_UMB_FLASH) {
+  const wasOff = petUmbT <= 0 && !(umbHeld && umbT > 0);
+  petUmbT = Math.max(petUmbT, sec);
+  if (wasOff) { try { umb.visible = true; SFX.pop(); } catch { /* */ } }
+}
+function petBark() {
+  petReactT = 0.35;
+  try {
+    tone(620, 0.06, 0.12, 'square');
+    tone(880, 0.07, 0.1, 'square', 0.07);
+  } catch { /* */ }
+  petToast('阿康擋下來了！', '#ffe36a');
+}
+function plazaNetReady(gap: number) {
+  return performance.now() - lastPlazaShellNet >= gap;
+}
+function stampPlazaNet() { lastPlazaShellNet = performance.now(); }
+function flushPetPlazaNet() {
+  if (!petReflectQ.length || !plazaNetReady(PLAZA_REFLECT_GAP_MS)) return;
+  const j = petReflectQ.shift()!;
+  stampPlazaNet();
+  void plazaShellReflect(j.to, j.from, j.back);
+}
+function queuePlazaReflect(to: string, from: { x: number; y: number; z: number }, back: { x: number; y: number; z: number }) {
+  petReflectQ.push({ to, from, back });
+  flushPetPlazaNet();
+}
+
 function windUp(n: Npc) {
   if (n.windup > 0 || state !== 'play' || stunned(n)) return;
   n.windup = Math.max(0.45, 1.0 - (n.grudge ?? 0) * 0.005);
@@ -2818,6 +2873,7 @@ function windUp(n: Npc) {
   n.look = Math.max(n.windup + 0.4, 1.6); // 蓄力全程盯著玩家
   n.distract = 0;
   if (n.warned) SFX.alert();
+  if (petAutoGuard().open) beginPetUmbGuard(Math.max(PET_UMB_FLASH, (n.windup || 1) + 0.7));
 }
 // 收音機開著：預警變晚（剩一半時間才出現，至少 0.5 秒）
 const warnLead = (n: Npc) => Math.min(n.w0 ?? n.windup, Math.max(0.5, (n.w0 ?? n.windup) * 0.5));
@@ -2831,9 +2887,11 @@ function throwOne(n: Npc) {
   if (state !== 'play') return;
   const sh = new THREE.Mesh(pick(HALF_GEOS), shellM(greyPick())); const from = worldOf(n.head); SFX.whoosh();
   fly(sh, from, () => camera.position.clone().add(new THREE.Vector3(0, -0.05, 0)), 0.55, 0.4, () => {
-    const U = umbNow(), up = umbT > 0 && umbAge() >= U.open, covered = up && Math.random() < U.cover;
+    const guard = petAutoGuard();
+    if (guard.open) { beginPetUmbGuard(); petBark(); }
+    const U = umbNow(), up = (umbT > 0 && umbAge() >= U.open) || guard.open, covered = guard.open || (up && Math.random() < U.cover);
     if (up && !covered) toast('傘傷細，殼仔對邊仔鑽入來！', '#ff9a8a');
-    if (covered && umbAge() - U.open < U.perf) { // 拄開好的時陣 = 完美反彈
+    if (covered && (guard.perfect || umbAge() - U.open < U.perf)) { // 拄開好的時陣 = 完美反彈；阿康自動擋一律完美
       reflects++; blockStreak++; umbHit3(sh.position); SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
       fly(sh, sh.position.clone(), () => worldOf(n.head), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); addGrudge(n, Math.round(20 * U.reflect)); npcHurt(n, U.reflect); });
     } else if (covered) { umbHit3(sh.position); scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋住了！啵嗯～', '#9be37a'); say(n, pick(['怎麼會有雨傘啦！', '狡怪喔你！', '什麼時候拿出來的！']), 2.5); }
@@ -4147,15 +4205,82 @@ function updatePetAnchor() {
   }
 }
 
+/** 工寮／廣場：阿康朝阿婆丟殼。好友房不丟。廣場走 ThrowAt 並遵守 400ms 節流。 */
+function plazaSamePileAma(): PlazaAimTarget | null {
+  const mine = plazaMySeat();
+  if (!mine) return null;
+  const from = new THREE.Vector3();
+  petAnchor.getWorldPosition(from);
+  let best: PlazaAimTarget | null = null, bestD = 1e9;
+  for (const t of plazaAimTargets()) {
+    if (!t.isNpc || t.pileId !== mine.pileId) continue;
+    if (isPlazaAber(t) || t.carriedBy || !t.seated) continue;
+    if (t.phase === 'moon' || t.phase === 'carried') continue;
+    if (!t.head || ![t.head.x, t.head.y, t.head.z].every(Number.isFinite)) continue;
+    const d = (t.head.x - from.x) ** 2 + (t.head.z - from.z) ** 2;
+    if (!best || d < bestD) { best = t; bestD = d; }
+  }
+  return best;
+}
+function yardClosestAma(): Npc | null {
+  if (!npcs.length || !petMesh) return null;
+  const from = new THREE.Vector3();
+  petAnchor.getWorldPosition(from);
+  let best: Npc | null = null, bestD = 1e9;
+  for (const n of npcs) {
+    if (!n.g.visible) continue;
+    const d = from.distanceToSquared(worldOf(n.head));
+    if (d < bestD) { best = n; bestD = d; }
+  }
+  return best;
+}
+function tryPetThrowAma(): boolean {
+  if (state !== 'play' || tut || isPlazaRaceMode()) return false;
+  if (roomPlay || isRoomActive()) return false;
+  if (flyers.length > 40) return false;
+  const from = new THREE.Vector3();
+  petAnchor.getWorldPosition(from); from.y += 0.12;
+  if (plazaMode) {
+    if (!isPlazaActive() || !plazaSeated()) return false;
+    const t = plazaSamePileAma();
+    if (!t) return false;
+    if (!plazaNetReady(PLAZA_THROW_GAP_MS)) return false;
+    const to = new THREE.Vector3(t.head.x, t.head.y, t.head.z);
+    const sh = new THREE.Mesh(halfGeo, shellBotMat);
+    SFX.whoosh();
+    fly(sh, from.clone(), to, 0.5, 0.3, () => { try { scene.remove(sh); SFX.hitNpc(); } catch { /* */ } });
+    stampPlazaNet();
+    void plazaThrowAt(t.connId, from, to);
+    petToast(`阿康朝${t.nick || '阿婆'}丟了一顆殼`, '#ffb070');
+    return true;
+  }
+  const n = yardClosestAma();
+  if (!n) return false;
+  const sh = new THREE.Mesh(pick(HALF_GEOS), shellM(greyPick()));
+  SFX.whoosh();
+  const target = n;
+  fly(sh, from.clone(), () => worldOf(target.head), 0.5, 0.3, () => {
+    scene.remove(sh);
+    SFX.hitNpc();
+    addGrudge(target, 20);
+    anger(target, SCOLD_SHELL, 0.6);
+    npcHurt(target);
+    petToast(`阿康丟中${target.name}！`, '#ffb070');
+    updHud();
+  });
+  return true;
+}
+
 /** 寵物每幀：工寮剝蚵／廣場都會動；玩家 10 秒沒操作就睡著暫停；累積到 tickSec 丟一塊肉進碗（只有工寮才真的入碗） */
 function petTick(dt: number) {
   // 單挑：完全關掉寵物（不產肉、不顯示）
   if (isPlazaRaceMode()) {
     petAnchor.visible = false;
-    petAcc = 0;
+    petAcc = 0; petThrowAcc = 0; petUmbT = 0;
     setPetSleeping(false);
     return;
   }
+  flushPetPlazaNet();
   if (!petMesh || !petCurId) return;
   const p = petNow(); if (!p) return;
   // 位置先更新，不論啟用與否（才不會從舊位置閃現）
@@ -4196,11 +4321,26 @@ function petTick(dt: number) {
     petBob += dt * (afk ? 0.6 : 2.2);
     petMesh.position.y = Math.sin(petBob) * (afk ? 0.006 : 0.012);
   }
+  if (petReactT > 0) {
+    petReactT = Math.max(0, petReactT - dt);
+    const k = Math.sin((1 - petReactT / 0.35) * Math.PI);
+    petMesh.scale.setScalar(petWorldScale(petCurId) * (1 + 0.07 * k));
+  } else {
+    petMesh.scale.setScalar(petWorldScale(petCurId));
+  }
   if (afk || !canProduce) return;
   petAcc += dt;
   if (petAcc >= p.fx.tickSec) {
     petAcc = 0;
     petDropMeat(p);
+  }
+  const throwSec = p.fx.throwAmaSec;
+  if (throwSec && throwSec > 0 && !roomPlay && !isRoomActive()) {
+    petThrowAcc += dt;
+    if (petThrowAcc >= throwSec) {
+      if (tryPetThrowAma()) petThrowAcc = 0;
+      else petThrowAcc = throwSec;
+    }
   }
 }
 /** 寵物提示：右下角小膠囊，不搶大 toast 的戲 */
@@ -4986,7 +5126,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) return true;
       return false;
     },
-    getUmb: () => umbHeld || umbT > 0,
+    getUmb: () => umbHeld || umbT > 0 || petUmbT > 0,
     getEco: () => mix.eco,
     hasOwnPet: () => !!(petNow() && petRidesHead(petNow()!.id) && !(mgActive || plazaOnMg()) && !isPlazaRaceMode()),
     selfHatLift: () => headTopLift(equipNow('head').id),
@@ -5679,7 +5819,10 @@ function frameBody() {
   tension = Math.max(0, tension - rdt * 1.6);
   if (umbHeld) { umbT = Math.max(0, umbT - rdt); if (umbT <= 0) { umbHeld = false; umbTired = true; $('umbBtn').classList.remove('held'); toast('手痠了，放開再重新撐傘', '#ffcf8a'); } } else umbT = 0; $('umbBtn').classList.toggle('cd', umbTired); { const b = $('umbBtn'), c = $('umbCd'); if (umbHeld) { const f = umbT / Math.max(0.1, umbLen); b.style.setProperty('--p', `${(f * 100).toFixed(1)}%`); c.textContent = `${umbT.toFixed(1)}s`; b.classList.toggle('low', umbT < 1.2); } else { c.textContent = ''; b.classList.remove('low'); } }
   tickPuffUi(rdt);
-  const us = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0; umbS = us; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
+  if (petUmbT > 0) petUmbT = Math.max(0, petUmbT - rdt);
+  const heldUs = umbT > 0 ? Math.min(1, umbAge() / Math.max(0.1, umbNow().open + 0.05), umbT * 6) : 0;
+  const petUs = petUmbT > 0 ? Math.min(1, petUmbT * 8) : 0;
+  const us = Math.max(heldUs, petUs); umbS = us; umb.visible = us > 0; umb.scale.setScalar(0.3 + 0.7 * us); umb.rotation.z = Math.sin(t * 20) * 0.05 * us;
   let warnNpc: Npc | null = null;
   if (state === 'play') {
     // 廣場休閒：不倒數、不自動收工
@@ -6283,7 +6426,7 @@ bindRoom({
     for (const c of walkKeys) if (/Key[WASD]|Arrow/.test(c)) return true;
     return false;
   },
-  getUmb: () => umbHeld || umbT > 0,
+  getUmb: () => umbHeld || umbT > 0 || petUmbT > 0,
   getOutfit: () => ({
     hair: equipNow('hair').id,
     head: equipNow('head').id,

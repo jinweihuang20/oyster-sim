@@ -1,6 +1,6 @@
 /** 商店卡片的寵物 3D 縮圖：共用一台離屏 renderer，依 id 快取 dataURL（啟動後畫一次就夠） */
 import * as THREE from 'three';
-import { findPet, makePet, petThumbFrame } from './pets';
+import { findPet, makePet, fitPetCamera } from './pets';
 
 const TW = 160, TH = 160;
 const cache = new Map<string, string>();
@@ -51,15 +51,17 @@ export function renderPetThumb(petId: string): string | null {
   let mesh: THREE.Group | null = null;
   mesh = makePet(petId);
   if (!mesh) return null;
-  const fr = petThumbFrame(petId);
-  camera.fov = fr.fov;
-  camera.position.copy(fr.pos);
-  camera.lookAt(fr.look);
-  camera.updateProjectionMatrix();
   scene.add(mesh);
-  // 面向相機（模型前方為 -z，相機在 +z 側），再微轉 ~10° 做 3/4 視角
-  // 阿康再略轉向右，讓右耳缺角入鏡
+  // 面向相機（模型前方為 -z，相機在 +z 側），再微轉做 3/4 視角
+  // 阿康再略轉向右，讓右耳平切入鏡
   mesh.rotation.y = Math.PI + (petId === 'pt_akang' ? 0.42 : 0.18);
+  mesh.updateMatrixWorld(true);
+  fitPetCamera(camera, mesh, {
+    margin: 1.2,
+    yawInvariant: false,
+    fov: 32,
+    dir: new THREE.Vector3(0.22, 0.26, 1),
+  });
   try {
     renderer.render(scene, camera);
     const url = renderer.domElement.toDataURL('image/png');
