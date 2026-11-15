@@ -1,5 +1,5 @@
 import * as signalR from '@microsoft/signalr';
-import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd } from './types';
+import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd, PlazaFoodQueue } from './types';
 import { normSeatWish, normSeatWishEnd } from './types';
 import { normFlagDto, type PlazaFlagState } from './flags';
 import { raceHubUrl } from '../race/hubClient';
@@ -39,6 +39,12 @@ export type PlazaHubHandlers = {
   onPlazaPuff?: (e: { connId: string; pid: string; start: boolean; holdMs: number }) => void;
   onFlagUpsert?: (f: PlazaFlagState) => void;
   onSeatWish?: (w: PlazaSeatWish) => void;
+  /** 食材攤排隊狀態變更 */
+  onFoodQueue?: (q: PlazaFoodQueue) => void;
+  /** 被食材攤踢出（timeout＝180 秒到；away＝輪到時不在） */
+  onFoodKick?: (reason: string) => void;
+  /** 輪到自己買食材 */
+  onFoodTurn?: (q: PlazaFoodQueue) => void;
   onSeatWishEnd?: (e: PlazaSeatWishEnd) => void;
   /** 連線中斷，開始自動重連 */
   onReconnecting?: (attempt: number) => void;
@@ -265,6 +271,9 @@ export class PlazaClient {
     conn.on('NpcSay', (m: any) => {
       try { this.handlers.onNpcSay?.(normChatDto(m)); } catch (err) { console.error('NpcSay', err); }
     });
+    conn.on('FoodQueue', (q: any) => { const n = normFoodQueue(q); if (n) this.handlers.onFoodQueue?.(n); });
+    conn.on('FoodTurn', (q: any) => { const n = normFoodQueue(q); if (n) this.handlers.onFoodTurn?.(n); });
+    conn.on('FoodKick', (e: any) => this.handlers.onFoodKick?.(String(e?.reason ?? e?.Reason ?? '')));
     conn.on('SeatWish', (w: any) => {
       try { const n = normSeatWish(w); if (n) this.handlers.onSeatWish?.(n); } catch (err) { console.error('SeatWish', err); }
     });
@@ -388,6 +397,8 @@ export class PlazaClient {
       const flags = Array.isArray(rawF) ? rawF.map(normFlagDto) : undefined;
       const rawW = (r as any).wishes ?? (r as any).Wishes ?? [];
       const wishes = Array.isArray(rawW) ? rawW.map(normSeatWish).filter((x: PlazaSeatWish | null): x is PlazaSeatWish => !!x) : [];
+      const fq = normFoodQueue((r as any).foodQueue ?? (r as any).FoodQueue);
+      if (fq) queueMicrotask(() => this.handlers.onFoodQueue?.(fq));
       return { ok: true, snap: r.snap, token: this.token, chat, grills, carryNpc, flags, wishes };
     } catch (e: any) {
       return { ok: false, err: e?.message || 'join_fail' };
@@ -451,7 +462,21 @@ export class PlazaClient {
     } catch (e: any) { return { ok: false as const, err: e?.message || 'change_fail', snap: undefined as PlazaSnapshot | undefined, mg: undefined as { expireAt: number; ammo: number } | undefined }; }
   }
 
-  async leaveSeat() {
+  /** 食材攤：排隊（沒人時直接輪到，mode=use） */
+  async foodQueueJoin(): Promise<{ ok: boolean; err?: string; mode?: string; state?: PlazaFoodQueue | null }> {
+    if (!this.conn) return { ok: false, err: 'no_conn' };
+    try {
+      const r: any = await this.conn.invoke('FoodQueueJoin');
+      return { ok: !!r?.ok, err: r?.err, mode: r?.mode, state: normFoodQueue(r?.state) };
+    } catch (e: any) { return { ok: false, err: e?.message || 'food_fail' }; }
+  }
+  /** 食材攤：離開隊伍／離開攤子 */
+  async foodQueueLeave() {
+    if (!this.conn) return null;
+    try { const r: any = await this.conn.invoke('FoodQueueLeave'); return normFoodQueue(r?.state); } catch { return null; }
+  }
+
+    async leaveSeat() {
     if (!this.conn) return;
     try { await this.conn.invoke('LeaveSeat'); } catch { /* ignore */ }
   }
@@ -736,4 +761,19 @@ export class PlazaClient {
       return { ok: false as const, err: 'nosup', flag: undefined as PlazaFlagState | undefined };
     }
   }
+}
+
+export function normFoodQueue(q: any): PlazaFoodQueue | null {
+  if (!q || typeof q !== 'object') return null;
+  const g = (k: string) => q[k] ?? q[k[0].toUpperCase() + k.slice(1)];
+  const raw = g('queue');
+  return {
+    userConn: String(g('userConn') ?? ''), userPid: String(g('userPid') ?? ''), userNick: String(g('userNick') ?? ''),
+    endsAt: fin(g('endsAt')), now: fin(g('now')), useMs: fin(g('useMs'), 180_000), max: fin(g('max'), 10),
+    queue: Array.isArray(raw) ? raw.map((e: any) => ({
+      connId: String(e?.connId ?? e?.ConnId ?? ''), pid: String(e?.pid ?? e?.Pid ?? ''),
+      nick: String(e?.nick ?? e?.Nick ?? ''), index: fin(e?.index ?? e?.Index),
+    })) : [],
+    seq: fin(g('seq')),
+  };
 }

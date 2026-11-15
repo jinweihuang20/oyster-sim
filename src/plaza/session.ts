@@ -6,14 +6,14 @@ import {
   isSmokePile, isLeisurePile, isRestPile, isMgPile, plazaSmokeObstacles, isPlazaAber, SMOKE_PILE_ID, SMOKE_ABER_SLOT,
   MG_PILE_ID, MG_SIT_PRICE, MG_SIT_AMMO, MG_SIT_MS, CENTER_PILE_ID, CENTER_SEAT_COUNT,
   type PlazaSeatRef, type PlazaSpawnMemory,
-  SHED_DOORS, shedDoorAt, plazaShedObstacles, foodStallAt,
+  SHED_DOORS, shedDoorAt, plazaShedObstacles, foodStallAt, foodQueueSlot, foodQueueAt, foodStallSpawn,
 } from './layout';
 import { plazaShedPosts } from './props';
 import { shedName } from './shedRow';
 import { plazaStallObstacles } from './ambiance';
 import { buildPlazaMapMarkers, drawPlazaMap } from './map';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
-import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd } from './types';
+import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd, PlazaFoodQueue } from './types';
 import { plazaDisplayName, normSeatWishEnd } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 import { plazaSoftCapClient } from '../core/economy';
@@ -129,6 +129,10 @@ export type PlazaDeps = {
   openShedDoor?: (loc: string) => void;
   /** 站在食材攤圓圈按「逛食材攤」 */
   openFoodStall?: () => void;
+  /** 食材攤時間到／被踢：關掉購買畫面 */
+  closeFoodStall?: () => void;
+  /** 食材攤購買畫面是否開著 */
+  foodStallOpen?: () => boolean;
   /** 自己裝備了寵物（坐姿時寵物在頭頂、聊天泡泡要讓位） */
   hasOwnPet?: () => boolean;
   /** 自己頭上帽子高出髮蓋頂的量（公尺）；有寵物+坐姿時聊天泡泡要再多抬這麼多 */
@@ -185,6 +189,18 @@ let nearPlace: PlazaSeatRef | null = null;
 let nearShed: string | null = null;
 /** 站在食材攤圓圈內（一般廣場才有，休閒房／競速不開） */
 let nearFood = false;
+/** 食材攤排隊（伺服器權威）；foodQOff＝伺服器時間−本機時間 */
+let foodQ: PlazaFoodQueue | null = null;
+let foodQOff = 0;
+/** 舊伺服器沒有排隊方法：直接開購買畫面 */
+let foodQOk = true;
+let nearFoodQ = false;
+let foodBusy = false;
+/** 排隊鎖位：目前站位（平滑往目標走） */
+let foodPin: { x: number; z: number } | null = null;
+let foodPinAt = 0;
+/** 剛輪到：先走到攤前圓圈 */
+let foodGlide = false;
 /** 新伺服器 Join 會帶 carryNpc；舊服沒有則不顯示抱起／放下 */
 let carryNpcOk = false;
 /** 新伺服器 Join 會帶 flags 陣列；舊服沒有則不顯示插旗 */
@@ -268,6 +284,7 @@ export function plazaWalkClamp(p: { x: number; z: number }) {
     return;
   }
   plazaClampWalk(p);
+  foodPinWalk(p);
 }
 export function plazaPileObs(): [number, number, number][] {
   const out = pileObstacles();
@@ -392,7 +409,8 @@ export function plazaNearPrompt(): PlazaNearPrompt | null {
       shedLoc: nearShed,
     };
   }
-  if (nearFood) return { kind: 'shop', info: '食材攤・地瓜粉、青菜、雞蛋和醬料', btn: '逛食材攤', icon: 'ic-bowl' };
+  const fq = foodQPrompt();
+  if (fq) return fq;
   if (carryNpcOk && myCarriedNpc()) {
     if (!nearPlace) return null;
     const w = seatWishes.find(x => x.npcConnId === myCarriedNpc()!.connId);
@@ -688,7 +706,7 @@ function forceResetPlazaLocal() {
   try { ui?.remove(); } catch { /* */ }
   ui = null;
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear();
-  deps = null; near = null; nearShed = null; nearFood = false; nearCarry = null; nearPlace = null;
+  deps = null; near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true;
   carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
   teardownPlayersChrome();
@@ -704,7 +722,7 @@ export function openPlaza(D: PlazaDeps) {
   partyMode = !!(!raceMode && (D.party?.code || D.party?.create));
   raceBooting = !!D.race?.code;
   seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
   raceFairSeed = 0; raceFillGen = 0;
   if (raceMode) {
     document.body.classList.add('raceMode');
@@ -759,7 +777,7 @@ async function abortEnter(D: PlazaDeps, err?: string) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
   removeFlagBtn();
   D.onEnterFail?.(err);
 }
@@ -1127,6 +1145,9 @@ function wireClient(D: PlazaDeps) {
     },
     onSeatWish: (w) => { upsertSeatWish(w); },
     onSeatWishEnd: (e) => { applySeatWishEnd(e); },
+    onFoodQueue: (q) => applyFoodQ(q),
+    onFoodTurn: (q) => { applyFoodQ(q); onFoodTurn(); },
+    onFoodKick: (reason) => onFoodKick(reason),
     onShellThrow: (e) => { try { D.onShellThrow?.(e); } catch (err) { console.error('onShellThrow', err); } },
     onShellInbound: (e) => { try { D.onShellInbound?.(e); } catch (err) { console.error('onShellInbound', err); } },
     onShellReflectHit: (e) => { try { D.onShellReflectHit?.(e); } catch (err) { console.error('onShellReflectHit', err); } },
@@ -1985,14 +2006,14 @@ function markCarryUnsupported(err?: string) {
 /** 走動時更新附近空位／可抱的阿婆（資訊只走遊戲 #seatCard） */
 export function plazaUpdateNear(wx: number, wz: number) {
   if (!active || seated) {
-    near = null; nearCarry = null; nearPlace = null; nearShed = null; nearFood = false;
+    near = null; nearCarry = null; nearPlace = null; nearShed = null; nearFood = false; nearFoodQ = false;
     view?.highlightNear(null);
     return null;
   }
   near = null; nearCarry = null; nearPlace = null;
   // 競速：關工寮門／抱人；不可換位（開局已對座）
   if (raceMode) {
-    nearShed = null; nearFood = false;
+    nearShed = null; nearFood = false; nearFoodQ = false;
     near = null;
     view?.highlightNear(null);
     return null;
@@ -2001,7 +2022,8 @@ export function plazaUpdateNear(wx: number, wz: number) {
   nearShed = shedDoorAt(wx, wz);
   if (nearShed) { nearFood = false; view?.highlightNear(null); return null; }
   nearFood = !partyMode && foodStallAt(wx, wz);
-  if (nearFood) { view?.highlightNear(null); return null; }
+  nearFoodQ = !partyMode && !nearFood && foodJoinSlot() != null && foodQueueAt(foodJoinSlot()!, wx, wz);
+  if (nearFood || nearFoodQ || foodQueueIdx() >= 0) { view?.highlightNear(null); return null; }
   if (carryNpcOk && myCarriedNpc()) {
     const n = nearestFreePlaceSeat(wx, wz, takenSet(true), SIT_DIST);
     nearPlace = n ? { pileId: n.pileId, slot: n.slot } : null;
@@ -2071,7 +2093,8 @@ export async function plazaTrySit(mgPay: PlazaMgPay = 'auto'): Promise<boolean> 
     deps.openShedDoor?.(nearShed);
     return false;
   }
-  if (nearFood) { deps.openFoodStall?.(); return false; }
+  if (foodQueueIdx() >= 0) { void plazaFoodLeave(); return false; }
+  if (nearFood || nearFoodQ) { void foodEnter(); return false; }
   if (carryNpcOk && myCarriedNpc()) {
     const seat = nearPlace ?? (() => {
       const n = nearestFreePlaceSeat(deps!.getWalkXZ().x, deps!.getWalkXZ().z, takenSet(true), SIT_DIST);
@@ -2369,8 +2392,9 @@ export function tickPlaza(dt: number) {
     }
   }
   if (!seated) plazaUpdateNear(p.x, p.z);
-  else { nearShed = null; nearFood = false; }
+  else { nearShed = null; nearFood = false; nearFoodQ = false; }
   view?.setFoodStallActive(nearFood);
+  foodQTick(p);
   if (view) for (const d of SHED_DOORS) view.setShedDoorState(d.loc, { locked: !(deps.shedUnlocked?.(d.loc) ?? true), active: nearShed === d.loc });
   placeChatFab();
   if (plazaMapIsOpen()) refreshPlazaMap();
@@ -2458,7 +2482,7 @@ export async function closePlaza(leaveSeat = true) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearShed = null; nearFood = false; nearCarry = null; nearPlace = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
   try { document.body.classList.remove('raceMode', 'partyMode'); } catch { /* */ }
   if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null, tag: myTag() });
@@ -2467,3 +2491,143 @@ export async function closePlaza(leaveSeat = true) {
 export function plazaEndCleanup() {
   plazaHideChrome(true);
 }
+
+/* ───────── 食材攤排隊 ───────── */
+
+function myConn() { return client?.connectionId ?? ''; }
+function foodIsUser() { return !!foodQ && !!foodQ.userConn && foodQ.userConn === myConn(); }
+function foodQueueIdx() { return foodQ ? foodQ.queue.findIndex(e => e.connId === myConn()) : -1; }
+function foodStallBusy() { return !!foodQ && (!!foodQ.userConn || foodQ.queue.length > 0); }
+/** 排隊圓圈的位次（隊伍最後面）；不需要排隊或已滿回 null */
+function foodJoinSlot(): number | null {
+  if (!foodQ || !foodQOk || partyMode || raceMode || !foodStallBusy() || foodIsUser() || foodQueueIdx() >= 0) return null;
+  return foodQ.queue.length < foodQ.max ? foodQ.queue.length : null;
+}
+/** 自己買食材剩下的毫秒 */
+export function plazaFoodLeftMs() {
+  if (!foodIsUser() || !foodQ) return 0;
+  return Math.max(0, foodQ.endsAt - (Date.now() + foodQOff));
+}
+const mmss = (ms: number) => { const t = Math.ceil(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+
+function applyFoodQ(q: PlazaFoodQueue) {
+  if (foodQ && q.seq < foodQ.seq) return;
+  const wasIdx = foodQueueIdx();
+  foodQ = q;
+  if (q.now > 0) foodQOff = q.now - Date.now();
+  const idx = foodQueueIdx();
+  if (idx >= 0 && !foodPin && deps) { const w = deps.getWalkXZ(); foodPin = { x: w.x, z: w.z }; foodPinAt = performance.now(); }
+  if (idx < 0 && !foodGlide) foodPin = null;
+  if (wasIdx > 0 && idx >= 0 && idx < wasIdx) deps?.toast(`隊伍往前，前面還有 ${idx} 人`, '#cfe3f5');
+}
+
+/** 站上圓圈按鈕：沒人就直接進，有人就排隊 */
+async function foodEnter() {
+  if (!deps || foodBusy) return;
+  if (foodIsUser() || !foodQOk || !client?.connected) { deps.openFoodStall?.(); return; }
+  foodBusy = true;
+  try {
+    const r = await client.foodQueueJoin();
+    if (!r.ok && /does not exist|MethodDoesNotExist|Unknown hub method|not be found|does not contain/i.test(r.err || '')) {
+      foodQOk = false; deps.openFoodStall?.(); return;
+    }
+    if (r.state) applyFoodQ(r.state);
+    if (!r.ok) {
+      const msg: Record<string, string> = { full: '排隊的人太多了，等一下再來', seated: '先站起來再排隊', carrying: '抱著人不能排隊', slow: '慢一點' };
+      deps.toast(msg[r.err ?? ''] ?? '排隊失敗，再試一次', '#ffb08a');
+      return;
+    }
+    if (r.mode === 'use') { foodGlide = false; foodPin = null; deps.openFoodStall?.(); }
+    else deps.toast(`已加入排隊，前面還有 ${Math.max(0, foodQueueIdx())} 人；輪到你會自動打開食材攤`, '#9be37a');
+  } finally { foodBusy = false; }
+}
+
+/** 離開隊伍／買完離開攤子 */
+export async function plazaFoodLeave() {
+  if (!client?.connected || (!foodIsUser() && foodQueueIdx() < 0)) return;
+  const wasQueued = foodQueueIdx() >= 0;
+  const st = await client.foodQueueLeave();
+  if (st) applyFoodQ(st);
+  foodPin = null; foodGlide = false;
+  if (wasQueued) deps?.toast('已離開隊伍', '#cfe3f5');
+}
+
+/** 能不能開食材攤畫面（輪到自己，或伺服器不支援排隊） */
+export function plazaFoodCanOpen() {
+  if (!active || partyMode || raceMode) return false;
+  if (!foodQOk || !foodQ) return true;
+  return foodIsUser();
+}
+
+function onFoodTurn() {
+  if (!deps) return;
+  deps.toast('輪到你了！買食材限時 3 分鐘', '#9be37a');
+  // 從隊伍走到攤前圓圈，再開畫面
+  const w = deps.getWalkXZ();
+  foodPin = { x: w.x, z: w.z }; foodPinAt = performance.now(); foodGlide = true;
+  deps.openFoodStall?.();
+}
+
+function onFoodKick(reason: string) {
+  deps?.closeFoodStall?.();
+  foodPin = null; foodGlide = false;
+  deps?.toast(reason === 'timeout' ? '3 分鐘到了，換下一位；還要買請重新排隊' : '輪到你時不在，已離開隊伍', '#ffb08a');
+}
+
+/** 排隊中鎖住位置，平滑跟著隊伍往前 */
+function foodPinWalk(p: { x: number; z: number }) {
+  if (!foodPin) return;
+  const idx = foodQueueIdx();
+  const tgt = idx >= 0 ? foodQueueSlot(idx) : foodGlide ? foodStallSpawn() : null;
+  if (!tgt) { foodPin = null; return; }
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - foodPinAt) / 1000); foodPinAt = now;
+  const dx = tgt.x - foodPin.x, dz = tgt.z - foodPin.z, d = Math.hypot(dx, dz);
+  const step = 2.6 * dt;
+  if (d <= step) {
+    foodPin.x = tgt.x; foodPin.z = tgt.z;
+    if (idx < 0) foodGlide = false;
+  } else { foodPin.x += dx / d * step; foodPin.z += dz / d * step; }
+  p.x = foodPin.x; p.z = foodPin.z;
+  if (!foodGlide && idx < 0) foodPin = null;
+}
+
+/** 排隊中：不能走動 */
+export function plazaFoodLocked() { return active && (foodQueueIdx() >= 0 || foodGlide); }
+
+function foodQPrompt(): PlazaNearPrompt | null {
+  if (partyMode || raceMode) return null;
+  const idx = foodQueueIdx();
+  if (idx >= 0) {
+    const left = foodQ?.userConn ? `，目前的人還剩 ${mmss(Math.max(0, foodQ.endsAt - (Date.now() + foodQOff)))}` : '';
+    return { kind: 'shop', info: idx === 0 ? `排隊中・下一位就是你${left}` : `排隊中・前面還有 ${idx} 人${left}`, btn: '離開隊伍', icon: 'ic-exit' };
+  }
+  if (nearFood) {
+    if (foodIsUser()) return { kind: 'shop', info: `輪到你了・剩 ${mmss(plazaFoodLeftMs())}`, btn: '逛食材攤', icon: 'ic-bowl' };
+    if (foodQOk && foodStallBusy()) {
+      const n = foodQ!.queue.length;
+      if (n >= foodQ!.max) return { kind: 'shop', info: '食材攤排隊已滿，等一下再來', btn: '逛食材攤', icon: 'ic-bowl' };
+      return { kind: 'shop', info: `有人在買${n ? `、${n} 人排隊` : ''}・每人限時 3 分鐘`, btn: '加入排隊', icon: 'ic-bowl' };
+    }
+    return { kind: 'shop', info: '食材攤・每人限時 3 分鐘', btn: '逛食材攤', icon: 'ic-bowl' };
+  }
+  if (nearFoodQ) {
+    const n = foodQ?.queue.length ?? 0;
+    return { kind: 'shop', info: `排隊圓圈・前面還有 ${n} 人，每人限時 3 分鐘`, btn: '加入排隊', icon: 'ic-bowl' };
+  }
+  return null;
+}
+
+/** 每幀：排隊圓圈顯示、計時文字、走離攤子自動結束 */
+function foodQTick(p: { x: number; z: number }) {
+  const slot = foodJoinSlot();
+  view?.setFoodQueueRing(slot != null ? foodQueueSlot(slot) : null, nearFoodQ);
+  const tEl = document.getElementById('foodStallTimer');
+  if (foodIsUser()) {
+    const ms = plazaFoodLeftMs();
+    if (tEl) { tEl.hidden = false; tEl.textContent = `剩 ${mmss(ms)}`; tEl.classList.toggle('low', ms < 30_000); }
+    // 畫面關了又走出圓圈＝買完了，讓給下一位
+    if (!foodGlide && !foodBusy && !(deps?.foodStallOpen?.() ?? false) && !foodStallAt(p.x, p.z)) void plazaFoodLeave();
+  } else if (tEl) tEl.hidden = true;
+}
+

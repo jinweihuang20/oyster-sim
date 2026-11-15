@@ -3506,3 +3506,24 @@ body:has(#foodStall.show) #pbd.show{z-index:11990!important}
 .fdGuide.sm{margin:8px 0 0;padding:0;border:0;box-shadow:none;background:none}
 .panel .fdGo,.fdGo{display:inline-flex;align-items:center;gap:5px;flex:none;margin:0;padding:6px 12px;font-size:13px;font-weight:800;color:#fff;background:#2a5a86;border:1px solid #1f4566;border-radius:8px;box-shadow:0 1px 4px rgba(20,40,60,.18);cursor:pointer}
 .fdGo:active{transform:translateY(1px)}
+/* 食材攤：窄螢幕不重疊（320–430px） */
+#foodStall h2.shopH .fsTitle{white-space:nowrap;flex:0 0 auto}
+#foodStall .fsIntro{margin:2px 0 8px;font-size:12.5px;line-height:1.5;color:#3c4652;text-align:left}
+#foodStall .fsList{display:flex;flex-direction:column;gap:6px}
+#foodStall .fsRow{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;background:#fff;border:1px solid #dfe5ec;border-radius:10px;padding:8px 10px;box-shadow:0 1px 4px rgba(20,40,60,.06);text-align:left}
+#foodStall .fsHead{display:flex;align-items:center;gap:8px;flex:1 1 140px;min-width:0}
+#foodStall .fsHead .fdIc.sm{margin:0}
+#foodStall .fsName{display:flex;flex-direction:column;min-width:0}
+#foodStall .fsName b{font-size:15px;color:#1d2731;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#foodStall .fsName small{font-size:11.5px;color:#66727e;white-space:nowrap}
+#foodStall .fsBuy{display:flex;align-items:center;gap:6px;flex:0 0 auto;margin-left:auto}
+#foodStall .qtyBox{display:flex;align-items:center;gap:0;border:1px solid #c7d5e3;border-radius:8px;background:#fff;padding:0;box-shadow:none}
+#foodStall .qtyBox .qtyBtn{min-width:0!important;min-height:0!important;width:32px!important;height:32px!important;padding:0!important;margin:0!important;border:0!important;border-radius:8px!important;background:transparent!important;box-shadow:none!important;color:#2a5a86!important;display:inline-flex;align-items:center;justify-content:center;transform:none!important}
+#foodStall .qtyBox .qtyBtn:disabled{opacity:.3}
+#foodStall .qtyBox .qtyIn{width:2.2em!important;height:32px!important;border:0!important;border-left:1px solid #e3e9ef!important;border-right:1px solid #e3e9ef!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;margin:0!important;padding:0!important;font-size:14px;font-weight:700;text-align:center;color:#1f2a35}
+#foodStall .fsPay{min-width:64px!important;min-height:0!important;height:34px;margin:0!important;padding:0 12px!important;font-size:14px!important;font-weight:800;white-space:nowrap;color:#fff!important;background:#2a5a86!important;border:1px solid #1f4566!important;border-radius:8px!important;box-shadow:0 1px 3px rgba(20,40,60,.18)!important;transform:none!important}
+#foodStall .fsPay:disabled{background:#9fb2c4!important;border-color:#9fb2c4!important;box-shadow:none!important}
+#foodStall .fsPay .pxSale s{opacity:.7;margin-right:3px}
+#foodStall .fsTimer{margin-left:auto;margin-right:8px;font-size:13px;font-weight:800;color:#2a5a86;background:#eef4fa;border:1px solid #c7d5e3;border-radius:999px;padding:2px 9px;white-space:nowrap;font-variant-numeric:tabular-nums}
+#foodStall .fsTimer.low{color:#b23a2a;background:#fbeeea;border-color:#ecc3b9}
+#foodStall .fsTimer[hidden]{display:none}

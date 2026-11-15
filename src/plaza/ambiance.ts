@@ -65,6 +65,8 @@ export function makePlazaAmbiance(
   obstacles: [number, number, number][];
   tick: (tSec: number, dt: number) => void;
   setFoodActive: (on: boolean) => void;
+  /** 食材攤排隊圓圈（隊伍最後面）；null＝隱藏 */
+  setFoodQueue: (at: { x: number; z: number; yaw: number } | null, active: boolean) => void;
 } {
   const root = new THREE.Group();
   root.name = 'plazaAmbiance';
@@ -93,6 +95,8 @@ export function makePlazaAmbiance(
 
   const foodRing = makeFoodRing();
   root.add(foodRing.group);
+  const foodQ = makeFoodQueueRing();
+  root.add(foodQ.group);
   root.add(makePlazaHarbor(M, add, segs, lowDetail));
   if (!opts?.skipTidal) root.add(makePlazaTidalFlat(M, add, lowDetail).group);
 
@@ -100,8 +104,9 @@ export function makePlazaAmbiance(
     group: root,
     lights,
     obstacles: plazaStallObstacles(),
-    tick: (tSec, dt) => { for (const f of fires) f.tick(tSec, dt); foodRing.tick(tSec); },
+    tick: (tSec, dt) => { for (const f of fires) f.tick(tSec, dt); foodRing.tick(tSec); foodQ.tick(tSec); },
     setFoodActive: (on) => foodRing.setActive(on),
+    setFoodQueue: (at, on) => foodQ.set(at, on),
   };
 }
 
@@ -390,6 +395,43 @@ function buildFood(g: THREE.Group, M: MatFn, add: AddFn, segs: number, lowDetail
 }
 
 /** 食材攤前的圓圈（細環＋淡底＋指向攤子的箭頭）；名稱沿用 shedRing 讓合併略過 */
+/** 排隊圓圈：小一號、虛線外圈，箭頭指向隊伍前方 */
+function makeFoodQueueRing() {
+  const R = 0.42;
+  const rg = new THREE.Group();
+  rg.name = 'shedRing';
+  rg.visible = false;
+  const ringMat = new THREE.MeshBasicMaterial({ color: FOOD_ACCENT, transparent: true, opacity: 0.8, depthWrite: false });
+  const fillMat = new THREE.MeshBasicMaterial({ color: FOOD_ACCENT, transparent: true, opacity: 0.1, depthWrite: false });
+  for (let i = 0; i < 12; i++) {
+    const a0 = (i / 12) * Math.PI * 2;
+    const seg = new THREE.Mesh(new THREE.RingGeometry(R - 0.05, R, 6, 1, a0, Math.PI * 2 / 12 * 0.62), ringMat);
+    seg.rotation.x = -Math.PI / 2; rg.add(seg);
+  }
+  const fill = new THREE.Mesh(new THREE.CircleGeometry(R - 0.05, 32), fillMat); fill.rotation.x = -Math.PI / 2; fill.position.y = -0.002; rg.add(fill);
+  const chev = new THREE.PlaneGeometry(0.2, 0.04);
+  for (const s of [-1, 1]) {
+    const c = new THREE.Mesh(chev, ringMat);
+    c.rotation.x = -Math.PI / 2;
+    c.rotation.z = -s * Math.PI / 4;
+    c.position.set(s * 0.066, 0.001, 0);
+    rg.add(c);
+  }
+  rg.renderOrder = 2;
+  let active = false;
+  return {
+    group: rg,
+    set(at: { x: number; z: number; yaw: number } | null, on: boolean) {
+      rg.visible = !!at;
+      if (at) { rg.position.set(at.x, 0.014, at.z); rg.rotation.y = at.yaw; }
+      if (on === active) return; active = on;
+      ringMat.opacity = on ? 1 : 0.8; fillMat.opacity = on ? 0.22 : 0.1;
+      if (!on) rg.scale.setScalar(1);
+    },
+    tick(t: number) { if (active && rg.visible) rg.scale.setScalar(1 + Math.sin(t * 4) * 0.03); },
+  };
+}
+
 function makeFoodRing() {
   const rg = new THREE.Group();
   rg.name = 'shedRing';

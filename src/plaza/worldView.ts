@@ -165,6 +165,7 @@ export type PlazaWorldView = {
   /** 北碼頭工寮門口：鎖定／玩家站在圈內 */
   setShedDoorState: (loc: string, st: { locked: boolean; active: boolean }) => void;
   setFoodStallActive: (on: boolean) => void;
+  setFoodQueueRing: (at: { x: number; z: number; yaw: number } | null, active: boolean) => void;
   /** 機關槍座架 */
   mgMounts: THREE.Group[];
   aimMg: (slot: number, yaw: number, pitch: number) => void;
@@ -2831,6 +2832,7 @@ function hashPid(pid: string) {
       shedRow?.setDoorState(loc, st);
     },
     setFoodStallActive: (on) => ambiance?.setFoodActive(on),
+    setFoodQueueRing: (at, on) => ambiance?.setFoodQueue(at, on),
     mgMounts, aimMg, mgFx, mgHitTargets, tick,
     tickTpOcclude: (dt, camera, focus) => applyTpOcclude(dt, camera, focus),
     dispose: disposeAll,

@@ -69,6 +69,7 @@ import { makeMeshHelpers } from './dm/mesh';
 import {
   plazaNearShed, SHED_DOORS, shedReturnSpawn, shedName,
   openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, isPlazaPartyMode, raceBeginBasinFill, tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaSettleRaceMeat, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
+  plazaFoodLocked, plazaFoodCanOpen, plazaFoodLeave,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile, isMgPile,
   MG_MAG_PRICE, MG_MAG_AMMO, MG_AMMO_MAX, MG_SIT_MS,
@@ -3698,7 +3699,7 @@ btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, 
 initWalkSeat({
   $, on, COARSE, clamp,
   getState: () => state, getPhase: () => phase,
-  walkSpeedMul: walkSpeedNow,
+  walkSpeedMul: () => (plazaMode && plazaFoodLocked() ? 0 : walkSpeedNow()),
   isPlazaMode: () => plazaMode, plazaSeated, plazaStandWalk, plazaPileObs, plazaWalkBodies, getJumpY: () => jumpY, plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaGroundY, plazaNearSeat, plazaNearPrompt, plazaMySeat,
   plazaLeaveXZ: (pileId, slot) => (isMgPile(pileId) ? mgLeaveXZ(slot) : null),
   seatPose,
@@ -5152,6 +5153,8 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
     },
     openShedDoor: (loc) => openShedDoor(loc),
     openFoodStall: () => openFoodStall(),
+    closeFoodStall: () => $('foodStall').classList.remove('show'),
+    foodStallOpen: () => $('foodStall').classList.contains('show'),
     onShellThrow: (e) => {
       // 自己丟的已經在本地飛過；別人的殼（含打向自己）播飛行動畫＋甩臂
       try {
@@ -6697,6 +6700,8 @@ initFood({
   isTut: () => !!tut, px, pxCd, pxHtml, payFor, jingle: () => { if (ac) SFX.jingle(); },
   inPlaza: () => foodPlazaOk(),
   goStall: () => goFoodStall(),
+  canOpenStall: () => plazaFoodCanOpen(),
+  onStallClose: () => { void plazaFoodLeave(); },
   refreshPrices: () => { void fetchPrices().then(r => { if (r === 'changed' && $('foodStall').classList.contains('show')) renderFoodStall(); }); },
   onMoney: () => updHud(),
 });
@@ -6707,6 +6712,7 @@ function goFoodStall() {
   const closeAll = () => ['food', 'shop', 'foodStall'].forEach(id => $(id).classList.remove('show'));
   if (foodPlazaOk()) {
     if (plazaSeated()) { toast('先站起來，再走到食材攤', '#ffd76a'); return; }
+    if (plazaFoodLocked()) { closeAll(); toast('排隊中，輪到你會自動打開食材攤', '#ffd76a'); return; }
     const sp = foodStallSpawn(); walkPos.set(sp.x, walkPos.y, sp.z); tYaw = yaw = sp.yaw;
     closeAll(); return;
   }

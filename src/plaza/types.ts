@@ -130,6 +130,13 @@ export type PlazaAimTarget = {
 };
 
 /** 廣場 NPC 送座位任務 */
+/** 食材攤排隊狀態（伺服器計時；userConn 空＝沒人在買） */
+export type PlazaFoodQueue = {
+  userConn: string; userPid: string; userNick: string;
+  endsAt: number; now: number; useMs: number; max: number;
+  queue: { connId: string; pid: string; nick: string; index: number }[];
+  seq: number;
+};
 export type PlazaSeatWish = {
   wishId: string;
   npcConnId: string;

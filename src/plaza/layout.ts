@@ -218,6 +218,36 @@ export function foodStallAt(x: number, z: number): boolean {
 export function foodStallSpawn(): { x: number; z: number; yaw: number } {
   return { x: FOOD_RING.x, z: FOOD_RING.z, yaw: Math.atan2(FOOD_RING.x - FOOD_STALL.x, FOOD_RING.z - FOOD_STALL.z) };
 }
+/**
+ * 食材攤排隊：一人限時 180 秒（伺服器計時），排隊位置由伺服器依序指定。
+ * 隊伍從攤前圓圈往中心退一步，再沿 x≈6.85 往北排（東排蚵堆已移除，這條走道沒有障礙）。
+ * 與後端 PlazaWorld.FoodQueue.cs 的 FoodQueueSlot 必須一致。
+ */
+export const FOOD_USE_MS = 180_000;
+export const FOOD_QUEUE_MAX = 10;
+export const FOOD_QUEUE_GAP = 0.9;
+const FOOD_Q_BEND = { x: FOOD_RING.x - Math.sin(FOOD_OUT) * 1.1, z: FOOD_RING.z - Math.cos(FOOD_OUT) * 1.1 };
+/** 第 i 個排隊者（0＝下一位）的站位，面向前一個人 */
+export function foodQueueSlot(i: number): { x: number; z: number; yaw: number } {
+  const pts = [FOOD_RING, FOOD_Q_BEND, { x: FOOD_Q_BEND.x, z: -8.4 }];
+  let d = FOOD_QUEUE_GAP * (i + 1);
+  for (let k = 0; k + 1 < pts.length; k++) {
+    const a = pts[k], b = pts[k + 1];
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    if (d <= len || k + 2 === pts.length) {
+      const t = Math.min(1, d / len);
+      // yaw 定義：面前方向 (−sin, −cos)；面向 a（隊伍前方）
+      return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, yaw: Math.atan2(b.x - a.x, b.z - a.z) };
+    }
+    d -= len;
+  }
+  return { x: FOOD_RING.x, z: FOOD_RING.z, yaw: 0 };
+}
+/** 站在第 i 位排隊圓圈內 */
+export function foodQueueAt(i: number, x: number, z: number): boolean {
+  const s = foodQueueSlot(i);
+  return Math.hypot(x - s.x, z - s.z) <= 0.45;
+}
 /** 站在哪個工寮的門口圓圈內 */
 export function shedDoorAt(x: number, z: number): string | null {
   for (const d of SHED_DOORS) if (Math.hypot(x - d.x, z - SHED_RING_Z) <= SHED_RING_R) return d.loc;
