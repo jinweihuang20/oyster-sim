@@ -8,18 +8,31 @@ import type { PlazaCookState } from './types';
 const ACCENT = 0x2a5a86;
 const DISH_SCALE = 0.115;
 
+/**
+ * 名牌：高解析畫布（2–3× 裝置像素比）、不透明底、粗字深色；關掉 mipmap 用 LinearFilter，避免遠看糊成一片。
+ * 第一行深色（料理名／玩家名），第二行 #2a5a86。
+ */
 function tagSprite(lines: string[]) {
+  const S = Math.min(3, Math.max(2, Math.ceil(window.devicePixelRatio || 1)));
   const W = 512, H = lines.length > 1 ? 150 : 90;
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const c = cv.getContext('2d')!;
-  c.fillStyle = 'rgba(255,255,255,0.94)'; c.strokeStyle = 'rgba(42,90,134,0.55)'; c.lineWidth = 4;
-  const r = 22; c.beginPath(); c.roundRect(4, 4, W - 8, H - 8, r); c.fill(); c.stroke();
+  c.scale(S, S);
+  c.fillStyle = '#ffffff'; c.strokeStyle = '#2a5a86'; c.lineWidth = 3;
+  c.beginPath(); c.roundRect(3, 3, W - 6, H - 6, 20); c.fill(); c.stroke();
   c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillStyle = '#1f2a35'; c.font = '700 40px "Noto Sans TC", system-ui, sans-serif';
-  c.fillText(lines[0], W / 2, lines.length > 1 ? 52 : H / 2, W - 30);
-  if (lines[1]) { c.fillStyle = '#2a5a86'; c.font = '500 32px "Noto Sans TC", system-ui, sans-serif'; c.fillText(lines[1], W / 2, 108, W - 30); }
-  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true }));
+  const font = '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif';
+  c.fillStyle = '#1f2d3a'; c.font = `800 44px ${font}`;
+  c.fillText(lines[0], W / 2, lines.length > 1 ? 52 : H / 2 + 1, W - 36);
+  if (lines[1]) { c.fillStyle = '#2a5a86'; c.font = `700 34px ${font}`; c.fillText(lines[1], W / 2, 109, W - 36); }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true, alphaTest: 0.5, fog: false, toneMapped: false }));
   const k = 0.0016; sp.scale.set(W * k, H * k, 1);
   sp.renderOrder = 5;
   return sp;
