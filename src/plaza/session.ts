@@ -351,8 +351,8 @@ function seatLabel(pileId: number, slot: number) {
 }
 
 function pileDiffSeatSuffix(pileId: number): string {
-  // 休閒場景（廣場／休閒房）不顯示難易度；僅單挑保留
-  if (!raceMode) return '';
+  // 單挑／多人休閒房不顯示難易度；公開廣場照常
+  if (partyMode || raceMode) return '';
   const name = pileDiffName(pileDiffOf(pileId, snap?.pileDiffs));
   return name ? `（${name}）` : '';
 }

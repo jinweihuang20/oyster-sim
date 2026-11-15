@@ -202,8 +202,8 @@ export function createPlazaWorldView(
   const LO = !!opts.lowDetail;
   const raceArena = !!opts.raceArena;
   const partyArena = !!opts.partyArena;
-  /** 休閒場景（公開廣場／多人休閒房）：藏難易度牌與 NPC；單挑擂台除外 */
-  const leisureHideNpc = !raceArena;
+  /** 單挑／多人休閒房藏難易度牌與 NPC；公開廣場照常顯示 */
+  const leisureHideNpc = partyArena || raceArena;
   const MOBILE = matchMedia('(pointer: coarse)').matches;
   // 須在吸菸阿伯 ensureTag 之前宣告（阿伯建於函式中段，const 有 TDZ）
   const PLAZA_TAG_A = 0.58;
