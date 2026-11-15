@@ -1,5 +1,5 @@
 import * as signalR from '@microsoft/signalr';
-import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd, PlazaFoodQueue } from './types';
+import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd, PlazaFoodQueue, PlazaCookState, PlazaCookSeat } from './types';
 import { normSeatWish, normSeatWishEnd } from './types';
 import { normFlagDto, type PlazaFlagState } from './flags';
 import { raceHubUrl } from '../race/hubClient';
@@ -45,6 +45,10 @@ export type PlazaHubHandlers = {
   onFoodKick?: (reason: string) => void;
   /** 輪到自己買食材 */
   onFoodTurn?: (q: PlazaFoodQueue) => void;
+  /** 烹煮區整體狀態（佔位／展示盤） */
+  onCookState?: (s: PlazaCookState) => void;
+  /** 某個位子的煎製進度 */
+  onCookSeat?: (s: PlazaCookSeat) => void;
   onSeatWishEnd?: (e: PlazaSeatWishEnd) => void;
   /** 連線中斷，開始自動重連 */
   onReconnecting?: (attempt: number) => void;
@@ -271,6 +275,8 @@ export class PlazaClient {
     conn.on('NpcSay', (m: any) => {
       try { this.handlers.onNpcSay?.(normChatDto(m)); } catch (err) { console.error('NpcSay', err); }
     });
+    conn.on('CookState', (x: any) => { const n = normCookState(x); if (n) this.handlers.onCookState?.(n); });
+    conn.on('CookSeat', (x: any) => { const n = normCookSeat(x); if (n) this.handlers.onCookSeat?.(n); });
     conn.on('FoodQueue', (q: any) => { const n = normFoodQueue(q); if (n) this.handlers.onFoodQueue?.(n); });
     conn.on('FoodTurn', (q: any) => { const n = normFoodQueue(q); if (n) this.handlers.onFoodTurn?.(n); });
     conn.on('FoodKick', (e: any) => this.handlers.onFoodKick?.(String(e?.reason ?? e?.Reason ?? '')));
@@ -399,6 +405,8 @@ export class PlazaClient {
       const wishes = Array.isArray(rawW) ? rawW.map(normSeatWish).filter((x: PlazaSeatWish | null): x is PlazaSeatWish => !!x) : [];
       const fq = normFoodQueue((r as any).foodQueue ?? (r as any).FoodQueue);
       if (fq) queueMicrotask(() => this.handlers.onFoodQueue?.(fq));
+      const ck = normCookState((r as any).cook ?? (r as any).Cook);
+      if (ck) queueMicrotask(() => this.handlers.onCookState?.(ck));
       return { ok: true, snap: r.snap, token: this.token, chat, grills, carryNpc, flags, wishes };
     } catch (e: any) {
       return { ok: false, err: e?.message || 'join_fail' };
@@ -470,6 +478,21 @@ export class PlazaClient {
       return { ok: !!r?.ok, err: r?.err, mode: r?.mode, state: normFoodQueue(r?.state) };
     } catch (e: any) { return { ok: false, err: e?.message || 'food_fail' }; }
   }
+  /** 烹煮區：佔位／離開／進度／展示 */
+  async cookClaim(seat: number): Promise<{ ok: boolean; err?: string; state?: PlazaCookState | null }> {
+    if (!this.conn) return { ok: false, err: 'no_conn' };
+    try { const r: any = await this.conn.invoke('CookClaim', seat); return { ok: !!r?.ok, err: r?.err, state: normCookState(r?.state) }; }
+    catch (e: any) { return { ok: false, err: e?.message || 'cook_fail' }; }
+  }
+  async cookLeave() { if (!this.conn) return; try { await this.conn.invoke('CookLeave'); } catch { /* */ } }
+  async cookProgress(stage: number, combo: number) { if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return; try { await this.conn.invoke('CookProgress', stage, combo); } catch { /* */ } }
+  async cookDisplay(combo: number): Promise<{ ok: boolean; err?: string; state?: PlazaCookState | null }> {
+    if (!this.conn) return { ok: false, err: 'no_conn' };
+    try { const r: any = await this.conn.invoke('CookDisplay', combo); return { ok: !!r?.ok, err: r?.err, state: normCookState(r?.state) }; }
+    catch (e: any) { return { ok: false, err: e?.message || 'cook_fail' }; }
+  }
+  async cookDisplayClear() { if (!this.conn) return; try { await this.conn.invoke('CookDisplayClear'); } catch { /* */ } }
+
   /** 食材攤：離開隊伍／離開攤子 */
   async foodQueueLeave() {
     if (!this.conn) return null;
@@ -775,5 +798,21 @@ export function normFoodQueue(q: any): PlazaFoodQueue | null {
       nick: String(e?.nick ?? e?.Nick ?? ''), index: fin(e?.index ?? e?.Index),
     })) : [],
     seq: fin(g('seq')),
+  };
+}
+
+const pick = (o: any, k: string) => o?.[k] ?? o?.[k[0].toUpperCase() + k.slice(1)];
+export function normCookSeat(x: any): PlazaCookSeat | null {
+  if (!x || typeof x !== 'object') return null;
+  const seat = fin(pick(x, 'seat'), -1); if (seat < 0 || seat > 9) return null;
+  return { seat, connId: String(pick(x, 'connId') ?? ''), pid: String(pick(x, 'pid') ?? ''), nick: String(pick(x, 'nick') ?? ''), stage: fin(pick(x, 'stage')), combo: fin(pick(x, 'combo'), -1) };
+}
+export function normCookState(x: any): PlazaCookState | null {
+  if (!x || typeof x !== 'object') return null;
+  const seats = (pick(x, 'seats') ?? []) as any[], ds = (pick(x, 'displays') ?? []) as any[];
+  return {
+    seats: Array.isArray(seats) ? seats.map(normCookSeat).filter((v): v is PlazaCookSeat => !!v) : [],
+    displays: Array.isArray(ds) ? ds.map(d => ({ connId: String(pick(d, 'connId') ?? ''), pid: String(pick(d, 'pid') ?? ''), nick: String(pick(d, 'nick') ?? ''), seat: fin(pick(d, 'seat')), slot: fin(pick(d, 'slot')), combo: fin(pick(d, 'combo')), at: fin(pick(d, 'at')) })).filter(d => d.seat >= 0 && d.seat < 10 && d.combo >= 0 && d.combo < 2304) : [],
+    seq: fin(pick(x, 'seq')),
   };
 }

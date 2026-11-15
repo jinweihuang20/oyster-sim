@@ -20,6 +20,7 @@ import {
   tickTpCamOcclude, clearTpCamOcclude, setTpCamOccludeIgnore,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
+import { initCook, openCook, closeCook, cookPanelOpen, openDex as openCookDex } from './cook/cookUi';
 import { initFood, openFood, openFoodStall, renderFoodStall, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
 import { foodStallSpawn } from './plaza/layout';
 import {
@@ -69,7 +70,7 @@ import { makeMeshHelpers } from './dm/mesh';
 import {
   plazaNearShed, SHED_DOORS, shedReturnSpawn, shedName,
   openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, isPlazaPartyMode, raceBeginBasinFill, tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaSettleRaceMeat, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
-  plazaFoodLocked, plazaFoodCanOpen, plazaFoodLeave,
+  plazaFoodLocked, plazaFoodCanOpen, plazaFoodLeave, plazaCookLeave, plazaCookProgress, plazaCookMyPan, plazaCookDisplay,
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile, isMgPile,
   MG_MAG_PRICE, MG_MAG_AMMO, MG_AMMO_MAX, MG_SIT_MS,
@@ -4826,6 +4827,7 @@ function clearPlazaLeaveUi() {
   document.body.classList.remove('plazaRoam', 'plazaSmokeSit', 'plazaMgSit');
   clearMgSitLocal();
   document.getElementById('foodStall')?.classList.remove('show');
+  closeCook(false);
   const info = document.getElementById('seatInfo');
   if (info) info.innerHTML = '';
   const sit = document.getElementById('sitBtn');
@@ -5154,6 +5156,10 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
     openShedDoor: (loc) => openShedDoor(loc),
     openFoodStall: () => openFoodStall(),
     closeFoodStall: () => $('foodStall').classList.remove('show'),
+    openCook: (seat) => openCook(seat),
+    cookOpen: () => cookPanelOpen(),
+    closeCook: () => closeCook(false),
+    openCookDex: (combo, owner) => openCookDex(combo, owner),
     foodStallOpen: () => $('foodStall').classList.contains('show'),
     onShellThrow: (e) => {
       // 自己丟的已經在本地飛過；別人的殼（含打向自己）播飛行動畫＋甩臂
@@ -6702,8 +6708,17 @@ initFood({
   goStall: () => goFoodStall(),
   canOpenStall: () => plazaFoodCanOpen(),
   onStallClose: () => { void plazaFoodLeave(); },
+  openCookDex: () => openCookDex(),
   refreshPrices: () => { void fetchPrices().then(r => { if (r === 'changed' && $('foodStall').classList.contains('show')) renderFoodStall(); }); },
   onMoney: () => updHud(),
+});
+initCook({
+  getSave: () => save, persist, track,
+  toast: (t, c) => toast(t, c ?? '#cfe3f5'),
+  leaveSeat: () => plazaCookLeave(),
+  progress: (stage, combo) => plazaCookProgress(stage, combo),
+  display: (combo) => plazaCookDisplay(combo),
+  myPan: (combo) => plazaCookMyPan(combo),
 });
 /** 一般廣場、站著走動中（休閒房／競速不開食材攤） */
 function foodPlazaOk() { return plazaMode && isPlazaActive() && state === 'play' && !isPlazaRaceMode() && !isPlazaPartyMode(); }

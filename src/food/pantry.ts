@@ -28,6 +28,8 @@ export type FoodDeps = {
   canOpenStall: () => boolean;
   /** 按「買好了」關畫面＝讓給下一位 */
   onStallClose: () => void;
+  /** 開蚵仔煎圖鑑 */
+  openCookDex: () => void;
 };
 
 let D: FoodDeps;
@@ -65,6 +67,21 @@ export function addFood(id: string, n: number, src: FoodSrc, q = 0, quiet = fals
   else if (!quiet) D.pop(`食材 +${n} ${nm}`, '#bfe0ff');
   renderFoodPanel();
 }
+
+/** 用掉食材（從最舊的一批開始扣）；ids 任一種都算（例：蚵仔＝一般／大蚵／石蚵）。不夠回 false 不扣 */
+export function takeFood(ids: readonly string[], n = 1): boolean {
+  purgeFood();
+  const L = batches().filter(b => ids.includes(b.id)).sort((a, b) => a.at - b.at);
+  if (L.reduce((s, b) => s + b.n, 0) < n) return false;
+  let left = n;
+  for (const b of L) { const k = Math.min(b.n, left); b.n -= k; left -= k; if (!left) break; }
+  const all = batches();
+  for (let i = all.length - 1; i >= 0; i--) if (all[i].n <= 0) all.splice(i, 1);
+  D.persist();
+  renderFoodPanel();
+  return true;
+}
+export function foodCountAny(ids: readonly string[]) { return ids.reduce((s, id) => s + foodCount(id), 0); }
 
 /** 過期的自動清掉並提示 */
 export function purgeFood() {
@@ -124,7 +141,7 @@ function rowHtml(f: Food) {
 export function foodPanelHtml() {
   const kinds = FOODS.filter(f => foodCount(f.id) > 0).length;
   const cats: FoodCat[] = ['main', 'extra', 'base', 'egg', 'sauce'];
-  return `<div class="fdHead"><div class="fdTease"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M5 10v9h14v-9M4 10l2-5h12l2 5"/><path d="M10 19v-5h4v5"/></svg><span>蚵仔煎攤即將開張</span></div><p class="fdSub">先把食材備起來，開張後可以煎出 50 種不同的蚵仔煎。現有 ${kinds}/${FOODS.length} 種食材，目前只能收集和查看。</p><div class="fdGuide sm"><p>地瓜粉、青菜、雞蛋和醬料在<b>廣場食材攤</b>買得到。</p>${goBtn()}</div></div>`
+  return `<div class="fdHead"><div class="fdTease"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M5 10v9h14v-9M4 10l2-5h12l2 5"/><path d="M10 19v-5h4v5"/></svg><span>廣場烹煮區開張了</span></div><p class="fdSub">到廣場東北角的煎台，站進藍色圓圈按「開始煎」，用這些食材煎出 2,304 種蚵仔煎。現有 ${kinds}/${FOODS.length} 種食材。</p><button type="button" class="fdGo fdDex" data-cookdex>${DEX_IC}蚵仔煎圖鑑</button><div class="fdGuide sm"><p>地瓜粉、青菜、雞蛋和醬料在<b>廣場食材攤</b>買得到。</p>${goBtn()}</div></div>`
     + cats.map(c => `<div class="fdCat">${CAT_N[c]}</div>` + FOODS.filter(f => f.cat === c).map(rowHtml).join('')).join('');
 }
 
@@ -138,10 +155,12 @@ export function openFood() {
   L.innerHTML = foodPanelHtml(); bindGo(L); p.classList.add('show'); p.scrollTop = 0;
 }
 
+const DEX_IC = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 7h6"/></svg>';
 const GO_IC = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6-5.5-6-10a6 6 0 0 1 12 0c0 4.5-6 10-6 10z"/><circle cx="12" cy="11" r="2"/></svg>';
 /** 「前往廣場」：在廣場裡會直接走到食材攤 */
 const goBtn = () => `<button type="button" class="fdGo" data-fdgo>${GO_IC}${D.inPlaza() ? '走到食材攤' : '前往廣場'}</button>`;
 function bindGo(root: ParentNode) {
+  root.querySelectorAll<HTMLButtonElement>('button[data-cookdex]').forEach(b => b.onclick = e => { e.stopPropagation(); D.openCookDex(); });
   root.querySelectorAll<HTMLButtonElement>('button[data-fdgo]').forEach(b => b.onclick = e => { e.stopPropagation(); D.goStall(); });
 }
 

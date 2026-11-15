@@ -6,14 +6,16 @@ import {
   isSmokePile, isLeisurePile, isRestPile, isMgPile, plazaSmokeObstacles, isPlazaAber, SMOKE_PILE_ID, SMOKE_ABER_SLOT,
   MG_PILE_ID, MG_SIT_PRICE, MG_SIT_AMMO, MG_SIT_MS, CENTER_PILE_ID, CENTER_SEAT_COUNT,
   type PlazaSeatRef, type PlazaSpawnMemory,
-  SHED_DOORS, shedDoorAt, plazaShedObstacles, foodStallAt, foodQueueSlot, foodQueueAt, foodStallSpawn,
+  SHED_DOORS, shedDoorAt, plazaShedObstacles, foodStallAt, foodQueueSlot, foodQueueAt, foodStallSpawn, cookObstacles, cookSeatAt, cookSeatPos, cookPanPos, cookPlatePos, COOK_SEATS,
 } from './layout';
 import { plazaShedPosts } from './props';
 import { shedName } from './shedRow';
 import { plazaStallObstacles } from './ambiance';
 import { buildPlazaMapMarkers, drawPlazaMap } from './map';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
-import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd, PlazaFoodQueue } from './types';
+import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd, PlazaFoodQueue, PlazaCookState } from './types';
+import { makeCookArea, type CookArea } from './cookArea';
+import { comboName } from '../cook/combo';
 import { plazaDisplayName, normSeatWishEnd } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 import { plazaSoftCapClient } from '../core/economy';
@@ -131,6 +133,11 @@ export type PlazaDeps = {
   openFoodStall?: () => void;
   /** 食材攤時間到／被踢：關掉購買畫面 */
   closeFoodStall?: () => void;
+  /** 烹煮區：佔到位子後開煎台面板、面板是否開著、關面板（不回呼放位子）、開圖鑑看某盤 */
+  openCook?: (seat: number) => void;
+  cookOpen?: () => boolean;
+  closeCook?: () => void;
+  openCookDex?: (combo?: number, owner?: string) => void;
   /** 食材攤購買畫面是否開著 */
   foodStallOpen?: () => boolean;
   /** 自己裝備了寵物（坐姿時寵物在頭頂、聊天泡泡要讓位） */
@@ -201,6 +208,17 @@ let foodPin: { x: number; z: number } | null = null;
 let foodPinAt = 0;
 /** 剛輪到：先走到攤前圓圈 */
 let foodGlide = false;
+/** 烹煮區（伺服器權威座位／展示盤） */
+let cookSt: PlazaCookState | null = null;
+let cookArea: CookArea | null = null;
+let mySeat: number | null = null;
+let nearCook: number | null = null;
+let nearPlate: { combo: number; nick: string } | null = null;
+let cookBusy = false;
+let cookOk = true;
+let cookSendAt = 0;
+let cookPend: [number, number] | null = null;
+let cookTimer = 0;
 /** 新伺服器 Join 會帶 carryNpc；舊服沒有則不顯示抱起／放下 */
 let carryNpcOk = false;
 /** 新伺服器 Join 會帶 flags 陣列；舊服沒有則不顯示插旗 */
@@ -285,6 +303,7 @@ export function plazaWalkClamp(p: { x: number; z: number }) {
   }
   plazaClampWalk(p);
   foodPinWalk(p);
+  if (mySeat != null) { const sp = cookSeatPos(mySeat); p.x = sp.x; p.z = sp.z; }
 }
 export function plazaPileObs(): [number, number, number][] {
   const out = pileObstacles();
@@ -293,6 +312,7 @@ export function plazaPileObs(): [number, number, number][] {
   for (const o of plazaShedObstacles()) out.push(o);
   for (const o of plazaSmokeObstacles()) out.push(o);
   for (const o of plazaCafeObstacles()) out.push(o);
+  for (const o of cookObstacles()) out.push(o);
   return out;
 }
 /** 走動時遠端玩家碰撞圓 `[x,z,r,isLie]`（擋路不推擠；坐下略過） */
@@ -302,7 +322,7 @@ export function plazaWalkBodies(): [number, number, number, number][] {
 /** 入場障礙：棚柱＋攤位 */
 function plazaSpawnExtraObs(): [number, number, number][] {
   const posts: [number, number, number][] = plazaShedPosts().map(p => [p.x, p.z, 0.22]);
-  return [...posts, ...plazaStallObstacles(), ...plazaSmokeObstacles(), ...plazaCafeObstacles()];
+  return [...posts, ...plazaStallObstacles(), ...plazaSmokeObstacles(), ...plazaCafeObstacles(), ...cookObstacles()];
 }
 
 /** 入場隨機站位（避開蚵堆／棚柱／攤位，面向中心） */
@@ -409,7 +429,7 @@ export function plazaNearPrompt(): PlazaNearPrompt | null {
       shedLoc: nearShed,
     };
   }
-  const fq = foodQPrompt();
+  const fq = foodQPrompt() ?? cookPrompt();
   if (fq) return fq;
   if (carryNpcOk && myCarriedNpc()) {
     if (!nearPlace) return null;
@@ -706,7 +726,7 @@ function forceResetPlazaLocal() {
   try { ui?.remove(); } catch { /* */ }
   ui = null;
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear();
-  deps = null; near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true;
+  deps = null; near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; cookSt = null; cookArea = null; mySeat = null; nearCook = null; nearPlate = null; cookOk = true; cookPend = null;
   carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
   teardownPlayersChrome();
@@ -722,7 +742,7 @@ export function openPlaza(D: PlazaDeps) {
   partyMode = !!(!raceMode && (D.party?.code || D.party?.create));
   raceBooting = !!D.race?.code;
   seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; cookSt = null; cookArea = null; mySeat = null; nearCook = null; nearPlate = null; cookOk = true; cookPend = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
   raceFairSeed = 0; raceFillGen = 0;
   if (raceMode) {
     document.body.classList.add('raceMode');
@@ -752,6 +772,7 @@ export function openPlaza(D: PlazaDeps) {
       raceArena: raceMode,
       partyArena: partyMode,
     });
+    if (!raceMode && !partyMode) { cookArea = makeCookArea(); view.root.add(cookArea.group); }
     buildUi();
     wireClient(D);
     void boot(D);
@@ -777,7 +798,7 @@ async function abortEnter(D: PlazaDeps, err?: string) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; cookSt = null; cookArea = null; mySeat = null; nearCook = null; nearPlate = null; cookOk = true; cookPend = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
   removeFlagBtn();
   D.onEnterFail?.(err);
 }
@@ -1148,6 +1169,13 @@ function wireClient(D: PlazaDeps) {
     onFoodQueue: (q) => applyFoodQ(q),
     onFoodTurn: (q) => { applyFoodQ(q); onFoodTurn(); },
     onFoodKick: (reason) => onFoodKick(reason),
+    onCookState: (st) => applyCook(st),
+    onCookSeat: (cs) => {
+      if (!cookSt) return;
+      const i = cookSt.seats.findIndex(x => x.seat === cs.seat);
+      if (i >= 0) cookSt.seats[i] = cs; else cookSt.seats.push(cs);
+      cookArea?.setState(cookSt, myConn());
+    },
     onShellThrow: (e) => { try { D.onShellThrow?.(e); } catch (err) { console.error('onShellThrow', err); } },
     onShellInbound: (e) => { try { D.onShellInbound?.(e); } catch (err) { console.error('onShellInbound', err); } },
     onShellReflectHit: (e) => { try { D.onShellReflectHit?.(e); } catch (err) { console.error('onShellReflectHit', err); } },
@@ -2023,7 +2051,9 @@ export function plazaUpdateNear(wx: number, wz: number) {
   if (nearShed) { nearFood = false; view?.highlightNear(null); return null; }
   nearFood = !partyMode && foodStallAt(wx, wz);
   nearFoodQ = !partyMode && !nearFood && foodJoinSlot() != null && foodQueueAt(foodJoinSlot()!, wx, wz);
-  if (nearFood || nearFoodQ || foodQueueIdx() >= 0) { view?.highlightNear(null); return null; }
+  nearCook = !partyMode && mySeat == null ? cookSeatAt(wx, wz) : null;
+  nearPlate = !partyMode && nearCook == null ? plateNear(wx, wz) : null;
+  if (nearFood || nearFoodQ || foodQueueIdx() >= 0 || nearCook != null || nearPlate || mySeat != null) { view?.highlightNear(null); return null; }
   if (carryNpcOk && myCarriedNpc()) {
     const n = nearestFreePlaceSeat(wx, wz, takenSet(true), SIT_DIST);
     nearPlace = n ? { pileId: n.pileId, slot: n.slot } : null;
@@ -2095,6 +2125,7 @@ export async function plazaTrySit(mgPay: PlazaMgPay = 'auto'): Promise<boolean> 
   }
   if (foodQueueIdx() >= 0) { void plazaFoodLeave(); return false; }
   if (nearFood || nearFoodQ) { void foodEnter(); return false; }
+  if (mySeat != null || nearCook != null || nearPlate) { void cookEnter(); return false; }
   if (carryNpcOk && myCarriedNpc()) {
     const seat = nearPlace ?? (() => {
       const n = nearestFreePlaceSeat(deps!.getWalkXZ().x, deps!.getWalkXZ().z, takenSet(true), SIT_DIST);
@@ -2395,6 +2426,7 @@ export function tickPlaza(dt: number) {
   else { nearShed = null; nearFood = false; nearFoodQ = false; }
   view?.setFoodStallActive(nearFood);
   foodQTick(p);
+  cookTick();
   if (view) for (const d of SHED_DOORS) view.setShedDoorState(d.loc, { locked: !(deps.shedUnlocked?.(d.loc) ?? true), active: nearShed === d.loc });
   placeChatFab();
   if (plazaMapIsOpen()) refreshPlazaMap();
@@ -2482,7 +2514,7 @@ export async function closePlaza(leaveSeat = true) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
-  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
+  myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; cookSt = null; cookArea = null; mySeat = null; nearCook = null; nearPlate = null; cookOk = true; cookPend = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
   try { document.body.classList.remove('raceMode', 'partyMode'); } catch { /* */ }
   if (announceLeave) void postDiscordPlazaPresence(nick, 'leave', { online: online != null ? Math.max(0, online - 1) : null, tag: myTag() });
@@ -2593,7 +2625,7 @@ function foodPinWalk(p: { x: number; z: number }) {
 }
 
 /** 排隊中：不能走動 */
-export function plazaFoodLocked() { return active && (foodQueueIdx() >= 0 || foodGlide); }
+export function plazaFoodLocked() { return active && (foodQueueIdx() >= 0 || foodGlide || mySeat != null); }
 
 function foodQPrompt(): PlazaNearPrompt | null {
   if (partyMode || raceMode) return null;
@@ -2631,3 +2663,105 @@ function foodQTick(p: { x: number; z: number }) {
   } else if (tEl) tEl.hidden = true;
 }
 
+/* ───────── 烹煮區 ───────── */
+
+function applyCook(st: PlazaCookState) {
+  if (cookSt && st.seq < cookSt.seq) return;
+  cookSt = st;
+  cookArea?.setState(st, myConn());
+  if (mySeat != null && !st.seats.some(x => x.seat === mySeat && x.connId === myConn())) {
+    // 伺服器放掉了（斷線重連、坐下等）
+    mySeat = null;
+    if (deps?.cookOpen?.()) { deps.closeCook?.(); deps.toast('已離開煎台', '#cfe3f5'); }
+  }
+}
+
+function plateNear(x: number, z: number): { combo: number; nick: string } | null {
+  if (!cookSt) return null;
+  let best: { combo: number; nick: string } | null = null, bd = 1.0;
+  for (const d of cookSt.displays) {
+    const p = cookPlatePos(d.seat, d.slot);
+    const seatP = cookSeatPos(d.seat);
+    // 站在煎台前（位子附近）就能看
+    const dd = Math.min(Math.hypot(x - p.x, z - p.z), Math.hypot(x - seatP.x, z - seatP.z) + 0.3);
+    if (dd < bd) { bd = dd; best = { combo: d.combo, nick: d.nick }; }
+  }
+  return best;
+}
+
+function cookPrompt(): PlazaNearPrompt | null {
+  if (partyMode || raceMode) return null;
+  if (mySeat != null) return { kind: 'shop', info: `煎台 ${mySeat + 1} 號`, btn: '打開煎台', icon: 'ic-bowl' };
+  if (nearCook != null) {
+    const who = cookSt?.seats.find(x => x.seat === nearCook && x.connId !== myConn());
+    if (who) return { kind: 'shop', info: `煎台 ${nearCook + 1} 號・${who.nick || '有人'}正在煎`, btn: '蚵仔煎圖鑑', icon: 'ic-book' };
+    return { kind: 'shop', info: `煎台 ${nearCook + 1} 號・空位，自由煎不限時`, btn: '開始煎', icon: 'ic-bowl' };
+  }
+  if (nearPlate) return { kind: 'shop', info: `${nearPlate.nick || '玩家'}的「${comboName(nearPlate.combo)}」`, btn: '看看', icon: 'ic-eye' };
+  return null;
+}
+
+async function cookEnter() {
+  if (!deps || cookBusy) return;
+  if (mySeat != null) { deps.openCook?.(mySeat); return; }
+  if (nearCook == null) { if (nearPlate) deps.openCookDex?.(nearPlate.combo, nearPlate.nick); return; }
+  const seat = nearCook;
+  if (cookSt?.seats.some(x => x.seat === seat && x.connId !== myConn())) { deps.openCookDex?.(); return; }
+  if (!client?.connected) { deps.toast('連線中，等一下再試', '#ffb08a'); return; }
+  cookBusy = true;
+  try {
+    const r = await client.cookClaim(seat);
+    if (!r.ok && /does not exist|MethodDoesNotExist|Unknown hub method|not be found|does not contain/i.test(r.err || '')) {
+      cookOk = false; deps.toast('伺服器還沒開放烹煮區，晚點再來', '#ffb08a'); return;
+    }
+    if (r.state) applyCook(r.state);
+    if (!r.ok) {
+      const msg: Record<string, string> = { taken: '這個位子有人了，換一個', far: '站進位子的圓圈裡再按', seated: '先站起來', carrying: '抱著人不能煎', food_queue: '排隊中不能煎', slow: '慢一點' };
+      deps.toast(msg[r.err ?? ''] ?? '佔位失敗，再試一次', '#ffb08a');
+      return;
+    }
+    mySeat = seat;
+    deps.openCook?.(seat);
+  } finally { cookBusy = false; }
+}
+
+/** 煎台面板關了＝放掉位子 */
+export function plazaCookLeave() {
+  if (mySeat == null) return;
+  const s = mySeat; mySeat = null;
+  cookArea?.clearPan(s);
+  void client?.cookLeave();
+}
+
+/** 煎的進度：步驟顆粒度、至少間隔 300ms（最後一筆一定送） */
+export function plazaCookProgress(stage: number, combo: number) {
+  if (mySeat == null || !client || !cookOk) return;
+  cookPend = [stage, combo];
+  const flush = () => {
+    cookTimer = 0;
+    if (!cookPend || !client) return;
+    const [a, b] = cookPend; cookPend = null; cookSendAt = performance.now();
+    void client.cookProgress(a, b);
+  };
+  const wait = 300 - (performance.now() - cookSendAt);
+  if (wait <= 0) flush(); else if (!cookTimer) cookTimer = window.setTimeout(flush, wait);
+}
+
+export function plazaCookMyPan(combo: number) {
+  if (mySeat != null) cookArea?.setMyPan(mySeat, combo);
+}
+
+export async function plazaCookDisplay(combo: number): Promise<boolean> {
+  if (!client?.connected) return false;
+  const r = await client.cookDisplay(combo);
+  if (r.state) applyCook(r.state);
+  return r.ok;
+}
+
+function cookTick() {
+  if (!cookArea) return;
+  cookArea.setActive(mySeat ?? nearCook);
+  cookArea.tick(performance.now() / 1000);
+  // 面板不知怎麼被關掉（例如一鍵關全部）：放掉位子
+  if (mySeat != null && !(deps?.cookOpen?.() ?? true)) plazaCookLeave();
+}

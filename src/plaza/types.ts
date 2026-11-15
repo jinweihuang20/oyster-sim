@@ -130,6 +130,10 @@ export type PlazaAimTarget = {
 };
 
 /** 廣場 NPC 送座位任務 */
+/** 烹煮區：佔位者（stage 0–6，combo -1＝還沒開始）與展示盤 */
+export type PlazaCookSeat = { seat: number; connId: string; pid: string; nick: string; stage: number; combo: number };
+export type PlazaCookPlate = { connId: string; pid: string; nick: string; seat: number; slot: number; combo: number; at: number };
+export type PlazaCookState = { seats: PlazaCookSeat[]; displays: PlazaCookPlate[]; seq: number };
 /** 食材攤排隊狀態（伺服器計時；userConn 空＝沒人在買） */
 export type PlazaFoodQueue = {
   userConn: string; userPid: string; userNick: string;
