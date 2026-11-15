@@ -49,7 +49,7 @@ import {
 import { ROOM_ENABLED, bindRoom, openRoomCreate, openRoomJoin, closeRoom, isRoomActive, roomSyncScore, roomRemainSec, currentRoomSnap, roomTick, roomTrySit, roomStandWalk, roomNearPrompt, roomSeated, roomWalkBodies } from './room';
 import {
   bindRace, openRaceMenu, startRaceQueue, clearRaceUi, setRaceSnap, applyRaceResults,
-  isRaceInputLocked, currentRaceSnap, normRaceSnap, normRaceResults, type RaceMatched,
+  isRaceInputLocked, isRaceLobbyWait, currentRaceSnap, normRaceSnap, normRaceResults, type RaceMatched,
 } from './race';
 import * as THREE from 'three';
 import { openDeathmatch, isDeathmatchActive, shopWeapons, WEAPON_DEFS, isWeaponId, openWeaponPreview, closeWeaponPreview, weaponPreviewCss, DM_PRESETS, type WeaponId, type DmMode } from './deathmatch';
@@ -83,7 +83,7 @@ import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { registerBrightRenderer, setSceneBrightness, clampBright, BRIGHT_DEF } from './world/sceneBrightness';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
-  $, on, toast, toastTop, initDomToast, tickToast, TOP_SEC,
+  $, on, toast, toastTop, dismissToast, initDomToast, tickToast, TOP_SEC,
   esc, bootQuiet, menuModalBusy, calTipOff, calTipCheck, initMenu, newDecor, newDots, newAnnounce,
 } from './ui';
 installNoZoom();
@@ -1068,6 +1068,21 @@ function ensureRacePickReady() {
     goPick();
   }
   syncBasinRing();
+}
+/** 單挑：清掉「等對手／等雙方」hint 與上方 toast（倒數或開打後不該再留） */
+function clearRaceWaitPrompt(ph: string) {
+  const waitHint = /雙方進場|等雙方|倒數 3 秒，再開始/.test(hint.textContent || '');
+  if (ph === 'countdown') {
+    if (waitHint || !hint.textContent) hint.textContent = '倒數結束後開始比賽';
+    const top = document.getElementById('toast');
+    if (top?.classList.contains('on') && /進場就緒|等雙方|到齊後倒數/.test(top.textContent || '')) dismissToast();
+  } else if (ph === 'play' || ph === 'results') {
+    if (waitHint || /倒數結束後開始/.test(hint.textContent || '')) {
+      hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : '臉盆空了！點面前的蚵仔堆撈一把';
+    }
+    const top = document.getElementById('toast');
+    if (top?.classList.contains('on') && /進場就緒|等雙方|到齊後倒數|倒數結束後/.test(top.textContent || '')) dismissToast();
+  }
 }
 function holdOyster(dd: number) {
   if (state !== 'play' || walking) return;
@@ -4813,8 +4828,12 @@ function launchPlaza(race?: RaceMatched) {
         try {
           const prev = currentRaceSnap()?.phase;
           setRaceSnap(normRaceSnap(raw));
+          const ph = currentRaceSnap()?.phase;
+          // 離開「等對手」：立刻清掉進場等待 hint／toast，避免該消未消
+          if (prev === 'lobby' && ph && ph !== 'lobby') clearRaceWaitPrompt(ph);
+          else if (ph === 'countdown' || ph === 'play') clearRaceWaitPrompt(ph);
           // 倒數結束開打：再保險一次進入拿蚵（防 enterWalk 沖掉 phase／seatRig）
-          if (prev !== 'play' && currentRaceSnap()?.phase === 'play') ensureRacePickReady();
+          if (prev !== 'play' && ph === 'play') ensureRacePickReady();
         } catch (err) { console.error(err); }
       },
       onResults: (raw) => {
@@ -5022,8 +5041,13 @@ function launchPlaza(race?: RaceMatched) {
         on('medBtn', false);
         refreshPet();
         ensureRacePickReady();
-        hint.textContent = '雙方進場後同步倒數 3 秒，再開始比賽';
-        toastTop('進場就緒・等雙方到齊後倒數', TOP_SEC.info);
+        // 對手已在場（已倒數／開打）就不要再掛「等雙方」提示
+        if (isRaceLobbyWait() || !currentRaceSnap()) {
+          hint.textContent = '雙方進場後同步倒數 3 秒，再開始比賽';
+          toastTop('進場就緒・等雙方到齊後倒數', TOP_SEC.info);
+        } else {
+          clearRaceWaitPrompt(currentRaceSnap()!.phase);
+        }
       } else {
         hint.textContent = '休閒模式：點面前蚵堆撈蚵，想換堆按「換位置」。無倒數，離開再結算。';
         toastTop('坐下了！第一人稱可左右轉約 90° 看旁邊', TOP_SEC.info);
@@ -5041,7 +5065,9 @@ function launchPlaza(race?: RaceMatched) {
       plazaRefillBasin();
       if (isPlazaRaceMode()) {
         refreshPet();
-        toastTop('進場就緒・等雙方到齊後倒數', TOP_SEC.info); SFX.pop();
+        if (isRaceLobbyWait() || !currentRaceSnap()) toastTop('進場就緒・等雙方到齊後倒數', TOP_SEC.info);
+        else clearRaceWaitPrompt(currentRaceSnap()!.phase);
+        SFX.pop();
         later(0.3, () => { goPick(); ensureRacePickReady(); });
       } else {
         toastTop('換位坐下，臉盆換成這桌的蚵仔', TOP_SEC.mid); SFX.pop(); later(0.3, goPick);

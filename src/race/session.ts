@@ -19,6 +19,7 @@ export type RaceHooks = {
 };
 
 const COUNTDOWN_MS = 3000;
+const PHASE_RANK: Record<string, number> = { lobby: 0, countdown: 1, play: 2, results: 3 };
 
 let hooks: RaceHooks | null = null;
 let queueClient: RaceQueueClient | null = null;
@@ -43,6 +44,27 @@ export function isRacePlayActive() {
 /** 競速場上但還不能動手（等對手／倒數／結算） */
 export function isRaceInputLocked() {
   return !!raceSnap && raceSnap.phase !== 'play';
+}
+
+/** 是否仍在「等對手進場」階段 */
+export function isRaceLobbyWait() {
+  return !!raceSnap && raceSnap.phase === 'lobby';
+}
+
+/**
+ * 擋掉過期 Join／亂序 State：同場不可用較舊階段蓋掉較新階段
+ * （例如 Join 當下 lobby，之後 State 已 countdown，boot 尾端又灌回 Join snap）
+ * 真實倒退（對手離場 countdown→lobby）會帶較新 phaseAt，仍接受。
+ */
+function shouldAcceptRaceSnap(next: RaceSnap, cur: RaceSnap | null) {
+  if (!cur?.code) return true;
+  if (next.code && cur.code && next.code !== cur.code) return true;
+  const a = PHASE_RANK[cur.phase] ?? 0;
+  const b = PHASE_RANK[next.phase] ?? 0;
+  if (b >= a) return true;
+  const curAt = Number(cur.phaseAt) || 0;
+  const nextAt = Number(next.phaseAt) || 0;
+  return nextAt > curAt;
 }
 
 export function openRaceMenu() {
@@ -73,8 +95,8 @@ export async function cancelRaceQueue() {
 
 export function setRaceSnap(s: RaceSnap | null) {
   const prev = prevPhase;
-  raceSnap = s;
   if (!s) {
+    raceSnap = null;
     prevPhase = '';
     stopCountClock();
     clearRaceHud();
@@ -82,6 +104,15 @@ export function setRaceSnap(s: RaceSnap | null) {
     document.body.classList.remove('raceWait');
     return;
   }
+  if (!shouldAcceptRaceSnap(s, raceSnap)) {
+    // 過期 lobby 等：仍可合併玩家名單／分數，但不回退 phase／倒數 UI
+    if (raceSnap && s.code === raceSnap.code && Array.isArray(s.players) && s.players.length) {
+      raceSnap = { ...raceSnap, players: s.players };
+      renderRaceHud(raceSnap);
+    }
+    return;
+  }
+  raceSnap = s;
   prevPhase = s.phase;
   renderRaceHud(s);
   syncCountOverlay(s);
@@ -261,10 +292,14 @@ function renderRaceHud(s: RaceSnap) {
 }
 
 function localCountdownSec(s: RaceSnap) {
+  const server = Math.max(0, s.remainSec | 0);
   if (s.phaseAt > 0) {
-    return Math.max(0, Math.ceil((COUNTDOWN_MS - (Date.now() - s.phaseAt)) / 1000));
+    const local = Math.ceil((COUNTDOWN_MS - (Date.now() - s.phaseAt)) / 1000);
+    // 客戶端時鐘與伺服器差太多時改信 remainSec，避免卡在等待／錯秒
+    if (!Number.isFinite(local) || Math.abs(local - server) > 2) return server;
+    return Math.max(0, local);
   }
-  return Math.max(0, s.remainSec | 0);
+  return server;
 }
 
 function ensureCountEl() {
@@ -280,6 +315,7 @@ function hideCountOverlay() {
   if (!countEl) return;
   countEl.classList.remove('on', 'go');
   countEl.textContent = '';
+  lastCountShown = '';
 }
 
 function syncCountOverlay(s: RaceSnap) {
@@ -297,7 +333,8 @@ function syncCountOverlay(s: RaceSnap) {
   if (s.phase === 'countdown') {
     const sec = localCountdownSec(s);
     const txt = sec > 0 ? String(sec) : '開始';
-    if (lastCountShown !== txt) {
+    // 離開 lobby 時一定要換掉「等待對手進場」
+    if (lastCountShown !== txt || el.textContent === '等待對手進場') {
       lastCountShown = txt;
       el.textContent = txt;
       el.classList.remove('on', 'go');
@@ -308,13 +345,22 @@ function syncCountOverlay(s: RaceSnap) {
     }
     return;
   }
-  if (s.phase !== 'play') hideCountOverlay();
+  // play／results：大字提示立刻清掉（「開始」由 flashGo 短暫再亮）
+  if (s.phase === 'play') {
+    if (lastCountShown === '等待對手進場' || lastCountShown === '等待雙方進場' || /^\d+$/.test(lastCountShown)) {
+      hideCountOverlay();
+    }
+    return;
+  }
+  hideCountOverlay();
 }
 
 function flashGo() {
   const el = ensureCountEl();
   lastCountShown = '開始';
   el.textContent = '開始';
+  el.classList.remove('go');
+  void el.offsetWidth;
   el.classList.add('on', 'go');
   window.setTimeout(() => {
     if (raceSnap?.phase === 'play') hideCountOverlay();

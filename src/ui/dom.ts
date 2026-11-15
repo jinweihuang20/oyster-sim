@@ -52,6 +52,9 @@ function hideToast() {
   topClearTimer = window.setTimeout(done, 320);
 }
 
+/** 立刻收起上方／中央 toast（單挑進場提示等） */
+export function dismissToast() { hideToast(); }
+
 export function initDomToast(el: HTMLElement, deps: ToastDeps) {
   toastEl = el;
   toastDeps = deps;

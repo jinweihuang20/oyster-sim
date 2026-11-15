@@ -1,7 +1,7 @@
 export {
   bindRace, openRaceMenu, startRaceQueue, cancelRaceQueue, isRaceQueuing,
   setRaceSnap, applyRaceResults, clearRaceUi, currentRaceSnap,
-  isRacePlayActive, isRaceInputLocked,
+  isRacePlayActive, isRaceInputLocked, isRaceLobbyWait,
   type RaceHooks,
 } from './session';
 export { raceHubUrl, RaceQueueClient } from './hubClient';
