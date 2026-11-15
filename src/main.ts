@@ -20,7 +20,7 @@ import {
   tickTpCamOcclude, clearTpCamOcclude, setTpCamOccludeIgnore,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
-import { initCook, openCook, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView } from './cook/cookUi';
+import { initCook, openCook, openCookSolo, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView } from './cook/cookUi';
 import { initFood, openFood, openFoodStall, renderFoodStall, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
 import { foodStallSpawn } from './plaza/layout';
 import {
@@ -4446,6 +4446,7 @@ function launchDeathmatch(mode: DmMode) {
 }
 $('oRace').onclick = () => { audio(); openRaceMenu(); };
 $('oParty').onclick = () => { audio(); openPartyMenu(); };
+$('oCook').onclick = () => { audio(); openCookSolo(); };
 $('oDmFfa').onclick = () => launchDeathmatch('ffa');
 $('oDmHorde').onclick = () => launchDeathmatch('horde');
 function plazaHideYard(hide: boolean) {

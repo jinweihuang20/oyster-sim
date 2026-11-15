@@ -3623,3 +3623,7 @@ body:has(#cook.show) #dex{z-index:12010!important}
 .dxItem.un{color:#66727e!important}
 .dxEmpty{text-align:center;color:#66727e;font-size:13px}
 .fdDex{margin-top:6px}
+
+/* 主選單自家煎台：預覽放在煎台鐵板上 */
+#cook.solo .ckViewW{background:#3a3e42;border:2px solid #a4acb4;box-shadow:inset 0 2px 8px rgba(0,0,0,.35)}
+#overlay .sysGrid>#oCook svg{flex:0 0 auto}

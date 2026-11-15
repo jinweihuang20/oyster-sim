@@ -46,6 +46,8 @@ export function initCook(deps: CookDeps) {
 
 type Sel = { top: number; batter: number; egg: number; done: number; sauce: number };
 let seat: number | null = null;
+/** 主選單的自家煎台：不連伺服器、不能展示 */
+let solo = false;
 let step = 1;
 let sel: Sel = { top: 0, batter: -1, egg: -1, done: -1, sauce: -1 };
 let target: Combo | null = null;
@@ -67,7 +69,8 @@ export function cookPanelOpen() { return $('cook').classList.contains('show'); }
 
 /** 站上位子、伺服器佔位成功後打開 */
 export function openCook(s: number, preset?: number) {
-  seat = s;
+  seat = s; solo = false;
+  $('cook').classList.remove('solo');
   resetSel(preset);
   $('cook').classList.add('show');
   if (document.pointerLockElement) document.exitPointerLock();
@@ -85,17 +88,29 @@ function resetSel(preset?: number) {
   sync(0);
 }
 
+/** 主選單「煎蚵仔煎」：自家煎台，一樣扣食材、記圖鑑，但不展示也不連伺服器 */
+export function openCookSolo() {
+  seat = null; solo = true;
+  resetSel();
+  $('cook').classList.add('show', 'solo');
+  ($('cookClose') as HTMLButtonElement).textContent = '回主選單';
+  if (document.pointerLockElement) document.exitPointerLock();
+  render();
+}
+
 /** 關閉：放掉位子 */
 export function closeCook(leave = true) {
   cancelAnimationFrame(pourRaf); cancelAnimationFrame(cookRaf);
   stopView?.(); stopView = null; lastViewId = -2;
   $('cook').classList.remove('show');
-  if (leave && seat != null) { seat = null; D.leaveSeat(); }
+  if (leave && seat != null && !solo) { seat = null; D.leaveSeat(); }
   seat = null;
+  if (solo) { solo = false; $('cook').classList.remove('solo'); ($('cookClose') as HTMLButtonElement).textContent = '離開煎台'; }
 }
 
 function sync(stage: number) {
   const id = stage >= 1 ? comboId(curCombo()) : -1;
+  if (solo) return;
   D.progress(stage, id);
   D.myPan(stage >= 1 ? id : -1);
 }
@@ -121,7 +136,7 @@ function stepsBar() {
 
 function render() {
   const body = $('cookBody');
-  const head = `<div class="ckHead"><b>煎台 ${seat != null ? seat + 1 : ''} 號</b><button type="button" class="ckLink" data-ck="dex">${IC.dex}圖鑑</button></div>`;
+  const head = `<div class="ckHead"><b>${solo ? '自家煎台' : `煎台 ${seat != null ? seat + 1 : ''} 號`}</b><button type="button" class="ckLink" data-ck="dex">${IC.dex}圖鑑</button></div>`;
   let html = head + stepsBar() + `<div class="ckViewW"><canvas id="ckView" width="256" height="256"></canvas></div>`;
   if (step === 1) {
     const lack = TOPS.filter(t => foodCountAny(t.food) === 0);
@@ -156,7 +171,7 @@ function render() {
       + (sp ? `<p class="ckDesc">${esc(sp.desc)}</p>` : '')
       + `<ul class="ckFeat">${comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
       + `<p class="ckSum">圖鑑 ${dexCount()}／${COMBO_TOTAL.toLocaleString()}${cookTitle(dexCount()) ? `・${cookTitle(dexCount())}` : ''}</p></div>`
-      + `<div class="ckAsk" id="ckAsk"><b>要展示嗎？</b><span>會放在煎台旁，大家都看得到；每人一盤，離開廣場就收掉</span><div class="ckAct"><button type="button" class="ckBtn" data-ck="nodisp">不用</button><button type="button" class="ckBtn pri" data-ck="disp">展示</button></div></div>`
+      + (solo ? '' : `<div class="ckAsk" id="ckAsk"><b>要展示嗎？</b><span>會放在煎台旁，大家都看得到；每人一盤，離開廣場就收掉</span><div class="ckAct"><button type="button" class="ckBtn" data-ck="nodisp">不用</button><button type="button" class="ckBtn pri" data-ck="disp">展示</button></div></div>`)
       + `<div class="ckAct"><button type="button" class="ckBtn" data-ck="again">再煎一盤</button></div>`;
   }
   body.innerHTML = html;
@@ -212,7 +227,7 @@ function startCook() {
     doneFrac = Math.min(1, (performance.now() - cookT0) / COOK_MS);
     const f = document.getElementById('ckDone'); if (f) f.style.width = `${doneFrac * 100}%`;
     const band = doneOf(doneFrac);
-    if (band !== lastBand) { lastBand = band; sel.done = band; mountView(comboId(curCombo())); D.myPan(comboId(curCombo())); }
+    if (band !== lastBand) { lastBand = band; sel.done = band; mountView(comboId(curCombo())); if (!solo) D.myPan(comboId(curCombo())); }
     if (doneFrac >= 1) { flipped = true; scoop(); return; }
     cookRaf = requestAnimationFrame(tick);
   };
@@ -366,11 +381,11 @@ function renderDex() {
     + `<ul class="ckFeat">${hid ? '<li>條件保密，煎出來才知道</li>' : comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
     + `<p class="ckSum">${got ? `第一次煎出：${fmtDate(dex()[String(id)])}` : '還沒收集'}</p>`
     + `<div class="ckAct"><button type="button" class="ckBtn pri" data-ck="follow"${hid ? ' disabled' : ''}>照這樣煎</button></div>`
-    + (seat == null ? '<p class="ckHint">' + IC.info + '到廣場東北角烹煮區，站上煎台位子後可以用</p>' : '');
+    + (seat == null && !solo ? '<p class="ckHint">' + IC.info + '主選單按「煎蚵仔煎」，或到廣場烹煮區站上煎台位子後可以用</p>' : '');
   B.scrollTop = 0;
   B.querySelector<HTMLButtonElement>('[data-nav]')!.onclick = () => { dexLevel = 'list'; dexOwner = ''; renderDex(); };
   B.querySelector<HTMLButtonElement>('[data-ck="follow"]')?.addEventListener('click', () => {
-    if (seat == null) { D.toast('到廣場烹煮區站上煎台位子，再按「照這樣煎」', '#ffd76a'); return; }
+    if (seat == null && !solo) { D.toast('主選單按「煎蚵仔煎」或到廣場烹煮區站上煎台，再按「照這樣煎」', '#ffd76a'); return; }
     closeDex(); resetSel(dexId); render();
   });
   const cv = document.getElementById('dxView') as HTMLCanvasElement | null;
