@@ -2642,15 +2642,18 @@ input[type=range]#rmEdSeats,input[type=range]#rmEdDur,input[type=range]#rmEdGoal
 #partyModal h3{margin:0 0 8px;font-size:20px}
 #partyModal p{margin:6px 0;font-size:13px;font-weight:700;color:#e8edf2}
 #partyModal .ptModes{display:flex;flex-direction:column;gap:8px;margin:12px 0}
-#partyModal .ptJoinRow{display:flex;gap:8px}
+#partyModal .ptJoinRow{display:flex;align-items:stretch;gap:8px}
 #partyModal .ptJoinRow input{
-  flex:1;min-height:44px;padding:8px 12px;border-radius:10px;border:2px solid #4a6a88;
+  flex:1 1 auto;min-width:0;min-height:44px;padding:8px 12px;border-radius:10px;border:2px solid #4a6a88;
   background:#0e1620;color:#e8edf2;font-weight:800;font-size:16px;letter-spacing:.12em;text-transform:uppercase
+}
+#partyModal .ptJoinRow button{
+  flex:0 0 auto;white-space:nowrap;min-width:4.75em;padding:8px 14px
 }
 #partyModal .ptActs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 #partyModal button{
   flex:1;min-height:44px;padding:8px 12px;border-radius:10px;border:2px solid #4a6a88;
-  background:#243448;color:#e8edf2;font-weight:800;font-size:14px;cursor:pointer
+  background:#243448;color:#e8edf2;font-weight:800;font-size:14px;cursor:pointer;white-space:nowrap
 }
 #partyModal button.ptPri{background:#2a5a86;border-color:#4a8ab8}
 #partyModal .ptList{max-height:min(40vh,220px);overflow:auto;display:flex;flex-direction:column;gap:6px;margin:8px 0}

@@ -4,7 +4,7 @@ import {
   initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl, setGeoLowDetail,
   importMove, escapeInApp, type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY,
   defaultSave, loadSave as loadSaveFrom, writeSave, todayKey, dayDiff, installNoZoom,
-  eco, fetchEconomy, syncEconomyTables, plazaPayMult,
+  eco, fetchEconomy, syncEconomyTables, plazaPayMult, plazaLeisureLocMult,
   writeShiftDraft, clearShiftDraft, takeShiftDraft,
   cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink, installCloudLifecycle, onCloudStatus,
 } from './core';
@@ -1403,8 +1403,9 @@ function applyCrew() {
 updSky(); showLand(); applyCrew(); setInterval(updSky, 30000);
 function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   nightShift = isNight(); updSky();
-  $('nightTag').style.display = nightShift && !plazaMode ? '' : 'none';
-  if (nightShift && !plazaMode) later(1.5, () => toastTop(`夜班上工！這一工收入 +${Math.round(eco.nightMult * 100)}%`, TOP_SEC.info));
+  // 休閒廣場／休閒房也吃夜班加成（地點倍率另關）；單挑同
+  $('nightTag').style.display = nightShift ? '' : 'none';
+  if (nightShift) later(1.5, () => toastTop(`夜班上工！這一工收入 +${Math.round(eco.nightMult * 100)}%`, TOP_SEC.info));
   if (isRoomActive()) { npcs.length = 0; ALL_NPCS.forEach(n => { n.g.visible = false; n.tag.sprite.visible = false; n.bubble.sprite.visible = false; }); stools.forEach(g => { g.visible = false; if (g.userData.tag) g.userData.tag.visible = false; }); }
   else { moonReset(); applyCrew(); }
   if (walking && !plazaMode && !isRoomActive()) { setWalking(false); on('seatCard', false); on('joy', false); handRig.visible = true; stools.forEach(g => g.userData.tag.visible = false); tYaw = yaw = 0; tPitch = pitch = -0.85; }
@@ -2877,7 +2878,10 @@ function bumpShiftDraft() {
       count: Math.max(0, Math.floor(count)),
       dCnt: [dCnt[0] | 0, dCnt[1] | 0, dCnt[2] | 0, dCnt[3] | 0],
       night: nightShift ? 1 : 0,
-      locM: mode === 'plaza' ? plazaPayMult() : locNow().m,
+      // 休閒廣場／休閒房不吃地點倍率；單挑仍用 plazaPayMult
+      locM: mode === 'plaza'
+        ? (isPlazaRaceMode() ? plazaPayMult() : plazaLeisureLocMult())
+        : locNow().m,
       perfectPay: eco.perfectPay,
       nightMult: eco.nightMult,
     });
@@ -2932,7 +2936,10 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
   }
   const LC = locNow();
-  const plazaM = plazaPayMult();
+  // 休閒廣場／多人休閒房：不吃地點倍率；夜班仍加。單挑另走 settleRaceShiftEarn。
+  const plazaM = plazaMode
+    ? (isPlazaRaceMode() ? plazaPayMult() : plazaLeisureLocMult())
+    : 1;
   const locM = plazaMode ? plazaM : LC.m;
   const base0 = meatPay + perfects * eco.perfectPay + bowlBonus + pearlMoney, locBonus = Math.round(base0 * (locM - 1)), nightBonus = nightShift ? Math.round((base0 + locBonus) * eco.nightMult) : 0;
   const ev = evRun, evDone = !!ev && endReason !== 'quit' && !handPain, evEarly = evDone && endReason === 'early', evCash = ev && evDone ? Math.max(0, ev.bonus) + (evEarly ? Math.max(0, ev.earlyBonus) : 0) : 0;
@@ -3728,7 +3735,8 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
   const lockedPick = !plazaCur && locPickedLocked();
   const isNew = (l: typeof LOCS[number]) => !seen.includes(l.id) && save.locs!.includes(l.id);
   const anyNew = LOCS.some(isNew);
-  const plazaM = plazaPayMult();
+  // 休閒廣場不吃地點倍率（夜班另計）；選卡顯示 ×1
+  const plazaM = plazaLeisureLocMult();
   const headTxt = plazaCur
     ? `<b><i class="ic ic-pin"></i> 上工地點：🦪 蚵仔廣場 ×${plazaM.toFixed(1)}</b><small>${plazaHeadCountTxt()}</small>`
     : `<b><i class="ic ic-pin"></i> 上工地點：${lockedPick ? '🔒 ' : ''}${cl!.n} ×${cl!.m.toFixed(1)}</b>${anyNew ? '<span class="nb">NEW</span>' : ''}<small>${lockedPick ? '此地點尚未解鎖・可先選看看或花錢提早解鎖' : `👉 點下面的卡片換地點${COARSE ? '（左右滑看更多）' : ''}`}</small>`;
