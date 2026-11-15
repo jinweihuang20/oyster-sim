@@ -243,27 +243,55 @@ export function makeAkang(): THREE.Group {
     box(0.007, 0.007, 0.004, sparkM, s * 0.024, 0.02, -0.051, headG);
   }
 
-  // 立耳：薄方塊堆成錐形；右耳較短、耳尖外側缺一角
+  // 立耳：寬底尖頂的三角楔，坐在頭頂上；右耳較短、耳尖外側缺一角
+  const earWedge = (notched: boolean, side: number, inner = false): THREE.ExtrudeGeometry => {
+    const baseW = inner ? 0.042 : 0.062;
+    const height = notched ? (inner ? 0.046 : 0.058) : (inner ? 0.07 : 0.088);
+    const depth = inner ? 0.006 : 0.032;
+    const hw = baseW / 2;
+    const s = new THREE.Shape();
+    if (!notched) {
+      s.moveTo(-hw, 0);
+      s.lineTo(hw, 0);
+      s.lineTo(0, height);
+      s.closePath();
+    } else {
+      // 外側（+X 為狗的右耳）切掉一角，整體較短
+      const o = side > 0 ? 1 : -1;
+      s.moveTo(-hw, 0);
+      s.lineTo(hw, 0);
+      s.lineTo(o * hw * 0.2, height * 0.48);
+      s.lineTo(o * hw * 0.62, height * 0.38);
+      s.lineTo(o * hw * 0.04, height);
+      s.lineTo(-o * hw * 0.38, height * 0.5);
+      s.closePath();
+    }
+    const geo = new THREE.ExtrudeGeometry(s, {
+      depth,
+      bevelEnabled: true,
+      bevelThickness: 0.002,
+      bevelSize: 0.002,
+      bevelSegments: 1,
+    });
+    geo.translate(0, 0, -depth / 2);
+    return geo;
+  };
   const addEar = (x: number, notched: boolean) => {
     const eg = new THREE.Group();
-    if (!notched) {
-      box(0.03, 0.04, 0.016, tanM, 0, 0.02, 0, eg);
-      box(0.02, 0.045, 0.014, tanM, 0, 0.058, 0, eg);
-      box(0.016, 0.055, 0.004, pinkM, 0, 0.028, -0.008, eg);
-    } else {
-      box(0.03, 0.032, 0.016, tanM, 0, 0.016, 0, eg);
-      // 上段偏內側，外側缺一截
-      box(0.016, 0.022, 0.014, tanM, x > 0 ? -0.006 : 0.006, 0.04, 0, eg);
-      box(0.016, 0.038, 0.004, pinkM, x > 0 ? -0.004 : 0.004, 0.022, -0.008, eg);
-    }
-    eg.position.set(x, 0.04, 0.0);
-    eg.rotation.z = x > 0 ? -0.22 : 0.22;
-    eg.rotation.y = x > 0 ? 0.12 : -0.12;
+    const side = x > 0 ? 1 : -1;
+    eg.add(new THREE.Mesh(earWedge(notched, side, false), tanM));
+    const inner = new THREE.Mesh(earWedge(notched, side, true), pinkM);
+    inner.position.z = -0.014;
+    eg.add(inner);
+    // 坐在頭頂兩側，略向外張
+    eg.position.set(x, 0.044, 0.0);
+    eg.rotation.z = side * -0.16;
+    eg.rotation.y = side * 0.08;
     headG.add(eg);
     return eg;
   };
-  addEar(-0.042, false);
-  addEar(0.042, true);
+  addEar(-0.03, false);
+  addEar(0.03, true);
 
   const zMat = new THREE.MeshBasicMaterial({ color: 0xc8d4e8, transparent: true, opacity: 0.9 });
   const sleepG = new THREE.Group(); sleepG.name = 'petSleep';
