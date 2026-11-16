@@ -66,15 +66,42 @@ function push(it: Item) {
   if (!showing) next();
 }
 
+let hideT = 0, nextT = 0;
+/** 收起目前這則，稍後換下一則（點一下或時間到） */
+function dismiss(delay = 350) {
+  const el = document.getElementById('bcBanner');
+  window.clearTimeout(hideT); window.clearTimeout(nextT);
+  el?.classList.remove('on');
+  nextT = window.setTimeout(next, delay);
+}
+
+function bannerEl() {
+  let el = document.getElementById('bcBanner');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'bcBanner';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+  el.title = '點一下關閉';
+  // 只有橫幅本身吃點擊；點了立刻收起、換下一則，不傳到遊戲畫面
+  const stop = (e: Event) => e.stopPropagation();
+  el.addEventListener('pointerdown', stop);
+  el.addEventListener('touchstart', stop, { passive: true });
+  el.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); if (el!.classList.contains('on')) dismiss(200); });
+  document.body.appendChild(el);
+  return el;
+}
+
 function next() {
   const it = queue.shift();
-  let el = document.getElementById('bcBanner');
+  const el = document.getElementById('bcBanner');
   if (!it) { showing = false; el?.classList.remove('on'); return; }
   showing = true;
-  if (!el) { el = document.createElement('div'); el.id = 'bcBanner'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); document.body.appendChild(el); }
-  el.innerHTML = `<span class="bcIc">${it.kind === 'first' ? IC_FIRST : IC_AMA}</span><span class="bcTx"><em>${it.kind === 'first' ? '全服首創' : '阿婆好評'}</em>${bannerText(it)}</span>`;
-  el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
-  window.setTimeout(() => { el!.classList.remove('on'); window.setTimeout(next, 350); }, 4000);
+  const b = el ?? bannerEl();
+  b.innerHTML = `<span class="bcIc">${it.kind === 'first' ? IC_FIRST : IC_AMA}</span><span class="bcTx"><em>${it.kind === 'first' ? '全服首創' : '阿婆好評'}</em>${bannerText(it)}</span>`;
+  b.classList.remove('on'); void b.offsetWidth; b.classList.add('on');
+  window.clearTimeout(hideT);
+  hideT = window.setTimeout(() => dismiss(350), 4000);
 }
 
 /* ───────── 回報 ───────── */

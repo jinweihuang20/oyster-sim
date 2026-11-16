@@ -2660,8 +2660,14 @@ function hashPid(pid: string) {
         // 這幀下面馬上要讀 head 世界座標排名牌，更新 matrix；渲染器之後本來也會再更新一次，不用 force
         r.rig.outer.updateMatrixWorld();
       }
-      // 低畫質：遠距名牌字也看不清，省一個 draw call
-      r.tag.sprite.visible = show && !(LO && tier === 'far');
+      // 太遠不畫身體時名牌照樣顯示（只剩一個 sprite，便宜）；低畫質在人非常多時才收遠處名牌
+      const crowdCut = LO && remotes.size > 40 && (tier === 'far' || tier === 'hide');
+      const tagOnly = hideFar && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon' && !crowdCut;
+      r.tag.sprite.visible = (show && !crowdCut) || tagOnly;
+      {
+        const wantA = tagOnly ? PLAZA_TAG_A * 0.7 : PLAZA_TAG_A;
+        if (rj._tagA !== wantA) { rj._tagA = wantA; r.tag.setOpacity(wantA); }
+      }
       // 有寵物且坐著時寵物會停在頭上（y≈1.44），名牌 / 聊天泡泡要往上讓位
       // 戴帽子時寵物再抬 headTopLift，名牌同步加抬，否則被帽頂＋寵物一起擋到
       const petOnHead = !!(r as any)._petMesh && !!r.seated && petRidesHead((r as any)._petId);
@@ -2669,7 +2675,14 @@ function hashPid(pid: string) {
       const remoteHatLift = headTopLift(remoteHeadId);
       const tagLift = petOnHead ? 0.52 + remoteHatLift : 0.22;
       const bubLift = petOnHead ? 0.72 + remoteHatLift : 0.42;
-      if (r.tag.sprite.visible) placeAboveHead(r.tag.sprite, r.rig.head, tagLift);
+      if (tagOnly) {
+        // 身體沒畫：用上次看得到時記下的頭頂高度，跟著插值後的位置走（批次 Poses 一樣會更新）
+        const dy = (rj[r.seated ? '_tagDyS' : '_tagDyW'] as number | undefined) ?? ((r.seated ? 1.3 : 1.75) * r.rig.outer.scale.y + tagLift);
+        r.tag.sprite.position.set(r.rig.outer.position.x, r.rig.outer.position.y + dy, r.rig.outer.position.z);
+      } else if (r.tag.sprite.visible) {
+        placeAboveHead(r.tag.sprite, r.rig.head, tagLift);
+        rj[r.seated ? '_tagDyS' : '_tagDyW'] = r.tag.sprite.position.y - r.rig.outer.position.y;
+      }
       if (r.bubUntil > t && show) {
         placeAboveHead(r.bubble.sprite, r.rig.head, bubLift);
         r.bubble.sprite.visible = true;
