@@ -314,7 +314,7 @@ export function disposeDish(g: THREE.Object3D) {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
     const geo = m.geometry;
-    if (geo && !Object.values(G).includes(geo as any) && geo !== plateGeo) geo.dispose();
+    if (geo && !Object.values(G).includes(geo as any) && geo !== plateGeo && !ANIM_GEOS.includes(geo)) geo.dispose();
   });
 }
 
@@ -385,11 +385,15 @@ export function dishAnimBetween(fromId: number, toId: number): DishAnim | null {
   const pour = b.batter && b.batter !== a.batter ? b.batter : 0;
   const egg = !!b.egg && !a.egg;
   if (!addTop && !remTop && !pour && !egg) return null;
-  const ms = pour ? [0, 700, 850, 1000][pour] : egg ? 650 : 750;
+  const ms = pour ? [0, 700, 850, 1000][pour] : egg ? 1300 : 750;
   return { addTop, remTop, pour, egg, ms };
 }
 const STREAM_GEO = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
 const LADLE_GEO = new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+const EGG_GEO = new THREE.SphereGeometry(1, 18, 12);
+const SHELL_GEO = new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+const EGG_SHELL_MAT = new THREE.MeshStandardMaterial({ color: '#efe3cf', roughness: 0.6, metalness: 0, side: THREE.DoubleSide });
+const ANIM_GEOS: THREE.BufferGeometry[] = [STREAM_GEO, LADLE_GEO, EGG_GEO, SHELL_GEO];
 /** 依動畫進度 t（0～1）擺放這一幀的配料／粉漿／蛋 */
 function applyDishAnim(d: THREE.Group, an: DishAnim, t: number) {
   const kids = [...d.children];
@@ -434,15 +438,54 @@ function applyDishAnim(d: THREE.Group, an: DishAnim, t: number) {
       ladle.position.set(0.12, top + 0.06, 0); d.add(ladle);
     }
   }
-  // 蛋：一片片從上面落下、攤開
+  // 蛋：一顆蛋在鐵板上方敲一下、殼裂成兩半，蛋黃連蛋白掉下來，再在粉漿上攤開
   if (an.egg) {
     const list = byPart.get('egg') ?? [];
-    list.forEach((o, i) => {
-      const u = clamp01((t - (i / Math.max(1, list.length)) * 0.3) / 0.55);
-      if (u <= 0) { o.visible = false; return; }
-      o.position.y += (1 - easeOut(u)) * 0.6;
-      o.scale.multiplyScalar(0.3 + 0.7 * easeOut(u));
-    });
+    const H = 0.72, top = 0.1;
+    // 蛋片：落地後從中間往外攤開
+    const sp = easeOut(clamp01((t - 0.5) / 0.45));
+    if (list.length) {
+      if (sp <= 0) list.forEach(o => { o.visible = false; });
+      else {
+        const grp = new THREE.Group(); grp.scale.set(0.15 + 0.85 * sp, 1, 0.15 + 0.85 * sp);
+        for (const o of list) { d.remove(o); grp.add(o); }
+        d.add(grp);
+      }
+    }
+    // 整顆蛋：降下來、輕敲兩下
+    if (t < 0.34) {
+      const u = easeOut(clamp01(t / 0.18));
+      const egg = new THREE.Mesh(EGG_GEO, EGG_SHELL_MAT);
+      const knock = t > 0.18 ? Math.sin(((t - 0.18) / 0.16) * Math.PI * 2) * 0.05 : 0;
+      egg.scale.set(0.16, 0.205, 0.16); egg.rotation.z = 0.5 + knock * 3;
+      egg.position.set(0.04, H + 0.35 * (1 - u) - Math.abs(knock), 0); d.add(egg);
+    } else {
+      // 殼裂開：兩半往左右翻開，之後往上收走
+      const u = easeOut(clamp01((t - 0.34) / 0.2)), out = clamp01((t - 0.62) / 0.25);
+      if (out < 1) for (const s of [-1, 1]) {
+        const half = new THREE.Mesh(SHELL_GEO, EGG_SHELL_MAT);
+        const k = 1 - out;
+        half.scale.set(0.16 * k, 0.2 * k, 0.16 * k);
+        half.rotation.set(0, 0, s > 0 ? -Math.PI / 2 - u * 0.9 : Math.PI / 2 + u * 0.9);
+        half.position.set(0.04 + s * (0.03 + u * 0.2), H + u * 0.06 + out * 0.3, 0); d.add(half);
+      }
+      // 蛋黃＋蛋白往下掉，落到粉漿上就變成蛋片
+      const f = clamp01((t - 0.36) / 0.16);
+      if (f < 1) {
+        const y = H - (H - top) * f * f;
+        const white = new THREE.Mesh(EGG_GEO, mat('#f6f3ea', { opacity: 0.82, rough: 0.25 }));
+        white.scale.set(0.12 - f * 0.02, 0.08 + f * 0.1, 0.12 - f * 0.02); white.position.set(0.04, y + 0.02, 0); d.add(white);
+        const yolk = new THREE.Mesh(EGG_GEO, mat('#f2b22a', { rough: 0.35 }));
+        yolk.scale.setScalar(0.075); yolk.position.set(0.04, y, 0); d.add(yolk);
+      } else if (sp < 0.35) {
+        // 剛落地：一灘蛋白＋蛋黃，馬上攤開
+        const w = 1 + sp * 4;
+        const white = new THREE.Mesh(EGG_GEO, mat('#f6f3ea', { opacity: 0.85, rough: 0.25 }));
+        white.scale.set(0.13 * w, 0.025, 0.13 * w); white.position.set(0.04, top + 0.02, 0); d.add(white);
+        const yolk = new THREE.Mesh(EGG_GEO, mat('#f2b22a', { rough: 0.35 }));
+        yolk.scale.set(0.065, 0.04, 0.065); yolk.position.set(0.04, top + 0.04, 0); d.add(yolk);
+      }
+    }
   }
 }
 

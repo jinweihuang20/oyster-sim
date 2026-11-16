@@ -152,7 +152,9 @@ function mountView(id: number) {
   const flipIn = lastViewUnder != null && lastViewUnder !== under && step >= 4 && step <= 5;
   // 選配料、粉漿、蛋的時候：從上一盤變過來要播動畫（換一次選擇就重播；點預覽可跳過）
   const settle = pourSettle; pourSettle = null;
-  const animFrom = settle == null && step >= 1 && step <= 3 && !under && lastViewId >= 0 && lastViewId !== id ? lastViewId : undefined;
+  // 點「加蛋」會直接進到煎的步驟：剛加上蛋的那一盤也要播打蛋動畫
+  const eggIn = step === 4 && !under && lastViewId >= 0 && !comboOf(lastViewId).egg && !!comboOf(id).egg;
+  const animFrom = settle == null && (step >= 1 && step <= 3 || eggIn) && !under && lastViewId >= 0 && lastViewId !== id ? lastViewId : undefined;
   stopView?.(); lastViewId = id; lastViewKey = key; lastViewUnder = under; viewCv = cv;
   // 剛起鍋：先彈一下、放完特效再開始慢慢轉
   const pop = !!cv.closest('.ckViewW.fx');
