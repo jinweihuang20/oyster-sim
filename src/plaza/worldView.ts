@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey, headTopLift, setOutfitDetailVisible } from '../shop/equipVisual';
 import { makePet, petRidesHead, petWorldScale, tickPetAnim } from '../shop/pets';
+import { playApoPunch, apoHitSeconds } from '../shop/apoFx';
+import { apoScold } from '../shop/apoTalk';
 import {
   AMA_LOOKS, AMA_SCALE, AMA_SIT_LIFT, AMA_CARRY_TILT, AMA_CARRY_Y, AMA_CARRY_FWD, AMA_CARRY_ROLL, AMA_CARRY_LIE_BACK, AMA_CARRY_LIE_Y,
   amaCarrySide, pickAmaLook, amaShirtHex,
@@ -154,6 +156,10 @@ export type PlazaWorldView = {
   moonLaunch: (connId: string, delayMs?: number, fromX?: number, fromZ?: number) => void;
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean; hold?: number }) => void;
+  /** 遠端阿珀頭頂垃圾話 */
+  showPetChat: (opts: { connId?: string; pid?: string; text: string }) => void;
+  /** 遠端阿珀對阿婆出貓拳 */
+  playPetPunch: (opts: { connId?: string; pid?: string; targetConnId: string; stole?: boolean; scold?: number }) => void;
   setSelfPose: (x: number, z: number, yaw: number, seated: boolean, smoke?: boolean, connId?: string) => void;
   setSelfBody: (pz: string, pk: number, jy: number) => void;
   setSelfCushion: (on: boolean, pileId: number, slot: number) => void;
@@ -2238,6 +2244,8 @@ function hashPid(pid: string) {
     if (r.cigSmoke) { root.remove(r.cigSmoke.group); r.cigSmoke.dispose(); r.cigSmoke = undefined; }
     syncCushion(r.pid || r.key, false, -1, -1);
     syncRemotePet(r, '');
+    const petBub = (r as any)._petBub as ReturnType<typeof ensureBubble> | undefined;
+    if (petBub) { try { root.remove(petBub.sprite); petBub.dispose(); } catch { /* */ } (r as any)._petBub = undefined; }
     clearPlazaSmokeCig(r.rig);
     const ashes = (r as any)._aberAsh?.ashes as { dispose: () => void }[] | undefined;
     if (ashes) for (const a of ashes) { try { a.dispose(); } catch { /* */ } }
@@ -2303,6 +2311,53 @@ function hashPid(pid: string) {
     r.bubble.setOpacity(PLAZA_BUB_A);
     r.bubble.sprite.visible = true;
     r.bubUntil = until;
+  }
+
+  function findRemote(opts: { connId?: string; pid?: string }): Remote | undefined {
+    let r: Remote | undefined;
+    if (opts.pid) r = remotes.get(opts.pid);
+    if (!r && opts.connId) {
+      for (const x of remotes.values()) { if (x.connId === opts.connId) { r = x; break; } }
+    }
+    return r;
+  }
+
+  function showPetChat(opts: { connId?: string; pid?: string; text: string }) {
+    const text = (opts.text || '').trim();
+    if (!text) return;
+    const r = findRemote(opts);
+    if (!r) return;
+    const short = text.length > 40 ? text.slice(0, 39) + '…' : text;
+    const rj = r as any;
+    if (!rj._petBub) rj._petBub = ensureBubble(false);
+    const bub = rj._petBub as ReturnType<typeof ensureBubble>;
+    bub.setText(short, true);
+    bub.setOpacity(PLAZA_BUB_A);
+    bub.sprite.visible = true;
+    rj._petBubUntil = performance.now() + 5000;
+  }
+
+  function playPetPunch(opts: { connId?: string; pid?: string; targetConnId: string; stole?: boolean; scold?: number }) {
+    const src = findRemote(opts);
+    const tgt = findRemote({ connId: opts.targetConnId });
+    if (!src || !tgt) return;
+    const mesh = (src as any)._petMesh as THREE.Group | undefined;
+    const from = new THREE.Vector3();
+    if (mesh) mesh.getWorldPosition(from);
+    else src.rig.outer.getWorldPosition(from);
+    from.y += 0.12;
+    const to = new THREE.Vector3();
+    if (tgt.rig.head) tgt.rig.head.getWorldPosition(to);
+    else tgt.rig.outer.getWorldPosition(to);
+    to.y += 0.08;
+    playApoPunch(root, from, to, {
+      empty: !opts.stole,
+      onHit: () => {
+        (tgt as any)._apoHit = performance.now() + apoHitSeconds() * 1000;
+        const line = apoScold(opts.scold ?? 0);
+        if (line) showChat({ connId: tgt.connId, pid: tgt.pid, text: line, hold: 2200 });
+      },
+    });
   }
 
   let seatWishes: PlazaSeatWish[] = [];
@@ -2664,6 +2719,17 @@ function hashPid(pid: string) {
         updateRemotePet(r, dt);
         // 這幀下面馬上要讀 head 世界座標排名牌，更新 matrix；渲染器之後本來也會再更新一次，不用 force
         r.rig.outer.updateMatrixWorld();
+        const petMesh = (r as any)._petMesh as THREE.Group | undefined;
+        const petBub = (r as any)._petBub as ReturnType<typeof ensureBubble> | undefined;
+        if (petBub && ((r as any)._petBubUntil ?? 0) > t && petMesh) {
+          petMesh.getWorldPosition(_tagHead);
+          petBub.sprite.position.set(_tagHead.x, _tagHead.y + 0.42, _tagHead.z);
+          petBub.sprite.visible = true;
+        } else if (petBub) petBub.sprite.visible = false;
+        if (((r as any)._apoHit ?? 0) > t && r.rig.head) {
+          const left = Math.max(0, ((r as any)._apoHit - t) / (apoHitSeconds() * 1000));
+          r.rig.head.rotation.z += Math.sin(t * 0.05) * 0.4 * left;
+        }
       }
       // 太遠不畫身體時名牌照樣顯示（只剩一個 sprite，便宜）；低畫質在人非常多時才收遠處名牌
       const crowdCut = LO && remotes.size > 40 && (tier === 'far' || tier === 'hide');
@@ -2935,7 +3001,7 @@ function hashPid(pid: string) {
   }
   return {
     root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, applyMove, setPhase, highlight, highlightNear, hitPile, grill,
-    syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfBody, setSelfCushion,
+    syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, showPetChat, playPetPunch, setSelfPose, setSelfBody, setSelfCushion,
     playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: (loc, st) => {
       shedDoorState.set(loc, st);
       shedRow?.setDoorState(loc, st);

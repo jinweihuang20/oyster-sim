@@ -109,12 +109,12 @@ export function purgeFood() {
 }
 
 // ----- 取得管道 -----
-/** 自己剝進碗的每一顆蚵仔肉都算一份食材蚵仔（完整／一般看有沒有剝破）；偷來、寵物、烤台的肉和新手教學不算 */
+/** 自己剝進碗的每一顆蚵仔肉都算一份食材蚵仔（完整／一般看有沒有剝破）；一般偷來、寵物產肉、新手教學不算。阿珀貓拳從阿婆碗偷來的是例外，會另外呼叫本函式。 */
 export function rollShuck(intact: boolean) {
   if (D.isTut()) return;
   addFood('oyster', 1, 'shuck', intact ? 1 : 0, true);
 }
-/** used：入碗幾顆（與 rollShuck 同一批：教學、偷來、寵物不算；烤台搶到再入碗的算）。每顆各自擲一次 */
+/** used：入碗幾顆（與 rollShuck 同一批：教學、一般偷來、寵物產肉不算；烤台搶到再入碗的算）。每顆各自擲一次 */
 export function rollScoop(locId: string, used: number) {
   if (D.isTut()) return;
   const r = FOOD_RATE.scoop[locId] ?? FOOD_RATE.scoop.home;

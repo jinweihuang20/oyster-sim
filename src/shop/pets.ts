@@ -44,6 +44,14 @@ export const PETS: Pet[] = [
     eff: '每 10 秒碗裡 +1 塊簡單蚵仔肉；自動撐傘完美反彈朝你飛來的殼；每 15 秒朝阿婆丟殼（掛機停止產肉與丟殼）',
     fx: { tickSec: 10, perTick: 1, meatDiff: 0, autoUmb: true, autoReflect: true, throwAmaSec: 15 },
   },
+  {
+    id: 'pt_apo',
+    n: '阿珀',
+    price: 3333,
+    desc: '作者的貓，棕灰虎斑、額頭有 M 字、尾巴一圈一圈的。會跟在腳邊，偶爾停下來舔毛。每 10 秒會丟一塊簡單蚵仔肉進碗；每隔一段時間會伸出超長貓拳打附近的阿婆，打中有肉就偷一顆給你（這顆算成績、也算食材蚵仔）。在廣場走動時還會講垃圾話。超過 10 秒沒動作會睡著，睡著時暫停產肉和貓拳。',
+    eff: '每 10 秒碗裡 +1 塊簡單蚵仔肉；20–30 秒對附近阿婆出貓拳，偷到的肉算成績與食材蚵仔；廣場走動時講垃圾話（掛機暫停）',
+    fx: { tickSec: 10, perTick: 1, meatDiff: 0 },
+  },
 ];
 
 export const defaultPetId = 'pt_oyster_baby';
@@ -159,19 +167,19 @@ export function petRidesHead(id: string | null | undefined): boolean {
 
 /** 場景裡的縮放：蚵仔寶寶較小以免擋頭，阿康站腳邊用原尺寸 */
 export function petWorldScale(id: string | null | undefined): number {
-  return id === 'pt_akang' ? 1 : 0.7;
+  return id === 'pt_akang' || id === 'pt_apo' ? 1 : 0.7;
 }
 
 /** 商店／預覽鏡頭：後備值；實際取景請用 fitPetCamera */
 export function petPreviewFrame(id: string): { pos: THREE.Vector3; look: THREE.Vector3; fov: number; dist?: number } {
-  if (id === 'pt_akang') {
+  if (id === 'pt_akang' || id === 'pt_apo') {
     return { pos: new THREE.Vector3(0.18, 0.2, 0.72), look: new THREE.Vector3(0, 0.13, 0), fov: 32 };
   }
   return { pos: new THREE.Vector3(0, 0.17, 0.95), look: new THREE.Vector3(0, 0.13, 0), fov: 30 };
 }
 
 export function petThumbFrame(id: string): { pos: THREE.Vector3; look: THREE.Vector3; fov: number } {
-  if (id === 'pt_akang') {
+  if (id === 'pt_akang' || id === 'pt_apo') {
     return { pos: new THREE.Vector3(0.16, 0.18, 0.62), look: new THREE.Vector3(0, 0.12, 0), fov: 34 };
   }
   return { pos: new THREE.Vector3(0, 0.17, 0.78), look: new THREE.Vector3(0, 0.13, 0), fov: 32 };
@@ -248,6 +256,7 @@ export function fitPetCamera(
 export function makePet(id: string): THREE.Group | null {
   if (id === 'pt_oyster_baby') return makeOysterBaby();
   if (id === 'pt_akang') return makeAkang();
+  if (id === 'pt_apo') return makeApo();
   return null;
 }
 
@@ -466,6 +475,220 @@ export function makeAkang(): THREE.Group {
       legs.hl.rotation.x = lerp(legs.hl.rotation.x, restLegX.hl, k);
       legs.hr.rotation.x = lerp(legs.hr.rotation.x, restLegX.hr, k);
       tailG.rotation.y = Math.sin((ud.t) * 5) * 0.28;
+    }
+  };
+
+  g.userData.sleep = sleepG;
+  g.userData.body = bodyG;
+  g.userData.head = headG;
+  g.userData.tail = tailG;
+  g.userData.legs = legs;
+  g.userData.tickAnim = tickAnim;
+  g.userData.groundPet = true;
+  g.userData.worldScale = 1;
+  return g;
+}
+
+
+/** 阿珀：方塊風格棕灰虎斑貓，額頭 M 字、環紋尾，閒置時偶爾舔毛 */
+export function makeApo(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'pet_apo';
+  const fur = 0x8d7358;
+  const stripe = 0x5a4636;
+  const belly = 0xd7cbb8;
+  const muzzle = 0xe8e0d4;
+  const eyeGold = 0xc4a035;
+  const dark = 0x1a1a1a;
+  const pink = 0xe8b4a8;
+  const tongueCol = 0xe8899a;
+  const furM = stdMat(fur);
+  const stripeM = stdMat(stripe);
+  const bellyM = stdMat(belly);
+  const muzzleM = stdMat(muzzle);
+  const darkM = stdMat(dark, { roughness: 0.3, metalness: 0.2 });
+  const goldM = stdMat(eyeGold, { roughness: 0.35, metalness: 0.2 });
+  const pinkM = stdMat(pink, { roughness: 0.45 });
+  const tongueM = stdMat(tongueCol, { roughness: 0.4 });
+  const sparkM = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+  const bodyG = new THREE.Group();
+  bodyG.name = 'apoBody';
+  box(0.11, 0.09, 0.20, furM, 0, 0.128, 0.01, bodyG);
+  box(0.09, 0.05, 0.16, bellyM, 0, 0.086, 0.0, bodyG);
+  // 背脊虎斑
+  box(0.04, 0.02, 0.16, stripeM, 0, 0.176, 0.01, bodyG);
+  box(0.02, 0.028, 0.04, stripeM, -0.04, 0.155, -0.02, bodyG);
+  box(0.02, 0.028, 0.04, stripeM, 0.04, 0.155, 0.04, bodyG);
+  box(0.02, 0.028, 0.04, stripeM, -0.04, 0.155, 0.06, bodyG);
+
+  const headG = new THREE.Group();
+  headG.name = 'apoHead';
+  headG.position.set(0, 0.195, -0.13);
+  box(0.10, 0.085, 0.09, furM, 0, 0, 0, headG);
+  box(0.07, 0.05, 0.055, muzzleM, 0, -0.018, -0.06, headG);
+  box(0.02, 0.014, 0.016, pinkM, 0, 0.002, -0.09, headG);
+  box(0.034, 0.012, 0.018, darkM, 0, -0.028, -0.082, headG);
+  const tongue = box(0.016, 0.01, 0.028, tongueM, 0, -0.034, -0.1, headG);
+  tongue.visible = false;
+  for (const s of [-1, 1]) {
+    box(0.028, 0.02, 0.008, goldM, s * 0.028, 0.012, -0.048, headG);
+    box(0.014, 0.014, 0.006, darkM, s * 0.028, 0.012, -0.054, headG);
+    box(0.006, 0.006, 0.004, sparkM, s * 0.024, 0.018, -0.058, headG);
+  }
+  // 額頭 M 字
+  const mMark = new THREE.Group();
+  mMark.position.set(0, 0.038, -0.046);
+  box(0.012, 0.036, 0.008, stripeM, -0.018, 0, 0, mMark);
+  box(0.012, 0.036, 0.008, stripeM, 0.018, 0, 0, mMark);
+  box(0.01, 0.022, 0.008, stripeM, 0, -0.006, 0, mMark);
+  box(0.012, 0.016, 0.008, stripeM, -0.008, 0.012, 0, mMark);
+  box(0.012, 0.016, 0.008, stripeM, 0.008, 0.012, 0, mMark);
+  headG.add(mMark);
+
+  const earWedge = (inner = false): THREE.ExtrudeGeometry => {
+    const inset = inner ? 0.01 : 0;
+    const hw = (0.052 - inset * 2) / 2;
+    const fullH = 0.07 - (inner ? 0.016 : 0);
+    const depth = inner ? 0.006 : 0.028;
+    const s = new THREE.Shape();
+    s.moveTo(-hw, 0);
+    s.lineTo(hw, 0);
+    s.lineTo(0, fullH);
+    s.closePath();
+    const geo = new THREE.ExtrudeGeometry(s, {
+      depth, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1,
+    });
+    geo.translate(0, 0, -depth / 2);
+    return geo;
+  };
+  const addEar = (x: number) => {
+    const eg = new THREE.Group();
+    const side = x > 0 ? 1 : -1;
+    eg.add(new THREE.Mesh(earWedge(false), furM));
+    const inner = new THREE.Mesh(earWedge(true), pinkM);
+    inner.position.z = -0.012;
+    eg.add(inner);
+    eg.position.set(x, 0.04, 0.01);
+    eg.rotation.z = side * -0.22;
+    eg.rotation.y = side * 0.1;
+    headG.add(eg);
+  };
+  addEar(-0.032);
+  addEar(0.032);
+
+  const zMat = new THREE.MeshBasicMaterial({ color: 0xc8d4e8, transparent: true, opacity: 0.9 });
+  const sleepG = new THREE.Group(); sleepG.name = 'petSleep';
+  const z1 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.005), zMat);
+  z1.position.set(0.07, 0.1, -0.02);
+  const z2 = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.005), zMat);
+  z2.position.set(0.1, 0.13, -0.02);
+  sleepG.add(z1, z2);
+  sleepG.visible = false;
+  headG.add(sleepG);
+  bodyG.add(headG);
+
+  // 環紋尾：向上再往後翹，深淺相間
+  const tailG = new THREE.Group();
+  tailG.position.set(0, 0.155, 0.12);
+  const tailSegs: { pos: [number, number, number]; rotX: number; size: [number, number, number]; dark?: boolean }[] = [
+    { pos: [0, 0.01, 0.01], rotX: -0.35, size: [0.036, 0.036, 0.05], dark: true },
+    { pos: [0, 0.03, 0.05], rotX: -0.55, size: [0.034, 0.034, 0.05] },
+    { pos: [0, 0.055, 0.09], rotX: -0.7, size: [0.032, 0.032, 0.048], dark: true },
+    { pos: [0, 0.085, 0.12], rotX: -0.85, size: [0.03, 0.03, 0.046] },
+    { pos: [0, 0.12, 0.145], rotX: -1.05, size: [0.028, 0.028, 0.044], dark: true },
+    { pos: [0, 0.15, 0.16], rotX: -1.15, size: [0.024, 0.024, 0.04] },
+  ];
+  for (const s of tailSegs) {
+    const sg = new THREE.Group();
+    sg.position.set(...s.pos);
+    sg.rotation.x = s.rotX;
+    box(s.size[0], s.size[1], s.size[2], s.dark ? stripeM : furM, 0, 0, 0, sg);
+    tailG.add(sg);
+  }
+  bodyG.add(tailG);
+  g.add(bodyG);
+
+  const makeLeg = (x: number, z: number) => {
+    const lg = new THREE.Group();
+    lg.position.set(x, 0.11, z);
+    box(0.028, 0.05, 0.03, furM, 0, -0.026, 0, lg);
+    box(0.024, 0.046, 0.026, stripeM, 0, -0.07, 0, lg);
+    box(0.03, 0.016, 0.04, muzzleM, 0, -0.104, 0.006, lg);
+    g.add(lg);
+    return lg;
+  };
+  const legs = {
+    fl: makeLeg(-0.042, -0.075),
+    fr: makeLeg(0.042, -0.075),
+    hl: makeLeg(-0.046, 0.075),
+    hr: makeLeg(0.046, 0.075),
+  };
+
+  const tickAnim = (_m: THREE.Group, st: PetAnimState) => {
+    const ud = g.userData as { t?: number; phase?: number; lickIn?: number; licking?: number };
+    ud.t = (ud.t ?? 0) + st.dt;
+    if (st.sleep) {
+      sleepG.visible = true;
+      tongue.visible = false;
+      ud.licking = 0;
+      bodyG.position.y = -0.036;
+      bodyG.rotation.x = 0.16;
+      bodyG.rotation.z = 0;
+      headG.rotation.x = 0.36;
+      const tuck = 1.0;
+      legs.fl.rotation.x = tuck;
+      legs.fr.rotation.x = tuck;
+      legs.hl.rotation.x = tuck * 0.85;
+      legs.hr.rotation.x = tuck * 0.85;
+      tailG.rotation.y = Math.sin((ud.t) * 1.1) * 0.08;
+      return;
+    }
+    sleepG.visible = false;
+    const lerp = (cur: number, to: number, k: number) => cur + (to - cur) * k;
+    const k = 1 - Math.exp(-12 * st.dt);
+    if (st.walk) {
+      tongue.visible = false;
+      ud.licking = 0;
+      const spd = Math.max(0.7, st.speed);
+      ud.phase = (ud.phase ?? 0) + st.dt * spd * 6.2;
+      const a = Math.sin(ud.phase);
+      const b = Math.sin(ud.phase + Math.PI);
+      const swing = 0.58;
+      legs.fl.rotation.x = a * swing;
+      legs.hr.rotation.x = a * swing;
+      legs.fr.rotation.x = b * swing;
+      legs.hl.rotation.x = b * swing;
+      bodyG.position.y = Math.abs(Math.sin(ud.phase * 2)) * 0.014;
+      bodyG.rotation.z = a * 0.06;
+      bodyG.rotation.x = 0.03;
+      headG.rotation.x = -0.04;
+      tailG.rotation.y = Math.sin(ud.phase * 2.4) * 0.45;
+      tailG.rotation.x = Math.sin(ud.phase) * 0.08;
+    } else {
+      if ((ud.licking ?? 0) <= 0) {
+        ud.lickIn = (ud.lickIn ?? 3 + Math.random() * 6) - st.dt;
+        if ((ud.lickIn ?? 0) <= 0) {
+          ud.licking = 1.15;
+          ud.lickIn = 8 + Math.random() * 6;
+        }
+      }
+      const licking = (ud.licking ?? 0) > 0;
+      if (licking) ud.licking = Math.max(0, (ud.licking ?? 0) - st.dt);
+      tongue.visible = licking;
+      const br = Math.sin((ud.t) * 2.1);
+      bodyG.position.y = lerp(bodyG.position.y, br * 0.005, k);
+      bodyG.rotation.z = lerp(bodyG.rotation.z, 0, k);
+      bodyG.rotation.x = lerp(bodyG.rotation.x, licking ? 0.12 : 0, k);
+      const lickNod = licking ? 0.42 + Math.sin((ud.t) * 10) * 0.12 : br * 0.03;
+      headG.rotation.x = lerp(headG.rotation.x, lickNod, k);
+      headG.rotation.y = lerp(headG.rotation.y, licking ? Math.sin((ud.t) * 6) * 0.12 : 0, k);
+      legs.fl.rotation.x = lerp(legs.fl.rotation.x, 0, k);
+      legs.fr.rotation.x = lerp(legs.fr.rotation.x, 0, k);
+      legs.hl.rotation.x = lerp(legs.hl.rotation.x, 0, k);
+      legs.hr.rotation.x = lerp(legs.hr.rotation.x, 0, k);
+      tailG.rotation.y = Math.sin((ud.t) * 3.2) * 0.22;
+      tailG.rotation.x = lerp(tailG.rotation.x, 0, k);
     }
   };
 

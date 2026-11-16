@@ -40,6 +40,10 @@ export type PlazaHubHandlers = {
   onGrillTaken?: (e: PlazaGrillTakenEvent) => void;
   /** 吸菸區「抽一口」同步（其他人） */
   onPlazaPuff?: (e: { connId: string; pid: string; start: boolean; holdMs: number }) => void;
+  /** 阿珀垃圾話（其他人；line＝台詞編號） */
+  onPetSay?: (e: { connId: string; pid: string; line: number }) => void;
+  /** 阿珀貓拳（其他人） */
+  onPetPunch?: (e: { connId: string; pid: string; targetConnId: string; stole: boolean; scold: number }) => void;
   onFlagUpsert?: (f: PlazaFlagState) => void;
   onSeatWish?: (w: PlazaSeatWish) => void;
   /** 食材攤排隊狀態變更 */
@@ -364,6 +368,26 @@ export class PlazaClient {
           holdMs: Math.max(0, Math.min(5000, Number(e?.holdMs ?? e?.HoldMs ?? 0) | 0)),
         });
       } catch (err) { console.error('PlazaPuff', err); }
+    });
+    conn.on('PetSay', (e: any) => {
+      try {
+        this.handlers.onPetSay?.({
+          connId: String(e?.connId ?? e?.ConnId ?? ''),
+          pid: String(e?.pid ?? e?.Pid ?? ''),
+          line: Number(e?.line ?? e?.Line ?? 0) | 0,
+        });
+      } catch (err) { console.error('PetSay', err); }
+    });
+    conn.on('PetPunch', (e: any) => {
+      try {
+        this.handlers.onPetPunch?.({
+          connId: String(e?.connId ?? e?.ConnId ?? ''),
+          pid: String(e?.pid ?? e?.Pid ?? ''),
+          targetConnId: String(e?.targetConnId ?? e?.TargetConnId ?? ''),
+          stole: !!(e?.stole ?? e?.Stole),
+          scold: Number(e?.scold ?? e?.Scold ?? 0) | 0,
+        });
+      } catch (err) { console.error('PetPunch', err); }
     });
     conn.on('FlagUpsert', (e: any) => {
       try { this.handlers.onFlagUpsert?.(normFlagDto(e)); } catch (err) { console.error('FlagUpsert', err); }
@@ -718,6 +742,33 @@ export class PlazaClient {
       return await this.conn.invoke<{ ok: boolean; err?: string; snap?: PlazaSnapshot; deliver?: PlazaSeatWishEnd }>('PlaceNpc', npcConnId, pileId, slot);
     } catch (e: any) {
       return { ok: false as const, err: e?.message || 'place_fail', snap: undefined as PlazaSnapshot | undefined, deliver: undefined as PlazaSeatWishEnd | undefined };
+    }
+  }
+
+  /** 阿珀垃圾話：只送編號。舊伺服器無此方法時回 nosup，不中斷。 */
+  async petSay(line: number) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn' };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string }>('PetSay', line | 0);
+      return { ok: !!r?.ok, err: r?.err };
+    } catch {
+      return { ok: false as const, err: 'nosup' };
+    }
+  }
+
+  /** 阿珀貓拳。舊伺服器無此方法時回 nosup，不中斷。 */
+  async petPunch(targetConnId: string, steal = false, scold = 0) {
+    if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) return { ok: false as const, err: 'no_conn' };
+    try {
+      const r = await this.conn.invoke<{ ok: boolean; err?: string; punch?: any }>('PetPunch', targetConnId, !!steal, scold | 0);
+      return {
+        ok: !!r?.ok,
+        err: r?.err,
+        stole: !!(r?.punch?.stole ?? r?.punch?.Stole),
+        scold: Number(r?.punch?.scold ?? r?.punch?.Scold ?? scold) | 0,
+      };
+    } catch {
+      return { ok: false as const, err: 'nosup', stole: false, scold };
     }
   }
 

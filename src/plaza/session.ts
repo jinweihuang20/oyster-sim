@@ -26,6 +26,7 @@ import { plazaSoftCapClient } from '../core/economy';
 import { myTag } from '../meta/social';
 import { achCheck, achS } from '../meta/achievements';
 import { parseCosmetics } from './cosmetics';
+import { apoLine } from '../shop/apoTalk';
 import { clipFlagText, flagErrText, flagPlantPos, flagSlowText, type PlazaFlagState } from './flags';
 import { pileDiffOf, pileDiffName, parsePileDiffs, weightsFor, PILE_DIFF_MIXED } from './pileDiff';
 
@@ -115,6 +116,10 @@ export type PlazaDeps = {
   onGrillUpsert?: (o: PlazaGrillOyster) => void;
   onGrillRemove?: (id: string, byConnId: string, byNick: string) => void;
   onGrillTaken?: (e: PlazaGrillTakenEvent) => void;
+  /** 其他人的阿珀垃圾話（顯示在那隻阿珀頭頂） */
+  onPetSay?: (e: { connId: string; pid: string; line: number }) => void;
+  /** 其他人的阿珀貓拳 */
+  onPetPunch?: (e: { connId: string; pid: string; targetConnId: string; stole: boolean; scold: number }) => void;
   track: (t: string, d?: Record<string, unknown>) => void;
   onPayout: (clamped: number, meta: { oysters: number; dur: number; raw: number }) => void;
   /** 廣場任務獎金（送座位等），走跟死鬥一樣的入帳路徑 */
@@ -608,6 +613,18 @@ export function plazaPlayThrowFx(connId: string) {
 export async function plazaSendPuff(start: boolean, holdMs = 0) {
   if (!client?.connected) return { ok: false as const, err: 'no_conn' };
   return client.plazaPuff(start, holdMs);
+}
+
+/** 阿珀垃圾話：只送編號。未連線／舊服回 nosup，呼叫端改走本機氣泡。 */
+export async function plazaPetSay(line: number) {
+  if (!client?.connected) return { ok: false as const, err: 'nosup' };
+  return client.petSay(line);
+}
+
+/** 阿珀貓拳同步。未連線／舊服回 nosup，本機仍可自己播動畫。 */
+export async function plazaPetPunch(targetConnId: string, steal = false, scold = 0) {
+  if (!client?.connected) return { ok: false as const, err: 'nosup', stole: false, scold };
+  return client.petPunch(targetConnId, steal, scold);
 }
 
 export async function plazaStealFrom(targetConnId: string, caught = false) {
@@ -1231,6 +1248,18 @@ function wireClient(D: PlazaDeps) {
       const me = client?.connectionId ?? '';
       if (e.connId && me && e.connId === me) return; // 忽略自己回聲
       view?.applyRemotePuff(e);
+    },
+    onPetSay: (e) => {
+      const me = client?.connectionId ?? '';
+      if (e.connId && me && e.connId === me) return;
+      view?.showPetChat({ connId: e.connId, pid: e.pid, text: apoLine(e.line) });
+      try { D.onPetSay?.(e); } catch (err) { console.error('onPetSay', err); }
+    },
+    onPetPunch: (e) => {
+      const me = client?.connectionId ?? '';
+      if (e.connId && me && e.connId === me) return;
+      view?.playPetPunch({ connId: e.connId, pid: e.pid, targetConnId: e.targetConnId, stole: e.stole, scold: e.scold });
+      try { D.onPetPunch?.(e); } catch (err) { console.error('onPetPunch', err); }
     },
     onReconnecting: (attempt) => {
       if (!active) return;
