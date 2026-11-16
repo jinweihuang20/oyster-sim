@@ -26,6 +26,16 @@ const G = {
   squid: new THREE.TorusGeometry(0.085, 0.026, 6, 14),
   leaf: (() => { const s = new THREE.Shape(); s.moveTo(0, -0.1); s.quadraticCurveTo(0.07, 0, 0, 0.11); s.quadraticCurveTo(-0.07, 0, 0, -0.1); return new THREE.ShapeGeometry(s, 4); })(),
   blob: new THREE.SphereGeometry(1, 10, 6),
+  /** 青菜大葉片：葉脈兩側微微捲起 */
+  leafBig: (() => {
+    const s = new THREE.Shape();
+    s.moveTo(0, -0.11); s.bezierCurveTo(0.1, -0.06, 0.1, 0.08, 0, 0.13); s.bezierCurveTo(-0.1, 0.08, -0.1, -0.06, 0, -0.11);
+    const geo = new THREE.ShapeGeometry(s, 10);
+    const p = geo.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i); p.setZ(i, x * x * 9 + Math.max(0, y - 0.04) * 0.4); }
+    geo.computeVertexNormals();
+    return geo;
+  })(),
   spot: new THREE.CircleGeometry(1, 10),
 };
 
@@ -33,6 +43,7 @@ const BATTER_COL = ['#efe5c8', '#ddb062', '#ad6d33'];
 const EDGE_COL = ['#e6d6ae', '#c58a3c', '#6e3f1c'];
 const SAUCE_COL = ['', '#e0566e', '#4a2b1d', '#cf2a22', '#a8572a', '#d8a21c'];
 const EGG_Y = ['#f6d35a', '#eebd3c', '#d79a33'];
+const EGG_W = ['#fbf3d6', '#f6e6b8', '#ead19a'];
 
 function blobOutline(r: () => number, R: number, n = 28, wob = 0.09) {
   const s = new THREE.Shape();
@@ -84,20 +95,31 @@ export function buildDish(id: number, combo?: Combo): THREE.Group {
       m.position.set(Math.cos(a) * d, top, Math.sin(a) * d); g.add(m);
     }
   }
-  // 蛋
+  // 蛋：攤平的蛋皮片（不規則薄片，邊緣帶一點蛋白）；沒粉漿就是散開的炒蛋片
   if (c.egg) {
-    const n = loose ? 9 : 5;
+    const er = rng(id + 29);
+    const n = loose ? 8 : 5 + Math.floor(er() * 2);
     for (let i = 0; i < n; i++) {
-      const a = r() * Math.PI * 2, d = Math.sqrt(r()) * (loose ? 0.5 : 0.6);
-      const white = r() < 0.4;
-      const m = new THREE.Mesh(G.blob, mat(white ? '#fbf5e3' : EGG_Y[c.done]));
-      const s = loose ? 0.1 + r() * 0.08 : 0.18 + r() * 0.12;
-      m.scale.set(s, loose ? s * 0.6 : 0.025, s * (0.7 + r() * 0.4));
-      m.position.set(Math.cos(a) * d, top + (loose ? s * 0.3 : 0.004), Math.sin(a) * d);
-      m.rotation.y = r() * Math.PI;
-      g.add(m);
+      const a = (i / n) * Math.PI * 2 + er() * 0.9, d = loose ? 0.12 + er() * 0.42 : 0.18 + er() * 0.42;
+      const R = loose ? 0.1 + er() * 0.07 : 0.24 + er() * 0.1;
+      const y = top + 0.006 + i * 0.0025 + er() * 0.006;
+      const piece = new THREE.Group();
+      const rim = new THREE.Mesh(new THREE.ShapeGeometry(blobOutline(er, R * 1.08, 22, 0.22), 2), mat(EGG_W[c.done], { rough: 0.55 }));
+      rim.rotation.x = -Math.PI / 2; piece.add(rim);
+      const yolk = new THREE.Mesh(new THREE.ShapeGeometry(blobOutline(er, R * 0.92, 22, 0.25), 2), mat(EGG_Y[c.done], { rough: 0.5 }));
+      yolk.rotation.x = -Math.PI / 2; yolk.position.set((er() - 0.5) * R * 0.15, 0.003, (er() - 0.5) * R * 0.15); piece.add(yolk);
+      // 一兩條蛋白紋
+      if (er() < 0.6) {
+        const st = new THREE.Mesh(G.spot, mat(EGG_W[c.done], { opacity: 0.9 }));
+        st.rotation.x = -Math.PI / 2; st.scale.set(R * 0.5, R * 0.12, 1); st.position.set((er() - 0.5) * R * 0.6, 0.005, (er() - 0.5) * R * 0.6); piece.add(st);
+      }
+      piece.scale.set(1, 1, 0.75 + er() * 0.45);
+      piece.rotation.y = er() * Math.PI * 2;
+      if (loose) { piece.rotation.x = (er() - 0.5) * 0.35; piece.rotation.z = (er() - 0.5) * 0.35; }
+      piece.position.set(Math.cos(a) * d, loose ? top + 0.02 + er() * 0.05 : y, Math.sin(a) * d);
+      g.add(piece);
     }
-    if (!loose) top += 0.02;
+    top += loose ? 0.04 : 0.025;
   }
   // 配料
   const R = loose ? 0.55 : 0.72;
@@ -123,10 +145,16 @@ export function buildDish(id: number, combo?: Combo): THREE.Group {
     const m = new THREE.Mesh(G.squid, mat(c.done === 2 ? '#eadfc8' : '#f6f1e6', { rough: 0.4 }));
     m.rotation.x = -Math.PI / 2; const o = new THREE.Group(); o.add(m); place(o, 0.025);
   }
-  if (c.top & 8) for (let i = 0; i < 9; i++) {
-    const m = new THREE.Mesh(G.leaf, mat(c.done === 2 ? '#3f7a2c' : '#4f9a3a', { rough: 0.6 }));
-    (m.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
-    m.rotation.x = -Math.PI / 2 + (r() - 0.5) * 0.5; const o = new THREE.Group(); o.add(m); place(o, 0.02);
+  if (c.top & 8) {
+    const vr = rng(id + 41), n = 5 + Math.floor(vr() * 2);
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(G.leafBig, mat(vr() < 0.5 ? (c.done === 2 ? '#3f7a2c' : '#4f9a3a') : (c.done === 2 ? '#4c8a34' : '#62ae48'), { rough: 0.6 }));
+      (m.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      const k = 2.1 + vr() * 0.5;
+      m.scale.set(k, k, k * (0.8 + vr() * 0.5));
+      m.rotation.x = -Math.PI / 2 + (vr() - 0.5) * 0.45; m.rotation.z = (vr() - 0.5) * 0.3;
+      const o = new THREE.Group(); o.add(m); place(o, 0.025 + vr() * 0.02);
+    }
   }
   // 醬：之字淋上
   if (c.sauce) {
@@ -168,23 +196,33 @@ export function disposeDish(g: THREE.Object3D) {
   });
 }
 
-/* ───── 縮圖與 3D 檢視（共用一個離屏 renderer） ───── */
+/* ───── 縮圖與 3D 檢視（共用一個離屏 renderer；WebGL 失效時改畫 2D 示意圖） ───── */
 let R3: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
 let cam: THREE.PerspectiveCamera | null = null;
+let glLost = false, glBroken = false;
 const thumbs = new Map<number, string>();
 
 function ensure(size: number) {
+  if (glBroken) throw new Error('no webgl');
   if (!R3) {
     const cv = document.createElement('canvas');
-    R3 = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    try {
+      R3 = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    } catch (e) { glBroken = true; throw e; }
+    // iOS 同時開太多 WebGL 會把舊的 context 收掉：先畫 2D 圖，恢復後自動回 3D
+    cv.addEventListener('webglcontextlost', e => { e.preventDefault(); glLost = true; }, false);
+    cv.addEventListener('webglcontextrestored', () => { glLost = false; }, false);
     R3.setPixelRatio(1);
     R3.outputColorSpace = THREE.SRGBColorSpace;
     scene = new THREE.Scene();
-    scene.add(new THREE.HemisphereLight(0xfff6ea, 0x6a7380, 1.25));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(2, 4, 3); scene.add(sun);
+    scene.add(new THREE.HemisphereLight(0xfff6ea, 0x8a93a0, 1.35));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.45); sun.position.set(2, 4, 3); scene.add(sun);
+    // 背光勾邊：放在深色鐵板上也看得清楚輪廓
+    const rim = new THREE.DirectionalLight(0xdfeaff, 0.9); rim.position.set(-2.5, 2.2, -3); scene.add(rim);
     cam = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
   }
+  if (glLost || R3.getContext().isContextLost()) throw new Error('webgl lost');
   const s = R3.getSize(new THREE.Vector2());
   if (s.x !== size) R3.setSize(size, size, false);
   return { R: R3, S: scene!, C: cam! };
@@ -197,13 +235,40 @@ function shoot(id: number, size: number, yaw: number, pitch: number, combo?: Com
   if (plate) holder.add(buildPlate());
   holder.rotation.y = yaw;
   S.add(holder);
-  const dist = 4.6;
+  const dist = 4.5;
   C.position.set(0, Math.sin(pitch) * dist, Math.cos(pitch) * dist);
   C.lookAt(0, 0.05, 0);
   R.setClearColor(0x000000, 0);
-  R.render(S, C);
-  S.remove(holder); disposeDish(holder);
+  try { R.render(S, C); } finally { S.remove(holder); disposeDish(holder); }
   return R.domElement;
+}
+
+/** WebGL 不能用時的 2D 示意圖：盤子＋粉漿＋蛋＋配料點點 */
+function draw2D(ctx: CanvasRenderingContext2D, W: number, id: number, combo?: Combo) {
+  const c = combo ?? comboOf(id), r = rng(id + 17);
+  const cx = W / 2, cy = W * 0.54;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(cx, cy + W * 0.05, W * 0.44, W * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f4f2ec'; ctx.strokeStyle = '#c9ccd0'; ctx.lineWidth = Math.max(1, W / 160);
+  ctx.beginPath(); ctx.ellipse(cx, cy, W * 0.43, W * 0.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  if (c.batter) {
+    ctx.fillStyle = BATTER_COL[c.done]; ctx.strokeStyle = EDGE_COL[c.done];
+    ctx.beginPath(); ctx.ellipse(cx, cy - W * 0.015, W * 0.33, W * 0.145, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  if (c.egg) {
+    ctx.fillStyle = '#f6d24a';
+    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.ellipse(cx + (r() - 0.5) * W * 0.4, cy + (r() - 0.5) * W * 0.16, W * 0.05, W * 0.025, 0, 0, Math.PI * 2); ctx.fill(); }
+  }
+  const tc = ['#9a9a8a', '#f19a8a', '#f3efe6', '#4f9a3c'];
+  for (let b = 0; b < 4; b++) if (c.top & (1 << b)) {
+    ctx.fillStyle = tc[b];
+    for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.ellipse(cx + (r() - 0.5) * W * 0.46, cy + (r() - 0.5) * W * 0.18, W * 0.035, W * 0.02, 0, 0, Math.PI * 2); ctx.fill(); }
+  }
+  if (c.sauce) {
+    ctx.strokeStyle = ['', '#e05a6a', '#4a2e22', '#d8342c', '#9a5524', '#6b3b2a'][c.sauce]; ctx.lineWidth = W / 60; ctx.lineCap = 'round';
+    ctx.beginPath(); for (let i = 0; i <= 12; i++) { const x = cx - W * 0.25 + i * W * 0.042, y = cy + Math.sin(i * 1.3) * W * 0.04; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); } ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /** 縮圖 dataURL（記憶體快取） */
@@ -213,27 +278,49 @@ export function dishThumb(id: number): string {
     const url = shoot(id, 128, 0.5, 0.95).toDataURL('image/png');
     thumbs.set(id, url);
     return url;
-  } catch { return ''; }
+  } catch {
+    try { const cv = document.createElement('canvas'); cv.width = cv.height = 128; draw2D(cv.getContext('2d')!, 128, id); return cv.toDataURL('image/png'); } catch { return ''; }
+  }
 }
 
-/** 可拖曳旋轉的 3D 檢視；回傳 stop() */
+/**
+ * 可拖曳旋轉的 3D 檢視；回傳 stop()。
+ * 掛上時立刻同步畫一次（不等 rAF）；跟著顯示大小調解析度；WebGL 掉了就畫 2D 圖。
+ */
 export function mountDishViewer(canvas: HTMLCanvasElement, id: number, combo?: Combo): () => void {
   const ctx = canvas.getContext('2d'); if (!ctx) return () => {};
-  let yaw = 0.6, pitch = 0.85, drag = false, lx = 0, ly = 0, idle = true, raf = 0, dirty = true;
-  const size = 256;
+  let yaw = 0.6, pitch = 0.85, drag = false, lx = 0, ly = 0, idle = true, raf = 0, dirty = true, stopped = false;
+  const fit = () => {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    const px = Math.max(128, Math.min(640, Math.round(Math.min(w, h) * Math.min(2, window.devicePixelRatio || 1))));
+    if (canvas.width !== px || canvas.height !== px) { canvas.width = canvas.height = px; dirty = true; }
+  };
+  const paint = () => {
+    dirty = false;
+    const W = canvas.width;
+    ctx.clearRect(0, 0, W, canvas.height);
+    try { ctx.drawImage(shoot(id, W, yaw, pitch, combo), 0, 0, W, canvas.height); }
+    catch { draw2D(ctx, W, id, combo); }
+  };
   const draw = () => {
+    if (stopped) return;
+    if (!canvas.isConnected) { stop(); return; }
     raf = requestAnimationFrame(draw);
     if (idle) { yaw += 0.006; dirty = true; }
-    if (!dirty) return; dirty = false;
-    const src = shoot(id, size, yaw, pitch, combo);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
+    if (dirty) paint();
   };
   const down = (e: PointerEvent) => { drag = true; idle = false; lx = e.clientX; ly = e.clientY; canvas.setPointerCapture(e.pointerId); };
   const move = (e: PointerEvent) => { if (!drag) return; yaw += (e.clientX - lx) * 0.012; pitch = Math.max(0.25, Math.min(1.45, pitch + (e.clientY - ly) * 0.008)); lx = e.clientX; ly = e.clientY; dirty = true; };
   const up = () => { drag = false; };
   canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', move); canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
   canvas.style.touchAction = 'none';
-  draw();
-  return () => { cancelAnimationFrame(raf); canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move); canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', up); };
+  const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => { fit(); if (dirty && !stopped) paint(); }) : null;
+  ro?.observe(canvas);
+  fit(); paint(); draw();
+  function stop() {
+    stopped = true; cancelAnimationFrame(raf); ro?.disconnect();
+    canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move); canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', up);
+  }
+  return stop;
 }

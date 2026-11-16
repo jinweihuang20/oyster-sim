@@ -53,6 +53,7 @@ let sel: Sel = { top: 0, batter: -1, egg: -1, done: -1, sauce: -1 };
 let target: Combo | null = null;
 let stopView: (() => void) | null = null;
 let lastViewId = -2;
+let viewCv: HTMLCanvasElement | null = null;
 let pourT0 = 0, pourRaf = 0, pourFrac = 0;
 let cookT0 = 0, cookRaf = 0, flipped = false, doneFrac = 0;
 /** 從「醬」回到「煎」：熟度條停在上次的位置，可沿用或重新煎 */
@@ -103,7 +104,7 @@ export function openCookSolo() {
 /** 關閉：放掉位子 */
 export function closeCook(leave = true) {
   cancelAnimationFrame(pourRaf); cancelAnimationFrame(cookRaf);
-  stopView?.(); stopView = null; lastViewId = -2;
+  stopView?.(); stopView = null; lastViewId = -2; viewCv = null;
   $('cook').classList.remove('show');
   if (leave && seat != null && !solo) { seat = null; D.leaveSeat(); }
   seat = null;
@@ -120,8 +121,9 @@ function sync(stage: number) {
 function mountView(id: number) {
   const cv = document.getElementById('ckView') as HTMLCanvasElement | null;
   if (!cv) return;
-  if (id === lastViewId && stopView) return;
-  stopView?.(); lastViewId = id;
+  // 每次 render 都換新 canvas：同一盤也要掛到新 canvas 上（舊寫法會留下空白預覽）
+  if (id === lastViewId && stopView && viewCv === cv) return;
+  stopView?.(); lastViewId = id; viewCv = cv;
   stopView = mountDishViewer(cv, id);
 }
 
@@ -139,8 +141,8 @@ function stepsBar() {
 function render() {
   const body = $('cookBody');
   const canBack = step >= 2 && step <= 5;
-  const head = `<div class="ckHead"><button type="button" class="ckLink ckBack" data-ck="back"${canBack ? '' : ' disabled aria-hidden="true" tabindex="-1"'}>${IC.back}上一步</button><b>${solo ? '自家煎台' : `煎台 ${seat != null ? seat + 1 : ''} 號`}</b><button type="button" class="ckLink" data-ck="dex">${IC.dex}圖鑑</button></div>`;
-  let html = head + stepsBar() + `<div class="ckViewW"><canvas id="ckView" width="256" height="256"></canvas></div>`;
+  const head = `<div class="ckHead"><button type="button" class="ckLink ckBack" data-ck="back"${canBack ? '' : ' disabled aria-hidden="true" tabindex="-1"'}>${IC.back}上一步</button><b>${solo ? '自家煎台' : `煎台 ${seat != null ? seat + 1 : ''} 號`}</b><button type="button" class="ckLink" data-ck="dex">${IC.dex}圖鑑</button><button type="button" class="ckLink ckX" data-ck="close" aria-label="${solo ? '回主選單' : '離開煎台'}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>`;
+  let html = '';
   if (step === 1) {
     const lack = TOPS.filter(t => foodCountAny(t.food) === 0);
     html += `<h3 class="ckH">選配料（可複選）</h3><div class="ckChips">${TOPS.map(t => { const n = foodCountAny(t.food); return chip(t.n, !!(sel.top & t.bit), n, `data-top="${t.bit}"`, n === 0); }).join('')}</div>`
@@ -180,7 +182,8 @@ function render() {
       + (solo ? '' : `<div class="ckAsk" id="ckAsk"><b>要展示嗎？</b><span>會放在煎台旁，大家都看得到；每人一盤，離開廣場就收掉</span><div class="ckAct"><button type="button" class="ckBtn" data-ck="nodisp">不用</button><button type="button" class="ckBtn pri" data-ck="disp">展示</button></div></div>`)
       + `<div class="ckAct"><button type="button" class="ckBtn" data-ck="again">再煎一盤</button></div>`;
   }
-  body.innerHTML = html;
+  // 全螢幕：標題列＋步驟固定在上、預覽撐滿中間、操作區固定在下
+  body.innerHTML = head + stepsBar() + `<div class="ckViewW"><canvas id="ckView" width="256" height="256"></canvas></div><div class="ckCtl s${step}">${html}</div>`;
   mountView(step === 6 ? resultId : step === 1 && !sel.top ? comboId({ top: 0, batter: 0, egg: 0, done: 0, sauce: 0 }) : comboId(curCombo()));
   bind(body);
 }
@@ -193,6 +196,7 @@ function bind(body: HTMLElement) {
     const k = b.dataset.ck;
     if (k === 'dex') openDex(target ? comboId(target) : undefined);
     else if (k === 'back') goBack();
+    else if (k === 'close') ($('cookClose') as HTMLButtonElement).click();
     else if (k === 'keepbatter') { if (sel.batter > 0 && !foodCount('flour')) sel.batter = 0; step = 3; sync(2); render(); }
     else if (k === 'keepdone') { reviewDone = false; step = 5; sync(4); render(); }
     else if (k === 'recook') startCook();
