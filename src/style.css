@@ -3709,3 +3709,16 @@ body:has(#cook.show) #pbd.show{z-index:12490!important}
   .ckBanner{animation:ckFade .3s ease-out both}
 }
 @keyframes ckFade{from{opacity:0}to{opacity:1}}
+/* 食材頁頂端卡片：標題、說明、購買提示，底部兩顆等寬按鈕 */
+.fdHead{padding:12px 14px!important;text-align:left}
+.fdHead .fdSub{margin:6px 0 0!important;font-size:13px;line-height:1.55;color:#3c4652}
+.fdHead .fdSub b,.fdHead .fdBuy b{color:#2a5a86}
+.fdHead .fdBuy{margin:6px 0 0;padding:6px 10px;font-size:12.5px;line-height:1.5;color:#3c4652;background:#f3f7fb;border:1px solid #e1e9f1;border-radius:8px}
+.fdBtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.panel .fdBtn,.fdBtn{display:inline-flex!important;align-items:center;justify-content:center;gap:6px;width:100%;height:44px;min-height:44px!important;min-width:0!important;margin:0!important;padding:0 10px!important;box-sizing:border-box;font-size:14px!important;font-weight:800;line-height:1;white-space:nowrap;color:#2a5a86!important;background:#fff!important;border:1px solid #2a5a86!important;border-radius:10px!important;box-shadow:0 1px 3px rgba(20,40,60,.1)!important;text-shadow:none!important;transform:none!important;cursor:pointer}
+.panel .fdBtn.pri,.fdBtn.pri{color:#fff!important;background:#2a5a86!important;border-color:#1f4566!important}
+.fdBtn span{overflow:hidden;text-overflow:ellipsis}
+.fdBtn svg{flex:none}
+.fdBtn:active{transform:translateY(1px)!important}
+@media (max-width:299px){.fdBtns{grid-template-columns:1fr}}
+@media (max-width:360px){.panel .fdBtn,.fdBtn{gap:4px;padding:0 6px!important;font-size:13px!important}.fdHead{padding:12px 10px!important}}
