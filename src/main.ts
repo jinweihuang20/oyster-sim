@@ -34,6 +34,7 @@ import {
   initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, FLAG_PRICE_ITEMS, gearFx,
   gearOn, knifeNow, umbNow, bowlNow, petNow, makePet, petRidesHead, petWorldScale, tickPetAnim,
   APO_ID, apoLine, apoScold, pickApoLine, pickApoScold, playApoPunch, apoHitSeconds,
+  apoPunchAllowedFrom, tickApoPunchTimer, resolveApoPunchTimer, plazaPunchProceed, plazaPunchLocalSteal,
   AMEI_ID, AMEI_UMB_DELAY,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor, fetchItemStats, onItemStatApply,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
@@ -4323,12 +4324,18 @@ function playerIsShucking(): boolean {
   }
   return !walking;
 }
-/** 貓拳／偷肉：剝蚵中，或在廣場走動且附近有阿婆 */
+/** 貓拳／偷肉：剝蚵中，或在廣場裡（站著、走著、坐下都可） */
 function apoPunchAllowed(): boolean {
-  if (state !== 'play' || tut || isPlazaRaceMode() || petCurId !== APO_ID) return false;
-  if (mgActive || plazaOnMg()) return false;
-  if (plazaMode && isPlazaActive() && walking && !plazaSeated()) return true;
-  return playerIsShucking();
+  return apoPunchAllowedFrom({
+    play: state === 'play',
+    tut: !!tut,
+    race: isPlazaRaceMode(),
+    isApo: petCurId === APO_ID,
+    mg: !!(mgActive || plazaOnMg()),
+    plaza: !!plazaMode,
+    plazaActive: isPlazaActive(),
+    shucking: playerIsShucking(),
+  });
 }
 function resetApoTimers() {
   petPunchIn = 10;
@@ -4456,19 +4463,19 @@ async function tryApoPunch(): Promise<boolean> {
     const getTo = () => new THREE.Vector3(t.head.x, t.head.y, t.head.z);
     const wantSteal = t.count > 0;
     const scold = pickApoScold();
-    let stole = false;
-    if (t.connId && t.connId !== 'npc-local') {
-      const r = await plazaPetPunch(t.connId, wantSteal, scold);
-      if (r.err && r.err !== 'nosup' && r.err !== 'no_conn' && !r.ok) return false;
-      stole = r.ok ? !!r.stole : wantSteal;
-    } else {
-      stole = wantSteal;
-    }
-    apoPunchVisual(getTo, !stole, () => {
-      if (stole) {
-        apoAwardMeat(getTo());
-        if (t.count > 0) t.count--;
-      }
+    // 先出拳並立刻回傳，避免 invoke 卡住後計時停在 PENDING、後面都不再出拳
+    const net = (t.connId && t.connId !== 'npc-local')
+      ? plazaPetPunch(t.connId, wantSteal, scold).catch(() => ({ ok: false as const, err: 'nosup', stole: false, scold }))
+      : Promise.resolve(null);
+    apoPunchVisual(getTo, !wantSteal, () => {
+      void net.then(r => {
+        if (r && plazaPunchProceed(r) === 'retry') return;
+        const stoleNow = r?.ok ? !!r.stole : plazaPunchLocalSteal(r, wantSteal);
+        if (stoleNow) {
+          apoAwardMeat(getTo());
+          if (t.count > 0) t.count--;
+        }
+      });
     });
     return true;
   }
@@ -4490,7 +4497,7 @@ async function tryApoPunch(): Promise<boolean> {
 }
 
 async function tryApoTalk(): Promise<boolean> {
-  if (petCurId !== APO_ID || !plazaMode || !isPlazaActive() || !walking || plazaSeated()) return false;
+  if (petCurId !== APO_ID || !plazaMode || !isPlazaActive() || isPlazaRaceMode()) return false;
   const i = pickApoLine();
   showApoTalk(i);
   void plazaPetSay(i);
@@ -4556,8 +4563,8 @@ function petTick(dt: number) {
   }
   if (apoBubT > 0) { apoBubT = Math.max(0, apoBubT - dt); placeApoBubble(); }
   else if (apoBub) apoBub.sprite.visible = false;
-  if (afk) return;
-  if (canProduce) {
+  // 掛機只暫停產肉／丟殼；廣場貓拳在站著不動時仍要繼續計時
+  if (!afk && canProduce) {
     petAcc += dt;
     if (petAcc >= p.fx.tickSec) {
       petAcc = 0;
@@ -4573,19 +4580,19 @@ function petTick(dt: number) {
     }
   }
   if (petCurId === APO_ID && show) {
-    if (apoPunchAllowed()) {
-      if (petPunchIn <= 0) petPunchIn = 10;
-      petPunchIn -= dt;
-      if (petPunchIn <= 0) {
-        // 範圍內沒有阿婆就不出拳，稍後再探；出拳後間隔 10 秒
-        void tryApoPunch().then(ok => { petPunchIn = ok ? 10 : 2; });
-        petPunchIn = 99; // 等非同步結束再重設
-      }
+    const punch = tickApoPunchTimer(apoPunchAllowed(), petPunchIn, dt);
+    petPunchIn = punch.dueIn;
+    if (punch.fire) {
+      // 範圍內沒有阿婆就不出拳，稍後再探；出拳後間隔 10 秒。失敗／例外都要重新上膛，不能停在 PENDING。
+      void tryApoPunch()
+        .then(ok => { petPunchIn = resolveApoPunchTimer(ok); })
+        .catch(() => { petPunchIn = resolveApoPunchTimer(false); });
     }
-    if (plazaMode && walking && !plazaSeated()) {
+    const canTalk = plazaMode && isPlazaActive() && !isPlazaRaceMode();
+    if (canTalk) {
       petTalkIn -= dt;
       if (petTalkIn <= 0) {
-        void tryApoTalk().then(ok => { petTalkIn = ok ? 8 + Math.random() * 7 : 3; });
+        void tryApoTalk().then(ok => { petTalkIn = ok ? 8 + Math.random() * 7 : 3; }).catch(() => { petTalkIn = 3; });
         petTalkIn = 99;
       }
     }
