@@ -27,8 +27,8 @@ export const FOODS: Food[] = [
   { id: 'oyster', n: '一般蚵仔', cat: 'main', icon: 'oyster', color: '#c9c2b0', life: 0, quality: true, how: '每剝一顆蚵仔肉進碗就多一個（不會壞）' },
   { id: 'bigoy', n: '大蚵', cat: 'main', icon: 'oyster', color: '#b8ad94', life: 48, soon: true, how: '即將開放' },
   { id: 'rockoy', n: '石蚵', cat: 'main', icon: 'oyster', color: '#8f8a7e', life: 48, soon: true, how: '即將開放' },
-  { id: 'shrimp', n: '蝦仁', cat: 'extra', icon: 'shrimp', color: '#f19a8a', life: 48, how: '臉盆補蚵仔時，用掉的每顆都有機會撈到（自己撈、換位補盆、烤台自動補都算）' },
-  { id: 'squid', n: '花枝', cat: 'extra', icon: 'squid', color: '#f3efe6', life: 48, how: '臉盆補蚵仔時，用掉的每顆都有機會撈到（自己撈、換位補盆、烤台自動補都算）' },
+  { id: 'shrimp', n: '蝦仁', cat: 'extra', icon: 'shrimp', color: '#f19a8a', life: 48, how: '從紅盆拿起每一顆蚵仔時都有機會一起撈到（各地點、廣場和烤台都算）' },
+  { id: 'squid', n: '花枝', cat: 'extra', icon: 'squid', color: '#f3efe6', life: 48, how: '從紅盆拿起每一顆蚵仔時都有機會一起撈到（各地點、廣場和烤台都算）' },
   // 蛋
   { id: 'egg', n: '雞蛋', cat: 'egg', icon: 'egg', color: '#f2c94c', life: 72, price: 8, how: '廣場食材攤購買，簽到第 7 天福袋也可能有' },
   // 醬料 5 種
@@ -57,7 +57,7 @@ export const CAT_N: Record<FoodCat, string> = { base: '基底', main: '主料', 
 
 /** 取得機率／數值（V1） */
 export const FOOD_RATE = {
-  /** 每顆從臉盆拿出來的蚵仔，補盆時各自擲一次蝦仁或花枝：依地點 home / wanggong / dongshi / budai；廣場（含烤台）另計 */
+  /** 每顆從紅盆拿起的蚵仔，當下各自擲一次蝦仁或花枝：依地點 home / wanggong / dongshi / budai；廣場（含烤台）另計 */
   scoop: { home: 0.12, wanggong: 0.14, dongshi: 0.16, budai: 0.18, plaza: 0.16 } as Record<string, number>,
   /** 撈到時是蝦仁的比例（其餘花枝） */
   shrimpShare: 0.6,
