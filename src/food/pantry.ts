@@ -114,7 +114,7 @@ export function rollShuck(intact: boolean) {
   if (D.isTut()) return;
   addFood('oyster', 1, 'shuck', intact ? 1 : 0, true);
 }
-/** used：從紅盆拿起幾顆；每顆各自擲一次（拿起當下就掉），沒拿的不算 */
+/** used：入碗幾顆（與 rollShuck 同一批：教學、偷來、寵物不算；烤台搶到再入碗的算）。每顆各自擲一次 */
 export function rollScoop(locId: string, used: number) {
   if (D.isTut()) return;
   const r = FOOD_RATE.scoop[locId] ?? FOOD_RATE.scoop.home;
@@ -194,7 +194,7 @@ export function renderFoodShop() {
 
 function stallHtml() {
   const money = D.getSave().money;
-  return `<p class="fsIntro">青菜和雞蛋可放 3 天，粉、醬和蚵仔不會壞。每剝一顆蚵仔肉就多一個蚵仔，蝦仁、花枝在從紅盆拿蚵仔時有機會一起撈到（家 50%、王功 55%、東石 60%、布袋 70%、廣場和烤台 60%，兩種各一半），阿婆祕傳醬要丟中阿婆才有。</p><div class="fsList">`
+  return `<p class="fsIntro">青菜和雞蛋可放 3 天，粉、醬和蚵仔不會壞。每剝一顆蚵仔肉就多一個蚵仔，蝦仁、花枝在蚵仔肉入碗時有機會一起拿到（家 50%、王功 55%、東石 60%、布袋 70%、廣場和烤台 60%，兩種各一半），阿婆祕傳醬要丟中阿婆才有。</p><div class="fsList">`
     + FOODS.filter(f => f.price).map(f => {
       const k = 'food-' + f.id, u = D.px(k, f.price!);
       // 固定兩行：名稱＋說明／（特價）＋數量＋購買；按鈕字永遠是「買 N 個 $X」，不因數量換行

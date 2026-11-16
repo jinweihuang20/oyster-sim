@@ -1765,8 +1765,6 @@ function pickAt(cx: number, cy: number) {
   hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : (plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！點中間的蚵殼山撈一把');
 }
 function grab(m: THREE.Mesh) {
-  // 從紅盆拿起這顆就擲：撈到蝦仁／花枝馬上入帳並提示
-  rollScoop(plazaMode ? 'plaza' : locNow().id, 1);
   basinOy.splice(basinOy.indexOf(m), 1); setPhase('busy'); reach = 0.35; tone(500, 0.05, 0.08, 'triangle'); noise(0.05, 1200, 0.2);
   const from = new THREE.Vector3();
   m.getWorldPosition(from);
@@ -2118,6 +2116,7 @@ function toss(tapped: boolean) {
   fly(m, from, land, 0.45, 0.3, () => {
     count++; bowlStock++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(eco.dpay[md] * eco.crumbRate)) : eco.dpay[md]) - (shiftLen < SHIFT ? eco.tempCut : 0)) + (quick ? eco.quickBonus : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
     rollShuck(!wasCracked);
+    rollScoop(plazaMode ? 'plaza' : locNow().id, 1);
     burst(land.clone().setY(BOWL.y + 0.02), 8, 0xbfe4f2, 1);
     if (!wasCracked) burst(land.clone().setY(BOWL.y + 0.05), 6, 0xffd23a, 1.4);
     if (quick) { tone(980, 0.06, 0.18, 'triangle', 0, 520); tone(1568, 0.08, 0.1, 'sine', 0.05); } else SFX.plop();
