@@ -26,22 +26,30 @@ const G = {
   squid: new THREE.TorusGeometry(0.085, 0.026, 6, 14),
   leaf: (() => { const s = new THREE.Shape(); s.moveTo(0, -0.1); s.quadraticCurveTo(0.07, 0, 0, 0.11); s.quadraticCurveTo(-0.07, 0, 0, -0.1); return new THREE.ShapeGeometry(s, 4); })(),
   blob: new THREE.SphereGeometry(1, 10, 6),
-  /** 青菜大葉片：葉脈兩側微微捲起 */
-  leafBig: (() => {
+  /** 小白菜葉片（沿 +x 長）：邊緣波浪皺摺，三種皺法輪流用 */
+  bok: [0, 1, 2].map(v => {
     const s = new THREE.Shape();
-    s.moveTo(0, -0.11); s.bezierCurveTo(0.1, -0.06, 0.1, 0.08, 0, 0.13); s.bezierCurveTo(-0.1, 0.08, -0.1, -0.06, 0, -0.11);
-    const geo = new THREE.ShapeGeometry(s, 10);
+    const L = 0.44 + v * 0.03, W = 0.15 + v * 0.015;
+    s.moveTo(0, 0);
+    s.bezierCurveTo(L * 0.25, W * 0.9, L * 0.75, W * 1.05, L, W * 0.15);
+    s.bezierCurveTo(L * 1.02, -W * 0.1, L * 0.7, -W * 1.05, L * 0.25, -W * 0.85);
+    s.lineTo(0, 0);
+    const geo = new THREE.ShapeGeometry(s, 14);
     const p = geo.attributes.position as THREE.BufferAttribute;
-    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i); p.setZ(i, x * x * 9 + Math.max(0, y - 0.04) * 0.4); }
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), e = Math.abs(y) / W;
+      p.setZ(i, Math.sin(x * (34 + v * 6) + v) * 0.018 * e + Math.sin(y * 60 + x * 20) * 0.008 + y * y * 1.6 + x * x * 0.12);
+    }
     geo.computeVertexNormals();
     return geo;
-  })(),
+  }),
   spot: new THREE.CircleGeometry(1, 10),
 };
 
 const BATTER_COL = ['#efe5c8', '#ddb062', '#ad6d33'];
 const EDGE_COL = ['#e6d6ae', '#c58a3c', '#6e3f1c'];
-const SAUCE_COL = ['', '#e0566e', '#4a2b1d', '#cf2a22', '#a8572a', '#d8a21c'];
+/** 醬色：甜辣是夜市那種橘紅色 */
+const SAUCE_COL = ['', '#e2552c', '#4a2b1d', '#cf2a22', '#a8572a', '#c98a1c'];
 const EGG_Y = ['#f6d35a', '#eebd3c', '#d79a33'];
 const EGG_W = ['#fbf3d6', '#f6e6b8', '#ead19a'];
 
@@ -55,6 +63,68 @@ function blobOutline(r: () => number, R: number, n = 28, wob = 0.09) {
     if (i === 0) s.moveTo(x, y); else s.lineTo(x, y);
   }
   return s;
+}
+
+function addSaucePool(g: THREE.Group, c: Combo, r: () => number, top: number, loose: boolean) {
+  const col = SAUCE_COL[c.sauce];
+  const Rp = loose ? 0.4 + r() * 0.06 : 0.6 + r() * 0.08;
+  const T = c.sauce === 2 ? 0.012 : 0.02;
+  const shape = blobOutline(r, Rp, 40, 0.2);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.004, bevelEnabled: true, bevelThickness: T, bevelSize: 0.05, bevelSegments: 3, curveSegments: 4 });
+  geo.rotateX(-Math.PI / 2);
+  const pool = new THREE.Mesh(geo, mat(col, { rough: 0.16 }));
+  pool.position.y = top + T * 0.4; g.add(pool);
+  // 邊緣半透明一圈
+  const rim = new THREE.Mesh(new THREE.ShapeGeometry(blobOutline(r, Rp * 1.12, 36, 0.24), 3), mat(col, { opacity: 0.42, rough: 0.2 }));
+  rim.rotation.x = -Math.PI / 2; rim.position.y = top + 0.003; g.add(rim);
+  if (loose) return;
+  // 流過餅邊的醬汁舌頭，盤子上積一小灘
+  const n = 3 + Math.floor(r() * 3), edge = c.batter === 1 ? 0.95 : 0.88;
+  for (let i = 0; i < n; i++) {
+    const a = r() * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+    const w = 0.06 + r() * 0.05;
+    const tongue = new THREE.Mesh(G.blob, mat(col, { rough: 0.18 }));
+    const mid = (Rp + edge) / 2, len = (edge - Rp) / 2 + 0.08;
+    tongue.scale.set(len, T * 0.9, w); tongue.rotation.y = -a;
+    tongue.position.set(ca * mid, top + T * 0.3, sa * mid); g.add(tongue);
+    const over = new THREE.Mesh(G.blob, mat(col, { rough: 0.18 }));
+    over.scale.set(0.08, 0.05, w * 0.85); over.rotation.y = -a; over.rotation.z = 0;
+    over.position.set(ca * (edge + 0.02), top * 0.55, sa * (edge + 0.02)); g.add(over);
+    if (r() < 0.75) {
+      const pud = new THREE.Mesh(G.blob, mat(col, { rough: 0.15 }));
+      const pr = 0.07 + r() * 0.07;
+      pud.scale.set(pr * 1.3, 0.012, pr); pud.rotation.y = -a;
+      pud.position.set(ca * (edge + 0.1), 0.006, sa * (edge + 0.1)); g.add(pud);
+    }
+  }
+}
+
+/** 小白菜：深淺兩種綠、白綠色梗；有的被半透明粉漿蓋住一半，有的伸出餅邊 */
+function addGreens(g: THREE.Group, c: Combo, r: () => number, top: number, loose: boolean) {
+  const dark = c.done === 2 ? '#2f6a24' : '#3a8a2e', light = c.done === 2 ? '#5c9440' : '#78b85a';
+  const stemCol = c.done === 2 ? '#c9d9a8' : '#e3efcf';
+  const n = loose ? 5 : 6 + Math.floor(r() * 2);
+  for (let i = 0; i < n; i++) {
+    const kind = loose ? 2 : i % 3; // 0 蓋在粉漿下、1 伸出餅邊、2 放在上面
+    const o = new THREE.Group();
+    const stem = new THREE.Mesh(G.blob, mat(stemCol, { rough: 0.45 }));
+    stem.scale.set(0.13, 0.028, 0.045); stem.position.set(0.08, 0, 0); o.add(stem);
+    const leaf = new THREE.Mesh(G.bok[i % 3], mat(r() < 0.5 ? dark : light, { rough: 0.55 }));
+    (leaf.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+    leaf.rotation.x = -Math.PI / 2; leaf.position.set(0.15, 0.01, 0); o.add(leaf);
+    const k = 1.05 + r() * 0.35; o.scale.setScalar(k);
+    const a = r() * Math.PI * 2;
+    let d: number, y: number;
+    if (kind === 1) { d = 0.4 + r() * 0.1; y = top - 0.01; o.rotation.y = -a; o.rotation.z = -0.12; o.scale.setScalar(0.95 + r() * 0.15); } // 葉尖伸出餅邊、不超出盤子
+    else { d = Math.sqrt(r()) * (loose ? 0.35 : 0.5); y = kind === 0 ? top - 0.03 : top + 0.02; o.rotation.y = r() * Math.PI * 2; o.rotation.z = (r() - 0.5) * 0.2; }
+    o.position.set(Math.cos(a) * d, y, Math.sin(a) * d);
+    g.add(o);
+    if (kind === 0) {
+      // 半透明粉漿蓋住一半
+      const film = new THREE.Mesh(new THREE.ShapeGeometry(blobOutline(r, 0.2, 20, 0.25), 2), mat(BATTER_COL[c.done], { opacity: 0.55, rough: 0.4 }));
+      film.rotation.x = -Math.PI / 2; film.position.set(Math.cos(a) * d + (r() - 0.5) * 0.1, top + 0.012, Math.sin(a) * d + (r() - 0.5) * 0.1); g.add(film);
+    }
+  }
 }
 
 /** 產生一盤蚵仔煎（Group，底面在 y=0） */
@@ -121,6 +191,11 @@ export function buildDish(id: number, combo?: Combo, seed = 0): THREE.Group {
     }
     top += loose ? 0.04 : 0.025;
   }
+  // 醬：中間一大灘、微微隆起、亮亮的，幾道醬汁流過餅邊滴到盤子上；配料從醬裡冒出來
+  if (c.sauce) {
+    addSaucePool(g, c, rng(id + 67 + seed * 7919), top, loose);
+    top += loose ? 0.02 : 0.03;
+  }
   // 配料
   const R = loose ? 0.55 : 0.72;
   const place = (m: THREE.Object3D, lift: number) => {
@@ -145,35 +220,7 @@ export function buildDish(id: number, combo?: Combo, seed = 0): THREE.Group {
     const m = new THREE.Mesh(G.squid, mat(c.done === 2 ? '#eadfc8' : '#f6f1e6', { rough: 0.4 }));
     m.rotation.x = -Math.PI / 2; const o = new THREE.Group(); o.add(m); place(o, 0.025);
   }
-  if (c.top & 8) {
-    const vr = rng(id + 41 + seed * 7919), n = 5 + Math.floor(vr() * 2);
-    for (let i = 0; i < n; i++) {
-      const m = new THREE.Mesh(G.leafBig, mat(vr() < 0.5 ? (c.done === 2 ? '#3f7a2c' : '#4f9a3a') : (c.done === 2 ? '#4c8a34' : '#62ae48'), { rough: 0.6 }));
-      (m.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
-      const k = 2.1 + vr() * 0.5;
-      m.scale.set(k, k, k * (0.8 + vr() * 0.5));
-      m.rotation.x = -Math.PI / 2 + (vr() - 0.5) * 0.45; m.rotation.z = (vr() - 0.5) * 0.3;
-      const o = new THREE.Group(); o.add(m); place(o, 0.025 + vr() * 0.02);
-    }
-  }
-  // 醬：之字淋上
-  if (c.sauce) {
-    const pts: THREE.Vector3[] = [];
-    const rows = 5, w = loose ? 0.55 : 0.75, y = top + 0.07;
-    const rot = r() * Math.PI;
-    for (let i = 0; i <= rows * 6; i++) {
-      const t = i / (rows * 6);
-      const z = -w + t * 2 * w;
-      const x = Math.sin(t * rows * Math.PI) * Math.sqrt(Math.max(0, w * w - z * z)) * 0.95;
-      pts.push(new THREE.Vector3(x * Math.cos(rot) - z * Math.sin(rot), y, x * Math.sin(rot) + z * Math.cos(rot)));
-    }
-    const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 120, c.sauce === 2 ? 0.022 : 0.03, 5), mat(SAUCE_COL[c.sauce], { rough: 0.25 }));
-    g.add(tube);
-    if (!loose) {
-      const glaze = new THREE.Mesh(G.spot, mat(SAUCE_COL[c.sauce], { opacity: 0.18 }));
-      glaze.rotation.x = -Math.PI / 2; glaze.scale.setScalar(0.7); glaze.position.y = top + 0.001; g.add(glaze);
-    }
-  }
+  if (c.top & 8) addGreens(g, c, rng(id + 41 + seed * 7919), top, loose);
   g.userData.dishId = id;
   return g;
 }
@@ -220,6 +267,16 @@ export function buildUnder(id: number, combo?: Combo): THREE.Group {
     const m = new THREE.Mesh(G.spot, mat(EGG_Y[c.done], { opacity: 0.3 }));
     m.rotation.x = -Math.PI / 2; m.scale.set(0.12 + r() * 0.08, 0.08 + r() * 0.05, 1);
     const a = r() * Math.PI * 2, d = Math.sqrt(r()) * 0.6; m.position.set(Math.cos(a) * d, top + 0.001, Math.sin(a) * d); g.add(m);
+  }
+  // 伸出餅邊的青菜葉尖，翻過來也看得到
+  if (c.top & 8) {
+    const vr = rng(id + 59);
+    for (let i = 0; i < 3; i++) {
+      const a = vr() * Math.PI * 2, leaf = new THREE.Mesh(G.bok[i % 3], mat(i % 2 ? '#3a8a2e' : '#78b85a', { rough: 0.55 }));
+      (leaf.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      leaf.rotation.x = -Math.PI / 2; const o = new THREE.Group(); o.add(leaf);
+      o.rotation.y = -a; o.position.set(Math.cos(a) * 0.68, top * 0.5, Math.sin(a) * 0.68); g.add(o);
+    }
   }
   if (c.batter === 1) for (let i = 0; i < 22; i++) {
     const a = r() * Math.PI * 2, d = 0.9 + r() * 0.2;
@@ -317,14 +374,25 @@ function draw2D(ctx: CanvasRenderingContext2D, W: number, id: number, combo?: Co
     ctx.fillStyle = '#f6d24a';
     for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.ellipse(cx + (r() - 0.5) * W * 0.4, cy + (r() - 0.5) * W * 0.16, W * 0.05, W * 0.025, 0, 0, Math.PI * 2); ctx.fill(); }
   }
+  if (c.sauce) {
+    ctx.fillStyle = SAUCE_COL[c.sauce];
+    ctx.beginPath(); ctx.ellipse(cx, cy - W * 0.01, W * (c.batter ? 0.22 : 0.15), W * (c.batter ? 0.095 : 0.065), 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.ellipse(cx - W * 0.06, cy - W * 0.04, W * 0.06, W * 0.015, -0.2, 0, Math.PI * 2); ctx.fill();
+  }
   const tc = ['#9a9a8a', '#f19a8a', '#f3efe6', '#4f9a3c'];
   for (let b = 0; b < 4; b++) if (c.top & (1 << b)) {
+    if (b === 3) { // 小白菜：大葉＋白綠梗
+      for (let i = 0; i < 5; i++) {
+        const x = cx + (r() - 0.5) * W * 0.5, y = cy + (r() - 0.5) * W * 0.2, ang = r() * Math.PI;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+        ctx.fillStyle = '#e3efcf'; ctx.fillRect(-W * 0.05, -W * 0.008, W * 0.06, W * 0.016);
+        ctx.fillStyle = i % 2 ? '#3a8a2e' : '#78b85a'; ctx.beginPath(); ctx.ellipse(W * 0.06, 0, W * 0.07, W * 0.03, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+      continue;
+    }
     ctx.fillStyle = tc[b];
     for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.ellipse(cx + (r() - 0.5) * W * 0.46, cy + (r() - 0.5) * W * 0.18, W * 0.035, W * 0.02, 0, 0, Math.PI * 2); ctx.fill(); }
-  }
-  if (c.sauce) {
-    ctx.strokeStyle = ['', '#e05a6a', '#4a2e22', '#d8342c', '#9a5524', '#6b3b2a'][c.sauce]; ctx.lineWidth = W / 60; ctx.lineCap = 'round';
-    ctx.beginPath(); for (let i = 0; i <= 12; i++) { const x = cx - W * 0.25 + i * W * 0.042, y = cy + Math.sin(i * 1.3) * W * 0.04; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); } ctx.stroke();
   }
   ctx.restore();
 }
