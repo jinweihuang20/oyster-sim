@@ -65,10 +65,8 @@ export function topName(top: number): string {
   return s;
 }
 
-/** 自動命名，例：薄脆焦香沙茶花枝煎；不加粉漿走「炒」 */
-export function comboName(id: number): string {
-  const sp = specialOf(id); if (sp) return sp.n;
-  const c = comboOf(id);
+/** 正常描述款命名，例：薄脆焦香沙茶花枝煎；不加粉漿走「炒」 */
+function plainName(c: Combo): string {
   const b = ['', '薄脆', '', '厚實'][c.batter];
   const d = DONES[c.done];
   const s = SAUCES[c.sauce].short;
@@ -78,6 +76,98 @@ export function comboName(id: number): string {
     return `${d}${s}${c.egg ? '' : '無蛋'}炒${t}${c.egg ? '蛋' : ''}`;
   }
   return `${b}${d}${s}${c.egg ? '' : '無蛋'}${t || '粉漿'}煎`;
+}
+
+/* ── 趣味命名：約一半的組合改用夜市風格的綽號，依 id 固定 ── */
+const FUN_DONE = [
+  ['半熟冒險家', '嫩到會發抖的', '剛剛好嫩嫩', '還在睡的', '軟綿綿'],
+  ['金黃閃亮', '老闆最愛', '黃金比例', '標準好吃', '閃閃發光的'],
+  ['焦香到阿婆搖頭', '炭烤風味（誤）', '焦脆有個性', '火力全開', '鍋巴系', '煎過頭的'],
+];
+const FUN_BATTER = [
+  ['散裝', '沒有粉漿的勇氣', '自由奔放', '不受拘束'],
+  ['薄脆到會唱歌的', '喀滋喀滋', '一咬就碎的', '薄如蟬翼'],
+  ['中規中矩', '乖巧', '模範生', '不偏不倚'],
+  ['厚到可以當枕頭的', '超有誠意', '份量爆表', '一口塞不下的'],
+];
+const FUN_EGG = [
+  ['蛋去哪了', '沒蛋也很勇', '省蛋派'],
+  ['蛋蛋加持', '雙倍蛋香', '蛋黃滿溢', '蛋包好包滿'],
+];
+const FUN_SAUCE = [
+  ['清純原味', '素顏', '不沾醬派', '本色演出'],
+  ['甜辣上頭', '甜辣派代表', '甜甜辣辣', '甜辣信徒'],
+  ['蒜香撲鼻', '吸血鬼退散', '蒜你厲害', '醬油膏控'],
+  ['番茄大亂入', '紅通通', '薯條醬誤用', '番茄派掌門'],
+  ['沙茶狂熱', '沙茶上身', '沙茶控必點', '沙茶灌頂'],
+  ['阿婆點頭認證', '阿婆祕傳', '巷口阿婆款', '阿婆說讚'],
+];
+const FUN_ANY = ['夜市排隊款', '深夜限定', '老闆私心', '考前續命', '下班犒賞', '隔壁攤都在看', '人氣爆棚', '期間限定', '傳說中的', '小吃界新星', '一吃就上癮', '心情不好也要吃'];
+
+/** 配料的趣味主體（有粉漿時＝煎；沒粉漿＝炒/散裝） */
+function funNouns(c: Combo): string[] {
+  const t = topName(c.top);
+  const n = [0, 1, 2, 3].filter(i => c.top & (1 << i)).length;
+  if (!c.batter) {
+    if (!t) return c.egg ? ['只有蛋的炒鍋', '蛋的獨角戲', '炒蛋而已'] : ['空鍋', '鍋子在發呆', '寂寞的鍋'];
+    if (n === 4) return ['什麼都炒', '冰箱清空炒', '大鍋炒'];
+    return [`炒${t}`, `${t}炒一炒`, `散裝${t}`];
+  }
+  if (!t) return ['蚵仔不見了煎', '只有粉的寂寞', '粉漿獨奏', '配料去哪了煎'];
+  if (n === 4) return ['什麼都加大滿貫', '海陸雙霸全餐', '冰箱清空煎', '豪華吃到飽煎'];
+  if (n === 3) return [`${t}煎`, `${t}豪華煎`, `${t}三重奏`, '三拼煎', '什錦煎', '綜合大拼盤'];
+  return n === 2 ? [`${t}煎`, '雙拼煎', `${t}雙人組`] : [`${t}煎`, c.top === 1 ? '蚵蚵煎' : `${t}煎`];
+}
+
+/** 整數雜湊：同 id 永遠同結果 */
+function hash(x: number) {
+  x = Math.imul(x ^ 0x5bd1e995, 0x9e3779b1); x ^= x >>> 15; x = Math.imul(x, 0x85ebca6b); x ^= x >>> 13;
+  return x >>> 0;
+}
+function shuffle<T>(a: T[], seed: number): T[] {
+  const o = a.slice();
+  for (let i = o.length - 1; i > 0; i--) { seed = hash(seed + i); const j = seed % (i + 1); [o[i], o[j]] = [o[j], o[i]]; }
+  return o;
+}
+
+let NAMES: string[] | null = null;
+function buildNames(): string[] {
+  const out: string[] = new Array(COMBO_TOTAL);
+  const used = new Set<string>();
+  const fun: number[] = [];
+  for (let i = 0; i < COMBO_TOTAL; i++) {
+    const sp = specialOf(i);
+    if (sp) { out[i] = sp.n; used.add(sp.n); continue; }
+    if (hash(i * 7 + 3) % 2 || [...plainName(comboOf(i))].length >= 13) fun.push(i); // 太長的正常名也改綽號
+    else { out[i] = plainName(comboOf(i)); used.add(out[i]); }
+  }
+  for (const i of fun) {
+    const c = comboOf(i), h = hash(i);
+    // 最搶眼的特色優先：焦/嫩、沒粉漿/厚/薄、阿婆/沙茶等
+    const adjs = shuffle([...FUN_DONE[c.done], ...FUN_BATTER[c.batter], ...FUN_EGG[c.egg], ...FUN_SAUCE[c.sauce], ...FUN_ANY.filter((_, k) => (h >>> k) & 1)], h);
+    const nouns = shuffle(funNouns(c), h >>> 7);
+    let name = '';
+    for (const max of [10, 12]) { // 先找 10 字內，放得進圖鑑格兩行
+      for (const a of adjs) {
+        for (const n of nouns) {
+          const cand = a + n;
+          if ([...cand].length <= max && !used.has(cand)) { name = cand; break; }
+        }
+        if (name) break;
+      }
+      if (name) break;
+    }
+    if (!name) name = plainName(c);
+    out[i] = name; used.add(name);
+  }
+  return out;
+}
+
+/** 蚵仔煎名稱：隱藏款用專屬名，其餘約一半正常描述、一半趣味綽號（依 id 固定、不重複） */
+export function comboName(id: number): string {
+  const sp = specialOf(id); if (sp) return sp.n;
+  if (!NAMES) NAMES = buildNames();
+  return NAMES[Math.max(0, Math.min(COMBO_TOTAL - 1, Math.floor(id)))];
 }
 
 /** 特色清單（詳細頁） */
