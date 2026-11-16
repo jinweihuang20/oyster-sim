@@ -33,6 +33,8 @@ export type Save = {
   cookDex?: Record<string, number>;
   /** 煎好留著的蚵仔煎：組合 id → 盤數（請阿婆吃會扣） */
   cookDish?: Record<string, number>;
+  /** 請阿婆吃：今天（本機日期）每款請過幾次，同款重複會扣滿意度 */
+  feedDay?: { d: string; c: Record<string, number> };
 };
 
 export const START_MONEY = 10000;
@@ -124,6 +126,16 @@ export function loadSave(LS: SaveStorage): Save {
     for (const [k, v] of Object.entries(raw.cookDish as Record<string, unknown>)) {
       const id = Number(k), n = Math.floor(num(v));
       if (comboHasFood(id) && Number.isInteger(n) && n > 0) out.cookDish[String(id)] = Math.min(n, 99_999);
+    }
+  }
+  if (raw.feedDay && typeof raw.feedDay === 'object' && typeof (raw.feedDay as any).d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test((raw.feedDay as any).d)) {
+    const fd = raw.feedDay as { d: string; c?: unknown };
+    out.feedDay = { d: fd.d, c: {} };
+    if (fd.c && typeof fd.c === 'object' && !Array.isArray(fd.c)) {
+      for (const [k, v] of Object.entries(fd.c as Record<string, unknown>)) {
+        const id = Number(k), n = Math.floor(num(v));
+        if (comboHasFood(id) && n > 0) out.feedDay.c[String(id)] = Math.min(n, 9_999);
+      }
     }
   }
   if (Array.isArray(raw.foodSeen)) out.foodSeen = raw.foodSeen.filter((x: unknown) => typeof x === 'string').slice(0, 40);

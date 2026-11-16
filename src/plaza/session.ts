@@ -2050,12 +2050,15 @@ export function plazaFeedStillNear(connId: string) {
   const w = deps.getWalkXZ();
   return Math.hypot(w.x - t.head.x, w.z - t.head.z) <= CARRY_DIST + 0.9;
 }
-const EAT_LINES = ['嘿好吃！', '這蚵仔煎煎得真好', '好香喔，謝謝你', '嗯～醬調得剛剛好', '吃飽了，多謝啦', '蚵仔好新鮮！'];
-/** 阿婆吃：盤子飛到嘴邊、三口吃完，頭上冒一句話 */
-export function plazaNpcEat(connId: string, combo: number): boolean {
+/** 開始吃時說的（還沒評分，不先講好不好吃） */
+const EAT_LINES = ['來，阿婆吃看看', '謝謝你喔，我嚐一口', '好香，我試看看', '哎呀，請我吃喔', '我來吃看覓'];
+/** 阿婆吃：盤子飛到嘴邊、三口吃完；開始說一句，吃完冒評分 */
+export function plazaNpcEat(connId: string, combo: number, after?: string): boolean {
   if (!view || !plazaFeedStillNear(connId)) return false;
   const t = npcAim(connId)!;
   view.showChat({ connId, text: EAT_LINES[Math.floor(Math.random() * EAT_LINES.length)] });
+  // 吃完講評分（分數＋一句話）
+  if (after) window.setTimeout(() => { if (active) view?.showChat({ connId, text: after }); }, 2100);
   const w = deps!.getWalkXZ();
   const head = new THREE.Vector3(t.head.x, t.head.y, t.head.z);
   const dx = w.x - head.x, dz = w.z - head.z, dl = Math.hypot(dx, dz) || 1;

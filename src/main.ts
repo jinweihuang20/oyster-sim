@@ -6731,7 +6731,8 @@ initFeed({
   getSave: () => save, persist, isTut: () => !!tut,
   toast: (t, c) => toast(t, c ?? '#cfe3f5'),
   onMoney: () => updHud(),
-  eat: (id, combo) => plazaNpcEat(id, combo),
+  eat: (id, combo, after) => plazaNpcEat(id, combo, after),
+  today: () => todayKey(),
   stillNear: id => plazaFeedStillNear(id),
   sfx: () => { if (!ac) return; SFX.pop(); tone(1046, 0.12, 0.1, 'triangle', 0.02); tone(1568, 0.16, 0.08, 'sine', 0.1); },
 });
