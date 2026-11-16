@@ -148,10 +148,12 @@ function mountView(id: number) {
   // 每次 render 都換新 canvas：同一盤也要掛到新 canvas 上（舊寫法會留下空白預覽）
   if (key === lastViewKey && stopView && viewCv === cv) return;
   const flipIn = lastViewUnder != null && lastViewUnder !== under && step >= 4 && step <= 5;
+  // 選配料、粉漿、蛋的時候：從上一盤變過來要播動畫（換一次選擇就重播；點預覽可跳過）
+  const animFrom = step >= 1 && step <= 3 && !under && lastViewId >= 0 && lastViewId !== id ? lastViewId : undefined;
   stopView?.(); lastViewId = id; lastViewKey = key; lastViewUnder = under; viewCv = cv;
   // 剛起鍋：先彈一下、放完特效再開始慢慢轉
   const pop = !!cv.closest('.ckViewW.fx');
-  stopView = mountDishViewer(cv, id, undefined, { spin, under, flipIn, spinAfter: pop ? 1300 : 0 });
+  stopView = mountDishViewer(cv, id, undefined, { spin, under, flipIn, spinAfter: pop ? 1300 : 0, animFrom });
 }
 
 const hint = (ids: readonly string[]) => FOOD_BY_ID[ids[0]]?.how ?? '';
