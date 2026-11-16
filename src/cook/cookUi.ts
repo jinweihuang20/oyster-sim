@@ -1,5 +1,5 @@
 /** 煎台操作面板（自由煎，不計分不限時）與蚵仔煎圖鑑（三層）。 */
-import { TOPS, BATTERS, DONES, SAUCES, COMBO_TOTAL, comboId, comboOf, comboName, comboLabel, comboHasFood, comboFeatures, specialOf, SPECIAL_IDS, topName, cookTitle, COOK_TITLES, revealedSlots, type Combo, type RevealLevel } from './combo';
+import { TOPS, BATTERS, DONES, SAUCES, COMBO_TOTAL, comboId, comboOf, comboName, comboHasFood, comboFeatures, specialOf, SPECIAL_IDS, topName, cookTitle, COOK_TITLES, type Combo } from './combo';
 import { dishThumb, mountDishViewer, setLivePour, pourSpread } from './dish3d';
 import { foodCount, foodCountAny, takeFood } from '../food/pantry';
 import { FOOD_BY_ID } from '../food/ingredients';
@@ -214,7 +214,7 @@ function render() {
     html += `<div class="ckResult"><div class="ckName">${esc(comboName(id))}${sp ? '<span class="ckTag">隱藏款</span>' : ''}${isNew ? '<span class="ckTag new">新收集</span>' : ''}</div>`
       + (sp ? `<p class="ckDesc">${esc(sp.desc)}</p>` : '')
       + `<ul class="ckFeat">${comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
-      + `<p class="ckSum">圖鑑已收集 ${dexCount().toLocaleString()} 種${cookTitle(dexCount()) ? `・${cookTitle(dexCount())}` : ''}</p></div>`
+      + `<p class="ckSum">圖鑑 ${dexCount()}／${COMBO_TOTAL.toLocaleString()}${cookTitle(dexCount()) ? `・${cookTitle(dexCount())}` : ''}</p></div>`
       + (resultKept ? `<p class="ckHint">${IC.info}這盤收好了（同款共 ${D.getSave().cookDish?.[String(id)] ?? 1} 盤），可以在廣場走到阿婆旁邊「請阿婆吃」</p>`
         : `<p class="ckHint">${IC.info}這盤什麼都沒放，沒辦法收起來請阿婆吃。加點配料、粉漿、蛋或醬再煎一盤吧</p>`)
       + (solo ? '' : `<div class="ckAsk" id="ckAsk"><b>要展示嗎？</b><span>會放在煎台旁，大家都看得到；每人一盤，離開廣場就收掉</span><div class="ckAct"><button type="button" class="ckBtn" data-ck="nodisp">不用</button><button type="button" class="ckBtn pri" data-ck="disp">展示</button></div></div>`)
@@ -354,11 +354,9 @@ async function doDisplay(b: HTMLButtonElement) {
 /* ───────── 圖鑑（平鋪：一格一種，共 2,304 格，依編號排；只畫看得到的幾列） ───────── */
 
 type DexFilter = 'all' | 'got' | 'un' | 'hid';
-type DexGroup = '' | 'oy' | 'shrimp' | 'squid' | 'veg' | 'none';
 let dexLevel: 'list' | 'detail' = 'list';
 let dexId = -1;
 let dexFilter: DexFilter = 'all';
-let dexGroup: DexGroup = '';
 let fq = '';
 let dexIds: number[] = [];
 let dexScroll = 0;
@@ -402,57 +400,9 @@ const SIL = `<span class="dxSil">${IC.dish}</span>`;
 const SIL_Q = `<span class="dxSil q">${IC.dish}<b>？</b></span>`;
 const no = (id: number) => `No.${String(id + 1).padStart(4, '0')}`;
 
-const TOP_GROUPS: { id: DexGroup; n: string; bit: number; total: number }[] = [
-  { id: 'oy', n: '有蚵', bit: 1, total: 8 * 4 * 2 * 3 * 6 },
-  { id: 'shrimp', n: '有蝦', bit: 2, total: 8 * 4 * 2 * 3 * 6 },
-  { id: 'squid', n: '有花枝', bit: 4, total: 8 * 4 * 2 * 3 * 6 },
-  { id: 'veg', n: '有青菜', bit: 8, total: 8 * 4 * 2 * 3 * 6 },
-  { id: 'none', n: '不放配料', bit: 0, total: 4 * 2 * 3 * 6 },
-];
-function inTopGroup(id: number, g: DexGroup) {
-  if (!g) return true;
-  const top = comboOf(id).top;
-  const def = TOP_GROUPS.find(x => x.id === g);
-  if (!def) return true;
-  return def.id === 'none' ? top === 0 : !!(top & def.bit);
-}
-function groupCount(bit: number, none: boolean) {
-  let n = 0;
-  for (const k of Object.keys(dex())) {
-    const id = Number(k);
-    if (!Number.isInteger(id) || !has(id)) continue;
-    const top = comboOf(id).top;
-    if (none ? top === 0 : !!(top & bit)) n++;
-  }
-  return n;
-}
-let topsCache: Set<number> | null = null;
-function cookedTops(): Set<number> {
-  if (topsCache) return topsCache;
-  const s = new Set<number>();
-  for (const k of Object.keys(dex())) {
-    const id = Number(k);
-    if (Number.isInteger(id) && has(id)) s.add(comboOf(id).top);
-  }
-  topsCache = s;
-  return s;
-}
-function revealOf(id: number): RevealLevel {
-  if (has(id)) return 'full';
-  // 隱藏款在自己煎出以前全程保密（即使已有全服首創、或煎過相近款）
-  if (specialOf(id)) return 'unknown';
-  if (cookFirstOf(id)) return 'first';
-  if (cookedTops().has(comboOf(id).top)) return 'related';
-  return 'unknown';
-}
-
 function dexHead() {
   const n = dexCount(), t = cookTitle(n), next = COOK_TITLES.find(m => m.n > n);
-  const groups = TOP_GROUPS.map(g => {
-    const got = groupCount(g.bit, g.id === 'none');
-    return `<button type="button" class="dxGrp${dexGroup === g.id ? ' on' : ''}" data-g="${g.id}"><span>${g.n}</span> <b>${got.toLocaleString()}／${g.total.toLocaleString()}</b></button>`;
-  }).join('');
-  return `<div class="dxTotal"><div><b>已收集 ${n.toLocaleString()} 種</b>${t ? `<span class="dxTitle">${t}</span>` : ''}</div>${next ? `<small>再收集 ${next.n - n} 種可得稱號「${next.t}」</small>` : '<small>所有稱號都拿到了</small>'}<div class="dxGroups">${groups}</div></div>`;
+  return `<div class="dxTotal"><div><b>已收集 ${n.toLocaleString()}／${COMBO_TOTAL.toLocaleString()}</b>${t ? `<span class="dxTitle">${t}</span>` : ''}</div><div class="dxBar"><i style="width:${(n / COMBO_TOTAL) * 100}%"></i></div>${next ? `<small>再收集 ${next.n - n} 種可得稱號「${next.t}」</small>` : '<small>所有稱號都拿到了</small>'}</div>`;
 }
 function filtersHtml() {
   const F: [DexFilter, string][] = [['all', '全部'], ['got', '已收集'], ['un', '未收集'], ['hid', '隱藏款']];
@@ -463,22 +413,16 @@ function computeIds() {
   const q = fq.trim();
   const qNo = /^(no\.?)?\s*0*(\d{1,4})$/i.exec(q);
   const out: number[] = [];
-  // 隱藏款篩選只列自己煎過的，避免露出還沒煎到的隱藏款位置
-  const pool = dexFilter === 'hid' ? SPECIAL_IDS.filter(has) : null;
+  const pool = dexFilter === 'hid' ? SPECIAL_IDS : null;
   const N = pool ? pool.length : COMBO_TOTAL;
   for (let k = 0; k < N; k++) {
     const id = pool ? pool[k] : k;
     const got = has(id);
     if (dexFilter === 'got' && !got) continue;
     if (dexFilter === 'un' && got) continue;
-    if (dexFilter === 'hid' && !got) continue;
-    // 配料進度篩選只作用在自己已收集的格子
-    if (dexGroup && (!got || !inTopGroup(id, dexGroup))) continue;
     if (q) {
-      if (qNo) {
-        if (id + 1 !== Number(qNo[2])) continue;
-        // 用編號跳到某一格可以，但名稱搜尋只看已收集
-      } else if (!got || !comboName(id).includes(q)) continue;
+      if (qNo) { if (id + 1 !== Number(qNo[2])) continue; }
+      else if (!got || !comboName(id).includes(q)) continue; // 名稱只搜已收集的
     }
     out.push(id);
   }
@@ -486,17 +430,9 @@ function computeIds() {
 }
 
 function cellHtml(id: number) {
-  const level = revealOf(id), sp = !!specialOf(id), f = cookFirstOf(id);
-  if (level === 'full') {
-    return `<button type="button" class="dxCell" data-id="${id}"><span class="dxTh" data-th="${id}">${SIL}</span><span class="dxNm">${esc(comboName(id))}</span>${sp ? '<i class="dxSp">隱藏款</i>' : ''}${f ? `<i class="dxFirst" title="全服首創：${esc(f.nick)}">首創 ${esc(f.nick)}</i>` : ''}</button>`;
-  }
-  if (level === 'first') {
-    return `<button type="button" class="dxCell mid" data-id="${id}">${SIL}<span class="dxNm">${esc(comboLabel(id, 'first'))}</span>${f ? `<i class="dxFirst" title="全服首創：${esc(f.nick)}">首創 ${esc(f.nick)}</i>` : ''}</button>`;
-  }
-  if (level === 'related') {
-    return `<button type="button" class="dxCell mid" data-id="${id}">${SIL}<span class="dxNm">${esc(comboLabel(id, 'related'))}</span></button>`;
-  }
-  return `<button type="button" class="dxCell un" data-id="${id}">${SIL_Q}<span class="dxNm"><small>${no(id)}</small>？</span></button>`;
+  const got = has(id), sp = !!specialOf(id);
+  if (got) { const f = cookFirstOf(id); return `<button type="button" class="dxCell" data-id="${id}"><span class="dxTh" data-th="${id}">${SIL}</span><span class="dxNm">${esc(comboName(id))}</span>${sp ? '<i class="dxSp">隱藏款</i>' : ''}${f ? `<i class="dxFirst" title="全服首創：${esc(f.nick)}">首創 ${esc(f.nick)}</i>` : ''}</button>`; }
+  return `<button type="button" class="dxCell un" data-id="${id}">${sp ? SIL_Q : SIL}<span class="dxNm"><small>${no(id)}</small>？？？</span></button>`;
 }
 
 function cols() {
@@ -507,7 +443,6 @@ function cols() {
 function renderDex() {
   stopDexView?.(); stopDexView = null;
   cancelAnimationFrame(virtRaf); cancelAnimationFrame(thumbRaf); thumbQ.length = 0;
-  topsCache = null;
   const B = $('cookDexBody');
   B.classList.toggle('dxDet', dexLevel !== 'list');
   if (dexLevel === 'list') {
@@ -523,30 +458,17 @@ function renderDex() {
     }
     return;
   }
-  const id = dexId, got = has(id), sp = specialOf(id), level = revealOf(id);
-  const first = cookFirstOf(id);
-  const name = comboLabel(id, level);
-  const slots = revealedSlots(id, level);
-  const lockTxt = level === 'unknown' ? '還沒揭開' : '還沒煎過';
-  const feat = level === 'unknown'
-    ? ''
-    : `<ul class="ckFeat">${comboFeatures(id, slots).map(f => `<li>${f}</li>`).join('')}</ul>`;
-  const follow = got
-    ? `<div class="ckAct"><button type="button" class="ckBtn pri" data-ck="follow">照這樣煎</button></div>`
-      + (seat == null && !solo ? '<p class="ckHint">' + IC.info + '主選單按「煎蚵仔煎」，或到廣場中央、第 5 桌的煎台站上位子後可以用</p>' : '')
-    : '';
-  const firstLine = (level === 'full' || level === 'first') && first
-    ? `<p class="ckFirst">${IC.info}全服首創：${esc(first.nick)}${first.tag ? `<small>#${esc(first.tag)}</small>` : ''}${first.ts ? `・${fmtDate(first.ts)}` : ''}</p>`
-    : '';
+  const id = dexId, got = has(id), sp = specialOf(id), hid = !!sp && !got;
   B.innerHTML = `<div class="dxNav"><button type="button" class="ckLink" data-nav="list">${IC.back}圖鑑</button><small>${no(id)}</small></div>`
-    + `<div class="ckViewW big${got ? '' : ' un'}"><canvas id="dxView" width="256" height="256"></canvas>${got ? '' : `<span class="dxLock">${lockTxt}</span>`}</div>`
-    + `<div class="ckName">${esc(name)}${got && sp ? '<span class="ckTag">隱藏款</span>' : ''}</div>`
+    + `<div class="ckViewW big${got ? '' : ' un'}"><canvas id="dxView" width="256" height="256"></canvas>${got ? '' : '<span class="dxLock">還沒煎過</span>'}</div>`
+    + `<div class="ckName">${hid ? '？？？' : esc(comboName(id))}${sp ? '<span class="ckTag">隱藏款</span>' : ''}</div>`
     + (dexOwner ? `<p class="ckDesc">${esc(dexOwner)} 展示的作品</p>` : '')
     + (sp && got ? `<p class="ckDesc">${esc(sp.desc)}</p>` : '')
-    + feat
+    + `<ul class="ckFeat">${hid ? '<li>條件保密，煎出來才知道</li>' : comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
     + `<p class="ckSum">${got ? `第一次煎出：${fmtDate(dex()[String(id)])}` : '還沒收集'}</p>`
-    + firstLine
-    + follow;
+    + (hid ? '' : (() => { const f = cookFirstOf(id); return f ? `<p class="ckFirst">${IC.info}全服首創：${esc(f.nick)}${f.tag ? `<small>#${esc(f.tag)}</small>` : ''}${f.ts ? `・${fmtDate(f.ts)}` : ''}</p>` : ''; })())
+    + `<div class="ckAct"><button type="button" class="ckBtn pri" data-ck="follow"${hid ? ' disabled' : ''}>照這樣煎</button></div>`
+    + (seat == null && !solo ? '<p class="ckHint">' + IC.info + '主選單按「煎蚵仔煎」，或到廣場中央、第 5 桌的煎台站上位子後可以用</p>' : '');
   B.scrollTop = 0;
   B.querySelector<HTMLButtonElement>('[data-nav]')!.onclick = () => { dexLevel = 'list'; dexOwner = ''; renderDex(); };
   B.querySelector<HTMLButtonElement>('[data-ck="follow"]')?.addEventListener('click', () => {
@@ -554,7 +476,7 @@ function renderDex() {
     closeDex(); resetSel(dexId); render();
   });
   const cv = document.getElementById('dxView') as HTMLCanvasElement | null;
-  if (cv && got) stopDexView = mountDishViewer(cv, id);
+  if (cv && !hid) stopDexView = mountDishViewer(cv, id);
 }
 
 /** 只畫看得到的列（上下各多留 2 列） */
@@ -593,13 +515,7 @@ function drawRows() {
 }
 
 function bindDexList(B: HTMLElement) {
-  B.querySelectorAll<HTMLButtonElement>('[data-f]').forEach(b => b.onclick = () => { dexFilter = b.dataset.f as DexFilter; if (dexFilter === 'un') dexGroup = ''; dexScroll = 0; renderDex(); });
-  B.querySelectorAll<HTMLButtonElement>('[data-g]').forEach(b => b.onclick = () => {
-    const g = b.dataset.g as DexGroup;
-    dexGroup = dexGroup === g ? '' : g;
-    if (dexGroup && dexFilter === 'un') dexFilter = 'got';
-    dexScroll = 0; renderDex();
-  });
+  B.querySelectorAll<HTMLButtonElement>('[data-f]').forEach(b => b.onclick = () => { dexFilter = b.dataset.f as DexFilter; dexScroll = 0; renderDex(); });
   const R = document.getElementById('dxRows');
   R?.addEventListener('click', e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-id]'); if (!b) return;
