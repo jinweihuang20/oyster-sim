@@ -40,13 +40,14 @@ export type PlazaHubHandlers = {
   onFlagUpsert?: (f: PlazaFlagState) => void;
   onSeatWish?: (w: PlazaSeatWish) => void;
   /** 食材攤排隊狀態變更 */
-  onFoodQueue?: (q: PlazaFoodQueue) => void;
+  /** fresh＝剛加入／重連拿到的完整狀態（伺服器重開後 seq 會變小，要直接採用） */
+  onFoodQueue?: (q: PlazaFoodQueue, fresh?: boolean) => void;
   /** 被食材攤踢出（timeout＝180 秒到；away＝輪到時不在） */
   onFoodKick?: (reason: string) => void;
   /** 輪到自己買食材 */
   onFoodTurn?: (q: PlazaFoodQueue) => void;
   /** 烹煮區整體狀態（佔位／展示盤） */
-  onCookState?: (s: PlazaCookState) => void;
+  onCookState?: (s: PlazaCookState, fresh?: boolean) => void;
   /** 某個位子的煎製進度 */
   onCookSeat?: (s: PlazaCookSeat) => void;
   onSeatWishEnd?: (e: PlazaSeatWishEnd) => void;
@@ -404,9 +405,9 @@ export class PlazaClient {
       const rawW = (r as any).wishes ?? (r as any).Wishes ?? [];
       const wishes = Array.isArray(rawW) ? rawW.map(normSeatWish).filter((x: PlazaSeatWish | null): x is PlazaSeatWish => !!x) : [];
       const fq = normFoodQueue((r as any).foodQueue ?? (r as any).FoodQueue);
-      if (fq) queueMicrotask(() => this.handlers.onFoodQueue?.(fq));
+      if (fq) queueMicrotask(() => this.handlers.onFoodQueue?.(fq, true));
       const ck = normCookState((r as any).cook ?? (r as any).Cook);
-      if (ck) queueMicrotask(() => this.handlers.onCookState?.(ck));
+      if (ck) queueMicrotask(() => this.handlers.onCookState?.(ck, true));
       return { ok: true, snap: r.snap, token: this.token, chat, grills, carryNpc, flags, wishes };
     } catch (e: any) {
       return { ok: false, err: e?.message || 'join_fail' };
@@ -494,6 +495,12 @@ export class PlazaClient {
   async cookDisplayClear() { if (!this.conn) return; try { await this.conn.invoke('CookDisplayClear'); } catch { /* */ } }
 
   /** 食材攤：離開隊伍／離開攤子 */
+  /** 重新拿一次排隊狀態（舊伺服器沒有這個方法就回 null） */
+  async foodQueueGet() {
+    if (!this.conn || !this.connected) return null;
+    try { const r: any = await this.conn.invoke('FoodQueueGet'); return normFoodQueue(r?.state); } catch { return null; }
+  }
+
   async foodQueueLeave() {
     if (!this.conn) return null;
     try { const r: any = await this.conn.invoke('FoodQueueLeave'); return normFoodQueue(r?.state); } catch { return null; }
@@ -786,6 +793,9 @@ export class PlazaClient {
   }
 }
 
+/** 煎台位子上限（伺服器目前 12 位；留點餘裕給之後加位子） */
+const COOK_SEAT_MAX = 32;
+
 export function normFoodQueue(q: any): PlazaFoodQueue | null {
   if (!q || typeof q !== 'object') return null;
   const g = (k: string) => q[k] ?? q[k[0].toUpperCase() + k.slice(1)];
@@ -804,7 +814,7 @@ export function normFoodQueue(q: any): PlazaFoodQueue | null {
 const pick = (o: any, k: string) => o?.[k] ?? o?.[k[0].toUpperCase() + k.slice(1)];
 export function normCookSeat(x: any): PlazaCookSeat | null {
   if (!x || typeof x !== 'object') return null;
-  const seat = fin(pick(x, 'seat'), -1); if (seat < 0 || seat > 9) return null;
+  const seat = fin(pick(x, 'seat'), -1); if (seat < 0 || seat >= COOK_SEAT_MAX) return null;
   return { seat, connId: String(pick(x, 'connId') ?? ''), pid: String(pick(x, 'pid') ?? ''), nick: String(pick(x, 'nick') ?? ''), stage: fin(pick(x, 'stage')), combo: fin(pick(x, 'combo'), -1) };
 }
 export function normCookState(x: any): PlazaCookState | null {
@@ -812,7 +822,7 @@ export function normCookState(x: any): PlazaCookState | null {
   const seats = (pick(x, 'seats') ?? []) as any[], ds = (pick(x, 'displays') ?? []) as any[];
   return {
     seats: Array.isArray(seats) ? seats.map(normCookSeat).filter((v): v is PlazaCookSeat => !!v) : [],
-    displays: Array.isArray(ds) ? ds.map(d => ({ connId: String(pick(d, 'connId') ?? ''), pid: String(pick(d, 'pid') ?? ''), nick: String(pick(d, 'nick') ?? ''), seat: fin(pick(d, 'seat')), slot: fin(pick(d, 'slot')), combo: fin(pick(d, 'combo')), at: fin(pick(d, 'at')) })).filter(d => d.seat >= 0 && d.seat < 10 && d.combo >= 0 && d.combo < 2304) : [],
+    displays: Array.isArray(ds) ? ds.map(d => ({ connId: String(pick(d, 'connId') ?? ''), pid: String(pick(d, 'pid') ?? ''), nick: String(pick(d, 'nick') ?? ''), seat: fin(pick(d, 'seat')), slot: fin(pick(d, 'slot')), combo: fin(pick(d, 'combo')), at: fin(pick(d, 'at')) })).filter(d => d.seat >= 0 && d.seat < COOK_SEAT_MAX && d.combo >= 0 && d.combo < 2304) : [],
     seq: fin(pick(x, 'seq')),
   };
 }

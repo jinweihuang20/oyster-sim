@@ -1174,10 +1174,10 @@ function wireClient(D: PlazaDeps) {
     },
     onSeatWish: (w) => { upsertSeatWish(w); },
     onSeatWishEnd: (e) => { applySeatWishEnd(e); },
-    onFoodQueue: (q) => applyFoodQ(q),
+    onFoodQueue: (q, fresh) => applyFoodQ(q, fresh),
     onFoodTurn: (q) => { applyFoodQ(q); onFoodTurn(); },
     onFoodKick: (reason) => onFoodKick(reason),
-    onCookState: (st) => applyCook(st),
+    onCookState: (st, fresh) => applyCook(st, fresh),
     onCookSeat: (cs) => {
       if (!cookSt) return;
       const i = cookSt.seats.findIndex(x => x.seat === cs.seat);
@@ -2604,8 +2604,10 @@ export function plazaFoodLeftMs() {
 }
 const mmss = (ms: number) => { const t = Math.ceil(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
 
-function applyFoodQ(q: PlazaFoodQueue) {
-  if (foodQ && q.seq < foodQ.seq) return;
+function applyFoodQ(q: PlazaFoodQueue, fresh = false) {
+  // 伺服器重開後 seq 從頭算：剛加入／重連拿到的狀態一律採用，不然會一直用舊隊伍（大家擠在同一個圓圈、隊伍不會動）
+  if (foodQ && q.seq < foodQ.seq && !fresh) return;
+  foodQAt = performance.now();
   const wasIdx = foodQueueIdx();
   foodQ = q;
   if (q.now > 0) foodQOff = q.now - Date.now();
@@ -2740,7 +2742,13 @@ function foodTimerStart() { if (!foodTimerIv) foodTimerIv = setInterval(foodTime
 function foodTimerStop() { if (foodTimerIv) { clearInterval(foodTimerIv); foodTimerIv = null; } foodTimerPaint(); }
 
 /** 每幀：排隊圓圈顯示、計時文字、走離攤子自動結束 */
+let foodQAt = 0, foodQGetBusy = false;
 function foodQTick(p: { x: number; z: number }) {
+  // 排隊中或攤子有人時，每 5 秒跟伺服器對一次隊伍（漏掉更新也不會卡住）
+  if (foodQOk && foodQ && client?.connected && !foodQGetBusy && (foodQueueIdx() >= 0 || foodStallBusy()) && performance.now() - foodQAt > 5000) {
+    foodQGetBusy = true; foodQAt = performance.now();
+    void client.foodQueueGet().then(st => { if (st && active) applyFoodQ(st, true); }).finally(() => { foodQGetBusy = false; });
+  }
   const slot = foodJoinSlot();
   view?.setFoodQueueRing(slot != null ? foodQueueSlot(slot) : null, nearFoodQ);
   foodTimerPaint();
@@ -2750,8 +2758,8 @@ function foodQTick(p: { x: number; z: number }) {
 
 /* ───────── 烹煮區 ───────── */
 
-function applyCook(st: PlazaCookState) {
-  if (cookSt && st.seq < cookSt.seq) return;
+function applyCook(st: PlazaCookState, fresh = false) {
+  if (cookSt && st.seq < cookSt.seq && !fresh) return;
   cookSt = st;
   cookArea?.setState(st, myConn());
   if (mySeat != null && !st.seats.some(x => x.seat === mySeat && x.connId === myConn())) {
