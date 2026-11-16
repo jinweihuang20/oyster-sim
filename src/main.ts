@@ -23,7 +23,7 @@ import {
 import { initCook, openCook, openCookSolo, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView } from './cook/cookUi';
 import { initFeed, openFeed } from './cook/feed';
 import { initHudMenu } from './ui/hudMenu';
-import { initCookBroadcast } from './meta/cookBroadcast';
+import { initCookBroadcast, syncCookDexOnce } from './meta/cookBroadcast';
 import { initFood, openFood, openFoodStall, renderFoodStall, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
 import { foodStallSpawn } from './plaza/layout';
 import {
@@ -6726,6 +6726,7 @@ initFood({
 });
 // 全服廣播（全服首創、阿婆好評）：主選單、工寮、廣場都輪詢
 initCookBroadcast();
+syncCookDexOnce(Object.keys(save.cookDex ?? {}).map(Number));
 initHudMenu({
   inPlaza: () => plazaMode,
   shopNew: () => !!document.querySelector('#shopBtn .newDot'),

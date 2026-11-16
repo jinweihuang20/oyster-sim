@@ -1,6 +1,6 @@
 /**
  * 蚵仔煎全服廣播：全服首創（伺服器判定誰先煎出）、請阿婆吃高分。
- * 後端：POST /s/cook/first、POST /s/bc/ama、GET /s/bc、GET /s/cook/firsts。
+ * 後端：POST /s/cook/first、POST /s/bc/ama、POST /s/cook/seen、GET /s/bc、GET /s/cook/firsts。
  * 舊伺服器沒有這些路徑時全部安靜失敗（不顯示首創、不跳橫幅），遊戲照常。
  */
 import { comboHasFood, comboName } from '../cook/combo';
@@ -161,6 +161,21 @@ async function poll() {
 }
 
 /** 開遊戲時呼叫一次：每 12 秒看有沒有新的全服廣播（主選單、工寮、廣場都會收到） */
+/**
+ * 圖鑑收集榜：這版之前煎過的款式一次補登到伺服器（伺服器每人只收一次、只收有食材的組合）。
+ * 本機圖鑑是空的就先不送（雲端存檔還沒載回來時不會白白用掉這一次）；舊伺服器沒有這條路徑時下次開遊戲再試。
+ */
+export function syncCookDexOnce(ids: number[]) {
+  const key = 'oyster-ck-seen-up' + (socialTest() ? '-t' : '');
+  try { if (localStorage.getItem(key)) return; } catch { return; }
+  const list = [...new Set(ids)].filter(id => Number.isInteger(id) && comboHasFood(id)).slice(0, 2304);
+  if (!list.length) return;
+  window.setTimeout(async () => {
+    const r = await socialPost('/cook/seen', { combos: list });
+    if (r?.ok) { try { localStorage.setItem(key, '1'); } catch { /* 存不了下次再送，伺服器只收一次 */ } }
+  }, 6000);
+}
+
 export function initCookBroadcast() {
   if (timer) return;
   window.setTimeout(poll, 4000);

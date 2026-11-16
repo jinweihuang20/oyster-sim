@@ -85,7 +85,7 @@ export function syncTitle() { if (D?.on()) post('/score', { scores: {} }); }
 export function report(kind: 'pearl' | 'legend' | 'odd' | 'port' | 'ach', item: number) { if (D?.on() && !D.inTut()) post('/event', { kind, item }); }
 
 // ---------- 排行榜 ----------
-type BoardId = 'income' | 'earn' | 'oysters' | 'oy0' | 'oy1' | 'oy2' | 'oy3' | 'pearls' | 'dmKills' | 'dmWaves' | 'seat';
+type BoardId = 'income' | 'earn' | 'oysters' | 'oy0' | 'oy1' | 'oy2' | 'oy3' | 'pearls' | 'dmKills' | 'dmWaves' | 'seat' | 'ckFirst' | 'ckDex' | 'ckAma';
 const BOARDS: { id: BoardId; label: string; unit: string }[] = [
   { id: 'income', label: '今日收入', unit: '$' },
   { id: 'oysters', label: '單班最多蚵仔', unit: '' },
@@ -98,14 +98,26 @@ const BOARDS: { id: BoardId; label: string; unit: string }[] = [
   { id: 'dmKills', label: '混戰擊殺', unit: '' },
   { id: 'dmWaves', label: '圍毆過關', unit: '' },
   { id: 'seat', label: '送座位', unit: '' },
+  { id: 'ckFirst', label: '首創王', unit: '' },
+  { id: 'ckDex', label: '圖鑑收集', unit: '' },
+  { id: 'ckAma', label: '阿婆好評', unit: '' },
 ];
 const CATS: { id: string; label: string; boards: BoardId[] }[] = [
   { id: 'daily', label: '日常', boards: ['income', 'oysters', 'pearls'] },
   { id: 'career', label: '生涯', boards: ['earn', 'oy0', 'oy1', 'oy2', 'oy3'] },
   { id: 'dm', label: '死鬥', boards: ['dmKills', 'dmWaves'] },
   { id: 'plaza', label: '廣場', boards: ['seat'] },
+  { id: 'cook', label: '蚵仔煎', boards: ['ckFirst', 'ckDex', 'ckAma'] },
 ];
 const CAREER = new Set<BoardId>(['earn', 'oy0', 'oy1', 'oy2', 'oy3']);
+/** 蚵仔煎榜：伺服器自己算（煎出／請阿婆吃時記錄），只有一種檢視 */
+const COOK = new Set<BoardId>(['ckFirst', 'ckDex', 'ckAma']);
+/** 距離週一 00:00（台北）重置還有多久 */
+function untilReset(resetAt: number, now: number) {
+  const m = Math.max(0, Math.floor((resetAt - now) / 60_000));
+  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+  return d > 0 ? `${d} 天 ${h} 小時` : h > 0 ? `${h} 小時 ${mm} 分` : `${Math.max(1, mm)} 分鐘`;
+}
 const boardMeta = (id: BoardId) => BOARDS.find(b => b.id === id)!;
 const catOf = (id: BoardId) => CATS.find(c => c.boards.includes(id)) ?? CATS[0];
 let board: BoardId = 'income', cat = 'daily', view: 'daily' | 'weekly' = 'daily';
@@ -175,13 +187,16 @@ function syncPick() {
   sel.disabled = !multi;
   $('lbPick').classList.toggle('one', !multi);
 }
+let renderSeq = 0;
 async function render() {
+  const seq = ++renderSeq;
   const list = $('lbList');
   syncPick();
   const viewBtns = Array.from($('lbView').querySelectorAll('button') as NodeListOf<HTMLButtonElement>);
   const career = CAREER.has(board);
-  if (career) {
-    viewBtns.forEach((b, i) => { b.textContent = '總榜'; b.style.display = i === 0 ? '' : 'none'; });
+  const cook = COOK.has(board);
+  if (career || cook) {
+    viewBtns.forEach((b, i) => { b.textContent = board === 'ckAma' ? '本週' : '總榜'; b.style.display = i === 0 ? '' : 'none'; });
   } else if (board === 'seat') {
     const labels = ['今日榜', '總榜'] as const;
     viewBtns.forEach((b, i) => { b.textContent = labels[i] ?? b.textContent; b.style.display = ''; });
@@ -190,10 +205,13 @@ async function render() {
     viewBtns.forEach((b, i) => { b.textContent = labels[i] ?? b.textContent; b.style.display = ''; });
   }
   const apiView = career || (board === 'seat' && view === 'weekly') ? 'all' : view;
-  viewBtns.forEach(b => b.classList.toggle('on', career ? b.dataset.v === 'daily' : b.dataset.v === view));
+  viewBtns.forEach(b => b.classList.toggle('on', career || cook ? b.dataset.v === 'daily' : b.dataset.v === view));
   list.innerHTML = '<div class="lbEmpty"><i class="ic ic-timer"></i><span>讀取中…</span></div>';
-  const r = await get(`/top?board=${board}&view=${apiView}&n=20&me=${D.id}${tq()}`);
-  if (!r) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; return; }
+  const r = await get(`/top?board=${board}&view=${apiView}&n=${cook ? 50 : 20}&me=${D.id}${tq()}`);
+  if (seq !== renderSeq) return; // 讀取中換了榜，交給新的那次
+  if (!r) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; $('lbMe').innerHTML = ''; return; }
+  // 舊伺服器不認得蚵仔煎榜，會回別的榜：不要把別的榜的數字當成蚵仔煎成績
+  if (cook && r.board !== board) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-timer"></i><span>蚵仔煎排行榜快要開放了<br><small>伺服器更新後就會出現</small></span></div>'; $('lbMe').innerHTML = ''; return; }
   const unit = boardMeta(board).unit;
   const foilOn = (x: any) => !!(x.foil || (x.me && D.foil?.()));
   const nameInner = (x: any) => {
@@ -202,15 +220,27 @@ async function render() {
   };
   const fr = await import('./friends');
   await fr.loadFriends();
+  if (seq !== renderSeq) return;
   const fmtV = (v: unknown) => {
     const n = Number(v);
     return Number.isFinite(n) ? n.toLocaleString('en-US') : String(v ?? '');
+  };
+  const dexTotal = Number(r.total) > 0 ? Number(r.total) : 2304;
+  const cookScore = (v: unknown): string | null => {
+    const n = Number(v) || 0;
+    if (board === 'ckFirst') return `<span class="lbV"><span class="lbUnit">首創</span><b class="lbNum">${esc(fmtV(n))}</b><span class="lbUnit">款</span></span>`;
+    if (board === 'ckDex') {
+      const pct = n > 0 ? Math.max(0.1, Math.floor(n / dexTotal * 1000) / 10) : 0;
+      return `<span class="lbV"><b class="lbNum">${esc(fmtV(n))}</b><span class="lbUnit">/ ${esc(fmtV(dexTotal))}・${pct}%</span></span>`;
+    }
+    if (board === 'ckAma') return `<span class="lbV"><span class="lbUnit">本週</span><b class="lbNum">${esc(fmtV(n))}</b><span class="lbUnit">次</span></span>`;
+    return null;
   };
   const row = (x: any) => {
     const side = x.me
       ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>`
       : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span><span class="lbFrAct">${fr.friendActionBtn(x.k, x.tag, x.nick)}</span>`;
-    const score = `<span class="lbV">${unit ? `<span class="lbUnit">${esc(unit)}</span>` : ''}<b class="lbNum">${esc(fmtV(x.v))}</b></span>`;
+    const score = cookScore(x.v) ?? `<span class="lbV">${unit ? `<span class="lbUnit">${esc(unit)}</span>` : ''}<b class="lbNum">${esc(fmtV(x.v))}</b></span>`;
     const rank = Number(x.rank);
     const medal = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
     const rankEl = medal
@@ -219,7 +249,10 @@ async function render() {
     return `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}${medal ? ` top${rank}` : ''}">${rankEl}<div class="lbBody"><div class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</div><div class="lbFoot">${score}<div class="lbSide">${side}</div></div></div></div>`;
   };
   const rows = r.rows as any[];
-  const emptyHint = board === 'seat' ? '把鄰居送到指定位子後就會出現成績！'
+  const emptyHint = board === 'ckFirst' ? '煎出還沒有人煎過的組合，就是全服首創！'
+    : board === 'ckDex' ? '每煎出一款新組合就會加一！'
+    : board === 'ckAma' ? '請阿婆吃拿到 90 分以上就會上榜！'
+    : board === 'seat' ? '把鄰居送到指定位子後就會出現成績！'
     : career ? '收工累積後就會出現你的生涯成績！'
     : board.startsWith('dm') ? '死鬥結算後就會出現成績！' : '收工後就會出現你的成績！';
   list.innerHTML = rows.length ? rows.map(row).join('') + (r.mine && !rows.some(x => x.me) ? '<div class="lbGap"></div>' + row(r.mine) : '') : `<div class="lbEmpty"><i class="ic ic-rank"></i><span>還沒有人上榜<br><small>${emptyHint}</small></span></div>`;
@@ -236,7 +269,8 @@ async function render() {
       ? `你目前第 <b>${esc(rankN)}</b> 名`
       : '你尚未上榜';
     const titleTxt = r.myTitle ? `<span class="lbMeTitle"><i class="ic ic-crown"></i> ${esc(r.myTitle)}</span>` : '';
-    $('lbMe').innerHTML = `<span class="lbMeRank">${rankTxt}</span>${titleTxt ? ` · ${titleTxt}` : ''}`;
+    const resetTxt = board === 'ckAma' && Number(r.resetAt) > 0 ? `<span class="lbMeReset">${esc(untilReset(Number(r.resetAt), Number(r.now) || Date.now()))}後重新計算</span>` : '';
+    $('lbMe').innerHTML = `<span class="lbMeRank">${rankTxt}</span>${titleTxt ? ` · ${titleTxt}` : ''}${resetTxt ? ` · ${resetTxt}` : ''}`;
   }
 }
 export function open() { ($('lbNick') as HTMLInputElement).value = D.nick() === '剝蚵人' ? '' : D.nick(); cat = catOf(board).id; $('lb').classList.add('show'); render(); }
