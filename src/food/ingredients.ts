@@ -60,11 +60,11 @@ export const FOOD_RATE = {
   /** 剝蚵入碗多留一份蚵仔 */
   shuck: 0.35,
   /** 每顆從臉盆拿出來的蚵仔，補盆時各自擲一次蝦仁或花枝：依地點 home / wanggong / dongshi / budai；廣場（含烤台）另計 */
-  scoop: { home: 0.06, wanggong: 0.07, dongshi: 0.08, budai: 0.09, plaza: 0.08 } as Record<string, number>,
+  scoop: { home: 0.12, wanggong: 0.14, dongshi: 0.16, budai: 0.18, plaza: 0.16 } as Record<string, number>,
   /** 撈到時是蝦仁的比例（其餘花枝） */
   shrimpShare: 0.6,
   /** 丟中阿婆掉祕傳醬 */
-  amaSauce: 0.1,
+  amaSauce: 0.2,
   /** 簽到第 7 天食材福袋 3～5 份 */
   bagMin: 3, bagMax: 5,
   bagPool: ['flour', 'veg', 'egg', 'sweet', 'garlic'],
