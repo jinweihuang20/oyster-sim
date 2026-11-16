@@ -3829,3 +3829,6 @@ body.menuOn #overlay .sysGrid>#oFood{
  #hudMenu .hmTile{min-height:66px!important;padding:6px 4px!important;gap:4px}
  #hudMenu .hmTile svg{width:22px;height:22px}
 }
+
+/* 選單或從選單開的畫面（圖鑑、食材、雜貨店、裝備、排行榜、設定…）開著時，廣場／工寮的浮動按鈕不要蓋在上面 */
+body.uiCovered:is(.onShift,.plazaMode,.plazaRoam) :is(#btns,#btnsL,#btnsCorner,#pzLeftFabs,#pzX,#pzChatFab,#pzChatPeek,#pzChat,#pzMap,#pzHud,#pzNet,#pzCamCluster,#pzPlayersDrop,#flagBtn,#flagPullBtn,#seatCard,#sitBtn,#sitAltBtn,#camBtn,#joy,#hint){visibility:hidden!important;pointer-events:none!important}

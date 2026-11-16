@@ -26,13 +26,27 @@ const ICON = {
 
 const click = (id: string) => (document.getElementById(id) as HTMLButtonElement | null)?.click();
 
+/** 有畫面蓋在遊戲上（選單、圖鑑、雜貨店、設定…）：body 加 uiCovered，廣場／工寮的浮動按鈕先藏起來 */
+const COVER_SKIP = new Set(['overlay', 'npcTip']);
+export function syncUiCovered() {
+  let on = !!box;
+  if (!on) for (const p of Array.from(document.querySelectorAll<HTMLElement>('.panel.show'))) {
+    if (!COVER_SKIP.has(p.id) && p.getClientRects().length) { on = true; break; }
+  }
+  document.body.classList.toggle('uiCovered', on);
+}
+
 export function initHudMenu(deps: HudMenuDeps) {
   D = deps;
+  window.setInterval(syncUiCovered, 200);
+  // 點擊後馬上更新一次（開關畫面不用等下一輪）
+  document.addEventListener('click', () => queueMicrotask(syncUiCovered), true);
+  document.addEventListener('click', () => window.setTimeout(syncUiCovered, 0));
   document.getElementById('hudMenuBtn')?.addEventListener('click', e => { e.stopPropagation(); if (box) closeHudMenu(); else openHudMenu(); });
 }
 
 export function hudMenuOpen() { return !!box; }
-export function closeHudMenu() { box?.remove(); box = null; }
+export function closeHudMenu() { box?.remove(); box = null; syncUiCovered(); }
 
 export function openHudMenu() {
   if (!D) return;
@@ -55,6 +69,7 @@ export function openHudMenu() {
   box.addEventListener('pointerdown', e => { if (e.target === box) closeHudMenu(); });
   document.body.appendChild(box);
   box.querySelector<HTMLButtonElement>('.hmX')!.onclick = closeHudMenu;
+  syncUiCovered();
   box.querySelectorAll<HTMLButtonElement>('.hmTile').forEach(b => b.onclick = () => {
     const t = tiles.find(x => x.k === b.dataset.k); closeHudMenu(); t?.go();
   });
