@@ -160,8 +160,43 @@ export function pxHtml(k: string, base: number, pre = '') {
 /** 特價倒數：放在物品說明下面的小字 */
 export function pxCd(k: string) { const p = pxLive(k); return p?.sale && p.endsAt && p.price < p.base ? `<small class="saleCd" data-end="${p.endsAt}">特價${cdTxt(p.endsAt - pxNow())}</small>` : ''; }
 setInterval(() => { if (!$('shop').classList.contains('show')) return; let gone = false; $('shop').querySelectorAll<HTMLElement>('.saleCd').forEach(e => { const left = +e.dataset.end! - pxNow(); e.textContent = '特價' + cdTxt(left); if (left <= 0) gone = true; }); if (gone) renderShop(); }, 1000);
+const BUYERS_URL = PX_URL.replace('/s/shop/prices', '/s/shop/buyers');
+let shopBuyers: Record<string, number> = {};
+/** 打開雜貨店時和價格一起拿；失敗就清空，畫面不顯示人數 */
+export async function fetchBuyers(ms = 2000) {
+  const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
+  try {
+    const r = await fetch(BUYERS_URL, { mode: 'cors', cache: 'no-store', signal: c.signal });
+    const j = r.ok ? await r.json() : null;
+    if (!j || typeof j.items !== 'object' || j.items == null) { shopBuyers = {}; return false; }
+    const next: Record<string, number> = {};
+    for (const [k, v] of Object.entries(j.items as Record<string, unknown>)) {
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 10) next[k] = Math.floor(v);
+    }
+    shopBuyers = next;
+    return true;
+  } catch { shopBuyers = {}; return false; }
+  finally { clearTimeout(t); }
+}
+/** 滿千用 1.2k，滿百萬用 1.2m；整數不留小數 */
+export function fmtBuyers(n: number): string {
+  const fmt = (v: number, suf: string) => {
+    const r = v >= 100 ? String(Math.round(v)) : String(Math.round(v * 10) / 10);
+    return r.replace(/\.0$/, '') + suf;
+  };
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return fmt(n / 1000, 'k');
+  return fmt(n / 1_000_000, 'm');
+}
+/** 免費或不滿 10 人不顯示。說明下方、購買列上方的小字。 */
+export function buyersHtml(id: string, price = 1): string {
+  if (price <= 0) return '';
+  const n = shopBuyers[id];
+  if (n == null || n < 10) return '';
+  return `<small class="shopBuyers"><i class="ic ic-users" aria-hidden="true"></i> 已有 ${fmtBuyers(n)} 人購買</small>`;
+}
 export function openShopPx() {
-  void Promise.all([fetchPrices(), import('./itemStats').then(m => m.fetchItemStats())]).then(([r]) => {
+  void Promise.all([fetchPrices(), fetchBuyers(), import('./itemStats').then(m => m.fetchItemStats())]).then(([r]) => {
     if (r === 'changed' && $('shop').classList.contains('show')) renderShop();
     else if ($('shop').classList.contains('show')) renderShop();
   });
@@ -223,23 +258,23 @@ export function renderShop() {
   $('shopList').innerHTML = `<h3><i class="ic ic-knife"></i> 剝殼刀</h3><table class="kt"><tr><th>刀</th><th>綠區</th><th>指針速</th><th>撬幾下</th><th>割手率</th><th>找縫</th><th>幸運</th><th></th></tr>` + KNIVES.map(k => {
     const own = D.getSave().shop.owned.includes(k.id);
     const tr = D.getSave().trial?.id === k.id, btn = tr ? `${k.id === cur ? '<b>使用中</b><br>' : `<button data-eq="${k.id}">換</button><br>`}<button data-buy="${k.id}" ${D.getSave().money < px(k.id, k.price) ? 'disabled' : ''}>${pxHtml(k.id, k.price, '買斷 ')}</button>` : k.id === cur ? `${ownedPxHtml(k.id, k.price)}<b>使用中</b>` : own ? `${ownedPxHtml(k.id, k.price)}<button data-eq="${k.id}">換</button>` : `<button data-buy="${k.id}" ${D.getSave().money < px(k.id, k.price) ? 'disabled' : ''}>${pxHtml(k.id, k.price)}</button>`;
-    return `<tr><td><b>${k.n}</b>${(() => { const tr = D.getSave().trial; return tr?.id === k.id ? ` <span class="trialTag">試用剩 ${tr.left} 班</span>` : ''; })()}<br><small>${k.desc}</small>${pxCd(k.id)}</td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    return `<tr><td><b>${k.n}</b>${(() => { const tr = D.getSave().trial; return tr?.id === k.id ? ` <span class="trialTag">試用剩 ${tr.left} 班</span>` : ''; })()}<br><small>${k.desc}</small>${pxCd(k.id)}${buyersHtml(k.id, k.price)}</td><td>${pctTxt(k.green, true)}</td><td>${pctTxt(k.speed, false)}</td><td>${k.steps ? `<b style="color:${k.steps < 0 ? '#9be37a' : '#ff8a7a'}">${k.steps > 0 ? '+' : ''}${k.steps}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${pctTxt(k.stab, false)}</td><td>${pctTxt(k.seam, true)}</td><td>${k.luck ? `<b style="color:#f2c440">${'🍀'.repeat(k.luck)}</b>` : '<span style="opacity:.6">—</span>'}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!D.getSave().shop.owned.includes('stripe')) D.getSave().shop.owned.push('stripe');
   const cu = umbNow().id, B = UMBS[0];
   const rel = (v: number, b: number, goodHigh: boolean, unit: string) => { if (v === b) return `<span style="opacity:.6">${v}${unit}</span>`; const good = goodHigh ? v > b : v < b; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${v}${unit}</b>`; };
   $('shopList').innerHTML += `<h3><i class="ic ic-umb"></i> 雨傘</h3><table class="kt"><tr><th>傘</th><th>開傘</th><th>可撐</th><th>完美窗</th><th>遮擋</th><th>反彈力</th><th></th></tr>` + UMBS.map(u => {
     const own = D.getSave().shop.owned.includes(u.id);
     const btn = u.id === cu ? `${ownedPxHtml(u.id, u.price)}<b>使用中</b>` : own ? `${ownedPxHtml(u.id, u.price)}<button data-ueq="${u.id}">換</button>` : `<button data-ubuy="${u.id}" ${D.getSave().money < px(u.id, u.price) ? 'disabled' : ''}>${pxHtml(u.id, u.price)}</button>`;
-    return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small>${pxCd(u.id)}</td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    return `<tr><td><b>${u.n}</b><br><small>${u.desc}</small>${pxCd(u.id)}${buyersHtml(u.id, u.price)}</td><td>${rel(u.open, B.open, false, 's')}</td><td>${rel(u.dur, B.dur, true, 's')}</td><td>${rel(u.perf, B.perf, true, 's')}</td><td>${rel(Math.round(u.cover * 100), 95, true, '%')}</td><td>${rel(u.reflect, 1, true, '×')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   if (!D.getSave().shop.owned.includes('plastic')) D.getSave().shop.owned.push('plastic');
   const cb = bowlNow().id;
   $('shopList').innerHTML += `<h3><i class="ic ic-bowl"></i> 盆仔</h3><table class="kt"><tr><th>盆</th><th>加價</th><th></th></tr>` + BOWLS.map(b => {
     const own = D.getSave().shop.owned.includes(b.id);
     const bk = b.id === 'wide' ? 'bowl-wide' : b.id; const btn = b.id === cb ? `${ownedPxHtml(bk, b.price)}<b>使用中</b>` : own ? `${ownedPxHtml(bk, b.price)}<button data-beq="${b.id}">換</button>` : `<button data-bbuy="${b.id}" ${D.getSave().money < px(bk, b.price) ? 'disabled' : ''}>${pxHtml(bk, b.price)}</button>`;
-    return `<tr><td><b>${b.n}</b><br><small>${b.desc}</small>${pxCd(b.id === 'wide' ? 'bowl-wide' : b.id)}</td><td>${rel(b.bonus, 0, true, '$')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
+    return `<tr><td><b>${b.n}</b><br><small>${b.desc}</small>${pxCd(b.id === 'wide' ? 'bowl-wide' : b.id)}${buyersHtml(b.id === 'wide' ? 'bowl-wide' : b.id, b.price)}</td><td>${rel(b.bonus, 0, true, '$')}</td><td>${btn}</td></tr>`; }).join('') + '</table>';
   $('shopList').querySelectorAll('button[data-bbuy],button[data-beq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-bbuy') || b.getAttribute('data-beq')!; const w = BOWLS.find(x => x.id === id)!;
-    if (b.hasAttribute('data-bbuy')) { const pr = await payFor(id === 'wide' ? 'bowl-wide' : id, w.price, w.n); if (pr == null) return; D.getSave().money -= pr; D.getSave().shop.owned.push(id); D.track('buy', { item: id, price: pr }); if (D.getAc()) D.SFX.jingle(); }
+    if (b.hasAttribute('data-bbuy')) { const pr = await payFor(id === 'wide' ? 'bowl-wide' : id, w.price, w.n); if (pr == null) return; D.getSave().money -= pr; D.getSave().shop.owned.push(id); D.track('buy', { item: id === 'wide' ? 'bowl-wide' : id, price: pr }); if (D.getAc()) D.SFX.jingle(); }
     D.clearBowlMeat();
     D.getSave().shop.equipped.bowl = id; D.persist(); D.applyBowl(); renderShop();
   });
@@ -254,7 +289,7 @@ export function renderShop() {
     D.getSave().shop.equipped.knife = id; D.persist(); D.applyKnife(); renderShop();
   });
   $('shopList').insertAdjacentHTML('beforeend', '<h4 class="shH4"><i class="ic ic-gear"></i> 其他器具（買了可以開關）</h4><table class="kt">' + GEAR.map(g => { const own = D.getSave().shop.owned.includes(g.id), on = gearOn(g.id);
-    return `<tr><td><b>${g.n}</b><br><small style="color:#9be37a">${g.good}</small><small style="color:#ff8a7a">${g.bad}</small>${pxCd(g.id)}</td><td>${own ? `${ownedPxHtml(g.id, g.price)}<button data-gtog="${g.id}">${on ? '✅ 使用中' : '⬜ 沒用'}</button>` : `<button data-gbuy="${g.id}" ${D.getSave().money < px(g.id, g.price) ? 'disabled' : ''}>${pxHtml(g.id, g.price)}</button>`}</td></tr>`; }).join('') + '</table>');
+    return `<tr><td><b>${g.n}</b><br><small style="color:#9be37a">${g.good}</small><small style="color:#ff8a7a">${g.bad}</small>${pxCd(g.id)}${buyersHtml(g.id, g.price)}</td><td>${own ? `${ownedPxHtml(g.id, g.price)}<button data-gtog="${g.id}">${on ? '✅ 使用中' : '⬜ 沒用'}</button>` : `<button data-gbuy="${g.id}" ${D.getSave().money < px(g.id, g.price) ? 'disabled' : ''}>${pxHtml(g.id, g.price)}</button>`}</td></tr>`; }).join('') + '</table>');
   $('shopList').querySelectorAll('button[data-gbuy],button[data-gtog]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-gbuy') || b.getAttribute('data-gtog')!; const g = GEAR.find(x => x.id === id)!; const save = D.getSave(); save.gear = save.gear ?? {};
     if (b.hasAttribute('data-gbuy')) { const pr = await payFor(id, g.price, g.n.replace(/^\S+\s/, '')); if (pr == null) return; save.money -= pr; save.shop.owned.push(id); save.gear[id] = true; D.track('buy', { item: id, price: pr }); if (D.getAc()) D.SFX.jingle(); }
@@ -264,7 +299,7 @@ export function renderShop() {
   $('shopList').insertAdjacentHTML('beforeend', '<h4 class="shH4"><i class="ic ic-user"></i> 廣場外觀（買了可以開關）</h4><table class="kt">' + COSMETICS.map(g => {
     const own = D.getSave().shop.owned.includes(g.id), on = gearOn(g.id);
     const ic = COS_IC[g.ic] || '';
-    return `<tr><td><b>${ic} ${g.n}</b><br><small style="color:#9be37a">${g.good}</small>${pxCd(g.id)}</td><td>${own ? `${ownedPxHtml(g.id, g.price)}<button data-ctog="${g.id}">${on ? '使用中' : '沒在用'}</button>` : `<button data-cbuy="${g.id}" ${D.getSave().money < px(g.id, g.price) ? 'disabled' : ''}>${pxHtml(g.id, g.price)}</button>`}</td></tr>`;
+    return `<tr><td><b>${ic} ${g.n}</b><br><small style="color:#9be37a">${g.good}</small>${pxCd(g.id)}${buyersHtml(g.id, g.price)}</td><td>${own ? `${ownedPxHtml(g.id, g.price)}<button data-ctog="${g.id}">${on ? '使用中' : '沒在用'}</button>` : `<button data-cbuy="${g.id}" ${D.getSave().money < px(g.id, g.price) ? 'disabled' : ''}>${pxHtml(g.id, g.price)}</button>`}</td></tr>`;
   }).join('') + '</table>');
   $('shopList').querySelectorAll('button[data-cbuy],button[data-ctog]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-cbuy') || b.getAttribute('data-ctog')!;
@@ -291,7 +326,7 @@ export function renderShop() {
         ? `<img src="${thumb}" alt="${p.n}" />`
         : `<span style="font-size:12px;opacity:.8">預覽</span>`;
       const ownPx = own ? ownedPxHtml(p.id, p.price) : '';
-      return `<div class="petCard"><button class="petThumb" type="button" data-ppreview="${p.id}" aria-label="預覽 ${p.n}">${thumbInner}</button><div class="petBody"><div class="petInfo"><b>${p.n}</b><span class="petDesc">${p.desc}</span><span class="petEff">${p.eff}</span>${pxCd(p.id) ? `<span class="petCd">${pxCd(p.id)}</span>` : ''}</div><div class="petAct">${ownPx}${equipBtn}</div></div></div>`;
+      return `<div class="petCard"><button class="petThumb" type="button" data-ppreview="${p.id}" aria-label="預覽 ${p.n}">${thumbInner}</button><div class="petBody"><div class="petInfo"><b>${p.n}</b><span class="petDesc">${p.desc}</span><span class="petEff">${p.eff}</span>${pxCd(p.id) ? `<span class="petCd">${pxCd(p.id)}</span>` : ''}${buyersHtml(p.id, p.price)}</div><div class="petAct">${ownPx}${equipBtn}</div></div></div>`;
     }).join('') + '</div>');
   $('shopList').querySelectorAll<HTMLElement>('[data-ppreview]').forEach(el => {
     el.onclick = () => { const id = el.getAttribute('data-ppreview')!; openPetPreview(id); };
@@ -315,7 +350,7 @@ export function renderShop() {
   $('shopList').insertAdjacentHTML('beforeend', `<h3><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg> 槍枝</h3><p style="font-size:12px;opacity:.8"><b style="color:#d9952b">點整列可預覽 3D 模型</b>（進去後拖曳旋轉）；買了才能在死鬥裡裝備；${WEAPON_DEFS.oysterGun.name}開局就送。${import.meta.env.DEV ? '（開發模式：全部已解鎖）' : ''}</p><table class="kt"><tr><th>槍</th><th>傷害</th><th>彈匣</th><th>射速</th><th>彈速</th><th></th></tr>` + shopWeapons().map(w => {
     const own = ownsWeapon(w.id);
     const btn = w.id === cw ? `${ownedPxHtml(w.id, w.price)}<b>死鬥預設</b>` : own ? `${ownedPxHtml(w.id, w.price)}<button data-weq="${w.id}">設為預設</button>` : `<button data-wbuy="${w.id}" ${D.getSave().money < px(w.id, w.price) ? 'disabled' : ''}>${pxHtml(w.id, w.price)}</button>`;
-    return `<tr class="wpnRow" data-wprev="${w.id}" role="button" tabindex="0" title="點擊預覽"><td><b>${w.name}</b> <small style="opacity:.7">預覽</small><br><small>${w.blurb}</small>${pxCd(w.id)}</td><td>${w.damage}${w.pelletCount > 1 ? `<br><small>×${w.pelletCount}</small>` : ''}</td><td>${w.maxAmmo}</td><td>${w.fireRate.toFixed(1)}/s${w.burstCount > 1 ? `<br><small>${w.burstCount} 連發</small>` : ''}${w.pelletCount > 1 ? `<br><small>散彈 ×${w.pelletCount}</small>` : ''}</td><td>${w.bulletSpeed}</td><td>${btn}</td></tr>`;
+    return `<tr class="wpnRow" data-wprev="${w.id}" role="button" tabindex="0" title="點擊預覽"><td><b>${w.name}</b> <small style="opacity:.7">預覽</small><br><small>${w.blurb}</small>${pxCd(w.id)}${buyersHtml(w.id, w.price)}</td><td>${w.damage}${w.pelletCount > 1 ? `<br><small>×${w.pelletCount}</small>` : ''}</td><td>${w.maxAmmo}</td><td>${w.fireRate.toFixed(1)}/s${w.burstCount > 1 ? `<br><small>${w.burstCount} 連發</small>` : ''}${w.pelletCount > 1 ? `<br><small>散彈 ×${w.pelletCount}</small>` : ''}</td><td>${w.bulletSpeed}</td><td>${btn}</td></tr>`;
   }).join('') + '</table>');
   const wpnPrevCtx = () => ({ shellGeos: D.shellGeos, shellMat: D.pileMat });
   const showWpnPrev = (id: WeaponId) => {
@@ -390,7 +425,7 @@ function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
   const save = D.getSave();
   if (!own) {
     const can = save.money >= px(FLAG_ITEM.id, FLAG_ITEM.price);
-    return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">買了可以在廣場插一支自己的旗，寫上最多 ${FLAG_TEXT_MAX} 個字。走到想放的地方按「插旗」（旗會插在你面前約半步），再插一次會搬到新位置。每個人同時只能有一支旗。</p>${flagPvHtml('點下面的樣式試看插在廣場的樣子')}${flagPvRow('顏色', 'color', FLAG_COLORS, 0, 0)}${flagPvRow('尺寸', 'size', FLAG_SIZES, 0, 0)}${flagPvRow('特效', 'fx', FLAG_FX, 0, 0)}<button data-fbuy ${can ? '' : 'disabled'}>${pxHtml(FLAG_ITEM.id, FLAG_ITEM.price)}</button>${pxCd(FLAG_ITEM.id)}</div>`;
+    return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4><p class="flagLead">買了可以在廣場插一支自己的旗，寫上最多 ${FLAG_TEXT_MAX} 個字。走到想放的地方按「插旗」（旗會插在你面前約半步），再插一次會搬到新位置。每個人同時只能有一支旗。</p>${flagPvHtml('點下面的樣式試看插在廣場的樣子')}${flagPvRow('顏色', 'color', FLAG_COLORS, 0, 0)}${flagPvRow('尺寸', 'size', FLAG_SIZES, 0, 0)}${flagPvRow('特效', 'fx', FLAG_FX, 0, 0)}${buyersHtml(FLAG_ITEM.id, FLAG_ITEM.price)}<button data-fbuy ${can ? '' : 'disabled'}>${pxHtml(FLAG_ITEM.id, FLAG_ITEM.price)}</button>${pxCd(FLAG_ITEM.id)}</div>`;
   }
   const unlockedColor = mine?.color ?? 0;
   const unlockedSize = mine?.size ?? 0;
@@ -409,7 +444,7 @@ function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
     const buy = !mine
       ? '<button disabled>讀取等級中…</button>'
       : nxt
-      ? `<button data-fup="${track}" ${save.money >= px(nxt.id, nxt.price) && !flagUpBusy ? '' : 'disabled'}>解鎖 ${D.esc(nxt.n.replace(/^旗幟[^：]*：/, ''))} ${pxHtml(nxt.id, nxt.price)}</button>${pxCd(nxt.id)}`
+      ? `<button data-fup="${track}" ${save.money >= px(nxt.id, nxt.price) && !flagUpBusy ? '' : 'disabled'}>解鎖 ${D.esc(nxt.n.replace(/^旗幟[^：]*：/, ''))} ${pxHtml(nxt.id, nxt.price)}</button>${pxCd(nxt.id)}${buyersHtml(nxt.id, nxt.price)}`
       : '<span class="flagMax">已全部解鎖</span>';
     // 已解鎖更高級但廣場上選的是較低的：講清楚，免得以為買了沒效又重買
     const hiN = opts.find(o => o.lv === unlocked)?.n ?? '';
@@ -417,7 +452,7 @@ function flagShopHtml(mine: PlazaFlagState | null, own: boolean) {
     const gap = mine && selected < unlocked ? `<div class="flagSelHint">廣場上目前用的是「${D.esc(selN)}」，你已經解鎖「${D.esc(hiN)}」，點上面的「${D.esc(hiN)}」就會換上（不用再買）</div>` : '';
     return `<div class="flagTrack"><div class="flagTrackHd">${label}</div><div class="flagChips">${chips}</div>${gap}${buy}</div>`;
   };
-  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4>${ownedPxHtml(FLAG_ITEM.id, FLAG_ITEM.price)}<p class="flagLead">已購買。走到廣場想放的地方按「插旗」（旗會插在你面前約半步）；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選；有鎖頭的可以先點來試看。</p>${flagPvHtml('目前的樣子')}<label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button><div id="flagTextMsg" class="flagMsg" role="status" aria-live="polite"></div><div class="flagTrack"><div class="flagTrackHd">在廣場顯示</div><div class="flagChips"><button type="button" class="flagChip${mine?.planted ? ' on' : ''}" data-fshow="1"${mine?.planted ? ' aria-current="true"' : ''}>顯示</button><button type="button" class="flagChip${mine && !mine.planted ? ' on' : ''}" data-fshow="0"${mine && !mine.planted ? ' aria-current="true"' : ''}>收起</button></div></div>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
+  return `<div id="flagShop" class="flagShop"><h4 class="shH4">${FLAG_IC} 廣場旗幟</h4>${ownedPxHtml(FLAG_ITEM.id, FLAG_ITEM.price)}${buyersHtml(FLAG_ITEM.id, FLAG_ITEM.price)}<p class="flagLead">已購買。走到廣場想放的地方按「插旗」（旗會插在你面前約半步）；再插一次會把舊的搬走。解鎖後的顏色、尺寸和特效可以隨時改選；有鎖頭的可以先點來試看。</p>${flagPvHtml('目前的樣子')}<label class="flagLbl">旗上的字（最多 ${FLAG_TEXT_MAX} 個字）<input id="flagTextIn" class="flagIn" type="text" maxlength="${FLAG_TEXT_MAX}" value="${text}" placeholder="寫在旗上的字"></label><button data-fsave>儲存文字</button><div id="flagTextMsg" class="flagMsg" role="status" aria-live="polite"></div><div class="flagTrack"><div class="flagTrackHd">在廣場顯示</div><div class="flagChips"><button type="button" class="flagChip${mine?.planted ? ' on' : ''}" data-fshow="1"${mine?.planted ? ' aria-current="true"' : ''}>顯示</button><button type="button" class="flagChip${mine && !mine.planted ? ' on' : ''}" data-fshow="0"${mine && !mine.planted ? ' aria-current="true"' : ''}>收起</button></div></div>${trackRow('顏色', 'color', unlockedColor, selectedColor, FLAG_COLORS)}${trackRow('尺寸', 'size', unlockedSize, selectedSize, FLAG_SIZES)}${trackRow('特效', 'fx', unlockedFx, selectedFx, FLAG_FX)}</div>`;
 }
 
 function bindFlagShop(mine: PlazaFlagState | null) {

@@ -6,6 +6,7 @@ import { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, NONE_ID, isNoneId, def
 import { EQUIP_VIS, paintEquipCanvas } from './equipVisual';
 import { openClothTryPreview, closeClothTryPreview } from './tryPreview';
 import { hydrateEquipThumbs } from './equipThumb';
+import { buyersHtml } from './yardShop';
 import { refreshEqPreview, snapshotEqPreview } from './equipPreview';
 
 export type ClothUiDeps = {
@@ -589,7 +590,7 @@ export function renderClothShop() {
   if (D.getClothTab() === 'hair') D.setClothTab('head');
   const items = EQUIP.filter(e => e.slot === D.getClothTab() && (e.price > 0 || isNoneId(e.id))).sort((a, b) => Number(isNoneId(b.id)) - Number(isNoneId(a.id)) || a.price - b.price);
   $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-equip"></i> 服飾</h3><p style="font-size:12px;opacity:.8">買了永久擁有，每個部位一次穿一件，只有穿著的有效果。換穿免費，也可以在主畫面的「裝備」換。湊齊套裝還有額外加成。點商品圖片可試穿，還沒買也能看。</p><div class="clTabs">${SHOP_SLOTS.map(([s, n]) => `<button data-ctab="${s}" class="${s === D.getClothTab() ? 'on' : ''}">${n}</button>`).join('')}</div><div class="slGrid">` + items.map(s => { const own = eqOwned(s.id), cur = equipNow(s.slot).id === s.id;
-    return `<div class="slCard${cur ? ' on' : ''}"><button type="button" class="slPeek" data-sltry="${s.id}" aria-label="試穿 ${s.n}">${eqIcon(s)}<b>${s.n}</b><em class="slPeekT">點我看穿著樣子</em></button><small>${s.eff}</small>${D.pxCd(s.id)}<div class="slBtns">${own ? `${ownedPxLabel(s.id, s.price, cur)}<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${D.getSave().money < D.px(s.id, s.price) ? 'disabled' : ''}>${D.pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
+    return `<div class="slCard${cur ? ' on' : ''}"><button type="button" class="slPeek" data-sltry="${s.id}" aria-label="試穿 ${s.n}">${eqIcon(s)}<b>${s.n}</b><em class="slPeekT">點我看穿著樣子</em></button><small>${s.eff}</small>${D.pxCd(s.id)}${buyersHtml(s.id, s.price)}<div class="slBtns">${own ? `${ownedPxLabel(s.id, s.price, cur)}<button data-sleq="${s.id}" ${cur ? 'disabled' : ''}>${cur ? '穿著中' : '換上'}</button>` : `<button data-slbuy="${s.id}" ${D.getSave().money < D.px(s.id, s.price) ? 'disabled' : ''}>${D.pxHtml(s.id, s.price, '買 ')}</button>`}</div></div>`; }).join('') + `</div>`);
   $('shopList').querySelectorAll('button[data-ctab]').forEach(b => (b as HTMLButtonElement).onclick = () => { D.setClothTab(b.getAttribute('data-ctab') as Slot); D.renderShop(); });
   $('shopList').querySelectorAll('button[data-slbuy],button[data-sleq]').forEach(b => (b as HTMLButtonElement).onclick = async () => {
     const id = b.getAttribute('data-slbuy') ?? b.getAttribute('data-sleq')!; const s = EQUIP.find(x => x.id === id)!;
@@ -626,7 +627,7 @@ function openTryModal(item: Eq) {
   m.setAttribute('role', 'dialog');
   m.setAttribute('aria-modal', 'true');
   m.setAttribute('aria-label', `試穿 ${item.n}`);
-  m.innerHTML = `<div class="clothTryBox"><button type="button" class="clothTryX" aria-label="關閉"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="clothTryHd"><b>試穿：${item.n}</b><small>${item.eff}</small></div><div class="clothTryStage" id="clothTryStage"></div><p class="clothTryHint">可拖曳轉動看背面。點外面或關閉即可離開。</p><div class="clothTryAct">${act}</div></div>`;
+  m.innerHTML = `<div class="clothTryBox"><button type="button" class="clothTryX" aria-label="關閉"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="clothTryHd"><b>試穿：${item.n}</b><small>${item.eff}</small></div><div class="clothTryStage" id="clothTryStage"></div><p class="clothTryHint">可拖曳轉動看背面。點外面或關閉即可離開。</p><div class="clothTryAct">${buyersHtml(item.id, item.price)}${act}</div></div>`;
   document.body.appendChild(m);
   openClothTryPreview(m.querySelector('#clothTryStage') as HTMLElement, outfit);
   const close = () => closeTryModal();

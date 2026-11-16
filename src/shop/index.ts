@@ -15,7 +15,7 @@ export {
 export {
   initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, gearFx,
   gearOn, knifeNow, umbNow, bowlNow, petNow,
-  fetchPrices, px, pxHtml, pxCd, openShopPx, payFor,
+  fetchPrices, fetchBuyers, buyersHtml, fmtBuyers, px, pxHtml, pxCd, openShopPx, payFor,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
   renderShop, getShopNewIds, FLAG_PRICE_ITEMS, FLAG_ITEM,
   type Knife, type Umb, type Bowl, type YardShopDeps,
