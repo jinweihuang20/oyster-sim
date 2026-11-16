@@ -60,7 +60,7 @@ export const FOOD_RATE = {
   /** 剝蚵入碗多留一份蚵仔 */
   shuck: 0.15,
   /** 撈蚵仔撈到蝦仁或花枝：依地點 home / wanggong / dongshi / budai；廣場另計 */
-  scoop: { home: 0.05, wanggong: 0.06, dongshi: 0.07, budai: 0.08, plaza: 0.06 } as Record<string, number>,
+  scoop: { home: 0.2, wanggong: 0.25, dongshi: 0.27, budai: 0.3, plaza: 0.25 } as Record<string, number>,
   /** 撈到時是蝦仁的比例（其餘花枝） */
   shrimpShare: 0.6,
   /** 丟中阿婆掉祕傳醬 */
