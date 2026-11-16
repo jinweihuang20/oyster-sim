@@ -355,7 +355,19 @@ type Pose = { under: boolean; ang: number; lift: number };
 
 /* ───── 加料／倒粉漿／打蛋動畫（只在煎的預覽用；每幀重建一盤再擺位置） ───── */
 /** addTop／remTop：這次加上／拿掉的配料 bit；pour：新倒的粉漿（0＝沒有）；egg：剛加蛋 */
-export type DishAnim = { addTop: number; remTop: number; pour: number; egg: boolean; ms: number };
+export type DishAnim = {
+  addTop: number; remTop: number; pour: number; egg: boolean; ms: number;
+  /** 按住倒粉漿時直接指定：攤開程度（0～1）、粉漿柱粗細（0＝沒在倒） */
+  spread?: number; stream?: number;
+  /** 放開後從這個攤開程度收尾到 1（不再倒） */
+  k0?: number;
+};
+/** 按住倒粉漿：pourFrac（0～1）→ 攤開程度 */
+export const pourSpread = (frac: number) => Math.min(1, 0.16 + Math.max(0, frac) * 1.7);
+/** 按住倒粉漿時的即時狀態；預覽每幀來問（null＝沒在倒） */
+export type LivePour = { frac: number; batter: number; holding: boolean };
+let livePour: (() => LivePour | null) | null = null;
+export function setLivePour(fn: (() => LivePour | null) | null) { livePour = fn; }
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 function bounce(t: number) {
@@ -401,7 +413,7 @@ function applyDishAnim(d: THREE.Group, an: DishAnim, t: number) {
   // 粉漿：杓子倒下來一道粉漿，從中間往外攤開到該有的厚度（厚實攤得慢、薄脆攤得快又大）
   if (an.pour) {
     const list = byPart.get('batter') ?? [];
-    const sp = easeOut(clamp01((t - 0.12) / 0.78));
+    const sp = an.spread ?? (an.k0 != null ? an.k0 + (1 - an.k0) * easeOut(clamp01(t)) : easeOut(clamp01((t - 0.12) / 0.78)));
     const k = 0.12 + 0.88 * sp, ky = 0.25 + 0.75 * sp;
     if (list.length) {
       const grp = new THREE.Group(); grp.scale.set(k, ky, k);
@@ -410,15 +422,15 @@ function applyDishAnim(d: THREE.Group, an: DishAnim, t: number) {
       // 粉漿攤開時，上面的配料也跟著往外推一點
       for (const bit of [1, 2, 4, 8]) for (const o of byPart.get('top' + bit) ?? []) { o.position.x *= 0.55 + 0.45 * sp; o.position.z *= 0.55 + 0.45 * sp; }
     }
-    const pourT = clamp01(1 - (t - 0.05) / 0.6);
+    const pourT = an.stream ?? (an.k0 != null ? 0 : clamp01(1 - (t - 0.05) / 0.6));
     if (pourT > 0) {
       const col = BATTER_COL[0], rad = [0, 0.035, 0.05, 0.07][an.pour];
-      const top = 1.25, len = top * Math.min(1, t / 0.12 + 0.1);
+      const top = 1.25, len = top * (an.stream != null ? 1 : Math.min(1, t / 0.12 + 0.1));
       const stream = new THREE.Mesh(STREAM_GEO, mat(col, { opacity: 0.9, rough: 0.35 }));
       stream.scale.set(rad * pourT + 0.006, len, rad * pourT + 0.006);
       stream.position.set(0, top - len / 2, 0); d.add(stream);
       const ladle = new THREE.Mesh(LADLE_GEO, mat('#9aa3ab', { rough: 0.3 }));
-      ladle.scale.set(0.2, 0.13, 0.2); ladle.rotation.z = -0.9 * Math.min(1, t / 0.15 + 0.3);
+      ladle.scale.set(0.2, 0.13, 0.2); ladle.rotation.z = -0.9 * (an.stream != null ? 1 : Math.min(1, t / 0.15 + 0.3));
       ladle.position.set(0.12, top + 0.06, 0); d.add(ladle);
     }
   }
@@ -523,6 +535,8 @@ export type ViewerOpts = {
   spinAfter?: number;
   /** 從這一盤變過來：播加料／倒粉漿／打蛋動畫（點一下預覽就跳過） */
   animFrom?: number;
+  /** 剛放開倒粉漿：從這個攤開程度收尾（不重播整段倒的動畫） */
+  pourSettle?: number;
 };
 const reduceMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 const FLIP_MS = 420;
@@ -532,7 +546,9 @@ export function mountDishViewer(canvas: HTMLCanvasElement, id: number, combo?: C
   let yaw = 0.6, pitch = 0.85, drag = false, lx = 0, ly = 0, idle = opts.spin !== false, raf = 0, dirty = true, stopped = false;
   let flipT0 = opts.flipIn ? performance.now() : 0;
   const spinAt = performance.now() + (opts.spinAfter ?? 0);
-  const an = opts.animFrom != null && !under && !reduceMotion() ? dishAnimBetween(opts.animFrom, id) : null;
+  const an: DishAnim | null = under || reduceMotion() ? null
+    : opts.pourSettle != null && comboOf(id).batter ? { addTop: 0, remTop: 0, pour: comboOf(id).batter, egg: false, ms: 320, k0: Math.min(1, Math.max(0, opts.pourSettle)) }
+    : opts.animFrom != null ? dishAnimBetween(opts.animFrom, id) : null;
   let animT0 = an ? performance.now() : 0;
   const animNow = () => {
     if (!an || !animT0) return undefined;
@@ -559,6 +575,15 @@ export function mountDishViewer(canvas: HTMLCanvasElement, id: number, combo?: C
     const W = canvas.width;
     ctx.clearRect(0, 0, W, canvas.height);
     const p = pose();
+    // 按住倒粉漿：照目前倒了多少即時畫（杓子倒、粉漿柱、慢慢攤開）
+    const lp = !under ? livePour?.() : null;
+    if (lp && lp.batter > 0) {
+      const sp = pourSpread(lp.frac);
+      const live: DishAnim = { addTop: 0, remTop: 0, pour: lp.batter, egg: false, ms: 1, spread: reduceMotion() ? 1 : sp, stream: lp.holding ? 1 : 0 };
+      try { ctx.drawImage(shoot(id, W, yaw, pitch, { ...(combo ?? comboOf(id)), batter: lp.batter }, true, p, { an: live, t: 0.5 }), 0, 0, W, canvas.height); }
+      catch { draw2D(ctx, W, id, combo, false); }
+      return;
+    }
     try { ctx.drawImage(shoot(id, W, yaw, pitch, combo, true, p, animNow()), 0, 0, W, canvas.height); }
     catch { draw2D(ctx, W, id, combo, p?.under ?? false); }
   };
@@ -568,7 +593,7 @@ export function mountDishViewer(canvas: HTMLCanvasElement, id: number, combo?: C
     raf = requestAnimationFrame(draw);
     if (idle && performance.now() >= spinAt) { yaw += 0.006; dirty = true; }
     if (flipT0) dirty = true;
-    if (animT0) dirty = true;
+    if (animT0 || livePour) dirty = true;
     if (dirty) paint();
   };
   const down = (e: PointerEvent) => { if (animT0) { animT0 = 0; dirty = true; } drag = true; idle = false; lx = e.clientX; ly = e.clientY; canvas.setPointerCapture(e.pointerId); };

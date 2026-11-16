@@ -1,6 +1,6 @@
 /** 煎台操作面板（自由煎，不計分不限時）與蚵仔煎圖鑑（三層）。 */
 import { TOPS, BATTERS, DONES, SAUCES, COMBO_TOTAL, comboId, comboOf, comboName, comboHasFood, comboFeatures, specialOf, SPECIAL_IDS, topName, cookTitle, COOK_TITLES, type Combo } from './combo';
-import { dishThumb, mountDishViewer } from './dish3d';
+import { dishThumb, mountDishViewer, setLivePour, pourSpread } from './dish3d';
 import { foodCount, foodCountAny, takeFood } from '../food/pantry';
 import { FOOD_BY_ID } from '../food/ingredients';
 import { cookFirstOf, loadCookFirsts, onCookFirsts, reportCookDone } from '../meta/cookBroadcast';
@@ -60,6 +60,8 @@ let viewCv: HTMLCanvasElement | null = null;
 let lastViewKey = '';
 let lastViewUnder: boolean | null = null;
 let pourT0 = 0, pourRaf = 0, pourFrac = 0;
+/** 剛放開倒粉漿時的攤開程度：下一次預覽從這裡收尾，不重播整段 */
+let pourSettle: number | null = null;
 let cookT0 = 0, cookRaf = 0, flipped = false, doneFrac = 0;
 /** 從「醬」回到「煎」：熟度條停在上次的位置，可沿用或重新煎 */
 let reviewDone = false;
@@ -90,7 +92,7 @@ export function openCook(s: number, preset?: number) {
 
 function resetSel(preset?: number) {
   step = 1; flipped = false; doneFrac = 0; pourFrac = 0; resultId = -1; reviewDone = false; pourT0 = 0;
-  cancelAnimationFrame(pourRaf); cancelAnimationFrame(cookRaf);
+  cancelAnimationFrame(pourRaf); setLivePour(null); cancelAnimationFrame(cookRaf);
   target = preset != null && preset >= 0 ? comboOf(preset) : null;
   sel = { top: 0, batter: -1, egg: -1, done: -1, sauce: -1 };
   if (target) {
@@ -111,7 +113,7 @@ export function openCookSolo() {
 
 /** 關閉：放掉位子 */
 export function closeCook(leave = true) {
-  cancelAnimationFrame(pourRaf); cancelAnimationFrame(cookRaf);
+  cancelAnimationFrame(pourRaf); setLivePour(null); cancelAnimationFrame(cookRaf);
   stopView?.(); stopView = null; lastViewId = -2; viewCv = null; lastViewKey = ''; lastViewUnder = null;
   $('cook').classList.remove('show');
   if (leave && seat != null && !solo) { seat = null; D.leaveSeat(); }
@@ -149,11 +151,12 @@ function mountView(id: number) {
   if (key === lastViewKey && stopView && viewCv === cv) return;
   const flipIn = lastViewUnder != null && lastViewUnder !== under && step >= 4 && step <= 5;
   // 選配料、粉漿、蛋的時候：從上一盤變過來要播動畫（換一次選擇就重播；點預覽可跳過）
-  const animFrom = step >= 1 && step <= 3 && !under && lastViewId >= 0 && lastViewId !== id ? lastViewId : undefined;
+  const settle = pourSettle; pourSettle = null;
+  const animFrom = settle == null && step >= 1 && step <= 3 && !under && lastViewId >= 0 && lastViewId !== id ? lastViewId : undefined;
   stopView?.(); lastViewId = id; lastViewKey = key; lastViewUnder = under; viewCv = cv;
   // 剛起鍋：先彈一下、放完特效再開始慢慢轉
   const pop = !!cv.closest('.ckViewW.fx');
-  stopView = mountDishViewer(cv, id, undefined, { spin, under, flipIn, spinAfter: pop ? 1300 : 0, animFrom });
+  stopView = mountDishViewer(cv, id, undefined, { spin, under, flipIn, spinAfter: pop ? 1300 : 0, animFrom, pourSettle: settle ?? undefined });
 }
 
 const hint = (ids: readonly string[]) => FOOD_BY_ID[ids[0]]?.how ?? '';
@@ -247,6 +250,8 @@ function bind(body: HTMLElement) {
     const start = (e: Event) => {
       e.preventDefault(); if (pb.disabled || pourT0) return;
       pourT0 = performance.now();
+      // 預覽跟著按住的時間即時倒、攤開
+      setLivePour(() => (pourT0 ? { frac: pourFrac, batter: batterOf(Math.max(0.01, pourFrac)), holding: true } : null));
       const tick = () => {
         pourFrac = Math.min(1, (performance.now() - pourT0) / POUR_MS);
         const f = document.getElementById('ckPour'); if (f) f.style.width = `${pourFrac * 100}%`;
@@ -258,6 +263,8 @@ function bind(body: HTMLElement) {
     const end = () => {
       if (!pourT0) return;
       cancelAnimationFrame(pourRaf); pourT0 = 0;
+      setLivePour(null);
+      pourSettle = pourSpread(pourFrac);
       sel.batter = batterOf(Math.max(0.01, pourFrac));
       step = 3; sync(2); render();
     };
@@ -270,7 +277,7 @@ function bind(body: HTMLElement) {
 /** 上一步：回到前一步，保留那一步原本的選擇；計時中的步驟會停下重來 */
 function goBack() {
   if (step < 2 || step > 5) return;
-  cancelAnimationFrame(pourRaf); pourT0 = 0;
+  cancelAnimationFrame(pourRaf); pourT0 = 0; setLivePour(null);
   if (step === 4) { cancelAnimationFrame(cookRaf); doneFrac = 0; flipped = false; sel.done = -1; reviewDone = false; }
   if (step === 5) { reviewDone = sel.done >= 0; flipped = true; }
   step -= 1;
