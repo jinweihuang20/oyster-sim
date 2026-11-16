@@ -4407,7 +4407,9 @@ function triggerAmeiLateUmb() {
   if (!ameiOut()) return;
   later(AMEI_UMB_DELAY, () => {
     if (!ameiOut() || state !== 'play') return;
+    const wasOff = petUmbT <= 0 && !(umbHeld && umbT > 0);
     beginPetUmbGuard();
+    if (wasOff) toast('阿妹慢半拍幫你撐傘了', '#ffe36a');
   });
 }
 
