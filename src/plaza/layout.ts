@@ -9,13 +9,24 @@ export const isCenterPile = (pileId: number) => pileId === CENTER_PILE_ID;
 export const playerSlotsOf = (pileId: number) => (isCenterPile(pileId) ? CENTER_SEAT_COUNT : SLOTS_PER_PILE);
 /** 已移除的蚵堆（東側第 4／8／12 堆＝pileId 3／7／11）；保留 id 空間，不建 mesh／不給入座 */
 export const REMOVED_PILE_IDS: readonly number[] = [3, 7, 11];
-export const pileIsRemoved = (pileId: number) => REMOVED_PILE_IDS.includes(pileId);
+/**
+ * 一般廣場的煎台堆：第 5 堆（pileId 4）＋中央第 6 堆（pileId 5）改成蚵仔煎煎台，不剝蚵、不入座、不放阿婆。
+ * 休閒房／單挑競速的中央桌照舊剝蚵，所以只在一般廣場開（session 進場時 setPlazaCookPiles）。
+ * 與後端 PlazaWorld.CookPileIds 對齊。
+ */
+export const COOK_PILE_IDS: readonly number[] = [4, 5];
+let cookPilesOn = false;
+export function setPlazaCookPiles(on: boolean) { cookPilesOn = on; }
+export const plazaCookPilesOn = () => cookPilesOn;
+export const pileIsCook = (pileId: number) => cookPilesOn && COOK_PILE_IDS.includes(pileId);
+/** 不當剝蚵堆：已移除的堆＋（一般廣場）煎台堆 */
+export const pileIsRemoved = (pileId: number) => REMOVED_PILE_IDS.includes(pileId) || pileIsCook(pileId);
 export const pileIsActive = (pileId: number) => pileId >= 0 && pileId < PILE_COUNT && !pileIsRemoved(pileId);
 /** 每堆額外阿婆座位（slot = SLOTS_PER_PILE + npcSlot）；僅 NpcPileIds 有 */
 export const NPC_SLOTS_PER_PILE = 2;
 /** 有阿婆的堆（與後端 PlazaWorld.NpcPileIds 對齊；不含已移除堆） */
-export const NPC_PILE_IDS: readonly number[] = [1, 4, 10, 13];
-export const pileHasNpc = (pileId: number) => NPC_PILE_IDS.includes(pileId);
+export const NPC_PILE_IDS: readonly number[] = [1, 10, 13];
+export const pileHasNpc = (pileId: number) => NPC_PILE_IDS.includes(pileId) && !pileIsCook(pileId);
 /** 南排改烤蚵台（多人共烤，座位／同步沿用舊堆模組） */
 export const GRILL_PILE_IDS: readonly number[] = [12, 13, 14, 15];
 export const pileIsGrill = (pileId: number) => GRILL_PILE_IDS.includes(pileId);
@@ -219,11 +230,11 @@ export function foodStallSpawn(): { x: number; z: number; yaw: number } {
   return { x: FOOD_RING.x, z: FOOD_RING.z, yaw: Math.atan2(FOOD_RING.x - FOOD_STALL.x, FOOD_RING.z - FOOD_STALL.z) };
 }
 /**
- * 食材攤排隊：一人限時 180 秒（伺服器計時），排隊位置由伺服器依序指定。
+ * 食材攤排隊：一人限時 90 秒（伺服器計時），排隊位置由伺服器依序指定。
  * 隊伍從攤前圓圈往中心退一步，再沿 x≈6.85 往北排（東排蚵堆已移除，這條走道沒有障礙）。
  * 與後端 PlazaWorld.FoodQueue.cs 的 FoodQueueSlot 必須一致。
  */
-export const FOOD_USE_MS = 180_000;
+export const FOOD_USE_MS = 90_000;
 export const FOOD_QUEUE_MAX = 8;
 export const FOOD_QUEUE_GAP = 0.9;
 const FOOD_Q_BEND = { x: FOOD_RING.x - Math.sin(FOOD_OUT) * 1.1, z: FOOD_RING.z - Math.cos(FOOD_OUT) * 1.1 };
@@ -249,43 +260,53 @@ export function foodQueueAt(i: number, x: number, z: number): boolean {
   return Math.hypot(x - s.x, z - s.z) <= 0.45;
 }
 /**
- * 烹煮區：東北角（已移除的 pile 3／7 之間）兩條長煎台面對面，各 5 個位子（共 10 位）。
- * A 排站 z=-5.9 面向北（-z），B 排站 z=-8.4 面向南；煎台在中間 z≈-6.75／-7.55。
- * 避開：食材攤排隊線（x=6.85，最多 8 人到 z≈-4.25）、棚柱 (10.6,-5.2)、北側推車、東北牆（z<-7.35 時 x≤11.15）。
- * 與後端 PlazaWorld.Cook.cs 的 CookSeatPos 一致。
+ * 煎台：第 5 堆（pileId 4）4 位＋中央堆（pileId 5）8 位，共 12 位；位子就是原本椅子的位置、面向桌心。
+ * 座位 0–3＝pileId 4 的椅 0–3，4–11＝中央堆椅 0–7。與後端 PlazaWorld.Cook.cs 的 CookSeatPos 一致。
  */
-export const COOK_SEATS = 10;
-export const COOK_SEAT_XS: readonly number[] = [7.7, 8.5, 9.3, 10.1, 10.9];
-export const COOK_ROW_Z = { a: -5.9, b: -8.4 } as const;
-export const COOK_GRIDDLE = { x0: 7.3, x1: 11.3, zA: -6.75, zB: -7.55, depth: 0.72, h: 0.86 } as const;
+export const COOK_SEATS = 12;
+/** 圓煎台：桌面半徑／高度 */
+export const COOK_TABLE = { r: 0.95, h: 0.86 } as const;
 export const COOK_RING_R = 0.36;
+/** 鍋面離桌心、展示盤兩個位置（內圈正對位子／外圈偏一側） */
+const COOK_PAN_R = 0.78, COOK_PLATE_IN_R = 0.48, COOK_PLATE_OUT_R = 0.8, COOK_PLATE_OUT_A = 0.36;
+export function cookSeatPile(seat: number): { pile: number; slot: number } {
+  const s = Math.max(0, Math.min(COOK_SEATS - 1, seat));
+  return s < SLOTS_PER_PILE ? { pile: COOK_PILE_IDS[0], slot: s } : { pile: COOK_PILE_IDS[1], slot: s - SLOTS_PER_PILE };
+}
+/** 椅子座標（休閒房也能算；只在一般廣場用） */
+function cookChair(seat: number) {
+  const { pile, slot } = cookSeatPile(seat);
+  const c = pileCenter(pile);
+  const n = pile === CENTER_PILE_ID ? CENTER_SEAT_COUNT : SLOTS_PER_PILE;
+  const a = n === CENTER_SEAT_COUNT ? slot * (Math.PI / 4) + Math.PI / 8 : slot * (Math.PI / 2) + Math.PI / 4;
+  return { cx: c.x, cz: c.z, a };
+}
 export function cookSeatPos(seat: number): { x: number; z: number; yaw: number } {
-  const row = seat < 5 ? 0 : 1, i = seat % 5;
-  // yaw：面前方向 (−sin, −cos)；A 排面向 -z → yaw 0；B 排面向 +z → yaw π
-  return row === 0 ? { x: COOK_SEAT_XS[i], z: COOK_ROW_Z.a, yaw: 0 } : { x: COOK_SEAT_XS[4 - i], z: COOK_ROW_Z.b, yaw: Math.PI };
+  const { cx, cz, a } = cookChair(seat);
+  // 面前方向 (−sin yaw, −cos yaw) 指向桌心 → yaw ＝ 位子角
+  return { x: cx + Math.sin(a) * SEAT_RADIUS, z: cz + Math.cos(a) * SEAT_RADIUS, yaw: Math.atan2(Math.sin(a), Math.cos(a)) };
 }
 /** 煎台上這個位子的鍋面位置（放正在煎的那盤） */
 export function cookPanPos(seat: number) {
-  const p = cookSeatPos(seat);
-  return { x: p.x, z: seat < 5 ? COOK_GRIDDLE.zA + 0.05 : COOK_GRIDDLE.zB - 0.05, y: COOK_GRIDDLE.h + 0.01 };
+  const { cx, cz, a } = cookChair(seat);
+  return { x: cx + Math.sin(a) * COOK_PAN_R, z: cz + Math.cos(a) * COOK_PAN_R, y: COOK_TABLE.h + 0.01 };
 }
-/** 展示盤：位子旁邊（煎台邊緣的小檯面），一個位子最多兩盤 */
+/** 展示盤：0＝鍋子內側、1＝鍋子旁邊；一個位子最多兩盤 */
 export function cookPlatePos(seat: number, k: number) {
-  const p = cookSeatPos(seat);
-  const side = seat < 5 ? 1 : -1;
-  return { x: p.x + (k === 0 ? 0.3 : -0.3) * side, z: seat < 5 ? COOK_GRIDDLE.zA + 0.1 : COOK_GRIDDLE.zB - 0.1, y: COOK_GRIDDLE.h + 0.01 };
+  const { cx, cz, a } = cookChair(seat);
+  const r = k === 0 ? COOK_PLATE_IN_R : COOK_PLATE_OUT_R, aa = k === 0 ? a : a + COOK_PLATE_OUT_A;
+  return { x: cx + Math.sin(aa) * r, z: cz + Math.cos(aa) * r, y: COOK_TABLE.h + 0.01 };
 }
-/** 站在哪個煎台位子的圓圈內 */
+/** 站在哪個煎台位子的圓圈內（只在一般廣場） */
 export function cookSeatAt(x: number, z: number): number | null {
+  if (!cookPilesOn) return null;
   for (let s = 0; s < COOK_SEATS; s++) { const p = cookSeatPos(s); if (Math.hypot(x - p.x, z - p.z) <= COOK_RING_R) return s; }
   return null;
 }
-/** 煎台碰撞圓 */
+/** 煎台碰撞圓（休閒房／競速沒有煎台） */
 export function cookObstacles(): [number, number, number][] {
-  const out: [number, number, number][] = [];
-  const zc = (COOK_GRIDDLE.zA + COOK_GRIDDLE.zB) / 2;
-  for (let x = COOK_GRIDDLE.x0 + 0.4; x <= COOK_GRIDDLE.x1 - 0.39; x += 0.5) out.push([x, zc, 0.62]);
-  return out;
+  if (!cookPilesOn) return [];
+  return COOK_PILE_IDS.map(id => { const c = pileCenter(id); return [c.x, c.z, 1.0] as [number, number, number]; });
 }
 /** 站在哪個工寮的門口圓圈內 */
 export function shedDoorAt(x: number, z: number): string | null {

@@ -4,7 +4,7 @@ import type { MatFn } from '../dm/weapons';
 import { makeCharcoalFire, type CharcoalFireFx } from './fireFx';
 import {
   PILE_SPACING, PLAZA_LAMP_XZ, WALK_BOUND, pileCenter, seatPose, CAFE_OPENING, CAFE_SOUTH_WALL_END,
-  PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, playerSlotsOf, pileHasNpc, pileIsRemoved,
+  PILE_COUNT, SLOTS_PER_PILE, NPC_SLOTS_PER_PILE, playerSlotsOf, pileHasNpc, pileIsRemoved, REMOVED_PILE_IDS,
 } from './layout';
 
 const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
@@ -319,7 +319,8 @@ export function plazaShedPosts(): { x: number; z: number }[] {
 
 function shedPostClear(x: number, z: number, pad = 0.28) {
   for (let i = 0; i < PILE_COUNT; i++) {
-    if (pileIsRemoved(i)) continue;
+    // 煎台堆仍有桌子：棚柱照原本的堆位避開（各模式一致）
+    if (REMOVED_PILE_IDS.includes(i)) continue;
     const c = pileCenter(i);
     if (Math.hypot(x - c.x, z - c.z) < 1.05 + pad) return false;
     const seatN = playerSlotsOf(i) + (pileHasNpc(i) ? NPC_SLOTS_PER_PILE : 0);

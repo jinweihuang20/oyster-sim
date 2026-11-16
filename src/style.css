@@ -3633,13 +3633,19 @@ body:has(#cook.show) #dex{z-index:12510!important}
 @media (max-width:500px){#foodStall.sheet{max-height:calc(100dvh - 16px - var(--sa-top,0px) - var(--sa-bottom,0px))!important}}
 #foodStall.sheet>.ph{flex:0 0 auto;position:relative!important}
 #foodStall.sheet>.pb{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:0!important;overflow:hidden}
-#foodStall .fsNote{flex:0 0 auto;display:flex;align-items:center;gap:8px;height:40px;box-sizing:border-box;padding:0 14px;background:#eef4fa;border-bottom:1px solid #c7d5e3;color:#2a5a86;font-size:13.5px;font-weight:800}
+#foodStall .fsNote{position:relative;flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-height:50px;box-sizing:border-box;padding:7px 14px 16px;background:#eef4fa;border-bottom:1px solid #c7d5e3;color:#2a5a86;font-size:13.5px;font-weight:800}
 #foodStall .fsNote[hidden]{display:none}
 #foodStall .fsNote svg{flex:0 0 auto}
 #foodStall .fsNoteT{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #foodStall .fsNote .fsTimer{flex:0 0 auto;margin:0;min-width:4.6em;text-align:center;box-sizing:border-box;background:#fff}
 #foodStall .fsNote.low{background:#fbeeea;border-bottom-color:#ecc3b9;color:#b23a2a}
 #foodStall .fsNote.low .fsTimer{color:#b23a2a;border-color:#ecc3b9}
+#foodStall .fsNote .fsTimer{font-size:14px;padding:3px 10px}
+#foodStall .fsBar{position:absolute;left:14px;right:14px;bottom:7px;height:5px;border-radius:999px;background:#d6e2ee;overflow:hidden;display:block}
+#foodStall .fsBar>i{display:block;height:100%;width:100%;border-radius:inherit;background:#2a5a86;transition:width .25s linear}
+#foodStall .fsNote.low .fsBar{background:#f1d4cc}
+#foodStall .fsNote.low .fsBar>i{background:#c2412d}
+@media (max-width:360px){#foodStall .fsNote{padding-left:10px;padding-right:10px;gap:6px;font-size:12.5px}#foodStall .fsBar{left:10px;right:10px}#foodStall .fsNote .fsTimer{font-size:13px;padding:2px 8px}}
 #foodStallList{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:12px 14px 14px}
 #foodStall .fsFoot{flex:0 0 auto;padding:10px 14px calc(10px + var(--sa-bottom,0px));border-top:1px solid #dfe5ec;background:rgba(255,255,255,.92);box-shadow:0 -2px 8px rgba(20,40,60,.06)}
 #foodStall .fsFoot #foodStallClose{display:block;width:100%;max-width:320px;height:44px;min-height:44px;margin:0 auto!important;box-sizing:border-box}

@@ -792,7 +792,7 @@ export function normFoodQueue(q: any): PlazaFoodQueue | null {
   const raw = g('queue');
   return {
     userConn: String(g('userConn') ?? ''), userPid: String(g('userPid') ?? ''), userNick: String(g('userNick') ?? ''),
-    endsAt: fin(g('endsAt')), now: fin(g('now')), useMs: fin(g('useMs'), 180_000), max: fin(g('max'), 10),
+    endsAt: fin(g('endsAt')), now: fin(g('now')), useMs: fin(g('useMs'), 90_000), max: fin(g('max'), 10),
     queue: Array.isArray(raw) ? raw.map((e: any) => ({
       connId: String(e?.connId ?? e?.ConnId ?? ''), pid: String(e?.pid ?? e?.Pid ?? ''),
       nick: String(e?.nick ?? e?.Nick ?? ''), index: fin(e?.index ?? e?.Index),

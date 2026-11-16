@@ -1,5 +1,5 @@
 import {
-  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, SEAFOOD_BUILDING, HQ_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, NORTH_DOCK, SHED_DOORS, SHED_W, SHED_D, SHED_FRONT_Z, pileCenter, pileIsGrill, pileIsRemoved, SMOKE_CENTER,
+  PILE_COUNT, WALK_BOUND, WALK_BOUND_WEST, WALK_BOUND_EAST, CAFE_BUILDING, SEAFOOD_BUILDING, HQ_BUILDING, CAFE_TABLE_X, CAFE_TABLE_Z, CAFE_FORECOURT, TIDAL_FLAT, NORTH_DOCK, SHED_DOORS, SHED_W, SHED_D, SHED_FRONT_Z, pileCenter, pileIsGrill, pileIsRemoved, pileIsCook, COOK_PILE_IDS, SMOKE_CENTER,
 } from './layout';
 import { shedName } from './shedRow';
 import { PLAZA_STALL_SITES } from './ambiance';
@@ -166,6 +166,25 @@ export function drawPlazaMap(canvas: HTMLCanvasElement, markers: PlazaMapMarker[
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(grill ? `烤${i - 11}` : `${i + 1}`, mx, my);
+  }
+  // 煎台（一般廣場的第 5 堆＋中央堆）
+  for (const id of COOK_PILE_IDS) {
+    if (!pileIsCook(id)) continue;
+    const c = pileCenter(id);
+    const [mx, my] = to(c.x, c.z);
+    const r = (1.05 / mapSpanX) * (size - pad * 2) * 0.92;
+    ctx.beginPath();
+    ctx.arc(mx, my, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(42,90,134,.85)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.6)';
+    ctx.lineWidth = Math.max(1, size * 0.003);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `700 ${Math.max(9, size * 0.028)}px system-ui,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('煎', mx, my);
   }
 
   // 攤位

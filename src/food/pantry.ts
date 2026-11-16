@@ -141,8 +141,8 @@ function rowHtml(f: Food) {
 export function foodPanelHtml() {
   const kinds = FOODS.filter(f => foodCount(f.id) > 0).length;
   const cats: FoodCat[] = ['main', 'extra', 'base', 'egg', 'sauce'];
-  return `<div class="fdHead"><div class="fdTease"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M5 10v9h14v-9M4 10l2-5h12l2 5"/><path d="M10 19v-5h4v5"/></svg><span>廣場烹煮區開張了</span></div>`
-    + `<p class="fdSub">到廣場東北角的煎台，站進藍色圓圈按「開始煎」；或在主選單按「煎蚵仔煎」，用自家煎台煎。用這些食材能煎出 2,304 種蚵仔煎，現有 <b>${kinds}/${FOODS.length}</b> 種食材。</p>`
+  return `<div class="fdHead"><div class="fdTease"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M5 10v9h14v-9M4 10l2-5h12l2 5"/><path d="M10 19v-5h4v5"/></svg><span>廣場煎台開張了</span></div>`
+    + `<p class="fdSub">到廣場中央和第 5 桌的煎台，站進藍色圓圈按「開始煎」；或在主選單按「煎蚵仔煎」，用自家煎台煎。用這些食材能煎出 2,304 種蚵仔煎，現有 <b>${kinds}/${FOODS.length}</b> 種食材。</p>`
     + `<p class="fdBuy">地瓜粉、青菜、雞蛋和醬料在<b>廣場食材攤</b>買得到。</p>`
     + `<div class="fdBtns"><button type="button" class="fdBtn" data-cookdex>${DEX_IC}<span>蚵仔煎圖鑑</span></button><button type="button" class="fdBtn pri" data-fdgo>${GO_IC}<span>${D.inPlaza() ? '走到食材攤' : '前往廣場'}</span></button></div></div>`
     + cats.map(c => `<div class="fdCat">${CAT_N[c]}</div>` + FOODS.filter(f => f.cat === c).map(rowHtml).join('')).join('');

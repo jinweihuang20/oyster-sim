@@ -1,6 +1,6 @@
-/** 廣場烹煮區 3D：兩條煎台、10 個站位圓圈、鍋上正在煎的那盤、展示盤與名牌。 */
+/** 廣場煎台 3D：第 5 堆＋中央堆兩張圓煎台、12 個站位圓圈、鍋上正在煎的那盤、展示盤與名牌。 */
 import * as THREE from 'three';
-import { COOK_GRIDDLE, COOK_RING_R, COOK_SEATS, cookSeatPos, cookPanPos, cookPlatePos } from './layout';
+import { COOK_TABLE, COOK_RING_R, COOK_SEATS, COOK_PILE_IDS, cookSeatPile, cookSeatPos, cookPanPos, cookPlatePos, pileCenter } from './layout';
 import { buildDish, buildPlate, disposeDish } from '../cook/dish3d';
 import { comboName } from '../cook/combo';
 import type { PlazaCookState } from './types';
@@ -44,20 +44,28 @@ export function makeCookArea() {
   const steel = new THREE.MeshStandardMaterial({ color: 0xa4acb4, roughness: 0.45, metalness: 0.35 });
   const plateTop = new THREE.MeshStandardMaterial({ color: 0x33373b, roughness: 0.55, metalness: 0.4 });
   const knobM = new THREE.MeshStandardMaterial({ color: 0x1f2a35, roughness: 0.6 });
-  const L = COOK_GRIDDLE.x1 - COOK_GRIDDLE.x0, cx = (COOK_GRIDDLE.x0 + COOK_GRIDDLE.x1) / 2, h = COOK_GRIDDLE.h;
-  for (const [zc, front] of [[COOK_GRIDDLE.zA, 1], [COOK_GRIDDLE.zB, -1]] as const) {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(L, h - 0.05, COOK_GRIDDLE.depth), steel);
-    body.position.set(cx, (h - 0.05) / 2, zc); root.add(body);
-    const top = new THREE.Mesh(new THREE.BoxGeometry(L - 0.06, 0.05, COOK_GRIDDLE.depth - 0.08), plateTop);
-    top.position.set(cx, h - 0.025, zc); root.add(top);
-    // 前緣擋油條＋旋鈕
-    const lip = new THREE.Mesh(new THREE.BoxGeometry(L, 0.06, 0.03), steel);
-    lip.position.set(cx, h + 0.01, zc + front * (COOK_GRIDDLE.depth / 2 - 0.015)); root.add(lip);
-    for (let i = 0; i < 5; i++) {
-      const p = cookSeatPos(front > 0 ? i : 5 + i);
-      const k = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.03, 10), knobM);
-      k.rotation.x = Math.PI / 2; k.position.set(p.x, h - 0.2, zc + front * (COOK_GRIDDLE.depth / 2 + 0.01)); root.add(k);
-    }
+  const h = COOK_TABLE.h, R = COOK_TABLE.r;
+  // 第 5 堆、中央堆原地換成圓形鐵板煎台（座位＝原本椅子位置）
+  for (const id of COOK_PILE_IDS) {
+    const c = pileCenter(id);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.06, R - 0.02, h - 0.05, 40), steel);
+    body.position.set(c.x, (h - 0.05) / 2, c.z); root.add(body);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.04, R - 0.04, 0.05, 40), plateTop);
+    top.position.set(c.x, h - 0.025, c.z); root.add(top);
+    // 外圈擋油環
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(R - 0.02, 0.025, 8, 48), steel);
+    lip.rotation.x = Math.PI / 2; lip.position.set(c.x, h + 0.005, c.z); root.add(lip);
+    // 中間醬料罐
+    const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.2, 14), new THREE.MeshStandardMaterial({ color: 0xc8502e, roughness: 0.5 }));
+    jar.position.set(c.x, h + 0.1, c.z); root.add(jar);
+  }
+  // 每個位子前面一顆旋鈕
+  for (let s = 0; s < COOK_SEATS; s++) {
+    const { pile } = cookSeatPile(s), c = pileCenter(pile), p = cookSeatPos(s);
+    const a = Math.atan2(p.x - c.x, p.z - c.z), r = R - 0.04;
+    const k = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.03, 10), knobM);
+    k.rotation.set(Math.PI / 2, a, 0, 'YXZ');
+    k.position.set(c.x + Math.sin(a) * r, h - 0.2, c.z + Math.cos(a) * r); root.add(k);
   }
   // 站位圓圈
   const rings: { g: THREE.Group; ring: THREE.MeshBasicMaterial; fill: THREE.MeshBasicMaterial }[] = [];

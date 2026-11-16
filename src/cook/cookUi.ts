@@ -439,11 +439,11 @@ function renderDex() {
     + `<ul class="ckFeat">${hid ? '<li>條件保密，煎出來才知道</li>' : comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
     + `<p class="ckSum">${got ? `第一次煎出：${fmtDate(dex()[String(id)])}` : '還沒收集'}</p>`
     + `<div class="ckAct"><button type="button" class="ckBtn pri" data-ck="follow"${hid ? ' disabled' : ''}>照這樣煎</button></div>`
-    + (seat == null && !solo ? '<p class="ckHint">' + IC.info + '主選單按「煎蚵仔煎」，或到廣場烹煮區站上煎台位子後可以用</p>' : '');
+    + (seat == null && !solo ? '<p class="ckHint">' + IC.info + '主選單按「煎蚵仔煎」，或到廣場中央、第 5 桌的煎台站上位子後可以用</p>' : '');
   B.scrollTop = 0;
   B.querySelector<HTMLButtonElement>('[data-nav]')!.onclick = () => { dexLevel = 'list'; dexOwner = ''; renderDex(); };
   B.querySelector<HTMLButtonElement>('[data-ck="follow"]')?.addEventListener('click', () => {
-    if (seat == null && !solo) { D.toast('主選單按「煎蚵仔煎」或到廣場烹煮區站上煎台，再按「照這樣煎」', '#ffd76a'); return; }
+    if (seat == null && !solo) { D.toast('主選單按「煎蚵仔煎」或到廣場中央、第 5 桌的煎台站上位子，再按「照這樣煎」', '#ffd76a'); return; }
     closeDex(); resetSel(dexId); render();
   });
   const cv = document.getElementById('dxView') as HTMLCanvasElement | null;

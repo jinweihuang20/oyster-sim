@@ -93,7 +93,7 @@ export const FLAG_ERR_ZH: Record<string, string> = {
   seat: '不能插在座位上',
   stall: '不能插在攤位上',
   walkway: '不能插在主要走道上',
-  no_flag_zone: '店家前和烹煮區這一帶不能插旗，換個地方吧',
+  no_flag_zone: '店家前這一帶不能插旗，換個地方吧',
   too_close: '離別人的旗太近了',
   stale: '等級剛更新過，這次沒有扣錢，請看清楚再買',
   blocked: '這裡太擠，換個地方插',

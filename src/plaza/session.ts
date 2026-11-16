@@ -7,6 +7,7 @@ import {
   MG_PILE_ID, MG_SIT_PRICE, MG_SIT_AMMO, MG_SIT_MS, CENTER_PILE_ID, CENTER_SEAT_COUNT,
   type PlazaSeatRef, type PlazaSpawnMemory,
   SHED_DOORS, shedDoorAt, plazaShedObstacles, foodStallAt, foodQueueSlot, foodQueueAt, foodStallSpawn, cookObstacles, cookSeatAt, cookSeatPos, cookPanPos, cookPlatePos, COOK_SEATS,
+  setPlazaCookPiles, FOOD_USE_MS,
 } from './layout';
 import { plazaShedPosts } from './props';
 import { shedName } from './shedRow';
@@ -740,6 +741,8 @@ export function openPlaza(D: PlazaDeps) {
   active = true;
   raceMode = !!D.race?.code;
   partyMode = !!(!raceMode && (D.party?.code || D.party?.create));
+  // 一般廣場：第 5 堆＋中央堆是煎台；休閒房／競速中央桌照舊剝蚵
+  setPlazaCookPiles(!raceMode && !partyMode);
   raceBooting = !!D.race?.code;
   seated = false; shiftStarted = false; plazaIoAnnounced = false; deps = D;
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; cookSt = null; cookArea = null; mySeat = null; nearCook = null; nearPlate = null; cookOk = true; cookPend = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null; sittingBusy = false; mgFromMeat = false;
@@ -2551,6 +2554,7 @@ function applyFoodQ(q: PlazaFoodQueue) {
   if (idx >= 0 && !foodPin && deps) { const w = deps.getWalkXZ(); foodPin = { x: w.x, z: w.z }; foodPinAt = performance.now(); }
   if (idx < 0 && !foodGlide) foodPin = null;
   if (wasIdx > 0 && idx >= 0 && idx < wasIdx) deps?.toast(`隊伍往前，前面還有 ${idx} 人`, '#cfe3f5');
+  if (foodIsUser()) foodTimerStart(); else foodTimerStop();
 }
 
 /** 站上圓圈按鈕：沒人就直接進，有人就排隊 */
@@ -2598,13 +2602,13 @@ function onFoodTurn() {
   foodPin = { x: w.x, z: w.z }; foodPinAt = performance.now(); foodGlide = true;
   deps.openFoodStall?.();
   // 面板有開就用面板裡的倒數條，不再浮一行字蓋住清單
-  if (!(deps.foodStallOpen?.() ?? false)) deps.toast('輪到你了！買食材限時 3 分鐘', '#9be37a');
+  if (!(deps.foodStallOpen?.() ?? false)) deps.toast('輪到你了！買食材限時 90 秒', '#9be37a');
 }
 
 function onFoodKick(reason: string) {
   deps?.closeFoodStall?.();
   foodPin = null; foodGlide = false;
-  deps?.toast(reason === 'timeout' ? '3 分鐘到了，換下一位；還要買請重新排隊' : '輪到你時不在，已離開隊伍', '#ffb08a');
+  deps?.toast(reason === 'timeout' ? '90 秒到了，換下一位；還要買請重新排隊' : '輪到你時不在，已離開隊伍', '#ffb08a');
 }
 
 /** 排隊中鎖住位置，平滑跟著隊伍往前 */
@@ -2640,29 +2644,49 @@ function foodQPrompt(): PlazaNearPrompt | null {
     if (foodQOk && foodStallBusy()) {
       const n = foodQ!.queue.length;
       if (n >= foodQ!.max) return { kind: 'shop', info: '食材攤排隊已滿，等一下再來', btn: '逛食材攤', icon: 'ic-bowl' };
-      return { kind: 'shop', info: `有人在買${n ? `、${n} 人排隊` : ''}・每人限時 3 分鐘`, btn: '加入排隊', icon: 'ic-bowl' };
+      return { kind: 'shop', info: `有人在買${n ? `、${n} 人排隊` : ''}・每人限時 90 秒`, btn: '加入排隊', icon: 'ic-bowl' };
     }
-    return { kind: 'shop', info: '食材攤・每人限時 3 分鐘', btn: '逛食材攤', icon: 'ic-bowl' };
+    return { kind: 'shop', info: '食材攤・每人限時 90 秒', btn: '逛食材攤', icon: 'ic-bowl' };
   }
   if (nearFoodQ) {
     const n = foodQ?.queue.length ?? 0;
-    return { kind: 'shop', info: `排隊圓圈・前面還有 ${n} 人，每人限時 3 分鐘`, btn: '加入排隊', icon: 'ic-bowl' };
+    return { kind: 'shop', info: `排隊圓圈・前面還有 ${n} 人，每人限時 90 秒`, btn: '加入排隊', icon: 'ic-bowl' };
   }
   return null;
 }
+
+/**
+ * 食材攤面板裡的倒數（條＋「剩 N 秒」）。
+ * 面板開著時主迴圈會暫停（panelOpen → isPaused），tickPlaza 不跑，所以另用計時器每 250ms 更新。
+ */
+let foodTimerIv: ReturnType<typeof setInterval> | null = null;
+function foodTimerPaint() {
+  const nEl = document.getElementById('foodStallNote');
+  if (!nEl) return;
+  if (!active || !foodIsUser() || !foodQ) {
+    if (!active && foodTimerIv) { clearInterval(foodTimerIv); foodTimerIv = null; }
+    if (!nEl.hidden) nEl.hidden = true;
+    return;
+  }
+  const ms = plazaFoodLeftMs();
+  const sec = Math.ceil(ms / 1000), low = ms < 15_000;
+  if (nEl.hidden) nEl.hidden = false;
+  nEl.classList.toggle('low', low);
+  const tEl = document.getElementById('foodStallTimer');
+  if (tEl) { const t = `剩 ${sec} 秒`; if (tEl.textContent !== t) tEl.textContent = t; }
+  const bEl = document.getElementById('foodStallBar');
+  if (bEl) bEl.style.width = `${Math.max(0, Math.min(100, (ms / Math.max(1, foodQ.useMs || FOOD_USE_MS)) * 100)).toFixed(1)}%`;
+}
+function foodTimerStart() { if (!foodTimerIv) foodTimerIv = setInterval(foodTimerPaint, 250); foodTimerPaint(); }
+function foodTimerStop() { if (foodTimerIv) { clearInterval(foodTimerIv); foodTimerIv = null; } foodTimerPaint(); }
 
 /** 每幀：排隊圓圈顯示、計時文字、走離攤子自動結束 */
 function foodQTick(p: { x: number; z: number }) {
   const slot = foodJoinSlot();
   view?.setFoodQueueRing(slot != null ? foodQueueSlot(slot) : null, nearFoodQ);
-  const tEl = document.getElementById('foodStallTimer'), nEl = document.getElementById('foodStallNote');
-  if (foodIsUser()) {
-    const ms = plazaFoodLeftMs();
-    if (nEl) { nEl.hidden = false; nEl.classList.toggle('low', ms < 30_000); }
-    if (tEl) { const t = `剩 ${mmss(ms)}`; if (tEl.textContent !== t) tEl.textContent = t; }
-    // 畫面關了又走出圓圈＝買完了，讓給下一位
-    if (!foodGlide && !foodBusy && !(deps?.foodStallOpen?.() ?? false) && !foodStallAt(p.x, p.z)) void plazaFoodLeave();
-  } else if (nEl && !nEl.hidden) nEl.hidden = true;
+  foodTimerPaint();
+  // 畫面關了又走出圓圈＝買完了，讓給下一位
+  if (foodIsUser() && !foodGlide && !foodBusy && !(deps?.foodStallOpen?.() ?? false) && !foodStallAt(p.x, p.z)) void plazaFoodLeave();
 }
 
 /* ───────── 烹煮區 ───────── */
