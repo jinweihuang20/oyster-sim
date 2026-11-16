@@ -42,7 +42,8 @@ export function initFood(deps: FoodDeps) {
   purgeFood();
   document.getElementById('foodClose')?.addEventListener('click', () => document.getElementById('food')?.classList.remove('show'));
   document.getElementById('foodStallClose')?.addEventListener('click', () => { document.getElementById('foodStall')?.classList.remove('show'); D.onStallClose(); });
-  setInterval(() => { if (!document.hidden) purgeFood(); }, 60_000);
+  setInterval(() => { flushShuckTrack(); if (!document.hidden) purgeFood(); }, 60_000);
+  addEventListener('pagehide', flushShuckTrack);
 }
 
 const batches = () => { const s = D.getSave(); return (s.food ??= []); };
@@ -52,16 +53,26 @@ export function foodCount(id: string, q?: number) {
   let n = 0; for (const b of batches()) if (b.id === id && (q == null || (b.q ?? 0) === q)) n += b.n; return n;
 }
 
+/** 剝蚵每顆都入帳，統計改成累積後一次送（避免每顆一筆） */
+const shuckPend: Record<number, number> = {};
+function flushShuckTrack() {
+  for (const k of Object.keys(shuckPend)) {
+    const q = Number(k), n = shuckPend[q]; delete shuckPend[q];
+    if (n > 0) D.track('food', { item: 'food-oyster', kind: 'shuck', count: n, ...(q ? { q } : {}) });
+  }
+}
 export function addFood(id: string, n: number, src: FoodSrc, q = 0, quiet = false) {
   const f = FOOD_BY_ID[id]; if (!f || n < 1) return;
   const L = batches(), now = Date.now(), qq = f.quality ? q : 0;
-  const hit = L.find(b => b.id === id && (b.q ?? 0) === qq && now - b.at < MERGE_MS);
+  // 不會壞的（粉、醬、蚵仔）同種同品質永遠併成一批，批數不會長、不會被 MAX_BATCH 擠掉
+  const hit = L.find(b => b.id === id && (b.q ?? 0) === qq && (!f.life || now - b.at < MERGE_MS));
   if (hit) hit.n += n; else L.push(qq ? { id, n, at: now, q: qq } : { id, n, at: now });
   if (L.length > MAX_BATCH) L.splice(0, L.length - MAX_BATCH);
   const s = D.getSave(); s.foodSeen ??= [];
   const first = !s.foodSeen.includes(id); if (first) s.foodSeen.push(id);
   D.persist();
-  D.track('food', { item: 'food-' + id, kind: src, count: n, ...(qq ? { q: qq } : {}) });
+  if (src === 'shuck') { shuckPend[qq] = (shuckPend[qq] ?? 0) + n; if ((shuckPend[0] ?? 0) + (shuckPend[1] ?? 0) >= 20) flushShuckTrack(); }
+  else D.track('food', { item: 'food-' + id, kind: src, count: n, ...(qq ? { q: qq } : {}) });
   const nm = `${f.n}${f.quality ? (qq ? '（完整）' : '（一般）') : ''}`;
   if (first) D.toastTop(`第一次拿到食材「${f.n}」！主選單的「食材」可以查看`);
   else if (!quiet) D.pop(`食材 +${n} ${nm}`, '#bfe0ff');
@@ -98,9 +109,10 @@ export function purgeFood() {
 }
 
 // ----- 取得管道 -----
+/** 自己剝進碗的每一顆蚵仔肉都算一份食材蚵仔（完整／一般看有沒有剝破）；偷來、寵物、烤台的肉和新手教學不算 */
 export function rollShuck(intact: boolean) {
-  if (D.isTut() || Math.random() >= FOOD_RATE.shuck) return;
-  addFood('oyster', 1, 'shuck', intact ? 1 : 0);
+  if (D.isTut()) return;
+  addFood('oyster', 1, 'shuck', intact ? 1 : 0, true);
 }
 /** used：這盆用掉幾顆；每顆各自擲一次（一盆可以撈到好幾個），沒用掉的不算 */
 export function rollScoop(locId: string, used: number) {
@@ -182,7 +194,7 @@ export function renderFoodShop() {
 
 function stallHtml() {
   const money = D.getSave().money;
-  return `<p class="fsIntro">青菜和雞蛋可放 3 天，粉和醬不會壞。蚵仔、蝦仁、花枝要靠剝蚵和撈蚵，阿婆祕傳醬要丟中阿婆才有。</p><div class="fsList">`
+  return `<p class="fsIntro">青菜和雞蛋可放 3 天，粉、醬和蚵仔不會壞。每剝一顆蚵仔肉就多一個蚵仔，蝦仁、花枝靠撈蚵，阿婆祕傳醬要丟中阿婆才有。</p><div class="fsList">`
     + FOODS.filter(f => f.price).map(f => {
       const k = 'food-' + f.id, u = D.px(k, f.price!);
       // 固定兩行：名稱＋說明／（特價）＋數量＋購買；按鈕字永遠是「買 N 個 $X」，不因數量換行
