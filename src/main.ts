@@ -1621,7 +1621,7 @@ function makeBasinOyster(dd: number) {
   return m;
 }
 const basinCap = () => plazaMode ? 15 : 20;
-/** 自上次補盆後從臉盆拿了幾顆（補盆時依比例擲蝦仁／花枝，換位補盆也不吃虧、但不能靠反覆坐下刷） */
+/** 自上次補盆後從臉盆拿了幾顆（補盆時每顆各擲一次蝦仁／花枝；沒拿的不算，反覆坐下刷不到） */
 let scoopUsed = 0;
 /** 臉盆本地座標（子物件），蚵仔永遠跟盆走 */
 function basinSlotLocal(i: number) {
@@ -1768,8 +1768,8 @@ function pickAt(cx: number, cy: number) {
   hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : (plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！點中間的蚵殼山撈一把');
 }
 function scoopRoll() {
-  const f = Math.min(1, scoopUsed / basinCap()); scoopUsed = 0;
-  if (f > 0) rollScoop(plazaMode ? 'plaza' : locNow().id, f);
+  const n = Math.min(basinCap(), scoopUsed); scoopUsed = 0;
+  if (n > 0) rollScoop(plazaMode ? 'plaza' : locNow().id, n);
 }
 function grab(m: THREE.Mesh) {
   scoopUsed++;

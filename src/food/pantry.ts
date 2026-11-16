@@ -102,12 +102,17 @@ export function rollShuck(intact: boolean) {
   if (D.isTut() || Math.random() >= FOOD_RATE.shuck) return;
   addFood('oyster', 1, 'shuck', intact ? 1 : 0);
 }
-/** frac：這盆用掉的比例（整盆用完＝1）；補半盆只算一半機率 */
-export function rollScoop(locId: string, frac = 1) {
+/** used：這盆用掉幾顆；每顆各自擲一次（一盆可以撈到好幾個），沒用掉的不算 */
+export function rollScoop(locId: string, used: number) {
   if (D.isTut()) return;
-  const r = (FOOD_RATE.scoop[locId] ?? FOOD_RATE.scoop.home) * Math.max(0, Math.min(1, frac));
-  if (Math.random() >= r) return;
-  addFood(Math.random() < FOOD_RATE.shrimpShare ? 'shrimp' : 'squid', 1, 'scoop');
+  const r = FOOD_RATE.scoop[locId] ?? FOOD_RATE.scoop.home;
+  let shrimp = 0, squid = 0;
+  for (let i = 0; i < Math.max(0, Math.floor(used)); i++) {
+    if (Math.random() >= r) continue;
+    if (Math.random() < FOOD_RATE.shrimpShare) shrimp++; else squid++;
+  }
+  if (shrimp) addFood('shrimp', shrimp, 'scoop');
+  if (squid) addFood('squid', squid, 'scoop');
 }
 export function rollAma() {
   if (D.isTut() || Math.random() >= FOOD_RATE.amaSauce) return;
