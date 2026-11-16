@@ -194,7 +194,7 @@ export function renderFoodShop() {
 
 function stallHtml() {
   const money = D.getSave().money;
-  return `<p class="fsIntro">青菜和雞蛋可放 3 天，粉、醬和蚵仔不會壞。每剝一顆蚵仔肉就多一個蚵仔，蝦仁、花枝在從紅盆拿蚵仔時有機會一起撈到，阿婆祕傳醬要丟中阿婆才有。</p><div class="fsList">`
+  return `<p class="fsIntro">青菜和雞蛋可放 3 天，粉、醬和蚵仔不會壞。每剝一顆蚵仔肉就多一個蚵仔，蝦仁、花枝在從紅盆拿蚵仔時有機會一起撈到（家 50%、王功 55%、東石 60%、布袋 70%、廣場和烤台 60%，兩種各一半），阿婆祕傳醬要丟中阿婆才有。</p><div class="fsList">`
     + FOODS.filter(f => f.price).map(f => {
       const k = 'food-' + f.id, u = D.px(k, f.price!);
       // 固定兩行：名稱＋說明／（特價）＋數量＋購買；按鈕字永遠是「買 N 個 $X」，不因數量換行
