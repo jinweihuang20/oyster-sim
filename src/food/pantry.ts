@@ -174,7 +174,13 @@ export function renderFoodShop() {
 function stallHtml() {
   const money = D.getSave().money;
   return `<p class="fsIntro">青菜和雞蛋可放 3 天，粉和醬不會壞。蚵仔、蝦仁、花枝要靠剝蚵和撈蚵，阿婆祕傳醬要丟中阿婆才有。</p><div class="fsList">`
-    + FOODS.filter(f => f.price).map(f => { const k = 'food-' + f.id; return `<div class="fsRow"><div class="fsHead"><span class="fdIc sm" style="--fc:${f.color}">${foodSvg(f, 16)}</span><div class="fsName"><b>${f.n}</b><small>${lifeTxt(f)}・持有 ${foodCount(f.id)}</small>${D.pxCd(k)}</div></div><div class="fsBuy">${qtyHtml(k)}<button type="button" class="fsPay" data-fbuy="${f.id}" ${money < D.px(k, f.price!) ? 'disabled' : ''}>${D.pxHtml(k, f.price!)}</button></div></div>`; }).join('') + '</div>';
+    + FOODS.filter(f => f.price).map(f => {
+      const k = 'food-' + f.id, u = D.px(k, f.price!);
+      // 固定兩行：名稱＋說明／（特價）＋數量＋購買；按鈕字永遠是「買 N 個 $X」，不因數量換行
+      return `<div class="fsRow"><span class="fdIc sm" style="--fc:${f.color}">${foodSvg(f, 16)}</span>`
+        + `<div class="fsL1"><b>${f.n}</b><small>${lifeTxt(f)}・持有 ${foodCount(f.id)}</small></div>`
+        + `<div class="fsL2"><span class="fsCd">${D.pxCd(k)}</span>${qtyHtml(k)}<button type="button" class="fsPay" data-fbuy="${f.id}" ${money < u ? 'disabled' : ''}>買 1 個 $${u}</button></div></div>`;
+    }).join('') + '</div>';
 }
 
 /** 廣場食材攤面板（不限購）；只在廣場、站在攤前圓圈時打開 */

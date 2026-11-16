@@ -2593,11 +2593,12 @@ export function plazaFoodCanOpen() {
 
 function onFoodTurn() {
   if (!deps) return;
-  deps.toast('輪到你了！買食材限時 3 分鐘', '#9be37a');
   // 從隊伍走到攤前圓圈，再開畫面
   const w = deps.getWalkXZ();
   foodPin = { x: w.x, z: w.z }; foodPinAt = performance.now(); foodGlide = true;
   deps.openFoodStall?.();
+  // 面板有開就用面板裡的倒數條，不再浮一行字蓋住清單
+  if (!(deps.foodStallOpen?.() ?? false)) deps.toast('輪到你了！買食材限時 3 分鐘', '#9be37a');
 }
 
 function onFoodKick(reason: string) {
@@ -2654,13 +2655,14 @@ function foodQPrompt(): PlazaNearPrompt | null {
 function foodQTick(p: { x: number; z: number }) {
   const slot = foodJoinSlot();
   view?.setFoodQueueRing(slot != null ? foodQueueSlot(slot) : null, nearFoodQ);
-  const tEl = document.getElementById('foodStallTimer');
+  const tEl = document.getElementById('foodStallTimer'), nEl = document.getElementById('foodStallNote');
   if (foodIsUser()) {
     const ms = plazaFoodLeftMs();
-    if (tEl) { tEl.hidden = false; tEl.textContent = `剩 ${mmss(ms)}`; tEl.classList.toggle('low', ms < 30_000); }
+    if (nEl) { nEl.hidden = false; nEl.classList.toggle('low', ms < 30_000); }
+    if (tEl) { const t = `剩 ${mmss(ms)}`; if (tEl.textContent !== t) tEl.textContent = t; }
     // 畫面關了又走出圓圈＝買完了，讓給下一位
     if (!foodGlide && !foodBusy && !(deps?.foodStallOpen?.() ?? false) && !foodStallAt(p.x, p.z)) void plazaFoodLeave();
-  } else if (tEl) tEl.hidden = true;
+  } else if (nEl && !nEl.hidden) nEl.hidden = true;
 }
 
 /* ───────── 烹煮區 ───────── */
