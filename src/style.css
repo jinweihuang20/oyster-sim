@@ -3722,3 +3722,56 @@ body:has(#cook.show) #pbd.show{z-index:12490!important}
 .fdBtn:active{transform:translateY(1px)!important}
 @media (max-width:299px){.fdBtns{grid-template-columns:1fr}}
 @media (max-width:360px){.panel .fdBtn,.fdBtn{gap:4px;padding:0 6px!important;font-size:13px!important}.fdHead{padding:12px 10px!important}}
+/* 煎蚵仔煎：主選單強調鈕（與多人休閒房成對、暖金色區隔；深藍字） */
+#oCook{position:relative}
+#overlay .sysGrid>#oCook,
+body.menuOn #overlay .sysGrid>#oCook{
+  position:relative!important;overflow:visible!important;
+  background:
+    radial-gradient(circle at 20% 16%,rgba(255,255,255,.6) 0 2px,transparent 3px),
+    radial-gradient(circle at 80% 24%,rgba(255,250,220,.55) 0 1.5px,transparent 3px),
+    linear-gradient(180deg,#ffd77a 0%,#f5b942 55%,#e9a42a 100%)!important;
+  color:#1f2d3a!important;
+  border:2px solid #8a5d10!important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.7),
+    0 0 0 2px rgba(255,214,120,.55),
+    0 3px 0 #b37a17,
+    0 6px 14px rgba(150,100,20,.3)!important;
+  text-shadow:0 1px 0 rgba(255,255,255,.45)!important;
+  font-weight:900!important;
+  animation:oCookGlow 2.6s ease-in-out infinite;
+}
+#overlay .sysGrid>#oCook::before{
+  content:"自家煎台";
+  position:absolute;top:-8px;left:50%;transform:translateX(-50%) rotate(-4deg);
+  z-index:2;padding:1px 7px;border-radius:8px;
+  background:#fff6dc;color:#1f2d3a;border:1.5px solid #1f2d3a;
+  font:900 10px/1.2 var(--sign);letter-spacing:.04em;
+  box-shadow:0 2px 0 rgba(0,0,0,.2);pointer-events:none;white-space:nowrap;
+}
+#overlay .sysGrid>#oCook .ckIc{flex:0 0 auto;width:26px;height:22px;filter:drop-shadow(0 1px 0 rgba(255,255,255,.5))}
+#overlay .sysGrid>#oCook span{white-space:nowrap}
+#overlay .sysGrid>#oCook:active{
+  transform:translateY(2px)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 0 0 2px rgba(255,214,120,.4),0 1px 0 #b37a17,0 2px 6px rgba(150,100,20,.25)!important;
+  animation:none;
+}
+@keyframes oCookGlow{
+  0%,100%{box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 0 0 2px rgba(255,214,120,.45),0 3px 0 #b37a17,0 6px 14px rgba(150,100,20,.28)}
+  50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.8),0 0 0 3px rgba(255,224,140,.85),0 3px 0 #b37a17,0 8px 18px rgba(255,190,70,.35)}
+}
+@media (prefers-reduced-motion:reduce){#overlay .sysGrid>#oCook{animation:none}}
+/* 食材：接在煎蚵仔煎右邊，同色系的次要鈕（米金底、細框、深藍字） */
+#overlay .sysGrid>#oFood,
+body.menuOn #overlay .sysGrid>#oFood{
+  background:linear-gradient(180deg,#fffaf0 0%,#fdeec8 100%)!important;
+  color:#1f2d3a!important;
+  border:2px solid #c99a3a!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.8),0 3px 0 #d9b066,0 5px 10px rgba(150,100,20,.18)!important;
+  text-shadow:none!important;font-weight:900!important;
+}
+#overlay .sysGrid>#oFood .ic{color:#2a5a86!important;background-color:#2a5a86!important}
+#overlay .sysGrid>#oFood:active{transform:translateY(2px)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 1px 0 #d9b066,0 2px 5px rgba(150,100,20,.15)!important}
+@media (max-width:340px){#overlay .sysGrid>#oCook span,#overlay .sysGrid>#oParty span{font-size:12px;letter-spacing:-.4px}#overlay .sysGrid>#oCook::before{content:"自家"}}
+@media (max-width:340px){#overlay .sysGrid>#oParty span{font-size:11px;letter-spacing:-.5px}}
