@@ -5061,6 +5061,8 @@ function returnToPlazaFromShed() {
 }
 function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: boolean } }) {
   if (isDeathmatchActive() || isPlazaActive()) return;
+  // 跟進工寮一樣：還沒取名字先取名，取好才進廣場（所有進廣場的路都經過這裡）
+  if (!save.name && !tut) { ensureNameThen(() => launchPlaza(opts)); return; }
   const party = opts && 'party' in opts ? opts.party : undefined;
   const race = party ? undefined : (opts as RaceMatched | undefined);
   if (race) raceEarnSettled = false;
@@ -6782,9 +6784,11 @@ function nameDismiss() {
   const f = nameAfter; nameAfter = null; f?.();
 }
 function namePrompt(after?: () => void) {
+  // 要接著做的事先記住：結算畫面還開著時會晚點才問，問完一樣接著進工寮／廣場
+  if (after) nameAfter = after;
   if ($('paySum').classList.contains('show')) { nameWait = true; return; }
-  if (save.name || tut) { after?.(); return; }
-  nameAfter = after ?? null;
+  if (save.name || tut) { const f = nameAfter; nameAfter = null; f?.(); return; }
+  if ($('nameAsk').classList.contains('show')) return;
   save.namePrompted = 1; persist();
   ($('naIn') as HTMLInputElement).value = '';
   $('nameAsk').classList.add('show');
