@@ -170,9 +170,10 @@ function render() {
         ? `<p class="ckPrev"><span>上次：${DONES[Math.max(0, sel.done)]}</span></p><div class="ckAct"><button type="button" class="ckBtn" data-ck="recook">重新煎</button><button type="button" class="ckBtn pri" data-ck="keepdone">沿用${DONES[Math.max(0, sel.done)]}</button></div>`
         : `<div class="ckAct"><button type="button" class="ckBtn" data-ck="flip"${flipped ? ' disabled' : ''}>${flipped ? '已翻面' : '翻面'}</button><button type="button" class="ckBtn pri" data-ck="scoop"${flipped ? '' : ' disabled'}>鏟起</button></div>`);
   } else if (step === 5) {
-    html += `<h3 class="ckH">淋什麼醬？</h3><div class="ckChips">${SAUCES.map((s, i) => { const n = i ? foodCount(s.id) : null; return chip(s.n, sel.sauce === i, n, `data-sauce="${i}"`, i > 0 && n === 0); }).join('')}</div>`
+    html += `<h3 class="ckH">淋什麼醬？選好按「完成」</h3><div class="ckChips">${SAUCES.map((s, i) => { const n = i ? foodCount(s.id) : null; return chip(s.n, sel.sauce === i, n, `data-sauce="${i}"`, i > 0 && n === 0); }).join('')}</div>`
       + (SAUCES.slice(1).some(s => foodCount(s.id) === 0) ? `<p class="ckHint">${IC.info}醬料在廣場食材攤買；阿婆祕傳醬要用殼丟中阿婆才有機會拿到</p>` : '')
-      + targetTip(SAUCES[target?.sauce ?? 0].n);
+      + targetTip(SAUCES[target?.sauce ?? 0].n)
+      + `<div class="ckAct"><button type="button" class="ckBtn pri" data-ck="finish"${sel.sauce < 0 ? ' disabled' : ''}>完成</button></div>`;
   } else {
     const id = resultId, sp = specialOf(id), isNew = resultNew;
     html += `<div class="ckResult"><div class="ckName">${esc(comboName(id))}${sp ? '<span class="ckTag">隱藏款</span>' : ''}${isNew ? '<span class="ckTag new">新收集</span>' : ''}</div>`
@@ -191,11 +192,12 @@ function render() {
 function bind(body: HTMLElement) {
   body.querySelectorAll<HTMLButtonElement>('[data-top]').forEach(b => b.onclick = () => { sel.top ^= Number(b.dataset.top); render(); });
   body.querySelectorAll<HTMLButtonElement>('[data-egg]').forEach(b => b.onclick = () => { sel.egg = Number(b.dataset.egg); step = 4; sync(3); startCook(); });
-  body.querySelectorAll<HTMLButtonElement>('[data-sauce]').forEach(b => b.onclick = () => { sel.sauce = Number(b.dataset.sauce); finish(); });
+  body.querySelectorAll<HTMLButtonElement>('[data-sauce]').forEach(b => b.onclick = () => { sel.sauce = Number(b.dataset.sauce); sync(4); render(); }); // 只選，不馬上完成：可以換
   body.querySelectorAll<HTMLButtonElement>('[data-ck]').forEach(b => b.onclick = () => {
     const k = b.dataset.ck;
     if (k === 'dex') openDex(target ? comboId(target) : undefined);
     else if (k === 'back') goBack();
+    else if (k === 'finish') { if (step === 5 && sel.sauce >= 0) finish(); }
     else if (k === 'close') ($('cookClose') as HTMLButtonElement).click();
     else if (k === 'keepbatter') { if (sel.batter > 0 && !foodCount('flour')) sel.batter = 0; step = 3; sync(2); render(); }
     else if (k === 'keepdone') { reviewDone = false; step = 5; sync(4); render(); }
