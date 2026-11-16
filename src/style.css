@@ -3655,3 +3655,9 @@ body:has(#cook.show) #dex{z-index:12010!important}
 #foodStall .fsL2 .qtyBox .qtyIn{flex:1 1 auto;width:0!important;min-width:0}
 #foodStall .fsL2 .fsPay{flex:0 0 auto;width:118px;min-width:118px!important;height:34px;padding:0 6px!important;font-size:13.5px!important;font-variant-numeric:tabular-nums;text-align:center;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:340px){#foodStall .fsL2 .fsPay{width:108px;min-width:108px!important;font-size:12.5px!important}#foodStall .fsL2 .qtyBox{width:90px}#foodStall .fsL2 .qtyBox .qtyBtn{width:28px!important}}
+/* 煎台「上一步」：固定在標題列左側，不能回時只隱藏不移位 */
+.ckHead .ckBack{flex:0 0 auto}
+.ckHead .ckBack:disabled{visibility:hidden}
+.ckHead>b{flex:1 1 auto;min-width:0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ckPrev{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 0;padding:6px 10px;font-size:13px;color:#2a5a86;background:#eef4fa;border:1px solid #c7d5e3;border-radius:8px}
+.ckPrev span{font-weight:700}

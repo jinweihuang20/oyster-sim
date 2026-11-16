@@ -55,6 +55,8 @@ let stopView: (() => void) | null = null;
 let lastViewId = -2;
 let pourT0 = 0, pourRaf = 0, pourFrac = 0;
 let cookT0 = 0, cookRaf = 0, flipped = false, doneFrac = 0;
+/** 從「醬」回到「煎」：熟度條停在上次的位置，可沿用或重新煎 */
+let reviewDone = false;
 let resultId = -1;
 let resultNew = false;
 const POUR_MS = 2400, COOK_MS = 7000;
@@ -78,7 +80,7 @@ export function openCook(s: number, preset?: number) {
 }
 
 function resetSel(preset?: number) {
-  step = 1; flipped = false; doneFrac = 0; pourFrac = 0; resultId = -1;
+  step = 1; flipped = false; doneFrac = 0; pourFrac = 0; resultId = -1; reviewDone = false; pourT0 = 0;
   cancelAnimationFrame(pourRaf); cancelAnimationFrame(cookRaf);
   target = preset != null && preset >= 0 ? comboOf(preset) : null;
   sel = { top: 0, batter: -1, egg: -1, done: -1, sauce: -1 };
@@ -136,7 +138,8 @@ function stepsBar() {
 
 function render() {
   const body = $('cookBody');
-  const head = `<div class="ckHead"><b>${solo ? '自家煎台' : `煎台 ${seat != null ? seat + 1 : ''} 號`}</b><button type="button" class="ckLink" data-ck="dex">${IC.dex}圖鑑</button></div>`;
+  const canBack = step >= 2 && step <= 5;
+  const head = `<div class="ckHead"><button type="button" class="ckLink ckBack" data-ck="back"${canBack ? '' : ' disabled aria-hidden="true" tabindex="-1"'}>${IC.back}上一步</button><b>${solo ? '自家煎台' : `煎台 ${seat != null ? seat + 1 : ''} 號`}</b><button type="button" class="ckLink" data-ck="dex">${IC.dex}圖鑑</button></div>`;
   let html = head + stepsBar() + `<div class="ckViewW"><canvas id="ckView" width="256" height="256"></canvas></div>`;
   if (step === 1) {
     const lack = TOPS.filter(t => foodCountAny(t.food) === 0);
@@ -149,6 +152,7 @@ function render() {
     html += `<h3 class="ckH">倒粉漿：按住越久越厚</h3>`
       + `<div class="ckMeter"><div class="ckFill" id="ckPour" style="width:${pourFrac * 100}%"></div><span style="left:0;width:34%">薄脆</span><span style="left:34%;width:33%">標準</span><span style="left:67%;width:33%">厚實</span></div>`
       + targetTip(BATTERS[target?.batter ?? 0])
+      + (sel.batter >= 0 ? `<p class="ckPrev"><span>上次：${BATTERS[sel.batter]}</span><button type="button" class="ckLink" data-ck="keepbatter">沿用</button></p>` : '')
       + `<div class="ckAct"><button type="button" class="ckBtn" data-ck="nobatter">不加粉漿</button><button type="button" class="ckBtn pri ckHold" id="ckPourBtn"${n ? '' : ' disabled'}>按住倒粉漿<small>地瓜粉 ×${n}</small></button></div>`
       + (n ? '' : `<p class="ckHint">${IC.info}地瓜粉：${hint(['flour'])}</p>`);
   } else if (step === 3) {
@@ -160,7 +164,9 @@ function render() {
     html += `<h3 class="ckH">先「翻面」，再看準時機「鏟起」</h3>`
       + `<div class="ckMeter done"><div class="ckFill" id="ckDone" style="width:${doneFrac * 100}%"></div><span style="left:0;width:38%">嫩</span><span style="left:38%;width:34%">金黃</span><span style="left:72%;width:28%">焦香</span></div>`
       + targetTip(DONES[target?.done ?? 0])
-      + `<div class="ckAct"><button type="button" class="ckBtn" data-ck="flip"${flipped ? ' disabled' : ''}>${flipped ? '已翻面' : '翻面'}</button><button type="button" class="ckBtn pri" data-ck="scoop"${flipped ? '' : ' disabled'}>鏟起</button></div>`;
+      + (reviewDone
+        ? `<p class="ckPrev"><span>上次：${DONES[Math.max(0, sel.done)]}</span></p><div class="ckAct"><button type="button" class="ckBtn" data-ck="recook">重新煎</button><button type="button" class="ckBtn pri" data-ck="keepdone">沿用${DONES[Math.max(0, sel.done)]}</button></div>`
+        : `<div class="ckAct"><button type="button" class="ckBtn" data-ck="flip"${flipped ? ' disabled' : ''}>${flipped ? '已翻面' : '翻面'}</button><button type="button" class="ckBtn pri" data-ck="scoop"${flipped ? '' : ' disabled'}>鏟起</button></div>`);
   } else if (step === 5) {
     html += `<h3 class="ckH">淋什麼醬？</h3><div class="ckChips">${SAUCES.map((s, i) => { const n = i ? foodCount(s.id) : null; return chip(s.n, sel.sauce === i, n, `data-sauce="${i}"`, i > 0 && n === 0); }).join('')}</div>`
       + (SAUCES.slice(1).some(s => foodCount(s.id) === 0) ? `<p class="ckHint">${IC.info}醬料在廣場食材攤買；阿婆祕傳醬要用殼丟中阿婆才有機會拿到</p>` : '')
@@ -186,6 +192,10 @@ function bind(body: HTMLElement) {
   body.querySelectorAll<HTMLButtonElement>('[data-ck]').forEach(b => b.onclick = () => {
     const k = b.dataset.ck;
     if (k === 'dex') openDex(target ? comboId(target) : undefined);
+    else if (k === 'back') goBack();
+    else if (k === 'keepbatter') { if (sel.batter > 0 && !foodCount('flour')) sel.batter = 0; step = 3; sync(2); render(); }
+    else if (k === 'keepdone') { reviewDone = false; step = 5; sync(4); render(); }
+    else if (k === 'recook') startCook();
     else if (k === 'next') { step = 2; sync(1); render(); }
     else if (k === 'nobatter') { sel.batter = 0; step = 3; sync(2); render(); }
     else if (k === 'flip') { flipped = true; render(); }
@@ -219,8 +229,20 @@ function bind(body: HTMLElement) {
   }
 }
 
+/** 上一步：回到前一步，保留那一步原本的選擇；計時中的步驟會停下重來 */
+function goBack() {
+  if (step < 2 || step > 5) return;
+  cancelAnimationFrame(pourRaf); pourT0 = 0;
+  if (step === 4) { cancelAnimationFrame(cookRaf); doneFrac = 0; flipped = false; sel.done = -1; reviewDone = false; }
+  if (step === 5) { reviewDone = sel.done >= 0; flipped = true; }
+  step -= 1;
+  sync(step - 1);
+  render();
+}
+
 function startCook() {
-  cookT0 = performance.now(); flipped = false; doneFrac = 0;
+  cancelAnimationFrame(cookRaf);
+  cookT0 = performance.now(); flipped = false; doneFrac = 0; reviewDone = false;
   render();
   let lastBand = -1;
   const tick = () => {
