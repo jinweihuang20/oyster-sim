@@ -102,9 +102,10 @@ export function rollShuck(intact: boolean) {
   if (D.isTut() || Math.random() >= FOOD_RATE.shuck) return;
   addFood('oyster', 1, 'shuck', intact ? 1 : 0);
 }
-export function rollScoop(locId: string) {
+/** frac：這盆用掉的比例（整盆用完＝1）；補半盆只算一半機率 */
+export function rollScoop(locId: string, frac = 1) {
   if (D.isTut()) return;
-  const r = FOOD_RATE.scoop[locId] ?? FOOD_RATE.scoop.home;
+  const r = (FOOD_RATE.scoop[locId] ?? FOOD_RATE.scoop.home) * Math.max(0, Math.min(1, frac));
   if (Math.random() >= r) return;
   addFood(Math.random() < FOOD_RATE.shrimpShare ? 'shrimp' : 'squid', 1, 'scoop');
 }

@@ -1063,6 +1063,8 @@ function goPick() {
   if (plazaOnGrill() && !basinOy.length) {
     liftSeatPropsOntoPile();
     fillBasin(false);
+    // 烤台臉盆用完自動補＝撈一把：一樣有機會撈到蝦仁／花枝
+    scoopRoll();
   }
   if (!basinOy.length) {
     hint.textContent = plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！轉頭看中間的蚵殼山，點一下撈一把';
@@ -1619,6 +1621,8 @@ function makeBasinOyster(dd: number) {
   return m;
 }
 const basinCap = () => plazaMode ? 15 : 20;
+/** 自上次補盆後從臉盆拿了幾顆（補盆時依比例擲蝦仁／花枝，換位補盆也不吃虧、但不能靠反覆坐下刷） */
+let scoopUsed = 0;
 /** 臉盆本地座標（子物件），蚵仔永遠跟盆走 */
 function basinSlotLocal(i: number) {
   const a = i * 2.4, r = 0.036 + (i % 4) * 0.030;
@@ -1638,7 +1642,7 @@ function layoutBasinOysters() {
 /** 每次清盆 +1；還在飛的舊蚵落地時發現代數不同就丟掉，避免清盆後又冒出來 */
 let basinGen = 0;
 function clearBasinOysters() {
-  basinGen++;
+  basinGen++; scoopUsed = 0;
   for (const m of basinOy) m.removeFromParent();
   basinOy.length = 0;
 }
@@ -1647,6 +1651,7 @@ function plazaRefillBasin() {
   if (!plazaMode) return;
   if (phase === 'scoop') { on('prog', false); setPhase('busy'); later(0.3, goPick); }
   if (plazaOnGrill()) liftSeatPropsOntoPile();
+  scoopRoll();
   clearBasinOysters();
   fillBasin(false);
   if (phase === 'pick' && !plazaOnGrill()) hint.textContent = '點臉盆內的蚵仔';
@@ -1750,6 +1755,7 @@ function pickAt(cx: number, cy: number) {
       if (plazaOnGrill()) {
         liftSeatPropsOntoPile();
         fillBasin(false);
+        scoopRoll();
         hint.textContent = '點臉盆內的蚵仔放上烤網；烤開的搶掀／搶拿';
         return;
       }
@@ -1761,7 +1767,12 @@ function pickAt(cx: number, cy: number) {
   } else if (ray.intersectObject(pileHit, false).length || ray.intersectObject(pile, false).length) { scoop(); return; }
   hint.textContent = basinOy.length ? '點臉盆內的蚵仔' : (plazaMode ? '臉盆空了！點面前的蚵仔堆撈一把' : '臉盆空了！點中間的蚵殼山撈一把');
 }
+function scoopRoll() {
+  const f = Math.min(1, scoopUsed / basinCap()); scoopUsed = 0;
+  if (f > 0) rollScoop(plazaMode ? 'plaza' : locNow().id, f);
+}
 function grab(m: THREE.Mesh) {
+  scoopUsed++;
   basinOy.splice(basinOy.indexOf(m), 1); setPhase('busy'); reach = 0.35; tone(500, 0.05, 0.08, 'triangle'); noise(0.05, 1200, 0.2);
   const from = new THREE.Vector3();
   m.getWorldPosition(from);
@@ -2802,7 +2813,7 @@ function throwShell() {
       if (pt?.connId && pt.head && Number.isFinite(pt.head.x) && Number.isFinite(pt.head.y) && Number.isFinite(pt.head.z)) {
         noteHostileThrow();
         const to = new THREE.Vector3(pt.head.x, pt.head.y, pt.head.z);
-        fly(sh, from, to, 0.5, 0.3, () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); } catch { /* */ } });
+        fly(sh, from, to, 0.5, 0.3, () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); if (pt.isNpc && !isPlazaAber(pt)) rollAma(); } catch { /* */ } });
         stampPlazaNet();
         void plazaThrowAt(pt.connId, from, to);
       } else {
@@ -5874,7 +5885,7 @@ function frameBody(ts?: number) {
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
     if (evRun?.infHp) hp = 100;
     updBlood(rdt);
-    if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); rollScoop(plazaMode ? 'plaza' : locNow().id); on('prog', false); later(0.28, goPick); setPhase('busy'); } }
+    if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); scoopRoll(); on('prog', false); later(0.28, goPick); setPhase('busy'); } }
     tickFx(rdt); if (phase === 'aim' && tapAim && down?.drag) tossT0 = performance.now() - 600; // 拖畫面找阿婆時先不自動入碗
     if (phase === 'aim' && tapAim && !tutMeat() && performance.now() - tossT0 > 2000) toss(false);
     if (phase === 'empty' && !(tut && (TUT[tut.i].id === 'empty' || TUT[tut.i].id === 'shell'))) { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
