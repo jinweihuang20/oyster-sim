@@ -955,7 +955,19 @@ body:has(.panel.sheet.show) #feed{display:none!important}
 .panel.sheet,.panel.sheet.show{transform:none!important;left:0!important;right:0!important}
 @media (max-width:500px){.panel.sheet,.panel.sheet.show{top:calc(8px + var(--sa-top))!important;bottom:auto!important;margin:0 auto!important;transform:none!important}}
 
-#result #resActs{position:sticky;bottom:calc(-14px - var(--sa-bottom));display:flex;gap:8px;margin:12px 0 0;z-index:2}
+/* 結算：標題／捷徑固定，統計區捲動，按鈕列釘在面板底（含安全區）。
+   直向手機也適用。不要用 sticky 負 bottom，會被面板底邊裁掉一半。 */
+#result.panel.show{
+  display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;
+  max-height:min(90vh,calc(100dvh - var(--sa-top) - var(--sa-bottom) - 16px));
+  padding:14px 14px calc(14px + var(--sa-bottom));
+}
+#result.panel.show #resTitle,
+#result.panel.show > .sysGrid{flex:none}
+#result.panel.show #resBody{
+  flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;
+}
+#result #resActs{position:static;display:flex;gap:8px;margin:12px 0 0;flex:none;z-index:2}
 #result #resActs #again{position:static;flex:2;margin:0;width:auto;min-width:0}
 #result #resActs #resMenu{flex:1.25;min-width:0;margin:0;min-height:54px;font-size:16px;letter-spacing:0;font-weight:800;background:var(--paint) var(--grain);color:var(--ink);border:3px solid var(--ink);border-radius:2px;box-shadow:4px 4px 0 var(--ink);white-space:nowrap;padding:8px 6px}
 #result #resActs #resMenu:active{transform:translateY(1px)}
@@ -3180,7 +3192,7 @@ body #locPick button.loc.locked.cur:not(.locPlaza){background:#f3eee4!important;
   #result.panel.show{
     display:flex!important;flex-direction:column!important;
     max-height:calc(100dvh - var(--sa-top) - var(--sa-bottom) - 16px)!important;
-    overflow:hidden!important;padding:12px 14px!important;box-sizing:border-box!important;
+    overflow:hidden!important;padding:12px 14px calc(12px + var(--sa-bottom))!important;box-sizing:border-box!important;
   }
   #result.panel.show #resTitle{flex:none;font-size:18px!important;margin:0 0 8px!important}
   #result.panel.show > .sysGrid{flex:none;gap:6px!important;margin:0 0 8px!important}
