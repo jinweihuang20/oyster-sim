@@ -1145,33 +1145,6 @@ export function createPlazaWorldView(
   }
 
   const _aimH = new THREE.Vector3(), _aimB = new THREE.Vector3();
-  function pushPetAim(out: PlazaAimTarget[], r: Remote) {
-    const mesh = (r as any)._petMesh as THREE.Group | undefined;
-    if (!mesh || !mesh.visible) return;
-    if ((r.phase || '') === 'moon' || r.awaitingPose) return;
-    const p = new THREE.Vector3();
-    mesh.getWorldPosition(p);
-    const petId = ((r as any)._petId as string | undefined) || (mesh.userData.petId as string | undefined) || null;
-    const nickBase = plazaDisplayName(r.nick, r.numTag);
-    const nick = petId === 'pt_amei' ? nickBase + '的阿妹' : petId === 'pt_apo' ? nickBase + '的阿珀' : nickBase + '的寵物';
-    out.push({
-      connId: r.connId || r.key,
-      nick,
-      pileId: r.pileId,
-      phase: r.phase || '',
-      x: p.x, z: p.z, yaw: r.yaw,
-      lookYaw: r.tLookYaw,
-      seated: !!r.seated,
-      count: 0,
-      umb: false,
-      isNpc: r.isNpc,
-      head: { x: p.x, y: p.y + 0.16, z: p.z },
-      bowl: { x: p.x, y: p.y + 0.12, z: p.z },
-      isPet: true,
-      petId,
-    });
-  }
-
   function aimTargets(leisureNpc = false): PlazaAimTarget[] {
     const out: PlazaAimTarget[] = [];
     for (const r of remotes.values()) {
@@ -1235,12 +1208,6 @@ export function createPlazaWorldView(
         head: { x: h.x, y: h.y, z: h.z },
         bowl: { x: b.x, y: b.y, z: b.z },
       });
-    }
-    for (const r of remotes.values()) {
-      if (r.seated && isMgPile(r.pileId)) continue;
-      const carried = !!(r.carriedBy || (r.phase || '') === 'carried');
-      if (carried) continue;
-      pushPetAim(out, r);
     }
     return out;
   }
@@ -1318,6 +1285,19 @@ function hashPid(pid: string) {
       worldH: LO ? 0.44 : 0.38,
       nameTone: isNpc ? 'npc' : 'player',
       depthTest: true,
+    });
+    el.setOpacity(PLAZA_BUB_A);
+    el.sprite.visible = false;
+    root.add(el.sprite);
+    return el;
+  }
+
+  /** 寵物對話：樣式跟廣場阿婆一樣，但最後再畫、不被玩家身體擋住 */
+  function ensurePetBubble() {
+    const el = makeWorldLabel(' ', 'bubble', {
+      worldH: LO ? 0.44 : 0.38,
+      nameTone: 'npc',
+      overlay: true,
     });
     el.setOpacity(PLAZA_BUB_A);
     el.sprite.visible = false;
@@ -2366,8 +2346,8 @@ function hashPid(pid: string) {
     if (!r) return;
     const short = text.length > 40 ? text.slice(0, 39) + '…' : text;
     const rj = r as any;
-    if (!rj._petBub) rj._petBub = ensureBubble(false);
-    const bub = rj._petBub as ReturnType<typeof ensureBubble>;
+    if (!rj._petBub) rj._petBub = ensurePetBubble();
+    const bub = rj._petBub as ReturnType<typeof ensurePetBubble>;
     bub.setText(short, true);
     bub.setOpacity(PLAZA_BUB_A);
     bub.sprite.visible = true;
@@ -2405,10 +2385,9 @@ function hashPid(pid: string) {
     const r = findRemote({ connId });
     if (!r) return;
     const mesh = (r as any)._petMesh as THREE.Group | undefined;
-    if (!mesh || !mesh.visible) return;
-    const id = ((r as any)._petId as string | undefined) || (mesh.userData.petId as string | undefined);
-    if (id && id !== AMEI_ID) return;
-    playAmeiLateUmb(mesh);
+    const id = ((r as any)._petId as string | undefined) || (mesh?.userData.petId as string | undefined);
+    if (id !== AMEI_ID || !mesh) return;
+    playAmeiLateUmb(mesh, r.rig.head ?? r.rig.outer);
   }
 
   let seatWishes: PlazaSeatWish[] = [];

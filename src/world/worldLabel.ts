@@ -36,6 +36,8 @@ export type WorldLabelOpts = {
   nameTone?: WorldLabelNameTone;
   /** 泡泡依文字自訂底色／邊框／字色 */
   bubbleTint?: (text: string) => { fill: string; line: string; text: string } | null;
+  /** 寵物對話等：主畫面與本機角色都畫完後再畫，不被玩家身體擋住 */
+  overlay?: boolean;
 };
 
 /** 主畫面 renderer：名牌 Canvas 第一次入鏡前先 upload，避免準心掃到某人才卡一下 */
@@ -57,7 +59,8 @@ export function makeWorldLabel(
 ): WorldLabel {
   const opts: WorldLabelOpts = typeof worldHOrOpts === 'number' ? { worldH: worldHOrOpts } : worldHOrOpts;
   const worldH = opts.worldH ?? (kind === 'name' ? 0.2 : 0.3);
-  const depthTest = opts.depthTest === true;
+  const overlay = !!opts.overlay;
+  const depthTest = overlay ? false : opts.depthTest === true;
   const nameTone: WorldLabelNameTone = opts.nameTone === 'npc' || opts.nameTone === 'sign' ? opts.nameTone : 'player';
   // 固定畫布尺寸：避免改 canvas.width 導致 WebGL 貼圖卡住舊畫面
   // 手機：名牌／泡泡允許 1.5x（貼圖仍很小）；省電降解析度時字才不會糊成一團
@@ -86,7 +89,9 @@ export function makeWorldLabel(
   const sprite = new THREE.Sprite(mat);
   sprite.center.set(0.5, 0);
   // 不寫深度；與場景的遮擋改由本機角色第二趟上色處理
-  sprite.renderOrder = kind === 'bubble' ? 31 : 30;
+  // overlay：再晚一趟畫，連本機／別人的身體都不會蓋住
+  sprite.renderOrder = overlay ? 40 : (kind === 'bubble' ? 31 : 30);
+  if (overlay) sprite.layers.set(OVERLAY_LABEL_LAYER);
   let text = '';
   let opacity = 1;
   let nameFrame = false;
@@ -233,6 +238,8 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 /** 本機第三人稱角色專用圖層：主畫面（含名牌）畫完後再畫一次，蓋住疊在自己身上的名牌 */
 export const LOCAL_AVATAR_LAYER = 3;
+/** 寵物對話泡泡：主畫面與本機角色都畫完後再畫，避免被玩家腿擋到 */
+export const OVERLAY_LABEL_LAYER = 4;
 
 export function markLocalAvatarLayer(root: THREE.Object3D | null | undefined) {
   if (!root) return;
@@ -290,7 +297,6 @@ export function renderSceneWithLocalAvatarOnTop(
   const prevBg = scene.background;
   try {
     renderer.render(scene, camera);
-    if (!hasLocal) return;
     // Three.js 只要 scene.background 是 Color，即使 autoClear=false 也會 forceClear 整張畫布（含深度），世界就會被清掉只剩本機角色
     renderer.autoClear = false;
     renderer.autoClearColor = false;
@@ -298,7 +304,12 @@ export function renderSceneWithLocalAvatarOnTop(
     renderer.autoClearStencil = false;
     renderer.shadowMap.enabled = false;
     scene.background = null;
-    camera.layers.set(LOCAL_AVATAR_LAYER);
+    if (hasLocal) {
+      camera.layers.set(LOCAL_AVATAR_LAYER);
+      renderer.render(scene, camera);
+    }
+    // 寵物對話：關深度、最後再畫，玩家身體（含本機第三身的腿）不會擋住
+    camera.layers.set(OVERLAY_LABEL_LAYER);
     renderer.render(scene, camera);
   } finally {
     for (const { obj, mask } of prevObjLayers) obj.layers.mask = mask;

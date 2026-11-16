@@ -1,4 +1,4 @@
-/** 阿妹被丟殼砸到：先挨打，慢半拍才開一把擋不住的小傘 */
+/** 飼主被丟殼砸中後，阿妹慢半拍才在他頭上開傘（擋不住，殼已經打中） */
 import * as THREE from 'three';
 
 export const AMEI_ID = 'pt_amei';
@@ -8,20 +8,20 @@ const OPEN = 0.16;
 const HOLD = 1.15;
 const CLOSE = 0.22;
 
-function makeMiniUmb(): THREE.Group {
+function makeOverheadUmb(): THREE.Group {
   const g = new THREE.Group();
   g.name = 'ameiLateUmb';
   const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.006, 0.006, 0.28, 6),
+    new THREE.CylinderGeometry(0.01, 0.01, 0.48, 6),
     new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.8 }),
   );
-  pole.position.y = 0.14;
+  pole.position.y = 0.24;
   g.add(pole);
   const canopy = new THREE.Mesh(
-    new THREE.ConeGeometry(0.16, 0.08, 10, 1, true),
+    new THREE.ConeGeometry(0.28, 0.12, 12, 1, true),
     new THREE.MeshStandardMaterial({ color: 0xc45c4a, roughness: 0.7, side: THREE.DoubleSide }),
   );
-  canopy.position.y = 0.26;
+  canopy.position.y = 0.46;
   canopy.name = 'canopy';
   g.add(canopy);
   g.userData.noMerge = true;
@@ -48,21 +48,25 @@ function beep(freq: number, dur = 0.08, vol = 0.08) {
 }
 
 /**
- * 被砸當下先縮一下，約半拍後才撐開小傘，隨即收掉。回傳取消函式。
- * 這把傘不能擋殼，只是慢半拍的反應。
+ * 飼主被砸後，阿妹先縮一下，約 0.38 秒後才在飼主頭上撐開小傘，隨即收掉。
+ * 這把傘不能擋殼，玩家照常受傷。回傳取消函式。
  */
-export function playAmeiLateUmb(pet: THREE.Object3D): () => void {
+export function playAmeiLateUmb(pet: THREE.Object3D, over: THREE.Object3D): () => void {
   const ud = pet.userData as { lateUmb?: THREE.Group; lateUmbStop?: () => void; body?: THREE.Object3D };
   ud.lateUmbStop?.();
   let umb = ud.lateUmb;
-  if (!umb || !umb.parent) {
-    umb = makeMiniUmb();
-    pet.add(umb);
-    ud.lateUmb = umb;
+  if (!umb) umb = makeOverheadUmb();
+  if (umb.parent && umb.parent !== over) umb.parent.remove(umb);
+  if (umb.parent !== over) over.add(umb);
+  ud.lateUmb = umb;
+  const isCam = !!(over as THREE.Camera).isCamera;
+  if (isCam) {
+    umb.position.set(0, 0.2, -0.42);
+    umb.rotation.set(-0.4, 0, 0);
+  } else {
+    umb.position.set(0, 0.32, 0);
+    umb.rotation.set(0, 0, 0);
   }
-  // 握在身前右上方，像臨時撐起來的小傘
-  umb.position.set(0.06, 0.22, -0.12);
-  umb.rotation.set(-0.55, 0.2, -0.15);
   umb.visible = false;
   umb.scale.setScalar(0.01);
 
@@ -77,7 +81,6 @@ export function playAmeiLateUmb(pet: THREE.Object3D): () => void {
   const tick = (dt: number) => {
     if (dead) return false;
     t += dt;
-    // 挨打當下：縮一下、頭一縮
     if (t < 0.22) {
       const k = Math.sin((t / 0.22) * Math.PI);
       body.position.y = bodyY0 - 0.025 * k;
@@ -102,7 +105,7 @@ export function playAmeiLateUmb(pet: THREE.Object3D): () => void {
         s = Math.max(0.01, 1 - k);
       }
       umb!.scale.setScalar(s);
-      umb!.rotation.z = -0.15 + Math.sin(t * 10) * 0.06;
+      umb!.rotation.z = (isCam ? 0 : 0) + Math.sin(t * 10) * 0.05;
     }
     if (t >= total) {
       umb!.visible = false;
