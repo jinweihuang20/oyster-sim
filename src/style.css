@@ -3816,3 +3816,16 @@ body.menuOn #overlay .sysGrid>#oFood{
 #hudMenu .hmTile span{color:#1d2731;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 #hudMenu .hmDot{position:absolute;top:6px;right:6px;padding:0 5px;border-radius:999px;background:#c2412d;color:#fff;font-size:10.5px;font-style:normal;line-height:16px}
 @media (max-width:340px){#hudMenu .hmGrid{gap:6px;padding:10px}#hudMenu .hmTile{min-height:76px!important;font-size:12px!important}}
+/* 手機橫向：「選單」固定在上方狀態列最右邊，視角鈕緊貼在它左邊；面板對齊按鈕、不超出畫面 */
+@media (pointer:coarse) and (orientation:landscape){
+ #top::after{content:"";order:97;flex:1 1 0;min-width:0}
+ #top #camBtn.hudCam,#top #pzCamCluster{order:98}
+ #top #hudMenuBtn{order:99;margin-left:4px!important;height:34px;min-height:34px!important;padding:0 10px!important;font-size:13px!important}
+ #hudMenu{padding:calc(var(--sa-top,0px) + 44px) calc(var(--sa-right,0px) + 8px) calc(var(--sa-bottom,0px) + 8px) 8px}
+ #hudMenu .hmCard{width:min(440px,100%);max-height:100%;display:flex;flex-direction:column}
+ #hudMenu .hmHead{padding:4px 6px 4px 14px;flex:none}
+ #hudMenu .hmX{width:34px!important;height:34px!important}
+ #hudMenu .hmGrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:8px 10px 10px;overflow-y:auto}
+ #hudMenu .hmTile{min-height:66px!important;padding:6px 4px!important;gap:4px}
+ #hudMenu .hmTile svg{width:22px;height:22px}
+}
