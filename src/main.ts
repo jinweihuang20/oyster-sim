@@ -21,6 +21,7 @@ import {
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
 import { initCook, openCook, openCookSolo, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView } from './cook/cookUi';
+import { initFeed, openFeed } from './cook/feed';
 import { initFood, openFood, openFoodStall, renderFoodStall, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
 import { foodStallSpawn } from './plaza/layout';
 import {
@@ -71,7 +72,7 @@ import {
   plazaNearShed, SHED_DOORS, shedReturnSpawn, shedName,
   openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, isPlazaPartyMode, raceBeginBasinFill, tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaSettleRaceMeat, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
   plazaFoodLocked, plazaFoodCanOpen, plazaFoodLeave, plazaCookLeave, plazaCookProgress, plazaCookMyPan, plazaCookDisplay,
-  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
+  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaFeedTarget, plazaFeedStillNear, plazaNpcEat, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile, isMgPile,
   MG_MAG_PRICE, MG_MAG_AMMO, MG_AMMO_MAX, MG_SIT_MS,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
@@ -3663,7 +3664,11 @@ $('psOk').onclick = () => { $('paySum').classList.remove('show'); if (nameWait) 
     void plazaTrySit(p?.altBtn ? 'money' : 'auto');
   } else if (isRoomActive()) void roomTrySit();
   else if (nearSeat) sitDown(nearSeat.id);
-}); btn('sitAltBtn', () => { if (plazaMode) void plazaTrySit('meat'); }); btn('throwBtn', throwShell);
+}); btn('sitAltBtn', () => {
+  if (!plazaMode) return;
+  if (plazaNearPrompt()?.altAct === 'feed') { const t = plazaFeedTarget(); if (t) openFeed(t); return; }
+  void plazaTrySit('meat');
+}); btn('throwBtn', throwShell);
 btn('mgFireBtn', () => { mgFireHeld = true; void tryMgFireOnce(); }, () => { mgFireHeld = false; });
 btn('mgReloadBtn', () => { void tryMgReload(); });
 btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('umbBtn').addEventListener(ev, closeUmbrella); addEventListener('blur', closeUmbrella); document.addEventListener('visibilitychange', () => { if (document.hidden) closeUmbrella(); }); $('umbBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('puffBtn', startPuff, endPuff); for (const ev of ['pointercancel', 'lostpointercapture', 'touchend', 'touchcancel']) $('puffBtn').addEventListener(ev, endPuff); addEventListener('blur', endPuff); document.addEventListener('visibilitychange', () => { if (document.hidden) endPuff(); }); $('puffBtn').addEventListener('contextmenu', e => e.preventDefault()); btn('stealBtn', startSteal, stopSteal);
@@ -6714,6 +6719,14 @@ initFood({
   openCookDex: () => openCookDex(),
   refreshPrices: () => { void fetchPrices().then(r => { if (r === 'changed' && $('foodStall').classList.contains('show')) renderFoodStall(); }); },
   onMoney: () => updHud(),
+});
+initFeed({
+  getSave: () => save, persist, isTut: () => !!tut,
+  toast: (t, c) => toast(t, c ?? '#cfe3f5'),
+  onMoney: () => updHud(),
+  eat: (id, combo) => plazaNpcEat(id, combo),
+  stillNear: id => plazaFeedStillNear(id),
+  sfx: () => { if (!ac) return; SFX.pop(); tone(1046, 0.12, 0.1, 'triangle', 0.02); tone(1568, 0.16, 0.08, 'sine', 0.1); },
 });
 initCook({
   getSave: () => save, persist, track,

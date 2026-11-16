@@ -17,6 +17,7 @@ import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worl
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd, PlazaFoodQueue, PlazaCookState } from './types';
 import { makeCookArea, type CookArea } from './cookArea';
 import { comboName } from '../cook/combo';
+import { buildDish, buildPlate, disposeDish } from '../cook/dish3d';
 import { plazaDisplayName, normSeatWishEnd } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 import { plazaSoftCapClient } from '../core/economy';
@@ -408,6 +409,8 @@ export type PlazaNearPrompt = {
   /** 第二顆按鈕（機關槍：碗內蚵肉當子彈） */
   altBtn?: string;
   altIcon?: string;
+  /** 第二顆按鈕的用途（預設＝機關槍用蚵肉） */
+  altAct?: 'feed';
   shedLoc?: string;
   pileId?: number;
   slot?: number;
@@ -442,7 +445,8 @@ export function plazaNearPrompt(): PlazaNearPrompt | null {
     const carry = nearCarry;
     const w = seatWishes.find(x => x.npcConnId === carry.connId);
     const info = w ? (w.carrierConnId && w.carrierConnId !== plazaConnId() ? '已有人在送' : (w.line || `${carry.nick}　站旁邊就能抱起來`)) : `${carry.nick}　站旁邊就能抱起來`;
-    return { kind: 'carry', info, btn: carry.nick === '阿伯' ? '抱起阿伯' : '抱起阿婆' };
+    const feed = feedable(carry.nick);
+    return { kind: 'carry', info, btn: carry.nick === '阿伯' ? '抱起阿伯' : '抱起阿婆', ...(feed ? { altBtn: '請阿婆吃', altIcon: 'ic-bowl', altAct: 'feed' as const } : {}) };
   }
   if (near) {
     const mg = isMgPile(near.pileId);
@@ -2026,6 +2030,56 @@ function nearestCarryNpc(wx: number, wz: number) {
     if (!best || d < best.dist) best = { connId: p.connId, nick: p.nick || '阿婆', dist: d };
   }
   return best;
+}
+
+/* ───────── 請阿婆吃蚵仔煎（只在一般廣場；純本機獎勵） ───────── */
+const feedable = (nick: string) => active && !partyMode && !raceMode && nick !== '阿伯';
+/** 旁邊可以請吃的阿婆 */
+export function plazaFeedTarget(): { connId: string; nick: string } | null {
+  return !seated && nearCarry && feedable(nearCarry.nick) ? { ...nearCarry } : null;
+}
+function npcAim(connId: string) {
+  return view?.aimTargets(true).find(t => t.connId === connId && t.isNpc && !t.carriedBy && t.phase !== 'carried') ?? null;
+}
+/** 還站在那位阿婆旁邊（選菜時走開就收起選單） */
+export function plazaFeedStillNear(connId: string) {
+  if (!active || !deps || seated || myCarriedNpc()) return false;
+  const t = npcAim(connId); if (!t) return false;
+  const w = deps.getWalkXZ();
+  return Math.hypot(w.x - t.head.x, w.z - t.head.z) <= CARRY_DIST + 0.9;
+}
+const EAT_LINES = ['嘿好吃！', '這蚵仔煎煎得真好', '好香喔，謝謝你', '嗯～醬調得剛剛好', '吃飽了，多謝啦', '蚵仔好新鮮！'];
+/** 阿婆吃：盤子飛到嘴邊、三口吃完，頭上冒一句話 */
+export function plazaNpcEat(connId: string, combo: number): boolean {
+  if (!view || !plazaFeedStillNear(connId)) return false;
+  const t = npcAim(connId)!;
+  view.showChat({ connId, text: EAT_LINES[Math.floor(Math.random() * EAT_LINES.length)] });
+  const w = deps!.getWalkXZ();
+  const head = new THREE.Vector3(t.head.x, t.head.y, t.head.z);
+  const dx = w.x - head.x, dz = w.z - head.z, dl = Math.hypot(dx, dz) || 1;
+  const front = head.clone().add(new THREE.Vector3(dx / dl * 0.32, -0.22, dz / dl * 0.32));
+  const g = new THREE.Group();
+  const holder = new THREE.Group(); holder.scale.setScalar(0.1);
+  holder.add(buildPlate());
+  const dish = buildDish(combo); dish.position.y = 0.04; holder.add(dish);
+  g.add(holder); g.position.copy(front).add(new THREE.Vector3(dx / dl * 0.35, -0.2, dz / dl * 0.35));
+  const root = view.root; root.add(g);
+  const from = g.position.clone(), t0 = performance.now(), DUR = 2100;
+  const tick = () => {
+    if (!g.parent) { disposeDish(g); return; }
+    const k = Math.min(1, (performance.now() - t0) / DUR);
+    // 0–0.25 遞到嘴邊；之後三口，每口縮一截並輕晃
+    const a = Math.min(1, k / 0.25);
+    g.position.lerpVectors(from, front, a * a * (3 - 2 * a));
+    const bites = k < 0.25 ? 0 : Math.min(3, Math.floor((k - 0.25) / 0.25) + 1);
+    dish.scale.setScalar(Math.max(0.05, 1 - bites * 0.32));
+    g.position.y += Math.sin(k * Math.PI * 9) * 0.012 * (k > 0.25 ? 1 : 0);
+    g.rotation.y = k * 1.2;
+    if (k < 1) requestAnimationFrame(tick);
+    else { root.remove(g); disposeDish(g); }
+  };
+  requestAnimationFrame(tick);
+  return true;
 }
 
 function markCarryUnsupported(err?: string) {

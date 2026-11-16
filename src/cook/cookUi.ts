@@ -5,7 +5,7 @@ import { foodCount, foodCountAny, takeFood } from '../food/pantry';
 import { FOOD_BY_ID } from '../food/ingredients';
 
 export type CookDeps = {
-  getSave: () => { cookDex?: Record<string, number> };
+  getSave: () => { cookDex?: Record<string, number>; cookDish?: Record<string, number> };
   persist: () => void;
   track: (t: string, d?: Record<string, unknown>) => void;
   toast: (text: string, color?: string) => void;
@@ -206,6 +206,7 @@ function render() {
       + (sp ? `<p class="ckDesc">${esc(sp.desc)}</p>` : '')
       + `<ul class="ckFeat">${comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
       + `<p class="ckSum">圖鑑 ${dexCount()}／${COMBO_TOTAL.toLocaleString()}${cookTitle(dexCount()) ? `・${cookTitle(dexCount())}` : ''}</p></div>`
+      + `<p class="ckHint">${IC.info}這盤收好了（同款共 ${D.getSave().cookDish?.[String(id)] ?? 1} 盤），可以在廣場走到阿婆旁邊「請阿婆吃」</p>`
       + (solo ? '' : `<div class="ckAsk" id="ckAsk"><b>要展示嗎？</b><span>會放在煎台旁，大家都看得到；每人一盤，離開廣場就收掉</span><div class="ckAct"><button type="button" class="ckBtn" data-ck="nodisp">不用</button><button type="button" class="ckBtn pri" data-ck="disp">展示</button></div></div>`)
       + `<div class="ckAct"><button type="button" class="ckBtn" data-ck="again">再煎一盤</button></div>`;
   }
@@ -306,7 +307,10 @@ function finish() {
   const id = comboId(c);
   const before = dexCount();
   const isNew = !has(id);
-  if (isNew) { dex()[String(id)] = Date.now(); D.persist(); }
+  if (isNew) dex()[String(id)] = Date.now();
+  // 煎好的這盤留著（可以請阿婆吃）；自家煎台也算
+  { const st = (D.getSave().cookDish ??= {}); st[String(id)] = Math.min(99_999, (st[String(id)] ?? 0) + 1); }
+  D.persist();
   resultNew = isNew;
   resultId = id; step = 6;
   sync(6);

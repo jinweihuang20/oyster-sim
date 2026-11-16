@@ -30,6 +30,8 @@ export type Save = {
   foodSeen?: string[];
   /** 蚵仔煎圖鑑：組合 id → 第一次煎出的時間 */
   cookDex?: Record<string, number>;
+  /** 煎好留著的蚵仔煎：組合 id → 盤數（請阿婆吃會扣） */
+  cookDish?: Record<string, number>;
 };
 
 export const START_MONEY = 10000;
@@ -114,6 +116,13 @@ export function loadSave(LS: SaveStorage): Save {
     for (const [k, v] of Object.entries(raw.cookDex as Record<string, unknown>)) {
       const id = Number(k), t = num(v);
       if (Number.isInteger(id) && id >= 0 && id < 2304 && t > 0) out.cookDex[String(id)] = t;
+    }
+  }
+  if (raw.cookDish && typeof raw.cookDish === 'object' && !Array.isArray(raw.cookDish)) {
+    out.cookDish = {};
+    for (const [k, v] of Object.entries(raw.cookDish as Record<string, unknown>)) {
+      const id = Number(k), n = Math.floor(num(v));
+      if (Number.isInteger(id) && id >= 0 && id < 2304 && n > 0) out.cookDish[String(id)] = Math.min(n, 99_999);
     }
   }
   if (Array.isArray(raw.foodSeen)) out.foodSeen = raw.foodSeen.filter((x: unknown) => typeof x === 'string').slice(0, 40);
