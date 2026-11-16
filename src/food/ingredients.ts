@@ -58,7 +58,7 @@ export const CAT_N: Record<FoodCat, string> = { base: '基底', main: '主料', 
 /** 取得機率／數值（V1） */
 export const FOOD_RATE = {
   /** 剝蚵入碗多留一份蚵仔 */
-  shuck: 0.15,
+  shuck: 0.35,
   /** 撈蚵仔撈到蝦仁或花枝：依地點 home / wanggong / dongshi / budai；廣場另計 */
   scoop: { home: 0.2, wanggong: 0.25, dongshi: 0.27, budai: 0.3, plaza: 0.25 } as Record<string, number>,
   /** 撈到時是蝦仁的比例（其餘花枝） */
