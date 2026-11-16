@@ -58,9 +58,9 @@ function blobOutline(r: () => number, R: number, n = 28, wob = 0.09) {
 }
 
 /** 產生一盤蚵仔煎（Group，底面在 y=0） */
-export function buildDish(id: number, combo?: Combo): THREE.Group {
+export function buildDish(id: number, combo?: Combo, seed = 0): THREE.Group {
   const c = combo ?? comboOf(id);
-  const r = rng(id + 17);
+  const r = rng(id + 17 + seed * 7919);
   const g = new THREE.Group();
   const H = [0, 0.05, 0.085, 0.14][c.batter];
   let top = 0.02;
@@ -97,7 +97,7 @@ export function buildDish(id: number, combo?: Combo): THREE.Group {
   }
   // 蛋：攤平的蛋皮片（不規則薄片，邊緣帶一點蛋白）；沒粉漿就是散開的炒蛋片
   if (c.egg) {
-    const er = rng(id + 29);
+    const er = rng(id + 29 + seed * 7919);
     const n = loose ? 8 : 5 + Math.floor(er() * 2);
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + er() * 0.9, d = loose ? 0.12 + er() * 0.42 : 0.18 + er() * 0.42;
@@ -146,7 +146,7 @@ export function buildDish(id: number, combo?: Combo): THREE.Group {
     m.rotation.x = -Math.PI / 2; const o = new THREE.Group(); o.add(m); place(o, 0.025);
   }
   if (c.top & 8) {
-    const vr = rng(id + 41), n = 5 + Math.floor(vr() * 2);
+    const vr = rng(id + 41 + seed * 7919), n = 5 + Math.floor(vr() * 2);
     for (let i = 0; i < n; i++) {
       const m = new THREE.Mesh(G.leafBig, mat(vr() < 0.5 ? (c.done === 2 ? '#3f7a2c' : '#4f9a3a') : (c.done === 2 ? '#4c8a34' : '#62ae48'), { rough: 0.6 }));
       (m.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
@@ -175,6 +175,57 @@ export function buildDish(id: number, combo?: Combo): THREE.Group {
     }
   }
   g.userData.dishId = id;
+  return g;
+}
+
+const UNDER_COL = ['#e4c88c', '#c98f45', '#8a5226'];
+const UNDER_SPOT = ['#c9a062', '#9a6128', '#4e2a12'];
+/**
+ * 翻面後看到的底面：煎過的粉漿面（依熟度上色、焦脆斑點），配料只剩微微凸起；
+ * 沒粉漿的則是翻炒過、換了位置的配料。
+ */
+export function buildUnder(id: number, combo?: Combo): THREE.Group {
+  const c = combo ?? comboOf(id);
+  if (!c.batter) return buildDish(id, c, 1);
+  const g = new THREE.Group();
+  const H = [0, 0.05, 0.085, 0.14][c.batter];
+  const shape = blobOutline(rng(id + 17), c.batter === 1 ? 0.95 : 0.88, 32, c.batter === 1 ? 0.14 : 0.08);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: H, bevelEnabled: true, bevelThickness: H * 0.35, bevelSize: 0.05, bevelSegments: 2, curveSegments: 4 });
+  geo.rotateX(-Math.PI / 2);
+  const base = new THREE.Mesh(geo, mat(UNDER_COL[c.done], { rough: 0.55 }));
+  base.position.y = H * 0.35; g.add(base);
+  const top = H * 1.7 + 0.012;
+  const r = rng(id + 53);
+  // 配料隔著粉漿凸起來的小包
+  const bumps = [0, 1, 2, 3].filter(i => c.top & (1 << i)).length * 5 + (c.egg ? 3 : 0);
+  for (let i = 0; i < bumps; i++) {
+    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * 0.68;
+    const m = new THREE.Mesh(G.blob, mat(UNDER_COL[c.done], { rough: 0.5 }));
+    const k = 0.08 + r() * 0.06; m.scale.set(k, 0.025 + r() * 0.015, k * (0.7 + r() * 0.5));
+    m.position.set(Math.cos(a) * d, top - 0.012, Math.sin(a) * d); m.rotation.y = r() * Math.PI; g.add(m);
+  }
+  // 焦脆斑點，越熟越多越深
+  const spots = [10, 20, 32][c.done];
+  for (let i = 0; i < spots; i++) {
+    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * 0.82;
+    const m = new THREE.Mesh(G.spot, mat(UNDER_SPOT[c.done], { opacity: 0.55 + r() * 0.35 }));
+    m.rotation.x = -Math.PI / 2; m.scale.set(0.03 + r() * 0.07, 0.025 + r() * 0.05, 1);
+    m.position.set(Math.cos(a) * d, top, Math.sin(a) * d); g.add(m);
+  }
+  // 外圈比較焦
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.66, c.batter === 1 ? 0.95 : 0.88, 32), mat(UNDER_SPOT[c.done], { opacity: 0.35 }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = top - 0.003; g.add(ring);
+  // 蛋從縫隙透出一點點
+  if (c.egg) for (let i = 0; i < 3; i++) {
+    const m = new THREE.Mesh(G.spot, mat(EGG_Y[c.done], { opacity: 0.3 }));
+    m.rotation.x = -Math.PI / 2; m.scale.set(0.12 + r() * 0.08, 0.08 + r() * 0.05, 1);
+    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * 0.6; m.position.set(Math.cos(a) * d, top + 0.001, Math.sin(a) * d); g.add(m);
+  }
+  if (c.batter === 1) for (let i = 0; i < 22; i++) {
+    const a = r() * Math.PI * 2, d = 0.9 + r() * 0.2;
+    const m = new THREE.Mesh(G.spot, mat(UNDER_SPOT[c.done], { opacity: 0.8 }));
+    m.rotation.x = -Math.PI / 2; m.scale.setScalar(0.04 + r() * 0.05); m.position.set(Math.cos(a) * d, 0.012, Math.sin(a) * d); g.add(m);
+  }
   return g;
 }
 
@@ -228,10 +279,16 @@ function ensure(size: number) {
   return { R: R3, S: scene!, C: cam! };
 }
 
-function shoot(id: number, size: number, yaw: number, pitch: number, combo?: Combo, plate = true) {
+/** 翻面姿勢：under＝顯示底面；ang＝繞水平軸轉的角度；lift＝往上拋的高度 */
+type Pose = { under: boolean; ang: number; lift: number };
+function shoot(id: number, size: number, yaw: number, pitch: number, combo?: Combo, plate = true, pose?: Pose) {
   const { R, S, C } = ensure(size);
   const holder = new THREE.Group();
-  const d = buildDish(id, combo); holder.add(d);
+  const d = pose?.under ? buildUnder(id, combo) : buildDish(id, combo);
+  if (pose && (pose.ang || pose.lift)) {
+    const pv = new THREE.Group(); pv.position.y = 0.08 + pose.lift; pv.rotation.x = pose.ang;
+    d.position.y = -0.08; pv.add(d); holder.add(pv);
+  } else holder.add(d);
   if (plate) holder.add(buildPlate());
   holder.rotation.y = yaw;
   S.add(holder);
@@ -244,15 +301,16 @@ function shoot(id: number, size: number, yaw: number, pitch: number, combo?: Com
 }
 
 /** WebGL 不能用時的 2D 示意圖：盤子＋粉漿＋蛋＋配料點點 */
-function draw2D(ctx: CanvasRenderingContext2D, W: number, id: number, combo?: Combo) {
-  const c = combo ?? comboOf(id), r = rng(id + 17);
+function draw2D(ctx: CanvasRenderingContext2D, W: number, id: number, combo?: Combo, under = false) {
+  const c = { ...(combo ?? comboOf(id)) }, r = rng(id + 17 + (under ? 7919 : 0));
+  if (under && c.batter) { c.top = 0; c.egg = 0; c.sauce = 0; }
   const cx = W / 2, cy = W * 0.54;
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(cx, cy + W * 0.05, W * 0.44, W * 0.2, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#f4f2ec'; ctx.strokeStyle = '#c9ccd0'; ctx.lineWidth = Math.max(1, W / 160);
   ctx.beginPath(); ctx.ellipse(cx, cy, W * 0.43, W * 0.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   if (c.batter) {
-    ctx.fillStyle = BATTER_COL[c.done]; ctx.strokeStyle = EDGE_COL[c.done];
+    ctx.fillStyle = (under ? UNDER_COL : BATTER_COL)[c.done]; ctx.strokeStyle = (under ? UNDER_SPOT : EDGE_COL)[c.done];
     ctx.beginPath(); ctx.ellipse(cx, cy - W * 0.015, W * 0.33, W * 0.145, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   }
   if (c.egg) {
@@ -287,9 +345,31 @@ export function dishThumb(id: number): string {
  * 可拖曳旋轉的 3D 檢視；回傳 stop()。
  * 掛上時立刻同步畫一次（不等 rAF）；跟著顯示大小調解析度；WebGL 掉了就畫 2D 圖。
  */
-export function mountDishViewer(canvas: HTMLCanvasElement, id: number, combo?: Combo): () => void {
+export type ViewerOpts = {
+  /** 自動慢慢轉（預設會轉；煎的過程中關掉） */
+  spin?: boolean;
+  /** 顯示底面（翻面後） */
+  under?: boolean;
+  /** 掛上時先播一次翻面動畫（從另一面翻過來） */
+  flipIn?: boolean;
+  /** 幾毫秒後才開始自動轉（起鍋特效播完） */
+  spinAfter?: number;
+};
+const FLIP_MS = 420;
+export function mountDishViewer(canvas: HTMLCanvasElement, id: number, combo?: Combo, opts: ViewerOpts = {}): () => void {
   const ctx = canvas.getContext('2d'); if (!ctx) return () => {};
-  let yaw = 0.6, pitch = 0.85, drag = false, lx = 0, ly = 0, idle = true, raf = 0, dirty = true, stopped = false;
+  const under = !!opts.under;
+  let yaw = 0.6, pitch = 0.85, drag = false, lx = 0, ly = 0, idle = opts.spin !== false, raf = 0, dirty = true, stopped = false;
+  let flipT0 = opts.flipIn ? performance.now() : 0;
+  const spinAt = performance.now() + (opts.spinAfter ?? 0);
+  /** 翻面動畫：前半段舊的那面轉到立起來，後半段換新的那面落下 */
+  const pose = (): Pose | undefined => {
+    if (!flipT0) return under ? { under: true, ang: 0, lift: 0 } : undefined;
+    const t = Math.min(1, (performance.now() - flipT0) / FLIP_MS);
+    if (t >= 1) { flipT0 = 0; return under ? { under: true, ang: 0, lift: 0 } : undefined; }
+    const lift = Math.sin(t * Math.PI) * 0.55;
+    return t < 0.5 ? { under: !under, ang: t * Math.PI, lift } : { under, ang: (t - 1) * Math.PI, lift };
+  };
   const fit = () => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w || !h) return;
@@ -300,14 +380,16 @@ export function mountDishViewer(canvas: HTMLCanvasElement, id: number, combo?: C
     dirty = false;
     const W = canvas.width;
     ctx.clearRect(0, 0, W, canvas.height);
-    try { ctx.drawImage(shoot(id, W, yaw, pitch, combo), 0, 0, W, canvas.height); }
-    catch { draw2D(ctx, W, id, combo); }
+    const p = pose();
+    try { ctx.drawImage(shoot(id, W, yaw, pitch, combo, true, p), 0, 0, W, canvas.height); }
+    catch { draw2D(ctx, W, id, combo, p?.under ?? false); }
   };
   const draw = () => {
     if (stopped) return;
     if (!canvas.isConnected) { stop(); return; }
     raf = requestAnimationFrame(draw);
-    if (idle) { yaw += 0.006; dirty = true; }
+    if (idle && performance.now() >= spinAt) { yaw += 0.006; dirty = true; }
+    if (flipT0) dirty = true;
     if (dirty) paint();
   };
   const down = (e: PointerEvent) => { drag = true; idle = false; lx = e.clientX; ly = e.clientY; canvas.setPointerCapture(e.pointerId); };

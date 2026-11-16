@@ -6720,6 +6720,13 @@ initCook({
   progress: (stage, combo) => plazaCookProgress(stage, combo),
   display: (combo) => plazaCookDisplay(combo),
   myPan: (combo) => plazaCookMyPan(combo),
+  // 起鍋：清脆的「叮」；隱藏款／新稱號放完整小號角
+  sfx: big => {
+    if (!ac) return;
+    SFX.pop();
+    if (big) SFX.endJingle(true);
+    else { tone(1318, 0.16, 0.12, 'triangle', 0.03); tone(1976, 0.22, 0.08, 'sine', 0.1); }
+  },
 });
 /** 一般廣場、站著走動中（休閒房／競速不開食材攤） */
 function foodPlazaOk() { return plazaMode && isPlazaActive() && state === 'play' && !isPlazaRaceMode() && !isPlazaPartyMode(); }

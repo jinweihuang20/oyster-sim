@@ -17,6 +17,8 @@ export type CookDeps = {
   display: (combo: number) => Promise<boolean>;
   /** 鍋上那盤（本機） */
   myPan: (combo: number) => void;
+  /** 起鍋音效（big＝隱藏款／新稱號）；靜音由音效系統處理 */
+  sfx?: (big: boolean) => void;
 };
 
 let D: CookDeps;
@@ -54,12 +56,16 @@ let target: Combo | null = null;
 let stopView: (() => void) | null = null;
 let lastViewId = -2;
 let viewCv: HTMLCanvasElement | null = null;
+let lastViewKey = '';
+let lastViewUnder: boolean | null = null;
 let pourT0 = 0, pourRaf = 0, pourFrac = 0;
 let cookT0 = 0, cookRaf = 0, flipped = false, doneFrac = 0;
 /** 從「醬」回到「煎」：熟度條停在上次的位置，可沿用或重新煎 */
 let reviewDone = false;
 let resultId = -1;
 let resultNew = false;
+/** 剛按「完成」：下一次畫面要播起鍋特效 */
+let fx: { big: boolean; banner: string; sub: string } | null = null;
 const POUR_MS = 2400, COOK_MS = 7000;
 const DONE_EDGE = [0.38, 0.72];
 const doneOf = (f: number) => (f < DONE_EDGE[0] ? 0 : f < DONE_EDGE[1] ? 1 : 2);
@@ -104,7 +110,7 @@ export function openCookSolo() {
 /** 關閉：放掉位子 */
 export function closeCook(leave = true) {
   cancelAnimationFrame(pourRaf); cancelAnimationFrame(cookRaf);
-  stopView?.(); stopView = null; lastViewId = -2; viewCv = null;
+  stopView?.(); stopView = null; lastViewId = -2; viewCv = null; lastViewKey = ''; lastViewUnder = null;
   $('cook').classList.remove('show');
   if (leave && seat != null && !solo) { seat = null; D.leaveSeat(); }
   seat = null;
@@ -118,13 +124,32 @@ function sync(stage: number) {
   D.myPan(stage >= 1 ? id : -1);
 }
 
+/** 起鍋特效：光圈、金色光暈、火花、蒸氣；隱藏款／新稱號再加橫幅和更多火花 */
+function fxHtml(f: { big: boolean; banner: string; sub: string }) {
+  const n = f.big ? 22 : 12;
+  let sp = '';
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 360 + (i * 37) % 23, d = (f.big ? 38 : 30) + ((i * 53) % 17);
+    sp += `<i class="ckSpk" style="--a:${a.toFixed(0)}deg;--d:${d};--dl:${((i * 41) % 9) * 22}ms"></i>`;
+  }
+  return `<div class="ckFx" aria-hidden="true"><b class="ckRing"></b>${f.big ? '<b class="ckRing r2"></b>' : ''}<b class="ckGlow"></b>${sp}<i class="ckSteam s1"></i><i class="ckSteam s2"></i><i class="ckSteam s3"></i></div>`
+    + (f.banner ? `<div class="ckBanner"><b>${esc(f.banner)}</b>${f.sub ? `<small>${esc(f.sub)}</small>` : ''}</div>` : '');
+}
+
+/** 預覽：煎的過程固定角度不轉，翻面後看底面，加醬時翻回正面；做好才慢慢轉 */
 function mountView(id: number) {
   const cv = document.getElementById('ckView') as HTMLCanvasElement | null;
   if (!cv) return;
+  const under = step === 4 && flipped; // 翻面後（含從醬回上一步）看底面
+  const spin = step === 6;
+  const key = `${id}|${under ? 1 : 0}|${spin ? 1 : 0}`;
   // 每次 render 都換新 canvas：同一盤也要掛到新 canvas 上（舊寫法會留下空白預覽）
-  if (id === lastViewId && stopView && viewCv === cv) return;
-  stopView?.(); lastViewId = id; viewCv = cv;
-  stopView = mountDishViewer(cv, id);
+  if (key === lastViewKey && stopView && viewCv === cv) return;
+  const flipIn = lastViewUnder != null && lastViewUnder !== under && step >= 4 && step <= 5;
+  stopView?.(); lastViewId = id; lastViewKey = key; lastViewUnder = under; viewCv = cv;
+  // 剛起鍋：先彈一下、放完特效再開始慢慢轉
+  const pop = !!cv.closest('.ckViewW.fx');
+  stopView = mountDishViewer(cv, id, undefined, { spin, under, flipIn, spinAfter: pop ? 1300 : 0 });
 }
 
 const hint = (ids: readonly string[]) => FOOD_BY_ID[ids[0]]?.how ?? '';
@@ -143,6 +168,7 @@ function render() {
   const canBack = step >= 2 && step <= 5;
   const head = `<div class="ckHead"><button type="button" class="ckLink ckBack" data-ck="back"${canBack ? '' : ' disabled aria-hidden="true" tabindex="-1"'}>${IC.back}上一步</button><b>${solo ? '自家煎台' : `煎台 ${seat != null ? seat + 1 : ''} 號`}</b><button type="button" class="ckLink" data-ck="dex">${IC.dex}圖鑑</button><button type="button" class="ckLink ckX" data-ck="close" aria-label="${solo ? '回主選單' : '離開煎台'}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>`;
   let html = '';
+  const fxNow = step === 6 ? fx : null; fx = null;
   if (step === 1) {
     const lack = TOPS.filter(t => foodCountAny(t.food) === 0);
     html += `<h3 class="ckH">選配料（可複選）</h3><div class="ckChips">${TOPS.map(t => { const n = foodCountAny(t.food); return chip(t.n, !!(sel.top & t.bit), n, `data-top="${t.bit}"`, n === 0); }).join('')}</div>`
@@ -184,7 +210,7 @@ function render() {
       + `<div class="ckAct"><button type="button" class="ckBtn" data-ck="again">再煎一盤</button></div>`;
   }
   // 全螢幕：標題列＋步驟固定在上、預覽撐滿中間、操作區固定在下
-  body.innerHTML = head + stepsBar() + `<div class="ckViewW"><canvas id="ckView" width="256" height="256"></canvas></div><div class="ckCtl s${step}">${html}</div>`;
+  body.innerHTML = head + stepsBar() + `<div class="ckViewW${fxNow ? ' fx' + (fxNow.big ? ' big' : '') : ''}"><canvas id="ckView" width="256" height="256"></canvas>${fxNow ? fxHtml(fxNow) : ''}</div><div class="ckCtl s${step}${fxNow ? ' fx' : ''}">${html}</div>`;
   mountView(step === 6 ? resultId : step === 1 && !sel.top ? comboId({ top: 0, batter: 0, egg: 0, done: 0, sauce: 0 }) : comboId(curCombo()));
   bind(body);
 }
@@ -287,8 +313,12 @@ function finish() {
   D.track('cook', { item: 'cook-' + id, combo: id, kind: isNew ? 'new' : 'repeat', count: dexCount() });
   const after = dexCount();
   const m = COOK_TITLES.find(x => before < x.n && after >= x.n);
-  if (m) D.toast(`圖鑑收集 ${m.n} 種，獲得稱號「${m.t}」`, '#9be37a');
-  else if (specialOf(id) && isNew) D.toast(`發現隱藏款「${comboName(id)}」！`, '#9be37a');
+  const sp = specialOf(id) && isNew;
+  fx = m ? { big: true, banner: `獲得稱號：${m.t}`, sub: `圖鑑收集 ${m.n} 種${sp ? '・發現隱藏款' : ''}` }
+    : sp ? { big: true, banner: '隱藏款！', sub: comboName(id) }
+    : { big: false, banner: '', sub: '' };
+  try { D.sfx?.(fx.big); } catch { /* 音效失敗不影響 */ }
+  try { navigator.vibrate?.(fx.big ? [30, 50, 30] : 30); } catch { /* 不支援 */ }
   render();
 }
 
