@@ -127,6 +127,9 @@ export type PlazaAimTarget = {
   carriedBy?: string;
   head: { x: number; y: number; z: number };
   bowl: { x: number; y: number; z: number };
+  /** 瞄的是這人帶出來的寵物，不是本體 */
+  isPet?: boolean;
+  petId?: string | null;
 };
 
 /** 廣場 NPC 送座位任務 */

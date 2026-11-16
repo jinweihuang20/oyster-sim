@@ -52,6 +52,14 @@ export const PETS: Pet[] = [
     eff: '每 10 秒碗裡 +1 塊簡單蚵仔肉；20–30 秒對附近阿婆出貓拳，偷到的肉算成績與食材蚵仔；廣場走動時講垃圾話（掛機暫停）',
     fx: { tickSec: 10, perTick: 1, meatDiff: 0 },
   },
+  {
+    id: 'pt_amei',
+    n: '阿妹',
+    price: 3333,
+    desc: '作者的第二隻虎斑貓，身形比阿珀秀氣、毛色也比較淡。會跟在腳邊，每 10 秒丟一塊簡單蚵仔肉進碗。沒有特別技能，也不會講垃圾話；被丟來的殼砸到時會慢半拍才開一把小傘，當然已經擋不住了。超過 10 秒沒動作會睡著，睡著時暫停產肉。',
+    eff: '每 10 秒碗裡 +1 塊簡單蚵仔肉；被丟殼砸到會慢半拍開小傘（擋不住）',
+    fx: { tickSec: 10, perTick: 1, meatDiff: 0 },
+  },
 ];
 
 export const defaultPetId = 'pt_oyster_baby';
@@ -167,19 +175,19 @@ export function petRidesHead(id: string | null | undefined): boolean {
 
 /** 場景裡的縮放：蚵仔寶寶較小以免擋頭，阿康站腳邊用原尺寸 */
 export function petWorldScale(id: string | null | undefined): number {
-  return id === 'pt_akang' || id === 'pt_apo' ? 1 : 0.7;
+  return id === 'pt_akang' || id === 'pt_apo' || id === 'pt_amei' ? 1 : 0.7;
 }
 
 /** 商店／預覽鏡頭：後備值；實際取景請用 fitPetCamera */
 export function petPreviewFrame(id: string): { pos: THREE.Vector3; look: THREE.Vector3; fov: number; dist?: number } {
-  if (id === 'pt_akang' || id === 'pt_apo') {
+  if (id === 'pt_akang' || id === 'pt_apo' || id === 'pt_amei') {
     return { pos: new THREE.Vector3(0.18, 0.2, 0.72), look: new THREE.Vector3(0, 0.13, 0), fov: 32 };
   }
   return { pos: new THREE.Vector3(0, 0.17, 0.95), look: new THREE.Vector3(0, 0.13, 0), fov: 30 };
 }
 
 export function petThumbFrame(id: string): { pos: THREE.Vector3; look: THREE.Vector3; fov: number } {
-  if (id === 'pt_akang' || id === 'pt_apo') {
+  if (id === 'pt_akang' || id === 'pt_apo' || id === 'pt_amei') {
     return { pos: new THREE.Vector3(0.16, 0.18, 0.62), look: new THREE.Vector3(0, 0.12, 0), fov: 34 };
   }
   return { pos: new THREE.Vector3(0, 0.17, 0.78), look: new THREE.Vector3(0, 0.13, 0), fov: 32 };
@@ -257,6 +265,7 @@ export function makePet(id: string): THREE.Group | null {
   if (id === 'pt_oyster_baby') return makeOysterBaby();
   if (id === 'pt_akang') return makeAkang();
   if (id === 'pt_apo') return makeApo();
+  if (id === 'pt_amei') return makeAmei();
   return null;
 }
 
@@ -490,14 +499,18 @@ export function makeAkang(): THREE.Group {
 }
 
 
-/** 阿珀：方塊風格棕灰虎斑貓，額頭 M 字、環紋尾，閒置時偶爾舔毛 */
-export function makeApo(): THREE.Group {
+/** 阿珀／阿妹共用虎斑貓：方塊風格、額頭 M 字、環紋尾，閒置時偶爾舔毛。阿妹較秀氣、毛色較淡。 */
+export function makeApo(): THREE.Group { return makeTabby('apo'); }
+export function makeAmei(): THREE.Group { return makeTabby('amei'); }
+
+function makeTabby(kind: 'apo' | 'amei'): THREE.Group {
   const g = new THREE.Group();
-  g.name = 'pet_apo';
-  const fur = 0x8d7358;
-  const stripe = 0x5a4636;
-  const belly = 0xd7cbb8;
-  const muzzle = 0xe8e0d4;
+  g.name = kind === 'amei' ? 'pet_amei' : 'pet_apo';
+  const slim = kind === 'amei';
+  const fur = slim ? 0xd4c2a4 : 0x8d7358;
+  const stripe = slim ? 0xa8896c : 0x5a4636;
+  const belly = slim ? 0xf3eadc : 0xd7cbb8;
+  const muzzle = slim ? 0xf7f1e8 : 0xe8e0d4;
   const eyeGold = 0xc4a035;
   const dark = 0x1a1a1a;
   const pink = 0xe8b4a8;
@@ -587,6 +600,11 @@ export function makeApo(): THREE.Group {
   sleepG.visible = false;
   headG.add(sleepG);
   bodyG.add(headG);
+  // 貓拳起點：右前肩，爪子從這裡連出去不會脫節
+  const punchAnchor = new THREE.Group();
+  punchAnchor.name = 'punchAnchor';
+  punchAnchor.position.set(slim ? 0.042 : 0.05, slim ? 0.145 : 0.155, slim ? -0.07 : -0.08);
+  bodyG.add(punchAnchor);
 
   // 環紋尾：向上再往後翹，深淺相間
   const tailG = new THREE.Group();
@@ -697,8 +715,11 @@ export function makeApo(): THREE.Group {
   g.userData.head = headG;
   g.userData.tail = tailG;
   g.userData.legs = legs;
+  g.userData.punchAnchor = punchAnchor;
   g.userData.tickAnim = tickAnim;
   g.userData.groundPet = true;
   g.userData.worldScale = 1;
+  g.userData.petId = slim ? 'pt_amei' : 'pt_apo';
+  if (slim) g.scale.set(0.86, 0.9, 0.88);
   return g;
 }

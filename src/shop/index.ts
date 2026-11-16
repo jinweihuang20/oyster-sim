@@ -4,9 +4,10 @@ export { applyOutfitToRig, clearOutfitDetails, headTopLift } from './equipVisual
 export { syncEqPreview, refreshEqPreview, stopEqPreview } from './equipPreview';
 export { openClothTryPreview, closeClothTryPreview } from './tryPreview';
 export { ODD } from './oddities';
-export { PETS, defaultPetId, findPet, makeOysterBaby, makePet, makeAkang, makeApo, petRidesHead, petWorldScale, tickPetAnim, petPreviewFrame, petThumbFrame, fitPetCamera, type Pet, type PetFx, type PetAnimState } from './pets';
+export { PETS, defaultPetId, findPet, makeOysterBaby, makePet, makeAkang, makeApo, makeAmei, petRidesHead, petWorldScale, tickPetAnim, petPreviewFrame, petThumbFrame, fitPetCamera, type Pet, type PetFx, type PetAnimState } from './pets';
 export { APO_ID, APO_LINES, APO_SCOLDS, apoLine, apoScold, pickApoLine, pickApoScold } from './apoTalk';
 export { playApoPunch, apoHitSeconds } from './apoFx';
+export { AMEI_ID, playAmeiLateUmb, isAmeiId } from './ameiFx';
 export { renderPetThumb } from './petThumb';
 export { openPetPreview, closePetPreview } from './petPreview';
 export { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, stealHoldSeconds, WALK_SPEED_BONUS, walkSpeedMul } from './shopEquip';

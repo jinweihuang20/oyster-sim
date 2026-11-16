@@ -1224,7 +1224,7 @@ function wireClient(D: PlazaDeps) {
     onShellBlocked: (e) => { try { D.onShellBlocked?.(e); } catch (err) { console.error('onShellBlocked', err); } },
     onNpcFeed: (e) => { try { onRemoteFeed(e); } catch (err) { console.error('onNpcFeed', err); } },
     onNpcMoon: (e) => { try { view?.moonLaunch(e.connId, 700, e.fromX, e.fromZ); D.onNpcMoon?.(e); } catch (err) { console.error('onNpcMoon', err); } },
-    onShellHit: (e) => { try { D.onShellHit?.(e); } catch (err) { console.error('onShellHit', err); } },
+    onShellHit: (e) => { try { D.onShellHit?.(e); } catch (err) { console.error('onShellHit', err); } try { view?.playPetLateUmb(e.connId); } catch (err) { console.error('playPetLateUmb', err); } },
     onMgFire: (e) => { try { D.onMgFire?.(e); } catch (err) { console.error('onMgFire', err); } },
     onMgHit: (e) => { try { D.onMgHit?.(e); } catch (err) { console.error('onMgHit', err); } },
     onPlazaAlert: (e) => { try { D.onPlazaAlert?.(e); } catch (err) { console.error('onPlazaAlert', err); } },

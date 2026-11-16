@@ -54,7 +54,7 @@ export function renderPetThumb(petId: string): string | null {
   scene.add(mesh);
   // 面向相機（模型前方為 -z，相機在 +z 側），再微轉做 3/4 視角
   // 阿康再略轉向右，讓右耳平切入鏡
-  mesh.rotation.y = Math.PI + (petId === 'pt_akang' || petId === 'pt_apo' ? 0.42 : 0.18);
+  mesh.rotation.y = Math.PI + (petId === 'pt_akang' || petId === 'pt_apo' || petId === 'pt_amei' ? 0.42 : 0.18);
   mesh.updateMatrixWorld(true);
   fitPetCamera(camera, mesh, {
     margin: 1.2,

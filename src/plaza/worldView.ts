@@ -3,6 +3,7 @@ import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey, headTopLift, setOutfitDetailVisible } from '../shop/equipVisual';
 import { makePet, petRidesHead, petWorldScale, tickPetAnim } from '../shop/pets';
 import { playApoPunch, apoHitSeconds } from '../shop/apoFx';
+import { playAmeiLateUmb, AMEI_ID } from '../shop/ameiFx';
 import { apoScold } from '../shop/apoTalk';
 import {
   AMA_LOOKS, AMA_SCALE, AMA_SIT_LIFT, AMA_CARRY_TILT, AMA_CARRY_Y, AMA_CARRY_FWD, AMA_CARRY_ROLL, AMA_CARRY_LIE_BACK, AMA_CARRY_LIE_Y,
@@ -158,8 +159,10 @@ export type PlazaWorldView = {
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean; hold?: number }) => void;
   /** 遠端阿珀頭頂垃圾話 */
   showPetChat: (opts: { connId?: string; pid?: string; text: string }) => void;
-  /** 遠端阿珀對阿婆出貓拳 */
+  /** 遠端阿珀對阿婆出貓拳（手臂從肩上連出去） */
   playPetPunch: (opts: { connId?: string; pid?: string; targetConnId: string; stole?: boolean; scold?: number }) => void;
+  /** 遠端阿妹被丟殼砸到：慢半拍開傘 */
+  playPetLateUmb: (connId: string) => void;
   setSelfPose: (x: number, z: number, yaw: number, seated: boolean, smoke?: boolean, connId?: string) => void;
   setSelfBody: (pz: string, pk: number, jy: number) => void;
   setSelfCushion: (on: boolean, pileId: number, slot: number) => void;
@@ -1142,6 +1145,33 @@ export function createPlazaWorldView(
   }
 
   const _aimH = new THREE.Vector3(), _aimB = new THREE.Vector3();
+  function pushPetAim(out: PlazaAimTarget[], r: Remote) {
+    const mesh = (r as any)._petMesh as THREE.Group | undefined;
+    if (!mesh || !mesh.visible) return;
+    if ((r.phase || '') === 'moon' || r.awaitingPose) return;
+    const p = new THREE.Vector3();
+    mesh.getWorldPosition(p);
+    const petId = ((r as any)._petId as string | undefined) || (mesh.userData.petId as string | undefined) || null;
+    const nickBase = plazaDisplayName(r.nick, r.numTag);
+    const nick = petId === 'pt_amei' ? nickBase + '的阿妹' : petId === 'pt_apo' ? nickBase + '的阿珀' : nickBase + '的寵物';
+    out.push({
+      connId: r.connId || r.key,
+      nick,
+      pileId: r.pileId,
+      phase: r.phase || '',
+      x: p.x, z: p.z, yaw: r.yaw,
+      lookYaw: r.tLookYaw,
+      seated: !!r.seated,
+      count: 0,
+      umb: false,
+      isNpc: r.isNpc,
+      head: { x: p.x, y: p.y + 0.16, z: p.z },
+      bowl: { x: p.x, y: p.y + 0.12, z: p.z },
+      isPet: true,
+      petId,
+    });
+  }
+
   function aimTargets(leisureNpc = false): PlazaAimTarget[] {
     const out: PlazaAimTarget[] = [];
     for (const r of remotes.values()) {
@@ -1205,6 +1235,12 @@ export function createPlazaWorldView(
         head: { x: h.x, y: h.y, z: h.z },
         bowl: { x: b.x, y: b.y, z: b.z },
       });
+    }
+    for (const r of remotes.values()) {
+      if (r.seated && isMgPile(r.pileId)) continue;
+      const carried = !!(r.carriedBy || (r.phase || '') === 'carried');
+      if (carried) continue;
+      pushPetAim(out, r);
     }
     return out;
   }
@@ -2175,6 +2211,7 @@ function hashPid(pid: string) {
     mesh.scale.setScalar(petWorldScale(petId));
     // 掛到 outer（自然跟著玩家 x/z/yaw），再由 updateRemotePet 控制 local 位置
     r.rig.outer.add(mesh);
+    mesh.userData.petId = petId;
     (r as any)._petMesh = mesh;
     (r as any)._petBob = 0;
   }
@@ -2342,15 +2379,18 @@ function hashPid(pid: string) {
     const tgt = findRemote({ connId: opts.targetConnId });
     if (!src || !tgt) return;
     const mesh = (src as any)._petMesh as THREE.Group | undefined;
-    const from = new THREE.Vector3();
-    if (mesh) mesh.getWorldPosition(from);
-    else src.rig.outer.getWorldPosition(from);
-    from.y += 0.12;
-    const to = new THREE.Vector3();
-    if (tgt.rig.head) tgt.rig.head.getWorldPosition(to);
-    else tgt.rig.outer.getWorldPosition(to);
-    to.y += 0.08;
-    playApoPunch(root, from, to, {
+    const anchor = (mesh?.getObjectByName('punchAnchor') as THREE.Object3D | undefined)
+      ?? (mesh?.userData.punchAnchor as THREE.Object3D | undefined)
+      ?? mesh
+      ?? src.rig.outer;
+    const getTo = () => {
+      const to = new THREE.Vector3();
+      if (tgt.rig.head) tgt.rig.head.getWorldPosition(to);
+      else tgt.rig.outer.getWorldPosition(to);
+      to.y += 0.08;
+      return to;
+    };
+    playApoPunch(anchor, getTo, {
       empty: !opts.stole,
       onHit: () => {
         (tgt as any)._apoHit = performance.now() + apoHitSeconds() * 1000;
@@ -2358,6 +2398,17 @@ function hashPid(pid: string) {
         if (line) showChat({ connId: tgt.connId, pid: tgt.pid, text: line, hold: 2200 });
       },
     });
+  }
+
+  function playPetLateUmb(connId: string) {
+    if (!connId) return;
+    const r = findRemote({ connId });
+    if (!r) return;
+    const mesh = (r as any)._petMesh as THREE.Group | undefined;
+    if (!mesh || !mesh.visible) return;
+    const id = ((r as any)._petId as string | undefined) || (mesh.userData.petId as string | undefined);
+    if (id && id !== AMEI_ID) return;
+    playAmeiLateUmb(mesh);
   }
 
   let seatWishes: PlazaSeatWish[] = [];
@@ -3001,7 +3052,7 @@ function hashPid(pid: string) {
   }
   return {
     root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, applyMove, setPhase, highlight, highlightNear, hitPile, grill,
-    syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, showPetChat, playPetPunch, setSelfPose, setSelfBody, setSelfCushion,
+    syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, showPetChat, playPetPunch, playPetLateUmb, setSelfPose, setSelfBody, setSelfCushion,
     playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: (loc, st) => {
       shedDoorState.set(loc, st);
       shedRow?.setDoorState(loc, st);

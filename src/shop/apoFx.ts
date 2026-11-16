@@ -8,8 +8,6 @@ export type ApoPunchOpts = {
   onDone?: () => void;
 };
 
-const _dir = new THREE.Vector3();
-const _mid = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
 
@@ -62,19 +60,17 @@ function slapBeep() {
 }
 
 /**
- * 從 from 伸爪打到 to。回傳取消函式。
- * empty：打空碗，命中後爪子再甩兩下。
+ * 貓拳從阿珀肩膀連出去，一直伸到阿婆再縮回。爪子掛在 anchor（肩膀）上，不會脫節。
+ * empty：打空碗，縮回後再嫌棄地甩爪。
+ * to 可每幀重算，阿婆移動時仍連在身上。
  */
 export function playApoPunch(
-  parent: THREE.Object3D,
-  from: THREE.Vector3,
-  to: THREE.Vector3,
+  anchor: THREE.Object3D,
+  to: THREE.Vector3 | (() => THREE.Vector3),
   opts: ApoPunchOpts = {},
 ): () => void {
   const paw = makePaw();
-  parent.add(paw);
-  _dir.copy(to).sub(from);
-  const dist = Math.max(0.35, _dir.length());
+  anchor.add(paw);
   const hitAt = 0.28;
   const hold = 0.12;
   const retract = 0.22;
@@ -85,61 +81,78 @@ export function playApoPunch(
   let label: ReturnType<typeof makeWorldLabel> | null = null;
   let labelT = 0;
   let dead = false;
+  const _to = new THREE.Vector3();
+  const _from = new THREE.Vector3();
+  const _local = new THREE.Vector3();
+  const _inv = new THREE.Matrix4();
+  let restLen = 0.22;
 
-  const place = (reach: number) => {
-    _dir.copy(to).sub(from);
-    const d = Math.max(0.2, _dir.length());
-    _dir.multiplyScalar(1 / d);
-    _mid.copy(from).addScaledVector(_dir, reach * 0.5);
-    paw.position.copy(_mid);
-    paw.scale.set(1, reach, 1);
-    _quat.setFromUnitVectors(_up, _dir);
+  const worldTo = () => {
+    const v = typeof to === 'function' ? to() : to;
+    _to.copy(v);
+    return _to;
+  };
+
+  const place = (reach: number, wag = 0) => {
+    anchor.updateWorldMatrix(true, false);
+    _inv.copy(anchor.matrixWorld).invert();
+    _local.copy(worldTo()).applyMatrix4(_inv);
+    const len = Math.max(0.12, _local.length());
+    const use = Math.min(reach, len);
+    if (len > 1e-4) _local.multiplyScalar(1 / len);
+    else _local.set(0, 0, -1);
+    _quat.setFromUnitVectors(_up, _local);
+    paw.position.set(0, 0, 0);
     paw.quaternion.copy(_quat);
+    if (wag) paw.rotateZ(wag);
+    paw.scale.set(1, use, 1);
   };
 
   const tick = (dt: number) => {
     if (dead) return false;
     t += dt;
+    anchor.updateWorldMatrix(true, false);
+    anchor.getWorldPosition(_from);
+    const dist = Math.max(0.35, _from.distanceTo(worldTo()));
     if (t <= hitAt) {
       const k = t / hitAt;
       const e = 1 - (1 - k) * (1 - k);
-      place(0.2 + (dist - 0.2) * e);
+      place(restLen + (dist - restLen) * e);
     } else if (t <= hitAt + hold) {
       place(dist);
       if (!hit) {
         hit = true;
         slapBeep();
+        const root = sceneRoot(anchor);
         label = makeWorldLabel('啪', 'bubble', { worldH: 0.32 });
         label.setOpacity(1);
-        label.sprite.position.copy(to).y += 0.18;
-        parent.add(label.sprite);
+        label.sprite.position.copy(worldTo()).y += 0.18;
+        root.add(label.sprite);
         labelT = 0.55;
         try { opts.onHit?.(); } catch { /* */ }
       }
     } else if (t <= hitAt + hold + retract) {
       const k = (t - hitAt - hold) / retract;
-      const reach = dist + (0.25 - dist) * k;
-      place(reach);
-      if (opts.empty && k > 0.6) {
-        paw.rotation.z = Math.sin(k * 18) * 0.35;
-      }
+      const reach = dist + (restLen - dist) * k;
+      const wag = opts.empty && k > 0.55 ? Math.sin(k * 18) * 0.35 : 0;
+      place(reach, wag);
     } else if (opts.empty && t <= total) {
       const k = (t - hitAt - hold - retract) / shake;
-      place(0.28);
-      paw.rotation.z = Math.sin(k * 22) * 0.7 * (1 - k);
-      paw.rotation.x = Math.sin(k * 16) * 0.25 * (1 - k);
+      place(restLen, Math.sin(k * 22) * 0.7 * (1 - k));
+    } else {
+      place(restLen);
     }
     if (label) {
       labelT -= dt;
-      label.sprite.position.copy(to).y += 0.18 + (0.55 - Math.max(0, labelT)) * 0.25;
+      label.sprite.position.copy(worldTo()).y += 0.18 + (0.55 - Math.max(0, labelT)) * 0.25;
       if (labelT <= 0) {
-        parent.remove(label.sprite);
+        label.sprite.parent?.remove(label.sprite);
         try { label.dispose(); } catch { /* */ }
         label = null;
       }
     }
     if (t >= total && !label) {
-      parent.remove(paw);
+      anchor.remove(paw);
       dead = true;
       try { opts.onDone?.(); } catch { /* */ }
       return false;
@@ -160,12 +173,18 @@ export function playApoPunch(
     if (dead) return;
     dead = true;
     cancelAnimationFrame(raf);
-    parent.remove(paw);
+    anchor.remove(paw);
     if (label) {
-      parent.remove(label.sprite);
+      label.sprite.parent?.remove(label.sprite);
       try { label.dispose(); } catch { /* */ }
     }
   };
+}
+
+function sceneRoot(o: THREE.Object3D) {
+  let p: THREE.Object3D = o;
+  while (p.parent) p = p.parent;
+  return p;
 }
 
 /** 頭晃：把剩餘秒數寫進 userData.apoHit，由呼叫端每幀疊加旋轉 */

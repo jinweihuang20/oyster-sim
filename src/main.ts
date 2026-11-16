@@ -34,6 +34,7 @@ import {
   initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, FLAG_PRICE_ITEMS, gearFx,
   gearOn, knifeNow, umbNow, bowlNow, petNow, makePet, petRidesHead, petWorldScale, tickPetAnim,
   APO_ID, apoLine, apoScold, pickApoLine, pickApoScold, playApoPunch, apoHitSeconds,
+  AMEI_ID, playAmeiLateUmb,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor, fetchItemStats, onItemStatApply,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
   renderShop, getShopNewIds,
@@ -2189,7 +2190,8 @@ function plazaThrowTarget(): PlazaAimTarget | null {
   let best: PlazaAimTarget | null = null, bestScore = 1e9;
   const cam = viewCam();
   for (const t of plazaAimTargetsFrame()) {
-    if (t.carriedBy || !t.seated || t.phase === 'carried') continue;
+    if (t.carriedBy || t.phase === 'carried') continue;
+    if (!t.isPet && !t.seated) continue;
     if (!t?.connId || !t.head || ![t.head.x, t.head.y, t.head.z].every(Number.isFinite)) continue;
     _stealBowl.set(t.head.x, t.head.y, t.head.z).project(cam);
     if (_stealBowl.z >= 1 || !Number.isFinite(_stealBowl.x + _stealBowl.y)) continue;
@@ -2206,6 +2208,7 @@ let plazaStealCatches = 0;
 const plazaStealPairCd = new Map<string, number>();
 
 function plazaStealCanTarget(t: PlazaAimTarget): string | null {
+  if (t.isPet) return '不能偷寵物';
   const mine = plazaMySeat();
   if (!mine || t.pileId !== mine.pileId) return '只能偷同一堆的人';
   if (t.count < eco.plazaStealMinCount) return '對方碗裡太少，先別偷';
@@ -2342,7 +2345,7 @@ function plazaStealAimTarget(): PlazaAimTarget | null {
   if (_framePlazaSteal !== undefined) return _framePlazaSteal;
   if (performance.now() < plazaStealBanUntil) return (_framePlazaSteal = null);
   for (const t of plazaAimTargetsFrame()) {
-    if (t.carriedBy || !t.seated || t.phase === 'carried') continue;
+    if (t.isPet || t.carriedBy || !t.seated || t.phase === 'carried') continue;
     if (bowlOnReticle(t.bowl.x, t.bowl.y, t.bowl.z)) return (_framePlazaSteal = t);
   }
   return (_framePlazaSteal = null);
@@ -2430,18 +2433,42 @@ function plazaFlyShell(e: PlazaShellEvent, onArrive?: () => void) {
   const sh = new THREE.Mesh(halfGeo, shellBotMat);
   const from = new THREE.Vector3(e.fromX, e.fromY, e.fromZ);
   const me = plazaConnId();
-  // 打向自己＋第一人稱：跟工寮阿婆丟殼一樣追鏡頭，才看得到殼飛過來
-  const atMeFp = !!(me && e.toConnId === me) && !tpv;
-  const to: THREE.Vector3 | (() => THREE.Vector3) = atMeFp
+  const atMe = !!(me && e.toConnId === me);
+  const atPet = atMe && plazaEventHitsLocalPet(e);
+  // 打向自己＋第一人稱：跟工寮阿婆丟殼一樣追鏡頭，才看得到殼飛過來；砸寵物則飛向寵物
+  const atMeFp = atMe && !tpv && !atPet;
+  const to: THREE.Vector3 | (() => THREE.Vector3) = atPet
+    ? () => petHitWorld() ?? new THREE.Vector3(e.toX, e.toY, e.toZ)
+    : atMeFp
     ? () => camera.position.clone().add(new THREE.Vector3(0, -0.05, 0))
     : new THREE.Vector3(e.toX, e.toY, e.toZ);
   try { SFX.whoosh(); } catch { /* */ }
-  fly(sh, from, to, 0.55, atMeFp ? 0.4 : 0.35, () => { try { scene.remove(sh); onArrive?.(); } catch { /* */ } });
+  fly(sh, from, to, 0.55, atMeFp || atPet ? 0.4 : 0.35, () => { try { scene.remove(sh); onArrive?.(); } catch { /* */ } });
+}
+function plazaEventHitsLocalPet(e: { toX: number; toY: number; toZ: number }): boolean {
+  const pp = petHitWorld();
+  if (!pp) return false;
+  const dest = new THREE.Vector3(e.toX, e.toY, e.toZ);
+  const head = plazaSelfBleedPos();
+  return dest.distanceTo(pp) + 0.08 < dest.distanceTo(head) && dest.distanceTo(pp) < 0.75;
 }
 function resolvePlazaInbound(e: PlazaShellEvent) {
   if (!plazaMode || state !== 'play' || !isPlazaActive()) return;
   if (!plazaShellCoordsOk(e)) return;
   try {
+    if (plazaEventHitsLocalPet(e)) {
+      SFX.hitNpc();
+      if (ameiVisible()) {
+        triggerAmeiLateUmb();
+        petToast('殼砸到阿妹了，她慢半拍才開傘', '#ffcf8a');
+      } else {
+        toast('殼砸到你的寵物了！', '#ffcf8a');
+      }
+      const p = petHitWorld() ?? new THREE.Vector3(e.toX, e.toY, e.toZ);
+      void plazaShellHit({ x: p.x, y: p.y, z: p.z });
+      updHud();
+      return;
+    }
     const guard = petAutoGuard();
     if (guard.open) { beginPetUmbGuard(); petBark(); }
     const U = umbNow(), up = (umbT > 0 && umbAge() >= U.open) || guard.open, covered = guard.open || (up && Math.random() < U.cover);
@@ -2467,6 +2494,7 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
       const splat = document.getElementById('splat');
       if (splat) { splat.style.opacity = '1'; later(0.9, () => { splat.style.opacity = '0'; }); }
       hurt(8, `${e.fromNick || '別人'} 丟中你了！`); hitInHand();
+      if (ameiVisible()) triggerAmeiLateUmb();
       reportPlazaShellHit();
     }
     updHud();
@@ -2903,7 +2931,23 @@ function npcThrow(n: Npc) {
 function throwOne(n: Npc) {
   if (state !== 'play') return;
   const sh = new THREE.Mesh(pick(HALF_GEOS), shellM(greyPick())); const from = worldOf(n.head); SFX.whoosh();
-  fly(sh, from, () => camera.position.clone().add(new THREE.Vector3(0, -0.05, 0)), 0.55, 0.4, () => {
+  const atPet = !!petHitWorld() && Math.random() < 0.45;
+  const dest = atPet
+    ? () => petHitWorld() ?? camera.position.clone().add(new THREE.Vector3(0, -0.05, 0))
+    : () => camera.position.clone().add(new THREE.Vector3(0, -0.05, 0));
+  fly(sh, from, dest, 0.55, 0.4, () => {
+    if (atPet && petHitWorld()) {
+      scene.remove(sh);
+      SFX.hitNpc();
+      if (ameiVisible()) {
+        triggerAmeiLateUmb();
+        petToast('殼砸到阿妹了，她慢半拍才開傘', '#ffcf8a');
+      } else {
+        toast('殼砸到你的寵物了！', '#ffcf8a');
+      }
+      updHud();
+      return;
+    }
     const guard = petAutoGuard();
     if (guard.open) { beginPetUmbGuard(); petBark(); }
     const U = umbNow(), up = (umbT > 0 && umbAge() >= U.open) || guard.open, covered = guard.open || (up && Math.random() < U.cover);
@@ -2912,7 +2956,7 @@ function throwOne(n: Npc) {
       reflects++; blockStreak++; umbHit3(sh.position); SFX.boing(); tone(1800, 0.08, 0.15, 'square'); toast('完美反彈！✨', '#ffe36a'); shake = 0.08;
       fly(sh, sh.position.clone(), () => worldOf(n.head), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); addGrudge(n, Math.round(20 * U.reflect)); npcHurt(n, U.reflect); });
     } else if (covered) { umbHit3(sh.position); scene.remove(sh); blocks++; blockStreak++; SFX.boing(); toast('擋住了！啵嗯～', '#9be37a'); say(n, pick(['怎麼會有雨傘啦！', '狡怪喔你！', '什麼時候拿出來的！']), 2.5); }
-    else { scene.remove(sh); blockStreak = 0; hitsTaken++; ($('splat') as HTMLElement).style.opacity = '1'; later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0'); hurt(8, '哎唷！被丟中了！'); hitInHand(); }
+    else { scene.remove(sh); blockStreak = 0; hitsTaken++; ($('splat') as HTMLElement).style.opacity = '1'; later(0.9, () => ($('splat') as HTMLElement).style.opacity = '0'); hurt(8, '哎唷！被丟中了！'); hitInHand(); if (ameiVisible()) triggerAmeiLateUmb(); }
     if (blockStreak >= 3 && !evRun) { blockStreak = 0; npcs.forEach((m, i) => { m.calm = 45; if (i === 0) later(0.8, () => say(m, `這個${myName()}真勇敢……`, 3)); }); toast('阿婆們怕你了，暫時比較少丟', '#9fe0ff'); achBump('sc'); }
     updHud();
   });
@@ -4356,8 +4400,28 @@ function apoAwardMeat(from: THREE.Vector3) {
   petToast('阿珀偷到一顆蚵仔，算進成績', '#c9a0ff');
   updHud(); bumpShiftDraft();
 }
-function apoPunchVisual(from: THREE.Vector3, to: THREE.Vector3, empty: boolean, onHit?: () => void) {
-  playApoPunch(scene, from, to, { empty, onHit });
+function apoPunchAnchor(): THREE.Object3D {
+  return (petMesh?.getObjectByName('punchAnchor') as THREE.Object3D | undefined)
+    ?? (petMesh?.userData.punchAnchor as THREE.Object3D | undefined)
+    ?? petMesh
+    ?? petAnchor;
+}
+function apoPunchVisual(to: THREE.Vector3 | (() => THREE.Vector3), empty: boolean, onHit?: () => void) {
+  const anchor = apoPunchAnchor();
+  playApoPunch(anchor, to, { empty, onHit });
+}
+function ameiVisible(): boolean {
+  return petCurId === AMEI_ID && !!petMesh && !!petAnchor.visible;
+}
+function petHitWorld(out = new THREE.Vector3()): THREE.Vector3 | null {
+  if (!petMesh || !petAnchor.visible) return null;
+  petAnchor.getWorldPosition(out);
+  out.y += 0.16;
+  return out;
+}
+function triggerAmeiLateUmb() {
+  if (!ameiVisible() || !petMesh) return;
+  playAmeiLateUmb(petMesh);
 }
 
 function yardApoTarget(): Npc | null {
@@ -4387,13 +4451,11 @@ function plazaApoTarget(): PlazaAimTarget | null {
 
 async function tryApoPunch(): Promise<boolean> {
   if (state !== 'play' || tut || isPlazaRaceMode() || petCurId !== APO_ID) return false;
-  const from = new THREE.Vector3();
-  petAnchor.getWorldPosition(from); from.y += 0.12;
   if (plazaMode) {
     if (!isPlazaActive()) return false;
     const t = plazaApoTarget();
     if (!t) return false;
-    const to = new THREE.Vector3(t.head.x, t.head.y, t.head.z);
+    const getTo = () => new THREE.Vector3(t.head.x, t.head.y, t.head.z);
     const wantSteal = t.count > 0;
     const scold = pickApoScold();
     let stole = false;
@@ -4404,9 +4466,9 @@ async function tryApoPunch(): Promise<boolean> {
     } else {
       stole = wantSteal;
     }
-    apoPunchVisual(from, to, !stole, () => {
+    apoPunchVisual(getTo, !stole, () => {
       if (stole) {
-        apoAwardMeat(to);
+        apoAwardMeat(getTo());
         if (t.count > 0) t.count--;
       }
     });
@@ -4414,15 +4476,15 @@ async function tryApoPunch(): Promise<boolean> {
   }
   const n = yardApoTarget();
   if (!n) return false;
-  const to = worldOf(n.head);
+  const getTo = () => worldOf(n.head);
   const stole = n.count > 0;
   const scold = pickApoScold();
-  apoPunchVisual(from, to.clone(), !stole, () => {
+  apoPunchVisual(getTo, !stole, () => {
     (n as { apoHit?: number }).apoHit = apoHitSeconds();
     if (stole) {
       n.count--;
       const lm = n.bowlMeat.pop(); if (lm) scene.remove(lm);
-      apoAwardMeat(to);
+      apoAwardMeat(getTo());
       say(n, apoScold(scold), 2.4);
     }
   });
