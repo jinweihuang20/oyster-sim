@@ -7,7 +7,7 @@ export { ODD } from './oddities';
 export { PETS, defaultPetId, findPet, makeOysterBaby, makePet, makeAkang, makeApo, makeAmei, petRidesHead, petWorldScale, tickPetAnim, petPreviewFrame, petThumbFrame, fitPetCamera, type Pet, type PetFx, type PetAnimState } from './pets';
 export { APO_ID, APO_LINES, APO_SCOLDS, apoLine, apoScold, pickApoLine, pickApoScold } from './apoTalk';
 export { playApoPunch, apoHitSeconds } from './apoFx';
-export { AMEI_ID, playAmeiLateUmb, isAmeiId } from './ameiFx';
+export { AMEI_ID, AMEI_UMB_DELAY, isAmeiId } from './ameiFx';
 export { renderPetThumb } from './petThumb';
 export { openPetPreview, closePetPreview } from './petPreview';
 export { type Slot, type Fx, type Eq, SLOTS, EQUIP, SETS, stealHoldSeconds, WALK_SPEED_BONUS, walkSpeedMul } from './shopEquip';

@@ -3,7 +3,6 @@ import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey, headTopLift, setOutfitDetailVisible } from '../shop/equipVisual';
 import { makePet, petRidesHead, petWorldScale, tickPetAnim } from '../shop/pets';
 import { playApoPunch, apoHitSeconds } from '../shop/apoFx';
-import { playAmeiLateUmb, AMEI_ID } from '../shop/ameiFx';
 import { apoScold } from '../shop/apoTalk';
 import {
   AMA_LOOKS, AMA_SCALE, AMA_SIT_LIFT, AMA_CARRY_TILT, AMA_CARRY_Y, AMA_CARRY_FWD, AMA_CARRY_ROLL, AMA_CARRY_LIE_BACK, AMA_CARRY_LIE_Y,
@@ -161,8 +160,6 @@ export type PlazaWorldView = {
   showPetChat: (opts: { connId?: string; pid?: string; text: string }) => void;
   /** 遠端阿珀對阿婆出貓拳（手臂從肩上連出去） */
   playPetPunch: (opts: { connId?: string; pid?: string; targetConnId: string; stole?: boolean; scold?: number }) => void;
-  /** 遠端阿妹被丟殼砸到：慢半拍開傘 */
-  playPetLateUmb: (connId: string) => void;
   setSelfPose: (x: number, z: number, yaw: number, seated: boolean, smoke?: boolean, connId?: string) => void;
   setSelfBody: (pz: string, pk: number, jy: number) => void;
   setSelfCushion: (on: boolean, pileId: number, slot: number) => void;
@@ -2380,15 +2377,6 @@ function hashPid(pid: string) {
     });
   }
 
-  function playPetLateUmb(connId: string) {
-    if (!connId) return;
-    const r = findRemote({ connId });
-    if (!r) return;
-    const mesh = (r as any)._petMesh as THREE.Group | undefined;
-    const id = ((r as any)._petId as string | undefined) || (mesh?.userData.petId as string | undefined);
-    if (id !== AMEI_ID || !mesh) return;
-    playAmeiLateUmb(mesh, r.rig.head ?? r.rig.outer);
-  }
 
   let seatWishes: PlazaSeatWish[] = [];
   let wishSelfConn = '';
@@ -3031,7 +3019,7 @@ function hashPid(pid: string) {
   }
   return {
     root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, applyMove, setPhase, highlight, highlightNear, hitPile, grill,
-    syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, showPetChat, playPetPunch, playPetLateUmb, setSelfPose, setSelfBody, setSelfCushion,
+    syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, showPetChat, playPetPunch, setSelfPose, setSelfBody, setSelfCushion,
     playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: (loc, st) => {
       shedDoorState.set(loc, st);
       shedRow?.setDoorState(loc, st);

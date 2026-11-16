@@ -56,8 +56,8 @@ export const PETS: Pet[] = [
     id: 'pt_amei',
     n: '阿妹',
     price: 3333,
-    desc: '作者的第二隻虎斑貓，身形比阿珀秀氣、毛色也比較淡。會跟在腳邊，每 10 秒丟一塊簡單蚵仔肉進碗。沒有特別技能，也不會講垃圾話；你被丟殼砸到時，她會慢半拍才在你頭上開一把小傘，當然已經擋不住了。超過 10 秒沒動作會睡著，睡著時暫停產肉。',
-    eff: '每 10 秒碗裡 +1 塊簡單蚵仔肉；你被丟殼砸到時她會慢半拍在頭上開小傘（擋不住）',
+    desc: '作者的第二隻虎斑貓，身形比阿珀秀氣、毛色也比較淡。會跟在腳邊，每 10 秒丟一塊簡單蚵仔肉進碗。超過 10 秒沒動作會睡著，睡著時暫停產肉。',
+    eff: '每 10 秒碗裡 +1 塊簡單蚵仔肉（掛機自動暫停）',
     fx: { tickSec: 10, perTick: 1, meatDiff: 0 },
   },
 ];
@@ -516,7 +516,10 @@ function makeTabby(kind: 'apo' | 'amei'): THREE.Group {
   const pink = 0xe8b4a8;
   const tongueCol = 0xe8899a;
   const furM = stdMat(fur);
-  const stripeM = stdMat(stripe);
+  // 虎斑貼在表面：盡量薄，略浮出並開 polygonOffset，避免與身體搶深度
+  const STRIPE_T = 0.0012;
+  const STRIPE_LIFT = STRIPE_T / 2 + 0.00035;
+  const stripeM = stdMat(stripe, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const bellyM = stdMat(belly);
   const muzzleM = stdMat(muzzle);
   const darkM = stdMat(dark, { roughness: 0.3, metalness: 0.2 });
@@ -529,18 +532,21 @@ function makeTabby(kind: 'apo' | 'amei'): THREE.Group {
   bodyG.name = 'apoBody';
   box(0.11, 0.09, 0.20, furM, 0, 0.128, 0.01, bodyG);
   box(0.09, 0.05, 0.16, bellyM, 0, 0.086, 0.0, bodyG);
-  // 背脊中央一條，再加多道橫向虎斑
-  box(0.028, 0.016, 0.18, stripeM, 0, 0.176, 0.01, bodyG);
-  box(0.10, 0.016, 0.026, stripeM, 0, 0.174, -0.07, bodyG);
-  box(0.10, 0.016, 0.026, stripeM, 0, 0.174, -0.02, bodyG);
-  box(0.10, 0.016, 0.026, stripeM, 0, 0.174, 0.03, bodyG);
-  box(0.095, 0.016, 0.024, stripeM, 0, 0.174, 0.08, bodyG);
-  // 左右腹側斑紋
+  // 背脊與橫向虎斑：厚度貼齊背脊表面
+  const bodyTop = 0.128 + 0.09 / 2;
+  const bodySide = 0.11 / 2;
+  box(0.028, STRIPE_T, 0.18, stripeM, 0, bodyTop + STRIPE_LIFT, 0.01, bodyG);
+  box(0.10, STRIPE_T, 0.026, stripeM, 0, bodyTop + STRIPE_LIFT, -0.07, bodyG);
+  box(0.10, STRIPE_T, 0.026, stripeM, 0, bodyTop + STRIPE_LIFT, -0.02, bodyG);
+  box(0.10, STRIPE_T, 0.026, stripeM, 0, bodyTop + STRIPE_LIFT, 0.03, bodyG);
+  box(0.095, STRIPE_T, 0.024, stripeM, 0, bodyTop + STRIPE_LIFT, 0.08, bodyG);
+  // 左右腹側：薄片貼在體側
   for (const s of [-1, 1]) {
-    box(0.018, 0.048, 0.026, stripeM, s * 0.056, 0.128, -0.06, bodyG);
-    box(0.018, 0.05, 0.026, stripeM, s * 0.056, 0.13, -0.01, bodyG);
-    box(0.018, 0.05, 0.026, stripeM, s * 0.056, 0.13, 0.045, bodyG);
-    box(0.018, 0.044, 0.024, stripeM, s * 0.056, 0.126, 0.09, bodyG);
+    const x = s * (bodySide + STRIPE_LIFT);
+    box(STRIPE_T, 0.048, 0.026, stripeM, x, 0.128, -0.06, bodyG);
+    box(STRIPE_T, 0.05, 0.026, stripeM, x, 0.13, -0.01, bodyG);
+    box(STRIPE_T, 0.05, 0.026, stripeM, x, 0.13, 0.045, bodyG);
+    box(STRIPE_T, 0.044, 0.024, stripeM, x, 0.126, 0.09, bodyG);
   }
 
   const headG = new THREE.Group();
@@ -559,12 +565,12 @@ function makeTabby(kind: 'apo' | 'amei'): THREE.Group {
   }
   // 額頭 M 字
   const mMark = new THREE.Group();
-  mMark.position.set(0, 0.038, -0.046);
-  box(0.012, 0.036, 0.008, stripeM, -0.018, 0, 0, mMark);
-  box(0.012, 0.036, 0.008, stripeM, 0.018, 0, 0, mMark);
-  box(0.01, 0.022, 0.008, stripeM, 0, -0.006, 0, mMark);
-  box(0.012, 0.016, 0.008, stripeM, -0.008, 0.012, 0, mMark);
-  box(0.012, 0.016, 0.008, stripeM, 0.008, 0.012, 0, mMark);
+  mMark.position.set(0, 0.038, -(0.09 / 2 + STRIPE_LIFT));
+  box(0.012, 0.036, STRIPE_T, stripeM, -0.018, 0, 0, mMark);
+  box(0.012, 0.036, STRIPE_T, stripeM, 0.018, 0, 0, mMark);
+  box(0.01, 0.022, STRIPE_T, stripeM, 0, -0.006, 0, mMark);
+  box(0.012, 0.016, STRIPE_T, stripeM, -0.008, 0.012, 0, mMark);
+  box(0.012, 0.016, STRIPE_T, stripeM, 0.008, 0.012, 0, mMark);
   headG.add(mMark);
 
   const earWedge = (inner = false): THREE.ExtrudeGeometry => {
@@ -638,10 +644,13 @@ function makeTabby(kind: 'apo' | 'amei'): THREE.Group {
   const makeLeg = (x: number, z: number) => {
     const lg = new THREE.Group();
     lg.position.set(x, 0.11, z);
-    box(0.028, 0.05, 0.03, furM, 0, -0.026, 0, lg);
-    box(0.031, 0.014, 0.033, stripeM, 0, -0.014, 0, lg);
-    box(0.024, 0.046, 0.026, stripeM, 0, -0.07, 0, lg);
-    box(0.027, 0.012, 0.03, stripeM, 0, -0.088, 0.002, lg);
+    const legW = 0.028, legD = 0.03;
+    box(legW, 0.096, legD, furM, 0, -0.052, 0, lg);
+    // 腿上環紋：薄環貼在腿面
+    const rw = legW + STRIPE_T * 2, rd = legD + STRIPE_T * 2, rh = 0.01;
+    box(rw, rh, rd, stripeM, 0, -0.018, 0, lg);
+    box(rw, rh, rd, stripeM, 0, -0.048, 0, lg);
+    box(rw, rh, rd, stripeM, 0, -0.078, 0, lg);
     box(0.03, 0.016, 0.04, muzzleM, 0, -0.104, 0.006, lg);
     g.add(lg);
     return lg;

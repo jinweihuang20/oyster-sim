@@ -34,7 +34,7 @@ import {
   initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, FLAG_PRICE_ITEMS, gearFx,
   gearOn, knifeNow, umbNow, bowlNow, petNow, makePet, petRidesHead, petWorldScale, tickPetAnim,
   APO_ID, apoLine, apoScold, pickApoLine, pickApoScold, playApoPunch, apoHitSeconds,
-  AMEI_ID, playAmeiLateUmb,
+  AMEI_ID, AMEI_UMB_DELAY,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor, fetchItemStats, onItemStatApply,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
   renderShop, getShopNewIds,
@@ -2443,8 +2443,10 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
   if (!plazaMode || state !== 'play' || !isPlazaActive()) return;
   if (!plazaShellCoordsOk(e)) return;
   try {
-    const guard = petAutoGuard();
-    if (guard.open) { beginPetUmbGuard(); petBark(); }
+    const auto = petAutoGuard();
+    const guard = ameiUmbGuard();
+    if (auto.open) { beginPetUmbGuard(); petBark(); }
+    else if (guard.open) beginPetUmbGuard();
     const U = umbNow(), up = (umbT > 0 && umbAge() >= U.open) || guard.open, covered = guard.open || (up && Math.random() < U.cover);
     if (up && !covered) toast('傘縫裡鑽進來了！', '#ff9a8a');
     if (covered && (guard.perfect || umbAge() - U.open < U.perf)) {
@@ -2907,8 +2909,10 @@ function throwOne(n: Npc) {
   if (state !== 'play') return;
   const sh = new THREE.Mesh(pick(HALF_GEOS), shellM(greyPick())); const from = worldOf(n.head); SFX.whoosh();
   fly(sh, from, () => camera.position.clone().add(new THREE.Vector3(0, -0.05, 0)), 0.55, 0.4, () => {
-    const guard = petAutoGuard();
-    if (guard.open) { beginPetUmbGuard(); petBark(); }
+    const auto = petAutoGuard();
+    const guard = ameiUmbGuard();
+    if (auto.open) { beginPetUmbGuard(); petBark(); }
+    else if (guard.open) beginPetUmbGuard();
     const U = umbNow(), up = (umbT > 0 && umbAge() >= U.open) || guard.open, covered = guard.open || (up && Math.random() < U.cover);
     if (up && !covered) toast('傘傷細，殼仔對邊仔鑽入來！', '#ff9a8a');
     if (covered && (guard.perfect || umbAge() - U.open < U.perf)) { // 拄開好的時陣 = 完美反彈；阿康自動擋一律完美
@@ -4393,15 +4397,18 @@ function apoPunchVisual(to: THREE.Vector3 | (() => THREE.Vector3), empty: boolea
 function ameiOut(): boolean {
   return petCurId === AMEI_ID && !!petMesh;
 }
-function ameiOverHost(): THREE.Object3D {
-  if (plazaMode && plazaMe?.head) return plazaMe.head;
-  if (tpv) return meHead;
-  return camera;
+/** 已撐開的玩家雨傘（延遲觸發後）：後續來的殼比照阿康，可擋住並完美反彈 */
+function ameiUmbGuard(): { open: boolean; perfect: boolean } {
+  const auto = petAutoGuard();
+  const late = ameiOut() && petUmbT > 0;
+  return { open: auto.open || late, perfect: auto.perfect || late };
 }
 function triggerAmeiLateUmb() {
-  if (!ameiOut() || !petMesh) return;
-  playAmeiLateUmb(petMesh, ameiOverHost());
-  petToast('阿妹慢半拍才幫你開傘', '#ffcf8a');
+  if (!ameiOut()) return;
+  later(AMEI_UMB_DELAY, () => {
+    if (!ameiOut() || state !== 'play') return;
+    beginPetUmbGuard();
+  });
 }
 
 function yardApoTarget(): Npc | null {
