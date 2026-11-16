@@ -39,7 +39,7 @@ import { makePlazaHq } from './hq';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
-import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot, PlazaSeatWish } from './types';
+import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot, PlazaSeatWish, PlazaMove } from './types';
 import { pileDiffOf, DEFAULT_PILE_DIFFS, PILE_DIFF_NAMES, PILE_DIFF_MIXED } from './pileDiff';
 import { plazaDisplayName } from './types';
 import { GOLD_SMOKE_TINT, parseCosmetics } from './cosmetics';
@@ -138,6 +138,8 @@ export type PlazaWorldView = {
   remove: (p: PlazaPlayer) => void;
   pruneSelf: (selfPid: string) => void;
   applyPose: (p: PlazaPlayer, selfPid: string) => void;
+  /** 批次走動（Poses）：只更新位置／動作／碗數／雨傘／轉頭；找不到這個人回 false */
+  applyMove: (pid: string, m: PlazaMove) => boolean;
   setPhase: (p: PlazaPlayer) => void;
   highlight: (pileId: number | null, slot: number | null) => void;
   highlightNear: (seat: PlazaSeatRef | null) => void;
@@ -2105,6 +2107,35 @@ function hashPid(pid: string) {
     if (!suppressOcc && (fresh || wasSeated !== r.seated || prevPile !== r.pileId || prevSlot !== r.slot)) paintOcc();
   }
 
+  /** 批次走動：比 applyPose 輕很多（不碰服飾、寵物、椅墊、椅子佔用） */
+  function applyMove(pid: string, m: PlazaMove): boolean {
+    const r = remotes.get(pid);
+    if (!r) return false;
+    const prevPhase = r.phase, prevUmb = r.umb, prevCount = r.count;
+    if (m.phase) r.phase = m.phase;
+    r.count = m.count;
+    r.moving = !r.seated && m.moving;
+    r.umb = m.umb;
+    r.tLookYaw = Number.isFinite(m.lookYaw) ? Math.max(-1.6, Math.min(1.6, m.lookYaw)) : 0;
+    r.tPitch = Number.isFinite(m.pitch) ? Math.max(-1.4, Math.min(0.85, m.pitch)) : 0;
+    if (r.umb !== prevUmb) {
+      r.umbMesh.visible = r.umb;
+      if (r.umb) layoutRemoteUmb(r.umbMesh, r.seated);
+    }
+    if (r.count !== prevCount) {
+      if (r.seated && !isLeisurePile(r.pileId)) syncRemoteMeats(r);
+      const label = r.isNpc ? r.nick : plazaDisplayName(r.nick, r.numTag);
+      r.tag.setText(r.seated && !isLeisurePile(r.pileId) ? `${label} · ${r.count}` : label);
+    }
+    if (!r.carriedBy && !r.seated) {
+      r.tx = m.x; r.tz = m.z; r.tyaw = m.yaw;
+      snapRemoteIfFar(r);
+      revealRemoteIfReady(r);
+    }
+    if (r.phase !== prevPhase || r.umb !== prevUmb) applyActionPose(r);
+    return true;
+  }
+
   /** 距離過大視為瞬移（新進廣場、重連），不走插值 */
   function snapRemoteIfFar(r: Remote, maxDist = 2.8) {
     if (Math.hypot(r.tx - r.x, r.tz - r.z) <= maxDist) return;
@@ -2885,7 +2916,7 @@ function hashPid(pid: string) {
     _dispose();
   }
   return {
-    root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, setPhase, highlight, highlightNear, hitPile, grill,
+    root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, applyMove, setPhase, highlight, highlightNear, hitPile, grill,
     syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, setSelfPose, setSelfBody, setSelfCushion,
     playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: (loc, st) => {
       shedDoorState.set(loc, st);

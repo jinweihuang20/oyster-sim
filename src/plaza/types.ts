@@ -202,3 +202,33 @@ export function normSeatWishEnd(e: any): PlazaSeatWishEnd | null {
     fast: !!(e.fast ?? e.Fast),
   };
 }
+
+/** 批次走動（伺服器 10Hz 合併的 Poses）的一筆 */
+export type PlazaMove = {
+  connId: string;
+  x: number; z: number; yaw: number;
+  phase: string; count: number;
+  moving: boolean; umb: boolean; seated: boolean;
+  lookYaw: number; pitch: number;
+};
+
+/** 解析 Poses：{ t, p: [[connId, x, z, yaw, phase, count, flags, lookYaw, pitch], ...] }；壞資料略過 */
+export function normPoseBatch(b: any): PlazaMove[] {
+  const rows = b?.p ?? b?.P;
+  if (!Array.isArray(rows)) return [];
+  const out: PlazaMove[] = [];
+  for (const e of rows) {
+    if (!Array.isArray(e) || e.length < 7 || typeof e[0] !== 'string' || !e[0]) continue;
+    const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+    const flags = num(e[6]) | 0;
+    out.push({
+      connId: e[0],
+      x: num(e[1]), z: num(e[2]), yaw: num(e[3]),
+      phase: typeof e[4] === 'string' ? e[4] : '',
+      count: Math.max(0, num(e[5]) | 0),
+      moving: (flags & 1) !== 0, umb: (flags & 2) !== 0, seated: (flags & 4) !== 0,
+      lookYaw: num(e[7]), pitch: num(e[8]),
+    });
+  }
+  return out;
+}

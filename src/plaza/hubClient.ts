@@ -1,6 +1,7 @@
 import * as signalR from '@microsoft/signalr';
 import type { PlazaPlayer, PlazaSnapshot, PlazaChat, PlazaShellEvent, PlazaShellHitEvent, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd, PlazaFoodQueue, PlazaCookState, PlazaCookSeat } from './types';
-import { normSeatWish, normSeatWishEnd } from './types';
+import { normSeatWish, normSeatWishEnd, normPoseBatch } from './types';
+import type { PlazaMove } from './types';
 import { normFlagDto, type PlazaFlagState } from './flags';
 import { raceHubUrl } from '../race/hubClient';
 import { partyHubUrl } from '../party/hubClient';
@@ -53,6 +54,8 @@ export type PlazaHubHandlers = {
   /** 某個位子的煎製進度 */
   onCookSeat?: (s: PlazaCookSeat) => void;
   onSeatWishEnd?: (e: PlazaSeatWishEnd) => void;
+  /** 新伺服器 10Hz 合併的走動（呼叫過 EnablePoseBatch 才會收到） */
+  onPoses?: (moves: PlazaMove[]) => void;
   /** 連線中斷，開始自動重連 */
   onReconnecting?: (attempt: number) => void;
   /** 底層 socket 重連成功（尚未重新 Join） */
@@ -273,6 +276,9 @@ export class PlazaClient {
     conn.on('PlayerLeft', (p: PlazaPlayer) => this.handlers.onLeft?.(p));
     conn.on('SeatChanged', (p: PlazaPlayer) => this.handlers.onSeatChanged?.(p));
     conn.on('Pose', (p: PlazaPlayer) => this.handlers.onPose?.(p));
+    conn.on('Poses', (b: any) => {
+      try { const m = normPoseBatch(b); if (m.length) this.handlers.onPoses?.(m); } catch (err) { console.error('Poses', err); }
+    });
     conn.on('Phase', (p: PlazaPlayer) => this.handlers.onPhase?.(p));
     conn.on('Chat', (m: PlazaChat) => this.handlers.onChat?.(m));
     conn.on('NpcSay', (m: any) => {
@@ -411,10 +417,23 @@ export class PlazaClient {
       if (fq) queueMicrotask(() => this.handlers.onFoodQueue?.(fq, true));
       const ck = normCookState((r as any).cook ?? (r as any).Cook);
       if (ck) queueMicrotask(() => this.handlers.onCookState?.(ck, true));
+      // 新伺服器：改收 10Hz 合併走動；舊伺服器沒這個方法就維持單筆 Pose（每次 Join 後都要再宣告）
+      void this.enablePoseBatch();
       return { ok: true, snap: r.snap, token: this.token, chat, grills, carryNpc, flags, wishes };
     } catch (e: any) {
       return { ok: false, err: e?.message || 'join_fail' };
     }
+  }
+
+  /** 伺服器是否已改送批次走動 */
+  poseBatch = false;
+  private async enablePoseBatch() {
+    this.poseBatch = false;
+    if (!this.conn) return;
+    try {
+      const r: any = await this.conn.invoke('EnablePoseBatch');
+      this.poseBatch = !!r?.ok;
+    } catch { /* 舊伺服器：沒有這個方法 */ }
   }
 
   /** socket 重連後重新進廣場（伺服器斷線會清掉玩家） */

@@ -1166,6 +1166,21 @@ function wireClient(D: PlazaDeps) {
     },
     onSeatChanged: (p) => { const n = normPlayer(p); mergePlayer(n); view?.applyPose(n, D.id); },
     onPose: (p) => { const n = normPlayer(p); mergePlayer(n); view?.applyPose(n, D.id); },
+    onPoses: (moves) => {
+      const me = client?.connectionId ?? '';
+      for (const m of moves) {
+        if (!m.connId || m.connId === me) continue;
+        const i = findPlayerIdx({ connId: m.connId });
+        if (i < 0 || !snap) continue;
+        const sp = snap.players[i];
+        if (!sp.pid || sp.pid === D.id) continue;
+        // 就地更新（不複製整個物件）：小地圖等讀 snap 的地方跟著動
+        sp.phase = m.phase || sp.phase; sp.count = m.count; sp.umb = m.umb;
+        sp.lookYaw = m.lookYaw; sp.pitch = m.pitch;
+        if (!sp.seated && !sp.carriedBy) { sp.x = m.x; sp.z = m.z; sp.yaw = m.yaw; sp.moving = m.moving; }
+        if (!view?.applyMove(sp.pid, m)) view?.applyPose(sp, D.id);
+      }
+    },
     onPhase: (p) => { const n = normPlayer(p); mergePlayer(n); view?.applyPose(n, D.id); },
     onChat: (m) => pushChat(normChat(m)),
     // 阿婆氣泡：比照工寮 say，只顯示頭上字、不進聊天窗／角標／Discord
