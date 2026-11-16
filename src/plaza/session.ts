@@ -18,6 +18,7 @@ import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShel
 import { makeCookArea, type CookArea } from './cookArea';
 import { comboName } from '../cook/combo';
 import { buildDish, buildPlate, disposeDish } from '../cook/dish3d';
+import { cookedDishCount, feedBusy } from '../cook/feed';
 import { plazaDisplayName, normSeatWishEnd } from './types';
 import { postDiscordPlazaChat, postDiscordPlazaPresence } from '../core/discord';
 import { plazaSoftCapClient } from '../core/economy';
@@ -2033,7 +2034,8 @@ function nearestCarryNpc(wx: number, wz: number) {
 }
 
 /* ───────── 請阿婆吃蚵仔煎（只在一般廣場；純本機獎勵） ───────── */
-const feedable = (nick: string) => active && !partyMode && !raceMode && nick !== '阿伯';
+/** 有收好的盤子、不在吃的動畫中才出現「請阿婆吃」 */
+const feedable = (nick: string) => active && !partyMode && !raceMode && nick !== '阿伯' && !feedBusy() && cookedDishCount() > 0;
 /** 旁邊可以請吃的阿婆 */
 export function plazaFeedTarget(): { connId: string; nick: string } | null {
   return !seated && nearCarry && feedable(nearCarry.nick) ? { ...nearCarry } : null;

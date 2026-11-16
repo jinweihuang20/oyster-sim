@@ -1,5 +1,6 @@
 import { ODD } from '../shop/oddities';
 import type { AchSave } from '../meta/achievements';
+import { comboHasFood } from '../cook/combo';
 
 export const SAVE_V = 3;
 export const LIFE_KEYS = ['opened', 'inBowl', 'missed', 'wasteShells', 'cracked', 'perfects', 'abandoned', 'stabs', 'steals', 'caught', 'meatHits', 'shellHits', 'hitsTaken', 'blocks', 'reflects', 'lost', 'bestCombo'] as const;
@@ -122,7 +123,7 @@ export function loadSave(LS: SaveStorage): Save {
     out.cookDish = {};
     for (const [k, v] of Object.entries(raw.cookDish as Record<string, unknown>)) {
       const id = Number(k), n = Math.floor(num(v));
-      if (Number.isInteger(id) && id >= 0 && id < 2304 && n > 0) out.cookDish[String(id)] = Math.min(n, 99_999);
+      if (comboHasFood(id) && Number.isInteger(n) && n > 0) out.cookDish[String(id)] = Math.min(n, 99_999);
     }
   }
   if (Array.isArray(raw.foodSeen)) out.foodSeen = raw.foodSeen.filter((x: unknown) => typeof x === 'string').slice(0, 40);

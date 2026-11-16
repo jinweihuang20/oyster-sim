@@ -36,6 +36,12 @@ export function comboOf(id: number): Combo {
   return { top: n & 15, batter, egg, done, sauce };
 }
 export const validCombo = (id: unknown) => Number.isInteger(id) && (id as number) >= 0 && (id as number) < COMBO_TOTAL;
+/** 這盤真的用到食材（配料、粉漿、蛋、醬至少一樣）；什麼都沒放的「空氣蚵仔煎」不算一盤 */
+export function comboHasFood(id: number) {
+  if (!validCombo(id)) return false;
+  const c = comboOf(id);
+  return !!(c.top || c.batter || c.egg || c.sauce);
+}
 
 /** 隱藏款：特定組合有專屬名字 */
 type Special = { n: string; desc: string; test: (c: Combo) => boolean };

@@ -1,5 +1,5 @@
 /** 煎台操作面板（自由煎，不計分不限時）與蚵仔煎圖鑑（三層）。 */
-import { TOPS, BATTERS, DONES, SAUCES, COMBO_TOTAL, comboId, comboOf, comboName, comboFeatures, specialOf, SPECIAL_IDS, topName, cookTitle, COOK_TITLES, type Combo } from './combo';
+import { TOPS, BATTERS, DONES, SAUCES, COMBO_TOTAL, comboId, comboOf, comboName, comboHasFood, comboFeatures, specialOf, SPECIAL_IDS, topName, cookTitle, COOK_TITLES, type Combo } from './combo';
 import { dishThumb, mountDishViewer } from './dish3d';
 import { foodCount, foodCountAny, takeFood } from '../food/pantry';
 import { FOOD_BY_ID } from '../food/ingredients';
@@ -64,6 +64,7 @@ let cookT0 = 0, cookRaf = 0, flipped = false, doneFrac = 0;
 let reviewDone = false;
 let resultId = -1;
 let resultNew = false;
+let resultKept = true;
 /** 剛按「完成」：下一次畫面要播起鍋特效 */
 let fx: { big: boolean; banner: string; sub: string } | null = null;
 const POUR_MS = 2400, COOK_MS = 7000;
@@ -206,7 +207,8 @@ function render() {
       + (sp ? `<p class="ckDesc">${esc(sp.desc)}</p>` : '')
       + `<ul class="ckFeat">${comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
       + `<p class="ckSum">圖鑑 ${dexCount()}／${COMBO_TOTAL.toLocaleString()}${cookTitle(dexCount()) ? `・${cookTitle(dexCount())}` : ''}</p></div>`
-      + `<p class="ckHint">${IC.info}這盤收好了（同款共 ${D.getSave().cookDish?.[String(id)] ?? 1} 盤），可以在廣場走到阿婆旁邊「請阿婆吃」</p>`
+      + (resultKept ? `<p class="ckHint">${IC.info}這盤收好了（同款共 ${D.getSave().cookDish?.[String(id)] ?? 1} 盤），可以在廣場走到阿婆旁邊「請阿婆吃」</p>`
+        : `<p class="ckHint">${IC.info}這盤什麼都沒放，沒辦法收起來請阿婆吃。加點配料、粉漿、蛋或醬再煎一盤吧</p>`)
       + (solo ? '' : `<div class="ckAsk" id="ckAsk"><b>要展示嗎？</b><span>會放在煎台旁，大家都看得到；每人一盤，離開廣場就收掉</span><div class="ckAct"><button type="button" class="ckBtn" data-ck="nodisp">不用</button><button type="button" class="ckBtn pri" data-ck="disp">展示</button></div></div>`)
       + `<div class="ckAct"><button type="button" class="ckBtn" data-ck="again">再煎一盤</button></div>`;
   }
@@ -308,8 +310,9 @@ function finish() {
   const before = dexCount();
   const isNew = !has(id);
   if (isNew) dex()[String(id)] = Date.now();
-  // 煎好的這盤留著（可以請阿婆吃）；自家煎台也算
-  { const st = (D.getSave().cookDish ??= {}); st[String(id)] = Math.min(99_999, (st[String(id)] ?? 0) + 1); }
+  // 煎好的這盤留著（可以請阿婆吃）；自家煎台也算。什麼都沒放（沒扣到任何食材）的空氣煎不留盤
+  resultKept = comboHasFood(id);
+  if (resultKept) { const st = (D.getSave().cookDish ??= {}); st[String(id)] = Math.min(99_999, (st[String(id)] ?? 0) + 1); }
   D.persist();
   resultNew = isNew;
   resultId = id; step = 6;

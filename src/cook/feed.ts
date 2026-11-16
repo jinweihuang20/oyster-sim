@@ -1,5 +1,5 @@
 /** 請廣場阿婆吃蚵仔煎：選一盤收好的蚵仔煎，阿婆吃掉、玩家拿 $1,000。 */
-import { comboName } from './combo';
+import { comboName, comboHasFood } from './combo';
 import { dishThumb } from './dish3d';
 
 export const FEED_PAY = 1000;
@@ -22,6 +22,9 @@ let D: FeedDeps;
 let box: HTMLDivElement | null = null;
 let target: { connId: string; nick: string } | null = null;
 let watch = 0;
+/** 正在給（阿婆吃的動畫期間）：擋連點和重開選單再送 */
+let busyUntil = 0;
+const EAT_MS = 2300;
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const IC = {
@@ -33,7 +36,18 @@ const IC = {
 export function initFeed(deps: FeedDeps) { D = deps; }
 
 const stock = () => (D.getSave().cookDish ??= {});
-export function cookedDishCount() { return Object.values(D?.getSave().cookDish ?? {}).reduce((a, b) => a + (b > 0 ? b : 0), 0); }
+/** 這款還能請幾盤：只算真的用到食材、數量是正整數的 */
+function plates(S: Record<string, number>, id: number) {
+  const n = S[String(id)];
+  return comboHasFood(id) && Number.isInteger(n) && n > 0 ? n : 0;
+}
+/** 收好、可以請阿婆吃的盤數（沒有就不顯示「請阿婆吃」） */
+export function cookedDishCount() {
+  const S = D?.getSave().cookDish; if (!S) return 0;
+  let t = 0; for (const k of Object.keys(S)) t += plates(S, Number(k));
+  return t;
+}
+export const feedBusy = () => performance.now() < busyUntil;
 
 export function feedOpen() { return !!box; }
 
@@ -43,7 +57,7 @@ export function closeFeed() {
 }
 
 export function openFeed(npc: { connId: string; nick: string }) {
-  if (!D || D.isTut()) return;
+  if (!D || D.isTut() || feedBusy()) return;
   closeFeed();
   target = npc;
   if (document.pointerLockElement) document.exitPointerLock();
@@ -59,7 +73,7 @@ export function openFeed(npc: { connId: string; nick: string }) {
 function render() {
   if (!box || !target) return;
   const S = stock();
-  const ids = Object.keys(S).map(Number).filter(id => (S[String(id)] ?? 0) > 0).sort((a, b) => (S[String(b)] - S[String(a)]) || a - b);
+  const ids = Object.keys(S).map(Number).filter(id => plates(S, id) > 0).sort((a, b) => (S[String(b)] - S[String(a)]) || a - b);
   const who = esc(target.nick || '阿婆');
   const list = ids.length
     ? `<ul class="fpList">${ids.map(id => `<li class="fpRow"><img class="fpImg" alt="" src="${dishThumb(id)}" width="48" height="48"><div class="fpTx"><b>${esc(comboName(id))}</b><small>還有 ${S[String(id)]} 盤</small></div><button type="button" class="fpGo" data-feed="${id}">請吃</button></li>`).join('')}</ul>`
@@ -71,11 +85,15 @@ function render() {
 }
 
 function give(id: number) {
-  if (!target) return;
+  if (!target || !box || feedBusy()) return;
+  // 先鎖住所有按鈕，連點只會算第一下
+  box.querySelectorAll<HTMLButtonElement>('button[data-feed]').forEach(b => { b.disabled = true; });
   const S = stock(), k = String(id);
-  if (!((S[k] ?? 0) > 0)) { render(); return; }
+  if (!(plates(S, id) > 0)) { if (!comboHasFood(id)) delete S[k]; render(); return; }
   if (!D.eat(target.connId, id)) { closeFeed(); D.toast('阿婆不在旁邊了', '#ffb08a'); return; }
-  S[k] -= 1; if (S[k] <= 0) delete S[k];
+  busyUntil = performance.now() + EAT_MS;
+  // 先扣一盤再給錢
+  const left = S[k] - 1; if (left > 0) S[k] = left; else delete S[k];
   const s = D.getSave(); s.money += FEED_PAY;
   D.persist(); D.onMoney();
   try { D.sfx?.(); } catch { /* 音效失敗不影響 */ }
