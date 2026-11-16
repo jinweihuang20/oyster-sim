@@ -50,9 +50,11 @@ const LINES: Record<'top' | 'good' | 'ok' | 'no', string[]> = {
 };
 
 /** 阿婆說的話；repeat>0 時提一下又是同款 */
-export function feedLine(score: number, repeat: number, rnd = Math.random()): string {
+export const FEED_LINE_N = 3;
+/** li＝評語序號（0～2；廣場同步時傳序號，別人用同一句） */
+export function feedLine(score: number, repeat: number, li = Math.floor(Math.random() * FEED_LINE_N)): string {
   const key = score >= 90 ? 'top' : score >= 70 ? 'good' : score >= 50 ? 'ok' : 'no';
   const arr = LINES[key];
-  const base = arr[Math.floor(rnd * arr.length) % arr.length];
+  const base = arr[Math.abs(Math.floor(li)) % arr.length];
   return repeat > 0 && key !== 'top' ? `又是這款喔…${base}` : base;
 }

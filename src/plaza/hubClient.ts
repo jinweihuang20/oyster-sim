@@ -30,6 +30,8 @@ export type PlazaHubHandlers = {
   /** 廣場警示（例如有人上機關槍） */
   onPlazaAlert?: (e: { kind?: string; text: string; nick?: string; connId?: string; expireAt?: number; ammo?: number }) => void;
   onNpcMoon?: (e: any) => void;
+  /** 別人請阿婆吃蚵仔煎（只轉動畫和分數） */
+  onNpcFeed?: (e: any) => void;
   onStealResult?: (e: PlazaStealEvent) => void;
   /** 共烤蚵狀態更新（放上／烤開／掀殼） */
   onGrillUpsert?: (o: PlazaGrillOyster) => void;
@@ -300,6 +302,7 @@ export class PlazaClient {
       try { this.handlers.onShellBlocked?.(normShell(e)); } catch (err) { console.error('ShellBlocked', err); }
     });
     conn.on('NpcMoon', (e: any) => { try { this.handlers.onNpcMoon?.(e); } catch (err) { console.error('NpcMoon', err); } });
+    conn.on('NpcFeed', (e: any) => { try { this.handlers.onNpcFeed?.(e); } catch (err) { console.error('NpcFeed', err); } });
     conn.on('MgFire', (e: any) => {
       try { this.handlers.onMgFire?.(normMgFire(e)); } catch (err) { console.error('MgFire', err); }
     });
@@ -614,6 +617,12 @@ export class PlazaClient {
   }
 
   /** 被殼砸中：廣播噴血點 */
+  /** 請阿婆吃：轉給同廣場其他人（舊伺服器沒有這個方法：回 false，不影響本機） */
+  async npcFeed(npcConnId: string, combo: number, score: number, rep: boolean, li: number) {
+    if (!this.conn || !this.connected) return false;
+    try { const r: any = await this.conn.invoke('NpcFeed', npcConnId, combo, score, rep, li); return !!r?.ok; } catch { return false; }
+  }
+
   async moonNpc(connId: string, x: number, y: number, z: number) {
     if (!this.conn) return { ok: false as const, err: 'no_conn' };
     try { return await this.conn.invoke<{ ok: boolean; err?: string }>('MoonNpc', connId, x, y, z); } catch (e: any) { return { ok: false as const, err: e?.message || 'moon_fail' }; }

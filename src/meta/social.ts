@@ -10,6 +10,14 @@ function post(p: string, data: object) {
   return fetch(API + p, { method: 'POST', body: JSON.stringify({ id: D.id, nick: D.nick(), title: D.title?.() ?? '', foil: !!D.foil?.(), test: D.test, ...data }), headers: { 'Content-Type': 'text/plain' }, mode: 'cors' }).then(r => r.ok ? r.json() : null).catch(() => null);
 }
 const get = (p: string) => fetch(API + p, { mode: 'cors', cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
+/** 給其他模組（蚵仔煎全服廣播）用：同一套身分、後端關機時安靜失敗 */
+export const socialPost = (p: string, data: object) => (D ? post(p, data) : Promise.resolve(null));
+export const socialGet = (p: string) => (D ? get(p) : Promise.resolve(null));
+export const socialTest = () => !!D?.test;
+/** 彈幕開著（設定）且不在教學中 */
+export const socialShow = () => !!D && D.on() && !D.inTut();
+export const socialInTut = () => !!D && D.inTut();
+export const socialNick = () => D?.nick() ?? '';
 
 // ---------- 彈幕 ----------
 let last = 0, busy = false, polls = 0;

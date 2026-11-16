@@ -3832,3 +3832,14 @@ body.menuOn #overlay .sysGrid>#oFood{
 
 /* 選單或從選單開的畫面（圖鑑、食材、雜貨店、裝備、排行榜、設定…）開著時，廣場／工寮的浮動按鈕不要蓋在上面 */
 body.uiCovered:is(.onShift,.plazaMode,.plazaRoam) :is(#btns,#btnsL,#btnsCorner,#pzLeftFabs,#pzX,#pzChatFab,#pzChatPeek,#pzChat,#pzMap,#pzHud,#pzNet,#pzCamCluster,#pzPlayersDrop,#flagBtn,#flagPullBtn,#seatCard,#sitBtn,#sitAltBtn,#camBtn,#joy,#hint){visibility:hidden!important;pointer-events:none!important}
+/* 全服廣播橫幅（全服首創、阿婆好評）：上方置中，一則 4 秒 */
+#bcBanner{position:fixed;left:50%;top:calc(var(--sa-top,0px) + 56px);z-index:13050;display:flex;align-items:center;gap:10px;width:max-content;max-width:min(92vw,460px);padding:9px 14px;box-sizing:border-box;background:#fff;color:#1d2731;border:1px solid #c7d5e3;border-left:4px solid #2a5a86;border-radius:12px;box-shadow:0 6px 20px rgba(20,40,60,.22);font:600 14px/1.4 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;opacity:0;transform:translate(-50%,-10px);transition:opacity .3s,transform .3s;pointer-events:none}
+#bcBanner.on{opacity:1;transform:translate(-50%,0)}
+#bcBanner .bcIc{flex:0 0 auto;display:inline-flex;color:#2a5a86}
+#bcBanner .bcTx{min-width:0;overflow-wrap:anywhere}
+#bcBanner .bcTx em{display:block;font-style:normal;font-size:11.5px;font-weight:800;color:#2a5a86;letter-spacing:.04em}
+#bcBanner .bcTx small{margin:0 2px 0 1px;color:#5b6b7a;font-weight:600}
+@media (max-width:360px){#bcBanner{font-size:13px;padding:8px 11px}}
+/* 蚵仔煎圖鑑：全服首創 */
+.dxCell .dxFirst{position:absolute;left:4px;top:4px;max-width:58%;padding:1px 6px;border-radius:999px;background:#fff;border:1px solid #c7d5e3;color:#2a5a86;font-size:10.5px;font-style:normal;font-weight:800;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(20,40,60,.12)}
+.ckFirst{display:flex;align-items:center;gap:6px;margin:6px 0;color:#2a5a86;font-size:13.5px;font-weight:700}

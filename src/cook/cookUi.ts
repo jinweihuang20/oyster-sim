@@ -3,6 +3,7 @@ import { TOPS, BATTERS, DONES, SAUCES, COMBO_TOTAL, comboId, comboOf, comboName,
 import { dishThumb, mountDishViewer } from './dish3d';
 import { foodCount, foodCountAny, takeFood } from '../food/pantry';
 import { FOOD_BY_ID } from '../food/ingredients';
+import { cookFirstOf, loadCookFirsts, onCookFirsts, reportCookDone } from '../meta/cookBroadcast';
 
 export type CookDeps = {
   getSave: () => { cookDex?: Record<string, number>; cookDish?: Record<string, number> };
@@ -313,6 +314,8 @@ function finish() {
   // 煎好的這盤留著（可以請阿婆吃）；自家煎台也算。什麼都沒放（沒扣到任何食材）的空氣煎不留盤
   resultKept = comboHasFood(id);
   if (resultKept) { const st = (D.getSave().cookDish ??= {}); st[String(id)] = Math.min(99_999, (st[String(id)] ?? 0) + 1); }
+  // 問伺服器是不是全服首創（是的話全服廣播）；空氣煎不算
+  void reportCookDone(id);
   D.persist();
   resultNew = isNew;
   resultId = id; step = 6;
@@ -366,7 +369,7 @@ export function dexTab(t: 'pearl' | 'cook') {
   document.querySelectorAll<HTMLButtonElement>('#dexTabs button').forEach(b => { const on = b.dataset.t === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
   ($('dexList') as HTMLElement).hidden = t !== 'pearl';
   ($('cookDexBody') as HTMLElement).hidden = t !== 'cook';
-  if (t === 'cook') renderDex();
+  if (t === 'cook') { renderDex(); void loadCookFirsts(); }
   else { stopDexView?.(); stopDexView = null; cancelAnimationFrame(virtRaf); cancelAnimationFrame(thumbRaf); thumbQ.length = 0; }
 }
 export function closeDex() {
@@ -374,6 +377,12 @@ export function closeDex() {
   cancelAnimationFrame(virtRaf); cancelAnimationFrame(thumbRaf); thumbQ.length = 0;
   $('dex').classList.remove('show');
 }
+// 首創名單更新：圖鑑開著就重畫看得到的格子／詳細頁
+onCookFirsts(() => {
+  if (!dexOpen()) return;
+  if (dexLevel === 'detail') { renderDex(); return; }
+  const R = document.getElementById('dxRows'); if (R) { R.dataset.k = ''; drawRows(); }
+});
 export function dexOpen() { return $('dex').classList.contains('show') && !($('cookDexBody') as HTMLElement).hidden; }
 
 const SIL = `<span class="dxSil">${IC.dish}</span>`;
@@ -411,7 +420,7 @@ function computeIds() {
 
 function cellHtml(id: number) {
   const got = has(id), sp = !!specialOf(id);
-  if (got) return `<button type="button" class="dxCell" data-id="${id}"><span class="dxTh" data-th="${id}">${SIL}</span><span class="dxNm">${esc(comboName(id))}</span>${sp ? '<i class="dxSp">隱藏款</i>' : ''}</button>`;
+  if (got) { const f = cookFirstOf(id); return `<button type="button" class="dxCell" data-id="${id}"><span class="dxTh" data-th="${id}">${SIL}</span><span class="dxNm">${esc(comboName(id))}</span>${sp ? '<i class="dxSp">隱藏款</i>' : ''}${f ? `<i class="dxFirst" title="全服首創：${esc(f.nick)}">首創 ${esc(f.nick)}</i>` : ''}</button>`; }
   return `<button type="button" class="dxCell un" data-id="${id}">${sp ? SIL_Q : SIL}<span class="dxNm"><small>${no(id)}</small>？？？</span></button>`;
 }
 
@@ -445,6 +454,7 @@ function renderDex() {
     + (sp && got ? `<p class="ckDesc">${esc(sp.desc)}</p>` : '')
     + `<ul class="ckFeat">${hid ? '<li>條件保密，煎出來才知道</li>' : comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
     + `<p class="ckSum">${got ? `第一次煎出：${fmtDate(dex()[String(id)])}` : '還沒收集'}</p>`
+    + (hid ? '' : (() => { const f = cookFirstOf(id); return f ? `<p class="ckFirst">${IC.info}全服首創：${esc(f.nick)}${f.tag ? `<small>#${esc(f.tag)}</small>` : ''}${f.ts ? `・${fmtDate(f.ts)}` : ''}</p>` : ''; })())
     + `<div class="ckAct"><button type="button" class="ckBtn pri" data-ck="follow"${hid ? ' disabled' : ''}>照這樣煎</button></div>`
     + (seat == null && !solo ? '<p class="ckHint">' + IC.info + '主選單按「煎蚵仔煎」，或到廣場中央、第 5 桌的煎台站上位子後可以用</p>' : '');
   B.scrollTop = 0;

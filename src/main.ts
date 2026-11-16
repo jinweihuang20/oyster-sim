@@ -23,6 +23,7 @@ import {
 import { initCook, openCook, openCookSolo, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView } from './cook/cookUi';
 import { initFeed, openFeed } from './cook/feed';
 import { initHudMenu } from './ui/hudMenu';
+import { initCookBroadcast } from './meta/cookBroadcast';
 import { initFood, openFood, openFoodStall, renderFoodStall, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
 import { foodStallSpawn } from './plaza/layout';
 import {
@@ -73,7 +74,7 @@ import {
   plazaNearShed, SHED_DOORS, shedReturnSpawn, shedName,
   openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, isPlazaPartyMode, raceBeginBasinFill, tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaSettleRaceMeat, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
   plazaFoodLocked, plazaFoodCanOpen, plazaFoodLeave, plazaCookLeave, plazaCookProgress, plazaCookMyPan, plazaCookDisplay,
-  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaFeedTarget, plazaFeedStillNear, plazaNpcEat, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
+  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaFeedTarget, plazaFeedStillNear, plazaNpcEat, plazaFeedRelay, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile, isMgPile,
   MG_MAG_PRICE, MG_MAG_AMMO, MG_AMMO_MAX, MG_SIT_MS,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaStealFrom, plazaZhErr,
@@ -6721,6 +6722,8 @@ initFood({
   refreshPrices: () => { void fetchPrices().then(r => { if (r === 'changed' && $('foodStall').classList.contains('show')) renderFoodStall(); }); },
   onMoney: () => updHud(),
 });
+// 全服廣播（全服首創、阿婆好評）：主選單、工寮、廣場都輪詢
+initCookBroadcast();
 initHudMenu({
   inPlaza: () => plazaMode,
   shopNew: () => !!document.querySelector('#shopBtn .newDot'),
@@ -6732,6 +6735,7 @@ initFeed({
   toast: (t, c) => toast(t, c ?? '#cfe3f5'),
   onMoney: () => updHud(),
   eat: (id, combo, after) => plazaNpcEat(id, combo, after),
+  relay: (id, combo, score, rep, li) => plazaFeedRelay(id, combo, score, rep, li),
   today: () => todayKey(),
   stillNear: id => plazaFeedStillNear(id),
   sfx: () => { if (!ac) return; SFX.pop(); tone(1046, 0.12, 0.1, 'triangle', 0.02); tone(1568, 0.16, 0.08, 'sine', 0.1); },

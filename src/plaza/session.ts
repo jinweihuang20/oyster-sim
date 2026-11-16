@@ -16,7 +16,8 @@ import { buildPlazaMapMarkers, drawPlazaMap } from './map';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd, PlazaFoodQueue, PlazaCookState } from './types';
 import { makeCookArea, type CookArea } from './cookArea';
-import { comboName } from '../cook/combo';
+import { comboName, comboHasFood } from '../cook/combo';
+import { feedLine } from '../cook/feedScore';
 import { buildDish, buildPlate, disposeDish } from '../cook/dish3d';
 import { cookedDishCount, feedBusy } from '../cook/feed';
 import { plazaDisplayName, normSeatWishEnd } from './types';
@@ -1188,6 +1189,7 @@ function wireClient(D: PlazaDeps) {
     onShellInbound: (e) => { try { D.onShellInbound?.(e); } catch (err) { console.error('onShellInbound', err); } },
     onShellReflectHit: (e) => { try { D.onShellReflectHit?.(e); } catch (err) { console.error('onShellReflectHit', err); } },
     onShellBlocked: (e) => { try { D.onShellBlocked?.(e); } catch (err) { console.error('onShellBlocked', err); } },
+    onNpcFeed: (e) => { try { onRemoteFeed(e); } catch (err) { console.error('onNpcFeed', err); } },
     onNpcMoon: (e) => { try { view?.moonLaunch(e.connId, 700, e.fromX, e.fromZ); D.onNpcMoon?.(e); } catch (err) { console.error('onNpcMoon', err); } },
     onShellHit: (e) => { try { D.onShellHit?.(e); } catch (err) { console.error('onShellHit', err); } },
     onMgFire: (e) => { try { D.onMgFire?.(e); } catch (err) { console.error('onMgFire', err); } },
@@ -2055,11 +2057,33 @@ const EAT_LINES = ['來，阿婆吃看看', '謝謝你喔，我嚐一口', '好�
 /** 阿婆吃：盤子飛到嘴邊、三口吃完；開始說一句，吃完冒評分 */
 export function plazaNpcEat(connId: string, combo: number, after?: string): boolean {
   if (!view || !plazaFeedStillNear(connId)) return false;
-  const t = npcAim(connId)!;
-  view.showChat({ connId, text: EAT_LINES[Math.floor(Math.random() * EAT_LINES.length)] });
+  return npcEatAnim(connId, combo, EAT_LINES[Math.floor(Math.random() * EAT_LINES.length)], after, deps!.getWalkXZ());
+}
+/** 請吃結果轉給同廣場其他人（賞金只在自己這邊） */
+export function plazaFeedRelay(npcConnId: string, combo: number, score: number, rep: boolean, li: number) {
+  if (!active || partyMode || raceMode || !client?.connected || npcConnId === LOCAL_AMA) return;
+  void client.npcFeed(npcConnId, combo, score, rep, li);
+}
+/** 收到別人請阿婆吃：同樣的吃動畫，頭上冒「菜名＋分數＋評語」 */
+function onRemoteFeed(e: any) {
+  if (!active || !view) return;
+  const connId = String(e?.connId ?? e?.ConnId ?? '');
+  const combo = Number(e?.combo ?? e?.Combo), score = Number(e?.score ?? e?.Score);
+  if (!connId || !comboHasFood(combo) || !Number.isInteger(score) || score < 0 || score > 100) return;
+  if (!npcAim(connId)) return;
+  const by = plazaDisplayName(String(e?.by ?? e?.By ?? ''), '') || '有人';
+  const byConn = String(e?.byConn ?? e?.ByConn ?? '');
+  const fp = snap?.players.find(p => p.connId === byConn);
+  const from = fp && Number.isFinite(fp.x) && Number.isFinite(fp.z) ? { x: fp.x, z: fp.z } : null;
+  const line = feedLine(score, e?.rep || e?.Rep ? 1 : 0, Number(e?.li ?? e?.Li) || 0);
+  npcEatAnim(connId, combo, `${by}請我吃，我嚐看看`, `〈${comboName(combo)}〉${score} 分　${line}`, from);
+}
+function npcEatAnim(connId: string, combo: number, startLine: string, after: string | undefined, src: { x: number; z: number } | null): boolean {
+  const t = npcAim(connId); if (!view || !t) return false;
+  view.showChat({ connId, text: startLine });
   // 吃完講評分（分數＋一句話）
   if (after) window.setTimeout(() => { if (active) view?.showChat({ connId, text: after }); }, 2100);
-  const w = deps!.getWalkXZ();
+  const w = src ?? { x: t.head.x + 0.6, z: t.head.z };
   const head = new THREE.Vector3(t.head.x, t.head.y, t.head.z);
   const dx = w.x - head.x, dz = w.z - head.z, dl = Math.hypot(dx, dz) || 1;
   const front = head.clone().add(new THREE.Vector3(dx / dl * 0.32, -0.22, dz / dl * 0.32));

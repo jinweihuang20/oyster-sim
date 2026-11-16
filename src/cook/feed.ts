@@ -1,7 +1,8 @@
 /** 請廣場阿婆吃蚵仔煎：選一盤收好的蚵仔煎，阿婆吃完打滿意度，依分數給錢（最高 $1,000）。 */
 import { comboName, comboHasFood } from './combo';
 import { dishThumb } from './dish3d';
-import { feedScore, feedPay, feedLine, FEED_TIERS } from './feedScore';
+import { feedScore, feedPay, feedLine, FEED_TIERS, FEED_LINE_N } from './feedScore';
+import { reportAmaScore } from '../meta/cookBroadcast';
 
 export const FEED_PAY = FEED_TIERS[0].pay;
 export type FeedDay = { d: string; c: Record<string, number> };
@@ -19,6 +20,8 @@ export type FeedDeps = {
   eat: (npcConnId: string, combo: number, after: string) => boolean;
   /** 還在不在阿婆旁邊（選的時候走開就關掉） */
   stillNear: (npcConnId: string) => boolean;
+  /** 轉給同廣場其他人看（舊伺服器不支援就安靜略過） */
+  relay?: (npcConnId: string, combo: number, score: number, rep: boolean, li: number) => void;
   sfx?: () => void;
 };
 
@@ -100,7 +103,8 @@ function give(id: number) {
   if (!s.feedDay || s.feedDay.d !== day) s.feedDay = { d: day, c: {} };
   const repeat = s.feedDay.c[k] ?? 0;
   const score = feedScore(id, repeat), pay = feedPay(score);
-  const bubble = `${score} 分　${feedLine(score, repeat)}`;
+  const li = Math.floor(Math.random() * FEED_LINE_N);
+  const bubble = `〈${comboName(id)}〉${score} 分　${feedLine(score, repeat, li)}`;
   if (!D.eat(target.connId, id, bubble)) { closeFeed(); D.toast('阿婆不在旁邊了', '#ffb08a'); return; }
   busyUntil = performance.now() + EAT_MS;
   // 先扣一盤、記同款次數，再給錢；分數太低盤子一樣吃掉
@@ -108,6 +112,8 @@ function give(id: number) {
   s.feedDay.c[k] = repeat + 1;
   if (pay > 0) s.money += pay;
   D.persist(); D.onMoney();
+  try { D.relay?.(target.connId, id, score, repeat > 0, li); } catch { /* 同步失敗不影響 */ }
+  void reportAmaScore(id, score);
   const who = target.nick || '阿婆';
   closeFeed();
   window.setTimeout(() => {
