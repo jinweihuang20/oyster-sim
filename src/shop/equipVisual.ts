@@ -755,6 +755,25 @@ export function clearOutfitDetails(rig: PlayerRig) {
   setBaseHairVisible(rig.head, true);
 }
 
+/** 遠距／低畫質：藏服飾小配件（領子、袖套、褲腳等；不動髮型與帽子，免得變光頭） */
+export function setOutfitDetailVisible(rig: PlayerRig, on: boolean) {
+  const pairs: [THREE.Object3D | undefined, string][] = [
+    [rig.torso, DET.body],
+    [rig.lowerL, DET.sleeve],
+    [rig.lowerR, DET.sleeve],
+    [rig.upperL, DET.upper],
+    [rig.upperR, DET.upper],
+    [rig.legL, DET.leg],
+    [rig.legR, DET.leg],
+    [rig.shinL, DET.shin],
+    [rig.shinR, DET.shin],
+  ];
+  for (const [p, k] of pairs) {
+    const g = p?.userData[k] as THREE.Object3D | undefined;
+    if (g) g.visible = on;
+  }
+}
+
 function setBaseHairVisible(head: THREE.Object3D, on: boolean) {
   head.traverse(o => {
     if ((o as THREE.Mesh).isMesh && o.userData.baseHair) o.visible = on;

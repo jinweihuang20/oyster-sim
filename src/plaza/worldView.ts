@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
-import { applyOutfitToRig, normalizeOutfitIds, outfitKey, headTopLift } from '../shop/equipVisual';
+import { applyOutfitToRig, normalizeOutfitIds, outfitKey, headTopLift, setOutfitDetailVisible } from '../shop/equipVisual';
 import { makePet, petRidesHead, petWorldScale, tickPetAnim } from '../shop/pets';
 import {
   AMA_LOOKS, AMA_SCALE, AMA_SIT_LIFT, AMA_CARRY_TILT, AMA_CARRY_Y, AMA_CARRY_FWD, AMA_CARRY_ROLL, AMA_CARRY_LIE_BACK, AMA_CARRY_LIE_Y,
@@ -1911,7 +1911,8 @@ function hashPid(pid: string) {
       return null;
     }
     // 以 pid 為唯一 key；掃掉同 pid 的舊 connId key／重複分身
-    let r = findRemoteByPid(pid);
+    const direct = remotes.get(pid);
+    let r = direct ?? findRemoteByPid(pid);
     if (!r && p.connId) {
       const legacy = remotes.get(p.connId);
       if (legacy) {
@@ -1923,8 +1924,9 @@ function hashPid(pid: string) {
       }
     }
     // 再建新模型前，清掉同 pid 殘留（避免 Map 裡一具、場景裡多具）
-    if (r) {
-      for (const x of [...remotes.values()]) {
+    // 常見路徑（Map 直接命中）不掃全部，免得每個 Pose 都 O(n)；殘留分身由 syncRoster 收
+    if (r && r !== direct) {
+      for (const x of remotes.values()) {
         if (x !== r && x.pid === pid) destroyRemote(x);
       }
     }
@@ -1995,8 +1997,28 @@ function hashPid(pid: string) {
     return r;
   }
 
+  /** 遠距簡化：藏臉盆／手上刀蚵／服飾細節；回近距再還原（只在檔位變化時走一次） */
+  function applyRemoteLod(r: Remote, cheap: boolean) {
+    const rj = r as any;
+    if (cheap) {
+      if (r.props.visible) r.props.visible = false;
+      if (r.knife.visible) r.knife.visible = false;
+      if (r.oyster.visible) r.oyster.visible = false;
+    }
+    if (!!rj._lodCheap === cheap) return;
+    rj._lodCheap = cheap;
+    setOutfitDetailVisible(r.rig, !cheap);
+    if (!cheap) {
+      r.props.visible = r.seated && !isLeisurePile(r.pileId);
+      applyActionPose(r);
+    }
+  }
+
+  let suppressOcc = false;
   function applyPose(p: PlazaPlayer, selfPid: string) {
     const r = ensure(p, selfPid); if (!r) return;
+    const rj = r as any;
+    const fresh = !rj._seen; rj._seen = true;
     const wasSeated = r.seated;
     const prevPile = r.pileId, prevSlot = r.slot;
     r.pileId = p.pileId; r.slot = p.slot; r.phase = p.phase || r.phase; r.count = p.count ?? r.count;
@@ -2021,9 +2043,14 @@ function hashPid(pid: string) {
       r.tag.setText(r.seated && !isLeisurePile(r.pileId) ? `${label} · ${r.count}` : label);
     }
     if (!r.isNpc && p.cosmetics !== undefined) r.cosmetics = p.cosmetics || '';
-    const cos = parseCosmetics(r.cosmetics);
+    if (rj._cosStr !== r.cosmetics || !rj._cos) { rj._cosStr = r.cosmetics; rj._cos = parseCosmetics(r.cosmetics); }
+    const cos = rj._cos as ReturnType<typeof parseCosmetics>;
     r.tag.setNameFrame(!r.isNpc && cos.nameFrame);
-    syncCushion(r.pid || r.key, !r.isNpc && r.seated && cos.cushion, r.pileId, r.slot);
+    {
+      const cushOn = !r.isNpc && r.seated && cos.cushion;
+      const ck = `${cushOn ? 1 : 0}|${r.pileId}|${r.slot}`;
+      if (rj._cushK !== ck) { rj._cushK = ck; syncCushion(r.pid || r.key, cushOn, r.pileId, r.slot); }
+    }
     // 寵物：掛／拆到遠端右肩；NPC 不帶寵物
     syncRemotePet(r, r.isNpc ? '' : cos.pet);
     if (r.carriedBy) {
@@ -2039,7 +2066,7 @@ function hashPid(pid: string) {
       const pose = seatPose(p.pileId, p.slot);
       r.tx = pose.pos.x; r.tz = pose.pos.z; r.tyaw = pose.yaw;
       r.x = pose.pos.x; r.z = pose.pos.z; r.yaw = pose.yaw;
-      (r as any)._wh = []; (r as any)._walkOn = false;
+      if ((r as any)._wh) (r as any)._wh.n = 0; (r as any)._walkOn = false;
     } else {
       // 剛站起：若封包座標異常（0,0 或離座位太遠），先站在椅後再跟 Sync
       if (wasSeated && prevPile >= 0) {
@@ -2062,14 +2089,20 @@ function hashPid(pid: string) {
       }
     }
     if (r.seated && r.awaitingPose) revealRemoteIfReady(r);
-    if (!r.isNpc) {
+    const rawOutfit = r.isNpc ? '' : `${p.hair}|${p.head}|${p.hand}|${p.body}|${p.legs}|${p.feet}`;
+    if (!r.isNpc && rj._rawOutfit !== rawOutfit) {
+      rj._rawOutfit = rawOutfit;
       const next = normalizeOutfitIds({
         hair: p.hair, head: p.head, hand: p.hand, body: p.body, legs: p.legs, feet: p.feet,
       });
-      if (r.rig.outfitKey !== outfitKey(next)) applyOutfitToRig(r.rig, next);
+      if (r.rig.outfitKey !== outfitKey(next)) {
+        applyOutfitToRig(r.rig, next);
+        if ((r as any)._lodCheap) setOutfitDetailVisible(r.rig, false);
+      }
     }
     applyActionPose(r);
-    paintOcc();
+    // 座位有變才重畫椅墊佔用（以前每個 Pose 都重畫全部椅子）
+    if (!suppressOcc && (fresh || wasSeated !== r.seated || prevPile !== r.pileId || prevSlot !== r.slot)) paintOcc();
   }
 
   /** 距離過大視為瞬移（新進廣場、重連），不走插值 */
@@ -2298,8 +2331,12 @@ function hashPid(pid: string) {
   }
 
   let selfConnId = '';
+  /** tick 期間快取「誰正抱著人」，避免每個遠端各掃一次全部（n²） */
+  const carrierIds = new Set<string>();
+  let carrierFresh = false;
   function anyoneCarriedBy(connId?: string) {
     if (!connId) return false;
+    if (carrierFresh) return carrierIds.has(connId);
     for (const o of remotes.values()) if (o.carriedBy === connId) return true;
     return false;
   }
@@ -2340,11 +2377,14 @@ function hashPid(pid: string) {
     applyPileDiffs(snap?.pileDiffs);
     pruneSelf(selfPid);
     const alive = new Set<string>();
-    for (const p of snap?.players ?? []) {
-      if (!p.pid || p.pid === selfPid) continue;
-      alive.add(p.pid);
-      applyPose(p, selfPid);
-    }
+    suppressOcc = true;
+    try {
+      for (const p of snap?.players ?? []) {
+        if (!p.pid || p.pid === selfPid) continue;
+        alive.add(p.pid);
+        applyPose(p, selfPid);
+      }
+    } finally { suppressOcc = false; }
     for (const [k, r] of [...remotes]) {
       // 不在 roster、或 key 不是正規 pid、或誤生的自己 → 刪
       if (r.pid === selfPid || k === selfPid || !alive.has(r.pid) || k !== r.pid) destroyRemote(r);
@@ -2415,6 +2455,9 @@ function hashPid(pid: string) {
     }
   }
 
+  type SmokeJob = { r: Remote; cig: NonNullable<ReturnType<typeof getPlazaSmokeCig>>; dist2: number; aber: boolean };
+  const smokeJobs: SmokeJob[] = [];
+  const smokeJobPool: SmokeJob[] = [];
   function tick(dt: number, camera: THREE.Camera) {
     const eco = !!opts.eco?.();
     // 分區串流依腳下 walkPos（非鏡頭），避免轉頭觸發狂建
@@ -2432,6 +2475,10 @@ function hashPid(pid: string) {
 
     const k = Math.min(1, dt * 10);
     const t = now();
+    carrierIds.clear();
+    for (const r of remotes.values()) if (r.carriedBy) carrierIds.add(r.carriedBy);
+    carrierFresh = true;
+    try {
     for (const r of remotes.values()) {
       snapRemoteIfFar(r);
       r.x += (r.tx - r.x) * k;
@@ -2460,16 +2507,15 @@ function hashPid(pid: string) {
       {
         // 平滑速度：用 ~200ms 視窗位移（單幀 lerp 殘差常→0，會誤判成沒在走）
         const nowMs = performance.now();
-        type Hist = { t: number; x: number; z: number };
-        let hist = rj._wh as Hist[] | undefined;
-        if (!hist) { hist = []; rj._wh = hist; }
-        hist.push({ t: nowMs, x: r.x, z: r.z });
-        while (hist.length > 1 && nowMs - hist[0].t > 220) hist.shift();
+        // 固定大小環形緩衝（不每幀 new 物件）
+        let hist = rj._wh as WalkHist | undefined;
+        if (!hist) { hist = makeWalkHist(); rj._wh = hist; }
+        walkHistPush(hist, nowMs, r.x, r.z);
         let moveSp = 0;
-        if (hist.length >= 2) {
-          const a = hist[0], b = hist[hist.length - 1];
-          const dtH = (b.t - a.t) * 0.001;
-          if (dtH > 0.04) moveSp = Math.hypot(b.x - a.x, b.z - a.z) / dtH;
+        if (hist.n >= 2) {
+          const ai = (hist.h - hist.n + WALK_HIST_N) % WALK_HIST_N, bi = (hist.h - 1 + WALK_HIST_N) % WALK_HIST_N;
+          const dtH = (hist.t[bi] - hist.t[ai]) * 0.001;
+          if (dtH > 0.04) moveSp = Math.hypot(hist.x[bi] - hist.x[ai], hist.z[bi] - hist.z[ai]) / dtH;
         }
         // 仍朝目標插值時補一點「接近速度」，避免視窗內幾乎貼齊目標卻其實在走
         const toT = Math.hypot(r.tx - r.x, r.tz - r.z);
@@ -2572,12 +2618,19 @@ function hashPid(pid: string) {
         else if (mu >= 1 && !inMoon) { rj.mt = 0; rj.mh = false; r.rig.outer.visible = true; } }
       // 遠距仍顯示（只停動畫）；moon／awaiting 另控
       if (!rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
-      // 寵物逐幀：坐著→頭頂；走動→身後彈跳
-      updateRemotePet(r, dt);
-      // 這幀下面馬上要讀 head 世界座標排名牌，更新 matrix；渲染器之後本來也會再更新一次，不用 force
-      r.rig.outer.updateMatrixWorld();
+      // 視距分級：超出最遠一檔整個不畫；遠距（省電從中距起）藏臉盆、手上刀蚵與服飾細節
+      const hideFar = tier === 'hide' && !r.carriedBy && !anyoneCarriedBy(r.connId);
+      if (hideFar) r.rig.outer.visible = false;
+      applyRemoteLod(r, tier === 'hide' || tier === 'far' || (LO && tier === 'mid'));
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
-      r.tag.sprite.visible = show;
+      if (show) {
+        // 寵物逐幀：坐著→頭頂；走動→身後彈跳
+        updateRemotePet(r, dt);
+        // 這幀下面馬上要讀 head 世界座標排名牌，更新 matrix；渲染器之後本來也會再更新一次，不用 force
+        r.rig.outer.updateMatrixWorld();
+      }
+      // 低畫質：遠距名牌字也看不清，省一個 draw call
+      r.tag.sprite.visible = show && !(LO && tier === 'far');
       // 有寵物且坐著時寵物會停在頭上（y≈1.44），名牌 / 聊天泡泡要往上讓位
       // 戴帽子時寵物再抬 headTopLift，名牌同步加抬，否則被帽頂＋寵物一起擋到
       const petOnHead = !!(r as any)._petMesh && !!r.seated && petRidesHead((r as any)._petId);
@@ -2585,7 +2638,7 @@ function hashPid(pid: string) {
       const remoteHatLift = headTopLift(remoteHeadId);
       const tagLift = petOnHead ? 0.52 + remoteHatLift : 0.22;
       const bubLift = petOnHead ? 0.72 + remoteHatLift : 0.42;
-      if (show) placeAboveHead(r.tag.sprite, r.rig.head, tagLift);
+      if (r.tag.sprite.visible) placeAboveHead(r.tag.sprite, r.rig.head, tagLift);
       if (r.bubUntil > t && show) {
         placeAboveHead(r.bubble.sprite, r.rig.head, bubLift);
         r.bubble.sprite.visible = true;
@@ -2606,6 +2659,7 @@ function hashPid(pid: string) {
         }
       }
     }
+    } finally { carrierFresh = false; }
     if (selfBubUntil > t) {
       const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
       const back = selfSeated ? -0.08 : 0;
@@ -2648,12 +2702,13 @@ function hashPid(pid: string) {
       cafe?.tick(tSec, fdt);
       flags.tick(fdt, camera);
       if (!eco) bigShed.tick(fdt);
-      careerMarquee.tick(fdt);
       tickRemoteExhales(fdt);
     }
+    // 跑馬燈每幀只改一個 uniform（不重畫貼圖），不必跟著特效降頻，捲動才平順
+    careerMarquee.tick(dt);
     // 遠端吸菸：手持菸（掛腕）＋菸頭薄煙；不再用頭側飄煙以免看起來沒拿菸
-    type SmokeJob = { r: Remote; cig: NonNullable<ReturnType<typeof getPlazaSmokeCig>>; dist2: number; aber: boolean };
-    const smokeJobs: SmokeJob[] = [];
+    smokeJobs.length = 0;
+    let smokeN = 0;
     for (const r of remotes.values()) {
       const wantSeat = r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke');
       const wantAber = isAberRemote(r) && !r.carriedBy && (r.phase || '') !== 'carried' && (r.phase || '') !== 'moon'
@@ -2664,9 +2719,14 @@ function hashPid(pid: string) {
         ensurePlazaSmokeCig(r.rig, LO, aberMouthSmoke(r) ? 'mouth' : 'hand');
         const cig = getPlazaSmokeCig(r.rig);
         if (cig) {
-          cig.setSmokeTint(!r.isNpc && parseCosmetics(r.cosmetics).goldSmoke ? GOLD_SMOKE_TINT : undefined);
+          const cosC = (r as any)._cos as ReturnType<typeof parseCosmetics> | undefined;
+          cig.setSmokeTint(!r.isNpc && (cosC ?? parseCosmetics(r.cosmetics)).goldSmoke ? GOLD_SMOKE_TINT : undefined);
           const dx = r.x - cx, dz = r.z - cz;
-          smokeJobs.push({ r, cig, dist2: dx * dx + dz * dz, aber: wantAber && !LO });
+          // 物件池：不每幀 new
+          const job = smokeJobPool[smokeN] ?? (smokeJobPool[smokeN] = { r, cig, dist2: 0, aber: false });
+          smokeN++;
+          job.r = r; job.cig = cig; job.dist2 = dx * dx + dz * dz; job.aber = wantAber && !LO;
+          smokeJobs.push(job);
         }
       } else {
         clearPlazaSmokeCig(r.rig);
@@ -2837,6 +2897,19 @@ function hashPid(pid: string) {
     tickTpOcclude: (dt, camera, focus) => applyTpOcclude(dt, camera, focus),
     dispose: disposeAll,
   };
+}
+
+const WALK_HIST_N = 48;
+type WalkHist = { t: Float64Array; x: Float32Array; z: Float32Array; h: number; n: number };
+function makeWalkHist(): WalkHist {
+  return { t: new Float64Array(WALK_HIST_N), x: new Float32Array(WALK_HIST_N), z: new Float32Array(WALK_HIST_N), h: 0, n: 0 };
+}
+/** 推一筆位置，丟掉 220ms 以前的（至少留 1 筆） */
+function walkHistPush(w: WalkHist, t: number, x: number, z: number) {
+  w.t[w.h] = t; w.x[w.h] = x; w.z[w.h] = z;
+  w.h = (w.h + 1) % WALK_HIST_N;
+  w.n = Math.min(WALK_HIST_N, w.n + 1);
+  while (w.n > 1 && t - w.t[(w.h - w.n + WALK_HIST_N) % WALK_HIST_N] > 220) w.n--;
 }
 
 export function tickPlazaTags(view: PlazaWorldView | null, camera: THREE.Camera, dt = 0.016) {

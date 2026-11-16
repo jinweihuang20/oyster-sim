@@ -118,7 +118,8 @@ export function submit(s: ScorePayload) {
 }
 
 /** 廣場南牆跑馬燈：生涯各榜前三（view=all） */
-export async function fetchCareerTop3(): Promise<string[]> {
+/** 各項生涯 TOP3 一行；某項連不上回 null（跟「尚無紀錄」分開，跑馬燈才能保留舊字） */
+export async function fetchCareerTop3(): Promise<(string | null)[]> {
   if (!D) return [];
   const ids: BoardId[] = ['earn', 'oy0', 'oy1', 'oy2', 'oy3'];
   const fmt = (v: unknown) => {
@@ -128,6 +129,7 @@ export async function fetchCareerTop3(): Promise<string[]> {
   return Promise.all(ids.map(async id => {
     const meta = boardMeta(id);
     const r = await get(`/top?board=${id}&view=all&n=3${tq()}`);
+    if (!r) return null;
     const rows = Array.isArray(r?.rows) ? (r.rows as { nick?: string; tag?: string; v?: number; rank?: number }[]) : [];
     if (!rows.length) return `【${meta.label}】尚無紀錄`;
     const parts = rows.slice(0, 3).map((x, i) => {

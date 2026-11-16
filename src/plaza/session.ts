@@ -851,6 +851,7 @@ function applySeatWishEnd(e: PlazaSeatWishEnd) {
 async function boot(D: PlazaDeps) {
   try {
   setHud(raceMode ? '進入對戰…' : partyMode ? '進入休閒房…' : '連線中…');
+  lastSync.at = 0;
   const r = await client!.connect(D.id, D.nick(), raceMode && D.race?.code
     ? { raceCode: D.race.code }
     : partyMode
@@ -1163,7 +1164,7 @@ function wireClient(D: PlazaDeps) {
       syncPlazaPeopleHud();
       if (!n.isNpc && n.pid && n.pid !== D.id) D.toast(`${plazaDisplayName(n.nick, n.tag)} 離開廣場了`, '#ffb08a', 2.5, 'top');
     },
-    onSeatChanged: (p) => { mergePlayer(normPlayer(p)); view?.applyPose(normPlayer(p), D.id); },
+    onSeatChanged: (p) => { const n = normPlayer(p); mergePlayer(n); view?.applyPose(n, D.id); },
     onPose: (p) => { const n = normPlayer(p); mergePlayer(n); view?.applyPose(n, D.id); },
     onPhase: (p) => { const n = normPlayer(p); mergePlayer(n); view?.applyPose(n, D.id); },
     onChat: (m) => pushChat(normChat(m)),
@@ -1227,7 +1228,7 @@ function wireClient(D: PlazaDeps) {
       setNetBanner('連上了，正在回到廣場…');
     },
     onFlagUpsert: (f) => { upsertFlag(f); },
-    onRejoined: (s, chat, grills, flags, wishes) => { if (active) void restoreAfterRejoin(s, chat, grills, flags, wishes); },
+    onRejoined: (s, chat, grills, flags, wishes) => { lastSync.at = 0; if (active) void restoreAfterRejoin(s, chat, grills, flags, wishes); },
     onRejoinFail: (err, attempt) => {
       if (!active) return;
       netDown = true;
@@ -1307,10 +1308,34 @@ function plazaHudPeople(s?: PlazaSnapshot | null) {
   if (partyMode) return `休閒房・目前 ${n}/${cap}`;
   return `廣場休閒・目前 ${n} 人（可坐 ${cap}）`;
 }
+/** snap.players 的 pid／connId → 索引快取；陣列換掉或對不上就重建（避免每個 Pose 都線性搜尋） */
+let pIdxArr: PlazaPlayer[] | null = null;
+const pIdx = new Map<string, number>();
+function findPlayerIdx(n: { connId?: string; pid?: string }): number {
+  if (!snap) return -1;
+  const arr = snap.players;
+  const ok = (i: number | undefined) => i != null && i < arr.length
+    && ((!!n.connId && arr[i].connId === n.connId) || (!!n.pid && arr[i].pid === n.pid));
+  if (pIdxArr === arr) {
+    const a = n.pid ? pIdx.get('p:' + n.pid) : undefined;
+    if (ok(a)) return a!;
+    const b = n.connId ? pIdx.get('c:' + n.connId) : undefined;
+    if (ok(b)) return b!;
+  }
+  pIdxArr = arr; pIdx.clear();
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i].pid) pIdx.set('p:' + arr[i].pid, i);
+    if (arr[i].connId) pIdx.set('c:' + arr[i].connId, i);
+  }
+  const a = n.pid ? pIdx.get('p:' + n.pid) : undefined;
+  if (ok(a)) return a!;
+  const b = n.connId ? pIdx.get('c:' + n.connId) : undefined;
+  return ok(b) ? b! : -1;
+}
 function mergePlayer(n: PlazaPlayer) {
   if (!snap || !n) return;
-  const i = snap.players.findIndex(x => (!!n.connId && x.connId === n.connId) || (!!n.pid && x.pid === n.pid));
-  if (i < 0) snap.players.push(n);
+  const i = findPlayerIdx(n);
+  if (i < 0) { snap.players.push(n); pIdxArr = null; }
   else snap.players[i] = { ...snap.players[i], ...n };
 }
 
@@ -2531,9 +2556,35 @@ export function tickPlaza(dt: number) {
     const lockLook = !!(deps.getTpv?.() ?? false);
     const lookYaw = lockLook ? 0 : (deps.getLookYaw?.() ?? 0);
     const pitch = lockLook ? 0 : (deps.getPitch?.() ?? 0);
-    void client.sync(p.x, p.z, yaw, phase, deps.getBowlStock(), moving, deps.getUmb(), lookYaw, pitch);
+    const count = deps.getBowlStock();
+    const umb = deps.getUmb();
+    // 只在有變化時送（位置 3cm、角度 0.03rad、動作／碗數／雨傘），靜止時每秒心跳一次；坐著最多 5Hz
+    const nowMs = performance.now();
+    const L = lastSync;
+    const sinceMs = nowMs - L.at;
+    const changed = L.at === 0
+      || L.phase !== phase || L.count !== count || L.moving !== moving || L.umb !== umb
+      || Math.abs(L.x - p.x) > 0.03 || Math.abs(L.z - p.z) > 0.03
+      || angDiff(L.yaw, yaw) > 0.03 || Math.abs(L.lookYaw - lookYaw) > 0.03 || Math.abs(L.pitch - pitch) > 0.03;
+    const minGap = seated ? 200 : 100;
+    if ((changed && sinceMs >= minGap - 5) || sinceMs >= 1000) {
+      L.at = nowMs; L.x = p.x; L.z = p.z; L.yaw = yaw; L.phase = phase; L.count = count;
+      L.moving = moving; L.umb = umb; L.lookYaw = lookYaw; L.pitch = pitch;
+      void client.sync(p.x, p.z, yaw, phase, count, moving, umb, lookYaw, pitch);
+    }
   }
 }
+
+/** 上次送出的 Sync（變化偵測用；at=0 表示下一次一定送） */
+const lastSync = { at: 0, x: 0, z: 0, yaw: 0, phase: '', count: -1, moving: false, umb: false, lookYaw: 0, pitch: 0 };
+function angDiff(a: number, b: number) {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return Math.abs(d);
+}
+/** 強迫下一幀送一次 Sync（坐下／站起／重連後） */
+export function plazaForceSync() { lastSync.at = 0; }
 
 /** 收工／結算時藏廣場 UI（離開鈕、聊天、地圖），避免擋結果面板 */
 export function plazaHideChrome(hide = true) {
@@ -2768,8 +2819,11 @@ function foodTimerStop() { if (foodTimerIv) { clearInterval(foodTimerIv); foodTi
 /** 每幀：排隊圓圈顯示、計時文字、走離攤子自動結束 */
 let foodQAt = 0, foodQGetBusy = false;
 function foodQTick(p: { x: number; z: number }) {
-  // 排隊中或攤子有人時，每 5 秒跟伺服器對一次隊伍（漏掉更新也不會卡住）
-  if (foodQOk && foodQ && client?.connected && !foodQGetBusy && (foodQueueIdx() >= 0 || foodStallBusy()) && performance.now() - foodQAt > 5000) {
+  // 自己在排隊／在用攤子：每 5 秒跟伺服器對一次隊伍（漏掉更新也不會卡住）；
+  // 只是站在攤子附近而攤子有人：15 秒一次；其他人不輪詢（靠伺服器推播）
+  const mineQ = foodQueueIdx() >= 0 || foodIsUser();
+  const qGap = mineQ ? 5000 : (foodStallBusy() && (nearFood || nearFoodQ)) ? 15000 : 0;
+  if (qGap && foodQOk && foodQ && client?.connected && !foodQGetBusy && performance.now() - foodQAt > qGap) {
     foodQGetBusy = true; foodQAt = performance.now();
     void client.foodQueueGet().then(st => { if (st && active) applyFoodQ(st, true); }).finally(() => { foodQGetBusy = false; });
   }
