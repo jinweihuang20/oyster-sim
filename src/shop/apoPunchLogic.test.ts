@@ -93,9 +93,14 @@ test('廣場同步：slow／舊服／斷線仍播出拳；far 則重試', () => 
   assert.equal(plazaPunchProceed({ ok: false, err: 'no_pet' }), 'retry');
 });
 
-test('slow 不本機偷肉，舊服／斷線才偷', () => {
-  assert.equal(plazaPunchLocalSteal({ ok: true, err: undefined }, true), false);
-  assert.equal(plazaPunchLocalSteal({ ok: false, err: 'slow' }, true), false);
+test('碗裡有肉就本機偷到，不管伺服器 ok／slow／失敗；空碗不偷', () => {
+  assert.equal(plazaPunchLocalSteal({ ok: true }, true), true);
+  assert.equal(plazaPunchLocalSteal({ ok: true, err: undefined }, true), true);
+  assert.equal(plazaPunchLocalSteal({ ok: false, err: 'slow' }, true), true);
   assert.equal(plazaPunchLocalSteal({ ok: false, err: 'nosup' }, true), true);
   assert.equal(plazaPunchLocalSteal({ ok: false, err: 'no_conn' }, true), true);
+  assert.equal(plazaPunchLocalSteal({ ok: false, err: 'far' }, true), true);
+  assert.equal(plazaPunchLocalSteal(null, true), true);
+  assert.equal(plazaPunchLocalSteal({ ok: true }, false), false);
+  assert.equal(plazaPunchLocalSteal({ ok: false, err: 'slow' }, false), false);
 });

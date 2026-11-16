@@ -34,7 +34,7 @@ import {
   initYardShop, GEAR, COSMETICS, KNIVES, UMBS, BOWLS, FLAG_PRICE_ITEMS, gearFx,
   gearOn, knifeNow, umbNow, bowlNow, petNow, makePet, petRidesHead, petWorldScale, tickPetAnim,
   APO_ID, apoLine, apoScold, pickApoLine, pickApoScold, playApoPunch, apoHitSeconds,
-  apoPunchAllowedFrom, tickApoPunchTimer, resolveApoPunchTimer, plazaPunchProceed, plazaPunchLocalSteal,
+  apoPunchAllowedFrom, tickApoPunchTimer, resolveApoPunchTimer, plazaPunchLocalSteal,
   AMEI_ID, AMEI_UMB_DELAY,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor, fetchItemStats, onItemStatApply,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
@@ -4467,16 +4467,14 @@ async function tryApoPunch(): Promise<boolean> {
     const net = (t.connId && t.connId !== 'npc-local')
       ? plazaPetPunch(t.connId, wantSteal, scold).catch(() => ({ ok: false as const, err: 'nosup', stole: false, scold }))
       : Promise.resolve(null);
+    // 本機偷肉不看伺服器回覆：舊服 15 秒間隔會回 slow，若等它才給肉，看起來就像出拳沒偷到
     apoPunchVisual(getTo, !wantSteal, () => {
-      void net.then(r => {
-        if (r && plazaPunchProceed(r) === 'retry') return;
-        const stoleNow = r?.ok ? !!r.stole : plazaPunchLocalSteal(r, wantSteal);
-        if (stoleNow) {
-          apoAwardMeat(getTo());
-          if (t.count > 0) t.count--;
-        }
-      });
+      if (plazaPunchLocalSteal(null, wantSteal)) {
+        apoAwardMeat(getTo());
+        if (t.count > 0) t.count--;
+      }
     });
+    void net;
     return true;
   }
   const n = yardApoTarget();

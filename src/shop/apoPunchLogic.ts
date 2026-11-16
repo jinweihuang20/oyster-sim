@@ -46,9 +46,7 @@ export function plazaPunchProceed(r: { ok?: boolean; err?: string } | null | und
   return 'retry';
 }
 
-/** 僅在舊服／斷線時用本機偷肉；伺服器說 slow 只播動畫、不偷。 */
-export function plazaPunchLocalSteal(r: { ok?: boolean; err?: string } | null | undefined, wantSteal: boolean): boolean {
-  if (r?.ok) return false;
-  if (r?.err === 'nosup' || r?.err === 'no_conn') return wantSteal;
-  return false;
+/** 本機偷肉只看目標碗有沒有肉。伺服器回覆只做同步，slow／失敗都不能把偷到的肉拿掉。 */
+export function plazaPunchLocalSteal(_r: { ok?: boolean; err?: string } | null | undefined, wantSteal: boolean): boolean {
+  return !!wantSteal;
 }
