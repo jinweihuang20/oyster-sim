@@ -347,9 +347,6 @@ let petThrowAcc = 0;
 /** 阿珀貓拳／垃圾話的下次間隔（秒） */
 let petPunchIn = 0;
 let petTalkIn = 0;
-/** 第一人稱坐著出貓拳時暫時現身，否則 hideFp 會把連在身上的爪子一起藏掉 */
-let apoPunchVis = false;
-let apoPunchLook: THREE.Vector3 | (() => THREE.Vector3) | null = null;
 /** 工寮貓拳輪流打阿婆的上一名下標 */
 let yardApoTurnI = -1;
 let apoBub: WorldLabel | null = null;
@@ -374,7 +371,6 @@ function refreshPet() {
     petCurId = null;
     petAcc = 0; petThrowAcc = 0; petUmbT = 0; petReactT = 0;
     petPunchIn = 0; petTalkIn = 0;
-    apoPunchVis = false; apoPunchLook = null;
     petSleeping = false;
     petAnchor.visible = false;
     if (isPlazaActive()) void plazaPushCosmetics();
@@ -385,8 +381,7 @@ function refreshPet() {
   if (wantId === petCurId) return;
   if (petMesh) { petAnchor.remove(petMesh); petMesh = null; }
   petCurId = wantId;
-  petAcc = 0; petThrowAcc = 0; petUmbT = 0; petReactT = 0; petPunchIn = 0; petTalkIn = 0;
-  apoPunchVis = false; apoPunchLook = null; petSleeping = false;
+  petAcc = 0; petThrowAcc = 0; petUmbT = 0; petReactT = 0; petPunchIn = 0; petTalkIn = 0; petSleeping = false;
   if (!wantId) return;
   petMesh = makePet(wantId);
   if (petMesh) {
@@ -4181,31 +4176,6 @@ let petLyingMode = false;
 /** 身後距離平滑：走動 1.0m，靜止湊近到 0.4m（阿康略短） */
 let petDistCur = 1.0;
 /** 把 petAnchor 擺到當前玩家世界位置／朝向。頭頂 ≈ feet+1.78；身後 +0.55、離地 0.3；躺姿 → 右手邊同躺 */
-const _apoFpOrigin = new THREE.Vector3();
-const _apoFpAim = new THREE.Vector3();
-const _apoFpLook = new THREE.Vector3();
-/** 第一人稱坐著時把阿珀暫時放到鏡頭右下方，讓貓拳打向阿婆時玩家看得到 */
-function applyApoSeatedFpPunchPose(): boolean {
-  if (tpv || petWalkingMode || petLyingMode || !petMesh) return false;
-  const look = apoPunchLook;
-  if (!look) return false;
-  const target = typeof look === 'function' ? look() : look;
-  if (!target) return false;
-  const cam = camera;
-  cam.updateMatrixWorld();
-  cam.getWorldPosition(_apoFpOrigin);
-  _apoFpAim.set(0.42, -0.28, 0.62).unproject(cam).sub(_apoFpOrigin);
-  if (_apoFpAim.lengthSq() < 1e-8) return false;
-  _apoFpAim.normalize();
-  _apoFpLook.copy(_apoFpOrigin).addScaledVector(_apoFpAim, 0.82);
-  if (_apoFpLook.y < 0.05) _apoFpLook.y = 0.05;
-  petAnchor.position.copy(_apoFpLook);
-  petAnchor.rotation.set(0, Math.atan2(_apoFpLook.x - target.x, _apoFpLook.z - target.z), 0);
-  petMesh.position.set(0, 0, 0);
-  petAnchor.visible = true;
-  petAnchor.updateMatrixWorld(true);
-  return true;
-}
 function updatePetAnchor() {
   if (!petMesh) return;
   let bx = 0, by = 0, bz = 0, byaw = 0, isWalk = false, isLie = false;
@@ -4227,8 +4197,6 @@ function updatePetAnchor() {
   const groundPet = !!petMesh.userData.groundPet;
   const gy = (plazaMode ? plazaGroundY(bx, bz) : 0);
   if (groundPet) {
-    // 第一人稱坐著出貓拳：暫時挪進鏡頭，不要停在椅側視線外
-    if (apoPunchVis && applyApoSeatedFpPunchPose()) return;
     // 阿康：一律貼地。走在身後偏右；坐在椅子右側（避開前方桌子）；躺也站在右側
     const s = Math.sin(byaw), c = Math.cos(byaw);
     if (isLie) {
@@ -4425,15 +4393,10 @@ function apoPunchAnchor(): THREE.Object3D {
     ?? petAnchor;
 }
 function apoPunchVisual(to: THREE.Vector3 | (() => THREE.Vector3), empty: boolean, onHit?: () => void) {
-  apoPunchVis = true;
-  apoPunchLook = to;
-  updatePetAnchor();
   const anchor = apoPunchAnchor();
-  playApoPunch(anchor, to, {
-    empty,
-    onHit,
-    onDone: () => { apoPunchVis = false; apoPunchLook = null; },
-  });
+  // 第一人稱坐著時阿珀仍 hideFp，爪子改掛場景，從椅邊真實位置伸進畫面
+  const fpHidden = !!petMesh?.userData.groundPet && !tpv && !petWalkingMode && !petLyingMode;
+  playApoPunch(anchor, to, { empty, onHit, worldSpace: fpHidden });
 }
 function ameiOut(): boolean {
   return petCurId === AMEI_ID && !!petMesh;
@@ -4559,8 +4522,7 @@ function petTick(dt: number) {
   })();
   const canProduce = show && (!plazaMode || plazaShellSeat);
   // 第一人稱剝蚵時，腳邊的阿康會擋視線，先藏起來（第三人稱仍看得到）
-  // 阿珀出貓拳時例外：爪子掛在身上，藏寵物會連拳一起不見
-  const hideFp = !!petMesh.userData.groundPet && !tpv && !petWalkingMode && !petLyingMode && !apoPunchVis;
+  const hideFp = !!petMesh.userData.groundPet && !tpv && !petWalkingMode && !petLyingMode;
   petAnchor.visible = show && !hideFp;
   if (!show) { petAcc = 0; setPetSleeping(false); return; }
   // AFK：距上次任何輸入 10 秒 → 睡著暫停

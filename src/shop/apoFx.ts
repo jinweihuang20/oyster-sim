@@ -6,6 +6,8 @@ export type ApoPunchOpts = {
   empty?: boolean;
   onHit?: () => void;
   onDone?: () => void;
+  /** 爪子掛到場景，不跟被藏起來的寵物一起消失；仍每幀從肩膀世界座標伸到目標 */
+  worldSpace?: boolean;
 };
 
 const _up = new THREE.Vector3(0, 1, 0);
@@ -70,7 +72,15 @@ export function playApoPunch(
   opts: ApoPunchOpts = {},
 ): () => void {
   const paw = makePaw();
-  anchor.add(paw);
+  const worldSpace = !!opts.worldSpace;
+  const root = sceneRoot(anchor);
+  if (worldSpace) {
+    paw.frustumCulled = false;
+    paw.traverse(o => { o.frustumCulled = false; });
+    root.add(paw);
+  } else {
+    anchor.add(paw);
+  }
   const hitAt = 0.28;
   const hold = 0.12;
   const retract = 0.22;
@@ -95,14 +105,20 @@ export function playApoPunch(
 
   const place = (reach: number, wag = 0) => {
     anchor.updateWorldMatrix(true, false);
-    _inv.copy(anchor.matrixWorld).invert();
-    _local.copy(worldTo()).applyMatrix4(_inv);
+    if (worldSpace) {
+      anchor.getWorldPosition(_from);
+      _local.copy(worldTo()).sub(_from);
+    } else {
+      _inv.copy(anchor.matrixWorld).invert();
+      _local.copy(worldTo()).applyMatrix4(_inv);
+    }
     const len = Math.max(0.12, _local.length());
     const use = Math.min(reach, len);
     if (len > 1e-4) _local.multiplyScalar(1 / len);
     else _local.set(0, 0, -1);
     _quat.setFromUnitVectors(_up, _local);
-    paw.position.set(0, 0, 0);
+    if (worldSpace) paw.position.copy(_from);
+    else paw.position.set(0, 0, 0);
     paw.quaternion.copy(_quat);
     if (wag) paw.rotateZ(wag);
     paw.scale.set(1, use, 1);
@@ -123,7 +139,6 @@ export function playApoPunch(
       if (!hit) {
         hit = true;
         slapBeep();
-        const root = sceneRoot(anchor);
         label = makeWorldLabel('啪', 'bubble', { worldH: 0.32 });
         label.setOpacity(1);
         label.sprite.position.copy(worldTo()).y += 0.18;
@@ -152,7 +167,7 @@ export function playApoPunch(
       }
     }
     if (t >= total && !label) {
-      anchor.remove(paw);
+      paw.parent?.remove(paw);
       dead = true;
       try { opts.onDone?.(); } catch { /* */ }
       return false;
@@ -173,7 +188,7 @@ export function playApoPunch(
     if (dead) return;
     dead = true;
     cancelAnimationFrame(raf);
-    anchor.remove(paw);
+    paw.parent?.remove(paw);
     if (label) {
       label.sprite.parent?.remove(label.sprite);
       try { label.dispose(); } catch { /* */ }
