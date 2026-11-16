@@ -1240,11 +1240,9 @@ body.menuOn #overlay .sysGrid>#oParty{
 
 /* 廣場：狀態列蓋過 #plazaRoot(9000)，避免地圖鈕擋到 #top／#stats */
 body.plazaMode #top,body.plazaMode #stats,body.plazaRoam #top,body.plazaRoam #stats{z-index:9100}
-#top #eqBtn,#top #rankBtn{display:none}
-body.plazaMode #top #eqBtn,body.plazaRoam #top #eqBtn{display:inline-block}
-body.plazaMode #top #rankBtn,body.plazaRoam #top #rankBtn{display:inline-flex!important;align-items:center;justify-content:center}
+/* 次要按鈕收進「選單」（#hudMenuBtn），按鈕本身留著給選單和教學用 */
+#top #shopBtn,#top #dexBtn,#top #eqBtn,#top #rankBtn,#top #setBtn{display:none!important}
 body.plazaMode #hpWrap,body.plazaRoam #hpWrap{display:none!important}
-body.plazaMode #top #dexBtn,body.plazaRoam #top #dexBtn{display:none!important}
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
 /* 吸菸區坐下：仍屬 plazaRoam（藏剝蚵鈕），但要顯示站起／回主選單（與一般座位同款） */
@@ -3801,3 +3799,20 @@ body.menuOn #overlay .sysGrid>#oFood{
 #feedPick .fpEmpty svg{width:32px;height:32px;color:#2a5a86}
 #feedPick .fpEmpty p{margin:0;font-size:13.5px;line-height:1.6}
 @media (max-width:340px){#feedPick .fpRow{grid-template-columns:40px minmax(0,1fr) auto;gap:8px;padding:7px 8px}#feedPick .fpImg{width:40px;height:40px}#feedPick .fpGo{min-width:56px!important;padding:0 10px!important}}
+
+/* 遊戲中「選單」 */
+#top #hudMenuBtn{position:relative;z-index:2;flex-shrink:0;margin-left:auto;display:inline-flex!important;align-items:center;justify-content:center;gap:5px;min-width:44px!important;min-height:36px!important;height:36px;padding:0 12px!important;border:1px solid #c7d5e3!important;border-radius:10px!important;background:#fff!important;color:#2a5a86!important;font-size:14px!important;font-weight:800;box-shadow:0 1px 4px rgba(20,40,60,.18)!important;text-shadow:none!important;transform:none!important;overflow:visible!important}
+#top #hudMenuBtn svg{flex:0 0 auto}
+#top #hudMenuBtn .newDot{top:-7px!important;right:-7px!important}
+@media (max-width:360px){#top #hudMenuBtn{padding:0 9px!important;font-size:13px!important}}
+#hudMenu{position:fixed;inset:0;z-index:12550;display:flex;align-items:flex-start;justify-content:flex-end;padding:calc(var(--sa-top,0px) + 52px) calc(var(--sa-right,0px) + 10px) 10px 10px;box-sizing:border-box;background:rgba(15,25,35,.25)}
+#hudMenu .hmCard{width:min(340px,100%);background:#fff;border:1px solid #d6e0ea;border-radius:14px;box-shadow:0 8px 28px rgba(20,40,60,.22);overflow:hidden;color:#1d2731;font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
+#hudMenu .hmHead{display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 16px;border-bottom:1px solid #e3e9ef}
+#hudMenu .hmHead b{font-size:16px;font-weight:800}
+#hudMenu .hmX{width:40px!important;height:40px!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;display:inline-flex;align-items:center;justify-content:center;border:1px solid #d6e0ea!important;border-radius:10px!important;background:#fff!important;color:#2a5a86!important;box-shadow:none!important;text-shadow:none!important;transform:none!important}
+#hudMenu .hmGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:12px}
+#hudMenu .hmTile{position:relative;display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-width:0!important;min-height:84px!important;height:auto;margin:0!important;padding:10px 4px!important;border:1px solid #dfe5ec!important;border-radius:12px!important;background:#fff!important;color:#2a5a86!important;box-shadow:0 1px 4px rgba(20,40,60,.08)!important;text-shadow:none!important;font-size:13px!important;font-weight:800;line-height:1.25;transform:none!important}
+#hudMenu .hmTile:active{background:#eef4fa!important}
+#hudMenu .hmTile span{color:#1d2731;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#hudMenu .hmDot{position:absolute;top:6px;right:6px;padding:0 5px;border-radius:999px;background:#c2412d;color:#fff;font-size:10.5px;font-style:normal;line-height:16px}
+@media (max-width:340px){#hudMenu .hmGrid{gap:6px;padding:10px}#hudMenu .hmTile{min-height:76px!important;font-size:12px!important}}

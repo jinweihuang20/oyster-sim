@@ -106,7 +106,7 @@ export function newDecor() {
 
 export function newDots() {
   const has = newNow().length > 0;
-  for (const id of ['shopBtn', 'shopBtn2', 'oShop', 'eqShop']) { const b = document.getElementById(id); if (!b) continue; let d = b.querySelector('.newDot'); if (has && !d) b.insertAdjacentHTML('beforeend', '<span class="newDot">新</span>'); else if (!has && d) d.remove(); }
+  for (const id of ['shopBtn', 'shopBtn2', 'oShop', 'eqShop', 'hudMenuBtn']) { const b = document.getElementById(id); if (!b) continue; let d = b.querySelector('.newDot'); if (has && !d) b.insertAdjacentHTML('beforeend', '<span class="newDot">新</span>'); else if (!has && d) d.remove(); }
 }
 
 function openShopAt(k: string) {

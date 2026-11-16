@@ -22,6 +22,7 @@ import {
 } from './world';
 import { initCook, openCook, openCookSolo, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView } from './cook/cookUi';
 import { initFeed, openFeed } from './cook/feed';
+import { initHudMenu } from './ui/hudMenu';
 import { initFood, openFood, openFoodStall, renderFoodStall, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
 import { foodStallSpawn } from './plaza/layout';
 import {
@@ -6719,6 +6720,12 @@ initFood({
   openCookDex: () => openCookDex(),
   refreshPrices: () => { void fetchPrices().then(r => { if (r === 'changed' && $('foodStall').classList.contains('show')) renderFoodStall(); }); },
   onMoney: () => updHud(),
+});
+initHudMenu({
+  inPlaza: () => plazaMode,
+  shopNew: () => !!document.querySelector('#shopBtn .newDot'),
+  openCookDex: () => openCookDex(),
+  openFood: () => openFood(),
 });
 initFeed({
   getSave: () => save, persist, isTut: () => !!tut,
