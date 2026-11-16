@@ -444,6 +444,7 @@ function renderDex() {
   stopDexView?.(); stopDexView = null;
   cancelAnimationFrame(virtRaf); cancelAnimationFrame(thumbRaf); thumbQ.length = 0;
   const B = $('cookDexBody');
+  B.classList.toggle('dxDet', dexLevel !== 'list');
   if (dexLevel === 'list') {
     computeIds();
     B.innerHTML = dexHead() + filtersHtml()

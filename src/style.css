@@ -3844,3 +3844,35 @@ body.uiCovered:is(.onShift,.plazaMode,.plazaRoam) :is(#btns,#btnsL,#btnsCorner,#
 /* 蚵仔煎圖鑑：全服首創 */
 .dxCell .dxFirst{position:absolute;left:4px;top:4px;max-width:58%;padding:1px 6px;border-radius:999px;background:#fff;border:1px solid #c7d5e3;color:#2a5a86;font-size:10.5px;font-style:normal;font-weight:800;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(20,40,60,.12)}
 .ckFirst{display:flex;align-items:center;gap:6px;margin:6px 0;color:#2a5a86;font-size:13.5px;font-weight:700}
+/* 手機橫向（矮螢幕）：煎台改左右兩欄，左邊方形預覽、右邊步驟＋操作（可捲動）；圖鑑單盤頁也一樣 */
+@media (orientation:landscape) and (max-height:500px){
+ #cook.panel.show{padding:calc(4px + var(--sa-top,0px)) calc(10px + var(--sa-right,0px)) calc(6px + var(--sa-bottom,0px)) calc(10px + var(--sa-left,0px))!important}
+ #cook #cookBody{--ckL:min(44vw,calc(100dvh - var(--sa-top,0px) - var(--sa-bottom,0px) - 48px));max-width:none;display:grid;grid-template-columns:var(--ckL) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);column-gap:10px}
+ #cook .ckHead{grid-column:1/-1;height:34px;margin:0 0 4px}
+ #cook .ckHead>b{font-size:15px}
+ #cook .ckX{height:30px}
+ #cook .ckSteps{grid-column:2;grid-row:2;margin:0 0 6px}
+ #cook .ckViewW{grid-column:1;grid-row:2/4;min-height:0;margin:0}
+ #cook .ckCtl,#cook .ckCtl.s6{grid-column:2;grid-row:3;height:auto;min-height:0;max-height:none;padding:8px 10px}
+ #cook .ckCtl>.ckAct:last-child{bottom:-8px;margin-bottom:-8px;padding-bottom:8px;padding-top:8px}
+ #cook .ckBanner{top:8px;padding:4px 12px}
+ #cook .ckBanner b{font-size:15px}
+ #cookDexBody.dxDet{display:grid;grid-template-columns:min(40vw,calc(100dvh - 170px - var(--sa-bottom,0px))) minmax(0,1fr);column-gap:12px;align-content:start;align-items:start}
+ #cookDexBody.dxDet>*{grid-column:2;min-width:0}
+ #cookDexBody.dxDet>.dxNav{grid-column:1/-1}
+ #cookDexBody.dxDet>.ckViewW{grid-column:1;grid-row:2/span 12;margin:0}
+ #cookDexBody.dxDet>.ckViewW canvas{width:100%;height:auto;aspect-ratio:1}
+ #cookDexBody.dxDet>.ckName{justify-content:flex-start;text-align:left;margin-top:2px}
+ #cookDexBody.dxDet>:is(.ckDesc,.ckSum){text-align:left}
+ #cookDexBody.dxDet>.ckFeat{justify-content:flex-start}
+ #cookDexBody.dxDet>.ckAct{justify-content:flex-start}
+ #feedPick{align-items:center;padding:calc(6px + var(--sa-top,0px)) calc(10px + var(--sa-right,0px)) calc(6px + var(--sa-bottom,0px)) calc(10px + var(--sa-left,0px))}
+ #feedPick .fpCard{width:min(640px,100%);max-height:100%}
+ #feedPick .fpHead{padding:4px 6px 4px 14px}
+ #feedPick .fpX{width:34px!important;height:34px!important}
+ #feedPick .fpNote{padding:5px 14px;font-size:12px;line-height:1.4}
+ #feedPick .fpList{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));align-content:start;gap:6px;padding:8px 10px 10px}
+ #feedPick .fpRow{grid-template-columns:40px minmax(0,1fr) auto;gap:8px;padding:6px 8px}
+ #feedPick .fpImg{width:40px;height:40px}
+ #feedPick .fpGo{height:34px!important}
+}
