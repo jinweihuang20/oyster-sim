@@ -4335,9 +4335,13 @@ function apoPunchAllowed(): boolean {
     plaza: !!plazaMode,
     plazaActive: isPlazaActive(),
     shucking: playerIsShucking(),
+    afk: petSleeping,
   });
 }
+/** 每次重設計時就加一，讓進行中的出拳回呼不會把剛醒來的 10 秒蓋掉 */
+let apoPunchEpoch = 0;
 function resetApoTimers() {
+  apoPunchEpoch++;
   petPunchIn = 10;
   petTalkIn = 8 + Math.random() * 7;
 }
@@ -4469,6 +4473,7 @@ async function tryApoPunch(): Promise<boolean> {
       : Promise.resolve(null);
     // 本機偷肉不看伺服器回覆：舊服 15 秒間隔會回 slow，若等它才給肉，看起來就像出拳沒偷到
     apoPunchVisual(getTo, !wantSteal, () => {
+      if (petSleeping) return;
       if (plazaPunchLocalSteal(null, wantSteal)) {
         apoAwardMeat(getTo());
         if (t.count > 0) t.count--;
@@ -4483,6 +4488,7 @@ async function tryApoPunch(): Promise<boolean> {
   const stole = n.count > 0;
   const scold = pickApoScold();
   apoPunchVisual(getTo, !stole, () => {
+    if (petSleeping) return;
     (n as { apoHit?: number }).apoHit = apoHitSeconds();
     if (stole) {
       n.count--;
@@ -4530,10 +4536,12 @@ function petTick(dt: number) {
   const hideFp = !!petMesh.userData.groundPet && !tpv && !petWalkingMode && !petLyingMode;
   petAnchor.visible = show && !hideFp;
   if (!show) { petAcc = 0; setPetSleeping(false); return; }
-  // AFK：距上次任何輸入 10 秒 → 睡著暫停
+  // AFK：距上次任何輸入 10 秒 → 睡著暫停（產肉、貓拳、偷肉都停）
   const idleMs = performance.now() - lastInteractAt;
   const afk = idleMs > 10000;
+  const wasAfk = petSleeping;
   setPetSleeping(afk);
+  if (wasAfk && !afk) resetApoTimers();
   const actuallyMoving = petWalkingMode && (performance.now() - walkMovingT < 200);
   if (petMesh.userData.tickAnim) {
     tickPetAnim(petMesh, {
@@ -4561,7 +4569,6 @@ function petTick(dt: number) {
   }
   if (apoBubT > 0) { apoBubT = Math.max(0, apoBubT - dt); placeApoBubble(); }
   else if (apoBub) apoBub.sprite.visible = false;
-  // 掛機只暫停產肉／丟殼；廣場貓拳在站著不動時仍要繼續計時
   if (!afk && canProduce) {
     petAcc += dt;
     if (petAcc >= p.fx.tickSec) {
@@ -4582,11 +4589,12 @@ function petTick(dt: number) {
     petPunchIn = punch.dueIn;
     if (punch.fire) {
       // 範圍內沒有阿婆就不出拳，稍後再探；出拳後間隔 10 秒。失敗／例外都要重新上膛，不能停在 PENDING。
+      const epoch = apoPunchEpoch;
       void tryApoPunch()
-        .then(ok => { petPunchIn = resolveApoPunchTimer(ok); })
-        .catch(() => { petPunchIn = resolveApoPunchTimer(false); });
+        .then(ok => { if (epoch === apoPunchEpoch) petPunchIn = resolveApoPunchTimer(ok); })
+        .catch(() => { if (epoch === apoPunchEpoch) petPunchIn = resolveApoPunchTimer(false); });
     }
-    const canTalk = plazaMode && isPlazaActive() && !isPlazaRaceMode();
+    const canTalk = !afk && plazaMode && isPlazaActive() && !isPlazaRaceMode();
     if (canTalk) {
       petTalkIn -= dt;
       if (petTalkIn <= 0) {

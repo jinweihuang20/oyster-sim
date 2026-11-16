@@ -6,6 +6,7 @@ import {
   APO_PUNCH_PENDING,
   apoPunchAllowedFrom,
   tickApoPunchTimer,
+  apoPunchTimerOnWake,
   resolveApoPunchTimer,
   plazaPunchProceed,
   plazaPunchLocalSteal,
@@ -40,9 +41,32 @@ test('競速或機關槍或非阿珀時關閉', () => {
   assert.equal(apoPunchAllowedFrom(base({ plaza: true, plazaActive: true, isApo: false })), false);
 });
 
+test('掛機時廣場或工寮都不允許出拳', () => {
+  assert.equal(apoPunchAllowedFrom(base({ plaza: true, plazaActive: true, afk: true })), false);
+  assert.equal(apoPunchAllowedFrom(base({ shucking: true, afk: true })), false);
+  assert.equal(apoPunchAllowedFrom(base({ plaza: true, plazaActive: true, afk: false })), true);
+});
+
 test('不允許時計時暫停，剩餘秒數保留', () => {
   const paused = tickApoPunchTimer(false, 3.5, 1);
   assert.deepEqual(paused, { dueIn: 3.5, fire: false });
+});
+
+test('掛機醒來時，不論原本是 PENDING、即將到期或剩餘 2 秒，都重設為 10 秒', () => {
+  assert.equal(apoPunchTimerOnWake(true, false, APO_PUNCH_PENDING), APO_PUNCH_INTERVAL);
+  assert.equal(apoPunchTimerOnWake(true, false, 0.2), APO_PUNCH_INTERVAL);
+  assert.equal(apoPunchTimerOnWake(true, false, APO_PUNCH_RETRY), APO_PUNCH_INTERVAL);
+  assert.equal(apoPunchTimerOnWake(true, true, 3), 3);
+  assert.equal(apoPunchTimerOnWake(false, false, 3), 3);
+});
+
+test('醒來後要再等滿 10 秒才會出拳，不會卡在 PENDING 或立刻打出', () => {
+  const due = apoPunchTimerOnWake(true, false, APO_PUNCH_PENDING);
+  const mid = tickApoPunchTimer(true, due, 9.5);
+  assert.equal(mid.fire, false);
+  const fire = tickApoPunchTimer(true, mid.dueIn, 0.6);
+  assert.equal(fire.fire, true);
+  assert.equal(fire.dueIn, APO_PUNCH_PENDING);
 });
 
 test('允許時從 0 先臂成 10 秒再倒數，到時觸發並進入 pending', () => {

@@ -9,7 +9,7 @@ export { APO_ID, APO_LINES, APO_SCOLDS, apoLine, apoScold, pickApoLine, pickApoS
 export { playApoPunch, apoHitSeconds } from './apoFx';
 export {
   APO_PUNCH_INTERVAL, APO_PUNCH_RETRY, APO_PUNCH_PENDING,
-  apoPunchAllowedFrom, tickApoPunchTimer, resolveApoPunchTimer,
+  apoPunchAllowedFrom, tickApoPunchTimer, resolveApoPunchTimer, apoPunchTimerOnWake,
   plazaPunchProceed, plazaPunchLocalSteal, type ApoPunchGateInput,
 } from './apoPunchLogic';
 export { AMEI_ID, AMEI_UMB_DELAY, isAmeiId } from './ameiFx';

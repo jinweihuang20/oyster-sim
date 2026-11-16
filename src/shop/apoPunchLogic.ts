@@ -15,13 +15,21 @@ export type ApoPunchGateInput = {
   plazaActive: boolean;
   /** 工寮或廣場坐下剝蚵中 */
   shucking: boolean;
+  /** 掛機睡著：廣場／工寮都不出拳、不偷肉 */
+  afk?: boolean;
 };
 
-/** 廣場內站著、走著、坐下都可以出拳；工寮則要正在剝蚵。不看 AFK。 */
+/** 廣場內站著、走著、坐下都可以出拳；工寮則要正在剝蚵。掛機時暫停。 */
 export function apoPunchAllowedFrom(s: ApoPunchGateInput): boolean {
-  if (!s.play || s.tut || s.race || !s.isApo || s.mg) return false;
+  if (!s.play || s.tut || s.race || !s.isApo || s.mg || s.afk) return false;
   if (s.plaza && s.plazaActive) return true;
   return s.shucking;
+}
+
+/** 從掛機醒來時重設為完整 10 秒間隔，避免停在 PENDING 或立刻再出拳。 */
+export function apoPunchTimerOnWake(wasAfk: boolean, afk: boolean, dueIn: number): number {
+  if (wasAfk && !afk) return APO_PUNCH_INTERVAL;
+  return dueIn;
 }
 
 /** 允許時才扣秒；到時回 fire，dueIn 先設成 PENDING，等非同步結果再 resolve。 */
