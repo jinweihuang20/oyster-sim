@@ -16,7 +16,7 @@ import { buildPlazaMapMarkers, drawPlazaMap } from './map';
 import { createPlazaWorldView, tickPlazaTags, type PlazaWorldView } from './worldView';
 import type { PlazaAimTarget, PlazaChat, PlazaPlayer, PlazaShellEvent, PlazaShellHitEvent, PlazaSnapshot, PlazaStealEvent, PlazaGrillOyster, PlazaGrillTakenEvent, PlazaSeatWish, PlazaSeatWishEnd, PlazaFoodQueue, PlazaCookState } from './types';
 import { makeCookArea, type CookArea } from './cookArea';
-import { comboName, comboHasFood } from '../cook/combo';
+import { comboName, comboHasFood, validCombo } from '../cook/combo';
 import { feedLine } from '../cook/feedScore';
 import { buildDish, buildPlate, disposeDish } from '../cook/dish3d';
 import { cookedDishCount, feedBusy } from '../cook/feed';
@@ -2115,8 +2115,8 @@ function onRemoteFeed(e: any) {
   const byConn = String(e?.byConn ?? e?.ByConn ?? '');
   const fp = snap?.players.find(p => p.connId === byConn);
   const from = fp && Number.isFinite(fp.x) && Number.isFinite(fp.z) ? { x: fp.x, z: fp.z } : null;
-  const line = feedLine(score, e?.rep || e?.Rep ? 1 : 0, Number(e?.li ?? e?.Li) || 0);
-  npcEatAnim(connId, combo, `${by}請我吃，我嚐看看`, `〈${comboName(combo)}〉${score} 分　${line}`, from);
+  const line = feedLine(score, e?.rep || e?.Rep ? 1 : 0, Number(e?.li ?? e?.Li) || 0, combo);
+  npcEatAnim(connId, combo, `${by}請我吃，我嚐看看`, `${validCombo(combo) ? `〈${comboName(combo)}〉` : ''}${score} 分　${line}`, from);
 }
 function npcEatAnim(connId: string, combo: number, startLine: string, after: string | undefined, src: { x: number; z: number } | null): boolean {
   const t = npcAim(connId); if (!view || !t) return false;
@@ -2884,7 +2884,10 @@ function cookPrompt(): PlazaNearPrompt | null {
     if (who) return { kind: 'shop', info: `煎台 ${nearCook + 1} 號・${who.nick || '有人'}正在煎`, btn: '蚵仔煎圖鑑', icon: 'ic-book' };
     return { kind: 'shop', info: `煎台 ${nearCook + 1} 號・空位，自由煎不限時`, btn: '開始煎', icon: 'ic-bowl' };
   }
-  if (nearPlate) return { kind: 'shop', info: `${nearPlate.nick || '玩家'}的「${comboName(nearPlate.combo)}」`, btn: '看看', icon: 'ic-eye' };
+  if (nearPlate) {
+    const nm = validCombo(nearPlate.combo) ? comboName(nearPlate.combo) : '蚵仔煎';
+    return { kind: 'shop', info: `${nearPlate.nick || '玩家'}的「${nm}」`, btn: '看看', icon: 'ic-eye' };
+  }
   return null;
 }
 

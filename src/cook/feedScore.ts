@@ -1,8 +1,8 @@
 /** 阿婆滿意度：純函式，只看組合和今天同款請過幾次。 */
-import { comboOf, validCombo } from './combo';
+import { comboOf, blooperOf, type BlooperKind } from './combo';
 
-/** 配料種類數 → 分數（0～4 種） */
-const TOP_PTS = [0, 22, 34, 42, 48];
+/** 配料種類數 → 分數（0～6 種；前 5 檔與舊版相同） */
+const TOP_PTS = [0, 22, 34, 42, 48, 52, 56];
 /** 有蚵仔才是蚵仔煎 */
 const OYSTER_PTS = 8;
 /** 粉漿：不加／薄脆／標準／厚實 */
@@ -25,9 +25,9 @@ export const FEED_TIERS: FeedTier[] = [
 
 /** 組合本身的分數（0～100，不含重複扣分） */
 export function feedBaseScore(id: number): number {
-  if (!validCombo(id)) return 0;
   const c = comboOf(id);
-  const tops = [1, 2, 4, 8].filter(b => c.top & b).length;
+  if (!c) return 0;
+  const tops = [1, 2, 4, 8, 16, 32].filter(b => c.top & b).length;
   if (!tops && !c.batter) return 0;
   const s = TOP_PTS[tops] + (c.top & 1 ? OYSTER_PTS : 0) + BATTER_PTS[c.batter] + (c.egg ? EGG_PTS : 0)
     + DONE_PTS[c.done] + (c.sauce === 5 ? AMA_SAUCE_PTS : c.sauce ? SAUCE_PTS : 0);
@@ -51,10 +51,20 @@ const LINES: Record<'top' | 'good' | 'ok' | 'no', string[]> = {
 
 /** 阿婆說的話；repeat>0 時提一下又是同款 */
 export const FEED_LINE_N = 3;
-/** li＝評語序號（0～2；廣場同步時傳序號，別人用同一句） */
-export function feedLine(score: number, repeat: number, li = Math.floor(Math.random() * FEED_LINE_N)): string {
+const BLOOPER_SNARK: Record<BlooperKind, string[]> = {
+  egg: ['這是要我吃一張臉嗎？', '只有蛋也敢端上來，膽子不小。', '鍋裡就一顆蛋，阿婆還是給你吃完。'],
+  ketchup: ['焦了還淋番茄醬，以為我看不出來？', '這顏色…是想蓋掉什麼？還是吃得下去啦。', '甜甜酸酸又帶點焦，算你有創意。'],
+  lonely: ['這麼厚一張餅，配料呢？跑去哪裡了？', '只有粉漿也想來換賞金？先吃再說。', '孤孤單單一大塊，口感倒是還在。'],
+  stirburn: ['料那麼多還炒焦，是跟火在比賽嗎？', '全部倒進去又走神，阿婆搖頭還是吃。', '這盤有個性，個性就是有點焦。'],
+};
+/** li＝評語序號（0～2；廣場同步時傳序號，別人用同一句）；出包款會再補一句吐槽 */
+export function feedLine(score: number, repeat: number, li = Math.floor(Math.random() * FEED_LINE_N), combo?: number): string {
   const key = score >= 90 ? 'top' : score >= 70 ? 'good' : score >= 50 ? 'ok' : 'no';
   const arr = LINES[key];
   const base = arr[Math.abs(Math.floor(li)) % arr.length];
-  return repeat > 0 && key !== 'top' ? `又是這款喔…${base}` : base;
+  const said = repeat > 0 && key !== 'top' ? `又是這款喔…${base}` : base;
+  const bk = combo != null ? blooperOf(combo) : null;
+  if (!bk) return said;
+  const snark = BLOOPER_SNARK[bk][Math.abs(Math.floor(li)) % BLOOPER_SNARK[bk].length];
+  return `${said} ${snark}`;
 }

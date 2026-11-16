@@ -3544,6 +3544,7 @@ body:has(#cook.show) #dex{z-index:12510!important}
 .dxCell.un .dxNm{color:#8a96a3;font-weight:600}
 .dxNm small{display:block;font-size:10.5px;color:#66727e;font-weight:700}
 .dxSp{position:absolute;top:3px;right:3px;font-style:normal;font-size:9.5px;font-weight:800;color:#2a5a86;background:#fff;border:1px solid #2a5a86;border-radius:999px;padding:0 4px}
+.dxOops{position:absolute;top:3px;left:3px;font-style:normal;font-size:9.5px;font-weight:800;color:#7a4a22;background:#fff8ee;border:1px solid #c9a06a;border-radius:999px;padding:0 4px}
 .dxTog{flex-wrap:wrap}
 #cook h2.ckH2{white-space:nowrap;font-size:20px;margin:0 0 6px}
 #cook #cookClose{display:block;margin:10px auto 0}
@@ -3583,6 +3584,8 @@ body:has(#cook.show) #dex{z-index:12510!important}
 .ckName{font-size:18px;font-weight:900;color:#1f2a35;text-align:center;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center;word-break:break-all}
 .ckTag{font-size:11px;font-weight:800;color:#2a5a86;border:1px solid #2a5a86;border-radius:999px;padding:0 7px}
 .ckTag.new{color:#fff;background:#2a5a86}
+.ckTag.oops{color:#7a4a22;border-color:#c9a06a;background:#fff8ee}
+.ckQuote{font-size:13px;color:#2a5a86;text-align:center;margin:6px 12px 4px;line-height:1.5;font-weight:650}
 .ckDesc{font-size:12.5px;color:#3c4652;text-align:center;margin:4px 0}
 .ckFeat{list-style:none;padding:0;margin:6px 0;display:flex;flex-wrap:wrap;gap:4px 10px;justify-content:center;font-size:12.5px;color:#3c4652}
 .ckSum{text-align:center;font-size:12.5px;color:#55606b;margin:4px 0}
@@ -3864,6 +3867,7 @@ body.uiCovered:is(.onShift,.plazaMode,.plazaRoam) :is(#btns,#btnsL,#btnsCorner,#
  #cookDexBody.dxDet>.ckViewW{grid-column:1;grid-row:2/span 12;margin:0}
  #cookDexBody.dxDet>.ckViewW canvas{width:100%;height:auto;aspect-ratio:1}
  #cookDexBody.dxDet>.ckName{justify-content:flex-start;text-align:left;margin-top:2px}
+ #cookDexBody.dxDet>.ckQuote{text-align:left;margin-left:0}
  #cookDexBody.dxDet>:is(.ckDesc,.ckSum){text-align:left}
  #cookDexBody.dxDet>.ckFeat{justify-content:flex-start}
  #cookDexBody.dxDet>.ckAct{justify-content:flex-start}

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { COOK_TABLE, COOK_RING_R, COOK_SEATS, COOK_PILE_IDS, cookSeatPile, cookSeatPos, cookPanPos, cookPlatePos, pileCenter } from './layout';
 import { buildDish, buildPlate, disposeDish } from '../cook/dish3d';
-import { comboName } from '../cook/combo';
+import { comboName, validCombo } from '../cook/combo';
 import type { PlazaCookState } from './types';
 
 const ACCENT = 0x2a5a86;
@@ -92,7 +92,7 @@ export function makeCookArea() {
     const cur = pans.get(seat);
     if (cur && cur.combo === combo) return;
     if (cur) { root.remove(cur.g); disposeDish(cur.g); pans.delete(seat); }
-    if (combo < 0) return;
+    if (combo < 0 || !validCombo(combo)) return;
     const g = new THREE.Group(); const d = buildDish(combo); d.scale.setScalar(DISH_SCALE); g.add(d);
     const p = cookPanPos(seat); g.position.set(p.x, p.y, p.z); g.rotation.y = seat * 1.3;
     root.add(g); pans.set(seat, { combo, g });
@@ -116,6 +116,7 @@ export function makeCookArea() {
     for (const seat of [...pans.keys()]) if (!seen.has(seat)) setPan(seat, -1);
     const want = new Set<string>();
     for (const d of st?.displays ?? []) {
+      if (!validCombo(d.combo)) continue;
       const k = `${d.seat}:${d.slot}`; want.add(k);
       const cur = plates.get(k);
       if (cur && cur.combo === d.combo && cur.nick === d.nick) continue;

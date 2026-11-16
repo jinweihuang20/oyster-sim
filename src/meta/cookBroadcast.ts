@@ -3,7 +3,7 @@
  * 後端：POST /s/cook/first、POST /s/bc/ama、POST /s/cook/seen、GET /s/bc、GET /s/cook/firsts。
  * 舊伺服器沒有這些路徑時全部安靜失敗（不顯示首創、不跳橫幅），遊戲照常。
  */
-import { comboHasFood, comboName } from '../cook/combo';
+import { comboHasFood, comboName, validCombo, COMBO_TOTAL } from '../cook/combo';
 import { socialPost, socialGet, socialTest, socialShow, socialInTut, socialNick } from './social';
 
 export type CookFirst = { nick: string; tag: string; ts: number };
@@ -151,7 +151,7 @@ async function poll() {
     for (const e of Array.isArray(r.items) ? r.items : []) {
       const kind = e?.kind === 'first' ? 'first' : e?.kind === 'ama' ? 'ama' : null;
       const combo = Number(e?.combo), score = Number(e?.score) || 0;
-      if (!kind || !Number.isInteger(combo)) continue;
+      if (!kind || !validCombo(combo)) continue;
       const key = `${kind}|${combo}|${kind === 'ama' ? score : 0}`;
       if (mine.has(key) && String(e?.nick ?? '') === socialNick()) { mine.delete(key); continue; }
       if (kind === 'first' && !firsts.has(combo)) firsts.set(combo, { nick: String(e?.nick ?? ''), tag: String(e?.tag ?? ''), ts: Number(e?.ts) || now });
@@ -168,7 +168,7 @@ async function poll() {
 export function syncCookDexOnce(ids: number[]) {
   const key = 'oyster-ck-seen-up' + (socialTest() ? '-t' : '');
   try { if (localStorage.getItem(key)) return; } catch { return; }
-  const list = [...new Set(ids)].filter(id => Number.isInteger(id) && comboHasFood(id)).slice(0, 2304);
+  const list = [...new Set(ids)].filter(id => Number.isInteger(id) && comboHasFood(id)).slice(0, COMBO_TOTAL);
   if (!list.length) return;
   window.setTimeout(async () => {
     const r = await socialPost('/cook/seen', { combos: list });

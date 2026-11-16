@@ -1,7 +1,7 @@
 /** 食材資料表：之後「蚵仔煎攤」與 50 種蚵仔煎圖鑑（5 主料 × 5 醬 × 加不加蛋）共用 */
 
 export type FoodCat = 'base' | 'main' | 'extra' | 'egg' | 'sauce';
-export type FoodIcon = 'oyster' | 'shrimp' | 'squid' | 'egg' | 'leaf' | 'sack' | 'bottle' | 'jar';
+export type FoodIcon = 'oyster' | 'shrimp' | 'squid' | 'egg' | 'leaf' | 'sack' | 'bottle' | 'jar' | 'pork' | 'chive';
 export type Food = {
   id: string; n: string; cat: FoodCat; icon: FoodIcon;
   /** 外觀色（之後煎出來的料／醬顏色也用這個） */
@@ -29,6 +29,8 @@ export const FOODS: Food[] = [
   { id: 'rockoy', n: '石蚵', cat: 'main', icon: 'oyster', color: '#8f8a7e', life: 48, soon: true, how: '即將開放' },
   { id: 'shrimp', n: '蝦仁', cat: 'extra', icon: 'shrimp', color: '#f19a8a', life: 48, how: '從紅盆拿起每一顆蚵仔時都有機會一起撈到（各地點、廣場和烤台都算）' },
   { id: 'squid', n: '花枝', cat: 'extra', icon: 'squid', color: '#f3efe6', life: 48, how: '從紅盆拿起每一顆蚵仔時都有機會一起撈到（各地點、廣場和烤台都算）' },
+  { id: 'pork', n: '豬肉絲', cat: 'extra', icon: 'pork', color: '#c4784a', life: 48, price: 18, how: '廣場食材攤購買' },
+  { id: 'chive', n: '韭菜', cat: 'extra', icon: 'chive', color: '#3d8c3a', life: 72, price: 12, how: '廣場食材攤購買，簽到第 7 天福袋也可能有' },
   // 蛋
   { id: 'egg', n: '雞蛋', cat: 'egg', icon: 'egg', color: '#f2c94c', life: 72, price: 8, how: '廣場食材攤購買，簽到第 7 天福袋也可能有' },
   // 醬料 5 種
@@ -65,7 +67,7 @@ export const FOOD_RATE = {
   amaSauce: 0.2,
   /** 簽到第 7 天食材福袋 3～5 份 */
   bagMin: 3, bagMax: 5,
-  bagPool: ['flour', 'veg', 'egg', 'sweet', 'garlic'],
+  bagPool: ['flour', 'veg', 'egg', 'sweet', 'garlic', 'chive'],
 };
 
 /** 線條圖示（24×24，stroke=currentColor） */
@@ -78,6 +80,8 @@ const ICON_PATH: Record<FoodIcon, string> = {
   sack: '<path d="M8 6h8l-1 3c3 2 5 5 5 8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3c0-3 2-6 5-8z"/><path d="M9 9h6"/>',
   bottle: '<path d="M10 2h4v4l2 3v11a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V9l2-3z"/><path d="M8 13h8"/>',
   jar: '<path d="M7 6h10v3c2 1 2 2 2 4v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-6c0-2 0-3 2-4z"/><path d="M6 4h12v2H6z"/>',
+  pork: '<path d="M4 9l4-2 5 1 5-1 2 3-3 8H8L4 12z"/><path d="M8 9.5v7M12 8.8v8M16 9.2v7"/>',
+  chive: '<path d="M6 20c1-6 1.5-12 2-16M10 20c.4-6 1.2-11 2.2-16M14 20c.3-5 1.5-11 3-16"/>',
 };
 export const foodSvg = (f: Food, size = 22) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATH[f.icon]}</svg>`;

@@ -1,5 +1,6 @@
 // 全服彈幕＋全球排行榜（後端：StatsServer /s/*）。後端關機時全部安靜失敗。
 import { postDiscordFirstPlay, postDiscordRename } from '../core/discord';
+import { COMBO_TOTAL } from '../cook/combo';
 const API = 'https://game-status.gwtech.org/s';
 type Deps = { id: string; test: boolean; nick: () => string; setNick: (v: string) => void; inTut: () => boolean; on: () => boolean; label: (kind: string, item: number) => string; title?: () => string; foil?: () => boolean; toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void; LS: { getItem(k: string): string | null; setItem(k: string, v: string): void } };
 let D: Deps;
@@ -225,7 +226,7 @@ async function render() {
     const n = Number(v);
     return Number.isFinite(n) ? n.toLocaleString('en-US') : String(v ?? '');
   };
-  const dexTotal = Number(r.total) > 0 ? Number(r.total) : 2304;
+  const dexTotal = Number(r.total) > 0 ? Number(r.total) : COMBO_TOTAL;
   const cookScore = (v: unknown): string | null => {
     const n = Number(v) || 0;
     if (board === 'ckFirst') return `<span class="lbV"><span class="lbUnit">首創</span><b class="lbNum">${esc(fmtV(n))}</b><span class="lbUnit">款</span></span>`;

@@ -1,5 +1,6 @@
 /** 食材收集（V1）：取得、保存期限、雜貨店食材區、食材頁。只收集與查看，還不能使用。 */
 import { FOODS, FOOD_BY_ID, FOOD_RATE, CAT_N, foodLifeMs, foodSvg, type Food, type FoodCat } from './ingredients';
+import { COMBO_TOTAL } from '../cook/combo';
 import type { FoodBatch } from '../core/save';
 import { qtyHtml, bindQty, getQty, resetQty } from '../shop/qty';
 
@@ -160,8 +161,8 @@ export function foodPanelHtml() {
   const kinds = FOODS.filter(f => foodCount(f.id) > 0).length;
   const cats: FoodCat[] = ['main', 'extra', 'base', 'egg', 'sauce'];
   return `<div class="fdHead"><div class="fdTease"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M5 10v9h14v-9M4 10l2-5h12l2 5"/><path d="M10 19v-5h4v5"/></svg><span>廣場煎台開張了</span></div>`
-    + `<p class="fdSub">到廣場中央和第 5 桌的煎台，站進藍色圓圈按「開始煎」；或在主選單按「煎蚵仔煎」，用自家煎台煎。用這些食材能煎出 2,304 種蚵仔煎，現有 <b>${kinds}/${FOODS.length}</b> 種食材。</p>`
-    + `<p class="fdBuy">地瓜粉、青菜、雞蛋和醬料在<b>廣場食材攤</b>買得到。</p>`
+    + `<p class="fdSub">到廣場中央和第 5 桌的煎台，站進藍色圓圈按「開始煎」；或在主選單按「煎蚵仔煎」，用自家煎台煎。用這些食材能煎出 ${COMBO_TOTAL.toLocaleString()} 種蚵仔煎，現有 <b>${kinds}/${FOODS.length}</b> 種食材。</p>`
+    + `<p class="fdBuy">地瓜粉、青菜、韭菜、豬肉絲、雞蛋和醬料在<b>廣場食材攤</b>買得到。</p>`
     + `<div class="fdBtns"><button type="button" class="fdBtn" data-cookdex>${DEX_IC}<span>蚵仔煎圖鑑</span></button><button type="button" class="fdBtn pri" data-fdgo>${GO_IC}<span>${D.inPlaza() ? '走到食材攤' : '前往廣場'}</span></button></div></div>`
     + cats.map(c => `<div class="fdCat">${CAT_N[c]}</div>` + FOODS.filter(f => f.cat === c).map(rowHtml).join('')).join('');
 }
@@ -188,13 +189,13 @@ function bindGo(root: ParentNode) {
 /** 雜貨店「食材」分頁：只放指引，食材只在廣場食材攤賣 */
 export function renderFoodShop() {
   const list = document.getElementById('shopList'); if (!list) return;
-  list.insertAdjacentHTML('beforeend', `<h3><i class="ic ic-bowl"></i> 食材</h3><div class="fdGuide"><p>食材請到<b>廣場食材攤</b>購買，地瓜粉、青菜、雞蛋和四種醬料都有，不限量。</p>${goBtn()}</div>`);
+  list.insertAdjacentHTML('beforeend', `<h3><i class="ic ic-bowl"></i> 食材</h3><div class="fdGuide"><p>食材請到<b>廣場食材攤</b>購買，地瓜粉、青菜、韭菜、豬肉絲、雞蛋和四種醬料都有，不限量。</p>${goBtn()}</div>`);
   bindGo(list);
 }
 
 function stallHtml() {
   const money = D.getSave().money;
-  return `<p class="fsIntro">青菜和雞蛋可放 3 天，粉、醬和蚵仔不會壞。每剝一顆蚵仔肉就多一個蚵仔，蝦仁、花枝在從紅盆拿蚵仔時有機會一起撈到，阿婆祕傳醬要丟中阿婆才有。</p><div class="fsList">`
+  return `<p class="fsIntro">青菜和韭菜可放 3 天，豬肉絲可放 2 天，雞蛋可放 3 天，粉、醬和蚵仔不會壞。每剝一顆蚵仔肉就多一個蚵仔，蝦仁、花枝在從紅盆拿蚵仔時有機會一起撈到，豬肉絲和韭菜在食材攤買，阿婆祕傳醬要丟中阿婆才有。</p><div class="fsList">`
     + FOODS.filter(f => f.price).map(f => {
       const k = 'food-' + f.id, u = D.px(k, f.price!);
       // 固定兩行：名稱＋說明／（特價）＋數量＋購買；按鈕字永遠是「買 N 個 $X」，不因數量換行

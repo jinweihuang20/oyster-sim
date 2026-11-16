@@ -1,5 +1,5 @@
 /** 煎台操作面板（自由煎，不計分不限時）與蚵仔煎圖鑑（三層）。 */
-import { TOPS, BATTERS, DONES, SAUCES, COMBO_TOTAL, comboId, comboOf, comboName, comboHasFood, comboFeatures, specialOf, SPECIAL_IDS, topName, cookTitle, COOK_TITLES, type Combo } from './combo';
+import { TOPS, BATTERS, DONES, SAUCES, COMBO_TOTAL, comboId, comboOf, comboName, comboHasFood, comboFeatures, specialOf, SPECIAL_IDS, BLOOPER_IDS, comboComment, isBlooper, topName, cookTitle, COOK_TITLES, validCombo, type Combo } from './combo';
 import { dishThumb, mountDishViewer, setLivePour, pourSpread } from './dish3d';
 import { foodCount, foodCountAny, takeFood } from '../food/pantry';
 import { FOOD_BY_ID } from '../food/ingredients';
@@ -93,7 +93,7 @@ export function openCook(s: number, preset?: number) {
 function resetSel(preset?: number) {
   step = 1; flipped = false; doneFrac = 0; pourFrac = 0; resultId = -1; reviewDone = false; pourT0 = 0;
   cancelAnimationFrame(pourRaf); setLivePour(null); cancelAnimationFrame(cookRaf);
-  target = preset != null && preset >= 0 ? comboOf(preset) : null;
+  target = preset != null && validCombo(preset) ? comboOf(preset) : null;
   sel = { top: 0, batter: -1, egg: -1, done: -1, sauce: -1 };
   if (target) {
     for (const t of TOPS) if (target.top & t.bit && foodCountAny(t.food) > 0) sel.top |= t.bit;
@@ -153,12 +153,12 @@ function mountView(id: number) {
   // 選配料、粉漿、蛋的時候：從上一盤變過來要播動畫（換一次選擇就重播；點預覽可跳過）
   const settle = pourSettle; pourSettle = null;
   // 點「加蛋」會直接進到煎的步驟：剛加上蛋的那一盤也要播打蛋動畫
-  const eggIn = step === 4 && !under && lastViewId >= 0 && !comboOf(lastViewId).egg && !!comboOf(id).egg;
+  const eggIn = step === 4 && !under && lastViewId >= 0 && !comboOf(lastViewId)?.egg && !!comboOf(id)?.egg;
   const animFrom = settle == null && (step >= 1 && step <= 3 || eggIn) && !under && lastViewId >= 0 && lastViewId !== id ? lastViewId : undefined;
   stopView?.(); lastViewId = id; lastViewKey = key; lastViewUnder = under; viewCv = cv;
   // 剛起鍋：先彈一下、放完特效再開始慢慢轉
   const pop = !!cv.closest('.ckViewW.fx');
-  stopView = mountDishViewer(cv, id, undefined, { spin, under, flipIn, spinAfter: pop ? 1300 : 0, animFrom, pourSettle: settle ?? undefined });
+  stopView = mountDishViewer(cv, id, undefined, { spin, under, flipIn, spinAfter: pop ? 1300 : 0, animFrom, pourSettle: settle ?? undefined, flourish: step === 6 });
 }
 
 const hint = (ids: readonly string[]) => FOOD_BY_ID[ids[0]]?.how ?? '';
@@ -210,9 +210,10 @@ function render() {
       + targetTip(SAUCES[target?.sauce ?? 0].n)
       + `<div class="ckAct"><button type="button" class="ckBtn pri" data-ck="finish"${sel.sauce < 0 ? ' disabled' : ''}>完成</button></div>`;
   } else {
-    const id = resultId, sp = specialOf(id), isNew = resultNew;
-    html += `<div class="ckResult"><div class="ckName">${esc(comboName(id))}${sp ? '<span class="ckTag">隱藏款</span>' : ''}${isNew ? '<span class="ckTag new">新收集</span>' : ''}</div>`
+    const id = resultId, sp = specialOf(id), isNew = resultNew, oops = isBlooper(id);
+    html += `<div class="ckResult"><div class="ckName">${esc(comboName(id))}${sp ? '<span class="ckTag">隱藏款</span>' : ''}${oops ? '<span class="ckTag oops">出包</span>' : ''}${isNew ? '<span class="ckTag new">新收集</span>' : ''}</div>`
       + (sp ? `<p class="ckDesc">${esc(sp.desc)}</p>` : '')
+      + `<p class="ckQuote">${esc(comboComment(id))}</p>`
       + `<ul class="ckFeat">${comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
       + `<p class="ckSum">圖鑑 ${dexCount()}／${COMBO_TOTAL.toLocaleString()}${cookTitle(dexCount()) ? `・${cookTitle(dexCount())}` : ''}</p></div>`
       + (resultKept ? `<p class="ckHint">${IC.info}這盤收好了（同款共 ${D.getSave().cookDish?.[String(id)] ?? 1} 盤），可以在廣場走到阿婆旁邊「請阿婆吃」</p>`
@@ -351,9 +352,9 @@ async function doDisplay(b: HTMLButtonElement) {
   else { b.disabled = false; D.toast('展示失敗，再試一次', '#ffb08a'); }
 }
 
-/* ───────── 圖鑑（平鋪：一格一種，共 2,304 格，依編號排；只畫看得到的幾列） ───────── */
+/* ───────── 圖鑑（平鋪：一格一種，共 9,216 格，依編號排；只畫看得到的幾列） ───────── */
 
-type DexFilter = 'all' | 'got' | 'un' | 'hid';
+type DexFilter = 'all' | 'got' | 'un' | 'hid' | 'oops';
 let dexLevel: 'list' | 'detail' = 'list';
 let dexId = -1;
 let dexFilter: DexFilter = 'all';
@@ -405,7 +406,7 @@ function dexHead() {
   return `<div class="dxTotal"><div><b>已收集 ${n.toLocaleString()}／${COMBO_TOTAL.toLocaleString()}</b>${t ? `<span class="dxTitle">${t}</span>` : ''}</div><div class="dxBar"><i style="width:${(n / COMBO_TOTAL) * 100}%"></i></div>${next ? `<small>再收集 ${next.n - n} 種可得稱號「${next.t}」</small>` : '<small>所有稱號都拿到了</small>'}</div>`;
 }
 function filtersHtml() {
-  const F: [DexFilter, string][] = [['all', '全部'], ['got', '已收集'], ['un', '未收集'], ['hid', '隱藏款']];
+  const F: [DexFilter, string][] = [['all', '全部'], ['got', '已收集'], ['un', '未收集'], ['hid', '隱藏款'], ['oops', '出包']];
   return `<div class="dxFilt"><label class="dxSearch">${IC.search}<input id="dxQ" type="search" placeholder="搜尋已收集的名稱或編號" value="${esc(fq)}"></label><div class="dxTog">${F.map(([k, l]) => `<button type="button" class="ckChip sm${dexFilter === k ? ' on' : ''}" data-f="${k}">${l}</button>`).join('')}</div></div>`;
 }
 
@@ -413,7 +414,7 @@ function computeIds() {
   const q = fq.trim();
   const qNo = /^(no\.?)?\s*0*(\d{1,4})$/i.exec(q);
   const out: number[] = [];
-  const pool = dexFilter === 'hid' ? SPECIAL_IDS : null;
+  const pool = dexFilter === 'hid' ? SPECIAL_IDS : dexFilter === 'oops' ? BLOOPER_IDS : null;
   const N = pool ? pool.length : COMBO_TOTAL;
   for (let k = 0; k < N; k++) {
     const id = pool ? pool[k] : k;
@@ -430,8 +431,8 @@ function computeIds() {
 }
 
 function cellHtml(id: number) {
-  const got = has(id), sp = !!specialOf(id);
-  if (got) { const f = cookFirstOf(id); return `<button type="button" class="dxCell" data-id="${id}"><span class="dxTh" data-th="${id}">${SIL}</span><span class="dxNm">${esc(comboName(id))}</span>${sp ? '<i class="dxSp">隱藏款</i>' : ''}${f ? `<i class="dxFirst" title="全服首創：${esc(f.nick)}">首創 ${esc(f.nick)}</i>` : ''}</button>`; }
+  const got = has(id), sp = !!specialOf(id), oops = isBlooper(id);
+  if (got) { const f = cookFirstOf(id); return `<button type="button" class="dxCell" data-id="${id}"><span class="dxTh" data-th="${id}">${SIL}</span><span class="dxNm">${esc(comboName(id))}</span>${sp ? '<i class="dxSp">隱藏款</i>' : ''}${oops ? '<i class="dxOops">出包</i>' : ''}${f ? `<i class="dxFirst" title="全服首創：${esc(f.nick)}">首創 ${esc(f.nick)}</i>` : ''}</button>`; }
   return `<button type="button" class="dxCell un" data-id="${id}">${sp ? SIL_Q : SIL}<span class="dxNm"><small>${no(id)}</small>？？？</span></button>`;
 }
 
@@ -461,9 +462,10 @@ function renderDex() {
   const id = dexId, got = has(id), sp = specialOf(id), hid = !!sp && !got;
   B.innerHTML = `<div class="dxNav"><button type="button" class="ckLink" data-nav="list">${IC.back}圖鑑</button><small>${no(id)}</small></div>`
     + `<div class="ckViewW big${got ? '' : ' un'}"><canvas id="dxView" width="256" height="256"></canvas>${got ? '' : '<span class="dxLock">還沒煎過</span>'}</div>`
-    + `<div class="ckName">${hid ? '？？？' : esc(comboName(id))}${sp ? '<span class="ckTag">隱藏款</span>' : ''}</div>`
+    + `<div class="ckName">${hid ? '？？？' : esc(comboName(id))}${sp ? '<span class="ckTag">隱藏款</span>' : ''}${!hid && isBlooper(id) ? '<span class="ckTag oops">出包</span>' : ''}</div>`
     + (dexOwner ? `<p class="ckDesc">${esc(dexOwner)} 展示的作品</p>` : '')
     + (sp && got ? `<p class="ckDesc">${esc(sp.desc)}</p>` : '')
+    + (got && !hid ? `<p class="ckQuote">${esc(comboComment(id))}</p>` : '')
     + `<ul class="ckFeat">${hid ? '<li>條件保密，煎出來才知道</li>' : comboFeatures(id).map(f => `<li>${f}</li>`).join('')}</ul>`
     + `<p class="ckSum">${got ? `第一次煎出：${fmtDate(dex()[String(id)])}` : '還沒收集'}</p>`
     + (hid ? '' : (() => { const f = cookFirstOf(id); return f ? `<p class="ckFirst">${IC.info}全服首創：${esc(f.nick)}${f.tag ? `<small>#${esc(f.tag)}</small>` : ''}${f.ts ? `・${fmtDate(f.ts)}` : ''}</p>` : ''; })())

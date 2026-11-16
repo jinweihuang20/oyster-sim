@@ -106,7 +106,7 @@ function give(id: number) {
   const repeat = s.feedDay.c[k] ?? 0;
   const score = feedScore(id, repeat), pay = feedPay(score);
   const li = Math.floor(Math.random() * FEED_LINE_N);
-  const bubble = `〈${comboName(id)}〉${score} 分　${feedLine(score, repeat, li)}`;
+  const bubble = `〈${comboName(id)}〉${score} 分　${feedLine(score, repeat, li, id)}`;
   if (!D.eat(target.connId, id, bubble)) { closeFeed(); D.toast('阿婆不在旁邊了', '#ffb08a'); return; }
   busyUntil = performance.now() + EAT_MS;
   // 先扣一盤、記同款次數，再給錢；分數太低盤子一樣吃掉

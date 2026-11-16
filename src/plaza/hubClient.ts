@@ -5,6 +5,7 @@ import type { PlazaMove } from './types';
 import { normFlagDto, type PlazaFlagState } from './flags';
 import { raceHubUrl } from '../race/hubClient';
 import { partyHubUrl } from '../party/hubClient';
+import { validCombo } from '../cook/combo';
 
 export type PlazaHubHandlers = {
   onRoster?: (snap: PlazaSnapshot) => void;
@@ -850,7 +851,7 @@ export function normCookState(x: any): PlazaCookState | null {
   const seats = (pick(x, 'seats') ?? []) as any[], ds = (pick(x, 'displays') ?? []) as any[];
   return {
     seats: Array.isArray(seats) ? seats.map(normCookSeat).filter((v): v is PlazaCookSeat => !!v) : [],
-    displays: Array.isArray(ds) ? ds.map(d => ({ connId: String(pick(d, 'connId') ?? ''), pid: String(pick(d, 'pid') ?? ''), nick: String(pick(d, 'nick') ?? ''), seat: fin(pick(d, 'seat')), slot: fin(pick(d, 'slot')), combo: fin(pick(d, 'combo')), at: fin(pick(d, 'at')) })).filter(d => d.seat >= 0 && d.seat < COOK_SEAT_MAX && d.combo >= 0 && d.combo < 2304) : [],
+    displays: Array.isArray(ds) ? ds.map(d => ({ connId: String(pick(d, 'connId') ?? ''), pid: String(pick(d, 'pid') ?? ''), nick: String(pick(d, 'nick') ?? ''), seat: fin(pick(d, 'seat')), slot: fin(pick(d, 'slot')), combo: fin(pick(d, 'combo')), at: fin(pick(d, 'at')) })).filter(d => d.seat >= 0 && d.seat < COOK_SEAT_MAX && validCombo(d.combo)) : [],
     seq: fin(pick(x, 'seq')),
   };
 }
