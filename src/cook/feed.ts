@@ -13,7 +13,8 @@ export type FeedDeps = {
   today: () => string;
   persist: () => void;
   isTut: () => boolean;
-  toast: (text: string, color?: string) => void;
+  /** sec＝顯示秒數（預設很短，結果提示要給長一點） */
+  toast: (text: string, color?: string, sec?: number) => void;
   /** 加錢後更新畫面 */
   onMoney: () => void;
   /** 阿婆吃的動畫；吃完頭上冒 after 這句。回傳 false＝阿婆不在旁邊了 */
@@ -32,6 +33,7 @@ let watch = 0;
 /** 正在給（阿婆吃的動畫期間）：擋連點和重開選單再送 */
 let busyUntil = 0;
 const EAT_MS = 2300;
+const RESULT_SEC = 3.5;
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const IC = {
@@ -113,11 +115,12 @@ function give(id: number) {
   if (pay > 0) s.money += pay;
   D.persist(); D.onMoney();
   try { D.relay?.(target.connId, id, score, repeat > 0, li); } catch { /* 同步失敗不影響 */ }
-  void reportAmaScore(id, score);
+  void reportAmaScore(id, score, EAT_MS - 200);
   const who = target.nick || '阿婆';
   closeFeed();
   window.setTimeout(() => {
     if (pay > 0) { try { D.sfx?.(); } catch { /* 音效失敗不影響 */ } }
-    D.toast(pay > 0 ? `${who}打 ${score} 分，給你 $${pay.toLocaleString()}` : `${who}只打 ${score} 分，這盤沒有賞金`, pay > 0 ? '#9be37a' : '#ffb08a');
+    // 結果提示停 3.5 秒（預設 1.1 秒會閃一下就沒了）
+    D.toast(pay > 0 ? `${who}打 ${score} 分，給你 $${pay.toLocaleString()}` : `${who}只打 ${score} 分，這盤沒有賞金`, pay > 0 ? '#9be37a' : '#ffb08a', RESULT_SEC);
   }, EAT_MS - 200);
 }

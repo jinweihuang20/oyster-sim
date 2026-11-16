@@ -6732,7 +6732,7 @@ initHudMenu({
 });
 initFeed({
   getSave: () => save, persist, isTut: () => !!tut,
-  toast: (t, c) => toast(t, c ?? '#cfe3f5'),
+  toast: (t, c, sec) => toast(t, c ?? '#cfe3f5', sec),
   onMoney: () => updHud(),
   eat: (id, combo, after) => plazaNpcEat(id, combo, after),
   relay: (id, combo, score, rep, li) => plazaFeedRelay(id, combo, score, rep, li),

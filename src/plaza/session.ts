@@ -2122,7 +2122,8 @@ function npcEatAnim(connId: string, combo: number, startLine: string, after: str
   const t = npcAim(connId); if (!view || !t) return false;
   view.showChat({ connId, text: startLine });
   // 吃完講評分（分數＋一句話）
-  if (after) window.setTimeout(() => { if (active) view?.showChat({ connId, text: after }); }, 2100);
+  // 評分泡泡至少停 4.5 秒，阿婆隨口講的話不會馬上蓋掉
+  if (after) window.setTimeout(() => { if (active) view?.showChat({ connId, text: after, hold: 4500 }); }, 2100);
   const w = src ?? { x: t.head.x + 0.6, z: t.head.z };
   const head = new THREE.Vector3(t.head.x, t.head.y, t.head.z);
   const dx = w.x - head.x, dz = w.z - head.z, dl = Math.hypot(dx, dz) || 1;

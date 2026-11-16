@@ -153,7 +153,7 @@ export type PlazaWorldView = {
   walkBodies: () => [number, number, number, number][];
   moonLaunch: (connId: string, delayMs?: number, fromX?: number, fromZ?: number) => void;
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
-  showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) => void;
+  showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean; hold?: number }) => void;
   setSelfPose: (x: number, z: number, yaw: number, seated: boolean, smoke?: boolean, connId?: string) => void;
   setSelfBody: (pz: string, pk: number, jy: number) => void;
   setSelfCushion: (on: boolean, pileId: number, slot: number) => void;
@@ -2273,10 +2273,12 @@ function hashPid(pid: string) {
     }
   }
 
-  function showChat(opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean }) {
+  /** hold＝這則至少停幾毫秒，期間阿婆隨口講的話不會蓋掉它（請吃的評分用） */
+  function showChat(opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean; hold?: number }) {
     const text = (opts.text || '').trim();
     if (!text) return;
-    const until = performance.now() + 5000;
+    const nowT = performance.now();
+    const until = nowT + Math.max(5000, opts.hold ?? 0);
     const short = text.length > 40 ? text.slice(0, 39) + '…' : text;
     if (opts.self) {
       selfBubble.setText(short, true);
@@ -2294,6 +2296,9 @@ function hashPid(pid: string) {
       for (const x of remotes.values()) { if (x.nick === opts.nick) { r = x; break; } }
     }
     if (!r) return;
+    const rj = r as any;
+    if (!opts.hold && (rj._bubHold ?? 0) > nowT) return;
+    rj._bubHold = opts.hold ? nowT + opts.hold : 0;
     r.bubble.setText(short, true);
     r.bubble.setOpacity(PLAZA_BUB_A);
     r.bubble.sprite.visible = true;

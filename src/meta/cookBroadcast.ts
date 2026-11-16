@@ -121,12 +121,17 @@ export async function reportCookDone(combo: number) {
 }
 
 /** 請阿婆吃拿到 85 分以上：全服廣播 */
-export async function reportAmaScore(combo: number, score: number) {
+/** showAfterMs＝等阿婆吃完、頭上冒分數時才跳自己的橫幅 */
+export async function reportAmaScore(combo: number, score: number, showAfterMs = 0) {
   if (score < AMA_BC_MIN || !comboHasFood(combo) || socialInTut()) return;
-  const r = await socialPost('/bc/ama', { combo, score: Math.round(score) });
-  if (r?.broadcast) {
-    mine.set(`ama|${combo}|${Math.round(score)}`, Date.now());
-    push({ kind: 'ama', nick: socialNick(), tag: '', combo, score: Math.round(score) });
+  const t0 = performance.now();
+  const sc = Math.round(score);
+  const r = await socialPost('/bc/ama', { combo, score: sc });
+  // 伺服器確認要播（30 秒內沒播過）→ 全服都會看到；連不上／舊伺服器（r＝null）→ 至少自己這邊照樣跳
+  if (r?.broadcast || r == null) {
+    mine.set(`ama|${combo}|${sc}`, Date.now());
+    const wait = Math.max(0, showAfterMs - (performance.now() - t0));
+    window.setTimeout(() => push({ kind: 'ama', nick: socialNick(), tag: '', combo, score: sc }), wait);
   }
 }
 
