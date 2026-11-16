@@ -6782,6 +6782,8 @@ let nameAfter: (() => void) | null = null;
 function nameDismiss() {
   $('nameAsk').classList.remove('show');
   const f = nameAfter; nameAfter = null; f?.();
+  // 取完名字直接要進工寮／廣場就不插導覽（下次回主畫面開遊戲再看）
+  if (f) hgPend = false; else hgResume();
 }
 function namePrompt(after?: () => void) {
   // 要接著做的事先記住：結算畫面還開著時會晚點才問，問完一樣接著進工寮／廣場
@@ -6789,6 +6791,9 @@ function namePrompt(after?: () => void) {
   if ($('paySum').classList.contains('show')) { nameWait = true; return; }
   if (save.name || tut) { const f = nameAfter; nameAfter = null; f?.(); return; }
   if ($('nameAsk').classList.contains('show')) return;
+  // 主畫面導覽（阿婆介紹按鈕）開著就先收起，取好名字再接著看
+  const hg = document.getElementById('hg');
+  if (hg?.classList.contains('show')) { hg.classList.remove('show'); hgI = -1; hgPend = true; }
   save.namePrompted = 1; persist();
   ($('naIn') as HTMLInputElement).value = '';
   $('nameAsk').classList.add('show');
@@ -7240,8 +7245,16 @@ const HG: [string, string][] = [
   ['oSet', '音量、名字跟重看教學，都在設定裡。'],
   ['locPick', '這裡可以換漁港，剝得越多，能去的地方越多。'],
 ];
-let hgI = -1;
+let hgI = -1, hgPend = false;
+/** 取名字視窗關掉後，補看剛剛等著的主畫面導覽（已經進工寮／廣場就不看） */
+function hgResume() {
+  if (!hgPend) return;
+  hgPend = false;
+  setTimeout(() => { if (state !== 'play' && !isPlazaActive() && $('overlay').classList.contains('show') && !$('nameAsk').classList.contains('show')) hgShow(); else hgPend = false; }, 400);
+}
 function hgShow() {
+  // 取名字視窗開著時先等，不要蓋在上面
+  if ($('nameAsk').classList.contains('show')) { hgPend = true; return; }
   const steps = HG.filter(([id]) => { const e = document.getElementById(id); return e && e.offsetParent; });
   let box = document.getElementById('hg'); if (!box) { box = document.createElement('div'); box.id = 'hg'; box.innerHTML = '<div id="hgHole"></div><div id="hgCall"><div id="hgTxt"></div><div class="hgB"><button id="hgSkip">略過</button><button id="hgNext">下一步</button></div></div>'; document.body.appendChild(box);
     let downOk = false; const t0 = () => Number(box!.dataset.t || 0);
