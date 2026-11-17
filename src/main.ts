@@ -126,6 +126,56 @@ function setPlazaMode(v: boolean) {
   applyPlazaShadowMode();
   // 進／出廣場同時切 lamp.castShadow（applyEcoGfx 內部會讀 plazaMode）
   try { applyEcoGfx(); } catch { /* applyEcoGfx 尚未定義時忽略 */ }
+  syncPlazaShuckBtns(v);
+  armPlazaShuckHint(v);
+}
+
+/** 廣場坐下：藥品／換位置／放棄這顆排成一列；離開廣場還原工寮版面 */
+function syncPlazaShuckBtns(on: boolean) {
+  const corner = document.getElementById('btnsCorner');
+  const left = document.getElementById('btnsL');
+  const med = document.getElementById('medBtn');
+  const stand = document.getElementById('standBtn');
+  const give = document.getElementById('giveUp');
+  if (!med || !stand || !give) return;
+  if (on && corner) {
+    corner.appendChild(med);
+    corner.appendChild(stand);
+    corner.appendChild(give);
+    corner.classList.add('pzShuckBtns');
+  } else {
+    corner?.classList.remove('pzShuckBtns');
+    if (left) {
+      left.appendChild(med);
+      left.appendChild(stand);
+    }
+    corner?.appendChild(give);
+  }
+}
+
+let pzShuckHintObs: MutationObserver | null = null;
+let pzShuckHintTimer = 0;
+function armPlazaShuckHint(on: boolean) {
+  const el = document.getElementById('hint');
+  if (!on) {
+    pzShuckHintObs?.disconnect();
+    pzShuckHintObs = null;
+    clearTimeout(pzShuckHintTimer);
+    el?.classList.remove('pzHintOn');
+    return;
+  }
+  if (!el || pzShuckHintObs) return;
+  const bump = () => {
+    if (!document.body.classList.contains('plazaMode') || document.body.classList.contains('plazaRoam')) return;
+    if (!el.textContent?.trim()) { el.classList.remove('pzHintOn'); return; }
+    el.classList.add('pzHintOn');
+    clearTimeout(pzShuckHintTimer);
+    pzShuckHintTimer = window.setTimeout(() => el.classList.remove('pzHintOn'), 5000);
+  };
+  pzShuckHintObs = new MutationObserver(bump);
+  pzShuckHintObs.observe(el, { characterData: true, childList: true, subtree: true });
+  pzShuckHintObs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  bump();
 }
 let plazaPayWait: Promise<number> | null = null;
 /** 競速本局剝蚵工錢是否已結算（勝負獎金另計） */

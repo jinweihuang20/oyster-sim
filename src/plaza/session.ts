@@ -1465,7 +1465,7 @@ function buildUi() {
 /* 右下：避開上方狀態列、左下搖桿／聊天 */
 /* 地圖／離開：狀態列下方左側並排圓形圖示鈕。top 由 syncPlazaHudLayout 依 #top 實際底緣覆寫 */
 #pzLeftFabs{pointer-events:none;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:var(--pz-fabs-top, calc(var(--sa-top) + 58px));bottom:auto;z-index:2;display:flex;flex-direction:row;align-items:center;gap:8px}
-#pzLeftFabs>button{pointer-events:auto;position:static;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border:1px solid rgba(232,246,255,.4);border-radius:50%;background:rgba(32,72,96,.5);color:#e8f6ff;font-weight:900;font-size:0;box-shadow:0 2px 8px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:inline-flex;align-items:center;justify-content:center}
+#pzLeftFabs>button{pointer-events:auto;position:relative;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border:1px solid rgba(232,246,255,.4);border-radius:50%;background:rgba(32,72,96,.5);color:#e8f6ff;font-weight:900;font-size:0;box-shadow:0 2px 8px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:inline-flex;align-items:center;justify-content:center}
 #pzLeftFabs>button:active{background:rgba(42,90,134,.72)}
 #pzLeftFabs>button .ic{width:18px;height:18px;background:currentColor}
 #pzLeftFabs>button .key{display:none}
@@ -1485,33 +1485,25 @@ function buildUi() {
 #pzLeaveAsk .pzLeaveBtns #pzLeaveOk{background:rgba(42,90,134,.85);border-color:rgba(232,246,255,.4)}
 #pzLeaveAsk .pzLeaveBtns button:active{background:rgba(255,255,255,.2)}
 #pzLeaveAsk .pzLeaveBtns #pzLeaveOk:active{background:rgba(42,90,134,1)}
-/* 聊天放左側，避開右下雨傘／丟殼／偷 */
-#pzChatFab{pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;bottom:calc(var(--sa-bottom) + 168px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
-#pzChatFab .pzBadge{display:none;position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e23b2f;color:#fff;font-size:11px;font-weight:900;line-height:18px;text-align:center;box-shadow:0 1px 0 #1b1208;pointer-events:none}
+/* 聊天改跟離開／地圖同一排（狀態列下左側圓形圖示），避開剝蚵拖曳與 ◀▶ */
+#pzChatFab{position:relative}
+#pzChatFab .pzBadge{display:none;position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#e23b2f;color:#fff;font-size:10px;font-weight:900;line-height:16px;text-align:center;pointer-events:none;z-index:1}
 #pzChatFab.hasUnread .pzBadge{display:block}
 #pzChatFab.hasUnread{animation:pzFabPulse .9s ease-in-out 2}
 @keyframes pzFabPulse{0%,100%{transform:scale(1)}40%{transform:scale(1.06)}}
-#pzChatPeek{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;bottom:calc(var(--sa-bottom) + 220px);max-width:min(70vw,280px);background:rgba(20,12,6,.92);border:2px solid #d9952b;border-radius:12px;padding:8px 10px;color:#fff6d8;font-size:12px;line-height:1.35;z-index:3;cursor:pointer;box-shadow:2px 2px 0 #1b1208}
+#pzChatPeek{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:calc(var(--pz-fabs-top, calc(var(--sa-top) + 58px)) + 44px);bottom:auto;max-width:min(70vw,280px);background:rgba(20,12,6,.92);border:2px solid #d9952b;border-radius:12px;padding:8px 10px;color:#fff6d8;font-size:12px;line-height:1.35;z-index:3;cursor:pointer;box-shadow:2px 2px 0 #1b1208}
 #pzChatPeek.on{display:block}
 #pzChatPeek b{color:#ffd23f;font-weight:900}
-#pzChat{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;bottom:calc(var(--sa-bottom) + 220px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
+#pzChat{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:calc(var(--pz-fabs-top, calc(var(--sa-top) + 58px)) + 44px);bottom:auto;width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
 #pzChat.open{display:block}
-/* 電腦：聊天鈕靠左下；視窗／預覽叠在鈕上方（離開已改到地圖下方） */
-@media (pointer:fine){
-  #pzChatFab{bottom:calc(var(--sa-bottom) + 18px);height:44px}
-  #pzChatPeek{bottom:calc(var(--sa-bottom) + 70px)}
-  #pzChat{bottom:calc(var(--sa-bottom) + 70px)}
-}
-/* 電腦寬螢幕：聊天窗加寬，方便看長句 */
 @media (pointer:fine) and (min-width:900px){
   #pzChat{width:min(36vw,420px)}
   #pzChatPeek{max-width:min(36vw,420px)}
   #pzLog{height:88px}
 }
 @media (pointer:coarse) and (orientation:landscape){
-  #pzChatFab{bottom:calc(var(--sa-bottom) + 120px)}
-  #pzChatPeek{bottom:calc(var(--sa-bottom) + 172px);max-width:min(42vw,240px)}
-  #pzChat{bottom:calc(var(--sa-bottom) + 172px);width:min(42vw,240px)}
+  #pzChatPeek{max-width:min(42vw,240px)}
+  #pzChat{width:min(42vw,240px)}
 }
 #pzChatHd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-size:12px;font-weight:800;color:#ffd23f}
 #pzChatMin{pointer-events:auto;background:transparent;border:0;color:#ffd23f;font-size:18px;line-height:1;padding:2px 6px;font-weight:900}
@@ -1548,6 +1540,7 @@ function buildUi() {
 <div id="pzLeftFabs">
 <button id="pzX" type="button" aria-label="離開廣場" title="離開廣場"><i class="ic ic-exit"></i></button>
 <button id="pzMapFab" type="button" aria-label="地圖" title="地圖 (M)"><i class="ic ic-pin"></i><span class="key"> (M)</span></button>
+<button id="pzChatFab" type="button" aria-label="聊天" title="聊天 (ENTER)"><i class="ic ic-chat"></i><span class="key"> (ENTER)</span><span class="pzBadge" aria-hidden="true">0</span></button>
 </div>
 <div id="pzLeaveAsk" role="dialog" aria-modal="true" aria-label="確定離開廣場？">
   <div class="pzLeaveBox">
@@ -1560,7 +1553,6 @@ function buildUi() {
 </div>
 <div id="pzHud">準備中…</div>
 <div id="pzNet" role="status" aria-live="polite"></div>
-<button id="pzChatFab" type="button" aria-label="聊天">聊天<span class="key"> (ENTER)</span><span class="pzBadge" aria-hidden="true">0</span></button>
 <button id="pzChatPeek" type="button" aria-label="打開聊天"></button>
 <div id="pzChat">
   <div id="pzChatHd"><span>${raceMode ? '對戰聊天' : partyMode ? '休閒房聊天' : '廣場聊天'}</span><button id="pzChatMin" type="button" aria-label="縮小">–</button></div>
@@ -2546,27 +2538,18 @@ function syncPlazaHudLayout() {
   root.setProperty('--pz-hint-top', `${hintTop}px`);
 }
 
-/** 手機直向坐著時：聊天鈕移到「藥品／道具」正上方；地圖鈕依狀態列實際高度放置，坐下不改 */
-let fabB = '';
+/** 聊天已跟離開／地圖同一排；清掉舊版留下的 inline 位移，窗／預覽改由 CSS 跟 --pz-fabs-top */
+let fabB = 'done';
 function placeChatFab() {
   if (!ui) return;
-  const portraitPhone = matchMedia('(pointer:coarse) and (orientation:portrait)').matches;
-  let b = '';
-  if (seated && portraitPhone) {
-    const med = document.getElementById('medBtn');
-    const r = med?.getBoundingClientRect();
-    if (r && r.height > 0) b = `${Math.round(innerHeight - r.top + 8)}px`;
-  }
-  if (b === fabB) return;
-  fabB = b;
+  if (fabB === '') return;
+  fabB = '';
   const fab = ui.querySelector('#pzChatFab') as HTMLElement | null;
   const peek = ui.querySelector('#pzChatPeek') as HTMLElement | null;
   const chat = ui.querySelector('#pzChat') as HTMLElement | null;
-  const up = b ? `calc(${b} + 52px)` : '';
-  if (fab) fab.style.bottom = b;
-  if (peek) peek.style.bottom = up;
-  if (chat) chat.style.bottom = up;
-  // 地圖鈕不跟坐下位移；清掉可能殘留的 inline top/bottom
+  if (fab) { fab.style.bottom = ''; fab.style.top = ''; }
+  if (peek) { peek.style.bottom = ''; peek.style.top = ''; }
+  if (chat) { chat.style.bottom = ''; chat.style.top = ''; }
   const mapFab = ui.querySelector('#pzMapFab') as HTMLElement | null;
   if (mapFab) { mapFab.style.bottom = ''; mapFab.style.top = ''; }
 }

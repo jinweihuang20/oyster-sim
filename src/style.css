@@ -1336,13 +1336,42 @@ body:is(.plazaMode,.plazaRoam) #hint{
 }
 body.plazaRoam:not(.plazaSmokeSit):not(.plazaMgSit) #hint{opacity:0;pointer-events:none;transition:opacity .45s ease}
 body.plazaRoam:not(.plazaSmokeSit):not(.plazaMgSit) #hint.pzHintOn{opacity:1}
+/* 坐下剝蚵提示：幾秒後淡出（文字更新會再出現） */
+body.plazaMode:not(.plazaRoam) #hint{opacity:0;pointer-events:none;transition:opacity .45s ease;white-space:normal;line-height:1.35;padding:0 16px}
+body.plazaMode:not(.plazaRoam) #hint.pzHintOn{opacity:1}
+/* 廣場坐下：不顯示「回主選單」（用左上離開） */
+body:is(.plazaMode,.plazaRoam) #quitBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
+/* 藥品／換位置／放棄這顆同一列，放棄靠右並留空隙 */
+#btnsCorner.pzShuckBtns{
+  left:calc(var(--sa-left) + 6px);right:auto;bottom:calc(var(--sa-bottom) + 6px);
+  flex-direction:row;align-items:flex-end;flex-wrap:wrap;gap:6px;
+  max-width:calc(100vw - var(--sa-left) - var(--sa-right) - 16px);
+}
+#btnsCorner.pzShuckBtns #giveUp{margin-left:12px}
+@media (pointer:coarse) and (orientation:landscape){
+  #btnsCorner.pzShuckBtns{max-width:calc(100vw - var(--sa-left) - var(--sa-right) - 140px)}
+}
+/* 橫向（含直向保險）：◀▶ 必須在離開／地圖／聊天列下方，避免重疊 */
+@media (pointer:coarse){
+  body:is(.plazaMode,.plazaRoam) #rotL{
+    top:max(40%, calc(var(--pz-fabs-top, 52px) + 44px))!important;
+    bottom:auto!important;
+    left:calc(var(--sa-left) + 8px)!important;
+  }
+}
+@media (pointer:coarse) and (orientation:landscape){
+  body:is(.plazaMode,.plazaRoam) #rotL{
+    top:max(28%, calc(var(--pz-fabs-top, 52px) + 44px))!important;
+    left:calc(var(--sa-left) + 8px)!important;
+  }
+}
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
 /* 吸菸區坐下：仍屬 plazaRoam（藏剝蚵鈕），但要顯示站起／回主選單（與一般座位同款） */
-body.plazaRoam.plazaSmokeSit #standBtn.on,body.plazaRoam.plazaSmokeSit #quitBtn.on,body.plazaRoam.plazaSmokeSit #puffBtn.on{visibility:visible!important;pointer-events:auto!important;display:block!important}
+body.plazaRoam.plazaSmokeSit #standBtn.on,body.plazaRoam.plazaSmokeSit #puffBtn.on{visibility:visible!important;pointer-events:auto!important;display:block!important}
 /* 蚵仔機關槍：站起／回主選單／發射／買彈夾 */
 #mgFireBtn,#mgReloadBtn{display:none}
-body.plazaRoam.plazaMgSit #standBtn.on,body.plazaRoam.plazaMgSit #quitBtn.on,body.plazaRoam.plazaMgSit #mgFireBtn,body.plazaRoam.plazaMgSit #mgReloadBtn{visibility:visible!important;pointer-events:auto!important;display:block!important}
+body.plazaRoam.plazaMgSit #standBtn.on,body.plazaRoam.plazaMgSit #mgFireBtn,body.plazaRoam.plazaMgSit #mgReloadBtn{visibility:visible!important;pointer-events:auto!important;display:block!important}
 body.plazaRoam.plazaMgSit #throwBtn,body.plazaRoam.plazaMgSit #stealBtn,body.plazaRoam.plazaMgSit #umbBtn,body.plazaRoam.plazaMgSit #puffBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
 #mgHud{display:none;position:fixed;top:calc(var(--sa-top) + 72px);left:50%;transform:translateX(-50%);z-index:9200;pointer-events:none;gap:10px;align-items:center;font-weight:800;font-size:15px;color:#fff4dc;text-shadow:0 1px 4px #000;background:rgba(20,12,8,.55);border:1px solid rgba(255,200,120,.35);padding:8px 14px;border-radius:12px}
 body.plazaRoam.plazaMgSit #mgHud{display:flex}
@@ -2820,7 +2849,8 @@ body.partyMode #partyHud.on{display:block}
 /* 頂部狀態列永遠蓋過休閒房列（點擊／視線優先） */
 body.partyMode #top,body.partyMode #stats{z-index:9100}
 /* 休閒房改走 #partyHud 離開／邀請；藏廣場左上地圖＋離開，避免再擋頂列 */
-body.partyMode #pzLeftFabs{display:none!important}
+/* 休閒房有自己的離開／邀請；地圖／離開藏起，聊天鈕仍留在左上 */
+body.partyMode #pzX,body.partyMode #pzMapFab{display:none!important}
 /* 休閒房：提示／toast 再往下，避開精簡列 */
 body.partyMode{
   --plaza-toast-top:calc(var(--sa-top,0px) + 138px);
