@@ -173,6 +173,7 @@ function syncPlazaShuckBtns(on: boolean) {
     }
     corner?.appendChild(give);
   }
+  requestAnimationFrame(syncShuckRotLayout);
 }
 
 let shedHudObs: ResizeObserver | null = null;
@@ -240,6 +241,43 @@ function ensureShedHudObserver() {
   if (med) shedHudObs.observe(med);
 }
 
+let shuckRotObs: ResizeObserver | null = null;
+function ensureShuckRotObserver() {
+  if (!shuckRotObs) shuckRotObs = new ResizeObserver(() => syncShuckRotLayout());
+  for (const id of ['btnsCorner', 'btnsL', 'giveUp']) {
+    const el = document.getElementById(id);
+    if (el) shuckRotObs.observe(el);
+  }
+}
+
+/** 手機橫向：◀▶ 放在左下角「放棄這顆／藥品／換位置」簇上方，避免重疊 */
+function syncShuckRotLayout() {
+  const st = document.documentElement.style;
+  const land = matchMedia('(pointer:coarse) and (orientation:landscape)').matches;
+  const shed = document.body.classList.contains('shedShift');
+  const plazaSit = document.body.classList.contains('plazaMode') && !document.body.classList.contains('plazaRoam');
+  if (!land || (!shed && !plazaSit)) {
+    st.removeProperty('--shuck-rot-bottom');
+    return;
+  }
+  ensureShuckRotObserver();
+  let top = Infinity;
+  for (const id of ['giveUp', 'medBtn', 'standBtn']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+    const r = el.getBoundingClientRect();
+    if (r.height >= 1) top = Math.min(top, r.top);
+  }
+  if (!Number.isFinite(top)) {
+    st.removeProperty('--shuck-rot-bottom');
+    return;
+  }
+  const bottom = Math.max(0, Math.round(document.documentElement.clientHeight - top + 8));
+  st.setProperty('--shuck-rot-bottom', `${bottom}px`);
+}
+
 /** 工寮頂部：直向兩列（下列回主選單＋血條）；橫向單列（血條在數據與圓鈕中間）；電腦單列、血條在欄下 */
 function placeShedTopChrome(on: boolean) {
   const top = document.getElementById('top');
@@ -293,6 +331,8 @@ function refreshWorkHud() {
   } else {
     clearShedHudLayout();
   }
+  syncShuckRotLayout();
+  requestAnimationFrame(syncShuckRotLayout);
 }
 
 let pzShuckHintObs: MutationObserver | null = null;
@@ -6167,6 +6207,7 @@ function resize() {
   updBaseFov();
   applyFpHandLayout();
   syncShedHudLayout();
+  syncShuckRotLayout();
 }
 /** 第一人稱手的畫面配置。camTick 每幀會重設 handRig，不可只寫在 resize。 */
 function applyFpHandLayout() {

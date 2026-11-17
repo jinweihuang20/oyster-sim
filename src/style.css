@@ -1481,6 +1481,27 @@ body:is(.plazaMode,.plazaRoam) #quitBtn{display:none!important;visibility:hidden
     left:calc(var(--sa-left) + 8px)!important;
   }
 }
+/* 手機橫向剝蚵：◀▶ 並排在左下角按鈕簇（放棄這顆／藥品／換位置）上方 */
+@media (pointer:coarse) and (orientation:landscape){
+  body.shedShift #rotL.mb,
+  body.shedShift #rotR.mb,
+  body.plazaMode:not(.plazaRoam) #rotL.mb,
+  body.plazaMode:not(.plazaRoam) #rotR.mb{
+    top:auto!important;
+    bottom:var(--shuck-rot-bottom, calc(var(--sa-bottom) + 100px))!important;
+    z-index:6;
+  }
+  body.shedShift #rotL.mb,
+  body.plazaMode:not(.plazaRoam) #rotL.mb{
+    left:calc(var(--sa-left) + 6px)!important;
+    right:auto!important;
+  }
+  body.shedShift #rotR.mb,
+  body.plazaMode:not(.plazaRoam) #rotR.mb{
+    left:calc(var(--sa-left) + 64px)!important;
+    right:auto!important;
+  }
+}
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
 /* 吸菸區坐下：仍屬 plazaRoam（藏剝蚵鈕），但要顯示站起／回主選單（與一般座位同款） */
