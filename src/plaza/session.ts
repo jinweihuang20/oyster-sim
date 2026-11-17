@@ -1518,6 +1518,27 @@ function buildUi() {
 #pzRow button{pointer-events:auto;background:rgba(42,90,134,.95);color:#fff;border:1px solid rgba(232,246,255,.35);border-radius:10px;font-weight:800;padding:8px 12px}
 #pzRow button:active{background:rgba(52,110,160,1)}
 @media (max-width:420px){#pzChat{width:min(78vw,280px)}#pzLog{height:52px}}
+/* 電腦：隱藏聊天鈕；左下常駐聊天列（一般線上遊戲風） */
+@media (pointer:fine){
+  #pzChatFab,#pzChatPeek{display:none!important}
+  #pzChat,#pzChat.open{
+    display:flex!important;flex-direction:column;
+    left:calc(var(--sa-left) + 12px);right:auto;
+    top:auto;bottom:calc(var(--sa-bottom) + 14px);
+    width:min(38vw,440px);max-width:440px;
+    background:rgba(22,28,36,.42);border-color:rgba(232,246,255,.16);
+    box-shadow:none;padding:6px 8px;
+  }
+  #pzChat.typing{
+    background:rgba(22,28,36,.92);border-color:rgba(232,246,255,.28);
+    box-shadow:0 8px 22px rgba(0,0,0,.35);
+  }
+  #pzChatHd{margin-bottom:2px;font-size:11px;opacity:.7}
+  #pzChatMin{display:none}
+  #pzLog{height:128px;margin-bottom:4px;mask-image:linear-gradient(to bottom,transparent 0%,#000 18%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 18%)}
+  #pzChat:not(.typing) #pzRow{opacity:.5}
+  #pzChat.typing #pzRow{opacity:1}
+}
 /* 地圖：左下聊天上方；開圖時全螢幕半透明＋中央畫布 */
 /* 左上：狀態列（#top／#stats）下方 */
 /* z-index 低於聊天／離開；狀態列另在 style.css 抬到 plazaRoot 之上 */
@@ -1602,15 +1623,36 @@ function buildUi() {
     if (ke.key === 'Enter') { ke.preventDefault(); sendChat(); }
     if (ke.key === 'Escape') { ke.preventDefault(); plazaCloseChat(); }
   });
+  // 電腦常駐列：點輸入框也進入／離開打字態
+  inp.addEventListener('focus', () => {
+    if (!pcChatDock()) return;
+    chat.classList.add('open', 'pcDock', 'typing');
+  });
+  inp.addEventListener('blur', () => {
+    if (!pcChatDock()) return;
+    chat.classList.remove('typing');
+  });
   ui.querySelector('#pzMapFab')!.addEventListener('click', () => plazaToggleMap());
   ui.querySelector('#pzMapClose')!.addEventListener('click', () => plazaCloseMap());
   ui.querySelector('#pzMap')!.addEventListener('click', (e) => {
     if (e.target === ui!.querySelector('#pzMap')) plazaCloseMap();
   });
   chatUnread = 0;
-  plazaCloseChat();
   plazaCloseMap();
   hideChatPeek();
+  if (pcChatDock()) {
+    const chat = ui.querySelector('#pzChat') as HTMLElement;
+    chat.classList.add('open', 'pcDock');
+    chat.classList.remove('typing');
+    requestAnimationFrame(() => requestAnimationFrame(scrollChatLogToEnd));
+  } else {
+    plazaCloseChat();
+  }
+}
+
+/** 電腦版左下常駐聊天（無 FAB） */
+function pcChatDock() {
+  return matchMedia('(pointer:fine)').matches;
 }
 
 function scrollChatLogToEnd() {
@@ -1622,7 +1664,19 @@ function scrollChatLogToEnd() {
 function setChatOpen(open: boolean) {
   const chat = ui?.querySelector('#pzChat') as HTMLElement | null;
   const fab = ui?.querySelector('#pzChatFab') as HTMLElement | null;
-  if (!chat || !fab) return;
+  if (!chat) return;
+  if (pcChatDock()) {
+    chat.classList.add('open', 'pcDock');
+    chat.classList.toggle('typing', open);
+    if (open) {
+      chatUnread = 0;
+      hideChatPeek();
+      syncChatBadge();
+      requestAnimationFrame(() => requestAnimationFrame(scrollChatLogToEnd));
+    }
+    return;
+  }
+  if (!fab) return;
   chat.classList.toggle('open', open);
   fab.style.opacity = open ? '0.55' : '1';
   if (open) {
@@ -1649,8 +1703,9 @@ function hideChatPeek() {
   ui?.querySelector('#pzChatPeek')?.classList.remove('on');
 }
 
-/** 縮小中：短暫預覽最新一句，點了開聊天 */
+/** 縮小中：短暫預覽最新一句，點了開聊天（電腦常駐列不需要） */
 function showChatPeek(nick: string, text: string) {
+  if (pcChatDock()) return;
   const peek = ui?.querySelector('#pzChatPeek') as HTMLElement | null;
   if (!peek || plazaChatIsOpen()) return;
   const short = text.length > 36 ? text.slice(0, 35) + '…' : text;
@@ -1664,7 +1719,7 @@ function escChat(s: string) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
 
-/** Enter／點聊天：打開並直接打字 */
+/** Enter／點聊天：打開並直接打字（電腦＝聚焦左下常駐輸入） */
 export function plazaFocusChat() {
   if (!active || !ui) return false;
   setChatOpen(true);
@@ -1680,12 +1735,21 @@ export function plazaFocusChat() {
 export function plazaCloseChat() {
   const inp = ui?.querySelector('#pzIn') as HTMLInputElement | null;
   if (inp && document.activeElement === inp) inp.blur();
+  // 電腦常駐列：只取消打字態，不藏窗
+  if (pcChatDock()) {
+    ui?.querySelector('#pzChat')?.classList.remove('typing');
+    return true;
+  }
   setChatOpen(false);
   return true;
 }
 
 export function plazaChatIsOpen() {
-  return !!ui?.querySelector('#pzChat')?.classList.contains('open');
+  const chat = ui?.querySelector('#pzChat');
+  if (!chat) return false;
+  // 電腦：正在打字才算「開著」（避免 Enter 被當成已開而無效）
+  if (pcChatDock()) return chat.classList.contains('typing') || document.activeElement?.id === 'pzIn';
+  return chat.classList.contains('open');
 }
 
 
@@ -2499,8 +2563,10 @@ function pushChat(m: PlazaChat) {
   // 僅發言端送 Discord；來自 Discord 的勿回貼（訊息已在頻道裡），避免迴圈
   if (isSelf && m.text && m.via !== 'discord')
     void postDiscordPlazaChat(m.nick || '剝蚵人', m.text, { pileId: m.pileId, tag: myTag() });
-  // 縮小中：角標＋短暫預覽（不自動展開，避免打斷剝蚵）
-  if (!isSelf && !plazaChatIsOpen()) {
+  // 縮小中：角標＋短暫預覽（不自動展開，避免打斷剝蚵）；電腦常駐列只捲到底
+  if (pcChatDock()) {
+    requestAnimationFrame(() => requestAnimationFrame(scrollChatLogToEnd));
+  } else if (!isSelf && !plazaChatIsOpen()) {
     chatUnread = Math.min(99, chatUnread + 1);
     syncChatBadge();
     showChatPeek(plazaDisplayName(m.nick, m.tag) || '誰', m.text || '');

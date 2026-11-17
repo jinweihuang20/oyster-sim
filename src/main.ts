@@ -121,6 +121,8 @@ let evRun: EvCfg | null = null, evToken: string | null = null, evLastId: number 
 let plazaMode = false;
 /** 第三人稱本機 avatar；須在 frame() 之前宣告，否則 tickPuffUi 會踩 TDZ */
 let plazaMe: PlayerRig | null = null;
+/** 抽一口按住狀態；須早於 blur／visibility 綁定 endPuff，否則 TDZ */
+let puffHeld = false;
 function setPlazaMode(v: boolean) {
   plazaMode = v;
   document.body.classList.toggle('plazaMode', v);
@@ -158,9 +160,16 @@ function syncPlazaShuckBtns(on: boolean) {
     corner.classList.add('pzShuckBtns');
   } else {
     corner?.classList.remove('pzShuckBtns');
-    if (left) {
+    // 手機藥品／換位置回 #btnsL；電腦它們在 #btns，勿硬塞進空的 #btnsL（否則 insertBefore 會炸）
+    if (matchMedia('(pointer:coarse)').matches && left) {
       left.appendChild(med);
       left.appendChild(stand);
+    } else {
+      const btns = document.getElementById('btns');
+      if (btns) {
+        if (med.parentElement !== btns) btns.appendChild(med);
+        if (stand.parentElement !== btns) btns.appendChild(stand);
+      }
     }
     corner?.appendChild(give);
   }
@@ -3855,7 +3864,11 @@ if (matchMedia('(pointer:coarse)').matches) {
   matchMedia('(orientation: landscape)').addEventListener('change', placeCamBtn);
   addEventListener('orientationchange', () => setTimeout(placeCamBtn, 60));
 }
-else $('btns').insertBefore($('radioBtn'), $('medBtn'));
+else {
+  const btns = $('btns'), med = $('medBtn'), radio = $('radioBtn');
+  if (med.parentElement === btns) btns.insertBefore(radio, med);
+  else btns.appendChild(radio);
+}
 btn('rotL', () => rotKey = -1, () => rotKey = 0); btn('rotR', () => rotKey = 1, () => rotKey = 0);
 // ----- 徛起來行路、換位 -----
 // walking／walkPos 等狀態與 standUp／sitDown／walkStep 在 world/walkSeat
@@ -4941,7 +4954,6 @@ const PUFF_MIN_HOLD = 0.3;
 const PUFF_UP_SEC = 0.7;
 const PUFF_DOWN_SEC = 0.5;
 const PUFF_AWAY_SEC = 0.12;
-let puffHeld = false;
 let puffT = 0;
 /** 0＝膝上 → 1＝嘴邊 */
 let puffAnimT = 0;

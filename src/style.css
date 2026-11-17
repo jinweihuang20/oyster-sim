@@ -2542,7 +2542,7 @@ body .clTabs button{
   position:fixed!important;right:calc(var(--sa-right,0px) + 12px)!important;left:auto!important;top:auto!important;
   min-width:96px!important;height:48px!important;min-height:48px!important;padding:0 14px!important;margin:0!important;
   border-radius:12px!important;display:flex!important;align-items:center;justify-content:center;gap:6px;
-  font-size:16px!important;font-weight:700;color:#fff!important;
+  font-size:16px!important;font-weight:700;color:#fff!important;white-space:nowrap;
   background:rgba(28,32,38,.55)!important;border:1px solid rgba(255,255,255,.35)!important;
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 2px 8px rgba(0,0,0,.2);
   z-index:30;pointer-events:auto
@@ -2583,8 +2583,12 @@ body.poseOpen #jumpBtn.on{bottom:calc(var(--sa-bottom,0px) + 132px)!important}
 body.poseOpen #crouchBtn.on{bottom:calc(var(--sa-bottom,0px) + 188px)!important}
 body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
 #crouchBtn.act,#lieBtn.act{background:rgba(42,90,134,.72)!important}
-/* 電腦廣場閒逛：離開已改到地圖下方，動作／藥品靠右下 */
+/* 電腦廣場閒逛：離開已改到地圖下方，動作／藥品靠右下；按鈕加寬避免「藥品/道具」換行 */
 @media (pointer:fine){
+  #poseBtn.on,#jumpBtn.on,#crouchBtn.on,#lieBtn.on,
+  #flagBtn.on,#flagPullBtn.on{
+    min-width:160px!important;padding:0 16px!important;
+  }
   body.plazaRoam #poseBtn.on{
     display:flex!important;
     bottom:calc(var(--sa-bottom,0px) + 18px)!important;
@@ -2593,7 +2597,7 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
   body.plazaRoam #flagBtn.on,body.plazaRoam #flagPullBtn.on{
     display:flex!important;
     bottom:calc(var(--sa-bottom,0px) + 18px)!important;
-    right:calc(var(--sa-right,0px) + 116px)!important;
+    right:calc(var(--sa-right,0px) + 180px)!important;
     z-index:9010;
   }
   body.plazaRoam #jumpBtn.on,body.plazaRoam #crouchBtn.on,body.plazaRoam #lieBtn.on{display:none!important}
@@ -2604,9 +2608,14 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
   body.plazaRoam #medBtn.on{
     position:fixed!important;right:calc(var(--sa-right,0px) + 12px)!important;left:auto!important;top:auto!important;
     bottom:calc(var(--sa-bottom,0px) + 74px)!important;z-index:9010;
-    min-width:96px!important;min-height:48px!important;margin:0!important;
+    min-width:160px!important;min-height:48px!important;margin:0!important;
+    padding:0 16px!important;white-space:nowrap!important;
+    display:flex!important;align-items:center;justify-content:center;gap:6px;
   }
   body.plazaRoam.poseOpen #medBtn.on{bottom:calc(var(--sa-bottom,0px) + 242px)!important}
+  /* 電腦上工右下鈕也略加寬 */
+  #btns{min-width:15em}
+  #btns button.on{min-width:160px;padding:10px 16px;white-space:nowrap}
 }
 /* 橫向廣場：動作／藥品往下靠底（視角已移到狀態列；離開在地圖下方） */
 @media (pointer:coarse) and (orientation:landscape){
