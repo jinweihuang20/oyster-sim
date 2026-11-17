@@ -1391,6 +1391,23 @@ body:is(.plazaMode,.plazaRoam).pzPlayersOpen #stats{z-index:9800!important;overf
 #pzPlayersDrop .pzPWho{display:inline-flex;align-items:center;gap:5px;min-width:0;flex:1}
 #pzPlayersDrop .pzPName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 #pzPlayersDrop .pzPRow .frAct,#pzPlayersDrop .pzPRow .frBadge{margin-left:0;flex:none}
+/* 壓過 #top button 的 44px，避免加好友鈕把名字擠成 yaojun #3... */
+#top #pzPlayersDrop .pzPRow .frAct,
+#pzPlayersDrop .pzPRow .frAct{
+  min-width:0!important;min-height:0!important;height:22px!important;width:auto!important;
+  padding:0 6px!important;margin:0!important;border-radius:999px!important;
+  border:1px solid rgba(255,255,255,.28)!important;
+  background:rgba(42,90,134,.9)!important;color:#fff!important;
+  box-shadow:none!important;font-size:10px!important;font-weight:800;line-height:22px;
+  display:inline-flex!important;align-items:center;justify-content:center;gap:3px;
+}
+#top #pzPlayersDrop .pzPRow .frAct svg,
+#pzPlayersDrop .pzPRow .frAct svg{width:12px;height:12px;flex:none}
+#top #pzPlayersDrop .pzPRow .frBadge,
+#pzPlayersDrop .pzPRow .frBadge{
+  min-height:0!important;height:22px;padding:0 6px;font-size:10px;line-height:22px;
+  display:inline-flex;align-items:center;
+}
 #pzPlayersDrop .pzPMeat{flex:none;margin-left:auto;font-variant-numeric:tabular-nums;color:#ffd76a;font-weight:900;white-space:nowrap}
 #pzPlayersDrop .pzPEmpty{padding:12px 10px;opacity:.7;font-size:13px;text-align:center}
 #stats #camBtn.hudCam{margin-left:0}

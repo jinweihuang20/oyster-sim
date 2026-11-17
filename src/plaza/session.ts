@@ -1469,6 +1469,8 @@ function buildUi() {
 #pzLeftFabs>button:active{background:rgba(42,90,134,.72)}
 #pzLeftFabs>button .ic{width:18px;height:18px;background:currentColor}
 #pzLeftFabs>button .key{display:none}
+/* 離開：門在右、箭頭朝左（原圖示旋轉 180°） */
+#pzX .ic{transform:rotate(180deg)}
 #pzX.hide{display:none}
 @media (pointer:fine){#pzLeftFabs{top:var(--pz-fabs-top, calc(var(--sa-top) + 58px));left:calc(var(--sa-left) + 10px);z-index:2}}
 @media (pointer:coarse) and (orientation:landscape){
@@ -1966,7 +1968,7 @@ async function paintPlayersDrop() {
       ...others.map(p => {
         const mark = fr.friendMark(p.tag);
         const name = plazaDisplayName(p.nick, p.tag) + (mark || '');
-        return { name, meat: p.count | 0, self: false, act: fr.friendActionBtn('', p.tag, p.nick) };
+        return { name, meat: p.count | 0, self: false, act: fr.friendActionBtn('', p.tag, p.nick, true) };
       }),
     ];
     body = extraRow + (rows.map(r =>

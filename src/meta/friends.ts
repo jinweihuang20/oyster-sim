@@ -210,18 +210,22 @@ export function relationOf(k?: string | null, tag?: string | null): 'self' | 'fr
   return 'none';
 }
 
-export function friendActionBtn(k: string, tag?: string, nick?: string) {
+const FR_PLUS_IC = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M19 8v6M16 11h6"/></svg>`;
+
+export function friendActionBtn(k: string, tag?: string, nick?: string, compact = false) {
   const rel = relationOf(k, tag);
   if (rel === 'self') return '';
+  const cls = compact ? ' frActSm' : '';
   if (rel === 'friend') return `<span class="frBadge">好友</span>`;
   if (rel === 'out') return `<span class="frBadge dim">已申請</span>`;
   if (rel === 'in') {
     const ik = k || cache?.incoming.find(x => x.tag === String(tag || '').replace(/^#/, ''))?.k || '';
-    return ik ? `<button type="button" class="frAct" data-fr-accept="${esc(ik)}">接受</button>` : '';
+    return ik ? `<button type="button" class="frAct${cls}" data-fr-accept="${esc(ik)}" aria-label="接受好友">接受</button>` : '';
   }
   const target = tag ? `#${String(tag).replace(/^#/, '')}` : k;
   if (!target) return '';
-  return `<button type="button" class="frAct" data-fr-add="${esc(target)}" data-fr-nick="${esc(nick || '')}">加好友</button>`;
+  const label = compact ? `${FR_PLUS_IC}<span>加</span>` : '加好友';
+  return `<button type="button" class="frAct${cls}" data-fr-add="${esc(target)}" data-fr-nick="${esc(nick || '')}" aria-label="加好友" title="加好友">${label}</button>`;
 }
 
 function paintPanel() {
