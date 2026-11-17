@@ -748,6 +748,8 @@ body.tutOn #feed{display:none!important}
 .authSum{background:#fff8e8;border:2px solid #1b2a3a;box-shadow:3px 3px 0 #1b2a3a;padding:10px 12px;text-align:left}
 .authSum h3{margin:0 0 8px;font-size:15px}
 .authSum pre{margin:0;font:600 14px/1.55 ui-sans-serif,system-ui,sans-serif;white-space:pre-wrap}
+#authConflict,#authSafariHint{z-index:13200!important}
+body:has(#authConflict.show) #pbd.show,body:has(#authSafariHint.show) #pbd.show{z-index:13190!important}
 #authConflict .mbtns,#authSafariHint .mbtns{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
 #authKeepCloud,#authKeepDevice{min-height:48px;flex:1}
 #authSafariHint p{font-size:16px;line-height:1.55;text-align:left}

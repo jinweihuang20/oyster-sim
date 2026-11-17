@@ -2,6 +2,7 @@
 // 不綁也能玩；這台登出只撤銷憑證，本機進度和 pid 都留著。
 
 import { cloudFlush } from './cloudSync';
+import { readOysterAuth, canonicalReturnUrl, stripOysterAuthFromUrl } from './authReturn';
 
 const API = 'https://game-status.gwtech.org/s';
 const TOKEN_KEY = 'oyster-auth-token';
@@ -62,6 +63,13 @@ let pollVisBound = false;
 const handledIds = new Set<string>();
 
 const notify = () => { for (const f of listeners) try { f(); } catch { /* */ } };
+
+// 模組一載入就先把回跳票證抄下來，免得之後其他程式改掉網址。
+const capturedReturn = typeof location !== 'undefined' ? readOysterAuth(location.href) : { code: '', err: '' };
+let choicePending = false;
+export const authChoicePending = () => choicePending;
+export function setAuthChoicePending(v: boolean) { choicePending = v; }
+
 
 export const authConfigured = () => configured;
 export const authBound = () => bound;
@@ -138,11 +146,7 @@ export function isIosDevice() {
 }
 
 function returnUrl() {
-  const u = new URL(location.href);
-  u.hash = '';
-  u.searchParams.delete('oyster_auth');
-  const q = u.searchParams.toString();
-  return u.origin + u.pathname + (q ? '?' + q : '');
+  return canonicalReturnUrl(location.href);
 }
 
 function setToken(t: string) {
@@ -303,7 +307,11 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
       }
       const { j } = await postAuth('/auth/bind', { pid: bindPid });
       if (j?.err === 'conflict') {
-        if (!bounce) opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
+        if (!bounce) {
+          choicePending = true;
+          opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
+          tellOnce(opts, 'conflict:' + ex.token, '這個 Google 已有另一份進度，請選要留哪一份。');
+        }
         return false;
       }
       if (j?.ok) { markBound(bindPid); return false; }
@@ -312,7 +320,11 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
     }
     const { j } = await postAuth('/auth/restore', { pid: bindPid || pid || undefined });
     if (j?.err === 'conflict') {
-      if (!bounce) opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
+      if (!bounce) {
+        choicePending = true;
+        opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
+        tellOnce(opts, 'conflict:' + ex.token, '這個 Google 已有另一份進度，請選要留哪一份。');
+      }
       return false;
     }
     if (j?.err === 'not_linked') {
@@ -387,12 +399,20 @@ export async function authBoot(opts: AuthBootOpts = {}): Promise<boolean> {
   booting = true;
   setAuthBootOpts(opts);
   await refreshAuthStatus();
-  const params = new URLSearchParams(location.search);
-  const code = params.get('oyster_auth');
-  if (code) {
-    params.delete('oyster_auth');
-    const q = params.toString();
-    try { history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash); } catch { /* */ }
+  const got = capturedReturn.code || capturedReturn.err
+    ? capturedReturn
+    : readOysterAuth(location.href);
+  const code = got.code;
+  const returnErr = got.err;
+  if (code || returnErr) {
+    try { history.replaceState(null, '', stripOysterAuthFromUrl(location.href)); } catch { /* */ }
+    if (returnErr && !code) {
+      if (!( !startedInThisContext() && isIosDevice() && !isStandaloneApp() )) {
+        tellOnce(opts, 'denied:' + returnErr, returnErr === 'denied' ? '沒有完成 Google 登入。請再試一次。' : 'Google 登入沒有成功，請稍後再試。');
+      }
+      booting = false;
+      return false;
+    }
     const bounce = !startedInThisContext() && isIosDevice() && !isStandaloneApp();
     const ex = await exchange({ code });
     if (ex.ok) setToken(ex.token);
@@ -406,7 +426,10 @@ export async function authBoot(opts: AuthBootOpts = {}): Promise<boolean> {
         booting = false;
         return bounce ? false : reloading;
       }
-      if (!bounce) clearLoginPending();
+      if (!bounce) {
+        clearLoginPending();
+        tellOnce(opts, 'handled:' + ex.token, '登入已處理過。若進度沒有回來，請再開一次設定，或再按一次「用 Google 登入取回進度」。');
+      }
       booting = false;
       return false;
     }
@@ -431,6 +454,12 @@ export async function authBoot(opts: AuthBootOpts = {}): Promise<boolean> {
       return false;
     }
     startWaitPoll(opts);
+  } else {
+    let intent = '';
+    try { intent = LS.getItem(INTENT_KEY) || sessionStorage.getItem(STARTED_KEY) || ''; } catch { /* */ }
+    if (intent === 'restore') {
+      tellOnce(opts, 'nostart', '登入回來了，但這頁沒有收到憑證。請再按一次「用 Google 登入取回進度」。');
+    }
   }
   booting = false;
   return false;

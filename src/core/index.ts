@@ -8,7 +8,7 @@ export {
   installCloudLifecycle, onCloudStatus, cloudStatus, cloudApplyRemote, cloudSetPid,
 } from './cloudSync';
 export {
-  authInit, authBoot, setAuthBootOpts, startGoogle, refreshAuthStatus, onAuthChange,
+  authInit, authBoot, setAuthBootOpts, startGoogle, refreshAuthStatus, onAuthChange, authChoicePending, setAuthChoicePending,
   authConfigured, authBound, authProvider, logoutThisDevice, unbindAccount,
   chooseKeepCloud, chooseKeepDevice, summaryLines, isStandaloneApp, isIosDevice,
   type SaveSummary, type AuthBootOpts,

@@ -8,7 +8,7 @@ import {
   writeShiftDraft, clearShiftDraft, takeShiftDraft,
   cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink, installCloudLifecycle, onCloudStatus,
   cloudApplyRemote,
-  authInit, authBoot, startGoogle, refreshAuthStatus, onAuthChange,
+  authInit, authBoot, startGoogle, refreshAuthStatus, onAuthChange, authChoicePending, setAuthChoicePending,
   authConfigured, authBound, logoutThisDevice, unbindAccount,
   chooseKeepCloud, chooseKeepDevice, summaryLines,
 } from './core';
@@ -915,17 +915,25 @@ const runShiftReclaimOnce = () => {
 };
 importMove().then(async moved => {
   if (moved) return;
-  const authReload = await authBoot({
-    onSafariHint: () => { $('authSafariHint').classList.add('show'); },
-    onConflict: (cloud, device) => {
-      $('authSumCloud').textContent = summaryLines(cloud);
-      $('authSumDevice').textContent = summaryLines(device);
-      $('authConflict').classList.add('show');
-    },
-    applyCloud: cloudApplyRemote,
-    onMessage: (msg) => toastTop(msg, TOP_SEC.long),
-  });
-  if (authReload) return;
+  try {
+    const authReload = await authBoot({
+      onSafariHint: () => { $('authSafariHint').classList.add('show'); },
+      onConflict: (cloud, device) => {
+        $('authSumCloud').textContent = summaryLines(cloud);
+        $('authSumDevice').textContent = summaryLines(device);
+        $('authConflict').classList.add('show');
+        toastTop('這個 Google 已有另一份進度，請選要留哪一份。', TOP_SEC.long);
+      },
+      applyCloud: cloudApplyRemote,
+      onMessage: (msg) => toastTop(msg, TOP_SEC.long),
+    });
+    if (authReload) return;
+    // 衝突對話還在：先不要用這台的進度去同步，以免蓋到雲端那份。
+    if (authChoicePending() || $('authConflict').classList.contains('show')) return;
+  } catch (e) {
+    console.error(e);
+    toastTop('取回進度時發生問題，請再試一次。', TOP_SEC.long);
+  }
   const pulled = await cloudBoot();
   if (pulled) return; // 即將 reload，補領留到下一輪開機（草稿仍在本機）
   // 雲端套用完再補領，避免雲端舊檔覆寫剛補入的錢
@@ -6108,13 +6116,18 @@ $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖�
   };
   $('authKeepCloud').onclick = async () => {
     $('authConflict').classList.remove('show');
+    setAuthChoicePending(false);
     await chooseKeepCloud(authOpts);
   };
   $('authKeepDevice').onclick = async () => {
     $('authConflict').classList.remove('show');
+    setAuthChoicePending(false);
     await chooseKeepDevice(authOpts);
   };
-  $('authConflictClose').onclick = () => $('authConflict').classList.remove('show');
+  $('authConflictClose').onclick = () => {
+    $('authConflict').classList.remove('show');
+    setAuthChoicePending(false);
+  };
   $('authSafariHintClose').onclick = () => $('authSafariHint').classList.remove('show');
 }
 $('shopBtn').onclick = () => { shopFromEquip = false; if (document.pointerLockElement) document.exitPointerLock(); openShopPx(); renderShop(); $('shop').classList.add('show'); void refreshNotices(); };
@@ -7207,7 +7220,7 @@ $('installAppClose').onclick = () => $('installApp').classList.remove('show');
 }
 
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['friends', 'friendsClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['installApp', 'installAppClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose'], ['food', 'foodClose'], ['foodStall', 'foodStallClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['friends', 'friendsClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['installApp', 'installAppClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose'], ['food', 'foodClose'], ['foodStall', 'foodStallClose'], ['authConflict', 'authConflictClose'], ['authSafariHint', 'authSafariHintClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
