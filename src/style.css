@@ -1307,20 +1307,20 @@ body.shedShift #top #lookBtn.hudLook{order:10}
 body.shedShift #top #camBtn.hudCam{order:11}
 body.shedShift #top #hudMenuBtn{order:12;margin-left:0!important}
 body.shedShift #top #quitBtn.hudQuit{order:13;margin-left:0!important}
-/* 工寮直向：兩列頂欄（上列時間＋數據，下列圓鈕：回主選單左、環視／視角／選單右） */
+/* 工寮直向：兩列頂欄——上列時間＋數據（左）與環視／視角／選單（右），下列回主選單靠左 */
 @media (pointer:coarse) and (orientation:portrait){
   body.shedShift #top{flex-wrap:wrap;row-gap:4px;align-items:center}
-  body.shedShift #top::after{content:none;display:none;flex:none}
+  body.shedShift #top::after{content:"";order:9;flex:1 1 auto;display:block;min-width:0}
   body.shedShift #top::before{
-    content:"";order:8;flex:1 0 100%;width:100%;height:0;
+    content:"";order:13;flex:1 0 100%;width:100%;height:0;
     align-self:stretch;box-sizing:border-box;
     border-top:1px solid rgba(255,255,255,.22);
     margin:2px 0;
   }
-  body.shedShift #top #quitBtn.hudQuit{order:10;margin-left:0!important;margin-right:auto!important}
-  body.shedShift #top #lookBtn.hudLook{order:11}
-  body.shedShift #top #camBtn.hudCam{order:12}
-  body.shedShift #top #hudMenuBtn{order:13;margin-left:0!important}
+  body.shedShift #top #lookBtn.hudLook{order:10}
+  body.shedShift #top #camBtn.hudCam{order:11}
+  body.shedShift #top #hudMenuBtn{order:12;margin-left:0!important}
+  body.shedShift #top #quitBtn.hudQuit{order:14;margin-left:0!important;margin-right:0!important}
 }
 @media (pointer:coarse) and (orientation:landscape){
   body.shedShift #top{flex-wrap:nowrap}

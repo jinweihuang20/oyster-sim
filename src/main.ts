@@ -222,7 +222,7 @@ function ensureShedHudObserver() {
   shedHudObs.observe(top);
 }
 
-/** 工寮頂部：直向兩列（回主選單左，環視／視角／選單右）；橫向／電腦單列 */
+/** 工寮頂部：直向兩列（上列時間／數據＋環視／視角／選單，下列回主選單靠左）；橫向／電腦單列 */
 function placeShedTopChrome(on: boolean) {
   const top = document.getElementById('top');
   const cam = document.getElementById('camBtn');
