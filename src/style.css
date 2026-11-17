@@ -1275,8 +1275,9 @@ body:is(.plazaMode,.plazaRoam) #countHud{order:2}
 body:is(.plazaMode,.plazaRoam) #pearlHud{order:3}
 body:is(.plazaMode,.plazaRoam) #stealHud{order:4}
 body:is(.plazaMode,.plazaRoam) #nightTag{order:5}
-body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn{order:10;margin-left:auto!important}
-body:is(.plazaMode,.plazaRoam) #top #pzCamCluster{order:11;margin-left:0!important}
+/* 右側一組由左到右：玩家、視角、選單（選單永遠最右邊） */
+body:is(.plazaMode,.plazaRoam) #top #pzCamCluster{order:10;margin-left:auto!important;gap:6px}
+body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn{order:11;margin-left:0!important}
 /* 選單／玩家／視角：同樣大的圓形圖示鈕 */
 body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn,
 body:is(.plazaMode,.plazaRoam) #top #pzPlayersBtn,

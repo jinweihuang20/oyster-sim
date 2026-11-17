@@ -2071,6 +2071,8 @@ function placePlayersChrome() {
   if (!host) return;
   if (cluster.parentElement !== host) host.appendChild(cluster);
   if (cam && cam.parentElement !== cluster) cluster.appendChild(cam);
+  const menu = document.getElementById('hudMenuBtn');
+  if (menu && menu.parentElement !== cluster) cluster.appendChild(menu);
   cam?.classList.add('hudCam', 'on');
   if (cam) cam.style.display = '';
 }
@@ -2081,6 +2083,13 @@ function teardownPlayersChrome() {
   document.removeEventListener('pointerdown', onPlayersDocPointer, true);
   const cluster = document.getElementById('pzCamCluster');
   const cam = document.getElementById('camBtn');
+  const menu = document.getElementById('hudMenuBtn');
+  const top = document.getElementById('top');
+  const shop = document.getElementById('shopBtn');
+  if (menu && cluster && menu.parentElement === cluster) {
+    if (shop && top && shop.parentElement === top) top.insertBefore(menu, shop);
+    else top?.appendChild(menu);
+  }
   if (cluster && cam && cam.parentElement === cluster) {
     if (matchMedia('(pointer: fine)').matches) {
       document.getElementById('btns')?.appendChild(cam);
