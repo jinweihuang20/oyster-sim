@@ -1355,9 +1355,30 @@ body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn{order:11;margin-left:0!important
   body:is(.plazaMode,.plazaRoam,.shedShift) #top::after{order:9;flex:1 1 auto}
   body:is(.plazaMode,.plazaRoam) #top #pzCamCluster{order:10}
   body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn{order:11;margin-left:0!important}
-  /* 工寮橫向：回主選單在剩餘時間左邊 */
-  body.shedShift #top #quitBtn.hudQuit{order:-1;margin-right:4px}
+  /* 工寮橫向：回主選單在剩餘時間左邊；血條在數據和右側圓鈕中間拉滿寬度 */
+  body.shedShift #top #quitBtn.hudQuit{order:-1;margin-right:4px;flex:none}
   body.shedShift #modeHud{order:0}
+  body.shedShift #top::after{content:none;display:none;flex:none}
+  body.shedShift #top #hpWrap{
+    position:relative!important;
+    left:auto;right:auto;top:auto;transform:none;
+    z-index:auto;order:6;
+    display:flex!important;flex:1 1 auto;min-width:0;width:auto;max-width:none;
+    height:36px;margin:0 4px;box-sizing:border-box;padding:0 10px;
+  }
+  body.shedShift #top #hpWrap .hudHp{
+    display:flex;flex:1 1 auto;width:100%;min-width:0;align-items:center;gap:6px;
+  }
+  body.shedShift #top #hpBar{flex:1 1 auto;width:auto;min-width:0;height:10px}
+  body.shedShift #top #lookBtn.hudLook,
+  body.shedShift #top #camBtn.hudCam,
+  body.shedShift #top #hudMenuBtn{flex:none}
+  body.shedShift #top #modeHud,
+  body.shedShift #top #openHud,
+  body.shedShift #top #countHud,
+  body.shedShift #top #pearlHud,
+  body.shedShift #top #stealHud,
+  body.shedShift #top #nightTag{flex:none}
 }
 /* 選單／玩家／環視／視角／回主選單：同樣大的圓形圖示鈕 */
 body:is(.plazaMode,.plazaRoam,.shedShift) #top #hudMenuBtn,
@@ -1414,9 +1435,13 @@ body.shedShift #medAct{
   top:var(--shed-hud-bottom, calc(var(--sa-top) + 84px));
 }
 @media (pointer:coarse) and (orientation:landscape){
-  body.shedShift #hpWrap{top:var(--shed-top-bottom, calc(var(--sa-top) + 46px))}
   body.shedShift #hint{top:var(--shed-hud-bottom, calc(var(--sa-top) + 74px))!important}
-  body.shedShift #medAct{top:var(--shed-hud-bottom, calc(var(--sa-top) + 74px))}
+  body.shedShift #medAct{
+    left:var(--shed-med-left, 50%);
+    top:var(--shed-med-top, var(--shed-hud-bottom, calc(var(--sa-top) + 74px)));
+    transform:none;
+    justify-content:flex-start;
+  }
 }
 body.plazaRoam:not(.plazaSmokeSit):not(.plazaMgSit) #hint{opacity:0;pointer-events:none;transition:opacity .45s ease}
 body.plazaRoam:not(.plazaSmokeSit):not(.plazaMgSit) #hint.pzHintOn{opacity:1}

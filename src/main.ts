@@ -195,7 +195,7 @@ function visRect(el: HTMLElement | null) {
   return r.height >= 1 ? r : null;
 }
 
-/** 依 #top 實際底緣推開工寮提示與藥效；直向血條已在第二列內 */
+/** 依 #top 實際底緣推開工寮提示與藥效；手機血條已在頂欄內 */
 function syncShedHudLayout() {
   if (!document.body.classList.contains('shedShift')) {
     clearShedHudLayout();
@@ -212,8 +212,9 @@ function syncShedHudLayout() {
   const hp = visRect(document.getElementById('hpWrap'));
   let stack = tr.bottom;
   if (hp) stack = Math.max(stack, hp.bottom);
-  const portrait = matchMedia('(pointer:coarse) and (orientation:portrait)').matches;
-  if (portrait) {
+  // 手機直向／橫向：藥效貼在頂欄血條下方；電腦仍用固定血條＋同一底緣
+  const phone = matchMedia('(pointer:coarse)').matches;
+  if (phone) {
     st.setProperty('--shed-med-top', `${barBottom}px`);
     if (hp) st.setProperty('--shed-med-left', `${Math.round(hp.left)}px`);
     else st.removeProperty('--shed-med-left');
@@ -224,7 +225,7 @@ function syncShedHudLayout() {
     st.removeProperty('--shed-med-left');
   }
   const hudBottom = Math.round(stack + gap);
-  const key = `${barBottom}|${hudBottom}|${portrait ? st.getPropertyValue('--shed-med-left') : ''}`;
+  const key = `${barBottom}|${hudBottom}|${phone ? st.getPropertyValue('--shed-med-left') : ''}`;
   if (key === shedHudKey) return;
   shedHudKey = key;
   st.setProperty('--shed-hud-bottom', `${hudBottom}px`);
@@ -239,7 +240,7 @@ function ensureShedHudObserver() {
   if (med) shedHudObs.observe(med);
 }
 
-/** 工寮頂部：直向兩列（上列時間／數據＋環視／視角／選單，下列回主選單＋血條）；橫向／電腦單列 */
+/** 工寮頂部：直向兩列（下列回主選單＋血條）；橫向單列（血條在數據與圓鈕中間）；電腦單列、血條在欄下 */
 function placeShedTopChrome(on: boolean) {
   const top = document.getElementById('top');
   const cam = document.getElementById('camBtn');
