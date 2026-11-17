@@ -87,13 +87,21 @@ html,body{margin:0;height:100%;background:#1a120c}
  <label class="row"><span class="rl">省電模式（降解析・關陰影・簡材質／少燈・降面・省電 GPU）</span><input id="v_eco" type="checkbox"></label>
  <div class="setSec">幫助</div>
  <div class="setGrid"><button id="tutReplay"><i class="ic ic-tut"></i> 重看教學</button><button id="hgReplay"><i class="ic ic-pin"></i> 主畫面導覽</button></div>
- <div class="setSec">雲端存檔</div>
- <p class="setHint" id="cloudHint">多裝置同一個進度：較新的會蓋過較舊的。換手機／瀏覽器先在這台產生連結碼，另一台輸入即可。</p>
+ <div class="setSec">帳號與同步</div>
+ <p class="setHint" id="cloudHint">綁定帳號（選配，不綁也能玩）。多裝置同一個進度，較新的會蓋過較舊的。也可以先在這台產生同步碼（連結碼），另一台輸入即可。</p>
+ <p class="authBoundLab" id="authBoundLab" hidden>已綁定：Google</p>
+ <div class="setGrid" id="authGrid">
+  <button id="authGoogleBind" type="button" hidden><i class="ic ic-google"></i> 用 Google 綁定</button>
+  <button id="authGoogleRestore" type="button" hidden><i class="ic ic-google"></i> 用 Google 登入取回進度</button>
+  <button id="authLogout" type="button" hidden>這台登出</button>
+  <button id="authUnbind" type="button" hidden>解除綁定</button>
+ </div>
+ <p class="setHint" id="authMsg" hidden></p>
  <div class="row"><span class="rl">同步狀態</span><code id="cloudStat">…</code></div>
  <div class="setGrid">
   <button id="cloudSyncNow" type="button"><i class="ic ic-again"></i> 立即同步</button>
-  <button id="cloudLink" type="button"><i class="ic ic-copy"></i> 產生連結碼</button>
-  <button id="cloudClaim" type="button"><i class="ic ic-gift"></i> 輸入連結碼</button>
+  <button id="cloudLink" type="button"><i class="ic ic-copy"></i> 產生同步碼（連結碼）</button>
+  <button id="cloudClaim" type="button"><i class="ic ic-gift"></i> 輸入同步碼（連結碼）</button>
  </div>
  <p class="setHint" id="cloudCode" style="display:none"></p>
  <div class="setSec">社群</div>
@@ -102,6 +110,23 @@ html,body{margin:0;height:100%;background:#1a120c}
  <hr class="setDiv">
  <button id="resetSave" class="danger">重置存檔</button> <button id="setClose">關閉</button>
 </div></div>
+<div id="authConflict" class="panel"><h2>要保留哪一份進度？</h2>
+ <p class="setHint">這個 Google 已經連過另一份進度。請選一份留下，兩份不會合併。</p>
+ <div class="authSums">
+  <section class="authSum"><h3>雲端這份</h3><pre id="authSumCloud"></pre></section>
+  <section class="authSum"><h3>這台的進度</h3><pre id="authSumDevice"></pre></section>
+ </div>
+ <div class="mbtns">
+  <button type="button" id="authKeepCloud">保留雲端這份</button>
+  <button type="button" id="authKeepDevice">保留這台的進度</button>
+ </div>
+ <button type="button" id="authConflictClose">先不要</button>
+</div>
+<div id="authSafariHint" class="panel"><h2>登入完成</h2>
+ <p>請回到手機主畫面，再開一次「剝蚵仔模擬器」。進度和綁定會在 App 裡自動接上。</p>
+ <p class="setHint">這個分頁可以關掉。</p>
+ <button type="button" id="authSafariHintClose">知道了</button>
+</div>
 <div id="fb" class="panel"><h2><i class="ic ic-chat"></i> 意見回饋</h2>
  <div id="fbForm"><p class="fbLead">遇到問題或有想法？寫在招牌上，阿婆幫你轉給做遊戲的人。</p>
  <div class="fbStep">1. 今天剝得心情如何？<small>（選填）</small></div>

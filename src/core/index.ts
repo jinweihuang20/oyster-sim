@@ -5,8 +5,14 @@ export { rbox, rboxNpc, rboxEnv, crease, rcyl, setGeoLowDetail, geoLowDetail } f
 export { importMove, escapeInApp } from './inapp';
 export {
   cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink,
-  installCloudLifecycle, onCloudStatus, cloudStatus,
+  installCloudLifecycle, onCloudStatus, cloudStatus, cloudApplyRemote, cloudSetPid,
 } from './cloudSync';
+export {
+  authInit, authBoot, startGoogle, refreshAuthStatus, onAuthChange,
+  authConfigured, authBound, authProvider, logoutThisDevice, unbindAccount,
+  chooseKeepCloud, chooseKeepDevice, summaryLines, isStandaloneApp, isIosDevice,
+  type SaveSummary, type AuthBootOpts,
+} from './auth';
 export {
   type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY, defaultSave, loadSave, writeSave,
   DAILY_PAYS, todayKey, dayDiff,

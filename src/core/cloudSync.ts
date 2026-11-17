@@ -36,7 +36,7 @@ function bumpRev(): number {
 }
 
 /** 未結算草稿／已領名單：只留本機，不上雲（避免雲端覆寫把進度冲掉或重複領）。 */
-const CLOUD_SKIP = new Set(['oyster-shift-draft', 'oyster-shift-claimed', SYNC_AT]);
+const CLOUD_SKIP = new Set(['oyster-shift-draft', 'oyster-shift-claimed', SYNC_AT, 'oyster-auth-token', 'oyster-auth-wait']);
 
 /** 收集本機 oyster* 鍵（與 inapp collect 一致；含 stats-id／存檔／設定）。 */
 export function collectCloudData(): Record<string, string> {
@@ -70,6 +70,18 @@ function applyCloudData(data: Record<string, string>, rev: number, newPid: strin
   } catch { /* */ }
 }
 
+/** 套用遠端存檔並重新載入（取回綁定進度時用）。 */
+export function cloudApplyRemote(data: Record<string, string>, rev: number, newPid: string) {
+  if (newPid) pid = newPid;
+  applyCloudData(data, rev, newPid || pid);
+  setStatus('ok');
+  location.reload();
+}
+
+export function cloudSetPid(playerId: string) {
+  if (playerId) pid = playerId;
+}
+
 async function getCloud(): Promise<{ found: boolean; pid?: string; data?: Record<string, string>; rev?: number } | null> {
   try {
     const r = await fetch(`${API}/cloud?pid=${encodeURIComponent(pid)}`, { mode: 'cors', cache: 'no-store' });
@@ -82,13 +94,23 @@ async function getCloud(): Promise<{ found: boolean; pid?: string; data?: Record
   } catch { return null; }
 }
 
+function cloudAuthHeaders(): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'text/plain' };
+  try {
+    const t = LS?.getItem('oyster-auth-token');
+    if (t) h.Authorization = 'Bearer ' + t;
+  } catch { /* */ }
+  return h;
+}
+
 async function putCloud(rev: number, data: Record<string, string>): Promise<'ok' | 'stale' | 'fail'> {
   try {
     const r = await fetch(`${API}/cloud`, {
       method: 'POST', mode: 'cors',
-      headers: { 'Content-Type': 'text/plain' },
+      headers: cloudAuthHeaders(),
       body: JSON.stringify({ pid, data, rev }),
     });
+    if (r.status === 401) { setStatus('err', '請重新用 Google 登入這台'); return 'fail'; }
     if (!r.ok) return 'fail';
     const j = await r.json();
     if (j?.ok) {

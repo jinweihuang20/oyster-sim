@@ -7,6 +7,10 @@ import {
   eco, fetchEconomy, syncEconomyTables, plazaPayMult, plazaNoAdminLocMult,
   writeShiftDraft, clearShiftDraft, takeShiftDraft,
   cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink, installCloudLifecycle, onCloudStatus,
+  cloudApplyRemote,
+  authInit, authBoot, startGoogle, refreshAuthStatus, onAuthChange,
+  authConfigured, authBound, logoutThisDevice, unbindAccount,
+  chooseKeepCloud, chooseKeepDevice, summaryLines,
 } from './core';
 import {
   createSkyDome, SHELL_GEOS, HALF_GEOS, greyPick, shellM, basinShellM, BASIN_SHELL_COLS,
@@ -902,6 +906,7 @@ setSceneBrightness(mix.bright);
 const STATS_URL = 'https://game-status.gwtech.org/e';
 const statsId = (() => { try { let v = LS.getItem('oyster-stats-id'); if (!v) { v = crypto.randomUUID(); LS.setItem('oyster-stats-id', v); } return v; } catch { return 'anon-' + Math.random().toString(36).slice(2, 14); } })();
 cloudInit(statsId, LS);
+authInit(statsId, LS);
 let shiftReclaimDone = false;
 const runShiftReclaimOnce = () => {
   if (shiftReclaimDone) return;
@@ -910,6 +915,17 @@ const runShiftReclaimOnce = () => {
 };
 importMove().then(async moved => {
   if (moved) return;
+  const authReload = await authBoot({
+    onSafariHint: () => { $('authSafariHint').classList.add('show'); },
+    onConflict: (cloud, device) => {
+      $('authSumCloud').textContent = summaryLines(cloud);
+      $('authSumDevice').textContent = summaryLines(device);
+      $('authConflict').classList.add('show');
+    },
+    applyCloud: cloudApplyRemote,
+    onMessage: (msg) => toastTop(msg, TOP_SEC.long),
+  });
+  if (authReload) return;
   const pulled = await cloudBoot();
   if (pulled) return; // 即將 reload，補領留到下一輪開機（草稿仍在本機）
   // 雲端套用完再補領，避免雲端舊檔覆寫剛補入的錢
@@ -6039,16 +6055,67 @@ $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖�
     const box = $('cloudCode');
     if (!r.ok) { toastTop(r.err, TOP_SEC.info); box.style.display = 'none'; return; }
     box.style.display = '';
-    box.textContent = `連結碼：${r.code}（約 ${Math.round(r.ttlMs / 60000)} 分鐘內有效，另一台在「輸入連結碼」貼上）`;
-    try { await navigator.clipboard?.writeText(r.code); toastTop(`已複製連結碼 ${r.code}`, TOP_SEC.long); } catch { toastTop(`連結碼：${r.code}`, TOP_SEC.long); }
+    box.textContent = `同步碼（連結碼）：${r.code}（約 ${Math.round(r.ttlMs / 60000)} 分鐘內有效，另一台在「輸入同步碼（連結碼）」貼上）`;
+    try { await navigator.clipboard?.writeText(r.code); toastTop(`已複製同步碼 ${r.code}`, TOP_SEC.long); } catch { toastTop(`同步碼：${r.code}`, TOP_SEC.long); }
   };
   $('cloudClaim').onclick = async () => {
-    const code = prompt('輸入另一台產生的 6 碼連結碼（會覆蓋本機進度）');
+    const code = prompt('輸入另一台產生的 6 碼同步碼（連結碼）（會覆蓋本機進度）');
     if (!code) return;
     if (!confirm('確定用雲端存檔覆蓋這台裝置的進度？')) return;
     const r = await cloudClaimLink(code);
     if (!r.ok) toastTop(r.err, TOP_SEC.info);
   };
+
+  const showAuthMsg = (t: string) => {
+    const el = $('authMsg');
+    el.hidden = !t;
+    el.textContent = t;
+  };
+  const renderAuth = () => {
+    const ready = authConfigured();
+    const on = ready && authBound();
+    $('authBoundLab').hidden = !on;
+    $('authGoogleBind').hidden = !ready || on;
+    $('authGoogleRestore').hidden = !ready || on;
+    $('authLogout').hidden = !on;
+    $('authUnbind').hidden = !on;
+  };
+  onAuthChange(renderAuth);
+  void refreshAuthStatus();
+  $('setBtn').addEventListener('click', () => { void refreshAuthStatus(); });
+  $('authGoogleBind').onclick = async () => {
+    const r = await startGoogle('bind');
+    if (!r.ok) toastTop(r.err, TOP_SEC.info);
+  };
+  $('authGoogleRestore').onclick = async () => {
+    const r = await startGoogle('restore');
+    if (!r.ok) toastTop(r.err, TOP_SEC.info);
+  };
+  $('authLogout').onclick = async () => {
+    await logoutThisDevice();
+    showAuthMsg('');
+    toastTop('這台已登出，進度還在，可以繼續玩。', TOP_SEC.long);
+  };
+  $('authUnbind').onclick = async () => {
+    if (!confirm('解除綁定後，這個 Google 就不再自動連到這份進度。這台的進度和雲端存檔都還在，之後仍可用同步碼取回。確定解除？')) return;
+    const r = await unbindAccount();
+    if (!r.ok) { toastTop(r.err, TOP_SEC.info); return; }
+    toastTop('已解除綁定。這台的進度還在。', TOP_SEC.long);
+  };
+  const authOpts = {
+    applyCloud: cloudApplyRemote,
+    onMessage: (m: string) => toastTop(m, TOP_SEC.long),
+  };
+  $('authKeepCloud').onclick = async () => {
+    $('authConflict').classList.remove('show');
+    await chooseKeepCloud(authOpts);
+  };
+  $('authKeepDevice').onclick = async () => {
+    $('authConflict').classList.remove('show');
+    await chooseKeepDevice(authOpts);
+  };
+  $('authConflictClose').onclick = () => $('authConflict').classList.remove('show');
+  $('authSafariHintClose').onclick = () => $('authSafariHint').classList.remove('show');
 }
 $('shopBtn').onclick = () => { shopFromEquip = false; if (document.pointerLockElement) document.exitPointerLock(); openShopPx(); renderShop(); $('shop').classList.add('show'); void refreshNotices(); };
 $('shopBtn2').onclick = () => { shopFromEquip = false; openShopPx(); renderShop(); $('shop').classList.add('show'); void refreshNotices(); };
