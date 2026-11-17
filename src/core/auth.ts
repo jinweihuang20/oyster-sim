@@ -1,6 +1,8 @@
 // Google 帳號綁定：登入只是取得同一組 pid／同一包雲端存檔的長期鑰匙。
 // 不綁也能玩；這台登出只撤銷憑證，本機進度和 pid 都留著。
 
+import { cloudFlush } from './cloudSync';
+
 const API = 'https://game-status.gwtech.org/s';
 const TOKEN_KEY = 'oyster-auth-token';
 const WAIT_KEY = 'oyster-auth-wait';
@@ -281,16 +283,18 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
   const mode = ex.mode === 'restore' ? 'restore' : 'bind';
   // Safari 回跳頁必須用登入當下帶去的 pid，不能用這個分頁自己的匿名 pid。
   const bindPid = bounce ? (ex.startPid || '') : (pid || ex.startPid || '');
-  const markBound = () => {
+  const markBound = (boundPid?: string) => {
     bound = true;
     provider = ex.provider || 'google';
     notify();
     if (!bounce) tellOnce(opts, 'bound:' + ex.token, '已綁定 Google，換裝置也可以用它取回進度。');
+    // 綁定後立刻上傳，否則之後寫入要帶憑證，雲端可能是空的，另一台取回就沒資料。
+    if (!bounce && (!boundPid || !pid || boundPid === pid)) void cloudFlush();
   };
   try {
     if (mode === 'bind') {
       if (ex.bound && ex.pid && (!bindPid || ex.pid === bindPid)) {
-        markBound();
+        markBound(ex.pid);
         return false;
       }
       if (!bindPid) {
@@ -302,7 +306,7 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
         if (!bounce) opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
         return false;
       }
-      if (j?.ok) { markBound(); return false; }
+      if (j?.ok) { markBound(bindPid); return false; }
       if (!bounce) tellOnce(opts, 'bindfail:' + ex.token, j?.err === 'not_configured' ? '還沒開放 Google 綁定' : '綁定沒有成功，請稍後再試');
       return false;
     }
@@ -312,27 +316,20 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
       return false;
     }
     if (j?.err === 'not_linked') {
-      // 取回時若這個 Google 其實還沒綁過，就幫這台綁上，而不是只顯示錯誤。
-      if (bindPid || pid) {
-        const { j: b } = await postAuth('/auth/bind', { pid: bindPid || pid });
-        if (b?.err === 'conflict') {
-          if (!bounce) opts.onConflict?.(b.cloud as SaveSummary, b.device as SaveSummary);
-          return false;
-        }
-        if (b?.ok) { markBound(); return false; }
-      }
-      if (!bounce) tellOnce(opts, 'notlinked:' + ex.token, '這個 Google 還沒綁過進度。可以先在原本那台綁定，或改用同步碼。');
+      // 取回絕不能改綁這台新的空進度，否則原本那台的綁定會被蓋掉。
+      if (!bounce) tellOnce(opts, 'notlinked:' + ex.token, '這個 Google 還沒綁過進度。請先在原本有進度的那台確認「已綁定：Google」且同步成功，再回這台取回。');
       return false;
     }
     if (j?.ok && j.cloud?.data && !bounce) {
-      opts.applyCloud?.(asCloudMap(j.cloud.data), Number(j.cloud.rev) || 0, String(j.pid || ''));
+      const newPid = String(j.pid || j.cloud.pid || '');
+      opts.applyCloud?.(asCloudMap(j.cloud.data), Number(j.cloud.rev) || 0, newPid);
       return true;
     }
     if (j?.ok) {
       bound = true;
       provider = ex.provider || 'google';
       notify();
-      if (!bounce && !j.cloud?.data) tellOnce(opts, 'empty:' + ex.token, '已取回綁定，但雲端還沒有存檔。');
+      if (!bounce && !j.cloud?.data) tellOnce(opts, 'empty:' + ex.token, '已取回綁定，但雲端還沒有這份存檔。請先回原本那台打開遊戲，確認同步成功後再試一次。');
       return false;
     }
     if (!bounce) tellOnce(opts, 'restorefail:' + ex.token, '取回進度沒有成功，請稍後再試');
@@ -443,7 +440,7 @@ export async function chooseKeepCloud(opts: AuthBootOpts): Promise<boolean> {
   try {
     const { j } = await postAuth('/auth/choose', { choice: 'cloud', pid });
     if (j?.ok && j.cloud?.data) {
-      opts.applyCloud?.(asCloudMap(j.cloud.data), Number(j.cloud.rev) || 0, String(j.pid || ''));
+      opts.applyCloud?.(asCloudMap(j.cloud.data), Number(j.cloud.rev) || 0, String(j.pid || j.cloud.pid || ''));
       return true;
     }
     if (j?.ok) {
