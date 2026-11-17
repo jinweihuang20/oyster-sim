@@ -1,16 +1,5 @@
 /** 玩法／模式更新公告資料（進主畫面跳一次；之後換 id 再發） */
-export const FEAT_NOTES: { id: string; title: string; lines: string[] }[] = [
-  {
-    id: 'dm-modes-weapons-2026-11b',
-    title: '死鬥大更新',
-    lines: [
-      '雜貨店新上架多把死鬥槍：蚵卡拉什、蚵殼卡賓、烏茲、沙鷹、噴子、狙擊…',
-      '「死鬥・混戰」：3 分鐘搶擊殺榜，結算依名次發錢',
-      '「死鬥・圍毆」：一關接一關，BOT 越來越多也越兇，看你能撐幾關',
-      '蚵仔堆填彈有冷卻（圓環進度），補完要換下一堆',
-    ],
-  },
-];
+export const FEAT_NOTES: { id: string; title: string; lines: string[] }[] = [];
 
 export type AnnounceDeps = {
   LS: { getItem: (k: string) => string | null; setItem: (k: string, v: string) => void; removeItem: (k: string) => void };
