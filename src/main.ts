@@ -6430,8 +6430,9 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     } else {
       occFocus.copy(tpLook);
     }
-    if (plazaMode && isPlazaActive()) tickPlazaTpOcclude(rdt, cam, occFocus);
-    tickTpCamOcclude(rdt, scene, cam, occFocus, tpOnNow);
+    if (plazaMode && isPlazaActive()) tickPlazaTpOcclude(rdt, cam, occFocus, tpCamSnap);
+    tickTpCamOcclude(rdt, scene, cam, occFocus, tpOnNow, tpCamSnap);
+    tpCamSnap = false;
     const nearHeads: THREE.Object3D[] = [];
     for (const n of ALL_NPCS) if (n.g.visible && n.head) nearHeads.push(n.head);
     if (plazaMe?.outer?.visible && plazaMe.head) nearHeads.push(plazaMe.head);
@@ -7110,7 +7111,7 @@ mesh(rbox(0.34, 0.12, 0.36), pm.legs, [0, 0.42, -0.1], meSeatLegs);
 for (const sx of [-0.09, 0.09]) { mesh(rcyl(0.055, 0.045, 0.32, 6), pm.legs, [sx, 0.2, -0.28], meSeatLegs); mesh(rbox(0.1, 0.05, 0.2), pm.feet, [sx, 0.03, -0.34], meSeatLegs); }
 // 站著走路用的腿：髖關節為軸，前後擺
 const meLeg = (sx: number) => { const g = new THREE.Group(); g.position.set(sx, 0.86, 0); me3.add(g); mesh(rcyl(0.065, 0.05, 0.8, 6), pm.legs, [0, -0.4, 0], g); mesh(rbox(0.11, 0.06, 0.22), pm.feet, [0, -0.83, -0.05], g); g.visible = false; return g; };
-const meLegL = meLeg(-0.09), meLegR = meLeg(0.09); let walkPh = 0; const lastWalk = new THREE.Vector3(); let tpWas = false; const tpLook = new THREE.Vector3(); const tpOccFocus = new THREE.Vector3(); let tpOccOuterLogged = false;
+const meLegL = meLeg(-0.09), meLegR = meLeg(0.09); let walkPh = 0; const lastWalk = new THREE.Vector3(); let tpWas = false; let tpCamSnap = false; const tpLook = new THREE.Vector3(); const tpOccFocus = new THREE.Vector3(); let tpOccOuterLogged = false;
 const meHead = new THREE.Group(); meHead.position.set(0, 1.02, 0); meTorso.add(meHead);
 mesh(new THREE.SphereGeometry(0.15, 10, 8), pm.skin, [0, 0, 0], meHead);
 mesh(new THREE.SphereGeometry(0.16, 10, 8, 0, Math.PI * 2, 0, 1.3), pm.head, [0, 0.03, 0], meHead);
@@ -7175,7 +7176,16 @@ function setTpv(v: boolean) {
   flYaw = 0; flRet = 0;
   lookMx = lookMy = 0;
   tpv = v;
-  if (!v) { clearTpCamOcclude(); clearCamHeadFade(); }
+  // 切換當幀立刻到位，不要鏡頭滑移或暖場轉頭過場
+  tpCamSnap = true;
+  if (!v) {
+    clearTpCamOcclude();
+    clearCamHeadFade();
+    tpOn = false;
+    const peNow = pearlShow > 0 ? Math.min(1, pearlShow * 2, (2.6 - pearlShow) * 4) : 0;
+    const fpFov = baseFov - peNow * (narrow ? 10 : 22);
+    if (Math.abs(camera.fov - fpFov) > 0.01) { camera.fov = fpFov; camera.updateProjectionMatrix(); }
+  }
   // 第三人稱不要掛第一人稱鏡頭上的「湊近臉」，否則會在世界裡突然出現兩顆人頭
   if (v) leanFaces.forEach(f => { f.visible = false; });
   // 抽一口按住中切視角：保留倒數／動畫進度，只換 FP 手／TP avatar 呈現
@@ -7193,8 +7203,6 @@ function setTpv(v: boolean) {
   }
   save.tpv = v ? 1 : 0; persist(); applyOutfit3(); drawCamBtn();
   const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) c.checked = v;
-  // 切回第一人稱坐下：補暖，避免環視第一次掃到才卡
-  if (!v && state === 'play' && !walking) scheduleSitLookWarm();
 }
 tpvApi.set = setTpv;
 function drawCamBtn() { const b = document.getElementById('camBtn'); if (!b) return; b.classList.toggle('tpOn', tpv); b.title = tpv ? '視角：第三人稱（V）' : '視角：第一人稱（V）'; }
@@ -7203,7 +7211,7 @@ function react3(kind: 'cheer' | 'ouch') { if (!tpReady) return; if (kind === 'ch
 function camTick(dt: number) {
   if (!tpReady) return;
   const show = tpv && state === 'play';
-  const enter = show && !tpWas; tpWas = show;
+  const enter = show && (!tpWas || tpCamSnap); tpWas = show;
   // 第三人稱一律用廣場同一套 makePlayerAvatar（工寮坐下／走動也套目前穿的衣服）
   const usePlazaMe = show;
   tpOn = show;

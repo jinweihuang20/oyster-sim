@@ -166,13 +166,14 @@ export function tickTpCamOcclude(
   camera: THREE.Camera,
   focus: THREE.Vector3,
   enabled: boolean,
+  snap = false,
 ) {
   if (errCooldown > 0) {
     errCooldown -= dt;
     return;
   }
   try {
-    tickInner(dt, scene, camera, focus, enabled);
+    tickInner(dt, scene, camera, focus, enabled, snap);
   } catch (e) {
     if (!errLogged) {
       errLogged = true;
@@ -265,11 +266,13 @@ function tickInner(
   camera: THREE.Camera,
   focus: THREE.Vector3,
   enabled: boolean,
+  snap = false,
 ) {
-  const kk = Math.min(1, dt * FADE_SPEED);
+  const kk = snap ? 1 : Math.min(1, dt * FADE_SPEED);
   if (!enabled) {
     want.clear();
     scanAcc = SCAN_GAP;
+    if (snap) { clearTpCamOcclude(); return; }
     if (!faded.size) return;
     for (const [mesh, rec] of [...faded]) {
       rec.k = Math.max(0, rec.k - kk);
@@ -279,6 +282,7 @@ function tickInner(
     return;
   }
 
+  if (snap) scanAcc = SCAN_GAP;
   scanAcc += dt;
   if (scanAcc >= SCAN_GAP) {
     scanAcc = 0;

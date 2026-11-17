@@ -170,7 +170,7 @@ export type PlazaWorldView = {
   applyRemotePuff: (opts: { connId?: string; pid?: string; start: boolean; holdMs: number }) => void;
   tick: (dt: number, camera: THREE.Camera) => void;
   /** 鏡頭更新後呼叫：木牆／厝頂淡化（需當幀 camera／focus） */
-  tickTpOcclude: (dt: number, camera: THREE.Camera, focus?: THREE.Vector3) => void;
+  tickTpOcclude: (dt: number, camera: THREE.Camera, focus?: THREE.Vector3, snap?: boolean) => void;
   setSeatWishes: (list: PlazaSeatWish[], selfConnId?: string) => void;
   /** 北碼頭工寮門口：鎖定／玩家站在圈內 */
   setShedDoorState: (loc: string, st: { locked: boolean; active: boolean }) => void;
@@ -2522,11 +2522,11 @@ function hashPid(pid: string) {
 
   const now = () => performance.now();
 
-  function applyTpOcclude(dt: number, camera: THREE.Camera, focus?: THREE.Vector3) {
+  function applyTpOcclude(dt: number, camera: THREE.Camera, focus?: THREE.Vector3, snap = false) {
     // 木頭牆／厝頂：鏡頭↔玩家之間有擋到才淡（輕量；其他建築由 tickTpCamOcclude 處理）
     try {
       if (!opts.getTpv?.()) {
-        if (tpOccludeK > 0.001) {
+        if (tpOccludeK > 0.001 || snap) {
           tpOccludeK = 0;
           for (const raw of tpOccludeMats) {
             const m = raw as THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
@@ -2553,7 +2553,8 @@ function hashPid(pid: string) {
           if (hitBetween(_tpOccFrom, focus) || hitBetween(focus, _tpOccFrom)) want = 1;
         }
       }
-      tpOccludeK += (want - tpOccludeK) * Math.min(1, dt * 7);
+      if (snap) tpOccludeK = want;
+      else tpOccludeK += (want - tpOccludeK) * Math.min(1, dt * 7);
       const op = 1 - tpOccludeK * 0.8;
       for (const raw of tpOccludeMats) {
         const m = raw as THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
@@ -3038,7 +3039,7 @@ function hashPid(pid: string) {
     setFoodStallActive: (on) => ambiance?.setFoodActive(on),
     setFoodQueueRing: (at, on) => ambiance?.setFoodQueue(at, on),
     mgMounts, aimMg, mgFx, mgHitTargets, tick, headObjects,
-    tickTpOcclude: (dt, camera, focus) => applyTpOcclude(dt, camera, focus),
+    tickTpOcclude: (dt, camera, focus, snap) => applyTpOcclude(dt, camera, focus, snap),
     dispose: disposeAll,
   };
 }

@@ -2550,9 +2550,9 @@ export function plazaToggleMap() {
 export function plazaSetSelfBody(pz: string, pk: number, jy: number) { view?.setSelfBody(pz, pk, jy); }
 
 /** 鏡頭／tpLook 更新後呼叫：木牆厝頂半透明（必須在 camTick 之後） */
-export function tickPlazaTpOcclude(dt: number, camera: THREE.Camera, focus: THREE.Vector3) {
+export function tickPlazaTpOcclude(dt: number, camera: THREE.Camera, focus: THREE.Vector3, snap = false) {
   if (!active || !view) return;
-  view.tickTpOcclude(dt, camera, focus);
+  view.tickTpOcclude(dt, camera, focus, snap);
 }
 
 export function tickPlaza(dt: number) {
