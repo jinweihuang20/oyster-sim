@@ -36,7 +36,7 @@ function bumpRev(): number {
 }
 
 /** 未結算草稿／已領名單：只留本機，不上雲（避免雲端覆寫把進度冲掉或重複領）。 */
-const CLOUD_SKIP = new Set(['oyster-shift-draft', 'oyster-shift-claimed', SYNC_AT, 'oyster-auth-token', 'oyster-auth-wait']);
+const CLOUD_SKIP = new Set(['oyster-shift-draft', 'oyster-shift-claimed', SYNC_AT, 'oyster-auth-token', 'oyster-auth-wait', 'oyster-auth-intent', 'oyster-auth-handled']);
 
 /** 收集本機 oyster* 鍵（與 inapp collect 一致；含 stats-id／存檔／設定）。 */
 export function collectCloudData(): Record<string, string> {

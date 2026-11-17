@@ -5,6 +5,8 @@ const API = 'https://game-status.gwtech.org/s';
 const TOKEN_KEY = 'oyster-auth-token';
 const WAIT_KEY = 'oyster-auth-wait';
 const STARTED_KEY = 'oyster-auth-started';
+const INTENT_KEY = 'oyster-auth-intent';
+const HANDLED_KEY = 'oyster-auth-handled';
 const WAIT_POLL_MS = 1500;
 const WAIT_GIVE_UP_MS = 10 * 60 * 1000;
 
@@ -52,6 +54,10 @@ let listeners: Array<() => void> = [];
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let pollStartedAt = 0;
 let booting = false;
+let lastOpts: AuthBootOpts = {};
+let lastMsg = '';
+let pollVisBound = false;
+const handledIds = new Set<string>();
 
 const notify = () => { for (const f of listeners) try { f(); } catch { /* */ } };
 
@@ -70,6 +76,51 @@ export const onAuthChange = (f: () => void) => {
 export function authInit(playerId: string, ls: AuthLS) {
   pid = playerId;
   LS = ls;
+}
+
+export function setAuthBootOpts(opts: AuthBootOpts) {
+  lastOpts = { ...lastOpts, ...opts };
+}
+
+function tellOnce(opts: AuthBootOpts, key: string, msg: string) {
+  const sk = 'oyster-auth-msg:' + key;
+  try {
+    if (sessionStorage.getItem(sk)) return;
+    sessionStorage.setItem(sk, '1');
+  } catch { /* */ }
+  if (lastMsg === msg) return;
+  lastMsg = msg;
+  opts.onMessage?.(msg);
+}
+
+function alreadyHandled(id: string) {
+  if (!id) return false;
+  if (handledIds.has(id)) return true;
+  try {
+    if (sessionStorage.getItem(HANDLED_KEY) === id) return true;
+  } catch { /* */ }
+  return false;
+}
+
+function markHandled(id: string) {
+  if (!id) return;
+  handledIds.add(id);
+  try {
+    sessionStorage.setItem(HANDLED_KEY, id);
+    LS.setItem(HANDLED_KEY, id);
+  } catch { /* */ }
+}
+
+function clearLoginPending() {
+  try { LS.removeItem?.(WAIT_KEY); } catch { /* */ }
+  try { LS.removeItem?.(INTENT_KEY); } catch { /* */ }
+  try { sessionStorage.removeItem(STARTED_KEY); } catch { /* */ }
+}
+
+function startedInThisContext() {
+  try { if (sessionStorage.getItem(STARTED_KEY)) return true; } catch { /* */ }
+  try { if (LS.getItem(INTENT_KEY)) return true; } catch { /* */ }
+  return false;
 }
 
 export function isStandaloneApp() {
@@ -99,6 +150,7 @@ function setToken(t: string) {
 function clearLocalAuth() {
   try { LS.removeItem?.(TOKEN_KEY); } catch { /* */ }
   try { LS.removeItem?.(WAIT_KEY); } catch { /* */ }
+  try { LS.removeItem?.(INTENT_KEY); } catch { /* */ }
   try { sessionStorage.removeItem(STARTED_KEY); } catch { /* */ }
   bound = false;
   provider = '';
@@ -140,14 +192,18 @@ export async function refreshAuthStatus(): Promise<void> {
   notify();
 }
 
-export async function startGoogle(mode: 'bind' | 'restore'): Promise<{ ok: true } | { ok: false; err: string }> {
+export async function startGoogle(mode: 'bind' | 'restore', opts?: AuthBootOpts): Promise<{ ok: true } | { ok: false; err: string }> {
+  if (opts) setAuthBootOpts(opts);
   await refreshAuthStatus();
   if (!configured) return { ok: false, err: '還沒開放 Google 綁定' };
   const wait = crypto.randomUUID();
   try {
     LS.setItem(WAIT_KEY, wait);
+    LS.setItem(INTENT_KEY, mode);
     sessionStorage.setItem(STARTED_KEY, mode);
   } catch { /* */ }
+  // 先開始輪詢，iOS 主畫面 App 跳去 Safari 後回來才接得到票。
+  startWaitPoll(lastOpts);
   const url = `${API}/auth/google/start?mode=${encodeURIComponent(mode)}`
     + `&return=${encodeURIComponent(returnUrl())}`
     + `&pid=${encodeURIComponent(pid)}`
@@ -221,38 +277,54 @@ export function asCloudMap(data: unknown): Record<string, string> {
   return o;
 }
 
-async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts): Promise<boolean> {
+async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): Promise<boolean> {
   const mode = ex.mode === 'restore' ? 'restore' : 'bind';
+  // Safari 回跳頁必須用登入當下帶去的 pid，不能用這個分頁自己的匿名 pid。
+  const bindPid = bounce ? (ex.startPid || '') : (pid || ex.startPid || '');
+  const markBound = () => {
+    bound = true;
+    provider = ex.provider || 'google';
+    notify();
+    if (!bounce) tellOnce(opts, 'bound:' + ex.token, '已綁定 Google，換裝置也可以用它取回進度。');
+  };
   try {
     if (mode === 'bind') {
-      const { j } = await postAuth('/auth/bind', { pid });
+      if (ex.bound && ex.pid && (!bindPid || ex.pid === bindPid)) {
+        markBound();
+        return false;
+      }
+      if (!bindPid) {
+        if (!bounce) tellOnce(opts, 'bindfail:' + ex.token, '綁定沒有成功，請稍後再試');
+        return false;
+      }
+      const { j } = await postAuth('/auth/bind', { pid: bindPid });
       if (j?.err === 'conflict') {
-        opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
-        await refreshAuthStatus();
+        if (!bounce) opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
         return false;
       }
-      if (j?.ok) {
-        bound = true;
-        provider = ex.provider || 'google';
-        notify();
-        opts.onMessage?.('已綁定 Google，換裝置也可以用它取回進度。');
-        return false;
-      }
-      opts.onMessage?.(j?.err === 'not_configured' ? '還沒開放 Google 綁定' : '綁定沒有成功，請稍後再試');
+      if (j?.ok) { markBound(); return false; }
+      if (!bounce) tellOnce(opts, 'bindfail:' + ex.token, j?.err === 'not_configured' ? '還沒開放 Google 綁定' : '綁定沒有成功，請稍後再試');
       return false;
     }
-    const { j } = await postAuth('/auth/restore', { pid });
+    const { j } = await postAuth('/auth/restore', { pid: bindPid || pid || undefined });
     if (j?.err === 'conflict') {
-      opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
-      await refreshAuthStatus();
+      if (!bounce) opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
       return false;
     }
     if (j?.err === 'not_linked') {
-      opts.onMessage?.('這個 Google 還沒綁過進度。可以先在原本那台綁定，或改用同步碼。');
-      await refreshAuthStatus();
+      // 取回時若這個 Google 其實還沒綁過，就幫這台綁上，而不是只顯示錯誤。
+      if (bindPid || pid) {
+        const { j: b } = await postAuth('/auth/bind', { pid: bindPid || pid });
+        if (b?.err === 'conflict') {
+          if (!bounce) opts.onConflict?.(b.cloud as SaveSummary, b.device as SaveSummary);
+          return false;
+        }
+        if (b?.ok) { markBound(); return false; }
+      }
+      if (!bounce) tellOnce(opts, 'notlinked:' + ex.token, '這個 Google 還沒綁過進度。可以先在原本那台綁定，或改用同步碼。');
       return false;
     }
-    if (j?.ok && j.cloud?.data) {
+    if (j?.ok && j.cloud?.data && !bounce) {
       opts.applyCloud?.(asCloudMap(j.cloud.data), Number(j.cloud.rev) || 0, String(j.pid || ''));
       return true;
     }
@@ -260,10 +332,10 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts): Promise<boolean>
       bound = true;
       provider = ex.provider || 'google';
       notify();
-      opts.onMessage?.('已取回綁定，但雲端還沒有存檔。');
+      if (!bounce && !j.cloud?.data) tellOnce(opts, 'empty:' + ex.token, '已取回綁定，但雲端還沒有存檔。');
       return false;
     }
-    opts.onMessage?.('取回進度沒有成功，請稍後再試');
+    if (!bounce) tellOnce(opts, 'restorefail:' + ex.token, '取回進度沒有成功，請稍後再試');
   } finally {
     await refreshAuthStatus();
   }
@@ -274,31 +346,40 @@ function stopPoll() {
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
 }
 
+async function runPollTick() {
+  const wait = (() => { try { return LS.getItem(WAIT_KEY) || ''; } catch { return ''; } })();
+  if (!wait) { stopPoll(); return; }
+  if (pollStartedAt && Date.now() - pollStartedAt > WAIT_GIVE_UP_MS) {
+    try { LS.removeItem?.(WAIT_KEY); LS.removeItem?.(INTENT_KEY); } catch { /* */ }
+    stopPoll();
+    tellOnce(lastOpts, 'timeout', '登入逾時，請再試一次。');
+    return;
+  }
+  const ex = await exchange({ wait });
+  if (ex.ok) {
+    setToken(ex.token);
+    clearLoginPending();
+    stopPoll();
+    if (!alreadyHandled(ex.token)) {
+      markHandled(ex.token);
+      const reloading = await finishLogin(ex, lastOpts);
+      if (!reloading) notify();
+    } else {
+      notify();
+    }
+    return;
+  }
+  pollTimer = setTimeout(() => { void runPollTick(); }, WAIT_POLL_MS);
+}
+
 function startWaitPoll(opts: AuthBootOpts) {
+  setAuthBootOpts(opts);
   stopPoll();
   pollStartedAt = Date.now();
-  const tick = async () => {
-    const wait = (() => { try { return LS.getItem(WAIT_KEY) || ''; } catch { return ''; } })();
-    if (!wait) { stopPoll(); return; }
-    if (Date.now() - pollStartedAt > WAIT_GIVE_UP_MS) {
-      try { LS.removeItem?.(WAIT_KEY); } catch { /* */ }
-      stopPoll();
-      opts.onMessage?.('登入逾時，請再試一次。');
-      return;
-    }
-    const ex = await exchange({ wait });
-    if (ex.ok) {
-      setToken(ex.token);
-      try { LS.removeItem?.(WAIT_KEY); sessionStorage.removeItem(STARTED_KEY); } catch { /* */ }
-      stopPoll();
-      const reloading = await finishLogin(ex, opts);
-      if (!reloading) notify();
-      return;
-    }
-    pollTimer = setTimeout(() => { void tick(); }, WAIT_POLL_MS);
-  };
-  pollTimer = setTimeout(() => { void tick(); }, WAIT_POLL_MS);
-  const onVis = () => { if (!document.hidden) void tick(); };
+  pollTimer = setTimeout(() => { void runPollTick(); }, WAIT_POLL_MS);
+  if (pollVisBound) return;
+  pollVisBound = true;
+  const onVis = () => { if (!document.hidden) void runPollTick(); };
   document.addEventListener('visibilitychange', onVis);
   addEventListener('pageshow', onVis);
   addEventListener('focus', onVis);
@@ -307,6 +388,7 @@ function startWaitPoll(opts: AuthBootOpts) {
 export async function authBoot(opts: AuthBootOpts = {}): Promise<boolean> {
   if (booting) return false;
   booting = true;
+  setAuthBootOpts(opts);
   await refreshAuthStatus();
   const params = new URLSearchParams(location.search);
   const code = params.get('oyster_auth');
@@ -314,23 +396,26 @@ export async function authBoot(opts: AuthBootOpts = {}): Promise<boolean> {
     params.delete('oyster_auth');
     const q = params.toString();
     try { history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash); } catch { /* */ }
-    let sameCtx = false;
-    try { sameCtx = !!sessionStorage.getItem(STARTED_KEY); } catch { /* */ }
+    const bounce = !startedInThisContext() && isIosDevice() && !isStandaloneApp();
     const ex = await exchange({ code });
     if (ex.ok) setToken(ex.token);
-    // iOS 主畫面 App 的登入常會在 Safari 打開回跳頁；這裡不能用 Safari 自己的 pid 去綁定。
-    if (!sameCtx && isIosDevice() && !isStandaloneApp()) {
-      opts.onSafariHint?.();
+    if (bounce) opts.onSafariHint?.();
+    if (ex.ok) {
+      // 回跳頁也要用 startPid 完成綁定；套用存檔只在原本的 App／分頁做。
+      if (!alreadyHandled(ex.token)) {
+        markHandled(ex.token);
+        const reloading = await finishLogin(ex, opts, bounce);
+        if (!bounce) clearLoginPending();
+        booting = false;
+        return bounce ? false : reloading;
+      }
+      if (!bounce) clearLoginPending();
       booting = false;
       return false;
     }
-    if (ex.ok) {
-      try { LS.removeItem?.(WAIT_KEY); sessionStorage.removeItem(STARTED_KEY); } catch { /* */ }
-      const reloading = await finishLogin(ex, opts);
-      booting = false;
-      return reloading;
-    }
-    opts.onMessage?.('登入沒有完成，請再試一次。');
+    if (!bounce) tellOnce(opts, 'nocomplete', '登入沒有完成，請再試一次。');
+    booting = false;
+    return false;
   }
   let wait = '';
   try { wait = LS.getItem(WAIT_KEY) || ''; } catch { /* */ }
@@ -338,10 +423,15 @@ export async function authBoot(opts: AuthBootOpts = {}): Promise<boolean> {
     const ex = await exchange({ wait });
     if (ex.ok) {
       setToken(ex.token);
-      try { LS.removeItem?.(WAIT_KEY); sessionStorage.removeItem(STARTED_KEY); } catch { /* */ }
-      const reloading = await finishLogin(ex, opts);
+      clearLoginPending();
+      if (!alreadyHandled(ex.token)) {
+        markHandled(ex.token);
+        const reloading = await finishLogin(ex, opts);
+        booting = false;
+        return reloading;
+      }
       booting = false;
-      return reloading;
+      return false;
     }
     startWaitPoll(opts);
   }
