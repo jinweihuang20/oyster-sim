@@ -1615,8 +1615,6 @@ function updHud() {
     const el = document.getElementById('stealV');
     if (el) el.innerHTML = `<i class="ic ic-hand"></i> ${stealN}`;
   }
-  const stEl = document.getElementById('stats');
-  if (stEl) stEl.dataset.pzExtra = `${opened}|${cracked}|${steals}|${caught}|${apoSteals}`;
   evHud();
   const statsKey = `${opened}|${count}|${cracked}|${steals}|${caught}|${apoSteals}`;
   if (hudPrev.stats !== statsKey) {

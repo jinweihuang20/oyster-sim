@@ -1947,14 +1947,6 @@ async function paintPlayersDrop() {
 
   let body = '';
   if (playersDropTab === 'plaza') {
-    const extra = (document.getElementById('stats')?.dataset.pzExtra ?? '').split('|');
-    const crackedN = Number(extra[1] ?? 0) || 0;
-    const stealN = (Number(extra[2] ?? 0) || 0) + (Number(extra[4] ?? 0) || 0);
-    const caughtN = Number(extra[3] ?? 0) || 0;
-    const extraRow = `<div class="pzPStats">
-      <span title="殼屑"><i class="ic ic-oyster"></i> ${crackedN}</span>
-      <span title="偷／被抓"><i class="ic ic-run"></i> ${stealN}/${caughtN}</span>
-    </div>`;
     const rows = [
       { name: `${selfName}（你）`, meat: selfMeat, self: true, act: '' },
       ...others.map(p => {
@@ -1963,9 +1955,9 @@ async function paintPlayersDrop() {
         return { name, meat: p.count | 0, self: false, act: fr.friendActionBtn('', p.tag, p.nick, true) };
       }),
     ];
-    body = extraRow + (rows.map(r =>
+    body = rows.map(r =>
       `<div class="pzPRow${r.self ? ' self' : ''}"><span class="pzPName">${escHtml(r.name)}</span>${r.act || ''}<span class="pzPMeat"><i class="ic ic-oyster"></i> ${r.meat}</span></div>`,
-    ).join('') || '<div class="pzPEmpty">廣場還沒有其他人</div>');
+    ).join('') || '<div class="pzPEmpty">廣場還沒有其他人</div>';
   } else {
     const friends = data?.friends ?? [];
     const plazaByTag = new Map(humans.map(p => [String(p.tag || ''), p]));

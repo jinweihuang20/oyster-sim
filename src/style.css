@@ -1319,14 +1319,6 @@ body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn:active{background:rgba(42,90,134
   font-size:10px!important;font-weight:800;line-height:16px;text-align:center;
   pointer-events:none;
 }
-#pzPlayersDrop .pzPStats{
-  display:flex;flex-wrap:wrap;align-items:center;gap:8px;
-  padding:6px 8px 8px;margin-bottom:4px;
-  border-bottom:1px solid rgba(232,246,255,.18);
-  font-size:12px;font-weight:800;color:#e8f6ff;
-}
-#pzPlayersDrop .pzPStats span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
-#pzPlayersDrop .pzPStats .ic{width:14px;height:14px;background:currentColor}
 /* 進廣場提示：約 5 秒後淡出；靠近空位再顯示。坐下剝蚵提示不受影響 */
 body:is(.plazaMode,.plazaRoam) #hint{
   top:var(--pz-hint-top, calc(var(--sa-top) + 96px))!important;
@@ -1402,9 +1394,13 @@ body:is(.plazaMode,.plazaRoam).pzPlayersOpen #stats{z-index:9800!important;overf
 #pzPlayersBtn svg{width:18px;height:18px;flex:none}
 #pzPlayersBtn .key{display:none;opacity:.8;font-size:11px;font-weight:800}
 #pzPlayersDrop{
-  display:none;position:absolute;top:calc(100% + 6px);right:0;
-  width:min(62vw,210px);min-width:168px;max-width:210px;max-height:min(48vh,280px);
-  overflow:auto;padding:5px;border-radius:12px;
+  display:none;position:fixed;
+  top:var(--pz-hint-top, calc(var(--sa-top) + 100px));
+  left:calc(var(--sa-left) + 8px);right:auto;
+  width:min(440px, calc(100vw - var(--sa-left) - var(--sa-right) - 16px));
+  min-width:0;max-width:min(440px, calc(100vw - var(--sa-left) - var(--sa-right) - 16px));
+  max-height:min(60vh, calc(100dvh - var(--pz-hint-top, calc(var(--sa-top) + 100px)) - var(--sa-bottom) - 12px));
+  overflow:auto;padding:8px;border-radius:12px;box-sizing:border-box;
   background:rgba(22,28,36,.92);border:1.5px solid rgba(232,246,255,.28);
   box-shadow:0 8px 22px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
   color:#e8f6ff;z-index:9800;
@@ -1907,6 +1903,18 @@ html.iosApp,html.standaloneApp{--sa-top:max(env(safe-area-inset-top,0px),47px)}
 .pzPTabs{display:flex;gap:4px;margin:0 0 6px;padding:0 2px}
 .pzPTab{flex:1;min-height:32px;border:0;border-radius:8px;background:rgba(255,255,255,.08);color:#e8f6ff;font-weight:800;font-size:12px;cursor:pointer}
 .pzPTab.on{background:rgba(42,90,134,.95);color:#fff}
+/* 壓過 #top button 的大顆樣式，恢復原本頁籤外觀 */
+#top #pzPlayersDrop .pzPTab,
+#pzPlayersDrop .pzPTab{
+  min-width:0!important;min-height:32px!important;height:auto!important;
+  padding:6px 8px!important;margin:0!important;
+  border:0!important;border-radius:8px!important;
+  background:rgba(255,255,255,.08)!important;color:#e8f6ff!important;
+  box-shadow:none!important;font-size:12px!important;font-weight:800;line-height:1.2;
+  display:flex!important;align-items:center;justify-content:center;
+}
+#top #pzPlayersDrop .pzPTab.on,
+#pzPlayersDrop .pzPTab.on{background:rgba(42,90,134,.95)!important;color:#fff!important}
 .pzPRow{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
 .pzPRow .frAct,.pzPRow .frBadge{margin-left:auto;font-size:11px;min-height:28px;padding:3px 8px}
 .pzPFr{color:#ffd76a;font-weight:800}
