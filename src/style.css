@@ -1275,9 +1275,19 @@ body:is(.plazaMode,.plazaRoam) #countHud{order:2}
 body:is(.plazaMode,.plazaRoam) #pearlHud{order:3}
 body:is(.plazaMode,.plazaRoam) #stealHud{order:4}
 body:is(.plazaMode,.plazaRoam) #nightTag{order:5}
-/* 右側一組由左到右：玩家、視角、選單（選單永遠最右邊） */
-body:is(.plazaMode,.plazaRoam) #top #pzCamCluster{order:10;margin-left:auto!important;gap:6px}
+/* 右側一組由左到右：玩家、視角、選單（選單永遠最右邊，貼齊狀態列右緣／安全區） */
+body:is(.plazaMode,.plazaRoam) #top::after{content:"";order:9;flex:1 1 auto;min-width:0}
+body:is(.plazaMode,.plazaRoam) #top #pzCamCluster{order:10;margin-left:auto!important;gap:6px;flex:none}
 body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn{order:11;margin-left:0!important}
+@media (pointer:coarse) and (orientation:landscape){
+  body:is(.plazaMode,.plazaRoam) #top{
+    justify-content:flex-start;
+    right:calc(var(--sa-right) + 8px);
+  }
+  body:is(.plazaMode,.plazaRoam) #top::after{order:9;flex:1 1 auto}
+  body:is(.plazaMode,.plazaRoam) #top #pzCamCluster{order:10}
+  body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn{order:11;margin-left:0!important}
+}
 /* 選單／玩家／視角：同樣大的圓形圖示鈕 */
 body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn,
 body:is(.plazaMode,.plazaRoam) #top #pzPlayersBtn,

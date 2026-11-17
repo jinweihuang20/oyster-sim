@@ -1544,8 +1544,8 @@ function buildUi() {
 }
 </style>
 <div id="pzLeftFabs">
-<button id="pzMapFab" type="button" aria-label="地圖" title="地圖 (M)"><i class="ic ic-pin"></i><span class="key"> (M)</span></button>
 <button id="pzX" type="button" aria-label="離開廣場" title="離開廣場"><i class="ic ic-exit"></i></button>
+<button id="pzMapFab" type="button" aria-label="地圖" title="地圖 (M)"><i class="ic ic-pin"></i><span class="key"> (M)</span></button>
 </div>
 <div id="pzLeaveAsk" role="dialog" aria-modal="true" aria-label="確定離開廣場？">
   <div class="pzLeaveBox">
