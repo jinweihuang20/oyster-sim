@@ -1463,16 +1463,16 @@ function buildUi() {
 #pzNet.on{display:block}
 #pzNet.ok{background:rgba(20,48,28,.92);border-color:#9be37a;color:#d8ffc8}
 /* 右下：避開上方狀態列、左下搖桿／聊天 */
-/* 離開廣場：跟地圖同一組，排在地圖正下方。top／橫向 #top 左緣由 syncPlazaHudLayout 依實際 HUD 量測覆寫，避免主畫面 App 狀態列變高／換行時重疊 */
-#pzLeftFabs{pointer-events:none;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:var(--pz-fabs-top, calc(var(--sa-top) + 118px));bottom:auto;z-index:2;display:flex;flex-direction:column;align-items:stretch;gap:8px}
-#pzLeftFabs>button{pointer-events:auto;position:static;min-width:48px;height:44px;padding:0 12px;border:1.5px solid rgba(232,246,255,.35);border-radius:12px;background:rgba(32,72,96,.48);color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:6px}
-#pzLeftFabs>button:active{background:rgba(32,72,96,.62)}
-#pzLeftFabs>button .ic{background:currentColor}
+/* 地圖／離開：狀態列下方左側並排圓形圖示鈕。top 由 syncPlazaHudLayout 依 #top 實際底緣覆寫 */
+#pzLeftFabs{pointer-events:none;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:var(--pz-fabs-top, calc(var(--sa-top) + 58px));bottom:auto;z-index:2;display:flex;flex-direction:row;align-items:center;gap:8px}
+#pzLeftFabs>button{pointer-events:auto;position:static;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border:1px solid rgba(232,246,255,.4);border-radius:50%;background:rgba(32,72,96,.5);color:#e8f6ff;font-weight:900;font-size:0;box-shadow:0 2px 8px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:inline-flex;align-items:center;justify-content:center}
+#pzLeftFabs>button:active{background:rgba(42,90,134,.72)}
+#pzLeftFabs>button .ic{width:18px;height:18px;background:currentColor}
+#pzLeftFabs>button .key{display:none}
 #pzX.hide{display:none}
-@media (pointer:fine){#pzLeftFabs{top:var(--pz-fabs-top, calc(var(--sa-top) + 14px));left:calc(var(--sa-left) + 10px);z-index:2}#pzLeftFabs>button{height:44px}}
+@media (pointer:fine){#pzLeftFabs{top:var(--pz-fabs-top, calc(var(--sa-top) + 58px));left:calc(var(--sa-left) + 10px);z-index:2}}
 @media (pointer:coarse) and (orientation:landscape){
-  #pzLeftFabs{top:var(--pz-fabs-top, calc(var(--sa-top) + 4px));left:calc(var(--sa-left) + 8px);gap:6px;z-index:2}
-  #pzLeftFabs>button{height:40px;min-width:44px;padding:0 10px;font-size:13px}
+  #pzLeftFabs{top:var(--pz-fabs-top, calc(var(--sa-top) + 52px));left:calc(var(--sa-left) + 8px);gap:8px;z-index:2}
 }
 #pzLeaveAsk{display:none;pointer-events:auto;position:absolute;inset:0;z-index:8;align-items:center;justify-content:center;padding:24px;background:rgba(8,10,12,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 #pzLeaveAsk.open{display:flex}
@@ -1544,8 +1544,8 @@ function buildUi() {
 }
 </style>
 <div id="pzLeftFabs">
-<button id="pzMapFab" type="button" aria-label="地圖"><i class="ic ic-pin"></i> 地圖<span class="key"> (M)</span></button>
-<button id="pzX" type="button" aria-label="離開廣場"><i class="ic ic-exit"></i> 離開</button>
+<button id="pzMapFab" type="button" aria-label="地圖" title="地圖 (M)"><i class="ic ic-pin"></i><span class="key"> (M)</span></button>
+<button id="pzX" type="button" aria-label="離開廣場" title="離開廣場"><i class="ic ic-exit"></i></button>
 </div>
 <div id="pzLeaveAsk" role="dialog" aria-modal="true" aria-label="確定離開廣場？">
   <div class="pzLeaveBox">
@@ -1848,10 +1848,10 @@ function showRoamUi() {
   syncSeatChrome();
 }
 
-/** 走動才顯示離開；坐下改用遊戲內 quit／換位置。上方狀態一律用遊戲 #top／#stats */
+/** 地圖／離開始終顯示在狀態列下方，坐下也不收進選單 */
 function syncSeatChrome() {
   const leave = ui?.querySelector('#pzX') as HTMLElement | null;
-  if (leave) leave.classList.toggle('hide', seated);
+  if (leave) leave.classList.remove('hide');
   syncFlagBtn();
 }
 
@@ -1903,6 +1903,16 @@ function syncPlazaPeopleHud() {
     top.title = h.title;
     top.setAttribute('aria-label', h.title);
   }
+  const badge = document.querySelector('#pzPlayersBtn .pzPBadge') as HTMLElement | null;
+  if (badge) {
+    badge.textContent = String(n);
+    badge.hidden = n <= 0;
+  }
+  const pbtn = document.getElementById('pzPlayersBtn');
+  if (pbtn) {
+    pbtn.title = `廣場玩家（${n} 人，可坐 ${cap}）(Tab)`;
+    pbtn.setAttribute('aria-label', pbtn.title);
+  }
   // 等 plazaMode 再掛玩家鈕，避免入場 loading 期間搬 #camBtn 出錯卡住
   if (document.body.classList.contains('plazaMode') || document.body.classList.contains('plazaRoam')) {
     try {
@@ -1943,6 +1953,14 @@ async function paintPlayersDrop() {
 
   let body = '';
   if (playersDropTab === 'plaza') {
+    const extra = (document.getElementById('stats')?.dataset.pzExtra ?? '').split('|');
+    const crackedN = Number(extra[1] ?? 0) || 0;
+    const stealN = (Number(extra[2] ?? 0) || 0) + (Number(extra[4] ?? 0) || 0);
+    const caughtN = Number(extra[3] ?? 0) || 0;
+    const extraRow = `<div class="pzPStats">
+      <span title="殼屑"><i class="ic ic-oyster"></i> ${crackedN}</span>
+      <span title="偷／被抓"><i class="ic ic-run"></i> ${stealN}/${caughtN}</span>
+    </div>`;
     const rows = [
       { name: `${selfName}（你）`, meat: selfMeat, self: true, act: '' },
       ...others.map(p => {
@@ -1951,9 +1969,9 @@ async function paintPlayersDrop() {
         return { name, meat: p.count | 0, self: false, act: fr.friendActionBtn('', p.tag, p.nick) };
       }),
     ];
-    body = rows.map(r =>
+    body = extraRow + (rows.map(r =>
       `<div class="pzPRow${r.self ? ' self' : ''}"><span class="pzPName">${escHtml(r.name)}</span>${r.act || ''}<span class="pzPMeat"><i class="ic ic-oyster"></i> ${r.meat}</span></div>`,
-    ).join('') || '<div class="pzPEmpty">廣場還沒有其他人</div>';
+    ).join('') || '<div class="pzPEmpty">廣場還沒有其他人</div>');
   } else {
     const friends = data?.friends ?? [];
     const plazaByTag = new Map(humans.map(p => [String(p.tag || ''), p]));
@@ -2007,7 +2025,7 @@ function ensurePlayersChrome() {
   if (!wrap) {
     wrap = document.createElement('div');
     wrap.id = 'pzPlayersWrap';
-    wrap.innerHTML = `<button id="pzPlayersBtn" type="button" aria-label="廣場玩家 (Tab)" aria-expanded="false" aria-haspopup="listbox" title="廣場玩家 (Tab)">${PZ_PLAYERS_SVG}<span>玩家</span><span class="key"> (Tab)</span></button><div id="pzPlayersDrop" role="listbox" aria-label="廣場玩家列表"></div>`;
+    wrap.innerHTML = `<button id="pzPlayersBtn" type="button" aria-label="廣場玩家 (Tab)" aria-expanded="false" aria-haspopup="listbox" title="廣場玩家 (Tab)">${PZ_PLAYERS_SVG}<span class="pzPBadge" hidden>0</span></button><div id="pzPlayersDrop" role="listbox" aria-label="廣場玩家列表"></div>`;
     const btn = wrap.querySelector('#pzPlayersBtn') as HTMLButtonElement;
     btn.addEventListener('click', e => {
       e.stopPropagation();
@@ -2049,27 +2067,12 @@ function placePlayersChrome() {
   const cluster = ensurePlayersChrome();
   cluster.classList.add('on');
   const cam = document.getElementById('camBtn');
-  const land = matchMedia('(orientation: landscape)').matches;
-  const coarse = matchMedia('(pointer: coarse)').matches;
-  const fine = matchMedia('(pointer: fine)').matches;
-  // 電腦／橫向：掛 #top（狀態列可見）；直向手機：跟視角鈕一起在 #stats
-  const host = document.getElementById(fine || land ? 'top' : 'stats');
+  const host = document.getElementById('top');
   if (!host) return;
-  if (coarse && cam && !fine) {
-    if (cam.parentElement !== cluster) {
-      if (cluster.parentElement !== host) {
-        if (cam.parentElement === host) host.insertBefore(cluster, cam);
-        else host.appendChild(cluster);
-      } else if (cam.parentElement === host) {
-        host.insertBefore(cluster, cam);
-      }
-      cluster.appendChild(cam);
-    } else if (cluster.parentElement !== host) {
-      host.appendChild(cluster);
-    }
-  } else if (cluster.parentElement !== host) {
-    host.appendChild(cluster);
-  }
+  if (cluster.parentElement !== host) host.appendChild(cluster);
+  if (cam && cam.parentElement !== cluster) cluster.appendChild(cam);
+  cam?.classList.add('hudCam', 'on');
+  if (cam) cam.style.display = '';
 }
 
 function teardownPlayersChrome() {
@@ -2079,7 +2082,15 @@ function teardownPlayersChrome() {
   const cluster = document.getElementById('pzCamCluster');
   const cam = document.getElementById('camBtn');
   if (cluster && cam && cam.parentElement === cluster) {
-    cluster.parentElement?.insertBefore(cam, cluster);
+    if (matchMedia('(pointer: fine)').matches) {
+      document.getElementById('btns')?.appendChild(cam);
+      cam.classList.remove('hudCam', 'on');
+      cam.style.display = '';
+    } else {
+      const land = matchMedia('(orientation: landscape)').matches;
+      const host = document.getElementById(land ? 'top' : 'stats');
+      host?.appendChild(cam);
+    }
   }
   document.getElementById('pzPlayersWrap')?.remove();
   cluster?.remove();
@@ -2475,6 +2486,7 @@ function clearPlazaHudLayout() {
   const st = document.documentElement.style;
   st.removeProperty('--pz-fabs-top');
   st.removeProperty('--pz-top-left');
+  st.removeProperty('--pz-hint-top');
 }
 
 function visHudBox(el: HTMLElement | null): DOMRect | null {
@@ -2485,7 +2497,7 @@ function visHudBox(el: HTMLElement | null): DOMRect | null {
   return r.width >= 1 && r.height >= 1 ? r : null;
 }
 
-/** 依實際 #top／#stats 底緣放地圖鈕（直向）；橫向與狀態列同列，並用實際按鈕寬當左緣。主畫面 App 安全區或狀態列換行時不再跟寫死的 118px／96px 錯開。 */
+/** 地圖／離開一律放在合併後狀態列實際底緣下方，直向橫向、主畫面 App／瀏覽器都量測，避免重疊。 */
 let plazaHudLayoutKey = '';
 function syncPlazaHudLayout() {
   if (!ui) { clearPlazaHudLayout(); return; }
@@ -2497,52 +2509,30 @@ function syncPlazaHudLayout() {
       plazaHudLayoutKey = 'off';
       root.removeProperty('--pz-fabs-top');
       root.removeProperty('--pz-top-left');
+      root.removeProperty('--pz-hint-top');
     }
     return;
   }
-  const landscape = matchMedia('(orientation: landscape)').matches;
-  const coarse = matchMedia('(pointer: coarse)').matches;
   const topBox = visHudBox(document.getElementById('top'));
   const statsBox = visHudBox(document.getElementById('stats'));
   const hudBottom = Math.max(topBox?.bottom ?? 0, statsBox?.bottom ?? 0);
-  const hudTop = topBox?.top ?? statsBox?.top ?? 0;
   const fabW = fabs.getBoundingClientRect().width;
-  const key = `${coarse ? 'c' : 'f'}|${landscape ? 'l' : 'p'}|${Math.round(hudTop)}|${Math.round(hudBottom)}|${Math.round(fabW)}`;
+  const key = `${Math.round(hudBottom)}|${Math.round(fabW)}`;
   if (key === plazaHudLayoutKey) return;
   plazaHudLayoutKey = key;
 
   const gap = 8;
-  let fabsTop: number | null = null;
-  let topLeft: number | null = null;
-
-  if (coarse && landscape && hudTop > 0) {
-    fabsTop = hudTop;
-    root.setProperty('--pz-fabs-top', `${Math.round(fabsTop)}px`);
-    const fr = fabs.getBoundingClientRect();
-    topLeft = Math.round(fr.right + gap);
-    root.setProperty('--pz-top-left', `${topLeft}px`);
-    const top2 = visHudBox(document.getElementById('top'));
-    const fr2 = fabs.getBoundingClientRect();
-    if (top2 && fr2.height >= 1 && top2.left < fr2.right - 2 && top2.top < fr2.bottom - 2 && top2.bottom > fr2.top + 2) {
-      const bottom = Math.max(top2.bottom, visHudBox(document.getElementById('stats'))?.bottom ?? 0);
-      fabsTop = bottom + gap;
-      topLeft = null;
-      root.removeProperty('--pz-top-left');
-    }
-  } else if (hudBottom > 0) {
-    if (!coarse && topBox && topBox.left > 140) {
-      fabsTop = hudTop > 0 ? hudTop : hudBottom + gap;
-    } else {
-      fabsTop = hudBottom + gap;
-    }
-    root.removeProperty('--pz-top-left');
-  } else {
+  if (hudBottom <= 0) {
     root.removeProperty('--pz-fabs-top');
     root.removeProperty('--pz-top-left');
+    root.removeProperty('--pz-hint-top');
     return;
   }
-
-  if (fabsTop != null) root.setProperty('--pz-fabs-top', `${Math.round(fabsTop)}px`);
+  root.setProperty('--pz-fabs-top', `${Math.round(hudBottom + gap)}px`);
+  root.removeProperty('--pz-top-left');
+  const fr = fabs.getBoundingClientRect();
+  const hintTop = Math.round(Math.max(fr.bottom, hudBottom) + gap);
+  root.setProperty('--pz-hint-top', `${hintTop}px`);
 }
 
 /** 手機直向坐著時：聊天鈕移到「藥品／道具」正上方；地圖鈕依狀態列實際高度放置，坐下不改 */

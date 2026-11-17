@@ -139,6 +139,46 @@ export function standUp() {
   D.hint.textContent = D.COARSE ? '用搖桿走動，走到空的藍色板凳旁，按「坐這裡」坐下' : 'WASD 走動，走到空的藍色板凳旁，按 E／「坐這裡」坐下';
 }
 
+/** 進廣場～5 秒顯示提示後淡出；靠近空位再出現 */
+let pzHintUntil = 0;
+let pzHintNear = false;
+let pzHintTimer = 0;
+let pzHintKey = '';
+
+function armPlazaEnterHint() {
+  const text = D.COARSE
+    ? '廣場走走・可按「視角」切換・靠近空位按「坐這裡」'
+    : 'WASD 走動・V／「視角」切換・Space 跳躍・C 蹲下・Z 躺下・E／「坐這裡」坐下';
+  D.hint.textContent = text;
+  pzHintUntil = performance.now() + 5000;
+  pzHintNear = false;
+  pzHintKey = '';
+  D.hint.classList.add('pzHintOn');
+  clearTimeout(pzHintTimer);
+  pzHintTimer = window.setTimeout(() => {
+    if (!pzHintNear) {
+      D.hint.classList.remove('pzHintOn');
+      pzHintKey = '0|0';
+    }
+  }, 5000);
+}
+
+function updatePlazaWalkHint(nearEmpty: boolean) {
+  const stay = nearEmpty || performance.now() < pzHintUntil;
+  const key = `${nearEmpty ? 1 : 0}|${stay ? 1 : 0}`;
+  if (key === pzHintKey) return;
+  pzHintKey = key;
+  pzHintNear = nearEmpty;
+  if (nearEmpty) {
+    D.hint.textContent = D.COARSE ? '靠近空位按「坐這裡」' : '靠近空位按 E／「坐這裡」坐下';
+    D.hint.classList.add('pzHintOn');
+  } else if (performance.now() < pzHintUntil) {
+    D.hint.classList.add('pzHintOn');
+  } else {
+    D.hint.classList.remove('pzHintOn');
+  }
+}
+
 /** 廣場：站起後的本地走動狀態（由 plazaStandWalk 呼叫） */
 export function plazaEnterWalkPose(fromSeat = true) {
   D.oyster.visible = false; D.setProgress(0); D.setCombo(0); D.setTension(0); D.shellTop.rotation.z = 0; D.setRotKey(0); D.stopSteal(); D.setPhase('busy');
@@ -170,7 +210,7 @@ export function plazaEnterWalkPose(fromSeat = true) {
   D.on('standBtn', false); D.on('umbBtn', false); D.on('medBtn', false); D.on('stealBtn', false); D.on('joy', true); D.on('camBtn', D.COARSE);
   if (D.COARSE) { const cam = D.$('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
   D.stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
-  D.hint.textContent = D.COARSE ? '廣場走走・可按「視角」切換・靠近空位按「坐這裡」' : 'WASD 走動・V／「視角」切換・Space 跳躍・C 蹲下・Z 躺下・E／「坐這裡」坐下';
+  armPlazaEnterHint();
 }
 
 export function sitDown(id: string) {
@@ -281,6 +321,7 @@ export function walkStep(dt: number) {
       if (btn) btn.innerHTML = `<i class="ic ic-chair"></i> 坐這裡<span class="key"> (E)</span>`;
       if (alt) alt.hidden = true;
     }
+    updatePlazaWalkHint(!!n);
     return;
   }
   if (room) {

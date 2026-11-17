@@ -845,7 +845,7 @@ let timeLeft = SHIFT, count = 0, bowlBonus = 0, cracked = 0, opened = 0, missed 
 /** 碗內尚可動用的蚵肉（機關槍子彈／被偷）；count＝本趟已入碗結算數，換座位不重算 */
 let bowlStock = 0;
 let reflects = 0, wasteShells = 0, thrown = 0, lost = 0, blockStreak = 0;
-let steals = 0, caught = 0, penalty = 0, meatHits = 0, shellHits = 0, blocks = 0, hitsTaken = 0, crackedNow = false;
+let steals = 0, apoSteals = 0, caught = 0, penalty = 0, meatHits = 0, shellHits = 0, blocks = 0, hitsTaken = 0, crackedNow = false;
 let holding = false, hold = 0, diff = 1, slowmo = 0, shake = 0, pearlShow = 0;
 let rot = 0, seamA = 0, lastTick = 0, progress = 0, tension = 0, strokeDir = 0, strokeLen = 0, strokePeak = 0, crabShakes = 0, lastKeyT = 0, lastKey = '';
 let find: ReturnType<typeof rollFind> = { kind: 'none', i: 0 };
@@ -1496,7 +1496,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
     else track('start', { seat: save.seat ?? 'door', loc: locNow().id });
   }
   const sidNow = statsSid; const pingT = setInterval(() => { if (tut || state !== 'play' || statsSid !== sidNow || document.hidden) { if (statsSid !== sidNow || state !== 'play') clearInterval(pingT); return; } track('ping'); }, 60_000);
-  count = bowlStock = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
+  count = bowlStock = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = apoSteals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   plazaStealBanUntil = 0; plazaStealCatches = 0; plazaStealPairCd.clear(); stopPlazaSteal();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   clearPendingFlyers();
@@ -1536,7 +1536,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   });
 }
 /** HUD dirty：避免每幀寫 DOM／innerHTML 觸發強制重排 */
-const hudPrev = { hpW: '', hpPct: '', timerLab: '', timer: '', count: -1, pearls: -1, stats: '' };
+const hudPrev = { hpW: '', hpPct: '', timerLab: '', timer: '', count: -1, pearls: -1, openedV: -1, stealV: -1, stats: '' };
 function updHud() {
   const hpW = `${hp}%`;
   if (hudPrev.hpW !== hpW) { hudPrev.hpW = hpW; ($('hpFill') as HTMLElement).style.width = hpW; }
@@ -1554,8 +1554,21 @@ function updHud() {
   if (hudPrev.count !== count) { hudPrev.count = count; $('count').innerHTML = `<i class="ic ic-oyster"></i> ${count}`; }
   const pearlN = dayPearls.length + dayOdd.length;
   if (hudPrev.pearls !== pearlN) { hudPrev.pearls = pearlN; $('pearls').innerHTML = `<i class="ic ic-pearl"></i> ${pearlN}`; }
+  if (hudPrev.openedV !== opened) {
+    hudPrev.openedV = opened;
+    const el = document.getElementById('openedV');
+    if (el) el.innerHTML = `<i class="ic ic-knife"></i> ${opened}`;
+  }
+  const stealN = steals + apoSteals;
+  if (hudPrev.stealV !== stealN) {
+    hudPrev.stealV = stealN;
+    const el = document.getElementById('stealV');
+    if (el) el.innerHTML = `<i class="ic ic-hand"></i> ${stealN}`;
+  }
+  const stEl = document.getElementById('stats');
+  if (stEl) stEl.dataset.pzExtra = `${opened}|${cracked}|${steals}|${caught}|${apoSteals}`;
   evHud();
-  const statsKey = `${opened}|${count}|${cracked}|${steals}|${caught}`;
+  const statsKey = `${opened}|${count}|${cracked}|${steals}|${caught}|${apoSteals}`;
   if (hudPrev.stats !== statsKey) {
     hudPrev.stats = statsKey;
     const cell = (lab: string, icon: string, val: string | number, warn = false) =>
@@ -3712,9 +3725,10 @@ if (matchMedia('(pointer:coarse)').matches) {
   $('camBtn').classList.add('hudCam');
   const placeCamBtn = () => {
     const cam = $('camBtn');
+    const plaza = document.body.classList.contains('plazaMode') || document.body.classList.contains('plazaRoam');
     const land = matchMedia('(orientation: landscape)').matches;
-    const host = land ? $('top') : $('stats');
-    // 廣場玩家鈕與視角綁成一組時整組搬
+    const host = (plaza || land) ? $('top') : $('stats');
+    // 廣場：選單／玩家／視角都在合併後的 #top；工寮直向視角仍掛 #stats
     const cluster = document.getElementById('pzCamCluster');
     const node = cluster && cam.parentElement === cluster ? cluster : cam;
     if (node.parentElement !== host) host.appendChild(node);
@@ -4393,7 +4407,7 @@ function placeApoBubble() {
 }
 function apoAwardMeat() {
   const md = eco.yardStealDiff ?? 1;
-  count++; bowlStock++; evMeat();
+  count++; bowlStock++; apoSteals++; evMeat();
   const pv = eco.dpay[md] ?? eco.dpay[1];
   meatPay += pv;
   dCnt[md] = (dCnt[md] ?? 0) + 1;

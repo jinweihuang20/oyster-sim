@@ -1260,6 +1260,71 @@ body.plazaMode #top,body.plazaMode #stats,body.plazaRoam #top,body.plazaRoam #st
 /* 次要按鈕收進「選單」（#hudMenuBtn），按鈕本身留著給選單和教學用 */
 #top #shopBtn,#top #dexBtn,#top #eqBtn,#top #rankBtn,#top #setBtn{display:none!important}
 body.plazaMode #hpWrap,body.plazaRoam #hpWrap{display:none!important}
+
+/* 廣場：兩條狀態列併成一列（數字＋圖示，不顯示「休閒」）；#stats 收起來，次要數字進玩家面板 */
+body:is(.plazaMode,.plazaRoam) #stats{display:none!important}
+body:is(.plazaMode,.plazaRoam) #modeHud,body:is(.plazaMode,.plazaRoam) #pzTopOn{display:none!important}
+body:is(.plazaMode,.plazaRoam) #openHud,body:is(.plazaMode,.plazaRoam) #stealHud{display:inline-flex!important}
+body:is(.plazaMode,.plazaRoam) #top{
+  white-space:normal;flex-wrap:wrap;row-gap:6px;align-items:center;
+  left:calc(var(--sa-left) + 8px);right:calc(var(--sa-right) + 8px);
+  transform:none;width:auto;max-width:none;box-sizing:border-box;
+}
+body:is(.plazaMode,.plazaRoam) #openHud{order:1}
+body:is(.plazaMode,.plazaRoam) #countHud{order:2}
+body:is(.plazaMode,.plazaRoam) #pearlHud{order:3}
+body:is(.plazaMode,.plazaRoam) #stealHud{order:4}
+body:is(.plazaMode,.plazaRoam) #nightTag{order:5}
+body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn{order:10;margin-left:auto!important}
+body:is(.plazaMode,.plazaRoam) #top #pzCamCluster{order:11;margin-left:0!important}
+/* 選單／玩家／視角：同樣大的圓形圖示鈕 */
+body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn,
+body:is(.plazaMode,.plazaRoam) #top #pzPlayersBtn,
+body:is(.plazaMode,.plazaRoam) #top #camBtn.hudCam{
+  width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;
+  padding:0!important;gap:0!important;
+  border-radius:50%!important;
+  border:1px solid rgba(255,255,255,.28)!important;
+  background:rgba(22,28,36,.55)!important;color:#f2f4f7!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.22)!important;
+  display:inline-flex!important;align-items:center;justify-content:center;
+  font-size:0!important;line-height:0;
+}
+body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn svg,
+body:is(.plazaMode,.plazaRoam) #top #pzPlayersBtn svg,
+body:is(.plazaMode,.plazaRoam) #top #camBtn.hudCam svg{width:18px;height:18px;flex:none}
+body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn>span:not(.newDot),
+body:is(.plazaMode,.plazaRoam) #top #pzPlayersBtn .key{display:none!important}
+body:is(.plazaMode,.plazaRoam) #top #camBtn.hudCam.on{display:inline-flex!important}
+body:is(.plazaMode,.plazaRoam) #top #camBtn.hudCam.tpOn{background:rgba(42,90,134,.92)!important;border-color:rgba(255,215,106,.55)!important}
+body:is(.plazaMode,.plazaRoam) #pzPlayersWrap.open #pzPlayersBtn,
+body:is(.plazaMode,.plazaRoam) #top #pzPlayersBtn:active,
+body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn:active{background:rgba(42,90,134,.92)!important;border-color:rgba(255,215,106,.55)!important}
+#pzPlayersBtn{position:relative}
+#pzPlayersBtn .pzPBadge{
+  position:absolute;top:-4px;right:-4px;z-index:1;
+  min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;
+  border-radius:999px;background:#2a5a86;color:#fff;
+  font-size:10px!important;font-weight:800;line-height:16px;text-align:center;
+  pointer-events:none;
+}
+#pzPlayersDrop .pzPStats{
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  padding:6px 8px 8px;margin-bottom:4px;
+  border-bottom:1px solid rgba(232,246,255,.18);
+  font-size:12px;font-weight:800;color:#e8f6ff;
+}
+#pzPlayersDrop .pzPStats span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+#pzPlayersDrop .pzPStats .ic{width:14px;height:14px;background:currentColor}
+/* 進廣場提示：約 5 秒後淡出；靠近空位再顯示。坐下剝蚵提示不受影響 */
+body:is(.plazaMode,.plazaRoam) #hint{
+  top:var(--pz-hint-top, calc(var(--sa-top) + 96px))!important;
+  bottom:auto!important;
+  padding:0 56px;
+  box-sizing:border-box;
+}
+body.plazaRoam:not(.plazaSmokeSit):not(.plazaMgSit) #hint{opacity:0;pointer-events:none;transition:opacity .45s ease}
+body.plazaRoam:not(.plazaSmokeSit):not(.plazaMgSit) #hint.pzHintOn{opacity:1}
 /* 廣場閒逛：上方 #top／#stats 與坐下後相同；只藏剝蚵操作鈕（搖桿／視角仍可用） */
 body.plazaRoam #gauge,body.plazaRoam #diff,body.plazaRoam #throwBtn,body.plazaRoam #umbBtn,body.plazaRoam #stealBtn,body.plazaRoam #standBtn,body.plazaRoam #quitBtn,body.plazaRoam #radioBtn,body.plazaRoam #btnsL #radioBtn{visibility:hidden!important;pointer-events:none!important;display:none!important}
 /* 吸菸區坐下：仍屬 plazaRoam（藏剝蚵鈕），但要顯示站起／回主選單（與一般座位同款） */
@@ -1325,9 +1390,15 @@ body:is(.plazaMode,.plazaRoam).pzPlayersOpen #stats{z-index:9800!important;overf
 }
 /* 電腦廣場：視角用 V，隱藏右下視角鈕；玩家鈕掛 #top 並顯示 Tab */
 @media (pointer:fine){
-  body.plazaMode #camBtn,body.plazaRoam #camBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
+  body:is(.plazaMode,.plazaRoam) #top #camBtn.hudCam.on{display:inline-flex!important;visibility:visible!important;pointer-events:auto!important}
   #pzPlayersBtn{height:36px;min-height:36px;min-width:auto;padding:0 12px}
   #pzPlayersBtn .key{display:inline}
+  body:is(.plazaMode,.plazaRoam) #pzPlayersBtn .key{display:none!important}
+  body:is(.plazaMode,.plazaRoam) #top{
+    top:calc(var(--sa-top,0px) + 10px);
+    left:calc(var(--sa-left) + 8px);right:calc(var(--sa-right) + 8px);
+    transform:none;width:auto;max-width:none;
+  }
 }
 /* 橫向：視角改在上方 #top，勿再浮右下 */
 /* 方向搖桿貼近底部，略留空隙 */
@@ -2460,18 +2531,17 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
   #gauge.tw #fill .ic{width:30px;height:30px}
 }
 
-/* 廣場人數（#top 內）：只在手機橫向顯示；狀態列上緣／左緣與地圖鈕共用量測變數 */
+/* 廣場人數改掛玩家鈕角標；橫向狀態列不再為地圖鈕留左縫（地圖在列下） */
 #pzTopOn{display:none!important}
 @media (pointer:coarse) and (orientation:landscape){
- #top #pzTopOn.on{display:inline-flex!important;align-items:center;gap:3px;color:#9fe0a8;font-weight:800}
- #top #pzTopOn svg{width:15px;height:15px}
  body.plazaMode #top,body.plazaRoam #top{
-  top:var(--pz-fabs-top, calc(var(--sa-top,0px) + 4px));
-  left:var(--pz-top-left, calc(var(--sa-left) + 96px));
+  top:calc(var(--sa-top,0px) + 4px);
+  left:calc(var(--sa-left) + 8px);
+  right:calc(var(--sa-right) + 8px);
  }
 }
-@media (pointer:coarse) and (orientation:landscape) and (min-height:501px){
- body.plazaMode #stats,body.plazaRoam #stats{left:var(--pz-top-left, calc(var(--sa-left) + 96px))}
+@media (pointer:coarse) and (orientation:landscape) and (max-height:500px){
+ body:is(.plazaMode,.plazaRoam) #hint{top:var(--pz-hint-top, calc(var(--sa-top) + 96px))!important}
 }
 
 /* 廣場裡開商店／圖鑑／裝備要蓋過廣場名牌、HUD 與按鈕 */
