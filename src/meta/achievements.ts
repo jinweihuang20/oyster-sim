@@ -1,5 +1,6 @@
 import * as SocialNS from './social';
 import type { EvCfg } from './eventsTypes';
+import { COOK_TITLES } from '../cook/combo';
 
 export type AchSave = { got: Record<string, number>; st: Record<string, number>; locs: string[]; seats: string[]; radio: string[]; sets: string[]; fresh: string[]; title: string; pts: number };
 
@@ -108,6 +109,8 @@ const ACH_TITLES: { n: string; d: string; ok: () => boolean }[] = [
   { n: '廣場炸彈客', d: '「廣場飛彈手」金牌', ok: () => (achS().got.pzmoon ?? 0) >= 3 },
   { n: '活動常客', d: '「活動常客」銀牌', ok: () => (achS().got.ev ?? 0) >= 2 },
   { n: '阿罵的乖孫', d: '「送座位」金牌', ok: () => (achS().got.seatdel ?? 0) >= 3 },
+  // 蚵仔煎圖鑑收集里程碑（同 cook/combo.ts COOK_TITLES）
+  ...COOK_TITLES.map(m => ({ n: m.t, d: `蚵仔煎圖鑑收集 ${m.n} 種`, ok: () => Object.keys(H.save.cookDex ?? {}).length >= m.n })),
 ];
 export const achTitle = () => { const t = achS().title; return t && ACH_TITLES.some(x => x.n === t && x.ok()) ? t : ''; };
 export const achAdd = (list: 'locs' | 'seats' | 'radio' | 'sets', id: string) => { const a = achS()[list]; if (!a.includes(id)) a.push(id); };
