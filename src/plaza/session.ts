@@ -1456,19 +1456,19 @@ function buildUi() {
 #plazaRoot *{box-sizing:border-box}
 /* 人數提示改走遊戲 #top；此層僅保留作內部狀態字串，預設隱藏以免蓋住 HUD */
 #pzHud{display:none}
-#pzNet{display:none;pointer-events:none;position:absolute;top:calc(env(safe-area-inset-top) + 108px);left:50%;transform:translateX(-50%);max-width:min(86vw,360px);background:rgba(80,28,12,.92);border:2px solid #ffb08a;border-radius:12px;padding:8px 14px;font-weight:900;font-size:14px;color:#ffe0c0;text-align:center;line-height:1.35;z-index:4;box-shadow:0 4px 14px #0008}
+#pzNet{display:none;pointer-events:none;position:absolute;top:calc(var(--sa-top) + 108px);left:50%;transform:translateX(-50%);max-width:min(86vw,360px);background:rgba(80,28,12,.92);border:2px solid #ffb08a;border-radius:12px;padding:8px 14px;font-weight:900;font-size:14px;color:#ffe0c0;text-align:center;line-height:1.35;z-index:4;box-shadow:0 4px 14px #0008}
 #pzNet.on{display:block}
 #pzNet.ok{background:rgba(20,48,28,.92);border-color:#9be37a;color:#d8ffc8}
 /* 右下：避開上方狀態列、左下搖桿／聊天 */
 /* 離開廣場：跟地圖同一組，排在地圖正下方 */
-#pzLeftFabs{pointer-events:none;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;top:calc(env(safe-area-inset-top) + 118px);bottom:auto;z-index:2;display:flex;flex-direction:column;align-items:stretch;gap:8px}
+#pzLeftFabs{pointer-events:none;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:calc(var(--sa-top) + 118px);bottom:auto;z-index:2;display:flex;flex-direction:column;align-items:stretch;gap:8px}
 #pzLeftFabs>button{pointer-events:auto;position:static;min-width:48px;height:44px;padding:0 12px;border:1.5px solid rgba(232,246,255,.35);border-radius:12px;background:rgba(32,72,96,.48);color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 #pzLeftFabs>button:active{background:rgba(32,72,96,.62)}
 #pzLeftFabs>button .ic{background:currentColor}
 #pzX.hide{display:none}
-@media (pointer:fine){#pzLeftFabs{top:calc(env(safe-area-inset-top) + 14px);left:calc(env(safe-area-inset-left) + 10px);z-index:2}#pzLeftFabs>button{height:44px}}
+@media (pointer:fine){#pzLeftFabs{top:calc(var(--sa-top) + 14px);left:calc(var(--sa-left) + 10px);z-index:2}#pzLeftFabs>button{height:44px}}
 @media (pointer:coarse) and (orientation:landscape){
-  #pzLeftFabs{top:calc(env(safe-area-inset-top) + 4px);left:calc(env(safe-area-inset-left) + 8px);gap:6px;z-index:2}
+  #pzLeftFabs{top:calc(var(--sa-top) + 4px);left:calc(var(--sa-left) + 8px);gap:6px;z-index:2}
   #pzLeftFabs>button{height:40px;min-width:44px;padding:0 10px;font-size:13px}
 }
 #pzLeaveAsk{display:none;pointer-events:auto;position:absolute;inset:0;z-index:8;align-items:center;justify-content:center;padding:24px;background:rgba(8,10,12,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
@@ -1481,21 +1481,21 @@ function buildUi() {
 #pzLeaveAsk .pzLeaveBtns button:active{background:rgba(255,255,255,.2)}
 #pzLeaveAsk .pzLeaveBtns #pzLeaveOk:active{background:rgba(42,90,134,1)}
 /* 聊天放左側，避開右下雨傘／丟殼／偷 */
-#pzChatFab{pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 168px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
+#pzChatFab{pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;bottom:calc(var(--sa-bottom) + 168px);z-index:3;min-width:48px;height:44px;padding:0 12px;border:0;border-radius:12px;background:#d9952b;color:#2a1600;font-weight:900;font-size:14px;box-shadow:2px 2px 0 #1b1208}
 #pzChatFab .pzBadge{display:none;position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e23b2f;color:#fff;font-size:11px;font-weight:900;line-height:18px;text-align:center;box-shadow:0 1px 0 #1b1208;pointer-events:none}
 #pzChatFab.hasUnread .pzBadge{display:block}
 #pzChatFab.hasUnread{animation:pzFabPulse .9s ease-in-out 2}
 @keyframes pzFabPulse{0%,100%{transform:scale(1)}40%{transform:scale(1.06)}}
-#pzChatPeek{display:none;pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 220px);max-width:min(70vw,280px);background:rgba(20,12,6,.92);border:2px solid #d9952b;border-radius:12px;padding:8px 10px;color:#fff6d8;font-size:12px;line-height:1.35;z-index:3;cursor:pointer;box-shadow:2px 2px 0 #1b1208}
+#pzChatPeek{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;bottom:calc(var(--sa-bottom) + 220px);max-width:min(70vw,280px);background:rgba(20,12,6,.92);border:2px solid #d9952b;border-radius:12px;padding:8px 10px;color:#fff6d8;font-size:12px;line-height:1.35;z-index:3;cursor:pointer;box-shadow:2px 2px 0 #1b1208}
 #pzChatPeek.on{display:block}
 #pzChatPeek b{color:#ffd23f;font-weight:900}
-#pzChat{display:none;pointer-events:auto;position:absolute;left:calc(env(safe-area-inset-left) + 10px);right:auto;bottom:calc(env(safe-area-inset-bottom) + 220px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
+#pzChat{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;bottom:calc(var(--sa-bottom) + 220px);width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
 #pzChat.open{display:block}
 /* 電腦：聊天鈕靠左下；視窗／預覽叠在鈕上方（離開已改到地圖下方） */
 @media (pointer:fine){
-  #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 18px);height:44px}
-  #pzChatPeek{bottom:calc(env(safe-area-inset-bottom) + 70px)}
-  #pzChat{bottom:calc(env(safe-area-inset-bottom) + 70px)}
+  #pzChatFab{bottom:calc(var(--sa-bottom) + 18px);height:44px}
+  #pzChatPeek{bottom:calc(var(--sa-bottom) + 70px)}
+  #pzChat{bottom:calc(var(--sa-bottom) + 70px)}
 }
 /* 電腦寬螢幕：聊天窗加寬，方便看長句 */
 @media (pointer:fine) and (min-width:900px){
@@ -1504,9 +1504,9 @@ function buildUi() {
   #pzLog{height:88px}
 }
 @media (pointer:coarse) and (orientation:landscape){
-  #pzChatFab{bottom:calc(env(safe-area-inset-bottom) + 120px)}
-  #pzChatPeek{bottom:calc(env(safe-area-inset-bottom) + 172px);max-width:min(42vw,240px)}
-  #pzChat{bottom:calc(env(safe-area-inset-bottom) + 172px);width:min(42vw,240px)}
+  #pzChatFab{bottom:calc(var(--sa-bottom) + 120px)}
+  #pzChatPeek{bottom:calc(var(--sa-bottom) + 172px);max-width:min(42vw,240px)}
+  #pzChat{bottom:calc(var(--sa-bottom) + 172px);width:min(42vw,240px)}
 }
 #pzChatHd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-size:12px;font-weight:800;color:#ffd23f}
 #pzChatMin{pointer-events:auto;background:transparent;border:0;color:#ffd23f;font-size:18px;line-height:1;padding:2px 6px;font-weight:900}
@@ -1520,7 +1520,7 @@ function buildUi() {
 /* z-index 低於聊天／離開；狀態列另在 style.css 抬到 plazaRoot 之上 */
 /* 直向手機：狀態列下方；桌面／橫向：與 #top 同一列左側（地圖-狀態列） */
 /* 地圖／離開樣式見 #pzLeftFabs */
-#pzMap{display:none;pointer-events:auto;position:absolute;inset:0;z-index:6;background:rgba(8,10,12,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px)}
+#pzMap{display:none;pointer-events:auto;position:absolute;inset:0;z-index:6;background:rgba(8,10,12,.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:calc(var(--sa-top) + 16px) calc(var(--sa-right) + 16px) calc(var(--sa-bottom) + 16px) calc(var(--sa-left) + 16px)}
 #pzMap.open{display:flex;flex-direction:column;gap:10px}
 #pzMapHd{display:flex;align-items:center;justify-content:space-between;gap:10px;width:min(92vw,420px);color:#ffe6b0;font-weight:900;font-size:16px}
 #pzMapHd button{pointer-events:auto;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;padding:8px 14px;font-size:14px}
@@ -1530,13 +1530,13 @@ function buildUi() {
 #pzMapLeg i{width:10px;height:10px;border-radius:50%;display:inline-block}
 /* 桌面／手機橫向：地圖盡量撐滿可視區（預留標題＋圖例） */
 @media (pointer:fine),(pointer:coarse) and (orientation:landscape){
-  #pzMap{padding:calc(env(safe-area-inset-top) + 8px) 12px calc(env(safe-area-inset-bottom) + 8px);gap:8px}
-  #pzMapHd,#pzMapLeg{width:min(96vw,calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 84px));max-width:96vw}
+  #pzMap{padding:calc(var(--sa-top) + 8px) calc(var(--sa-right) + 12px) calc(var(--sa-bottom) + 8px) calc(var(--sa-left) + 12px);gap:8px}
+  #pzMapHd,#pzMapLeg{width:min(96vw,calc(100dvh - var(--sa-top) - var(--sa-bottom) - 84px));max-width:96vw}
   #pzMapCvs{
-    width:min(96vw,calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 84px));
-    height:min(96vw,calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 84px));
+    width:min(96vw,calc(100dvh - var(--sa-top) - var(--sa-bottom) - 84px));
+    height:min(96vw,calc(100dvh - var(--sa-top) - var(--sa-bottom) - 84px));
     max-width:96vw;
-    max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 84px);
+    max-height:calc(100dvh - var(--sa-top) - var(--sa-bottom) - 84px);
   }
 }
 </style>
