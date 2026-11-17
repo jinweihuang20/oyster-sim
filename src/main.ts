@@ -5052,11 +5052,9 @@ function plazaEnsureTpView() {
 }
 /** 廣場坐下：強制第一人稱（不寫入存檔；離開廣場仍依 plazaForceTp 還原偏好） */
 function plazaEnsureFpView() {
-  if (!tpv) { drawCamBtn(); return; }
-  clearTpCamOcclude();
-  // 清掉第三人稱環視殘值，避免坐下後準心被 flYaw 回彈拉扯
-  flYaw = 0; flRet = 0; flHeld = false; flPtr = -1; flDragId = -1; flDown = null;
+  if (flHeld) { flHeld = false; flPtr = -1; flDragId = -1; flDown = null; }
   tpv = false;
+  snapSeatedFirstPerson();
   drawCamBtn();
 }
 /** 離開廣場時清掉座落卡／搖桿等 HUD，避免殘留到主選單或其他工寮 */
@@ -7171,37 +7169,72 @@ function applyOutfit3() {
   refreshEqPreview(outfit);
   if (isPlazaActive()) void plazaPushOutfit();
 }
+/** 坐下第一人稱的最終俯仰：機關槍／吸菸座用各自視線，其餘看向工作台 */
+function seatedFpPitch() {
+  if (mgActive) return -0.3;
+  if (smokeSitActive) return -0.35;
+  return -0.85;
+}
+/** 切回第一人稱（或坐下）當幀就把鏡頭、視野、手一次放到最終姿勢，不要滑過去 */
+function snapSeatedFirstPerson() {
+  flYaw = 0; flRet = 0; flHeld = false; flPtr = -1; flDragId = -1; flDown = null;
+  lookMx = lookMy = 0;
+  yaw = tYaw = 0;
+  pitch = tPitch = seatedFpPitch();
+  reach = 0;
+  puffCamPitch = puffInhaleK() * 0.045;
+  tpOn = false;
+  tpWas = false;
+  tpCamSnap = true;
+  clearTpCamOcclude();
+  clearCamHeadFade();
+  leanFaces.forEach(f => { f.visible = false; });
+  if (plazaMe) plazaMe.outer.visible = false;
+  if (!walking) handRig.visible = !mgActive;
+  applyFpHandLayout();
+  if (handL.children[0]) handL.children[0].visible = !walking && !mgActive;
+  if (handR.children[0]) handR.children[0].visible = !walking && !mgActive;
+  const peNow = pearlShow > 0 ? Math.min(1, pearlShow * 2, (2.6 - pearlShow) * 4) : 0;
+  const fpFov = baseFov - peNow * (narrow ? 10 : 22);
+  if (Math.abs(camera.fov - fpFov) > 0.01) { camera.fov = fpFov; camera.updateProjectionMatrix(); }
+  if (mgActive) applyMgFpView();
+  camera.position.copy(walking ? walkPos : SEAT);
+  if (jumpY > 0) camera.position.y += jumpY;
+  const camPitch = pitch - peNow * 0.08 + (smokeSitActive ? puffCamPitch : 0);
+  camera.rotation.set(camPitch, yaw + (walking ? 0 : seatYaw), 0);
+  camera.updateMatrixWorld();
+}
 function setTpv(v: boolean) {
-  if (flHeld) flRelease();
+  // 先改 tpv，再清環視；不要走 flRelease 的回彈，否則切回第一人稱會滑 0.3 秒
+  if (flHeld) { flHeld = false; flPtr = -1; flDragId = -1; flDown = null; }
   flYaw = 0; flRet = 0;
   lookMx = lookMy = 0;
   tpv = v;
   // 切換當幀立刻到位，不要鏡頭滑移或暖場轉頭過場
   tpCamSnap = true;
   if (!v) {
-    clearTpCamOcclude();
-    clearCamHeadFade();
-    tpOn = false;
-    const peNow = pearlShow > 0 ? Math.min(1, pearlShow * 2, (2.6 - pearlShow) * 4) : 0;
-    const fpFov = baseFov - peNow * (narrow ? 10 : 22);
-    if (Math.abs(camera.fov - fpFov) > 0.01) { camera.fov = fpFov; camera.updateProjectionMatrix(); }
+    if (!walking) snapSeatedFirstPerson();
+    else {
+      clearTpCamOcclude();
+      clearCamHeadFade();
+      tpOn = false;
+      const peNow = pearlShow > 0 ? Math.min(1, pearlShow * 2, (2.6 - pearlShow) * 4) : 0;
+      const fpFov = baseFov - peNow * (narrow ? 10 : 22);
+      if (Math.abs(camera.fov - fpFov) > 0.01) { camera.fov = fpFov; camera.updateProjectionMatrix(); }
+    }
   }
   // 第三人稱不要掛第一人稱鏡頭上的「湊近臉」，否則會在世界裡突然出現兩顆人頭
   if (v) leanFaces.forEach(f => { f.visible = false; });
   // 抽一口按住中切視角：保留倒數／動畫進度，只換 FP 手／TP avatar 呈現
   if (plazaForceTp) plazaForceTp = false; // 玩家手動切換，之後跟存檔偏好
-  if (!walking) {
-    if (plazaMode) {
-      // 第三人稱：鏡頭從角色背後開始繞；切回第一人稱：相對座位轉頭歸零
-      if (v) yaw = tYaw = seatYaw;
-      else yaw = tYaw = 0;
-    } else {
-      // 工寮坐下：切換時轉頭歸零，避免第三人稱繞到隔壁阿婆臉上
-      yaw = tYaw = 0;
-      if (!v) { pitch = tPitch = -0.85; }
-    }
+  if (v && !walking) {
+    if (plazaMode) yaw = tYaw = seatYaw;
+    else yaw = tYaw = 0;
   }
-  save.tpv = v ? 1 : 0; persist(); applyOutfit3(); drawCamBtn();
+  save.tpv = v ? 1 : 0; persist();
+  // 只在切到第三人稱時同步服裝，避免切回第一人稱還重建材質卡住
+  if (v) applyOutfit3();
+  drawCamBtn();
   const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) c.checked = v;
 }
 tpvApi.set = setTpv;
