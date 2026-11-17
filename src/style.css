@@ -1281,7 +1281,7 @@ body.shedShift #hpWrap{
   position:fixed!important;
   left:50%;
   transform:translateX(-50%);
-  top:calc(var(--sa-top) + 52px);
+  top:var(--shed-top-bottom, calc(var(--sa-top) + 52px));
   z-index:6;
   flex-direction:row!important;
   align-items:center;
@@ -1307,6 +1307,27 @@ body.shedShift #top #lookBtn.hudLook{order:10}
 body.shedShift #top #camBtn.hudCam{order:11}
 body.shedShift #top #hudMenuBtn{order:12;margin-left:0!important}
 body.shedShift #top #quitBtn.hudQuit{order:13;margin-left:0!important}
+/* 工寮直向：兩列頂欄（上列時間＋數據，下列圓鈕：回主選單左、環視／視角／選單右） */
+@media (pointer:coarse) and (orientation:portrait){
+  body.shedShift #top{flex-wrap:wrap;row-gap:4px;align-items:center}
+  body.shedShift #top::after{content:none;display:none;flex:none}
+  body.shedShift #top::before{
+    content:"";order:8;flex:1 0 100%;width:100%;height:0;
+    align-self:stretch;box-sizing:border-box;
+    border-top:1px solid rgba(255,255,255,.22);
+    margin:2px 0;
+  }
+  body.shedShift #top #quitBtn.hudQuit{order:10;margin-left:0!important;margin-right:auto!important}
+  body.shedShift #top #lookBtn.hudLook{order:11}
+  body.shedShift #top #camBtn.hudCam{order:12}
+  body.shedShift #top #hudMenuBtn{order:13;margin-left:0!important}
+}
+@media (pointer:coarse) and (orientation:landscape){
+  body.shedShift #top{flex-wrap:nowrap}
+}
+@media (pointer:fine){
+  body.shedShift #top{flex-wrap:nowrap}
+}
 body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn{order:11;margin-left:0!important}
 @media (pointer:coarse) and (orientation:landscape){
   body:is(.plazaMode,.plazaRoam,.shedShift) #top{
@@ -1364,16 +1385,20 @@ body:is(.plazaMode,.plazaRoam) #hint{
   padding:0 56px;
   box-sizing:border-box;
 }
-/* 工寮：提示在血條下方 */
+/* 工寮：提示／藥效／血條依 #top 實際底緣（直向兩列也對得齊） */
 body.shedShift #hint{
-  top:calc(var(--sa-top) + 84px)!important;
+  top:var(--shed-hud-bottom, calc(var(--sa-top) + 84px))!important;
   bottom:auto!important;
   padding:0 16px;
   box-sizing:border-box;
 }
+body.shedShift #medAct{
+  top:var(--shed-hud-bottom, calc(var(--sa-top) + 84px));
+}
 @media (pointer:coarse) and (orientation:landscape){
-  body.shedShift #hpWrap{top:calc(var(--sa-top) + 46px)}
-  body.shedShift #hint{top:calc(var(--sa-top) + 74px)!important}
+  body.shedShift #hpWrap{top:var(--shed-top-bottom, calc(var(--sa-top) + 46px))}
+  body.shedShift #hint{top:var(--shed-hud-bottom, calc(var(--sa-top) + 74px))!important}
+  body.shedShift #medAct{top:var(--shed-hud-bottom, calc(var(--sa-top) + 74px))}
 }
 body.plazaRoam:not(.plazaSmokeSit):not(.plazaMgSit) #hint{opacity:0;pointer-events:none;transition:opacity .45s ease}
 body.plazaRoam:not(.plazaSmokeSit):not(.plazaMgSit) #hint.pzHintOn{opacity:1}

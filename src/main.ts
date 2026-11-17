@@ -175,7 +175,54 @@ function syncPlazaShuckBtns(on: boolean) {
   }
 }
 
-/** 工寮頂部：環視｜視角｜選單｜回主選單（對齊廣場圓形鈕列） */
+let shedHudObs: ResizeObserver | null = null;
+let shedHudKey = '';
+
+function clearShedHudLayout() {
+  shedHudKey = '';
+  const st = document.documentElement.style;
+  st.removeProperty('--shed-top-bottom');
+  st.removeProperty('--shed-hud-bottom');
+}
+
+/** 依 #top 實際底緣推開工寮血條、提示與藥效文字，避免兩列頂欄重疊 */
+function syncShedHudLayout() {
+  if (!document.body.classList.contains('shedShift')) {
+    clearShedHudLayout();
+    return;
+  }
+  const top = document.getElementById('top');
+  if (!top) { clearShedHudLayout(); return; }
+  const tr = top.getBoundingClientRect();
+  if (tr.height < 1) return;
+  const gap = 8;
+  const barBottom = Math.round(tr.bottom + gap);
+  const st = document.documentElement.style;
+  st.setProperty('--shed-top-bottom', `${barBottom}px`);
+  const hp = document.getElementById('hpWrap');
+  let stack = tr.bottom;
+  if (hp) {
+    const cs = getComputedStyle(hp);
+    if (cs.display !== 'none' && cs.visibility !== 'hidden') {
+      const hr = hp.getBoundingClientRect();
+      if (hr.height >= 1) stack = Math.max(stack, hr.bottom);
+    }
+  }
+  const hudBottom = Math.round(stack + gap);
+  const key = `${barBottom}|${hudBottom}`;
+  if (key === shedHudKey) return;
+  shedHudKey = key;
+  st.setProperty('--shed-hud-bottom', `${hudBottom}px`);
+}
+
+function ensureShedHudObserver() {
+  const top = document.getElementById('top');
+  if (!top || shedHudObs) return;
+  shedHudObs = new ResizeObserver(() => syncShedHudLayout());
+  shedHudObs.observe(top);
+}
+
+/** 工寮頂部：直向兩列（回主選單左，環視／視角／選單右）；橫向／電腦單列 */
 function placeShedTopChrome(on: boolean) {
   const top = document.getElementById('top');
   const cam = document.getElementById('camBtn');
@@ -204,7 +251,7 @@ function placeShedTopChrome(on: boolean) {
   }
 }
 
-/** 上工 HUD：左下格線＋工寮頂部單列（shedShift） */
+/** 上工 HUD：左下格線＋工寮頂欄（直向兩列／橫向單列） */
 function refreshWorkHud() {
   const shed = isShedShift();
   document.body.classList.toggle('shedShift', shed);
@@ -220,6 +267,13 @@ function refreshWorkHud() {
       look.classList.add('hudLook');
       top.insertBefore(look, cam);
     }
+  }
+  if (shed) {
+    ensureShedHudObserver();
+    syncShedHudLayout();
+    requestAnimationFrame(syncShedHudLayout);
+  } else {
+    clearShedHudLayout();
   }
 }
 
@@ -6094,6 +6148,7 @@ function resize() {
   // 4:3 平板也用橫向 FOV，避免近鏡頭前臂過度放大
   updBaseFov();
   applyFpHandLayout();
+  syncShedHudLayout();
 }
 /** 第一人稱手的畫面配置。camTick 每幀會重設 handRig，不可只寫在 resize。 */
 function applyFpHandLayout() {
