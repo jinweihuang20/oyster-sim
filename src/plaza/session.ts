@@ -753,6 +753,7 @@ function forceResetPlazaLocal() {
   view = null;
   try { ui?.remove(); } catch { /* */ }
   ui = null;
+  clearPlazaHudLayout();
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear();
   deps = null; near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; cookSt = null; cookArea = null; mySeat = null; nearCook = null; nearPlate = null; cookOk = true; cookPend = null;
   carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
@@ -814,6 +815,7 @@ export function openPlaza(D: PlazaDeps) {
     view = null;
     try { ui?.remove(); } catch { /* */ }
     ui = null;
+    clearPlazaHudLayout();
     deps = null;
     teardownPlayersChrome();
     D.onEnterFail?.('open_fail');
@@ -828,6 +830,7 @@ async function abortEnter(D: PlazaDeps, err?: string) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
+  clearPlazaHudLayout();
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; cookSt = null; cookArea = null; mySeat = null; nearCook = null; nearPlate = null; cookOk = true; cookPend = null; carryNpcOk = false; flagOk = false; flagList = []; deps = null;
   removeFlagBtn();
   D.onEnterFail?.(err);
@@ -1460,15 +1463,15 @@ function buildUi() {
 #pzNet.on{display:block}
 #pzNet.ok{background:rgba(20,48,28,.92);border-color:#9be37a;color:#d8ffc8}
 /* 右下：避開上方狀態列、左下搖桿／聊天 */
-/* 離開廣場：跟地圖同一組，排在地圖正下方 */
-#pzLeftFabs{pointer-events:none;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:calc(var(--sa-top) + 118px);bottom:auto;z-index:2;display:flex;flex-direction:column;align-items:stretch;gap:8px}
+/* 離開廣場：跟地圖同一組，排在地圖正下方。top／橫向 #top 左緣由 syncPlazaHudLayout 依實際 HUD 量測覆寫，避免主畫面 App 狀態列變高／換行時重疊 */
+#pzLeftFabs{pointer-events:none;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:var(--pz-fabs-top, calc(var(--sa-top) + 118px));bottom:auto;z-index:2;display:flex;flex-direction:column;align-items:stretch;gap:8px}
 #pzLeftFabs>button{pointer-events:auto;position:static;min-width:48px;height:44px;padding:0 12px;border:1.5px solid rgba(232,246,255,.35);border-radius:12px;background:rgba(32,72,96,.48);color:#e8f6ff;font-weight:900;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 #pzLeftFabs>button:active{background:rgba(32,72,96,.62)}
 #pzLeftFabs>button .ic{background:currentColor}
 #pzX.hide{display:none}
-@media (pointer:fine){#pzLeftFabs{top:calc(var(--sa-top) + 14px);left:calc(var(--sa-left) + 10px);z-index:2}#pzLeftFabs>button{height:44px}}
+@media (pointer:fine){#pzLeftFabs{top:var(--pz-fabs-top, calc(var(--sa-top) + 14px));left:calc(var(--sa-left) + 10px);z-index:2}#pzLeftFabs>button{height:44px}}
 @media (pointer:coarse) and (orientation:landscape){
-  #pzLeftFabs{top:calc(var(--sa-top) + 4px);left:calc(var(--sa-left) + 8px);gap:6px;z-index:2}
+  #pzLeftFabs{top:var(--pz-fabs-top, calc(var(--sa-top) + 4px));left:calc(var(--sa-left) + 8px);gap:6px;z-index:2}
   #pzLeftFabs>button{height:40px;min-width:44px;padding:0 10px;font-size:13px}
 }
 #pzLeaveAsk{display:none;pointer-events:auto;position:absolute;inset:0;z-index:8;align-items:center;justify-content:center;padding:24px;background:rgba(8,10,12,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
@@ -2466,7 +2469,83 @@ function pushChat(m: PlazaChat) {
   }
 }
 
-/** 手機直向坐著時：聊天鈕移到「藥品／道具」正上方；地圖鈕固定 CSS 位置，坐下不改 */
+/** 清掉依 HUD 量到的地圖鈕位置，離開廣場時還原工寮狀態列 */
+function clearPlazaHudLayout() {
+  plazaHudLayoutKey = '';
+  const st = document.documentElement.style;
+  st.removeProperty('--pz-fabs-top');
+  st.removeProperty('--pz-top-left');
+}
+
+function visHudBox(el: HTMLElement | null): DOMRect | null {
+  if (!el) return null;
+  const st = getComputedStyle(el);
+  if (st.display === 'none' || st.visibility === 'hidden') return null;
+  const r = el.getBoundingClientRect();
+  return r.width >= 1 && r.height >= 1 ? r : null;
+}
+
+/** 依實際 #top／#stats 底緣放地圖鈕（直向）；橫向與狀態列同列，並用實際按鈕寬當左緣。主畫面 App 安全區或狀態列換行時不再跟寫死的 118px／96px 錯開。 */
+let plazaHudLayoutKey = '';
+function syncPlazaHudLayout() {
+  if (!ui) { clearPlazaHudLayout(); return; }
+  const root = document.documentElement.style;
+  const fabs = ui.querySelector('#pzLeftFabs') as HTMLElement | null;
+  const fabSt = fabs ? getComputedStyle(fabs) : null;
+  if (!fabs || !fabSt || fabSt.display === 'none' || fabSt.visibility === 'hidden') {
+    if (plazaHudLayoutKey !== 'off') {
+      plazaHudLayoutKey = 'off';
+      root.removeProperty('--pz-fabs-top');
+      root.removeProperty('--pz-top-left');
+    }
+    return;
+  }
+  const landscape = matchMedia('(orientation: landscape)').matches;
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const topBox = visHudBox(document.getElementById('top'));
+  const statsBox = visHudBox(document.getElementById('stats'));
+  const hudBottom = Math.max(topBox?.bottom ?? 0, statsBox?.bottom ?? 0);
+  const hudTop = topBox?.top ?? statsBox?.top ?? 0;
+  const fabW = fabs.getBoundingClientRect().width;
+  const key = `${coarse ? 'c' : 'f'}|${landscape ? 'l' : 'p'}|${Math.round(hudTop)}|${Math.round(hudBottom)}|${Math.round(fabW)}`;
+  if (key === plazaHudLayoutKey) return;
+  plazaHudLayoutKey = key;
+
+  const gap = 8;
+  let fabsTop: number | null = null;
+  let topLeft: number | null = null;
+
+  if (coarse && landscape && hudTop > 0) {
+    fabsTop = hudTop;
+    root.setProperty('--pz-fabs-top', `${Math.round(fabsTop)}px`);
+    const fr = fabs.getBoundingClientRect();
+    topLeft = Math.round(fr.right + gap);
+    root.setProperty('--pz-top-left', `${topLeft}px`);
+    const top2 = visHudBox(document.getElementById('top'));
+    const fr2 = fabs.getBoundingClientRect();
+    if (top2 && fr2.height >= 1 && top2.left < fr2.right - 2 && top2.top < fr2.bottom - 2 && top2.bottom > fr2.top + 2) {
+      const bottom = Math.max(top2.bottom, visHudBox(document.getElementById('stats'))?.bottom ?? 0);
+      fabsTop = bottom + gap;
+      topLeft = null;
+      root.removeProperty('--pz-top-left');
+    }
+  } else if (hudBottom > 0) {
+    if (!coarse && topBox && topBox.left > 140) {
+      fabsTop = hudTop > 0 ? hudTop : hudBottom + gap;
+    } else {
+      fabsTop = hudBottom + gap;
+    }
+    root.removeProperty('--pz-top-left');
+  } else {
+    root.removeProperty('--pz-fabs-top');
+    root.removeProperty('--pz-top-left');
+    return;
+  }
+
+  if (fabsTop != null) root.setProperty('--pz-fabs-top', `${Math.round(fabsTop)}px`);
+}
+
+/** 手機直向坐著時：聊天鈕移到「藥品／道具」正上方；地圖鈕依狀態列實際高度放置，坐下不改 */
 let fabB = '';
 function placeChatFab() {
   if (!ui) return;
@@ -2589,6 +2668,7 @@ export function tickPlaza(dt: number) {
   cookTick();
   if (view) for (const d of SHED_DOORS) view.setShedDoorState(d.loc, { locked: !(deps.shedUnlocked?.(d.loc) ?? true), active: nearShed === d.loc });
   placeChatFab();
+  syncPlazaHudLayout();
   if (plazaMapIsOpen()) refreshPlazaMap();
   if (!client?.connected) return;
   phaseTimer += dt;
@@ -2700,6 +2780,7 @@ export async function closePlaza(leaveSeat = true) {
   client = null;
   view?.dispose(); view = null;
   ui?.remove(); ui = null;
+  clearPlazaHudLayout();
   myPile = null; mySlot = null; snap = null; seatWishes = []; paidWishIds.clear(); deps = null; near = null; nearShed = null; nearFood = false; nearFoodQ = false; nearCarry = null; nearPlace = null; foodQ = null; foodPin = null; foodGlide = false; foodQOk = true; cookSt = null; cookArea = null; mySeat = null; nearCook = null; nearPlate = null; cookOk = true; cookPend = null; carryNpcOk = false; flagOk = false; flagList = []; myFlagText = null;
   removeFlagBtn();
   try { document.body.classList.remove('raceMode', 'partyMode'); } catch { /* */ }

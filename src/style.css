@@ -2460,12 +2460,18 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
   #gauge.tw #fill .ic{width:30px;height:30px}
 }
 
-/* 廣場人數（#top 內）：只在手機橫向顯示；狀態列上緣對齊左上「地圖」鈕 */
+/* 廣場人數（#top 內）：只在手機橫向顯示；狀態列上緣／左緣與地圖鈕共用量測變數 */
 #pzTopOn{display:none!important}
 @media (pointer:coarse) and (orientation:landscape){
  #top #pzTopOn.on{display:inline-flex!important;align-items:center;gap:3px;color:#9fe0a8;font-weight:800}
  #top #pzTopOn svg{width:15px;height:15px}
- body.plazaMode #top,body.plazaRoam #top{top:calc(var(--sa-top,0px) + 4px)}
+ body.plazaMode #top,body.plazaRoam #top{
+  top:var(--pz-fabs-top, calc(var(--sa-top,0px) + 4px));
+  left:var(--pz-top-left, calc(var(--sa-left) + 96px));
+ }
+}
+@media (pointer:coarse) and (orientation:landscape) and (min-height:501px){
+ body.plazaMode #stats,body.plazaRoam #stats{left:var(--pz-top-left, calc(var(--sa-left) + 96px))}
 }
 
 /* 廣場裡開商店／圖鑑／裝備要蓋過廣場名牌、HUD 與按鈕 */
