@@ -1341,9 +1341,17 @@ body.plazaRoam #joy{z-index:8400;left:calc(var(--sa-left) + 16px)!important;bott
 .giftMsg{padding:max(16px,calc(var(--sa-top) + 8px)) max(16px,calc(var(--sa-right) + 8px)) max(16px,calc(var(--sa-bottom) + 8px)) max(16px,calc(var(--sa-left) + 8px))}
 .giftMsg .gmBox{max-height:calc(100dvh - var(--sa-top) - var(--sa-bottom) - 32px)}
 #medList{max-height:min(55vh,calc(100dvh - var(--sa-top) - var(--sa-bottom) - 160px))}
-/* 加到主畫面（standalone）時狀態列疊在內容上：至少留 20px（舊 iOS 有時 env() 回 0） */
-@media (display-mode: standalone) and (pointer:coarse){:root{--sa-top:max(env(safe-area-inset-top,0px),20px)}}
-html.iosApp{--sa-top:max(env(safe-area-inset-top,0px),20px)}
+/* 加到主畫面時狀態列疊在內容上：env() 有值就用；為 0 時（舊 iOS／fullscreen）至少讓開狀態列。一般瀏覽器不套用，版面不會被往下推 */
+@media (display-mode: standalone), (display-mode: fullscreen){
+  :root{--sa-top:max(env(safe-area-inset-top,0px),47px)}
+}
+@media (display-mode: standalone) and (orientation:landscape), (display-mode: fullscreen) and (orientation:landscape){
+  :root{--sa-top:max(env(safe-area-inset-top,0px),21px)}
+}
+html.iosApp,html.standaloneApp{--sa-top:max(env(safe-area-inset-top,0px),47px)}
+@media (orientation:landscape){
+  html.iosApp,html.standaloneApp{--sa-top:max(env(safe-area-inset-top,0px),21px)}
+}
 /* ---------- 活動場景 ---------- */
 .evEntry{margin:12px 0 4px;padding:10px 12px;border:2px solid var(--ink);background:linear-gradient(#7a1e12,#4e130b);color:#ffe9c2;box-shadow:3px 3px 0 var(--ink);position:relative;text-align:left}
 .evEntry::before,.evEntry::after{content:'';position:absolute;top:-9px;width:14px;height:18px;border-radius:7px;background:#e2442b;border:2px solid var(--ink);box-shadow:0 0 10px #ff7a3a99}
@@ -2457,7 +2465,7 @@ body.poseOpen #lieBtn.on{bottom:calc(var(--sa-bottom,0px) + 244px)!important}
 @media (pointer:coarse) and (orientation:landscape){
  #top #pzTopOn.on{display:inline-flex!important;align-items:center;gap:3px;color:#9fe0a8;font-weight:800}
  #top #pzTopOn svg{width:15px;height:15px}
- body.plazaMode #top,body.plazaRoam #top{top:calc(env(safe-area-inset-top,0px) + 4px)}
+ body.plazaMode #top,body.plazaRoam #top{top:calc(var(--sa-top,0px) + 4px)}
 }
 
 /* 廣場裡開商店／圖鑑／裝備要蓋過廣場名牌、HUD 與按鈕 */
@@ -3892,4 +3900,54 @@ body.uiCovered:is(.onShift,.plazaMode,.plazaRoam) :is(#btns,#btnsL,#btnsCorner,#
  #feedPick .fpRow{grid-template-columns:40px minmax(0,1fr) auto;gap:8px;padding:6px 8px}
  #feedPick .fpImg{width:40px;height:40px}
  #feedPick .fpGo{height:34px!important}
+}
+
+
+/* 主畫面：安裝 App 說明 */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  #oInstall{display:none!important}
+}
+#installApp .installLead{
+  margin:0 0 14px;font-size:15px;line-height:1.55;color:#2a3540;text-align:left
+}
+#installApp .installSteps{
+  list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:8px
+}
+#installApp .installSteps li{
+  display:flex;align-items:flex-start;gap:12px;text-align:left;
+  margin:0;padding:10px 12px;border:1.5px solid rgba(31,42,54,.14);
+  border-radius:10px;background:rgba(255,255,255,.42);
+  box-shadow:0 1px 3px rgba(0,0,0,.08)
+}
+#installApp .installIc{
+  flex:0 0 44px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  border:1.5px solid rgba(42,90,134,.28);border-radius:10px;background:#fff;
+  box-shadow:0 1px 2px rgba(0,0,0,.06);color:#2a5a86
+}
+#installApp .installIc svg{width:28px;height:28px;display:block}
+#installApp .installTx{flex:1 1 auto;min-width:0;font-size:14px;line-height:1.5;color:#2a3540}
+#installApp .installTx b{
+  display:block;margin:0 0 2px;font:800 15px/1.35 var(--sign);color:#1f2a36;letter-spacing:.02em
+}
+#installApp .installSteps li.installEm{
+  border-color:#2a5a86;background:rgba(42,90,134,.1);
+  box-shadow:0 0 0 1px rgba(42,90,134,.18),0 2px 6px rgba(42,90,134,.12)
+}
+#installApp .installSteps li.installEm .installIc{
+  border-color:#2a5a86;background:#eef3f8
+}
+#installApp .installSteps li.installEm .installTx b{color:#2a5a86}
+#installApp #installAppClose{
+  display:block;width:100%;margin:0;min-height:48px;font-weight:800;
+  border:1.5px solid var(--ink);border-radius:8px;background:#2a5a86;color:#fff;
+  box-shadow:0 2px 6px rgba(20,30,45,.16)
+}
+@media (orientation:landscape) and (max-height:500px){
+  #installApp .installLead{margin-bottom:8px;font-size:13px}
+  #installApp .installSteps{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px}
+  #installApp .installSteps li{padding:8px 10px;gap:8px}
+  #installApp .installIc{flex-basis:36px;width:36px;height:36px;border-radius:8px}
+  #installApp .installIc svg{width:22px;height:22px}
+  #installApp .installTx,#installApp .installTx b{font-size:13px}
+  #installApp .installSteps li.installEm{grid-column:1/-1}
 }

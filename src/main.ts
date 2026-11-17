@@ -6869,8 +6869,20 @@ frame();
 
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
+$('oInstall').onclick = () => $('installApp').classList.add('show');
+$('installAppClose').onclick = () => $('installApp').classList.remove('show');
+{
+  const standalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.matchMedia('(display-mode: fullscreen)').matches
+    || !!(navigator as Navigator & { standalone?: boolean }).standalone;
+  if (standalone) {
+    const b = document.getElementById('oInstall');
+    if (b) b.style.display = 'none';
+  }
+}
+
 // 所有可關閉面板：頂端懸浮標題＋右上角 ✕（手機、電腦都一樣）
-for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['friends', 'friendsClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose'], ['food', 'foodClose'], ['foodStall', 'foodStallClose']] as const) {
+for (const [pid, cid] of [['shop', 'shopClose'], ['dex', 'dexClose'], ['friends', 'friendsClose'], ['settings', 'setClose'], ['redeem', 'rdClose'], ['fb', 'fbClose'], ['lb', 'lbClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'], ['installApp', 'installAppClose'], ['adminTools', 'adminToolsClose'], ['paySum', 'psOk'], ['tagNote', 'tnOk'], ['evLb', 'evLbClose'], ['ach', 'achClose'], ['food', 'foodClose'], ['foodStall', 'foodStallClose']] as const) {
   const pn = $(pid), h = pn.querySelector('h2')!, bar = document.createElement('div'); bar.className = 'ph';
   pn.insertBefore(bar, h); bar.appendChild(h); const x = document.createElement('button'); x.className = 'px'; x.textContent = '✕'; x.setAttribute('aria-label', '關閉');
   x.onclick = () => ($(cid) as HTMLButtonElement).click(); bar.appendChild(x);
@@ -7523,7 +7535,7 @@ function closeTopModal(): boolean {
   for (const [id, close] of [
     ['backMenu', 'bmStay'], ['sv', 'svClose'], ['ach', 'achClose'], ['evLb', 'evLbClose'], ['lb', 'lbClose'],
     ['fb', 'fbClose'], ['redeem', 'rdClose'], ['equip', 'eqClose'], ['gift', 'giftClose'], ['notice', 'noticeClose'],
-    ['adminTools', 'adminToolsClose'],
+    ['installApp', 'installAppClose'], ['adminTools', 'adminToolsClose'],
     ['shop', 'shopClose'], ['settings', 'setClose'], ['friends', 'friendsClose'], ['dex', 'dexClose'],
     ['nameAsk', 'naSkip'], ['paySum', 'psOk'], ['tagNote', 'tnOk'],
   ] as const) {
@@ -7675,7 +7687,13 @@ syncAdminBtn(myTag);
 
 (window as any).__pity = { LEGEND_PITY, LEGEND_ODD, get dry() { return save.legendDry ?? 0; }, set dry(v: number) { save.legendDry = v; }, roll: () => rollFind(), sync: () => legendSync(), give: (i: number) => { save.odd[i]++; }, odd: () => save.odd.slice() };
 
-if ((navigator as any).standalone) document.documentElement.classList.add('iosApp');
+{
+  const app = !!(navigator as Navigator & { standalone?: boolean }).standalone
+    || window.matchMedia('(display-mode: standalone)').matches
+    || window.matchMedia('(display-mode: fullscreen)').matches;
+  if (app) document.documentElement.classList.add('iosApp', 'standaloneApp');
+}
+
 
 /* events / survey extracted */
 // 手機：對話框按鈕統一走 btn()（放開觸發＋click 備援），不只靠 onclick
