@@ -13,6 +13,7 @@ export {
 } from './walkSeat';
 export { makeWorldLabel, bindWorldLabelRenderer, renderSceneWithLocalAvatarOnTop, markLocalAvatarLayer, invalidateLocalAvatarCache, invalidateLightLayerCache, LOCAL_AVATAR_LAYER, OVERLAY_LABEL_LAYER, type WorldLabel, type WorldLabelKind } from './worldLabel';
 export { tickTpCamOcclude, clearTpCamOcclude, setTpCamOccludeIgnore } from './tpCamOcclude';
+export { tickCamHeadFade, clearCamHeadFade, leanFacePeekX } from './camHeadFade';
 export {
   initYardScene, LAND, shedAnim, disposeShed, buildShed, applyShedLook, showLand, WATER_C, getShedG,
   type YardSceneDeps,

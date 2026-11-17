@@ -18,6 +18,7 @@ import {
   setWalking, setNearSeat, clearWalkInput,
   makeWorldLabel, bindWorldLabelRenderer, renderSceneWithLocalAvatarOnTop, invalidateLocalAvatarCache, type WorldLabel,
   tickTpCamOcclude, clearTpCamOcclude, setTpCamOccludeIgnore,
+  tickCamHeadFade, clearCamHeadFade, leanFacePeekX,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
 } from './world';
 import { initCook, openCook, openCookSolo, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView } from './cook/cookUi';
@@ -77,7 +78,7 @@ import {
   plazaNearShed, SHED_DOORS, shedReturnSpawn, shedName,
   openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, isPlazaPartyMode, raceBeginBasinFill, tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaSettleRaceMeat, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
   plazaFoodLocked, plazaFoodCanOpen, plazaFoodLeave, plazaCookLeave, plazaCookProgress, plazaCookMyPan, plazaCookDisplay,
-  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaFeedTarget, plazaFeedStillNear, plazaNpcEat, plazaFeedRelay, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
+  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaHeadObjects, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaFeedTarget, plazaFeedStillNear, plazaNpcEat, plazaFeedRelay, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile, isMgPile,
   MG_MAG_PRICE, MG_MAG_AMMO, MG_AMMO_MAX, MG_SIT_MS,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaPetSay, plazaPetPunch, plazaStealFrom, plazaZhErr,
@@ -625,7 +626,7 @@ const shimmer = mesh(new THREE.SphereGeometry(0.11, 12, 8), new THREE.MeshBasicM
 const pearlMesh = mesh(new THREE.SphereGeometry(0.03, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.3 }), [0, 0.05, 0], oyster);
 pearlMesh.visible = false;
 const leanFaces: THREE.Group[] = [];
-for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x3a9a6a : 0xe86878, s < 0 ? 0x444444 : 0xc8c8c8).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); leanFaces.push(f); }
+for (const s of [-1, 1]) { const f = makeAma(s < 0 ? 0x3a9a6a : 0xe86878, s < 0 ? 0x444444 : 0xc8c8c8).head; f.removeFromParent(); f.rotation.y = Math.PI; f.scale.setScalar(1.3); camera.add(f); f.userData.s = s; f.position.set(s * 1.2, 0.05, -0.75); f.visible = false; leanFaces.push(f); }
 
 // ---------- 音效（全部 WebAudio 即時合成，無外部音檔） ----------
 type Mix = { master: number; amb: number; sfx: number; mute: boolean ; music: number; gore: boolean; stats: boolean; feed: boolean; sens: number; invX: boolean; invY: boolean; eco: boolean; rotTip: boolean; bright: number; boot: 'menu' | 'plaza' };
@@ -6312,10 +6313,10 @@ function frameBody(ts?: number) {
   pearlMesh.rotation.y += rdt * 2;
   oyster.scale.setScalar(DIFF[diff].scale * (1 + pe * (narrow ? 0.25 : 0.6)));
   handL.position.set(HL.x + (narrow ? 0.12 : 0.05) * pe, HL.y + 0.06 * pe, HL.z);
-  const restX = 0.75 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect + 0.3; // 平常囥佇畫面外
-  // 單挑擂台無阿婆場：隱藏「湊近來看」臉特效（奇物／珍珠共用 pearlShow）
-  const leanOn = pe > 0.02 && !isPlazaRaceMode();
-  leanFaces.forEach(f => { f.visible = leanOn; if (!leanOn) return; f.position.x = f.userData.s * (restX + ((narrow ? 0.4 : 0.58) - restX) * pe); f.position.y = 0.05 - 0.08 * pe; f.rotation.z = -f.userData.s * 0.35 * pe; });
+  const { restX, peekX } = leanFacePeekX(camera.fov, camera.aspect);
+  // 單挑擂台／第三人稱：隱藏「湊近來看」臉特效（掛在 FP 鏡頭上，TP 會變成世界裡的人頭）
+  const leanOn = pe > 0.02 && !isPlazaRaceMode() && !tpv;
+  leanFaces.forEach(f => { f.visible = leanOn; if (!leanOn) return; f.position.x = f.userData.s * (restX + (peekX - restX) * pe); f.position.y = 0.05 - 0.08 * pe; f.rotation.z = -f.userData.s * 0.35 * pe; });
   // 手勢：左手空手掌心向下、持蚵掌心向上；右手掌心向下；插刀時雙手 A 字
   const holdOy = oyster.visible && oyster.parent === handL;
   const tw = phase === 'twist' ? strokeDir * Math.min(1, tension) : 0;
@@ -6431,6 +6432,11 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     }
     if (plazaMode && isPlazaActive()) tickPlazaTpOcclude(rdt, cam, occFocus);
     tickTpCamOcclude(rdt, scene, cam, occFocus, tpOnNow);
+    const nearHeads: THREE.Object3D[] = [];
+    for (const n of ALL_NPCS) if (n.g.visible && n.head) nearHeads.push(n.head);
+    if (plazaMe?.outer?.visible && plazaMe.head) nearHeads.push(plazaMe.head);
+    if (plazaMode) nearHeads.push(...plazaHeadObjects());
+    tickCamHeadFade(cam, nearHeads, state === 'play');
   } catch (e) {
     // 內層已限流；這裡只擋未預期外洩，避免每幀刷
     if (!tpOccOuterLogged) { tpOccOuterLogged = true; console.error('tpOcclude', e); }
@@ -7169,13 +7175,21 @@ function setTpv(v: boolean) {
   flYaw = 0; flRet = 0;
   lookMx = lookMy = 0;
   tpv = v;
-  if (!v) clearTpCamOcclude();
+  if (!v) { clearTpCamOcclude(); clearCamHeadFade(); }
+  // 第三人稱不要掛第一人稱鏡頭上的「湊近臉」，否則會在世界裡突然出現兩顆人頭
+  if (v) leanFaces.forEach(f => { f.visible = false; });
   // 抽一口按住中切視角：保留倒數／動畫進度，只換 FP 手／TP avatar 呈現
   if (plazaForceTp) plazaForceTp = false; // 玩家手動切換，之後跟存檔偏好
-  if (plazaMode && !walking) {
-    // 第三人稱：鏡頭從角色背後開始繞；切回第一人稱：相對座位轉頭歸零
-    if (v) yaw = tYaw = seatYaw;
-    else yaw = tYaw = 0;
+  if (!walking) {
+    if (plazaMode) {
+      // 第三人稱：鏡頭從角色背後開始繞；切回第一人稱：相對座位轉頭歸零
+      if (v) yaw = tYaw = seatYaw;
+      else yaw = tYaw = 0;
+    } else {
+      // 工寮坐下：切換時轉頭歸零，避免第三人稱繞到隔壁阿婆臉上
+      yaw = tYaw = 0;
+      if (!v) { pitch = tPitch = -0.85; }
+    }
   }
   save.tpv = v ? 1 : 0; persist(); applyOutfit3(); drawCamBtn();
   const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) c.checked = v;

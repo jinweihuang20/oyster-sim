@@ -1,6 +1,6 @@
 export {
   openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, isPlazaPartyMode, setRaceFairSeed, raceBeginBasinFill, plazaSeated, plazaSittingBusy, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
-  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaRandomSpawn, plazaResolveEnterSpawn, plazaNearSeat, plazaNearShed, plazaNearFood, plazaFoodLocked, plazaFoodCanOpen, plazaFoodLeave, plazaFoodLeftMs, plazaCookLeave, plazaCookProgress, plazaCookMyPan, plazaCookDisplay, plazaNearPrompt, plazaFeedTarget, plazaFeedStillNear, plazaNpcEat, plazaFeedRelay, plazaCarrying, plazaTrySit, plazaStandWalk,
+  plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaHeadObjects, plazaRandomSpawn, plazaResolveEnterSpawn, plazaNearSeat, plazaNearShed, plazaNearFood, plazaFoodLocked, plazaFoodCanOpen, plazaFoodLeave, plazaFoodLeftMs, plazaCookLeave, plazaCookProgress, plazaCookMyPan, plazaCookDisplay, plazaNearPrompt, plazaFeedTarget, plazaFeedStillNear, plazaNpcEat, plazaFeedRelay, plazaCarrying, plazaTrySit, plazaStandWalk,
   plazaHitPile, plazaMyPileOrigin,
   plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaPetSay, plazaPetPunch, plazaStealFrom, plazaZhErr,
   plazaMgFire, plazaMgHit, plazaMgReload, plazaAimMg, plazaMgFx, plazaMgMount, plazaMgHitTargets, plazaOnMg,

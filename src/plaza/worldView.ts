@@ -153,6 +153,8 @@ export type PlazaWorldView = {
   aimTargets: (leisureNpc?: boolean) => PlazaAimTarget[];
   /** 走動碰撞用：遠端 `[x, z, radius, isLie]`；isLie=1 時跳躍夠高可越过 */
   walkBodies: () => [number, number, number, number][];
+  /** 遠端／廣場阿婆的頭，供鏡頭靠近時暫時藏起 */
+  headObjects: () => THREE.Object3D[];
   moonLaunch: (connId: string, delayMs?: number, fromX?: number, fromZ?: number) => void;
   /** 頭頂氣泡：最後一句聊天，約 5 秒 */
   showChat: (opts: { connId?: string; pid?: string; nick?: string; text: string; self?: boolean; hold?: number }) => void;
@@ -2933,6 +2935,15 @@ function hashPid(pid: string) {
     return out;
   }
 
+  function headObjects(): THREE.Object3D[] {
+    const out: THREE.Object3D[] = [];
+    for (const r of remotes.values()) {
+      if (!r.rig?.head || !r.rig.outer.visible) continue;
+      out.push(r.rig.head);
+    }
+    return out;
+  }
+
   function dispose() {
     shedRow?.dispose();
     clearStallKeepers();
@@ -3026,7 +3037,7 @@ function hashPid(pid: string) {
     },
     setFoodStallActive: (on) => ambiance?.setFoodActive(on),
     setFoodQueueRing: (at, on) => ambiance?.setFoodQueue(at, on),
-    mgMounts, aimMg, mgFx, mgHitTargets, tick,
+    mgMounts, aimMg, mgFx, mgHitTargets, tick, headObjects,
     tickTpOcclude: (dt, camera, focus) => applyTpOcclude(dt, camera, focus),
     dispose: disposeAll,
   };

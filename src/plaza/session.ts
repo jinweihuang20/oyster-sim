@@ -328,6 +328,10 @@ export function plazaPileObs(): [number, number, number][] {
 export function plazaWalkBodies(): [number, number, number, number][] {
   return view?.walkBodies() ?? [];
 }
+/** 遠端／廣場阿婆的頭，供鏡頭靠近時暫時藏起 */
+export function plazaHeadObjects(): THREE.Object3D[] {
+  return view?.headObjects() ?? [];
+}
 /** 入場障礙：棚柱＋攤位 */
 function plazaSpawnExtraObs(): [number, number, number][] {
   const posts: [number, number, number][] = plazaShedPosts().map(p => [p.x, p.z, 0.22]);
