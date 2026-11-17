@@ -90,6 +90,8 @@ export type WalkSeatDeps = {
   hint: HTMLElement;
   stools: THREE.Group[];
   scene: THREE.Scene;
+  /** 站起／坐下後刷新工寮／廣場 HUD 排版 */
+  onWalkUi?: () => void;
 };
 
 let D: WalkSeatDeps;
@@ -137,6 +139,7 @@ export function standUp() {
   D.setTpv(true); D.drawCamBtn();
   D.$('diff').textContent = ''; D.on('standBtn', false); D.on('joy', true); D.on('stealBtn', false);
   D.hint.textContent = D.COARSE ? '用搖桿走動，走到空的藍色板凳旁，按「坐這裡」坐下' : 'WASD 走動，走到空的藍色板凳旁，按 E／「坐這裡」坐下';
+  D.onWalkUi?.();
 }
 
 /** 進廣場～5 秒顯示提示後淡出；靠近空位再出現 */
@@ -211,6 +214,7 @@ export function plazaEnterWalkPose(fromSeat = true) {
   if (D.COARSE) { const cam = D.$('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
   D.stools.forEach(g => { g.visible = false; g.userData.tag.visible = false; });
   armPlazaEnterHint();
+  D.onWalkUi?.();
 }
 
 export function sitDown(id: string) {
@@ -225,6 +229,7 @@ export function sitDown(id: string) {
     if (D.getTpv()) { D.setTpv(false); D.drawCamBtn(); }
   }
   D.toast(`已坐下：${D.seatNow().n}`, '#9fe0ff'); D.SFX.pop(); D.later(0.3, D.goPick);
+  D.onWalkUi?.();
 }
 
 export function walkStep(dt: number) {

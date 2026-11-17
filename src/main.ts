@@ -119,6 +119,8 @@ let shiftLen = SHIFT; // 臨時工 60／120 秒
 let evRun: EvCfg | null = null, evToken: string | null = null, evLastId: number | null = null, evBusy = false;
 /** 廣場多人：無 NPC、座位由 Hub 權威；進場先走動再坐下開剝 */
 let plazaMode = false;
+/** 第三人稱本機 avatar；須在 frame() 之前宣告，否則 tickPuffUi 會踩 TDZ */
+let plazaMe: PlayerRig | null = null;
 function setPlazaMode(v: boolean) {
   plazaMode = v;
   document.body.classList.toggle('plazaMode', v);
@@ -126,11 +128,22 @@ function setPlazaMode(v: boolean) {
   applyPlazaShadowMode();
   // 進／出廣場同時切 lamp.castShadow（applyEcoGfx 內部會讀 plazaMode）
   try { applyEcoGfx(); } catch { /* applyEcoGfx 尚未定義時忽略 */ }
-  syncPlazaShuckBtns(v);
+  refreshWorkHud();
   armPlazaShuckHint(v);
 }
 
-/** 廣場坐下：藥品／換位置／放棄這顆排成一列；離開廣場還原工寮版面 */
+/** 工寮上工（非廣場／非好友房） */
+function isShedShift() {
+  return state === 'play' && !plazaMode && !isRoomActive();
+}
+
+/** 左下格線：廣場全程；工寮僅坐下剝蚵時 */
+function wantShuckBtns() {
+  if (plazaMode) return true;
+  return isShedShift() && !walking;
+}
+
+/** 放棄在藥品上方，藥品／換位置同一列；關閉時還原工寮左下列 */
 function syncPlazaShuckBtns(on: boolean) {
   const corner = document.getElementById('btnsCorner');
   const left = document.getElementById('btnsL');
@@ -139,9 +152,9 @@ function syncPlazaShuckBtns(on: boolean) {
   const give = document.getElementById('giveUp');
   if (!med || !stand || !give) return;
   if (on && corner) {
+    corner.appendChild(give);
     corner.appendChild(med);
     corner.appendChild(stand);
-    corner.appendChild(give);
     corner.classList.add('pzShuckBtns');
   } else {
     corner?.classList.remove('pzShuckBtns');
@@ -150,6 +163,54 @@ function syncPlazaShuckBtns(on: boolean) {
       left.appendChild(stand);
     }
     corner?.appendChild(give);
+  }
+}
+
+/** 工寮頂部：環視｜視角｜選單｜回主選單（對齊廣場圓形鈕列） */
+function placeShedTopChrome(on: boolean) {
+  const top = document.getElementById('top');
+  const cam = document.getElementById('camBtn');
+  const look = document.getElementById('lookBtn');
+  const quit = document.getElementById('quitBtn');
+  const menu = document.getElementById('hudMenuBtn');
+  const corner = document.getElementById('btnsCorner');
+  if (!top || !cam || !menu) return;
+  if (on) {
+    look?.classList.add('hudLook');
+    cam.classList.add('hudCam');
+    quit?.classList.add('hudQuit');
+    // 順序：環視 → 視角 → 選單 → 回主選單
+    if (look) top.appendChild(look);
+    top.appendChild(cam);
+    top.appendChild(menu);
+    if (quit) top.appendChild(quit);
+  } else {
+    quit?.classList.remove('hudQuit');
+    // 回主選單還原左下角；視角／環視交 placeCamBtn／placeLookBtn 重掛
+    if (quit && corner && quit.parentElement !== corner) {
+      const give = document.getElementById('giveUp');
+      if (give && give.parentElement === corner) corner.insertBefore(quit, give);
+      else corner.appendChild(quit);
+    }
+  }
+}
+
+/** 上工 HUD：左下格線＋工寮頂部單列（shedShift） */
+function refreshWorkHud() {
+  const shed = isShedShift();
+  document.body.classList.toggle('shedShift', shed);
+  syncPlazaShuckBtns(wantShuckBtns());
+  placeShedTopChrome(shed);
+  // 工寮上工：視角／環視一律掛 #top（與廣場一致）
+  if (shed && matchMedia('(pointer:coarse)').matches) {
+    const cam = document.getElementById('camBtn');
+    const look = document.getElementById('lookBtn');
+    const top = document.getElementById('top');
+    if (top && cam && cam.parentElement !== top) top.appendChild(cam);
+    if (top && look && cam && (look.parentElement !== top || look.nextElementSibling !== cam)) {
+      look.classList.add('hudLook');
+      top.insertBefore(look, cam);
+    }
   }
 }
 
@@ -887,7 +948,10 @@ let tapAim = false, tossT0 = 0; const TAP_HINT = '肉在刀尖上！點一下碗
 type Phase = 'pick' | 'scoop' | 'seam' | 'twist' | 'aim' | 'empty' | 'crab' | 'busy'
   | 'grillPlace' | 'grillCook' | 'grillFlip' | 'grillTake';
 let state: 'menu' | 'play' | 'end' = 'menu';
-const syncShiftUi = () => document.body.classList.toggle('onShift', state === 'play');
+const syncShiftUi = () => {
+  document.body.classList.toggle('onShift', state === 'play');
+  refreshWorkHud();
+};
 syncShiftUi();
 let phase: Phase = 'busy';
 let hp = 100, stabs = 0, flinch = 0, handPain = false;
@@ -3437,33 +3501,32 @@ function flTick(dt: number) {
   flYaw = flRetFrom * (1 - k);
   if (flRet <= 0) flYaw = 0;
 }
+/** 環視鈕掛在視角鈕左邊（頂部 HUD），不再貼右下 */
 function placeLookBtn() {
   const btn = document.getElementById('lookBtn');
   if (!btn) return;
   const show = COARSE && state === 'play';
+  btn.classList.add('hudLook');
   btn.classList.toggle('on', show);
+  btn.style.right = '';
+  btn.style.bottom = '';
   if (!show) {
     if (flHeld) flRelease();
-    btn.style.right = ''; btn.style.bottom = '';
     return;
   }
-  const ids = ['poseBtn', 'jumpBtn', 'crouchBtn', 'lieBtn', 'umbBtn', 'puffBtn', 'throwBtn', 'stealBtn', 'flagBtn', 'flagPullBtn'];
-  let minL = Infinity, maxB = 0;
-  const consider = (el: HTMLElement | null) => {
-    if (!el) return;
-    if (el.id === 'lookBtn' || el.id === 'camBtn' || el.id === 'rotL' || el.id === 'rotR') return;
-    const r = el.getBoundingClientRect();
-    if (r.width < 8 || r.height < 8) return;
-    if (r.right < innerWidth * 0.45) return;
-    minL = Math.min(minL, r.left);
-    maxB = Math.max(maxB, r.bottom);
-  };
-  for (const id of ids) consider(document.getElementById(id));
-  const box = document.getElementById('btns');
-  if (box) for (const el of Array.from(box.querySelectorAll('button')) as HTMLElement[]) consider(el);
-  if (!isFinite(minL) || maxB <= 0) { btn.style.right = ''; btn.style.bottom = ''; return; }
-  btn.style.right = Math.max(8, innerWidth - minL + 8) + 'px';
-  btn.style.bottom = Math.max(8, innerHeight - maxB) + 'px';
+  const cam = document.getElementById('camBtn');
+  const host = cam?.parentElement;
+  if (host && (btn.parentElement !== host || btn.nextElementSibling !== cam)) host.insertBefore(btn, cam);
+  // 工寮：環視｜視角｜選單｜回主選單
+  if (document.body.classList.contains('shedShift')) {
+    const quit = document.getElementById('quitBtn');
+    const menu = document.getElementById('hudMenuBtn');
+    const top = document.getElementById('top');
+    if (quit && menu && cam && top && host === top) {
+      if (cam.nextElementSibling !== menu) top.insertBefore(menu, quit);
+      if (menu.nextElementSibling !== quit) top.appendChild(quit);
+    }
+  }
 }
 const YAW = 1.25, P0 = -1.05, P1 = 0.15;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -3763,23 +3826,30 @@ btn('umbBtn', openUmbrella, closeUmbrella); for (const ev of ['pointercancel', '
 if (matchMedia('(pointer:coarse)').matches) {
   const L = $('btnsL');
   for (const id of ['radioBtn', 'medBtn', 'standBtn']) L.appendChild($(id));
-  // 左下角固定列：回主選單 ＋ 右側放棄這顆
+  // 左下角固定列：回主選單 ＋ 右側放棄這顆（上工後 refreshWorkHud 會把回主選單改掛頂部）
   const corner = document.createElement('div');
   corner.id = 'btnsCorner';
   $('hud').appendChild(corner);
   corner.appendChild($('quitBtn'));
   corner.appendChild($('giveUp'));
-  // 視角：直向掛統計列右側；橫向掛上方狀態列右側
+  // 視角：廣場／工寮上工／橫向掛 #top；僅非上工直向才掛 #stats
   $('camBtn').classList.add('hudCam');
   const placeCamBtn = () => {
     const cam = $('camBtn');
     const plaza = document.body.classList.contains('plazaMode') || document.body.classList.contains('plazaRoam');
+    const shed = document.body.classList.contains('shedShift');
     const land = matchMedia('(orientation: landscape)').matches;
-    const host = (plaza || land) ? $('top') : $('stats');
-    // 廣場：選單／玩家／視角都在合併後的 #top；工寮直向視角仍掛 #stats
+    const host = (plaza || shed || land) ? $('top') : $('stats');
     const cluster = document.getElementById('pzCamCluster');
+    // 工寮上工：look／cam／quit／menu 由 refreshWorkHud 排好，勿拆 cluster 以外的頂部列
+    if (shed) { refreshWorkHud(); return; }
     const node = cluster && cam.parentElement === cluster ? cluster : cam;
     if (node.parentElement !== host) host.appendChild(node);
+    const look = document.getElementById('lookBtn');
+    if (look && cam.parentElement && (look.parentElement !== cam.parentElement || look.nextElementSibling !== cam)) {
+      look.classList.add('hudLook');
+      cam.parentElement.insertBefore(look, cam);
+    }
   };
   placeCamBtn();
   matchMedia('(orientation: landscape)').addEventListener('change', placeCamBtn);
@@ -3817,6 +3887,7 @@ initWalkSeat({
   bumpAbandoned: () => { abandoned++; },
   setProgress: v => { progress = v; }, setCombo: v => { combo = v; }, setTension: v => { tension = v; }, setRotKey: v => { rotKey = v; },
   hint, stools, scene,
+  onWalkUi: () => refreshWorkHud(),
 });
 initWalkJoy();
 
@@ -6927,7 +6998,6 @@ if (SHOT) setTimeout(() => {
   if (SHOT === 'harbor') look(0, -0.05);
   if (SHOT === 'end') { count = 38; opened = 47; missed = 9; abandoned = 3; perfects = 12; cracked = 4; steals = 3; caught = 1; meatHits = 2; shellHits = 4; thrown = 5; blocks = 3; reflects = 2; lost = 1; hitsTaken = 1; penalty = 28; dayPearls = [0]; dayOdd = [1]; endDay(); }
 }, 0);
-frame();
 
 // 開始／結算畫面嘛會當開雜貨店、圖鑑、設定
 for (const [b, t] of [['oShop', 'shopBtn'], ['oDex', 'dexBtn'], ['oSet', 'setBtn'], ['rDex', 'dexBtn'], ['rSet', 'setBtn']] as const) $(b).onclick = () => ($(t) as HTMLButtonElement).click();
@@ -7201,7 +7271,6 @@ mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.02, 12), pm.head, [0, 0.06, 0], me
 const meArm = (s: number) => { const p = new THREE.Group(); p.position.set(s * 0.22, 0.84, 0); meTorso.add(p); mesh(rcyl(0.05, 0.045, 0.36, 6), sleeve, [0, -0.12, -0.12], p).rotation.x = 1.1; mesh(crease(new THREE.SphereGeometry(0.05, 6, 5)), pm.skin, [0, -0.2, -0.3], p); return p; };
 const meArmL = meArm(-1), meArmR = meArm(1);
 /** 第三人稱本機：與遠端同一套 makePlayerAvatar（廣場與工寮都用這套並套裝備） */
-let plazaMe: PlayerRig | null = null;
 function ensurePlazaMe(): PlayerRig {
   if (plazaMe) return plazaMe;
   const { M, add } = makeMeshHelpers(scene, matchMedia('(pointer: coarse)').matches);
@@ -7964,3 +8033,6 @@ function plazaPose(p: 'crouch' | 'lie') { if (!(plazaMode || isRoomActive()) || 
   };
   requestAnimationFrame(step);
 }
+
+// 主迴圈放檔案最末：等 jumpY／equip／plazaMe 等全部宣告完再開，避免 TDZ
+frame();

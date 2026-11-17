@@ -1491,27 +1491,33 @@ function buildUi() {
 #pzChatFab.hasUnread .pzBadge{display:block}
 #pzChatFab.hasUnread{animation:pzFabPulse .9s ease-in-out 2}
 @keyframes pzFabPulse{0%,100%{transform:scale(1)}40%{transform:scale(1.06)}}
-#pzChatPeek{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:calc(var(--pz-fabs-top, calc(var(--sa-top) + 58px)) + 44px);bottom:auto;max-width:min(70vw,280px);background:rgba(20,12,6,.92);border:2px solid #d9952b;border-radius:12px;padding:8px 10px;color:#fff6d8;font-size:12px;line-height:1.35;z-index:3;cursor:pointer;box-shadow:2px 2px 0 #1b1208}
+/* 聊天／預覽：對齊廣場 HUD（深藍毛玻璃＋淡藍細框，勿用橘金） */
+#pzChatPeek{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:calc(var(--pz-fabs-top, calc(var(--sa-top) + 58px)) + 44px);bottom:auto;max-width:min(72vw,320px);background:rgba(22,28,36,.92);border:1.5px solid rgba(232,246,255,.28);border-radius:12px;padding:8px 10px;color:#e8f6ff;font-size:12px;line-height:1.35;z-index:3;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 #pzChatPeek.on{display:block}
-#pzChatPeek b{color:#ffd23f;font-weight:900}
-#pzChat{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:calc(var(--pz-fabs-top, calc(var(--sa-top) + 58px)) + 44px);bottom:auto;width:min(58vw,260px);max-width:calc(100vw - 24px);background:rgba(20,12,6,.88);border:2px solid #d9952b;border-radius:12px;padding:8px;color:#fff6d8;z-index:3}
+#pzChatPeek b{color:#9ec9ef;font-weight:900}
+#pzChat{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:calc(var(--pz-fabs-top, calc(var(--sa-top) + 58px)) + 44px);bottom:auto;width:min(64vw,300px);max-width:calc(100vw - 24px);background:rgba(22,28,36,.92);border:1.5px solid rgba(232,246,255,.28);border-radius:12px;padding:8px;color:#e8f6ff;z-index:3;box-shadow:0 8px 22px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 #pzChat.open{display:block}
 @media (pointer:fine) and (min-width:900px){
-  #pzChat{width:min(36vw,420px)}
-  #pzChatPeek{max-width:min(36vw,420px)}
+  #pzChat{width:min(40vw,480px)}
+  #pzChatPeek{max-width:min(40vw,480px)}
   #pzLog{height:88px}
 }
 @media (pointer:coarse) and (orientation:landscape){
-  #pzChatPeek{max-width:min(42vw,240px)}
-  #pzChat{width:min(42vw,240px)}
+  #pzChatPeek{max-width:min(52vw,340px)}
+  #pzChat{width:min(52vw,340px)}
 }
-#pzChatHd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-size:12px;font-weight:800;color:#ffd23f}
-#pzChatMin{pointer-events:auto;background:transparent;border:0;color:#ffd23f;font-size:18px;line-height:1;padding:2px 6px;font-weight:900}
-#pzLog{height:64px;overflow:auto;font-size:12px;line-height:1.35;margin-bottom:6px}
+#pzChatHd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-size:12px;font-weight:800;color:#e8f6ff}
+#pzChatMin{pointer-events:auto;background:transparent;border:0;color:#c5d8ea;font-size:18px;line-height:1;padding:2px 6px;font-weight:900}
+#pzChatMin:active{color:#fff}
+#pzLog{height:64px;overflow:auto;font-size:12px;line-height:1.35;margin-bottom:6px;color:#e8f6ff}
+#pzLog b{color:#9ec9ef;font-weight:800}
 #pzRow{display:flex;gap:6px}
-#pzRow input{flex:1;min-width:0;border-radius:8px;border:2px solid #6b3a12;background:#1a1008;color:#fff6d8;padding:6px 8px;font-size:14px}
-#pzRow button{pointer-events:auto;background:#d9952b;color:#2a1600;border:0;border-radius:10px;font-weight:800;padding:8px 12px}
-@media (max-width:420px){#pzChat{width:min(72vw,240px)}#pzLog{height:52px}}
+#pzRow input{flex:1;min-width:0;border-radius:8px;border:1.5px solid rgba(232,246,255,.28);background:rgba(12,18,26,.75);color:#e8f6ff;padding:6px 8px;font-size:14px;outline:none}
+#pzRow input::placeholder{color:rgba(232,246,255,.45)}
+#pzRow input:focus{border-color:rgba(158,201,239,.65)}
+#pzRow button{pointer-events:auto;background:rgba(42,90,134,.95);color:#fff;border:1px solid rgba(232,246,255,.35);border-radius:10px;font-weight:800;padding:8px 12px}
+#pzRow button:active{background:rgba(52,110,160,1)}
+@media (max-width:420px){#pzChat{width:min(78vw,280px)}#pzLog{height:52px}}
 /* 地圖：左下聊天上方；開圖時全螢幕半透明＋中央畫布 */
 /* 左上：狀態列（#top／#stats）下方 */
 /* z-index 低於聊天／離開；狀態列另在 style.css 抬到 plazaRoot 之上 */
@@ -1979,12 +1985,26 @@ async function paintPlayersDrop() {
   fr.bindFriendActions(drop, () => { void paintPlayersDrop(); });
 }
 
+/** 列表掛回按鈕旁（關閉時） */
+function nestPlayersDrop() {
+  const wrap = document.getElementById('pzPlayersWrap');
+  const drop = document.getElementById('pzPlayersDrop');
+  if (wrap && drop && drop.parentElement !== wrap) wrap.appendChild(drop);
+}
+
+/** 列表掛到 body，避開 #top transform／#plazaRoot 層級，才能蓋過離開／地圖／聊天 */
+function portalPlayersDrop() {
+  const drop = document.getElementById('pzPlayersDrop');
+  if (drop && drop.parentElement !== document.body) document.body.appendChild(drop);
+}
+
 function closePlayersDrop() {
   const wrap = document.getElementById('pzPlayersWrap');
   const btn = document.getElementById('pzPlayersBtn');
   wrap?.classList.remove('open');
   btn?.setAttribute('aria-expanded', 'false');
   document.body.classList.remove('pzPlayersOpen');
+  nestPlayersDrop();
 }
 
 export function plazaPlayersIsOpen() {
@@ -1995,8 +2015,9 @@ export function plazaClosePlayers() { closePlayersDrop(); }
 
 function onPlayersDocPointer(e: Event) {
   const wrap = document.getElementById('pzPlayersWrap');
+  const drop = document.getElementById('pzPlayersDrop');
   if (!wrap?.classList.contains('open')) return;
-  if (e.target instanceof Node && wrap.contains(e.target)) return;
+  if (e.target instanceof Node && (wrap.contains(e.target) || drop?.contains(e.target))) return;
   closePlayersDrop();
 }
 
@@ -2041,6 +2062,7 @@ export function plazaTogglePlayers() {
   if (open) {
     plazaCloseMap();
     plazaCloseChat();
+    portalPlayersDrop();
     paintPlayersDrop();
     wrap.classList.add('open');
     btn.setAttribute('aria-expanded', 'true');
@@ -2057,6 +2079,10 @@ function placePlayersChrome() {
   if (!host) return;
   if (cluster.parentElement !== host) host.appendChild(cluster);
   if (cam && cam.parentElement !== cluster) cluster.appendChild(cam);
+  // 環視鈕在視角鈕左邊
+  const look = document.getElementById('lookBtn');
+  if (look && cam && (look.parentElement !== cluster || look.nextElementSibling !== cam)) cluster.insertBefore(look, cam);
+  look?.classList.add('hudLook');
   const menu = document.getElementById('hudMenuBtn');
   if (menu && menu.parentElement !== cluster) cluster.appendChild(menu);
   cam?.classList.add('hudCam', 'on');
@@ -2076,16 +2102,22 @@ function teardownPlayersChrome() {
     if (shop && top && shop.parentElement === top) top.insertBefore(menu, shop);
     else top?.appendChild(menu);
   }
+  const look = document.getElementById('lookBtn');
   if (cluster && cam && cam.parentElement === cluster) {
     if (matchMedia('(pointer: fine)').matches) {
       document.getElementById('btns')?.appendChild(cam);
       cam.classList.remove('hudCam', 'on');
       cam.style.display = '';
+      // 桌面不顯示環視；先掛回 body 避免跟 cluster 一起被刪
+      if (look && look.parentElement === cluster) document.body.appendChild(look);
     } else {
       const land = matchMedia('(orientation: landscape)').matches;
       const host = document.getElementById(land ? 'top' : 'stats');
       host?.appendChild(cam);
+      if (look && host) host.insertBefore(look, cam);
     }
+  } else if (look && cluster && look.parentElement === cluster) {
+    document.body.appendChild(look);
   }
   document.getElementById('pzPlayersWrap')?.remove();
   cluster?.remove();

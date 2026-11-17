@@ -224,7 +224,8 @@ export function friendActionBtn(k: string, tag?: string, nick?: string, compact 
   }
   const target = tag ? `#${String(tag).replace(/^#/, '')}` : k;
   if (!target) return '';
-  const label = compact ? `${FR_PLUS_IC}<span>加</span>` : '加好友';
+  // 廣場列表 compact 仍顯示「加好友」全文（勿縮成「加」）
+  const label = compact ? `${FR_PLUS_IC}<span>加好友</span>` : '加好友';
   return `<button type="button" class="frAct${cls}" data-fr-add="${esc(target)}" data-fr-nick="${esc(nick || '')}" aria-label="加好友" title="加好友">${label}</button>`;
 }
 

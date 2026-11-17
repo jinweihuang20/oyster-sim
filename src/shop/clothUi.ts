@@ -43,13 +43,16 @@ export type ClothUiDeps = {
   setEqPick: (v: Slot | null) => void;
 };
 
-let D: ClothUiDeps;
+let D!: ClothUiDeps;
 export function initClothUi(deps: ClothUiDeps) { D = deps; }
 
-// Slot/EQUIP/SETS → shopEquip.ts
-export const eqOwned = (id: string) => (EQUIP.find(e => e.id === id)?.price === 0) || D.getSave().shop.owned.includes(id);
+// Slot/EQUIP/SETS → shopEquip.ts（init 前讀取回傳預設件，避免 frame 早開踩空）
+export const eqOwned = (id: string) => (EQUIP.find(e => e.id === id)?.price === 0) || !!(D?.getSave().shop.owned.includes(id));
 export const setEquip = (slot: Slot, id: string) => { const save = D.getSave(); save.equip = save.equip ?? {}; save.equip[slot] = id; };
-export const equipNow = (slot: Slot) => EQUIP.find(e => e.slot === slot && e.id === D.getSave().equip?.[slot] && eqOwned(e.id)) ?? EQUIP.find(e => e.id === defaultEquipId(slot))!;
+export const equipNow = (slot: Slot) => {
+  const cur = D?.getSave().equip?.[slot];
+  return (cur ? EQUIP.find(e => e.slot === slot && e.id === cur && eqOwned(e.id)) : undefined) ?? EQUIP.find(e => e.id === defaultEquipId(slot))!;
+};
 export const wornIds = () => SLOTS.map(([s]) => equipNow(s).id);
 export const setsOn = () => { const w = wornIds(); return SETS.filter(s => s.need.every(i => w.includes(i))); };
 export const slOn = (id: string) => wornIds().includes(id);

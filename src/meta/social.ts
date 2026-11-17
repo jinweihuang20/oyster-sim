@@ -74,7 +74,13 @@ async function poll() {
     const r = await get(`/events?since=${last}${tq()}`);
     if (r && typeof r.last === 'number') {
       const first = last === 0; last = r.last;
-      if (!first) for (const e of r.events ?? []) { const t = `${e.atitle ? `<em class="fdA">${esc(e.atitle)}</em>` : ''}<b>${esc(e.nick)}</b><small>#${esc(e.tag)}</small> ${esc(D.label(e.kind, e.item))}`; if (queue.length >= 3) queue[queue.length - 1] += '　・　' + t; else queue.push(t); }
+      // 跑馬燈只播傳說奇物（kind=legend）；珍珠／普通奇物／成就／解鎖地點不顯示
+      if (!first) for (const e of r.events ?? []) {
+        if (e.kind !== 'legend') continue;
+        const t = `${e.atitle ? `<em class="fdA">${esc(e.atitle)}</em>` : ''}<b>${esc(e.nick)}</b><small>#${esc(e.tag)}</small> ${esc(D.label(e.kind, e.item))}`;
+        if (queue.length >= 3) queue[queue.length - 1] += '　・　' + t;
+        else queue.push(t);
+      }
       showNext();
     }
   }
@@ -292,7 +298,7 @@ export function init(d: Deps) {
   x.addEventListener('pointerleave', () => { down = false; });
   x.addEventListener('pointercancel', () => { down = false; });
   for (const t of ['click', 'touchstart', 'touchend', 'mousedown', 'mouseup']) x.addEventListener(t, stop);
-  if (/[?&]feedtest=1/.test(location.search)) { queue.push('<b>測試蚵民</b><small>#0001</small> 剝到了黑珍珠！', '<b>第二則</b><small>#0002</small> 開到「舊懷錶」'); setTimeout(showNext, 500); }
+  if (/[?&]feedtest=1/.test(location.search)) { queue.push('<b>測試蚵民</b><small>#0001</small> 挖到傳說的「舊懷錶」！'); setTimeout(showNext, 500); }
   $('lbTabs').innerHTML = CATS.map(c => `<button type="button" data-c="${c.id}">${c.label}</button>`).join('');
   $('lbTabs').querySelectorAll<HTMLButtonElement>('button').forEach(b => b.onclick = () => {
     cat = b.dataset.c!;
@@ -315,7 +321,8 @@ export function init(d: Deps) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) showNext(); });
 }
 export function resume() { showNext(); }
-export function local(txt: string) { queue.push(esc(txt)); showNext(); }
+/** 本機提示不再進跑馬燈（只播傳說奇物）；保留 API 以免呼叫端改動。 */
+export function local(_txt: string) { /* no-op: feed is legend-only */ }
 // ---------- 禮物信箱 ----------
 export type Gift = { id: string; type: 'money' | 'equip' | 'odd' | 'pearl' | 'item'; amount?: number; itemId?: string | number; tier?: number; message?: string; createdAt?: number | string };
 export async function gifts(): Promise<Gift[]> { const r = await get(`/gifts?pid=${encodeURIComponent(D.id)}&caps=item${tq()}`); return Array.isArray(r?.gifts) ? r.gifts : []; }

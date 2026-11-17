@@ -1261,37 +1261,71 @@ body.plazaMode #top,body.plazaMode #stats,body.plazaRoam #top,body.plazaRoam #st
 #top #shopBtn,#top #dexBtn,#top #eqBtn,#top #rankBtn,#top #setBtn{display:none!important}
 body.plazaMode #hpWrap,body.plazaRoam #hpWrap{display:none!important}
 
-/* 廣場：兩條狀態列併成一列（數字＋圖示，不顯示「休閒」）；#stats 收起來，次要數字進玩家面板 */
-body:is(.plazaMode,.plazaRoam) #stats{display:none!important}
+/* 廣場／工寮上工：兩條狀態列併成一列；#stats 收起來 */
+body:is(.plazaMode,.plazaRoam,.shedShift) #stats{display:none!important}
 body:is(.plazaMode,.plazaRoam) #modeHud,body:is(.plazaMode,.plazaRoam) #pzTopOn{display:none!important}
-body:is(.plazaMode,.plazaRoam) #openHud,body:is(.plazaMode,.plazaRoam) #stealHud{display:inline-flex!important}
-body:is(.plazaMode,.plazaRoam) #top{
+body:is(.plazaMode,.plazaRoam,.shedShift) #openHud,body:is(.plazaMode,.plazaRoam,.shedShift) #stealHud{display:inline-flex!important}
+body:is(.plazaMode,.plazaRoam,.shedShift) #top{
   white-space:normal;flex-wrap:wrap;row-gap:6px;align-items:center;
   left:calc(var(--sa-left) + 8px);right:calc(var(--sa-right) + 8px);
   transform:none;width:auto;max-width:none;box-sizing:border-box;
 }
-body:is(.plazaMode,.plazaRoam) #openHud{order:1}
-body:is(.plazaMode,.plazaRoam) #countHud{order:2}
-body:is(.plazaMode,.plazaRoam) #pearlHud{order:3}
-body:is(.plazaMode,.plazaRoam) #stealHud{order:4}
-body:is(.plazaMode,.plazaRoam) #nightTag{order:5}
-/* 右側一組由左到右：玩家、視角、選單（選單永遠最右邊，貼齊狀態列右緣／安全區） */
-body:is(.plazaMode,.plazaRoam) #top::after{content:"";order:9;flex:1 1 auto;min-width:0}
+body:is(.plazaMode,.plazaRoam,.shedShift) #openHud{order:1}
+body:is(.plazaMode,.plazaRoam,.shedShift) #countHud{order:2}
+body:is(.plazaMode,.plazaRoam,.shedShift) #pearlHud{order:3}
+body:is(.plazaMode,.plazaRoam,.shedShift) #stealHud{order:4}
+body:is(.plazaMode,.plazaRoam,.shedShift) #nightTag{order:5}
+body.shedShift #modeHud{order:0}
+/* 工寮：血條移到狀態列下方（原提示位置），提示再往下 */
+body.shedShift #hpWrap{
+  position:fixed!important;
+  left:50%;
+  transform:translateX(-50%);
+  top:calc(var(--sa-top) + 52px);
+  z-index:6;
+  flex-direction:row!important;
+  align-items:center;
+  gap:6px;
+  padding:4px 10px;
+  border-radius:999px;
+  background:rgba(22,28,36,.55);
+  border:1px solid rgba(255,255,255,.22);
+  box-shadow:0 2px 8px rgba(0,0,0,.22);
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
+  pointer-events:none;
+}
+body.shedShift #hpWrap .hudL{display:none!important}
+body.shedShift #hpWrap .hudHp{display:inline-flex;align-items:center;gap:6px}
+body.shedShift #hpWrap .hudHp>.ic{display:none!important}
+body.shedShift #hpBar{width:140px;height:10px}
+body.shedShift #hpPct{display:inline!important;font-size:12px;font-weight:800;color:#f2f4f7;min-width:2.2em}
+/* 右側一組：廣場＝玩家／環視／視角／選單；工寮＝環視／視角／選單／回主選單 */
+body:is(.plazaMode,.plazaRoam,.shedShift) #top::after{content:"";order:9;flex:1 1 auto;min-width:0}
 body:is(.plazaMode,.plazaRoam) #top #pzCamCluster{order:10;margin-left:auto!important;gap:6px;flex:none}
+body.shedShift #top #lookBtn.hudLook{order:10}
+body.shedShift #top #camBtn.hudCam{order:11}
+body.shedShift #top #hudMenuBtn{order:12;margin-left:0!important}
+body.shedShift #top #quitBtn.hudQuit{order:13;margin-left:0!important}
 body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn{order:11;margin-left:0!important}
 @media (pointer:coarse) and (orientation:landscape){
-  body:is(.plazaMode,.plazaRoam) #top{
+  body:is(.plazaMode,.plazaRoam,.shedShift) #top{
     justify-content:flex-start;
     right:calc(var(--sa-right) + 8px);
   }
-  body:is(.plazaMode,.plazaRoam) #top::after{order:9;flex:1 1 auto}
+  body:is(.plazaMode,.plazaRoam,.shedShift) #top::after{order:9;flex:1 1 auto}
   body:is(.plazaMode,.plazaRoam) #top #pzCamCluster{order:10}
   body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn{order:11;margin-left:0!important}
+  /* 工寮橫向：回主選單在剩餘時間左邊 */
+  body.shedShift #top #quitBtn.hudQuit{order:-1;margin-right:4px}
+  body.shedShift #modeHud{order:0}
 }
-/* 選單／玩家／視角：同樣大的圓形圖示鈕 */
-body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn,
+/* 選單／玩家／環視／視角／回主選單：同樣大的圓形圖示鈕 */
+body:is(.plazaMode,.plazaRoam,.shedShift) #top #hudMenuBtn,
 body:is(.plazaMode,.plazaRoam) #top #pzPlayersBtn,
-body:is(.plazaMode,.plazaRoam) #top #camBtn.hudCam{
+body:is(.plazaMode,.plazaRoam,.shedShift) #top #lookBtn.hudLook,
+body:is(.plazaMode,.plazaRoam,.shedShift) #top #camBtn.hudCam,
+body.shedShift #top #quitBtn.hudQuit{
   width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;
   padding:0!important;gap:0!important;
   border-radius:50%!important;
@@ -1301,16 +1335,20 @@ body:is(.plazaMode,.plazaRoam) #top #camBtn.hudCam{
   display:inline-flex!important;align-items:center;justify-content:center;
   font-size:0!important;line-height:0;
 }
-body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn svg,
+body:is(.plazaMode,.plazaRoam,.shedShift) #top #hudMenuBtn svg,
 body:is(.plazaMode,.plazaRoam) #top #pzPlayersBtn svg,
-body:is(.plazaMode,.plazaRoam) #top #camBtn.hudCam svg{width:18px;height:18px;flex:none}
-body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn>span:not(.newDot),
+body:is(.plazaMode,.plazaRoam,.shedShift) #top #lookBtn.hudLook .ic,
+body:is(.plazaMode,.plazaRoam,.shedShift) #top #camBtn.hudCam svg,
+body.shedShift #top #quitBtn.hudQuit .ic{width:18px;height:18px;flex:none}
+body.shedShift #top #quitBtn.hudQuit .ic{background-color:#f2f4f7}
+body:is(.plazaMode,.plazaRoam,.shedShift) #top #hudMenuBtn>span:not(.newDot),
 body:is(.plazaMode,.plazaRoam) #top #pzPlayersBtn .key{display:none!important}
-body:is(.plazaMode,.plazaRoam) #top #camBtn.hudCam.on{display:inline-flex!important}
-body:is(.plazaMode,.plazaRoam) #top #camBtn.hudCam.tpOn{background:rgba(42,90,134,.92)!important;border-color:rgba(255,215,106,.55)!important}
+body:is(.plazaMode,.plazaRoam,.shedShift) #top #camBtn.hudCam.on{display:inline-flex!important}
+body:is(.plazaMode,.plazaRoam,.shedShift) #top #camBtn.hudCam.tpOn{background:rgba(42,90,134,.92)!important;border-color:rgba(255,215,106,.55)!important}
 body:is(.plazaMode,.plazaRoam) #pzPlayersWrap.open #pzPlayersBtn,
 body:is(.plazaMode,.plazaRoam) #top #pzPlayersBtn:active,
-body:is(.plazaMode,.plazaRoam) #top #hudMenuBtn:active{background:rgba(42,90,134,.92)!important;border-color:rgba(255,215,106,.55)!important}
+body:is(.plazaMode,.plazaRoam,.shedShift) #top #hudMenuBtn:active,
+body.shedShift #top #quitBtn.hudQuit:active{background:rgba(42,90,134,.92)!important;border-color:rgba(255,215,106,.55)!important}
 #pzPlayersBtn{position:relative}
 #pzPlayersBtn .pzPBadge{
   position:absolute;top:-4px;right:-4px;z-index:1;
@@ -1326,6 +1364,17 @@ body:is(.plazaMode,.plazaRoam) #hint{
   padding:0 56px;
   box-sizing:border-box;
 }
+/* 工寮：提示在血條下方 */
+body.shedShift #hint{
+  top:calc(var(--sa-top) + 84px)!important;
+  bottom:auto!important;
+  padding:0 16px;
+  box-sizing:border-box;
+}
+@media (pointer:coarse) and (orientation:landscape){
+  body.shedShift #hpWrap{top:calc(var(--sa-top) + 46px)}
+  body.shedShift #hint{top:calc(var(--sa-top) + 74px)!important}
+}
 body.plazaRoam:not(.plazaSmokeSit):not(.plazaMgSit) #hint{opacity:0;pointer-events:none;transition:opacity .45s ease}
 body.plazaRoam:not(.plazaSmokeSit):not(.plazaMgSit) #hint.pzHintOn{opacity:1}
 /* 坐下剝蚵提示：幾秒後淡出（文字更新會再出現） */
@@ -1333,13 +1382,20 @@ body.plazaMode:not(.plazaRoam) #hint{opacity:0;pointer-events:none;transition:op
 body.plazaMode:not(.plazaRoam) #hint.pzHintOn{opacity:1}
 /* 廣場坐下：不顯示「回主選單」（用左上離開） */
 body:is(.plazaMode,.plazaRoam) #quitBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}
-/* 藥品／換位置／放棄這顆同一列，放棄靠右並留空隙 */
+/* 廣場坐下：放棄在藥品上方；藥品／換位置同一列 */
 #btnsCorner.pzShuckBtns{
   left:calc(var(--sa-left) + 6px);right:auto;bottom:calc(var(--sa-bottom) + 6px);
-  flex-direction:row;align-items:flex-end;flex-wrap:wrap;gap:6px;
+  display:grid!important;
+  grid-template-columns:auto auto;
+  grid-template-areas:
+    "give ."
+    "med stand";
+  align-items:end;justify-items:start;gap:6px;
   max-width:calc(100vw - var(--sa-left) - var(--sa-right) - 16px);
 }
-#btnsCorner.pzShuckBtns #giveUp{margin-left:12px}
+#btnsCorner.pzShuckBtns #giveUp{grid-area:give;margin-left:0}
+#btnsCorner.pzShuckBtns #medBtn{grid-area:med}
+#btnsCorner.pzShuckBtns #standBtn{grid-area:stand}
 @media (pointer:coarse) and (orientation:landscape){
   #btnsCorner.pzShuckBtns{max-width:calc(100vw - var(--sa-left) - var(--sa-right) - 140px)}
 }
@@ -1378,8 +1434,9 @@ body.plazaMode #pzCamCluster.on,body.plazaRoam #pzCamCluster.on{display:inline-f
 #top #pzCamCluster.on{margin-left:auto}
 #pzPlayersWrap{position:relative;flex:none;display:inline-flex;overflow:visible}
 /* 開啟時整條狀態列抬到名牌／機關槍 HUD 之上，避免選單被蓋 */
+/* 玩家列表開啟：整層 #top 抬到最上，列表才能蓋過離開／地圖／聊天 */
 body:is(.plazaMode,.plazaRoam).pzPlayersOpen #top,
-body:is(.plazaMode,.plazaRoam).pzPlayersOpen #stats{z-index:9800!important;overflow:visible!important}
+body:is(.plazaMode,.plazaRoam).pzPlayersOpen #stats{z-index:12000!important;overflow:visible!important}
 #pzPlayersWrap.open{z-index:2}
 #pzPlayersBtn{
   display:inline-flex!important;align-items:center;justify-content:center;gap:4px;
@@ -1395,17 +1452,33 @@ body:is(.plazaMode,.plazaRoam).pzPlayersOpen #stats{z-index:9800!important;overf
 #pzPlayersBtn .key{display:none;opacity:.8;font-size:11px;font-weight:800}
 #pzPlayersDrop{
   display:none;position:fixed;
-  top:var(--pz-hint-top, calc(var(--sa-top) + 100px));
-  left:calc(var(--sa-left) + 8px);right:auto;
-  width:min(440px, calc(100vw - var(--sa-left) - var(--sa-right) - 16px));
-  min-width:0;max-width:min(440px, calc(100vw - var(--sa-left) - var(--sa-right) - 16px));
-  max-height:min(60vh, calc(100dvh - var(--pz-hint-top, calc(var(--sa-top) + 100px)) - var(--sa-bottom) - 12px));
+  /* 掛 body 後蓋過 #plazaRoot(9000)／離開地圖聊天；滿寬、左右留白 */
+  top:calc(var(--sa-top) + 48px);
+  left:calc(var(--sa-left) + 12px);
+  right:calc(var(--sa-right) + 12px);
+  width:auto;min-width:0;max-width:none;
+  max-height:min(60vh, calc(100dvh - var(--sa-top) - 48px - var(--sa-bottom) - 12px));
   overflow:auto;padding:8px;border-radius:12px;box-sizing:border-box;
   background:rgba(22,28,36,.92);border:1.5px solid rgba(232,246,255,.28);
   box-shadow:0 8px 22px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
-  color:#e8f6ff;z-index:9800;
+  color:#e8f6ff;z-index:12500;pointer-events:auto;
 }
-#pzPlayersWrap.open #pzPlayersDrop{display:block}
+/* 手機橫向：寬度 45% 螢幕、靠右 */
+@media (pointer:coarse) and (orientation:landscape){
+  #pzPlayersDrop,
+  body.pzPlayersOpen > #pzPlayersDrop{
+    left:auto;
+    right:calc(var(--sa-right) + 12px);
+    width:45vw;
+    max-width:45vw;
+  }
+}
+body.pzPlayersOpen #pzPlayersDrop,
+#pzPlayersWrap.open ~ #pzPlayersDrop,
+body > #pzPlayersDrop{z-index:12500}
+/* wrap.open 時：若仍在 wrap 內也顯示；portal 到 body 後靠 body.pzPlayersOpen */
+#pzPlayersWrap.open #pzPlayersDrop,
+body.pzPlayersOpen > #pzPlayersDrop{display:block}
 #pzPlayersWrap.open #pzPlayersBtn{background:rgba(42,90,134,.95);border-color:rgba(255,215,106,.55)}
 #pzPlayersDrop .pzPRow{
   display:flex;align-items:center;gap:6px;
@@ -1416,24 +1489,32 @@ body:is(.plazaMode,.plazaRoam).pzPlayersOpen #stats{z-index:9800!important;overf
 #pzPlayersDrop .pzPWho{display:inline-flex;align-items:center;gap:5px;min-width:0;flex:1}
 #pzPlayersDrop .pzPName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 #pzPlayersDrop .pzPRow .frAct,#pzPlayersDrop .pzPRow .frBadge{margin-left:0;flex:none}
-/* 壓過 #top button 的 44px，避免加好友鈕把名字擠成 yaojun #3... */
+/* 壓過 #top button 的 44px；「加好友」三字完整顯示 */
 #top #pzPlayersDrop .pzPRow .frAct,
 #pzPlayersDrop .pzPRow .frAct{
-  min-width:0!important;min-height:0!important;height:22px!important;width:auto!important;
-  padding:0 6px!important;margin:0!important;border-radius:999px!important;
+  min-width:0!important;min-height:0!important;height:24px!important;width:auto!important;
+  padding:0 8px!important;margin:0!important;border-radius:999px!important;
   border:1px solid rgba(255,255,255,.28)!important;
   background:rgba(42,90,134,.9)!important;color:#fff!important;
-  box-shadow:none!important;font-size:10px!important;font-weight:800;line-height:22px;
+  box-shadow:none!important;font-size:11px!important;font-weight:800;line-height:24px;
   display:inline-flex!important;align-items:center;justify-content:center;gap:3px;
+  flex:none!important;white-space:nowrap!important;
 }
 #top #pzPlayersDrop .pzPRow .frAct svg,
 #pzPlayersDrop .pzPRow .frAct svg{width:12px;height:12px;flex:none}
 #top #pzPlayersDrop .pzPRow .frBadge,
 #pzPlayersDrop .pzPRow .frBadge{
-  min-height:0!important;height:22px;padding:0 6px;font-size:10px;line-height:22px;
-  display:inline-flex;align-items:center;
+  min-height:0!important;height:24px;padding:0 8px;font-size:11px;line-height:24px;
+  display:inline-flex;align-items:center;flex:none;white-space:nowrap;
 }
-#pzPlayersDrop .pzPMeat{flex:none;margin-left:auto;font-variant-numeric:tabular-nums;color:#ffd76a;font-weight:900;white-space:nowrap}
+/* 蚵肉欄：固定寬至少塞得下圖示＋4 位數 */
+#pzPlayersDrop .pzPMeat{
+  flex:none;margin-left:auto;
+  min-width:4.75em;width:4.75em;box-sizing:border-box;
+  display:inline-flex;align-items:center;justify-content:flex-end;gap:3px;
+  font-variant-numeric:tabular-nums;color:#ffd76a;font-weight:900;white-space:nowrap;
+}
+#pzPlayersDrop .pzPMeat .ic{width:14px;height:14px;flex:none}
 #pzPlayersDrop .pzPEmpty{padding:12px 10px;opacity:.7;font-size:13px;text-align:center}
 #stats #camBtn.hudCam{margin-left:0}
 #top #camBtn.hudCam{margin-left:0!important}
@@ -2439,18 +2520,20 @@ body .clTabs button{
 @keyframes ltSwipe{0%{transform:translateX(-80px);opacity:0}15%{opacity:1}50%{transform:translateX(80px);opacity:1}65%{opacity:0}100%{transform:translateX(80px);opacity:0}}
 
 
-/* 手機環視鈕：右下動作鈕左側，長按只轉鏡頭 */
-#lookBtn{display:none;position:fixed;right:calc(var(--sa-right,0px) + 12px);bottom:calc(var(--sa-bottom,0px) + 16px);width:48px;height:48px;min-width:48px;min-height:48px;padding:0;margin:0;z-index:30;pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;border-radius:12px;align-items:center;justify-content:center;color:#f2f4f7;background:rgba(22,28,36,.55)!important;border:1px solid rgba(255,255,255,.22)!important;box-shadow:0 4px 14px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.10)!important;-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2)}
+/* 手機環視鈕：頂部、視角鈕左邊；長按只轉鏡頭 */
+#lookBtn{display:none;position:static;flex:none;margin:0;padding:0;z-index:6;pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;align-items:center;justify-content:center;box-sizing:border-box;color:#f2f4f7;background:rgba(22,28,36,.55)!important;border:1px solid rgba(255,255,255,.28)!important;box-shadow:0 2px 8px rgba(0,0,0,.22)!important;-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2)}
+#lookBtn.hudLook{width:40px;min-width:40px;height:40px;min-height:40px;border-radius:10px;font-size:0;gap:0}
 @media (pointer:coarse){
-  #lookBtn.on{display:flex!important}
-  #lookBtn .ic{width:22px;height:22px;background-color:#f2f4f7}
+  #lookBtn.hudLook.on{display:inline-flex!important}
+  #lookBtn .ic{width:20px;height:20px;background-color:#f2f4f7}
   #lookBtn:active{background:rgba(22,28,36,.72)!important;transform:scale(.96)}
   #lookBtn.held,#lookBtn.held:active{background:#2a5a86!important;border-color:rgba(232,246,255,.45)!important;transform:none}
 }
-@media (pointer:coarse) and (orientation:landscape){
-  #lookBtn,#lookBtn.on{width:44px;height:44px;min-width:44px;min-height:44px;border-radius:10px}
-  #lookBtn .ic{width:20px;height:20px}
+#top #lookBtn.hudLook,#stats #lookBtn.hudLook,#pzCamCluster #lookBtn.hudLook{
+  width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;
+  border-radius:50%!important;
 }
+#top #lookBtn.hudLook .ic,#stats #lookBtn.hudLook .ic,#pzCamCluster #lookBtn.hudLook .ic{width:18px;height:18px}
 @media (pointer:fine){#lookBtn{display:none!important}}
 
 /* 廣場動作：手機只顯示「動作」；展開後才露出跳／蹲／躺 */

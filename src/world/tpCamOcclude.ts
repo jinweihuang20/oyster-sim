@@ -254,6 +254,8 @@ function scanWant(scene: THREE.Scene, camera: THREE.Camera, focus: THREE.Vector3
   to.copy(focus);
   if (![from.x, from.y, from.z, to.x, to.y, to.z].every(Number.isFinite)) return;
   if (from.distanceTo(to) < 0.35) return;
+  // Sprite.raycast 需要 Raycaster.camera，否則會丟例外刷 console
+  ray.camera = camera;
   const roots = collectRoots(scene, camera);
   let left = MAX_HITS;
   left = castBundle(roots, from, to, left);
