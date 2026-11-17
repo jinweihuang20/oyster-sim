@@ -4351,25 +4351,12 @@ function resetApoTimers() {
   petTalkIn = 8 + Math.random() * 7;
 }
 const apoPunchStops: Array<() => void> = [];
-const apoStealMeats = new Set<THREE.Object3D>();
-/** 進行中的貓拳與還沒入碗的偷肉一律拿掉（換場、卸寵物、掛機、切視角、出拳被打斷） */
+/** 進行中的貓拳收掉（換場、卸寵物、掛機、切視角、出拳被打斷） */
 function clearApoPunchFx() {
   const stops = apoPunchStops.splice(0);
   for (const s of stops) { try { s(); } catch { /* */ } }
-  for (let i = flyers.length - 1; i >= 0; i--) {
-    if (!flyers[i].m.userData.apoSteal) continue;
-    const m = flyers[i].m;
-    flyers.splice(i, 1);
-    try { m.parent?.remove(m); scene.remove(m); } catch { /* */ }
-    apoStealMeats.delete(m);
-  }
-  for (const m of [...apoStealMeats]) {
-    if (bowlMeat.includes(m as THREE.Mesh)) { apoStealMeats.delete(m); continue; }
-    try { m.parent?.remove(m); scene.remove(m); } catch { /* */ }
-    apoStealMeats.delete(m);
-  }
 }
-/** 換場時連還沒飛完的入碗肉也清掉，避免結束回呼又把肉加回場景 */
+/** 換場時把還沒飛完、也還沒入碗的肉清掉，避免結束回呼又加回場景 */
 function clearPendingFlyers() {
   clearApoPunchFx();
   for (let i = flyers.length - 1; i >= 0; i--) {
@@ -4378,9 +4365,6 @@ function clearPendingFlyers() {
     if (bowlMeat.includes(m as THREE.Mesh)) continue;
     try { m.parent?.remove(m); scene.remove(m); } catch { /* */ }
   }
-}
-function apoKeepInBowl() {
-  return (!walking || plazaSeated()) && seatRig.visible && Number.isFinite(BOWL.x);
 }
 function showApoTalk(i: number) {
   const text = apoLine(i);
@@ -4407,41 +4391,13 @@ function placeApoBubble() {
   apoBub.sprite.position.set(p.x, Math.max(p.y + 0.42, y), p.z);
   apoBub.sprite.visible = true;
 }
-function apoLandPos() {
-  if (apoKeepInBowl()) {
-    return new THREE.Vector3(
-      BOWL.x + rnd(-0.06, 0.06),
-      BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015,
-      BOWL.z + rnd(-0.06, 0.06),
-    );
-  }
-  const p = walking ? walkPos : petAnchor.position;
-  const gy = plazaMode ? (plazaGroundY(p.x, p.z) || 0) : 0;
-  return new THREE.Vector3(p.x + rnd(-0.1, 0.1), gy + 0.25 + (walking ? jumpY : 0), p.z + rnd(-0.1, 0.1));
-}
-function apoAwardMeat(from: THREE.Vector3) {
+function apoAwardMeat() {
   const md = eco.yardStealDiff ?? 1;
   count++; bowlStock++; evMeat();
   const pv = eco.dpay[md] ?? eco.dpay[1];
   meatPay += pv;
   dCnt[md] = (dCnt[md] ?? 0) + 1;
   rollShuck(true); // 阿珀例外：從阿婆碗偷來的算食材蚵仔
-  const m = new THREE.Mesh(meatGeo, meatMat);
-  m.userData.apoSteal = true;
-  apoStealMeats.add(m);
-  fly(m, from.clone(), () => apoLandPos(), 0.5, 0.3, () => {
-    if (!apoStealMeats.has(m)) return; // 中途已被清掉
-    if (apoKeepInBowl()) {
-      m.userData.apoSteal = false;
-      apoStealMeats.delete(m);
-      m.visible = seatRig.visible;
-      bowlMeat.push(m);
-      if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
-    } else {
-      try { scene.remove(m); } catch { /* */ }
-      apoStealMeats.delete(m);
-    }
-  });
   petToast('阿珀偷到一顆蚵仔，算進成績', '#c9a0ff');
   updHud(); bumpShiftDraft();
 }
@@ -4527,7 +4483,7 @@ async function tryApoPunch(): Promise<boolean> {
     apoPunchVisual(getTo, !wantSteal, () => {
       if (petSleeping) return;
       if (plazaPunchLocalSteal(null, wantSteal)) {
-        apoAwardMeat(getTo());
+        apoAwardMeat();
         if (t.count > 0) t.count--;
       }
     });
@@ -4545,7 +4501,7 @@ async function tryApoPunch(): Promise<boolean> {
     if (stole) {
       n.count--;
       const lm = n.bowlMeat.pop(); if (lm) scene.remove(lm);
-      apoAwardMeat(getTo());
+      apoAwardMeat();
       say(n, apoScold(scold), 2.4);
     }
   });

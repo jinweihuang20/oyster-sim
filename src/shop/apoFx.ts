@@ -4,8 +4,6 @@ import { makeWorldLabel } from '../world/worldLabel';
 
 export type ApoPunchOpts = {
   empty?: boolean;
-  /** 命中後爪子帶一顆偷來的蚵仔，出拳結束或中斷時一定摘掉（遠端同步用） */
-  carryMeat?: boolean;
   onHit?: () => void;
   onDone?: () => void;
   /** 爪子掛到場景，不跟被藏起來的寵物一起消失；仍每幀從肩膀世界座標伸到目標 */
@@ -90,8 +88,6 @@ export function playApoPunch(
   const total = hitAt + hold + retract + shake;
   let t = 0;
   let hit = false;
-  let meat: THREE.Mesh | null = null;
-  const carryMeat = !!opts.carryMeat && !opts.empty;
   let label: ReturnType<typeof makeWorldLabel> | null = null;
   let labelT = 0;
   let dead = false;
@@ -126,12 +122,6 @@ export function playApoPunch(
     paw.quaternion.copy(_quat);
     if (wag) paw.rotateZ(wag);
     paw.scale.set(1, use, 1);
-    if (meat) {
-      if (meat.parent !== paw) paw.add(meat);
-      meat.position.set(0, 1.02, 0.07);
-      // 手臂用 scale.y 拉長，蚵仔要反縮才不會被拉成一條
-      meat.scale.set(1, 1 / Math.max(0.08, use), 1);
-    }
   };
 
   const tick = (dt: number) => {
@@ -154,7 +144,6 @@ export function playApoPunch(
         label.sprite.position.copy(worldTo()).y += 0.18;
         root.add(label.sprite);
         labelT = 0.55;
-        if (carryMeat && !meat) meat = makeStealMeat();
         try { opts.onHit?.(); } catch { /* */ }
       }
     } else if (t <= hitAt + hold + retract) {
@@ -178,7 +167,6 @@ export function playApoPunch(
       }
     }
     if (t >= total && !label) {
-      disposeStealMeat(meat); meat = null;
       paw.parent?.remove(paw);
       dead = true;
       try { opts.onDone?.(); } catch { /* */ }
@@ -200,32 +188,12 @@ export function playApoPunch(
     if (dead) return;
     dead = true;
     cancelAnimationFrame(raf);
-    disposeStealMeat(meat); meat = null;
     paw.parent?.remove(paw);
     if (label) {
       label.sprite.parent?.remove(label.sprite);
       try { label.dispose(); } catch { /* */ }
     }
   };
-}
-
-function makeStealMeat() {
-  const geo = new THREE.SphereGeometry(0.035, 8, 6);
-  geo.scale(1.4, 0.6, 1);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xd8cbb0, roughness: 0.3, metalness: 0.1 });
-  const m = new THREE.Mesh(geo, mat);
-  m.frustumCulled = false;
-  m.userData.apoSteal = true;
-  return m;
-}
-
-function disposeStealMeat(m: THREE.Mesh | null) {
-  if (!m) return;
-  m.parent?.remove(m);
-  try { m.geometry.dispose(); } catch { /* */ }
-  const mat = m.material;
-  if (Array.isArray(mat)) mat.forEach(x => { try { x.dispose(); } catch { /* */ } });
-  else if (mat) { try { mat.dispose(); } catch { /* */ } }
 }
 
 function sceneRoot(o: THREE.Object3D) {

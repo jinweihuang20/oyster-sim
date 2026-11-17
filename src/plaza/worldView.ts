@@ -2375,7 +2375,6 @@ function hashPid(pid: string) {
     try { rj._apoPunchStop?.(); } catch { /* */ }
     rj._apoPunchStop = playApoPunch(anchor, getTo, {
       empty: !opts.stole,
-      carryMeat: !!opts.stole,
       onHit: () => {
         (tgt as any)._apoHit = performance.now() + apoHitSeconds() * 1000;
         const line = apoScold(opts.scold ?? 0);
