@@ -369,6 +369,7 @@ let petReactT = 0;
 function refreshPet() {
   // 單挑競速：禁用寵物外觀與效果（也不同步給對手看）
   if (isPlazaRaceMode()) {
+    clearApoPunchFx();
     if (petMesh) { petAnchor.remove(petMesh); petMesh = null; }
     petCurId = null;
     petAcc = 0; petThrowAcc = 0; petUmbT = 0; petReactT = 0;
@@ -381,6 +382,7 @@ function refreshPet() {
   const p = petNow();
   const wantId = p?.id ?? null;
   if (wantId === petCurId) return;
+  clearApoPunchFx();
   if (petMesh) { petAnchor.remove(petMesh); petMesh = null; }
   petCurId = wantId;
   petAcc = 0; petThrowAcc = 0; petUmbT = 0; petReactT = 0; petPunchIn = 0; petTalkIn = 0; petSleeping = false;
@@ -397,6 +399,7 @@ function refreshPet() {
 function setPetSleeping(v: boolean) {
   if (petSleeping === v) return;
   petSleeping = v;
+  if (v) clearApoPunchFx();
   const slp = (petMesh?.userData as any)?.sleep as THREE.Object3D | undefined;
   if (slp) slp.visible = v;
 }
@@ -1496,6 +1499,7 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   count = bowlStock = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
   plazaStealBanUntil = 0; plazaStealCatches = 0; plazaStealPairCd.clear(); stopPlazaSteal();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
+  clearPendingFlyers();
   [...bowlMeat, ...splats].forEach(m => scene.remove(m)); bowlMeat.length = 0; splats.length = 0;
   ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show')); on('umbBtn', true); on('medBtn', !tut); on('quitBtn', !tut); drawRadio(); applyGloves(); applySleeve(); drawMeds(); clearBasinOysters(); fillBasin(false);
   // 單挑：enterWalk 會把 walking／seatRig 藏起來；開工班前強制坐好再 goPick，否則黃框與拿蚵會失效
@@ -1966,7 +1970,7 @@ initYardShop({
   showFlag: (on) => on ? plazaTryShowFlag() : plazaTryRemoveFlag(),
   upgradeFlag: (track, from) => plazaTryUpgradeFlag(track, from),
   selectFlag: (track, level) => plazaTrySelectFlag(track, level),
-  clearBowlMeat: () => { if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; } },
+  clearBowlMeat: () => { clearPendingFlyers(); if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; } },
   renderClothShop,
   renderMedShop,
   renderItemShop: () => { renderItemShop(); renderFoodShop(); },
@@ -3056,7 +3060,7 @@ function reclaimInterruptedShift() {
 }
 function endDay() { inputGuard(); if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
-  if (state === 'end') return; state = 'end'; if (plazaMode) plazaShellGen++; syncShiftUi(); setTimeout(giftAlert, 1500); setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal();
+  if (state === 'end') return; state = 'end'; if (plazaMode) plazaShellGen++; syncShiftUi(); setTimeout(giftAlert, 1500); setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal(); clearPendingFlyers();
   const all = [{ name: `你（${esc(myName())}）`, count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= eco.workedMinCount, queen = all[0].me && !temp && worked;
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
@@ -4346,6 +4350,38 @@ function resetApoTimers() {
   petPunchIn = 10;
   petTalkIn = 8 + Math.random() * 7;
 }
+const apoPunchStops: Array<() => void> = [];
+const apoStealMeats = new Set<THREE.Object3D>();
+/** 進行中的貓拳與還沒入碗的偷肉一律拿掉（換場、卸寵物、掛機、切視角、出拳被打斷） */
+function clearApoPunchFx() {
+  const stops = apoPunchStops.splice(0);
+  for (const s of stops) { try { s(); } catch { /* */ } }
+  for (let i = flyers.length - 1; i >= 0; i--) {
+    if (!flyers[i].m.userData.apoSteal) continue;
+    const m = flyers[i].m;
+    flyers.splice(i, 1);
+    try { m.parent?.remove(m); scene.remove(m); } catch { /* */ }
+    apoStealMeats.delete(m);
+  }
+  for (const m of [...apoStealMeats]) {
+    if (bowlMeat.includes(m as THREE.Mesh)) { apoStealMeats.delete(m); continue; }
+    try { m.parent?.remove(m); scene.remove(m); } catch { /* */ }
+    apoStealMeats.delete(m);
+  }
+}
+/** 換場時連還沒飛完的入碗肉也清掉，避免結束回呼又把肉加回場景 */
+function clearPendingFlyers() {
+  clearApoPunchFx();
+  for (let i = flyers.length - 1; i >= 0; i--) {
+    const m = flyers[i].m;
+    flyers.splice(i, 1);
+    if (bowlMeat.includes(m as THREE.Mesh)) continue;
+    try { m.parent?.remove(m); scene.remove(m); } catch { /* */ }
+  }
+}
+function apoKeepInBowl() {
+  return (!walking || plazaSeated()) && seatRig.visible && Number.isFinite(BOWL.x);
+}
 function showApoTalk(i: number) {
   const text = apoLine(i);
   if (!text) return;
@@ -4372,8 +4408,7 @@ function placeApoBubble() {
   apoBub.sprite.visible = true;
 }
 function apoLandPos() {
-  const seatedBowl = (!walking || plazaSeated()) && Number.isFinite(BOWL.x);
-  if (seatedBowl) {
+  if (apoKeepInBowl()) {
     return new THREE.Vector3(
       BOWL.x + rnd(-0.06, 0.06),
       BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015,
@@ -4381,7 +4416,8 @@ function apoLandPos() {
     );
   }
   const p = walking ? walkPos : petAnchor.position;
-  return new THREE.Vector3(p.x + rnd(-0.1, 0.1), (walking ? (jumpY + 0.25) : 0.25), p.z + rnd(-0.1, 0.1));
+  const gy = plazaMode ? (plazaGroundY(p.x, p.z) || 0) : 0;
+  return new THREE.Vector3(p.x + rnd(-0.1, 0.1), gy + 0.25 + (walking ? jumpY : 0), p.z + rnd(-0.1, 0.1));
 }
 function apoAwardMeat(from: THREE.Vector3) {
   const md = eco.yardStealDiff ?? 1;
@@ -4391,9 +4427,20 @@ function apoAwardMeat(from: THREE.Vector3) {
   dCnt[md] = (dCnt[md] ?? 0) + 1;
   rollShuck(true); // 阿珀例外：從阿婆碗偷來的算食材蚵仔
   const m = new THREE.Mesh(meatGeo, meatMat);
-  fly(m, from.clone(), apoLandPos(), 0.5, 0.3, () => {
-    bowlMeat.push(m);
-    if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+  m.userData.apoSteal = true;
+  apoStealMeats.add(m);
+  fly(m, from.clone(), () => apoLandPos(), 0.5, 0.3, () => {
+    if (!apoStealMeats.has(m)) return; // 中途已被清掉
+    if (apoKeepInBowl()) {
+      m.userData.apoSteal = false;
+      apoStealMeats.delete(m);
+      m.visible = seatRig.visible;
+      bowlMeat.push(m);
+      if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    } else {
+      try { scene.remove(m); } catch { /* */ }
+      apoStealMeats.delete(m);
+    }
   });
   petToast('阿珀偷到一顆蚵仔，算進成績', '#c9a0ff');
   updHud(); bumpShiftDraft();
@@ -4408,7 +4455,11 @@ function apoPunchVisual(to: THREE.Vector3 | (() => THREE.Vector3), empty: boolea
   const anchor = apoPunchAnchor();
   // 第一人稱坐著時阿珀仍 hideFp，爪子改掛場景，從椅邊真實位置伸進畫面
   const fpHidden = !!petMesh?.userData.groundPet && !tpv && !petWalkingMode && !petLyingMode;
-  playApoPunch(anchor, to, { empty, onHit, worldSpace: fpHidden });
+  const stop = playApoPunch(anchor, to, {
+    empty, onHit, worldSpace: fpHidden,
+    onDone: () => { const i = apoPunchStops.indexOf(stop); if (i >= 0) apoPunchStops.splice(i, 1); },
+  });
+  apoPunchStops.push(stop);
 }
 function ameiOut(): boolean {
   return petCurId === AMEI_ID && !!petMesh;
@@ -4536,7 +4587,7 @@ function petTick(dt: number) {
   // 第一人稱剝蚵時，腳邊的阿康會擋視線，先藏起來（第三人稱仍看得到）
   const hideFp = !!petMesh.userData.groundPet && !tpv && !petWalkingMode && !petLyingMode;
   petAnchor.visible = show && !hideFp;
-  if (!show) { petAcc = 0; setPetSleeping(false); return; }
+  if (!show) { petAcc = 0; setPetSleeping(false); clearApoPunchFx(); return; }
   // AFK：距上次任何輸入 10 秒 → 睡著暫停（產肉、貓拳、偷肉都停）
   const idleMs = performance.now() - lastInteractAt;
   const afk = idleMs > 10000;
@@ -5150,6 +5201,7 @@ function showMenuLoading(show = true) {
 }
 /** 任意場景回主畫面：先秀轉場，再打開主選單（至少約 0.9 秒） */
 function returnToMainMenu(work?: () => void | Promise<void>, opts?: { then?: () => void }) {
+  clearPendingFlyers();
   const gen = ++menuLoadGen;
   shedTrip = null; pendingShed = null; closeShedDoorPanel();
   const at = performance.now();
@@ -5271,6 +5323,7 @@ async function leavePlazaForShed(trip: { loc: string; len: number }) {
   for (const id of ['result', 'backMenu']) $(id).classList.remove('show');
   await plazaPayWait?.catch(() => 0);
   bowlStock = 0;
+  clearPendingFlyers();
   if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; }
   plazaShellGen++;
   setPlazaMode(false); plazaPayWait = null; plazaPlayAt = 0;
@@ -6609,6 +6662,7 @@ async function settleRaceShiftEarn() {
   shiftDraftT0 = 0;
   meatPay = 0; bowlBonus = 0; penalty = 0;
   count = bowlStock = 0;
+  clearPendingFlyers();
   if (bowlMeat.length) { bowlMeat.forEach(m => scene.remove(m)); bowlMeat.length = 0; }
 }
 
@@ -7205,6 +7259,7 @@ function snapSeatedFirstPerson() {
   camera.updateMatrixWorld();
 }
 function setTpv(v: boolean) {
+  clearApoPunchFx();
   // 先改 tpv，再清環視；不要走 flRelease 的回彈，否則切回第一人稱會滑 0.3 秒
   if (flHeld) { flHeld = false; flPtr = -1; flDragId = -1; flDown = null; }
   flYaw = 0; flRet = 0;

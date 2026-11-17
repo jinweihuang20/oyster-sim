@@ -2257,6 +2257,8 @@ function hashPid(pid: string) {
   }
 
   function destroyRemote(r: Remote) {
+    try { (r as any)._apoPunchStop?.(); } catch { /* */ }
+    (r as any)._apoPunchStop = undefined;
     if (r.cigSmoke) { root.remove(r.cigSmoke.group); r.cigSmoke.dispose(); r.cigSmoke = undefined; }
     syncCushion(r.pid || r.key, false, -1, -1);
     syncRemotePet(r, '');
@@ -2369,13 +2371,17 @@ function hashPid(pid: string) {
       to.y += 0.08;
       return to;
     };
-    playApoPunch(anchor, getTo, {
+    const rj = src as any;
+    try { rj._apoPunchStop?.(); } catch { /* */ }
+    rj._apoPunchStop = playApoPunch(anchor, getTo, {
       empty: !opts.stole,
+      carryMeat: !!opts.stole,
       onHit: () => {
         (tgt as any)._apoHit = performance.now() + apoHitSeconds() * 1000;
         const line = apoScold(opts.scold ?? 0);
         if (line) showChat({ connId: tgt.connId, pid: tgt.pid, text: line, hold: 2200 });
       },
+      onDone: () => { if (rj._apoPunchStop) rj._apoPunchStop = undefined; },
     });
   }
 
