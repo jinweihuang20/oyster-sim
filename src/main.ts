@@ -183,9 +183,19 @@ function clearShedHudLayout() {
   const st = document.documentElement.style;
   st.removeProperty('--shed-top-bottom');
   st.removeProperty('--shed-hud-bottom');
+  st.removeProperty('--shed-med-top');
+  st.removeProperty('--shed-med-left');
 }
 
-/** 依 #top 實際底緣推開工寮血條、提示與藥效文字，避免兩列頂欄重疊 */
+function visRect(el: HTMLElement | null) {
+  if (!el) return null;
+  const cs = getComputedStyle(el);
+  if (cs.display === 'none' || cs.visibility === 'hidden') return null;
+  const r = el.getBoundingClientRect();
+  return r.height >= 1 ? r : null;
+}
+
+/** 依 #top 實際底緣推開工寮提示與藥效；直向血條已在第二列內 */
 function syncShedHudLayout() {
   if (!document.body.classList.contains('shedShift')) {
     clearShedHudLayout();
@@ -199,17 +209,22 @@ function syncShedHudLayout() {
   const barBottom = Math.round(tr.bottom + gap);
   const st = document.documentElement.style;
   st.setProperty('--shed-top-bottom', `${barBottom}px`);
-  const hp = document.getElementById('hpWrap');
+  const hp = visRect(document.getElementById('hpWrap'));
   let stack = tr.bottom;
-  if (hp) {
-    const cs = getComputedStyle(hp);
-    if (cs.display !== 'none' && cs.visibility !== 'hidden') {
-      const hr = hp.getBoundingClientRect();
-      if (hr.height >= 1) stack = Math.max(stack, hr.bottom);
-    }
+  if (hp) stack = Math.max(stack, hp.bottom);
+  const portrait = matchMedia('(pointer:coarse) and (orientation:portrait)').matches;
+  if (portrait) {
+    st.setProperty('--shed-med-top', `${barBottom}px`);
+    if (hp) st.setProperty('--shed-med-left', `${Math.round(hp.left)}px`);
+    else st.removeProperty('--shed-med-left');
+    const med = visRect(document.getElementById('medAct'));
+    if (med && document.getElementById('medAct')?.childElementCount) stack = Math.max(stack, med.bottom);
+  } else {
+    st.removeProperty('--shed-med-top');
+    st.removeProperty('--shed-med-left');
   }
   const hudBottom = Math.round(stack + gap);
-  const key = `${barBottom}|${hudBottom}`;
+  const key = `${barBottom}|${hudBottom}|${portrait ? st.getPropertyValue('--shed-med-left') : ''}`;
   if (key === shedHudKey) return;
   shedHudKey = key;
   st.setProperty('--shed-hud-bottom', `${hudBottom}px`);
@@ -217,12 +232,14 @@ function syncShedHudLayout() {
 
 function ensureShedHudObserver() {
   const top = document.getElementById('top');
-  if (!top || shedHudObs) return;
-  shedHudObs = new ResizeObserver(() => syncShedHudLayout());
+  if (!top) return;
+  if (!shedHudObs) shedHudObs = new ResizeObserver(() => syncShedHudLayout());
   shedHudObs.observe(top);
+  const med = document.getElementById('medAct');
+  if (med) shedHudObs.observe(med);
 }
 
-/** 工寮頂部：直向兩列（上列時間／數據＋環視／視角／選單，下列回主選單靠左）；橫向／電腦單列 */
+/** 工寮頂部：直向兩列（上列時間／數據＋環視／視角／選單，下列回主選單＋血條）；橫向／電腦單列 */
 function placeShedTopChrome(on: boolean) {
   const top = document.getElementById('top');
   const cam = document.getElementById('camBtn');

@@ -1307,7 +1307,7 @@ body.shedShift #top #lookBtn.hudLook{order:10}
 body.shedShift #top #camBtn.hudCam{order:11}
 body.shedShift #top #hudMenuBtn{order:12;margin-left:0!important}
 body.shedShift #top #quitBtn.hudQuit{order:13;margin-left:0!important}
-/* 工寮直向：兩列頂欄——上列時間＋數據（左）與環視／視角／選單（右），下列回主選單靠左 */
+/* 工寮直向：兩列頂欄——上列時間＋數據（左）與環視／視角／選單（右）；下列回主選單靠左，血條佔滿右側 */
 @media (pointer:coarse) and (orientation:portrait){
   body.shedShift #top{flex-wrap:wrap;row-gap:4px;align-items:center}
   body.shedShift #top::after{content:"";order:9;flex:1 1 auto;display:block;min-width:0}
@@ -1320,7 +1320,25 @@ body.shedShift #top #quitBtn.hudQuit{order:13;margin-left:0!important}
   body.shedShift #top #lookBtn.hudLook{order:10}
   body.shedShift #top #camBtn.hudCam{order:11}
   body.shedShift #top #hudMenuBtn{order:12;margin-left:0!important}
-  body.shedShift #top #quitBtn.hudQuit{order:14;margin-left:0!important;margin-right:0!important}
+  body.shedShift #top #quitBtn.hudQuit{order:14;margin-left:0!important;margin-right:0!important;flex:none}
+  body.shedShift #top #hpWrap{
+    position:relative!important;
+    left:auto;right:auto;top:auto;transform:none;
+    z-index:auto;order:15;
+    display:flex!important;flex:1 1 auto;min-width:0;width:auto;max-width:none;
+    height:36px;margin:0;box-sizing:border-box;padding:0 10px;
+  }
+  body.shedShift #top #hpWrap .hudHp{
+    display:flex;flex:1 1 auto;width:100%;min-width:0;align-items:center;gap:6px;
+  }
+  body.shedShift #top #hpBar{flex:1 1 auto;width:auto;min-width:0;height:10px}
+  /* 藥效貼在第二列血條下方，不蓋到上列數據或提示 */
+  body.shedShift #medAct{
+    left:var(--shed-med-left, 50%);
+    top:var(--shed-med-top, var(--shed-hud-bottom, calc(var(--sa-top) + 84px)));
+    transform:none;
+    justify-content:flex-start;
+  }
 }
 @media (pointer:coarse) and (orientation:landscape){
   body.shedShift #top{flex-wrap:nowrap}
