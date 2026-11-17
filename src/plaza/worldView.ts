@@ -2632,14 +2632,16 @@ function hashPid(pid: string) {
         // 仍朝目標插值時補一點「接近速度」，避免視窗內幾乎貼齊目標卻其實在走
         const toT = Math.hypot(r.tx - r.x, r.tz - r.z);
         if (toT > 0.04) moveSp = Math.max(moveSp, Math.min(2.8, toT * 8));
-        // 遲滯：避免 Sync 間閃爍站／走
+        // 遲滯：避免 Sync 間閃爍站／走；蹲／躺不要被走路或站姿衰減蓋掉
+        const posed = !r.seated && ((r.phase || '') === 'crouch' || (r.phase || '') === 'lie');
         let walkOn = !!rj._walkOn;
-        if (walkOn) walkOn = moveSp > 0.08 || !!r.moving;
+        if (posed) walkOn = false;
+        else if (walkOn) walkOn = moveSp > 0.08 || !!r.moving;
         else walkOn = moveSp > 0.22 || !!r.moving;
         rj._walkOn = walkOn;
         const gaitSp = walkOn ? Math.max(moveSp, r.moving ? 0.9 : 0.55) : moveSp;
         const walkAmp = Math.min(1, gaitSp / 1.2);
-        const wantWalk = !r.seated && jumpElapsed < 0 && walkOn;
+        const wantWalk = !r.seated && !posed && jumpElapsed < 0 && walkOn;
         if (!r.seated && jumpElapsed >= 0) {
           posePlazaJump(r.rig, jumpElapsed);
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
@@ -2655,7 +2657,7 @@ function hashPid(pid: string) {
           // 走動一律輕微ㄑ字彎肘擺臂（勿切回直臂下垂）
           if (r.throwT <= 0) { swingArms(r, swing); hideHold(r); }
           rj._loco = 'walk';
-        } else if (!r.seated) {
+        } else if (!r.seated && !posed) {
           r.rig.legL.rotation.x *= 0.8; r.rig.legR.rotation.x *= 0.8;
           r.rig.shinL.rotation.x *= 0.8; r.rig.shinR.rotation.x *= 0.8;
           r.rig.root.position.y *= 0.8;
@@ -2720,8 +2722,19 @@ function hashPid(pid: string) {
       r.rig.outer.rotation.order = 'YXZ';
       r.rig.outer.rotation.y = r.yaw;
       r.rig.outer.rotation.x = rotX;
-      if (!far) {
-        { const ph = r.seated ? '' : (r.phase || ''); const want = ph === 'crouch' || ph === 'lie' ? 1 : 0; if (want) rj.pz = ph; rj.pk = (rj.pk ?? 0) + (want - (rj.pk ?? 0)) * 0.18; if (rj.pk > 0.001 && rj.pz && !r.moving) { r.rig.legL.rotation.x = r.rig.legR.rotation.x = 0; r.rig.shinL.rotation.x = r.rig.shinR.rotation.x = 0; } if (rj.pk > 0.001 && rj.pz) applyPlazaBodyPose(r.rig, rj.pz, rj.pk); }
+      // 蹲／躺要每幀疊在剛重設的 outer 姿勢上。遠距也要套，否則遠看會變站著、靠近才躺回去
+      {
+        const ph = r.seated ? '' : (r.phase || '');
+        const want = ph === 'crouch' || ph === 'lie' ? 1 : 0;
+        if (want) rj.pz = ph;
+        // 遠距一次到位，避免遠處第一次看到時還從站姿慢慢躺下
+        if (far) rj.pk = want;
+        else rj.pk = (rj.pk ?? 0) + (want - (rj.pk ?? 0)) * 0.18;
+        if (rj.pk > 0.001 && rj.pz && !r.moving) {
+          r.rig.legL.rotation.x = r.rig.legR.rotation.x = 0;
+          r.rig.shinL.rotation.x = r.rig.shinR.rotation.x = 0;
+        }
+        if (rj.pk > 0.001 && rj.pz) applyPlazaBodyPose(r.rig, rj.pz, rj.pk);
       }
       { const now = performance.now(); const mu = rj.mt ? (now - rj.mt) / 1800 : -1; const inMoon = (r.phase || '') === 'moon'; r.rig.outer.rotation.z = rotZ;
         if (mu >= 0 && mu < 1) { r.rig.outer.position.x += Math.sin(rj.mz) * 22 * mu; r.rig.outer.position.z += Math.cos(rj.mz) * 22 * mu; r.rig.outer.position.y += 22 * mu; r.rig.outer.rotation.x = mu * 14; r.rig.outer.rotation.z = mu * 9; r.rig.outer.visible = true; rj.mh = true; }
