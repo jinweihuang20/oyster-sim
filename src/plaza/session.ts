@@ -1454,7 +1454,7 @@ function buildUi() {
   ui.id = 'plazaRoot';
   ui.innerHTML = `
 <style>
-/* 高於 #plazaTags(8800)、#seatCard(8900)，聊天窗不被人名／座位指示蓋住 */
+/* 高於 #plazaTags(8800)、#seatCard(8900)：聊天蓋過座位／阿婆提示；設定、衝突對話等仍在 9999+ */
 #plazaRoot{position:fixed;inset:0;z-index:9000;pointer-events:none;font-family:inherit}
 #plazaRoot *{box-sizing:border-box}
 /* 人數提示改走遊戲 #top；此層僅保留作內部狀態字串，預設隱藏以免蓋住 HUD */
@@ -2773,7 +2773,8 @@ function collectChatObstacles(skip: HTMLElement[]) {
   const skipSet = new Set(skip.filter(Boolean));
   // 不含 #pzLeftFabs：頂部離開／地圖列已用 padT 避開。若把它當障礙物，
   // 「上方」模式會把視窗一路抬到左上角，看起來跟舊版沒變。
-  const ids = ['joy', 'medBtn', 'standBtn', 'giveUp', 'poseBtn', 'jumpBtn', 'crouchBtn', 'lieBtn', 'flagBtn', 'flagPullBtn', 'seatCard', 'rotL', 'rotR'];
+  // 不含 #seatCard：座位／阿婆選項應被聊天蓋住，不可把視窗往上擠開。
+  const ids = ['joy', 'medBtn', 'standBtn', 'giveUp', 'poseBtn', 'jumpBtn', 'crouchBtn', 'lieBtn', 'flagBtn', 'flagPullBtn', 'rotL', 'rotR'];
   const out: DOMRect[] = [];
   for (const id of ids) {
     const el = document.getElementById(id);
