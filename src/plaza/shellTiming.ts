@@ -13,8 +13,11 @@ export type V3 = { x: number; y: number; z: number };
 export const PLAZA_WINDUP = 0.65;
 /** 座標缺漏時的飛行秒數 */
 export const PLAZA_FLY_FALLBACK = 0.4;
-/** 殼的固定飛行速度（公尺／秒）：同桌對面約 2.8m → 0.4s */
-export const PLAZA_SHELL_SPEED = 7;
+/**
+ * 殼的固定飛行速度（公尺／秒），和丟阿婆一樣快：
+ * 同桌阿婆從手上到她的頭約 1.1m（隔壁）～2.3m（斜對面），平均約 1.7m；丟阿婆固定 0.5s → 1.7÷0.5 ＝ 3.4 m/s。
+ */
+export const PLAZA_SHELL_SPEED = 3.4;
 /** 極近距離的最短飛行秒數（避免 0 秒） */
 export const PLAZA_FLY_MIN = 0.12;
 /** 丟阿婆時本機快飛秒數 */

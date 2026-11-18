@@ -9,17 +9,17 @@ const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 const o = { x: 0, y: 1, z: 0 };
 const at = (d: number) => ({ x: 0, y: 1, z: -d });
 
-test('固定速度：飛行秒數＝距離÷速度，蓄力固定 0.65s', () => {
+test('固定速度與丟阿婆相同：同桌阿婆平均 1.7m 用 0.5s，蓄力固定 0.65s', () => {
   assert.equal(PLAZA_WINDUP, 0.65);
-  assert.equal(PLAZA_SHELL_SPEED, 7);
-  assert.ok(near(plazaFlyTime(o, at(2.8)), 0.4)); // 同桌對面
-  assert.ok(near(plazaFlyTime(o, at(7)), 1.0));
-  assert.ok(near(plazaFlyTime(o, at(14)), 2.0)); // 廣場另一頭，不封頂
+  assert.equal(PLAZA_SHELL_SPEED, 3.4);
+  assert.ok(near(plazaFlyTime(o, at(1.7)), PLAZA_NPC_FLY)); // 等同丟阿婆
+  assert.ok(near(plazaFlyTime(o, at(3.4)), 1.0));
+  assert.ok(near(plazaFlyTime(o, at(13.6)), 4.0)); // 廣場另一頭，不封頂
 });
 
 test('極近距離有最短秒數；座標缺漏用 0.4s', () => {
   assert.equal(plazaFlyTime(o, o), PLAZA_FLY_MIN);
-  assert.equal(plazaFlyTime(o, at(0.5)), PLAZA_FLY_MIN);
+  assert.equal(plazaFlyTime(o, at(0.3)), PLAZA_FLY_MIN);
   assert.equal(plazaFlyTime(null, at(3)), PLAZA_FLY_FALLBACK);
   assert.equal(plazaFlyTime(o, { x: NaN, y: 0, z: 0 }), PLAZA_FLY_FALLBACK);
 });
