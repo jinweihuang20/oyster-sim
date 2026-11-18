@@ -10,11 +10,12 @@ const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 const o = { x: 0, y: 1, z: 0 };
 const at = (d: number) => ({ x: 0, y: 1, z: -d });
 
-test('固定速度 8 m/s，最短 0.12s、最長 0.8s', () => {
-  assert.equal(PLAZA_SHELL_SPEED, 8);
-  assert.ok(near(plazaFlyTime(o, at(2.4)), 0.3)); // 同桌對面
-  assert.ok(near(plazaFlyTime(o, at(4)), 0.5));
-  assert.equal(plazaFlyTime(o, at(6.4)), PLAZA_FLY_MAX);
+test('固定速度 5 m/s，最短 0.12s、最長 1.28s', () => {
+  assert.equal(PLAZA_SHELL_SPEED, 5);
+  assert.equal(PLAZA_FLY_MAX, 1.28);
+  assert.ok(near(plazaFlyTime(o, at(2.4)), 0.48)); // 同桌對面
+  assert.ok(near(plazaFlyTime(o, at(5)), 1.0));
+  assert.ok(near(plazaFlyTime(o, at(6.4)), PLAZA_FLY_MAX));
   assert.equal(plazaFlyTime(o, at(14)), PLAZA_FLY_MAX);
   assert.equal(plazaFlyTime(o, at(0.5)), PLAZA_FLY_MIN);
   assert.equal(plazaFlyTime(null, at(3)), PLAZA_FLY_FALLBACK);

@@ -14,10 +14,10 @@ export type V3 = { x: number; y: number; z: number };
 export const PLAZA_NPC_WINDUP = 1.0;
 /** 座標缺漏時的飛行秒數 */
 export const PLAZA_FLY_FALLBACK = 0.4;
-/** 殼的固定飛行速度（公尺／秒）：同桌對面約 2.4m → 0.3s */
-export const PLAZA_SHELL_SPEED = 8;
+/** 殼的固定飛行速度（公尺／秒）：同桌對面約 2.4m → 0.48s */
+export const PLAZA_SHELL_SPEED = 5;
 /** 最長飛行秒數（廣場另一頭也不會飄太久） */
-export const PLAZA_FLY_MAX = 0.8;
+export const PLAZA_FLY_MAX = 1.28;
 /** 極近距離的最短飛行秒數（避免 0 秒） */
 export const PLAZA_FLY_MIN = 0.12;
 /** 丟阿婆時本機快飛秒數 */
