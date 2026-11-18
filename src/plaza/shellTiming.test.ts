@@ -1,28 +1,47 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { PLAZA_WINDUP, PLAZA_INBOUND_FLY, PLAZA_SHELL_LAND, plazaShellFlight } from './shellTiming.ts';
+import {
+  PLAZA_WINDUP, PLAZA_SHELL_SPEED, PLAZA_FLY_MIN, PLAZA_FLY_FALLBACK, PLAZA_NPC_FLY,
+  plazaFlyTime, plazaEventFlyTime, plazaShellFlight,
+} from './shellTiming.ts';
 
-const land = PLAZA_WINDUP + PLAZA_INBOUND_FLY;
+const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+const o = { x: 0, y: 1, z: 0 };
+const at = (d: number) => ({ x: 0, y: 1, z: -d });
 
-test('丟真人：本機落地時間＝對方蓄力＋飛行（對方此時才判定擋／反彈）', () => {
-  assert.equal(plazaShellFlight({ who: 'thrower', targetIsNpc: false })[0], land);
-});
-
-test('丟阿婆：伺服器當下結算，本機維持快飛', () => {
-  assert.ok(plazaShellFlight({ who: 'thrower', targetIsNpc: true })[0] < 0.6);
-});
-
-test('旁觀：丟真人用同樣時間；反彈、阿婆、舊伺服器維持快飛', () => {
-  assert.equal(plazaShellFlight({ who: 'spectator', reflect: false, targetIsNpc: false })[0], land);
-  assert.equal(plazaShellFlight({ who: 'spectator', reflect: true, targetIsNpc: false })[0], PLAZA_INBOUND_FLY);
-  assert.equal(plazaShellFlight({ who: 'spectator', reflect: false, targetIsNpc: true })[0], PLAZA_INBOUND_FLY);
-  assert.equal(plazaShellFlight({ who: 'spectator', reflect: undefined, targetIsNpc: false })[0], PLAZA_INBOUND_FLY);
-  assert.equal(plazaShellFlight({ who: 'spectator', reflect: false, targetIsNpc: null })[0], PLAZA_INBOUND_FLY);
-});
-
-test('時間平衡：蓄力 0.65s＋飛行 0.4s＝1.05s，反彈飛回 0.4s', () => {
+test('固定速度：飛行秒數＝距離÷速度，蓄力固定 0.65s', () => {
   assert.equal(PLAZA_WINDUP, 0.65);
-  assert.equal(PLAZA_INBOUND_FLY, 0.4);
-  assert.ok(Math.abs(PLAZA_SHELL_LAND - 1.05) < 1e-9);
-  assert.equal(plazaShellFlight({ who: 'spectator', reflect: true, targetIsNpc: false })[0], 0.4);
+  assert.equal(PLAZA_SHELL_SPEED, 7);
+  assert.ok(near(plazaFlyTime(o, at(2.8)), 0.4)); // 同桌對面
+  assert.ok(near(plazaFlyTime(o, at(7)), 1.0));
+  assert.ok(near(plazaFlyTime(o, at(14)), 2.0)); // 廣場另一頭，不封頂
+});
+
+test('極近距離有最短秒數；座標缺漏用 0.4s', () => {
+  assert.equal(plazaFlyTime(o, o), PLAZA_FLY_MIN);
+  assert.equal(plazaFlyTime(o, at(0.5)), PLAZA_FLY_MIN);
+  assert.equal(plazaFlyTime(null, at(3)), PLAZA_FLY_FALLBACK);
+  assert.equal(plazaFlyTime(o, { x: NaN, y: 0, z: 0 }), PLAZA_FLY_FALLBACK);
+});
+
+test('三方同一封包座標算出相同時間（含反彈回程）', () => {
+  const e = { fromX: 1, fromY: 1.1, fromZ: 0.5, toX: -1.2, toY: 1.0, toZ: -1.4 };
+  const fly = plazaEventFlyTime(e);
+  // 丟殼者用同一組出手點／目標點
+  assert.ok(near(plazaFlyTime({ x: 1, y: 1.1, z: 0.5 }, { x: -1.2, y: 1.0, z: -1.4 }), fly));
+  // 反彈回程（起訖對調）距離相同
+  assert.ok(near(plazaFlyTime({ x: -1.2, y: 1.0, z: -1.4 }, { x: 1, y: 1.1, z: 0.5 }), fly));
+  const thrower = plazaShellFlight({ who: 'thrower', targetIsNpc: false, fly })[0];
+  const spect = plazaShellFlight({ who: 'spectator', reflect: false, targetIsNpc: false, fly })[0];
+  assert.ok(near(thrower, PLAZA_WINDUP + fly));
+  assert.ok(near(spect, PLAZA_WINDUP + fly));
+});
+
+test('丟阿婆維持快飛；旁觀反彈／阿婆／舊伺服器只算飛行不加蓄力', () => {
+  const fly = 0.4;
+  assert.equal(plazaShellFlight({ who: 'thrower', targetIsNpc: true, fly })[0], PLAZA_NPC_FLY);
+  assert.equal(plazaShellFlight({ who: 'spectator', reflect: true, targetIsNpc: false, fly })[0], fly);
+  assert.equal(plazaShellFlight({ who: 'spectator', reflect: false, targetIsNpc: true, fly })[0], fly);
+  assert.equal(plazaShellFlight({ who: 'spectator', reflect: undefined, targetIsNpc: false, fly })[0], fly);
+  assert.equal(plazaShellFlight({ who: 'spectator', reflect: false, targetIsNpc: null, fly })[0], fly);
 });

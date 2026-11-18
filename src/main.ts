@@ -97,7 +97,7 @@ import {
 } from './plaza';
 import { mgMuzzleWorld, mgEjectWorld, mgMountRight } from './plaza/mgGun';
 import { pickThrowTarget, type ThrowPickCand } from './plaza/throwPick';
-import { PLAZA_WINDUP, PLAZA_INBOUND_FLY, PLAZA_SHELL_LAND, plazaShellFlight } from './plaza/shellTiming';
+import { PLAZA_WINDUP, plazaFlyTime, plazaEventFlyTime, plazaShellFlight } from './plaza/shellTiming';
 import type { PlazaMgFireEvent, PlazaMgHitEvent } from './plaza/hubClient';
 import { openShedDoorPanel, closeShedDoorPanel } from './plaza/shedDoorUi';
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
@@ -2722,7 +2722,7 @@ function plazaWarnStart(e: PlazaShellEvent) {
   const w: PlazaWarn = { e, left: PLAZA_WINDUP, w0: PLAZA_WINDUP, warned: !gearOn('radio'), gen: plazaShellGen };
   if (w.warned) SFX.alert();
   plazaWarns.push(w);
-  if (petAutoGuard().open) beginPetUmbGuard(Math.max(PET_UMB_FLASH, PLAZA_SHELL_LAND + 0.15));
+  if (petAutoGuard().open) beginPetUmbGuard(Math.max(PET_UMB_FLASH, PLAZA_WINDUP + plazaEventFlyTime(e) + 0.15));
 }
 /** 每幀：倒數、收音機晚亮、時間到才飛殼並在落地時結算 */
 function plazaWarnTick(dt: number): PlazaWarn | null {
@@ -2736,7 +2736,7 @@ function plazaWarnTick(dt: number): PlazaWarn | null {
       plazaWarns.splice(i, 1);
       const gen = w.gen;
       try { plazaFlyShell(w.e); } catch { /* 動畫失敗也要結算 */ }
-      later(PLAZA_INBOUND_FLY, () => { if (gen !== plazaShellGen) return; resolvePlazaInbound(w.e); });
+      later(plazaEventFlyTime(w.e), () => { if (gen !== plazaShellGen) return; resolvePlazaInbound(w.e); });
       continue;
     }
     if (w.warned && (!show || w.left < show.left)) show = w;
@@ -2746,7 +2746,7 @@ function plazaWarnTick(dt: number): PlazaWarn | null {
 function plazaShellCoordsOk(e: PlazaShellEvent) {
   return [e.fromX, e.fromY, e.fromZ, e.toX, e.toY, e.toZ].every(Number.isFinite);
 }
-function plazaFlyShell(e: PlazaShellEvent, onArrive?: () => void, dur = PLAZA_INBOUND_FLY, arc?: number) {
+function plazaFlyShell(e: PlazaShellEvent, onArrive?: () => void, dur = plazaEventFlyTime(e), arc?: number) {
   if (!plazaShellCoordsOk(e)) return;
   if (flyers.length > 40) return; // 連丟時節流，避免手機 WebGL 爆掉
   const sh = new THREE.Mesh(halfGeo, shellBotMat);
@@ -2782,7 +2782,7 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
       const from = { x: e.toX, y: e.toY, z: e.toZ };
       const back = { x: e.fromX, y: e.fromY, z: e.fromZ };
       const sh = new THREE.Mesh(halfGeo, shellBotMat);
-      fly(sh, new THREE.Vector3(from.x, from.y, from.z), new THREE.Vector3(back.x, back.y, back.z), PLAZA_INBOUND_FLY, 0.15, () => { scene.remove(sh); SFX.hitNpc(); });
+      fly(sh, new THREE.Vector3(from.x, from.y, from.z), new THREE.Vector3(back.x, back.y, back.z), plazaFlyTime(from, back), 0.15, () => { scene.remove(sh); SFX.hitNpc(); });
       // 通知原丟殼者：被反彈砸中（工寮反彈打中阿婆同概念）
       // 阿康連發時排隊，避開伺服器 280ms 節流把後續反彈丟掉
       if (e.fromConnId) {
@@ -3148,9 +3148,9 @@ function throwShell() {
         // 追著目標目前的頭飛（站著走動的人也會落在身上）；送伺服器的仍是出手當下位置
         const track = new THREE.Vector3();
         const toNow = () => { const h = plazaRemoteHead(pt.connId); return h ? track.set(h.x, h.y, h.z) : to; };
-        // 丟真人：對方要先蓄力預警 PLAZA_WINDUP 再飛 PLAZA_INBOUND_FLY 才結算擋／反彈，
+        // 丟真人：對方要先蓄力預警 PLAZA_WINDUP 再飛 plazaFlyTime(距離) 才結算擋／反彈，
         // 本機改成同樣長的拋物線，落點時間才會和對方擋回來對得上（阿婆由伺服器當下結算，維持快飛）
-        const [flyDur, flyArc] = plazaShellFlight({ who: 'thrower', targetIsNpc: !!pt.isNpc });
+        const [flyDur, flyArc] = plazaShellFlight({ who: 'thrower', targetIsNpc: !!pt.isNpc, fly: plazaFlyTime(from, to) });
         fly(sh, from, toNow, flyDur, flyArc, () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); if (pt.isNpc && !isPlazaAber(pt)) rollAma(); } catch { /* */ } });
         stampPlazaNet();
         void plazaThrowAt(pt.connId, from, to);
@@ -5816,20 +5816,20 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
         }
         // 旁觀：丟真人（非反彈）時，被丟的人要蓄力 PLAZA_WINDUP 才飛；
         // 用同樣長的拋物線，殼落地和對方擋／反彈／噴血才對得上。舊伺服器（reflect 未知）維持原本快飛。
-        const [flyDur, flyArc] = plazaShellFlight({ who: 'spectator', reflect: e.reflect, targetIsNpc: e.toConnId ? plazaRemoteIsNpc(e.toConnId) : null });
+        const [flyDur, flyArc] = plazaShellFlight({ who: 'spectator', reflect: e.reflect, targetIsNpc: e.toConnId ? plazaRemoteIsNpc(e.toConnId) : null, fly: plazaEventFlyTime(e) });
         plazaFlyShell(e, undefined, flyDur, flyArc);
       } catch (err) { console.error('plaza shell throw', err); }
     },
     onShellInbound: (e) => {
-      // 蓄力 PLAZA_WINDUP＋飛行 PLAZA_INBOUND_FLY 後結算；世代號避免離開廣場後還結算
+      // 蓄力 PLAZA_WINDUP＋依距離飛行後結算；世代號避免離開廣場後還結算
       plazaThrowToMe = null; // 這顆由預警流程負責飛＋結算
       if (!plazaMode || !isPlazaActive()) return;
       plazaWarnStart(e);
     },
     onShellReflectHit: (e) => {
-      // 反彈飛回 PLAZA_INBOUND_FLY 秒（新伺服器 reflect 標記時立即飛）；視覺走 ShellThrow，這裡結算傷害＋提示
+      // 反彈飛回＝距離÷固定速度（新伺服器 reflect 標記時立即飛）；視覺走 ShellThrow，這裡結算傷害＋提示
       const gen = plazaShellGen;
-      later(PLAZA_INBOUND_FLY, () => { if (gen !== plazaShellGen) return; resolvePlazaReflectHit(e); });
+      later(plazaEventFlyTime(e), () => { if (gen !== plazaShellGen) return; resolvePlazaReflectHit(e); });
     },
     onShellBlocked: (e) => { resolvePlazaBlocked(e); },
     onShellHit: (e) => { resolvePlazaShellHitFx(e); },
