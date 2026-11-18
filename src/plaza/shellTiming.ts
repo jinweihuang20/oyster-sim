@@ -1,19 +1,20 @@
 /**
  * 廣場丟殼時間軸（丟殼者／被丟者／旁觀者共用）。
  *
- * 被丟的人收到 ShellInbound 後：先蓄力預警 PLAZA_WINDUP 秒（固定，保留反應時間），
- * 再以固定速度飛 距離÷PLAZA_SHELL_SPEED 秒（最短 PLAZA_FLY_MIN、最長 PLAZA_FLY_MAX），落地時才判定擋／反彈／受傷。
- * 飛行秒數只用封包裡的出手點→目標點座標算（三方收到的數字相同），所以各端落地時間一致。
- * 丟真人時，丟殼者與旁觀者：殼先在丟的人手上握 PLAZA_WINDUP 秒，放手後只飛「飛行秒數」，落地時間＝蓄力＋飛行，和被丟者判定同時。
- * 阿婆由伺服器在轉發當下就結算噴血，維持快飛；反彈飛回不用蓄力，飛行同樣是距離÷速度。
+ * 照現實：丟殼者一按就放手，殼以固定速度飛；ThrowAt 在放手當下送出。
+ * 被丟者／旁觀者收到時殼「已經在空中飛了 延遲 秒」：從弧線上對應進度接著飛，
+ * 剩餘時間＝飛行 − 估計延遲（最少 PLAZA_REMAIN_MIN），盡量和丟殼者畫面同時落地。
+ * 被丟者 ⚠ 預警在收到當下亮起，落地當下才判定擋／反彈／受傷。
+ * 飛行秒數只用封包裡的出手點→目標點座標算（三方數字相同）。
+ * 阿婆主動丟玩家（伺服器發的）維持原本先蓄力 PLAZA_NPC_WINDUP 再飛；丟阿婆由伺服器當下結算，本機快飛。
  */
 export type V3 = { x: number; y: number; z: number };
 
-/** 被丟者蓄力預警秒數（⚠ 方向警告；收音機晚亮在剩一半時才亮） */
-export const PLAZA_WINDUP = 0.65;
+/** 阿婆主動丟玩家時，被丟者先看到的蓄力預警秒數（原本行為） */
+export const PLAZA_NPC_WINDUP = 1.0;
 /** 座標缺漏時的飛行秒數 */
 export const PLAZA_FLY_FALLBACK = 0.4;
-/** 殼的固定飛行速度（公尺／秒）：同桌對面約 2.3m → 約 0.29s */
+/** 殼的固定飛行速度（公尺／秒）：同桌對面約 2.4m → 0.3s */
 export const PLAZA_SHELL_SPEED = 8;
 /** 最長飛行秒數（廣場另一頭也不會飄太久） */
 export const PLAZA_FLY_MAX = 0.8;
@@ -21,6 +22,12 @@ export const PLAZA_FLY_MAX = 0.8;
 export const PLAZA_FLY_MIN = 0.12;
 /** 丟阿婆時本機快飛秒數 */
 export const PLAZA_NPC_FLY = 0.5;
+/** 收到後至少還要飛這麼久（不瞬移、留一點反應） */
+export const PLAZA_REMAIN_MIN = 0.1;
+/** 還沒量到延遲時的預估單程延遲（秒） */
+export const PLAZA_LAT_DEFAULT = 0.06;
+/** 延遲補償上限（秒）：網路很差時不要補到殼一出現就落地 */
+export const PLAZA_LAT_MAX = 0.25;
 
 /** 飛行秒數＝出手點到目標點距離 ÷ 固定速度（PLAZA_FLY_MIN～PLAZA_FLY_MAX） */
 export function plazaFlyTime(from: V3 | null | undefined, to: V3 | null | undefined): number {
@@ -35,15 +42,18 @@ export function plazaEventFlyTime(e: { fromX: number; fromY: number; fromZ: numb
   return plazaFlyTime({ x: e.fromX, y: e.fromY, z: e.fromZ }, { x: e.toX, y: e.toY, z: e.toZ });
 }
 
-export type ShellFlightKind =
-  /** 自己丟出去；fly＝plazaFlyTime(出手點, 送出的目標點) */
-  | { who: 'thrower'; targetIsNpc: boolean; fly: number }
-  /** 旁觀別人丟；reflect／targetIsNpc 為 undefined/null 代表不知道（舊伺服器或看不到目標） */
-  | { who: 'spectator'; reflect?: boolean; targetIsNpc: boolean | null; fly: number };
+/**
+ * 丟殼者→伺服器→自己 的單程延遲估計（秒）。
+ * 用自己量到的來回時間（RTT）：對方上行≈自己上行時，上行半趟＋下行半趟≈一個 RTT。
+ */
+export function plazaLatencyEst(rttMs: number | null | undefined): number {
+  if (rttMs == null || !Number.isFinite(rttMs) || rttMs <= 0) return PLAZA_LAT_DEFAULT;
+  return Math.min(PLAZA_LAT_MAX, rttMs / 1000);
+}
 
-/** 回傳 [握在手上秒數, 放手後飛行秒數, 拋物線高度]；落地＝握＋飛 */
-export function plazaShellFlight(k: ShellFlightKind): [number, number, number] {
-  if (k.who === 'thrower') return k.targetIsNpc ? [0, PLAZA_NPC_FLY, 0.3] : [PLAZA_WINDUP, k.fly, 0.35];
-  if (k.reflect === false && k.targetIsNpc === false) return [PLAZA_WINDUP, k.fly, 0.35];
-  return [0, k.fly, 0.3];
+/** 收到時殼已飛了 lat 秒：回傳弧線起始進度 k0 與剩餘秒數 remain（remain＝(1−k0)×fly） */
+export function plazaCatchUp(fly: number, lat: number): { k0: number; remain: number } {
+  if (!(fly > 0)) return { k0: 0, remain: PLAZA_REMAIN_MIN };
+  const remain = Math.min(fly, Math.max(PLAZA_REMAIN_MIN, fly - Math.max(0, lat)));
+  return { k0: 1 - remain / fly, remain };
 }

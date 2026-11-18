@@ -1239,8 +1239,9 @@ export function createPlazaWorldView(
     if (!connId) return null;
     for (const r of remotes.values()) {
       if ((r.connId || r.key) !== connId) continue;
+      // 每幀被飛殼呼叫：回傳共用物件不配置（呼叫端立即複製）
       const h = headWorld(r, _remHead);
-      return Number.isFinite(h.x + h.y + h.z) ? { x: h.x, y: h.y, z: h.z } : null;
+      return Number.isFinite(h.x + h.y + h.z) ? h : null;
     }
     return null;
   }

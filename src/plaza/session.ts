@@ -502,6 +502,11 @@ export function plazaRemoteHead(connId: string) {
   return view?.remoteHead(connId) ?? null;
 }
 
+/** 與伺服器的來回時間（毫秒，平滑）；沒連線或還沒量到為 null */
+export function plazaRttMs(): number | null {
+  return client?.rttMs ?? null;
+}
+
 /** 遠端是否為阿婆；找不到回 null */
 export function plazaRemoteIsNpc(connId: string) {
   return view?.remoteIsNpc(connId) ?? null;

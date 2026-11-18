@@ -565,6 +565,8 @@ export class PlazaClient {
   }
 
   /** 環視時 ~10Hz Sync；勿堆疊 await，否則回包擠在主執行緒會頓一下 */
+  /** Sync 來回時間平滑值（毫秒）；還沒量到為 null */
+  rttMs: number | null = null;
   private _syncBusy = false;
   private _syncPend: [number, number, number, string, number, boolean, boolean, number, number] | null = null;
   async sync(x: number, z: number, yaw: number, phase: string, count: number, moving: boolean, umb = false, lookYaw = 0, pitch = 0) {
@@ -577,7 +579,13 @@ export class PlazaClient {
         const args = this._syncPend;
         this._syncPend = null;
         if (!this.conn || this.conn.state !== signalR.HubConnectionState.Connected) break;
-        try { await this.conn.invoke('Sync', ...args); } catch { /* ignore */ }
+        const t0 = performance.now();
+        try {
+          await this.conn.invoke('Sync', ...args);
+          // 量來回時間（丟殼延遲補償用）；平滑避免單次抖動
+          const rtt = performance.now() - t0;
+          if (rtt > 0 && rtt < 3000) this.rttMs = this.rttMs == null ? rtt : this.rttMs * 0.8 + rtt * 0.2;
+        } catch { /* ignore */ }
       }
     } finally {
       this._syncBusy = false;
