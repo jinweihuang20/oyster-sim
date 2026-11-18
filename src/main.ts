@@ -87,7 +87,7 @@ import {
   plazaWalkBound, plazaWalkRect, plazaWalkClamp, plazaPileObs, plazaWalkBodies, plazaHeadObjects, plazaResolveEnterSpawn, plazaNearSeat, plazaNearPrompt, plazaFeedTarget, plazaFeedStillNear, plazaNpcEat, plazaFeedRelay, plazaCarrying, plazaTrySit, plazaStandWalk, plazaSeated, plazaSittingBusy, plazaGroundY,
   plazaHitPile, plazaMyPileOrigin, pileIsGrill, isSmokePile, isMgPile,
   MG_MAG_PRICE, MG_MAG_AMMO, MG_AMMO_MAX, MG_SIT_MS,
-  plazaConnId, plazaAimTargets, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaPetSay, plazaPetPunch, plazaStealFrom, plazaZhErr,
+  plazaConnId, plazaAimTargets, plazaRemoteHead, plazaThrowAt, plazaShellFx, plazaShellReflect, plazaShellBlocked, plazaShellHit, plazaMoonNpc, plazaPlayThrowFx, plazaSendPuff, plazaPetSay, plazaPetPunch, plazaStealFrom, plazaZhErr,
   plazaMgFire, plazaMgReload, plazaMgFx, plazaMgMount, plazaAimMg, plazaOnMg,
   plazaGrillPlace, plazaGrillFlip, plazaGrillTake, plazaGrillNearest, plazaGrillUpsertLocal, plazaGrillRemoveLocal,
   plazaEndCleanup, plazaHideChrome, plazaFocusChat, plazaCloseChat, plazaChatIsOpen,
@@ -2504,10 +2504,12 @@ function plazaThrowTarget(): PlazaAimTarget | null {
   const cam = viewCam();
   _throwRay.setFromCamera(_throwNdc, cam);
   const cands: ThrowPickCand<PlazaAimTarget>[] = [];
-  for (const t of plazaAimTargetsFrame()) {
-    if (t.carriedBy || !t.seated || t.phase === 'carried') continue;
+  for (const t of plazaThrowTargetsFrame()) {
+    if (t.carriedBy || t.phase === 'carried') continue;
+    // 站著的只算真人玩家；阿婆照舊只丟坐著的
+    if (!t.seated && t.isNpc) continue;
     if (!t?.connId || !t.head) continue;
-    cands.push({ item: t, head: t.head, isNpc: !!t.isNpc });
+    cands.push({ item: t, head: t.head, isNpc: !!t.isNpc, standing: !t.seated });
   }
   return pickThrowTarget(_throwRay.ray.origin, _throwRay.ray.direction, cands);
 }
@@ -2537,6 +2539,7 @@ let _stealCamReady = false;
 let _framePlazaSteal: PlazaAimTarget | null | undefined;
 let _frameYardSteal: Npc | null | undefined;
 let _frameAimTargets: PlazaAimTarget[] | undefined;
+let _frameThrowTargets: PlazaAimTarget[] | undefined;
 let _lastStealHint = '';
 let _lastStealBtnOn: boolean | null = null;
 /** 準心擦過碗緣時避免 steal on/off 每幀抖動 */
@@ -2547,6 +2550,7 @@ function beginStealFrame() {
   _framePlazaSteal = undefined;
   _frameYardSteal = undefined;
   _frameAimTargets = undefined;
+  _frameThrowTargets = undefined;
 }
 /** 廣場不可偷原因（setStealHint 用 `${nick}：${why}`，舊預熱漏掉→準心換人就卡） */
 const PLAZA_STEAL_WHYS = [
@@ -2591,6 +2595,11 @@ function maybeWarmPlazaStealHints() {
 function plazaAimTargetsFrame() {
   if (!_frameAimTargets) _frameAimTargets = plazaAimTargets();
   return _frameAimTargets;
+}
+/** 丟殼用：坐著的人＋站著／走動的玩家 */
+function plazaThrowTargetsFrame() {
+  if (!_frameThrowTargets) _frameThrowTargets = plazaAimTargets(false, true);
+  return _frameThrowTargets;
 }
 function prepStealCam() {
   if (_stealCamReady) return;
@@ -2745,9 +2754,15 @@ function plazaFlyShell(e: PlazaShellEvent, onArrive?: () => void) {
   const me = plazaConnId();
   // 打向自己＋第一人稱：跟工寮阿婆丟殼一樣追鏡頭，才看得到殼飛過來
   const atMeFp = !!(me && e.toConnId === me) && !tpv;
+  const fixed = new THREE.Vector3(e.toX, e.toY, e.toZ);
+  const track = new THREE.Vector3();
+  const atMeTp = !!(me && e.toConnId === me) && !!tpv;
+  // 目標可能站著走動：追著對方目前的頭（找不到就用出手時座標）
   const to: THREE.Vector3 | (() => THREE.Vector3) = atMeFp
     ? () => camera.position.clone().add(new THREE.Vector3(0, -0.05, 0))
-    : new THREE.Vector3(e.toX, e.toY, e.toZ);
+    : atMeTp ? () => plazaSelfBleedPos()
+      : e.toConnId ? () => { const h = plazaRemoteHead(e.toConnId); return h ? track.set(h.x, h.y, h.z) : fixed; }
+        : fixed;
   try { SFX.whoosh(); } catch { /* */ }
   fly(sh, from, to, 0.55, atMeFp ? 0.4 : 0.35, () => { try { scene.remove(sh); onArrive?.(); } catch { /* */ } });
 }
@@ -3130,7 +3145,10 @@ function throwShell() {
       if (pt?.connId && pt.head && Number.isFinite(pt.head.x) && Number.isFinite(pt.head.y) && Number.isFinite(pt.head.z)) {
         noteHostileThrow();
         const to = new THREE.Vector3(pt.head.x, pt.head.y, pt.head.z);
-        fly(sh, from, to, 0.5, 0.3, () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); if (pt.isNpc && !isPlazaAber(pt)) rollAma(); } catch { /* */ } });
+        // 追著目標目前的頭飛（站著走動的人也會落在身上）；送伺服器的仍是出手當下位置
+        const track = new THREE.Vector3();
+        const toNow = () => { const h = plazaRemoteHead(pt.connId); return h ? track.set(h.x, h.y, h.z) : to; };
+        fly(sh, from, toNow, 0.5, 0.3, () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); if (pt.isNpc && !isPlazaAber(pt)) rollAma(); } catch { /* */ } });
         stampPlazaNet();
         void plazaThrowAt(pt.connId, from, to);
       } else {

@@ -54,3 +54,24 @@ test('鏡頭後方的人不算', () => {
   const behind = P('背後', 0, 1.0, 2.0);
   assert.equal(pickThrowTarget(eye, { x: 0, y: 0, z: -1 }, [behind]), null);
 });
+
+test('站著的玩家：瞄腰部（頭下 0.7m）也算打中，坐姿身體則打不到', () => {
+  // 站著的人頭在 1.6m，站在 2.5m 外
+  const stand: ThrowPickCand<string> = { item: '站著', head: { x: 0, y: 1.6, z: -2.5 }, isNpc: false, standing: true };
+  const aimWaist = dirTo({ x: 0, y: 0.9, z: -2.5 });
+  assert.equal(pickThrowTarget(eye, aimWaist, [stand]), '站著');
+  // 同位置若用坐姿身體長度（頭到大腿 0.55m）就構不到腰下
+  const asSeated = { ...stand, standing: false };
+  assert.equal(pickThrowTarget(eye, dirTo({ x: 0, y: 0.8, z: -2.5 }), [asSeated], { assistPlayer: 0 }), null);
+  assert.equal(pickThrowTarget(eye, dirTo({ x: 0, y: 0.8, z: -2.5 }), [stand], { assistPlayer: 0 }), '站著');
+});
+
+test('站著的玩家擋在坐著阿婆前面時打到玩家；走開後才打到阿婆', () => {
+  const ama = P('阿婆', 0, 1.0, -4.0, true);
+  const walker: ThrowPickCand<string> = { item: '走路', head: { x: 0, y: 1.6, z: -2.0 }, isNpc: false, standing: true };
+  const aim = dirTo(ama.head);
+  assert.equal(pickThrowTarget(eye, aim, [ama, walker]), '走路');
+  // 走到旁邊 1.2m：身體跟著移動，不再擋線
+  const moved = { ...walker, head: { x: 1.2, y: 1.6, z: -2.0 } };
+  assert.equal(pickThrowTarget(eye, aim, [ama, moved]), '阿婆');
+});

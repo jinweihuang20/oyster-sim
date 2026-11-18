@@ -493,8 +493,13 @@ export function plazaMyPileOrigin(out = new THREE.Vector3()) {
 export function plazaConnId() { return client?.connectionId ?? ''; }
 
 /** 坐下遠端玩家瞄準點 */
-export function plazaAimTargets(leisureNpc = false): PlazaAimTarget[] {
-  return view?.aimTargets(leisureNpc) ?? [];
+export function plazaAimTargets(leisureNpc = false, standPlayers = false): PlazaAimTarget[] {
+  return view?.aimTargets(leisureNpc, standPlayers) ?? [];
+}
+
+/** 遠端目前頭部位置（飛殼追移動中的人）；找不到回 null */
+export function plazaRemoteHead(connId: string) {
+  return view?.remoteHead(connId) ?? null;
 }
 
 export async function plazaThrowAt(

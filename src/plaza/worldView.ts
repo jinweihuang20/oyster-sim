@@ -150,7 +150,9 @@ export type PlazaWorldView = {
   grill: PlazaGrillView;
   syncFlags: (list: PlazaFlagState[]) => void;
   /** 坐下遠端玩家的瞄準點（丟殼／偷肉） */
-  aimTargets: (leisureNpc?: boolean) => PlazaAimTarget[];
+  aimTargets: (leisureNpc?: boolean, standPlayers?: boolean) => PlazaAimTarget[];
+  /** 某遠端（玩家／阿婆）目前頭部世界座標；飛殼追著移動中的人 */
+  remoteHead: (connId: string) => { x: number; y: number; z: number } | null;
   /** 走動碰撞用：遠端 `[x, z, radius, isLie]`；isLie=1 時跳躍夠高可越过 */
   walkBodies: () => [number, number, number, number][];
   /** 遠端／廣場阿婆的頭，供鏡頭靠近時暫時藏起 */
@@ -1144,10 +1146,29 @@ export function createPlazaWorldView(
   }
 
   const _aimH = new THREE.Vector3(), _aimB = new THREE.Vector3();
-  function aimTargets(leisureNpc = false): PlazaAimTarget[] {
+  function aimTargets(leisureNpc = false, standPlayers = false): PlazaAimTarget[] {
     const out: PlazaAimTarget[] = [];
     for (const r of remotes.values()) {
       const carried = !!(r.carriedBy || (r.phase || '') === 'carried');
+      // 站著／走動的真人玩家：只給丟殼瞄（standPlayers），不給偷；阿婆不在此列
+      if (standPlayers && !r.isNpc && !r.seated && !carried && (r.phase || '') !== 'moon') {
+        const h = headWorld(r, _aimH);
+        out.push({
+          connId: r.connId || r.key,
+          nick: plazaDisplayName(r.nick, r.numTag),
+          pileId: -1,
+          phase: r.phase || 'walk',
+          x: r.x, z: r.z, yaw: r.yaw,
+          lookYaw: r.tLookYaw,
+          seated: false,
+          count: r.count,
+          umb: r.umb,
+          isNpc: false,
+          head: { x: h.x, y: h.y, z: h.z },
+          bowl: { x: h.x, y: h.y, z: h.z },
+        });
+        continue;
+      }
       if (carried && r.isNpc && (r.phase || '') !== 'moon') {
         const h = headWorld(r, _aimH);
         const b = bowlWorld(r, _aimB);
@@ -1209,6 +1230,17 @@ export function createPlazaWorldView(
       });
     }
     return out;
+  }
+
+  const _remHead = new THREE.Vector3();
+  function remoteHead(connId: string) {
+    if (!connId) return null;
+    for (const r of remotes.values()) {
+      if ((r.connId || r.key) !== connId) continue;
+      const h = headWorld(r, _remHead);
+      return Number.isFinite(h.x + h.y + h.z) ? { x: h.x, y: h.y, z: h.z } : null;
+    }
+    return null;
   }
 
   function moonLaunch(connId: string, delayMs = 0, fromX?: number, fromZ?: number) {
@@ -3049,7 +3081,7 @@ function hashPid(pid: string) {
   }
   return {
     root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, applyMove, setPhase, highlight, highlightNear, hitPile, grill,
-    syncFlags: flags.sync, aimTargets, walkBodies, moonLaunch, showChat, showPetChat, playPetPunch, setSelfPose, setSelfBody, setSelfCushion,
+    syncFlags: flags.sync, aimTargets, remoteHead, walkBodies, moonLaunch, showChat, showPetChat, playPetPunch, setSelfPose, setSelfBody, setSelfCushion,
     playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: (loc, st) => {
       shedDoorState.set(loc, st);
       shedRow?.setDoorState(loc, st);

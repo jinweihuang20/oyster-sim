@@ -16,6 +16,8 @@ export type ThrowPickCand<T> = {
   item: T;
   head: V3;
   isNpc: boolean;
+  /** 站著／走動：身體從頭往下延伸較長（頭到大腿），預設用坐姿 */
+  standing?: boolean;
 };
 
 export type ThrowPickOpts = {
@@ -25,6 +27,8 @@ export type ThrowPickOpts = {
   headTop?: number;
   /** 身體往下延伸多少（坐姿：頭到大腿） */
   bodyDown?: number;
+  /** 站姿身體往下延伸多少（頭到大腿） */
+  standDown?: number;
   /** 輔助瞄準最大角度（弧度）：玩家 */
   assistPlayer?: number;
   /** 輔助瞄準最大角度（弧度）：阿婆（較嚴） */
@@ -37,6 +41,7 @@ const D: Required<ThrowPickOpts> = {
   bodyR: 0.22,
   headTop: 0.12,
   bodyDown: 0.55,
+  standDown: 0.85,
   assistPlayer: 0.1,
   assistNpc: 0.035,
   maxDist: 30,
@@ -82,7 +87,7 @@ export function pickThrowTarget<T>(origin: V3, dir: V3, cands: ThrowPickCand<T>[
     const h = c.head;
     if (!h || ![h.x, h.y, h.z].every(Number.isFinite)) continue;
     const top = { x: h.x, y: h.y + o.headTop, z: h.z };
-    const bot = { x: h.x, y: h.y - o.bodyDown, z: h.z };
+    const bot = { x: h.x, y: h.y - (c.standing ? o.standDown : o.bodyDown), z: h.z };
     const { dist, t } = raySegmentDist(origin, d, top, bot);
     if (!(t > 0.05) || t > o.maxDist) continue; // 在鏡頭後面／太遠
     if (dist <= o.bodyR) {
