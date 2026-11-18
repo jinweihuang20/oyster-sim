@@ -96,6 +96,7 @@ import {
   type PlazaAimTarget, type PlazaShellEvent, type PlazaShellHitEvent, type PlazaGrillTakenEvent,
 } from './plaza';
 import { mgMuzzleWorld, mgEjectWorld, mgMountRight } from './plaza/mgGun';
+import { pickThrowTarget, type ThrowPickCand } from './plaza/throwPick';
 import type { PlazaMgFireEvent, PlazaMgHitEvent } from './plaza/hubClient';
 import { openShedDoorPanel, closeShedDoorPanel } from './plaza/shedDoorUi';
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
@@ -2495,18 +2496,20 @@ function grudgeUI(n: Npc) {
   const g = n.grudge ?? 0; n.gIcon.visible = n.gBar!.visible = g > 4; n.gIcon.scale.setScalar(0.12 + g * 0.0015); n.gBar!.scale.set(0.006 + g * 0.0032, 0.035, 1);
   (n.gBar!.material as THREE.SpriteMaterial).color.setHSL(0.12 - g * 0.0012, 1, 0.5);
 }
+/** 廣場丟殼目標：沿準心射線，先打到誰就是誰；沒打到才小範圍輔助（阿婆更嚴），見 plaza/throwPick */
+const _throwRay = new THREE.Raycaster();
+const _throwNdc = new THREE.Vector2(0, 0);
 function plazaThrowTarget(): PlazaAimTarget | null {
-  let best: PlazaAimTarget | null = null, bestScore = 1e9;
+  prepStealCam();
   const cam = viewCam();
+  _throwRay.setFromCamera(_throwNdc, cam);
+  const cands: ThrowPickCand<PlazaAimTarget>[] = [];
   for (const t of plazaAimTargetsFrame()) {
     if (t.carriedBy || !t.seated || t.phase === 'carried') continue;
-    if (!t?.connId || !t.head || ![t.head.x, t.head.y, t.head.z].every(Number.isFinite)) continue;
-    _stealBowl.set(t.head.x, t.head.y, t.head.z).project(cam);
-    if (_stealBowl.z >= 1 || !Number.isFinite(_stealBowl.x + _stealBowl.y)) continue;
-    const s = Math.abs(_stealBowl.x) * 1.2 + Math.abs(_stealBowl.y);
-    if (Math.abs(_stealBowl.x) < 0.32 && Math.abs(_stealBowl.y) < 0.5 && s < bestScore) { best = t; bestScore = s; }
+    if (!t?.connId || !t.head) continue;
+    cands.push({ item: t, head: t.head, isNpc: !!t.isNpc });
   }
-  return best;
+  return pickThrowTarget(_throwRay.ray.origin, _throwRay.ray.direction, cands);
 }
 /** 廣場偷肉：讀條／同堆冷卻寫死；罰金／禁偷／碗少門檻見 eco */
 const PLAZA_STEAL_PAIR_MS = 4000;
