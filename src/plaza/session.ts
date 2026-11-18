@@ -1506,6 +1506,10 @@ function buildUi() {
   #pzChatPeek{max-width:min(52vw,340px)}
   #pzChat{width:min(52vw,340px)}
 }
+/* 手機對齊藥品／換位置／搖桿：位置由 placePlazaChat 寫入；高度不夠時紀錄區可縮小 */
+#pzChat.mobDock,#pzChatPeek.mobDock{right:auto;top:auto;bottom:auto}
+#pzChat.open.mobDock{display:flex;flex-direction:column;min-height:0}
+#pzChat.mobDock.maxed #pzLog{flex:1 1 auto;min-height:28px;height:auto;max-height:none}
 #pzChatHd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-size:12px;font-weight:800;color:#e8f6ff}
 #pzChatMin{pointer-events:auto;background:transparent;border:0;color:#c5d8ea;font-size:18px;line-height:1;padding:2px 6px;font-weight:900}
 #pzChatMin:active{color:#fff}
@@ -1648,6 +1652,8 @@ function buildUi() {
   } else {
     plazaCloseChat();
   }
+  ensurePlazaChatLayoutHooks();
+  placePlazaChat(true);
 }
 
 /** 電腦版左下常駐聊天（無 FAB） */
@@ -1684,7 +1690,9 @@ function setChatOpen(open: boolean) {
     hideChatPeek();
     syncChatBadge();
     // 縮小時 display:none，展開後才有正確 scrollHeight；雙 rAF 等 layout
-    requestAnimationFrame(() => requestAnimationFrame(scrollChatLogToEnd));
+    requestAnimationFrame(() => requestAnimationFrame(() => { placePlazaChat(true); scrollChatLogToEnd(); }));
+  } else {
+    placePlazaChat(true);
   }
 }
 
@@ -1711,6 +1719,7 @@ function showChatPeek(nick: string, text: string) {
   const short = text.length > 36 ? text.slice(0, 35) + '…' : text;
   peek.innerHTML = `<b>${escChat(nick)}</b> ${escChat(short)}`;
   peek.classList.add('on');
+  placePlazaChat(true);
   if (chatPeekTimer) clearTimeout(chatPeekTimer);
   chatPeekTimer = setTimeout(() => { chatPeekTimer = null; peek.classList.remove('on'); }, 4200);
 }
@@ -2576,10 +2585,12 @@ function pushChat(m: PlazaChat) {
 /** 清掉依 HUD 量到的地圖鈕位置，離開廣場時還原工寮狀態列 */
 function clearPlazaHudLayout() {
   plazaHudLayoutKey = '';
+  plazaChatLayoutKey = '';
   const st = document.documentElement.style;
   st.removeProperty('--pz-fabs-top');
   st.removeProperty('--pz-top-left');
   st.removeProperty('--pz-hint-top');
+  clearPlazaChatDockStyles();
 }
 
 function visHudBox(el: HTMLElement | null): DOMRect | null {
@@ -2628,21 +2639,245 @@ function syncPlazaHudLayout() {
   root.setProperty('--pz-hint-top', `${hintTop}px`);
 }
 
-/** 聊天已跟離開／地圖同一排；清掉舊版留下的 inline 位移，窗／預覽改由 CSS 跟 --pz-fabs-top */
-let fabB = 'done';
-function placeChatFab() {
-  if (!ui) return;
-  if (fabB === '') return;
-  fabB = '';
-  const fab = ui.querySelector('#pzChatFab') as HTMLElement | null;
-  const peek = ui.querySelector('#pzChatPeek') as HTMLElement | null;
-  const chat = ui.querySelector('#pzChat') as HTMLElement | null;
-  if (fab) { fab.style.bottom = ''; fab.style.top = ''; }
-  if (peek) { peek.style.bottom = ''; peek.style.top = ''; }
-  if (chat) { chat.style.bottom = ''; chat.style.top = ''; }
-  const mapFab = ui.querySelector('#pzMapFab') as HTMLElement | null;
-  if (mapFab) { mapFab.style.bottom = ''; mapFab.style.top = ''; }
+const CHAT_DOCK_GAP = 8;
+let plazaChatLayoutKey = '';
+let plazaChatHooksBound = false;
+
+function clearPlazaChatDockEl(el: HTMLElement | null) {
+  if (!el) return;
+  el.classList.remove('mobDock', 'maxed');
+  for (const k of ['left', 'right', 'top', 'bottom', 'width', 'max-width', 'max-height'] as const)
+    el.style.removeProperty(k);
 }
+
+function clearPlazaChatDockStyles() {
+  clearPlazaChatDockEl(ui?.querySelector('#pzChat') as HTMLElement | null);
+  clearPlazaChatDockEl(ui?.querySelector('#pzChatPeek') as HTMLElement | null);
+}
+
+function chatViewBox() {
+  const vv = window.visualViewport;
+  if (vv) {
+    return { left: vv.offsetLeft, top: vv.offsetTop, right: vv.offsetLeft + vv.width, bottom: vv.offsetTop + vv.height };
+  }
+  return { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+}
+
+function chatSaInsets() {
+  const cs = getComputedStyle(document.documentElement);
+  const n = (name: string) => {
+    const v = parseFloat(cs.getPropertyValue(name));
+    return Number.isFinite(v) ? v : 0;
+  };
+  return { top: n('--sa-top'), right: n('--sa-right'), bottom: n('--sa-bottom'), left: n('--sa-left') };
+}
+
+function measureDockEl(el: HTMLElement) {
+  const prev = {
+    display: el.style.display,
+    visibility: el.style.visibility,
+    maxWidth: el.style.maxWidth,
+    maxHeight: el.style.maxHeight,
+    width: el.style.width,
+  };
+  el.style.removeProperty('max-width');
+  el.style.removeProperty('max-height');
+  el.style.removeProperty('width');
+  const hide = getComputedStyle(el).display === 'none';
+  if (hide) {
+    el.style.visibility = 'hidden';
+    el.style.display = 'block';
+  }
+  const r = el.getBoundingClientRect();
+  const w = r.width;
+  const h = r.height;
+  el.style.display = prev.display;
+  el.style.visibility = prev.visibility;
+  el.style.maxWidth = prev.maxWidth;
+  el.style.maxHeight = prev.maxHeight;
+  el.style.width = prev.width;
+  return { w, h };
+}
+
+function boxesOverlap(a: { left: number; right: number; top: number; bottom: number }, b: DOMRect, gap: number) {
+  return a.left < b.right + gap && a.right > b.left - gap && a.top < b.bottom + gap && a.bottom > b.top - gap;
+}
+
+function collectChatObstacles(skip: HTMLElement[]) {
+  const skipSet = new Set(skip.filter(Boolean));
+  const ids = ['joy', 'medBtn', 'standBtn', 'giveUp', 'poseBtn', 'jumpBtn', 'crouchBtn', 'lieBtn', 'flagBtn', 'flagPullBtn', 'seatCard', 'rotL', 'rotR', 'pzLeftFabs'];
+  const out: DOMRect[] = [];
+  for (const id of ids) {
+    const el = (id === 'pzLeftFabs' ? ui?.querySelector('#pzLeftFabs') : document.getElementById(id)) as HTMLElement | null;
+    if (!el || skipSet.has(el)) continue;
+    const r = visHudBox(el);
+    if (r) out.push(r);
+  }
+  return out;
+}
+
+function applyChatDock(el: HTMLElement, mode: 'above' | 'right', dock: { left: number; right: number; top: number; bottom: number }, obstacles: DOMRect[]) {
+  const root = ui!.getBoundingClientRect();
+  const view = chatViewBox();
+  const sa = chatSaInsets();
+  const gap = CHAT_DOCK_GAP;
+  const padL = Math.max(view.left + sa.left + gap, root.left + sa.left + gap);
+  const padR = Math.min(view.right - sa.right - gap, root.right - sa.right - gap);
+  const fabs = visHudBox(ui!.querySelector('#pzLeftFabs') as HTMLElement | null);
+  const padT = Math.max(view.top + sa.top + gap, root.top + sa.top + gap, fabs ? fabs.bottom + gap : 0);
+  const padB = Math.min(view.bottom - gap, root.bottom - sa.bottom - gap);
+  const natural = measureDockEl(el);
+  let w = natural.w;
+  let h = natural.h;
+  const maxW = Math.max(120, padR - padL);
+  const maxH = Math.max(72, padB - padT);
+  if (w > maxW) w = maxW;
+  if (h > maxH) h = maxH;
+
+  let left = mode === 'above' ? dock.left : dock.right + gap;
+  let top = mode === 'above' ? dock.top - gap - h : dock.bottom - h;
+
+  const liftAbove = (boxTop: number) => {
+    top = boxTop - gap - h;
+  };
+
+  // 直向「上方」：若中間還有放棄這顆／坐這裡等，改貼在那些之上，避免蓋住
+  if (mode === 'above') {
+    for (const o of obstacles) {
+      const xHit = Math.min(Math.max(dock.right, left + w), o.right) - Math.max(Math.min(dock.left, left), o.left) > 4;
+      if (xHit && o.bottom <= dock.top + 8) liftAbove(Math.min(o.top, dock.top));
+    }
+  }
+
+  const clampPad = () => {
+    if (w > padR - padL) w = padR - padL;
+    if (left + w > padR) left = padR - w;
+    if (left < padL) left = padL;
+    if (top + h > padB) top = padB - h;
+    if (top < padT) {
+      // 抬到安全區頂仍會蓋住中間物件時，縮短高度讓出下方按鈕
+      top = padT;
+      h = Math.min(h, padB - padT);
+    }
+  };
+  clampPad();
+
+  for (const o of obstacles) {
+    const box = { left, right: left + w, top, bottom: top + h };
+    if (!boxesOverlap(box, o, gap)) continue;
+    if (o.left >= left + 40) {
+      const cap = o.left - gap - left;
+      if (cap >= 160) { w = Math.min(w, cap); continue; }
+    }
+    if (mode === 'above' && o.bottom <= dock.top + 8) {
+      const room = o.top - gap - padT;
+      if (room >= 72) { h = Math.min(h, room); top = o.top - gap - h; }
+      else liftAbove(o.top);
+    } else if (o.top >= top + 40) {
+      const room = o.top - gap - top;
+      if (room >= 72) h = Math.min(h, room);
+    }
+  }
+  clampPad();
+
+  el.classList.add('mobDock');
+  el.classList.toggle('maxed', h + 0.5 < natural.h);
+  el.style.left = `${Math.round(left - root.left)}px`;
+  el.style.top = `${Math.round(top - root.top)}px`;
+  el.style.right = 'auto';
+  el.style.bottom = 'auto';
+  el.style.maxWidth = `${Math.round(w)}px`;
+  if (h + 0.5 < natural.h) el.style.maxHeight = `${Math.round(h)}px`;
+  else el.style.removeProperty('max-height');
+}
+
+/** 手機：直向坐著在藥品／道具上方、站著在搖桿上方；橫向坐著在換位置右方、站著在搖桿右方。電腦維持左下常駐列。 */
+function placePlazaChat(force = false) {
+  if (!ui) { plazaChatLayoutKey = ''; return; }
+  const chat = ui.querySelector('#pzChat') as HTMLElement | null;
+  const peek = ui.querySelector('#pzChatPeek') as HTMLElement | null;
+  if (pcChatDock()) {
+    if (plazaChatLayoutKey !== 'pc') {
+      plazaChatLayoutKey = 'pc';
+      clearPlazaChatDockStyles();
+    }
+    return;
+  }
+  if (!chat) return;
+
+  const land = matchMedia('(orientation: landscape)').matches;
+  const joyEl = document.getElementById('joy');
+  const medEl = document.getElementById('medBtn');
+  const standEl = document.getElementById('standBtn');
+  const giveEl = document.getElementById('giveUp');
+  const cornerEl = document.getElementById('btnsCorner');
+  const joy = visHudBox(joyEl);
+  const med = visHudBox(medEl);
+  const stand = visHudBox(standEl);
+  const give = visHudBox(giveEl);
+  const corner = visHudBox(cornerEl);
+  const walking = !seated && !!joy;
+  let mode: 'above' | 'right' = land ? 'right' : 'above';
+  let anchor: DOMRect | null = null;
+  let skip: HTMLElement[] = [];
+  if (walking) {
+    anchor = joy;
+    skip = joyEl ? [joyEl] : [];
+    mode = land ? 'right' : 'above';
+  } else if (land) {
+    // 橫向坐下：貼在「換位置」右方；沒顯示時改用藥品或左下角簇
+    anchor = stand || med || give || corner;
+    skip = [standEl, medEl, giveEl, cornerEl].filter((e): e is HTMLElement => !!e);
+    mode = 'right';
+  } else {
+    // 直向坐下：貼在「藥品/道具」上方（含其上方的放棄這顆）
+    anchor = med || stand || give || corner;
+    skip = [standEl, medEl, giveEl, cornerEl].filter((e): e is HTMLElement => !!e);
+    mode = 'above';
+  }
+
+  const vv = window.visualViewport;
+  const vkey = vv ? `${Math.round(vv.offsetLeft)}|${Math.round(vv.offsetTop)}|${Math.round(vv.width)}|${Math.round(vv.height)}` : `${innerWidth}|${innerHeight}`;
+  if (!anchor) {
+    const key = `css|${vkey}`;
+    if (!force && key === plazaChatLayoutKey) return;
+    plazaChatLayoutKey = key;
+    clearPlazaChatDockStyles();
+    return;
+  }
+
+  const dock = { left: anchor.left, right: anchor.right, top: anchor.top, bottom: anchor.bottom };
+  if (mode === 'above' && !walking) {
+    for (const b of [med, stand, give, corner]) {
+      if (!b) continue;
+      if (Math.min(dock.right, b.right) - Math.max(dock.left, b.left) > 8)
+        dock.top = Math.min(dock.top, b.top);
+    }
+  }
+
+  const open = chat.classList.contains('open') ? 1 : 0;
+  const peekOn = peek?.classList.contains('on') ? 1 : 0;
+  const key = `${land ? 'L' : 'P'}|${walking ? 'W' : 'S'}|${mode}|${Math.round(dock.left)}|${Math.round(dock.top)}|${Math.round(dock.right)}|${Math.round(dock.bottom)}|${open}|${peekOn}|${vkey}`;
+  if (!force && key === plazaChatLayoutKey) return;
+  plazaChatLayoutKey = key;
+
+  const obstacles = collectChatObstacles(skip);
+  applyChatDock(chat, mode, dock, obstacles);
+  if (peek) applyChatDock(peek, mode, dock, obstacles);
+}
+
+function ensurePlazaChatLayoutHooks() {
+  if (plazaChatHooksBound) return;
+  plazaChatHooksBound = true;
+  const bump = () => { plazaChatLayoutKey = ''; if (active) placePlazaChat(true); };
+  addEventListener('resize', bump);
+  addEventListener('orientationchange', () => setTimeout(bump, 80));
+  matchMedia('(orientation: landscape)').addEventListener('change', bump);
+  matchMedia('(pointer: fine)').addEventListener('change', bump);
+  window.visualViewport?.addEventListener('resize', bump);
+  window.visualViewport?.addEventListener('scroll', bump);
+}
+
 
 function refreshPlazaMap() {
   if (!ui || !deps || !plazaMapIsOpen()) return;
@@ -2741,7 +2976,7 @@ export function tickPlaza(dt: number) {
   foodQTick(p);
   cookTick();
   if (view) for (const d of SHED_DOORS) view.setShedDoorState(d.loc, { locked: !(deps.shedUnlocked?.(d.loc) ?? true), active: nearShed === d.loc });
-  placeChatFab();
+  placePlazaChat();
   syncPlazaHudLayout();
   if (plazaMapIsOpen()) refreshPlazaMap();
   if (!client?.connected) return;
