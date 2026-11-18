@@ -1530,7 +1530,6 @@ function applyGrillTakeWin(serverCount?: number, takenDiff?: number) {
   setPhase('busy');
   if (find.kind === 'pearl') {
     revealPearl(find.i);
-    later(2.5, () => { pearlMesh.visible = false; if (state === 'play') setPhase('aim'); });
   } else if (find.kind === 'odd') {
     revealOdd(find.i);
   } else {
@@ -2305,42 +2304,70 @@ function openOyster() {
   if (crackedNow) cracked++;
   shellTop.visible = false;
   const top = new THREE.Mesh(halfGeo, shellTopMat); fly(top, worldOf(oyster), pileSpot(), 0.6, 0.5, () => scene.remove(top));
-  if (find.kind === 'pearl') { revealPearl(find.i); later(2.5, () => { pearlMesh.visible = false; setPhase('aim'); }); }
+  if (find.kind === 'pearl') revealPearl(find.i);
   else if (find.kind === 'odd') revealOdd(find.i);
   else later(0.2, () => setPhase('aim'));
   updHud();
 }
-/** 奇物展示世代：點螢幕可跳過阿婆湊近觀看 */
-let oddShowGen = 0, oddShowI = -1;
-function oddShowActive() { return oddShowI >= 0 && oddShowI !== 3 && pearlShow > 0; }
-function skipOddShow() {
-  if (!oddShowActive()) return false;
-  const i = oddShowI;
-  oddShowGen++;
-  oddShowI = -1;
+/** 珍珠／奇物展示世代：點一下略過阿婆湊近觀看（不含夾人的螃蟹） */
+let findShowGen = 0;
+let findShowKind: 'pearl' | 'odd' | null = null;
+let findShowI = -1;
+/** 略過那一下的 pointerId，只擋同一個手指／滑鼠的 pointerup／click */
+let findShowSkipPtr = -1;
+let findShowSkipUntil = 0;
+function findShowActive() { return !!findShowKind && pearlShow > 0; }
+function findShowSheetOpen() {
+  if (document.getElementById('pbd')?.classList.contains('show')) return true;
+  if (document.querySelector('.panel.show')) return true;
+  if (document.body.classList.contains('tutOn')) return true;
+  return false;
+}
+function endFindShow() {
+  const kind = findShowKind;
+  const i = findShowI;
+  findShowKind = null;
+  findShowI = -1;
   pearlShow = 0;
   slowmo = 0;
   label.classList.remove('on');
   leanFaces.forEach(f => { f.visible = false; });
-  if (i >= 0) oddMeshes[i].visible = false;
+  if (kind === 'odd' && i >= 0) oddMeshes[i].visible = false;
+  if (kind === 'pearl') pearlMesh.visible = false;
+}
+function skipFindShow() {
+  if (!findShowActive()) return false;
+  findShowGen++;
+  endFindShow();
   if (state === 'play' && phase === 'busy') setPhase('aim');
+  findShowSkipUntil = performance.now() + 450;
+  return true;
+}
+function swallowFindShowSkip(e: Event) {
+  if (performance.now() >= findShowSkipUntil) { findShowSkipPtr = -1; return false; }
+  const pe = e as PointerEvent;
+  if (e.type !== 'click' && findShowSkipPtr >= 0 && typeof pe.pointerId === 'number' && pe.pointerId !== findShowSkipPtr) return false;
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+  if (e.type === 'pointerup' || e.type === 'pointercancel') findShowSkipPtr = -1;
   return true;
 }
 function revealOdd(i: number) { react3('cheer');
   const o = ODD[i]; dayOdd.push(i); save.odd[i]++; const wasPity = pityHit; pityHit = false; if (rarOf(o.weight) === 'legend' && !o.limited) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report(rarOf(o.weight) === 'legend' ? 'legend' : 'odd', i); track('find', { kind: 'odd', item: 'odd-' + i, rarity: rarOf(o.weight), ...(wasPity ? { pity: 1 } : {}), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); oddMeshes[i].visible = true;
-  const gen = ++oddShowGen;
-  oddShowI = i === 3 ? -1 : i;
+  const gen = ++findShowGen;
+  if (i === 3) { findShowKind = null; findShowI = -1; }
+  else { findShowKind = 'odd'; findShowI = i; }
   slowmo = 1.8; pearlShow = 2.2; SFX.jingle(i !== 3);
   label.innerHTML = `${o.name}！<small>${o.line}</small><small>${save.odd[i] === 1 ? '🆕 第一次找到！' : `你的第 ${save.odd[i]} 個`}</small>`; label.style.color = o.color; label.classList.add('on');
   // 單挑：不播阿婆轉頭／喊話（擂台無阿婆；湊近臉特效另在 frame 關掉）
   if (!isPlazaRaceMode()) npcs.forEach((n, k) => { n.look = 2.4; say(n, o.cry[k % o.cry.length], 2.4); });
   else leanFaces.forEach(f => { f.visible = false; });
-  if (i === 3) { later(0.6, () => { if (gen !== oddShowGen) return; flinch = 1; SFX.pinch(); bleed(8); hurt(4, '夾！'); crabShakes = 0; strokeDir = 0; strokeLen = 0; setPhase('crab'); }); }
+  if (i === 3) { later(0.6, () => { if (gen !== findShowGen) return; flinch = 1; SFX.pinch(); bleed(8); hurt(4, '夾！'); crabShakes = 0; strokeDir = 0; strokeLen = 0; setPhase('crab'); }); }
   else later(2.2, () => {
-    if (gen !== oddShowGen) return;
-    oddShowI = -1;
-    oddMeshes[i].visible = false;
-    setPhase('aim');
+    if (gen !== findShowGen) return;
+    endFindShow();
+    if (state === 'play') setPhase('aim');
   });
 }
 function crabOff() {
@@ -3516,6 +3543,9 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
 }
 function revealPearl(r: number) { react3('cheer');
   sleeveGold(); dayPearls.push(r); save.dex[r]++; if (r === 3) { save.legendDry = 0; save.legendN = legendTotal(); } persist(); Social.report('pearl', r); track('find', { kind: 'pearl', item: 'pearl-' + r, rarity: rarOf(RAR[r].w), seat: save.seat ?? 'door', knife: knifeNow().id, luck: luckNow(), dex: dexN() }); renderDex();
+  const gen = ++findShowGen;
+  findShowKind = 'pearl';
+  findShowI = r;
   slowmo = 2.6; pearlShow = 2.6;
   (pearlMesh.material as THREE.MeshStandardMaterial).color.setHex(RAR[r].color);
   (pearlMesh.material as THREE.MeshStandardMaterial).emissive.setHex(r === 3 ? 0x302050 : RAR[r].color).multiplyScalar(0.25);
@@ -3526,6 +3556,11 @@ function revealPearl(r: number) { react3('cheer');
     const cries = ['哎唷！珍珠！', '給我看看！', '好運喔你！', '老天爺保佑！'];
     npcs.forEach((n, i) => { n.look = 2.6; say(n, cries[(i + r) % cries.length], 2.6); });
   } else leanFaces.forEach(f => { f.visible = false; });
+  later(2.5, () => {
+    if (gen !== findShowGen) return;
+    endFindShow();
+    if (state === 'play' && phase === 'busy') setPhase('aim');
+  });
 }
 function renderDex() {
   const RZ: Record<string, string> = { common: '普通', uncommon: '少見', rare: '稀有', legend: '傳說' };
@@ -3681,10 +3716,26 @@ const YAW = 1.25, P0 = -1.05, P1 = 0.15;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const swipePhase = () => phase === 'twist' || phase === 'crab';
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+{
+  const onFindShowDown = (e: PointerEvent) => {
+    if (state !== 'play' || findShowSheetOpen()) return;
+    if (!findShowActive()) return;
+    if (!skipFindShow()) return;
+    findShowSkipPtr = e.pointerId;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  };
+  const onFindShowSwallow = (e: Event) => { swallowFindShowSkip(e); };
+  document.addEventListener('pointerdown', onFindShowDown, true);
+  document.addEventListener('pointerup', onFindShowSwallow, true);
+  document.addEventListener('pointercancel', onFindShowSwallow, true);
+  document.addEventListener('click', onFindShowSwallow, true);
+}
 canvas.addEventListener('pointerdown', e => {
   if (state !== 'play') return; audio().resume();
-  // 奇物展示：點一下跳過阿婆湊近觀看
-  if (skipOddShow()) return;
+  // 珍珠／奇物展示：點一下跳過阿婆湊近觀看（文件捕捉已處理大部份；這裡當備援）
+  if (skipFindShow()) { findShowSkipPtr = e.pointerId; return; }
   if (moonAimOn) { down = { x: e.clientX, y: e.clientY, id: e.pointerId, drag: false, yaw: tYaw, pitch: tPitch, tp: tpPitch, rotMode: false, lx: e.clientX, lt: performance.now() }; return; }
   if (swipePhase()) { pry(e.timeStamp); if (e.pointerType === 'mouse' && document.pointerLockElement !== canvas) canvas.requestPointerLock(); return; }
   if (!walking && !plazaMode && e.button === 0) {
