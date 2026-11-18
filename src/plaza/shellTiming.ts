@@ -5,8 +5,10 @@
  * 所以丟真人時，丟殼者與旁觀者的殼也要花 WINDUP + INBOUND_FLY 才落地，畫面才會和結果對得上。
  * 阿婆由伺服器在轉發當下就結算噴血，維持快飛；反彈飛回也不用蓄力。
  */
-export const PLAZA_WINDUP = 1.0;
-export const PLAZA_INBOUND_FLY = 0.55;
+/** 被丟者蓄力預警秒數（⚠ 方向警告；收音機晚亮在剩一半時才亮） */
+export const PLAZA_WINDUP = 0.65;
+/** 被丟者看到的飛行秒數；反彈飛回也用這個 */
+export const PLAZA_INBOUND_FLY = 0.4;
 export const PLAZA_SHELL_LAND = PLAZA_WINDUP + PLAZA_INBOUND_FLY;
 /** 丟阿婆時本機快飛秒數 */
 export const PLAZA_NPC_FLY = 0.5;
@@ -19,7 +21,7 @@ export type ShellFlightKind =
 
 /** 回傳 [飛行秒數, 拋物線高度] */
 export function plazaShellFlight(k: ShellFlightKind): [number, number] {
-  if (k.who === 'thrower') return k.targetIsNpc ? [PLAZA_NPC_FLY, 0.3] : [PLAZA_SHELL_LAND, 0.75];
-  if (k.reflect === false && k.targetIsNpc === false) return [PLAZA_SHELL_LAND, 0.75];
-  return [PLAZA_INBOUND_FLY, 0.35];
+  if (k.who === 'thrower') return k.targetIsNpc ? [PLAZA_NPC_FLY, 0.3] : [PLAZA_SHELL_LAND, 0.55];
+  if (k.reflect === false && k.targetIsNpc === false) return [PLAZA_SHELL_LAND, 0.55];
+  return [PLAZA_INBOUND_FLY, 0.3];
 }

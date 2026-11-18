@@ -97,7 +97,7 @@ import {
 } from './plaza';
 import { mgMuzzleWorld, mgEjectWorld, mgMountRight } from './plaza/mgGun';
 import { pickThrowTarget, type ThrowPickCand } from './plaza/throwPick';
-import { PLAZA_WINDUP, PLAZA_INBOUND_FLY, plazaShellFlight } from './plaza/shellTiming';
+import { PLAZA_WINDUP, PLAZA_INBOUND_FLY, PLAZA_SHELL_LAND, plazaShellFlight } from './plaza/shellTiming';
 import type { PlazaMgFireEvent, PlazaMgHitEvent } from './plaza/hubClient';
 import { openShedDoorPanel, closeShedDoorPanel } from './plaza/shedDoorUi';
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
@@ -2714,7 +2714,7 @@ function plazaOnStealCaught(nick: string) {
 }
 /** 廣場飛殼／受擊世代：離開廣場後作廢延遲回呼，避免關場後還跑 hurt */
 let plazaShellGen = 0;
-/** 廣場被丟殼預警：和工寮阿婆一樣先蓄力約 1 秒、亮 ⚠ 方向＋提示，再飛過來 */
+/** 廣場被丟殼預警：先蓄力 PLAZA_WINDUP 秒、亮 ⚠ 方向＋提示，再飛過來 */
 type PlazaWarn = { e: PlazaShellEvent; left: number; w0: number; warned: boolean; gen: number };
 const plazaWarns: PlazaWarn[] = [];
 let plazaThrowToMe: { e: PlazaShellEvent; at: number } | null = null;
@@ -2722,7 +2722,7 @@ function plazaWarnStart(e: PlazaShellEvent) {
   const w: PlazaWarn = { e, left: PLAZA_WINDUP, w0: PLAZA_WINDUP, warned: !gearOn('radio'), gen: plazaShellGen };
   if (w.warned) SFX.alert();
   plazaWarns.push(w);
-  if (petAutoGuard().open) beginPetUmbGuard(Math.max(PET_UMB_FLASH, PLAZA_WINDUP + 0.7));
+  if (petAutoGuard().open) beginPetUmbGuard(Math.max(PET_UMB_FLASH, PLAZA_SHELL_LAND + 0.15));
 }
 /** 每幀：倒數、收音機晚亮、時間到才飛殼並在落地時結算 */
 function plazaWarnTick(dt: number): PlazaWarn | null {
@@ -2731,12 +2731,12 @@ function plazaWarnTick(dt: number): PlazaWarn | null {
     const w = plazaWarns[i];
     if (w.gen !== plazaShellGen || !plazaMode) { plazaWarns.splice(i, 1); continue; }
     w.left -= dt;
-    if (!w.warned && w.left <= Math.min(w.w0, Math.max(0.5, w.w0 * 0.5))) { w.warned = true; SFX.alert(); }
+    if (!w.warned && w.left <= w.w0 * 0.5) { w.warned = true; SFX.alert(); }
     if (w.left <= 0) {
       plazaWarns.splice(i, 1);
       const gen = w.gen;
       try { plazaFlyShell(w.e); } catch { /* 動畫失敗也要結算 */ }
-      later(0.55, () => { if (gen !== plazaShellGen) return; resolvePlazaInbound(w.e); });
+      later(PLAZA_INBOUND_FLY, () => { if (gen !== plazaShellGen) return; resolvePlazaInbound(w.e); });
       continue;
     }
     if (w.warned && (!show || w.left < show.left)) show = w;
@@ -2782,7 +2782,7 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
       const from = { x: e.toX, y: e.toY, z: e.toZ };
       const back = { x: e.fromX, y: e.fromY, z: e.fromZ };
       const sh = new THREE.Mesh(halfGeo, shellBotMat);
-      fly(sh, new THREE.Vector3(from.x, from.y, from.z), new THREE.Vector3(back.x, back.y, back.z), 0.4, 0.15, () => { scene.remove(sh); SFX.hitNpc(); });
+      fly(sh, new THREE.Vector3(from.x, from.y, from.z), new THREE.Vector3(back.x, back.y, back.z), PLAZA_INBOUND_FLY, 0.15, () => { scene.remove(sh); SFX.hitNpc(); });
       // 通知原丟殼者：被反彈砸中（工寮反彈打中阿婆同概念）
       // 阿康連發時排隊，避開伺服器 280ms 節流把後續反彈丟掉
       if (e.fromConnId) {
@@ -3148,7 +3148,7 @@ function throwShell() {
         // 追著目標目前的頭飛（站著走動的人也會落在身上）；送伺服器的仍是出手當下位置
         const track = new THREE.Vector3();
         const toNow = () => { const h = plazaRemoteHead(pt.connId); return h ? track.set(h.x, h.y, h.z) : to; };
-        // 丟真人：對方要先蓄力預警 PLAZA_WINDUP 再飛 0.55s 才結算擋／反彈，
+        // 丟真人：對方要先蓄力預警 PLAZA_WINDUP 再飛 PLAZA_INBOUND_FLY 才結算擋／反彈，
         // 本機改成同樣長的拋物線，落點時間才會和對方擋回來對得上（阿婆由伺服器當下結算，維持快飛）
         const [flyDur, flyArc] = plazaShellFlight({ who: 'thrower', targetIsNpc: !!pt.isNpc });
         fly(sh, from, toNow, flyDur, flyArc, () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); if (pt.isNpc && !isPlazaAber(pt)) rollAma(); } catch { /* */ } });
@@ -5821,7 +5821,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       } catch (err) { console.error('plaza shell throw', err); }
     },
     onShellInbound: (e) => {
-      // 飛行動畫約 0.55s 後結算；世代號避免離開廣場後還結算
+      // 蓄力 PLAZA_WINDUP＋飛行 PLAZA_INBOUND_FLY 後結算；世代號避免離開廣場後還結算
       plazaThrowToMe = null; // 這顆由預警流程負責飛＋結算
       if (!plazaMode || !isPlazaActive()) return;
       plazaWarnStart(e);
