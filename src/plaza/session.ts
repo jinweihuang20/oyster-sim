@@ -1485,11 +1485,16 @@ function buildUi() {
 #pzLeaveAsk .pzLeaveBtns #pzLeaveOk{background:rgba(42,90,134,.85);border-color:rgba(232,246,255,.4)}
 #pzLeaveAsk .pzLeaveBtns button:active{background:rgba(255,255,255,.2)}
 #pzLeaveAsk .pzLeaveBtns #pzLeaveOk:active{background:rgba(42,90,134,1)}
-/* 聊天改跟離開／地圖同一排（狀態列下左側圓形圖示），避開剝蚵拖曳與 ◀▶ */
-#pzChatFab{position:relative}
+/* 離開／地圖仍在狀態列下左側；聊天鈕改跟視窗一起對齊藥品／換位置／搖桿 */
+#pzChatFab{pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:var(--pz-fabs-top, calc(var(--sa-top) + 58px));bottom:auto;z-index:3;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border:1px solid rgba(232,246,255,.4);border-radius:50%;background:rgba(32,72,96,.5);color:#e8f6ff;font-weight:900;font-size:0;box-shadow:0 2px 8px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:inline-flex;align-items:center;justify-content:center}
+#pzChatFab:active{background:rgba(42,90,134,.72)}
+#pzChatFab .ic{width:18px;height:18px;background:currentColor}
+#pzChatFab .key{display:none}
 #pzChatFab .pzBadge{display:none;position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#e23b2f;color:#fff;font-size:10px;font-weight:900;line-height:16px;text-align:center;pointer-events:none;z-index:1}
 #pzChatFab.hasUnread .pzBadge{display:block}
 #pzChatFab.hasUnread{animation:pzFabPulse .9s ease-in-out 2}
+#pzChatFab.mobDock{right:auto;bottom:auto}
+#pzChatFab.dockHidden{display:none!important}
 @keyframes pzFabPulse{0%,100%{transform:scale(1)}40%{transform:scale(1.06)}}
 /* 聊天／預覽：對齊廣場 HUD（深藍毛玻璃＋淡藍細框，勿用橘金） */
 #pzChatPeek{display:none;pointer-events:auto;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:calc(var(--pz-fabs-top, calc(var(--sa-top) + 58px)) + 44px);bottom:auto;max-width:min(72vw,320px);background:rgba(22,28,36,.92);border:1.5px solid rgba(232,246,255,.28);border-radius:12px;padding:8px 10px;color:#e8f6ff;font-size:12px;line-height:1.35;z-index:3;cursor:pointer;box-shadow:0 8px 22px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
@@ -1507,9 +1512,14 @@ function buildUi() {
   #pzChat{width:min(52vw,340px)}
 }
 /* 手機對齊藥品／換位置／搖桿：位置由 placePlazaChat 寫入；高度不夠時紀錄區可縮小 */
-#pzChat.mobDock,#pzChatPeek.mobDock{right:auto;top:auto;bottom:auto}
+#pzChat.mobDock,#pzChatPeek.mobDock,#pzChatFab.mobDock{right:auto;top:auto;bottom:auto}
+#pzChat.kbLift{z-index:5;overflow:hidden;justify-content:flex-end}
+body.pzChatKb{overflow:hidden;overscroll-behavior:none}
+body.pzChatKb #previewBadge{visibility:hidden!important}
 #pzChat.open.mobDock{display:flex;flex-direction:column;min-height:0}
 #pzChat.mobDock.maxed #pzLog{flex:1 1 auto;min-height:28px;height:auto;max-height:none}
+#pzChat.kbLift #pzLog{flex:1 1 auto;min-height:0;height:auto;margin-bottom:4px}
+#pzChat.kbLift #pzRow{flex:0 0 auto}
 #pzChatHd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-size:12px;font-weight:800;color:#e8f6ff}
 #pzChatMin{pointer-events:auto;background:transparent;border:0;color:#c5d8ea;font-size:18px;line-height:1;padding:2px 6px;font-weight:900}
 #pzChatMin:active{color:#fff}
@@ -1571,7 +1581,6 @@ function buildUi() {
 <div id="pzLeftFabs">
 <button id="pzX" type="button" aria-label="離開廣場" title="離開廣場"><i class="ic ic-exit"></i></button>
 <button id="pzMapFab" type="button" aria-label="地圖" title="地圖 (M)"><i class="ic ic-pin"></i><span class="key"> (M)</span></button>
-<button id="pzChatFab" type="button" aria-label="聊天" title="聊天 (ENTER)"><i class="ic ic-chat"></i><span class="key"> (ENTER)</span><span class="pzBadge" aria-hidden="true">0</span></button>
 </div>
 <div id="pzLeaveAsk" role="dialog" aria-modal="true" aria-label="確定離開廣場？">
   <div class="pzLeaveBox">
@@ -1584,6 +1593,7 @@ function buildUi() {
 </div>
 <div id="pzHud">準備中…</div>
 <div id="pzNet" role="status" aria-live="polite"></div>
+<button id="pzChatFab" type="button" aria-label="聊天" title="聊天 (ENTER)"><i class="ic ic-chat"></i><span class="key"> (ENTER)</span><span class="pzBadge" aria-hidden="true">0</span></button>
 <button id="pzChatPeek" type="button" aria-label="打開聊天"></button>
 <div id="pzChat">
   <div id="pzChatHd"><span>${raceMode ? '對戰聊天' : partyMode ? '休閒房聊天' : '廣場聊天'}</span><button id="pzChatMin" type="button" aria-label="縮小">–</button></div>
@@ -1629,12 +1639,20 @@ function buildUi() {
   });
   // 電腦常駐列：點輸入框也進入／離開打字態
   inp.addEventListener('focus', () => {
-    if (!pcChatDock()) return;
-    chat.classList.add('open', 'pcDock', 'typing');
+    if (pcChatDock()) {
+      chat.classList.add('open', 'pcDock', 'typing');
+      return;
+    }
+    setChatKbLock(true);
+    placePlazaChat(true);
   });
   inp.addEventListener('blur', () => {
-    if (!pcChatDock()) return;
-    chat.classList.remove('typing');
+    if (pcChatDock()) {
+      chat.classList.remove('typing');
+      return;
+    }
+    setChatKbLock(false);
+    placePlazaChat(true);
   });
   ui.querySelector('#pzMapFab')!.addEventListener('click', () => plazaToggleMap());
   ui.querySelector('#pzMapClose')!.addEventListener('click', () => plazaCloseMap());
@@ -1684,7 +1702,8 @@ function setChatOpen(open: boolean) {
   }
   if (!fab) return;
   chat.classList.toggle('open', open);
-  fab.style.opacity = open ? '0.55' : '1';
+  fab.classList.toggle('dockHidden', open);
+  fab.style.opacity = '';
   if (open) {
     chatUnread = 0;
     hideChatPeek();
@@ -2642,20 +2661,59 @@ function syncPlazaHudLayout() {
 const CHAT_DOCK_GAP = 8;
 let plazaChatLayoutKey = '';
 let plazaChatHooksBound = false;
+let chatKbLocked = false;
+
+type ChatViewBox = { left: number; top: number; right: number; bottom: number };
+
+function chatKbActive() {
+  if (pcChatDock()) return false;
+  const inp = ui?.querySelector('#pzIn') as HTMLInputElement | null;
+  return !!inp && document.activeElement === inp;
+}
+
+/** 輸入框聚焦且可視區確實被鍵盤（或測試覆寫）縮小，才把視窗抬到鍵盤上方 */
+function chatKbVisible() {
+  if (!chatKbActive()) return false;
+  const w = window as Window & { __pzChatView?: ChatViewBox };
+  if (w.__pzChatView) return true;
+  const view = chatViewBox();
+  return (view.bottom - view.top) < innerHeight - 80;
+}
+
+function setChatKbLock(on: boolean) {
+  chatKbLocked = on;
+  document.body.classList.toggle('pzChatKb', on);
+  document.documentElement.style.overflow = on ? 'hidden' : '';
+  document.body.style.overflow = on ? 'hidden' : '';
+  window.scrollTo(0, 0);
+}
+
+function chatKbExtraPad() {
+  const w = window as Window & { __pzChatView?: ChatViewBox };
+  // 測試覆寫已代表可用底緣，不再另外扣附件列
+  if (w.__pzChatView) return 0;
+  // iOS 附件列（完成／前後項）有時不算進 visualViewport
+  const ua = navigator.userAgent || '';
+  const ios = /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+  return ios ? 44 : 8;
+}
 
 function clearPlazaChatDockEl(el: HTMLElement | null) {
   if (!el) return;
-  el.classList.remove('mobDock', 'maxed');
-  for (const k of ['left', 'right', 'top', 'bottom', 'width', 'max-width', 'max-height'] as const)
+  el.classList.remove('mobDock', 'maxed', 'dockHidden', 'kbLift');
+  for (const k of ['left', 'right', 'top', 'bottom', 'width', 'height', 'max-width', 'max-height', 'opacity'] as const)
     el.style.removeProperty(k);
 }
 
 function clearPlazaChatDockStyles() {
   clearPlazaChatDockEl(ui?.querySelector('#pzChat') as HTMLElement | null);
   clearPlazaChatDockEl(ui?.querySelector('#pzChatPeek') as HTMLElement | null);
+  clearPlazaChatDockEl(ui?.querySelector('#pzChatFab') as HTMLElement | null);
 }
 
-function chatViewBox() {
+function chatViewBox(): ChatViewBox {
+  const w = window as Window & { __pzChatView?: ChatViewBox };
+  if (w.__pzChatView) return w.__pzChatView;
   const vv = window.visualViewport;
   if (vv) {
     return { left: vv.offsetLeft, top: vv.offsetTop, right: vv.offsetLeft + vv.width, bottom: vv.offsetTop + vv.height };
@@ -2679,10 +2737,15 @@ function measureDockEl(el: HTMLElement) {
     maxWidth: el.style.maxWidth,
     maxHeight: el.style.maxHeight,
     width: el.style.width,
+    height: el.style.height,
   };
+  const hadMaxed = el.classList.contains('maxed');
+  const hadLift = el.classList.contains('kbLift');
+  el.classList.remove('maxed', 'kbLift');
   el.style.removeProperty('max-width');
   el.style.removeProperty('max-height');
   el.style.removeProperty('width');
+  el.style.removeProperty('height');
   const hide = getComputedStyle(el).display === 'none';
   if (hide) {
     el.style.visibility = 'hidden';
@@ -2696,6 +2759,9 @@ function measureDockEl(el: HTMLElement) {
   el.style.maxWidth = prev.maxWidth;
   el.style.maxHeight = prev.maxHeight;
   el.style.width = prev.width;
+  el.style.height = prev.height;
+  el.classList.toggle('maxed', hadMaxed);
+  el.classList.toggle('kbLift', hadLift);
   return { w, h };
 }
 
@@ -2726,8 +2792,22 @@ function applyChatDock(el: HTMLElement, mode: 'above' | 'right', dock: { left: n
   const padL = Math.max(view.left + sa.left + gap, root.left + sa.left + gap);
   const padR = Math.min(view.right - sa.right - gap, root.right - sa.right - gap);
   const fabs = visHudBox(ui!.querySelector('#pzLeftFabs') as HTMLElement | null);
-  const padT = Math.max(view.top + sa.top + gap, root.top + sa.top + gap, fabs ? fabs.bottom + gap : 0);
-  const padB = Math.min(view.bottom - gap, root.bottom - sa.bottom - gap);
+  const hardT = Math.max(view.top + sa.top + gap, root.top + sa.top + gap);
+  let padT = Math.max(hardT, fabs ? fabs.bottom + gap : 0);
+  const kb = chatKbVisible();
+  let padB = Math.min(view.bottom - gap, root.bottom - sa.bottom - gap);
+  if (kb) {
+    padB = Math.min(padB, view.bottom - gap - chatKbExtraPad());
+    const badge = visHudBox(document.getElementById('previewBadge'));
+    if (badge) padB = Math.min(padB, badge.top - gap);
+    const row = el.id === 'pzChat' ? el.querySelector('#pzRow') as HTMLElement | null : null;
+    const rowH = row ? Math.ceil(row.getBoundingClientRect().height) : 48;
+    const minH = rowH + 20;
+    if (padB - padT < minH) padT = hardT;
+    if (padB - padT < minH) padB = Math.min(view.bottom - gap, root.bottom - sa.bottom - gap);
+    if (badge) padB = Math.min(padB, badge.top - gap);
+    if (padB - padT < minH) padT = Math.max(hardT, padB - minH);
+  }
   const natural = measureDockEl(el);
   let w = natural.w;
   let h = natural.h;
@@ -2746,14 +2826,15 @@ function applyChatDock(el: HTMLElement, mode: 'above' | 'right', dock: { left: n
     if (left + w > padR) left = padR - w;
     if (left < padL) left = padL;
     if (top + h > padB) top = padB - h;
-    // 直向不可落到錨點上（搖桿／藥品）；若被頂欄擋住只貼齊 padT，不再整窗拉到左上
-    if (mode === 'above' && top + h > dock.top - gap) top = dock.top - gap - h;
+    // 打字時改貼齊可視區底部（鍵盤上方），不要再被搖桿／藥品錨點拉回去
+    if (!kb && mode === 'above' && top + h > dock.top - gap) top = dock.top - gap - h;
+    if (kb && top + h > padB) top = padB - h;
     if (top < padT) top = padT;
   };
   clampPad();
 
-  // 只處理「會蓋到建議位置」的按鈕；不要把畫面上方遠處的 ◀▶／狀態列當成長距離抬升目標
-  for (let pass = 0; pass < 4; pass++) {
+  // 打字＋鍵盤升起時，錨點（搖桿等）多半已在鍵盤下方，不再為避讓把它往上抬
+  if (!kb) for (let pass = 0; pass < 4; pass++) {
     let moved = false;
     for (const o of obstacles) {
       const box = { left, right: left + w, top, bottom: top + h };
@@ -2781,16 +2862,19 @@ function applyChatDock(el: HTMLElement, mode: 'above' | 'right', dock: { left: n
 
   el.classList.add('mobDock');
   el.classList.toggle('maxed', h + 0.5 < natural.h);
+  if (el.id === 'pzChat') el.classList.toggle('kbLift', kb);
   el.style.left = `${Math.round(left - root.left)}px`;
   el.style.top = `${Math.round(top - root.top)}px`;
   el.style.right = 'auto';
   el.style.bottom = 'auto';
   el.style.maxWidth = `${Math.round(w)}px`;
-  if (h + 0.5 < natural.h) el.style.maxHeight = `${Math.round(h)}px`;
+  if (h + 0.5 < natural.h || kb) el.style.maxHeight = `${Math.round(h)}px`;
   else el.style.removeProperty('max-height');
+  if (kb && el.id === 'pzChat') el.style.height = `${Math.round(h)}px`;
+  else el.style.removeProperty('height');
 }
 
-/** 手機：直向坐著在藥品／道具上方、站著在搖桿上方；橫向坐著在換位置右方、站著在搖桿右方。電腦維持左下常駐列。 */
+/** 手機：聊天鈕與視窗同一錨點——直向坐著在藥品／道具上方、站著在搖桿上方；橫向坐著在換位置右方、站著在搖桿右方。電腦維持左下常駐列。 */
 function placePlazaChat(force = false) {
   if (!ui) { plazaChatLayoutKey = ''; return; }
   const chat = ui.querySelector('#pzChat') as HTMLElement | null;
@@ -2835,8 +2919,8 @@ function placePlazaChat(force = false) {
     mode = 'above';
   }
 
-  const vv = window.visualViewport;
-  const vkey = vv ? `${Math.round(vv.offsetLeft)}|${Math.round(vv.offsetTop)}|${Math.round(vv.width)}|${Math.round(vv.height)}` : `${innerWidth}|${innerHeight}`;
+  const box = chatViewBox();
+  const vkey = `${Math.round(box.left)}|${Math.round(box.top)}|${Math.round(box.right)}|${Math.round(box.bottom)}`;
   if (!anchor) {
     const key = `css|${vkey}`;
     if (!force && key === plazaChatLayoutKey) return;
@@ -2854,21 +2938,36 @@ function placePlazaChat(force = false) {
     }
   }
 
+  const fab = ui.querySelector('#pzChatFab') as HTMLElement | null;
   const open = chat.classList.contains('open') ? 1 : 0;
   const peekOn = peek?.classList.contains('on') ? 1 : 0;
-  const key = `${land ? 'L' : 'P'}|${walking ? 'W' : 'S'}|${mode}|${Math.round(dock.left)}|${Math.round(dock.top)}|${Math.round(dock.right)}|${Math.round(dock.bottom)}|${open}|${peekOn}|${vkey}`;
+  const kb = chatKbVisible() ? 1 : 0;
+  const key = `${land ? 'L' : 'P'}|${walking ? 'W' : 'S'}|${mode}|${Math.round(dock.left)}|${Math.round(dock.top)}|${Math.round(dock.right)}|${Math.round(dock.bottom)}|${open}|${peekOn}|${kb}|${vkey}`;
   if (!force && key === plazaChatLayoutKey) return;
   plazaChatLayoutKey = key;
 
   const obstacles = collectChatObstacles(skip);
+  // 開著：視窗佔錨點；收合：聊天鈕佔同一錨點，未讀預覽貼在鈕上方
   applyChatDock(chat, mode, dock, obstacles);
-  if (peek) applyChatDock(peek, mode, dock, obstacles);
+  if (fab) {
+    fab.classList.add('mobDock');
+    fab.classList.toggle('dockHidden', !!open);
+    if (!open) applyChatDock(fab, mode, dock, obstacles);
+  }
+  if (peek) {
+    const fabBox = !open && fab ? visHudBox(fab) : null;
+    applyChatDock(peek, fabBox ? 'above' : mode, fabBox ?? dock, obstacles);
+  }
 }
 
 function ensurePlazaChatLayoutHooks() {
   if (plazaChatHooksBound) return;
   plazaChatHooksBound = true;
-  const bump = () => { plazaChatLayoutKey = ''; if (active) placePlazaChat(true); };
+  const bump = () => {
+    if (chatKbLocked || chatKbActive()) window.scrollTo(0, 0);
+    plazaChatLayoutKey = '';
+    if (active) placePlazaChat(true);
+  };
   addEventListener('resize', bump);
   addEventListener('orientationchange', () => setTimeout(bump, 80));
   matchMedia('(orientation: landscape)').addEventListener('change', bump);
