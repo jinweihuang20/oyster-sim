@@ -2705,10 +2705,12 @@ function boxesOverlap(a: { left: number; right: number; top: number; bottom: num
 
 function collectChatObstacles(skip: HTMLElement[]) {
   const skipSet = new Set(skip.filter(Boolean));
-  const ids = ['joy', 'medBtn', 'standBtn', 'giveUp', 'poseBtn', 'jumpBtn', 'crouchBtn', 'lieBtn', 'flagBtn', 'flagPullBtn', 'seatCard', 'rotL', 'rotR', 'pzLeftFabs'];
+  // 不含 #pzLeftFabs：頂部離開／地圖列已用 padT 避開。若把它當障礙物，
+  // 「上方」模式會把視窗一路抬到左上角，看起來跟舊版沒變。
+  const ids = ['joy', 'medBtn', 'standBtn', 'giveUp', 'poseBtn', 'jumpBtn', 'crouchBtn', 'lieBtn', 'flagBtn', 'flagPullBtn', 'seatCard', 'rotL', 'rotR'];
   const out: DOMRect[] = [];
   for (const id of ids) {
-    const el = (id === 'pzLeftFabs' ? ui?.querySelector('#pzLeftFabs') : document.getElementById(id)) as HTMLElement | null;
+    const el = document.getElementById(id);
     if (!el || skipSet.has(el)) continue;
     const r = visHudBox(el);
     if (r) out.push(r);
@@ -2734,51 +2736,48 @@ function applyChatDock(el: HTMLElement, mode: 'above' | 'right', dock: { left: n
   if (w > maxW) w = maxW;
   if (h > maxH) h = maxH;
 
+  // 先貼齊錨點：直向＝底緣在錨點上方；橫向＝左緣在錨點右方、底緣對齊
   let left = mode === 'above' ? dock.left : dock.right + gap;
   let top = mode === 'above' ? dock.top - gap - h : dock.bottom - h;
 
-  const liftAbove = (boxTop: number) => {
-    top = boxTop - gap - h;
-  };
-
-  // 直向「上方」：若中間還有放棄這顆／坐這裡等，改貼在那些之上，避免蓋住
-  if (mode === 'above') {
-    for (const o of obstacles) {
-      const xHit = Math.min(Math.max(dock.right, left + w), o.right) - Math.max(Math.min(dock.left, left), o.left) > 4;
-      if (xHit && o.bottom <= dock.top + 8) liftAbove(Math.min(o.top, dock.top));
-    }
-  }
-
   const clampPad = () => {
     if (w > padR - padL) w = padR - padL;
+    if (h > padB - padT) h = padB - padT;
     if (left + w > padR) left = padR - w;
     if (left < padL) left = padL;
     if (top + h > padB) top = padB - h;
-    if (top < padT) {
-      // 抬到安全區頂仍會蓋住中間物件時，縮短高度讓出下方按鈕
-      top = padT;
-      h = Math.min(h, padB - padT);
-    }
+    // 直向不可落到錨點上（搖桿／藥品）；若被頂欄擋住只貼齊 padT，不再整窗拉到左上
+    if (mode === 'above' && top + h > dock.top - gap) top = dock.top - gap - h;
+    if (top < padT) top = padT;
   };
   clampPad();
 
-  for (const o of obstacles) {
-    const box = { left, right: left + w, top, bottom: top + h };
-    if (!boxesOverlap(box, o, gap)) continue;
-    if (o.left >= left + 40) {
-      const cap = o.left - gap - left;
-      if (cap >= 160) { w = Math.min(w, cap); continue; }
+  // 只處理「會蓋到建議位置」的按鈕；不要把畫面上方遠處的 ◀▶／狀態列當成長距離抬升目標
+  for (let pass = 0; pass < 4; pass++) {
+    let moved = false;
+    for (const o of obstacles) {
+      const box = { left, right: left + w, top, bottom: top + h };
+      if (!boxesOverlap(box, o, gap)) continue;
+      if (o.left > left + 48) {
+        const cap = o.left - gap - left;
+        if (cap >= 160) { w = Math.min(w, cap); moved = true; continue; }
+      }
+      if (mode === 'above' && o.bottom > box.top && o.top < dock.top + 4) {
+        const above = o.top - gap - h;
+        if (above >= padT) {
+          if (above < top) { top = above; moved = true; }
+        } else {
+          const room = o.top - gap - padT;
+          if (room >= 72 && room < h) { h = room; top = padT; moved = true; }
+        }
+      } else if (mode === 'right' && o.left >= dock.right - 1) {
+        const cap = o.left - gap - left;
+        if (cap >= 160) { w = Math.min(w, cap); moved = true; }
+      }
     }
-    if (mode === 'above' && o.bottom <= dock.top + 8) {
-      const room = o.top - gap - padT;
-      if (room >= 72) { h = Math.min(h, room); top = o.top - gap - h; }
-      else liftAbove(o.top);
-    } else if (o.top >= top + 40) {
-      const room = o.top - gap - top;
-      if (room >= 72) h = Math.min(h, room);
-    }
+    clampPad();
+    if (!moved) break;
   }
-  clampPad();
 
   el.classList.add('mobDock');
   el.classList.toggle('maxed', h + 0.5 < natural.h);
