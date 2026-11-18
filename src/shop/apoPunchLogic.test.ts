@@ -10,7 +10,10 @@ import {
   resolveApoPunchTimer,
   plazaPunchProceed,
   plazaPunchLocalSteal,
+  pickPlazaSeatedApoTarget,
+  pickPlazaNearestApoTarget,
   type ApoPunchGateInput,
+  type PlazaApoCand,
 } from './apoPunchLogic.ts';
 
 const base = (over: Partial<ApoPunchGateInput> = {}): ApoPunchGateInput => ({
@@ -127,4 +130,61 @@ test('碗裡有肉就本機偷到，不管伺服器 ok／slow／失敗；空碗�
   assert.equal(plazaPunchLocalSteal(null, true), true);
   assert.equal(plazaPunchLocalSteal({ ok: true }, false), false);
   assert.equal(plazaPunchLocalSteal({ ok: false, err: 'slow' }, false), false);
+});
+
+const ama = (over: Partial<PlazaApoCand> & Pick<PlazaApoCand, 'connId'>): PlazaApoCand => ({
+  pileId: 1, count: 3, dist2: 1, isNpc: true, phase: 'pick', ...over,
+});
+
+test('坐下同桌多個有肉的阿婆會隨機，連續兩次不重複', () => {
+  const list = [
+    ama({ connId: 'a', dist2: 1, count: 3 }),
+    ama({ connId: 'b', dist2: 4, count: 2 }),
+    ama({ connId: 'c', dist2: 9, count: 1 }),
+  ];
+  const first = pickPlazaSeatedApoTarget(list, 64, 1, null, () => 0);
+  assert.equal(first?.connId, 'a');
+  const second = pickPlazaSeatedApoTarget(list, 64, 1, first!.connId, () => 0);
+  assert.equal(second?.connId, 'b');
+  const third = pickPlazaSeatedApoTarget(list, 64, 1, second!.connId, () => 0.99);
+  assert.ok(third && third.connId !== 'b');
+});
+
+test('只有一個碗裡有肉時，就算上次是她也還是打她', () => {
+  const list = [ama({ connId: 'a', count: 3 }), ama({ connId: 'b', count: 0, dist2: 0.5 })];
+  const r = pickPlazaSeatedApoTarget(list, 64, 1, 'a', () => 0);
+  assert.equal(r?.connId, 'a');
+});
+
+test('同桌沒肉才從空碗抽，不打別桌有肉的阿婆', () => {
+  const list = [
+    ama({ connId: 'a', pileId: 1, count: 0, dist2: 4 }),
+    ama({ connId: 'b', pileId: 1, count: 0, dist2: 1 }),
+    ama({ connId: 'c', pileId: 2, count: 9, dist2: 2 }),
+  ];
+  const r0 = pickPlazaSeatedApoTarget(list, 64, 1, null, () => 0);
+  const r1 = pickPlazaSeatedApoTarget(list, 64, 1, null, () => 0.99);
+  assert.equal(r0?.connId, 'a');
+  assert.equal(r1?.connId, 'b');
+});
+
+test('略過阿伯、被載走、登月，以及超出距離的', () => {
+  const list = [
+    ama({ connId: 'aber', aber: true, dist2: 0.2 }),
+    ama({ connId: 'moon', phase: 'moon', dist2: 0.3 }),
+    ama({ connId: 'carried', carriedBy: 'p1', dist2: 0.4 }),
+    ama({ connId: 'far', dist2: 80, count: 9 }),
+    ama({ connId: 'ok', dist2: 3, count: 2 }),
+  ];
+  const r = pickPlazaSeatedApoTarget(list, 64, 1, null, () => 0);
+  assert.equal(r?.connId, 'ok');
+});
+
+test('走著仍打範圍內最近的，含空碗，不改成隨機', () => {
+  const list = [
+    ama({ connId: 'far-meat', dist2: 20, count: 9 }),
+    ama({ connId: 'near-empty', dist2: 2, count: 0 }),
+  ];
+  const r = pickPlazaNearestApoTarget(list, 64);
+  assert.equal(r?.connId, 'near-empty');
 });

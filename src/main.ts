@@ -41,6 +41,7 @@ import {
   gearOn, knifeNow, umbNow, bowlNow, petNow, makePet, petRidesHead, petWorldScale, tickPetAnim,
   APO_ID, apoLine, apoScold, pickApoLine, pickApoScold, playApoPunch, apoHitSeconds,
   apoPunchAllowedFrom, tickApoPunchTimer, resolveApoPunchTimer, plazaPunchLocalSteal,
+  pickPlazaSeatedApoTarget, pickPlazaNearestApoTarget,
   AMEI_ID, AMEI_UMB_DELAY,
   fetchPrices, px, pxHtml, pxCd, openShopPx, payFor, fetchItemStats, onItemStatApply,
   ensureStarterWeapons, ownsWeapon, ownedWeaponIds, weaponNow,
@@ -588,6 +589,8 @@ let petPunchIn = 0;
 let petTalkIn = 0;
 /** 工寮貓拳輪流打阿婆的上一名下標 */
 let yardApoTurnI = -1;
+/** 廣場坐下貓拳上一名阿婆，用來避免連續打同一個 */
+let plazaApoLastId = '';
 let apoBub: WorldLabel | null = null;
 let apoBubT = 0;
 /** 寵物自動撐傘剩餘秒數（不走手痠、不佔用玩家按住狀態） */
@@ -4735,18 +4738,36 @@ function yardApoTarget(): Npc | null {
   yardApoTurnI = next;
   return npcs[next];
 }
+function plazaApoSeatedPile(): number | null {
+  if (!plazaMode || !isPlazaActive() || walking || !plazaSeated()) return null;
+  const s = plazaMySeat();
+  if (!s || pileIsGrill(s.pileId) || isSmokePile(s.pileId) || isMgPile(s.pileId)) return null;
+  return s.pileId;
+}
 function plazaApoTarget(): PlazaAimTarget | null {
   const from = new THREE.Vector3();
   petAnchor.getWorldPosition(from);
-  let best: PlazaAimTarget | null = null, bestD = APO_PUNCH_RANGE * APO_PUNCH_RANGE;
-  for (const t of plazaAimTargets(true)) {
-    if (!t.isNpc || t.phase === 'moon' || t.carriedBy) continue;
-    if (isPlazaAber(t)) continue;
-    const dx = t.head.x - from.x, dy = t.head.y - from.y, dz = t.head.z - from.z;
-    const d = dx * dx + dy * dy + dz * dz;
-    if (d < bestD) { best = t; bestD = d; }
-  }
-  return best;
+  const range2 = APO_PUNCH_RANGE * APO_PUNCH_RANGE;
+  const cands = plazaAimTargets(true).map((tgt) => {
+    const dx = tgt.head.x - from.x, dy = tgt.head.y - from.y, dz = tgt.head.z - from.z;
+    return {
+      t: tgt,
+      connId: tgt.connId,
+      pileId: tgt.pileId,
+      count: tgt.count,
+      dist2: dx * dx + dy * dy + dz * dz,
+      isNpc: tgt.isNpc,
+      phase: tgt.phase,
+      carriedBy: tgt.carriedBy,
+      aber: isPlazaAber(tgt),
+    };
+  });
+  const pileId = plazaApoSeatedPile();
+  const hit = pileId != null
+    ? pickPlazaSeatedApoTarget(cands, range2, pileId, plazaApoLastId)
+    : pickPlazaNearestApoTarget(cands, range2);
+  if (hit) plazaApoLastId = hit.connId;
+  return hit?.t ?? null;
 }
 
 async function tryApoPunch(): Promise<boolean> {

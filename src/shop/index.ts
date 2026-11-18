@@ -10,7 +10,8 @@ export { playApoPunch, apoHitSeconds } from './apoFx';
 export {
   APO_PUNCH_INTERVAL, APO_PUNCH_RETRY, APO_PUNCH_PENDING,
   apoPunchAllowedFrom, tickApoPunchTimer, resolveApoPunchTimer, apoPunchTimerOnWake,
-  plazaPunchProceed, plazaPunchLocalSteal, type ApoPunchGateInput,
+  plazaPunchProceed, plazaPunchLocalSteal, pickPlazaSeatedApoTarget, pickPlazaNearestApoTarget,
+  type ApoPunchGateInput, type PlazaApoCand,
 } from './apoPunchLogic';
 export { AMEI_ID, AMEI_UMB_DELAY, isAmeiId } from './ameiFx';
 export { renderPetThumb } from './petThumb';
