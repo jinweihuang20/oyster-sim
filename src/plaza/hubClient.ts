@@ -106,6 +106,7 @@ function normShell(e: any): PlazaShellEvent {
     toX: fin(e?.toX ?? e?.ToX),
     toY: fin(e?.toY ?? e?.ToY),
     toZ: fin(e?.toZ ?? e?.ToZ),
+    reflect: typeof (e?.reflect ?? e?.Reflect) === 'boolean' ? !!(e?.reflect ?? e?.Reflect) : undefined,
   };
 }
 

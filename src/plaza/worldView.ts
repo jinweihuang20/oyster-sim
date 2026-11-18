@@ -153,6 +153,8 @@ export type PlazaWorldView = {
   aimTargets: (leisureNpc?: boolean, standPlayers?: boolean) => PlazaAimTarget[];
   /** 某遠端（玩家／阿婆）目前頭部世界座標；飛殼追著移動中的人 */
   remoteHead: (connId: string) => { x: number; y: number; z: number } | null;
+  /** 某遠端是否為阿婆；找不到回 null */
+  remoteIsNpc: (connId: string) => boolean | null;
   /** 走動碰撞用：遠端 `[x, z, radius, isLie]`；isLie=1 時跳躍夠高可越过 */
   walkBodies: () => [number, number, number, number][];
   /** 遠端／廣場阿婆的頭，供鏡頭靠近時暫時藏起 */
@@ -1240,6 +1242,12 @@ export function createPlazaWorldView(
       const h = headWorld(r, _remHead);
       return Number.isFinite(h.x + h.y + h.z) ? { x: h.x, y: h.y, z: h.z } : null;
     }
+    return null;
+  }
+
+  function remoteIsNpc(connId: string) {
+    if (!connId) return null;
+    for (const r of remotes.values()) if ((r.connId || r.key) === connId) return !!r.isNpc;
     return null;
   }
 
@@ -3081,7 +3089,7 @@ function hashPid(pid: string) {
   }
   return {
     root, pileGroups, syncRoster, upsert, remove, pruneSelf, applyPose, applyMove, setPhase, highlight, highlightNear, hitPile, grill,
-    syncFlags: flags.sync, aimTargets, remoteHead, walkBodies, moonLaunch, showChat, showPetChat, playPetPunch, setSelfPose, setSelfBody, setSelfCushion,
+    syncFlags: flags.sync, aimTargets, remoteHead, remoteIsNpc, walkBodies, moonLaunch, showChat, showPetChat, playPetPunch, setSelfPose, setSelfBody, setSelfCushion,
     playThrowFx, applyRemotePuff, setSeatWishes, setShedDoorState: (loc, st) => {
       shedDoorState.set(loc, st);
       shedRow?.setDoorState(loc, st);

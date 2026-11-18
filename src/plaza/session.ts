@@ -502,6 +502,11 @@ export function plazaRemoteHead(connId: string) {
   return view?.remoteHead(connId) ?? null;
 }
 
+/** 遠端是否為阿婆；找不到回 null */
+export function plazaRemoteIsNpc(connId: string) {
+  return view?.remoteIsNpc(connId) ?? null;
+}
+
 export async function plazaThrowAt(
   targetConnId: string,
   from: { x: number; y: number; z: number },

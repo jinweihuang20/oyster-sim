@@ -69,6 +69,8 @@ export type PlazaShellEvent = {
   toConnId: string;
   fromX: number; fromY: number; fromZ: number;
   toX: number; toY: number; toZ: number;
+  /** 完美反彈飛回（伺服器新版才有；undefined＝舊伺服器，不知道） */
+  reflect?: boolean;
 };
 
 /** 廣場被殼砸中噴血 */
