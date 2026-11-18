@@ -8,7 +8,7 @@ export {
   installCloudLifecycle, onCloudStatus, cloudStatus, cloudApplyRemote, cloudSetPid,
 } from './cloudSync';
 export {
-  authInit, authBoot, setAuthBootOpts, startGoogle, startProvider, refreshAuthStatus, onAuthChange, authChoicePending, setAuthChoicePending,
+  authInit, authBoot, setAuthBootOpts, startGoogle, startProvider, requestEmailCode, verifyEmailCode, refreshAuthStatus, onAuthChange, authChoicePending, setAuthChoicePending,
   authConfigured, authBound, authProvider, authEnabledProviders, authLinks, logoutThisDevice, unbindAccount,
   chooseKeepCloud, chooseKeepDevice, summaryLines, isStandaloneApp, isIosDevice,
   type SaveSummary, type AuthBootOpts,
@@ -25,4 +25,4 @@ export {
   type ShiftDraftBody, type ShiftDraftMode,
 } from './shiftDraft';
 export { installNoZoom } from './nozoom';
-export { AUTH_PROVIDERS, providerDef, providerName, visibleProviders } from './authProviders';
+export { AUTH_PROVIDERS, providerDef, providerName, visibleProviders, providerKind, maskEmail, linkLabel, type AuthLink } from './authProviders';

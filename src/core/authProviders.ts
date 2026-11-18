@@ -3,11 +3,16 @@
 
 export type AuthProviderId = 'google' | 'discord' | 'github' | 'email';
 
+export type AuthProviderKind = 'oauth' | 'code';
+
 export type AuthProviderDef = {
   id: AuthProviderId;
   name: string;
   iconSvg: string;
+  kind: AuthProviderKind;
 };
+
+export type AuthLink = { provider: string; hint?: string };
 
 const svg = (paths: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
@@ -16,21 +21,25 @@ export const AUTH_PROVIDERS: AuthProviderDef[] = [
   {
     id: 'google',
     name: 'Google',
+    kind: 'oauth',
     iconSvg: svg('<circle cx="12" cy="12" r="8"/><path d="M16 12h-5"/><path d="M12 8.5a3.5 3.5 0 1 0 3.2 5"/>'),
   },
   {
     id: 'discord',
     name: 'Discord',
+    kind: 'oauth',
     iconSvg: svg('<rect x="4" y="6" width="16" height="12" rx="4"/><circle cx="9.5" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="14.5" cy="12" r="1.15" fill="currentColor" stroke="none"/><path d="m8 18.5 1-2.4M16 18.5l-1-2.4"/>'),
   },
   {
     id: 'github',
     name: 'GitHub',
+    kind: 'oauth',
     iconSvg: svg('<circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="12" r="2.2"/><path d="M6 8.2v7.6"/><path d="M8.15 7.15c3.1 0 5.15 1.55 7.55 3.2"/>'),
   },
   {
     id: 'email',
     name: 'Email',
+    kind: 'code',
     iconSvg: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1.5"/><path d="m4.2 7.2 7.8 6 7.8-6"/>'),
   },
 ];
@@ -61,21 +70,48 @@ export function parseEnabledProviders(j: unknown): string[] {
   return [];
 }
 
-export function parseLinkedProviders(j: unknown): string[] {
+export function parseLinkedProviders(j: unknown): AuthLink[] {
   if (!j || typeof j !== 'object') return [];
   const rec = j as Record<string, unknown>;
   if (Array.isArray(rec.links)) {
-    const out: string[] = [];
+    const out: AuthLink[] = [];
     for (const item of rec.links) {
       if (typeof item === 'string') {
-        if (item) out.push(item);
+        if (item) out.push({ provider: item });
       } else if (item && typeof item === 'object' && 'provider' in item) {
-        const p = String((item as { provider?: unknown }).provider || '').trim();
-        if (p) out.push(p);
+        const row = item as { provider?: unknown; hint?: unknown };
+        const p = String(row.provider || '').trim();
+        const hint = String(row.hint || '').trim();
+        if (p) out.push(hint ? { provider: p, hint } : { provider: p });
       }
     }
     return out;
   }
-  if (rec.bound && rec.provider) return [String(rec.provider)];
+  if (rec.bound && rec.provider) return [{ provider: String(rec.provider) }];
   return [];
+}
+
+export function providerKind(id: string): AuthProviderKind {
+  return providerDef(id)?.kind || 'oauth';
+}
+
+/** 顯示用：本機部分只留第一個字加星號，例如 m***@gmail.com。 */
+export function maskEmail(email: string): string {
+  const at = email.indexOf('@');
+  if (at < 1) return '***';
+  return `${email[0]}***@${email.slice(at + 1)}`;
+}
+
+export function isLikelyEmail(raw: string): boolean {
+  const s = raw.trim();
+  const at = s.indexOf('@');
+  if (at < 1 || at !== s.lastIndexOf('@')) return false;
+  const domain = s.slice(at + 1);
+  const dot = domain.lastIndexOf('.');
+  return dot > 0 && dot < domain.length - 1 && s.length <= 254;
+}
+
+export function linkLabel(link: AuthLink): string {
+  const name = providerName(link.provider);
+  return link.hint ? `${name}（${link.hint}）` : name;
 }

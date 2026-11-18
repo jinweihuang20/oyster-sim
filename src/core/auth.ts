@@ -3,7 +3,7 @@
 
 import { cloudFlush } from './cloudSync';
 import { readOysterAuth, canonicalReturnUrl, stripOysterAuthFromUrl } from './authReturn';
-import { parseEnabledProviders, parseLinkedProviders, providerName } from './authProviders';
+import { parseEnabledProviders, parseLinkedProviders, providerName, providerKind, isLikelyEmail, type AuthLink } from './authProviders';
 
 const API = 'https://game-status.gwtech.org/s';
 const TOKEN_KEY = 'oyster-auth-token';
@@ -55,7 +55,7 @@ let configured = false;
 let bound = false;
 let provider = '';
 let enabledProviders: string[] = [];
-let links: string[] = [];
+let links: AuthLink[] = [];
 let listeners: Array<() => void> = [];
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let pollStartedAt = 0;
@@ -82,6 +82,11 @@ export const authLinks = () => links.slice();
 
 function labelOf(id?: string | null): string {
   return providerName(id || provider || 'google');
+}
+
+function rememberLink(id: string) {
+  if (!id) return;
+  if (!links.some((l) => l.provider === id)) links = [...links, { provider: id }];
 }
 export const authToken = () => {
   try { return LS?.getItem(TOKEN_KEY) || ''; } catch { return ''; }
@@ -205,7 +210,7 @@ export async function refreshAuthStatus(): Promise<void> {
       bound = !!j.bound;
       provider = String(j.provider || '');
       links = parseLinkedProviders(j);
-      if (bound && links.length === 0 && provider) links = [provider];
+      if (bound && links.length === 0 && provider) links = [{ provider }];
     } else if (r.status === 401 || j?.err === 'auth') {
       clearLocalAuth();
     }
@@ -218,6 +223,7 @@ export async function startProvider(id: string, mode: 'bind' | 'restore', opts?:
   await refreshAuthStatus();
   const name = labelOf(id);
   if (!configured || !enabledProviders.includes(id)) return { ok: false, err: `還沒開放${name}綁定` };
+  if (providerKind(id) === 'code') return { ok: false, err: `請在設定裡輸入 ${name} 和驗證碼` };
   const wait = crypto.randomUUID();
   try {
     LS.setItem(WAIT_KEY, wait);
@@ -236,6 +242,69 @@ export async function startProvider(id: string, mode: 'bind' | 'restore', opts?:
 
 export async function startGoogle(mode: 'bind' | 'restore', opts?: AuthBootOpts): Promise<{ ok: true } | { ok: false; err: string }> {
   return startProvider('google', mode, opts);
+}
+
+function emailErr(err: string, retryAfter?: number): string {
+  switch (err) {
+    case 'bad_email': return '請輸入正確的 Email';
+    case 'cooldown': return `請稍候再寄${retryAfter ? `（還要 ${retryAfter} 秒）` : ''}`;
+    case 'rate': return '寄太多次了，請稍後再試';
+    case 'send_failed': return '信沒有寄出，請稍後再試';
+    case 'not_configured': return '還沒開放 Email 綁定';
+    case 'bad_code': return '驗證碼不對，請再試一次';
+    case 'expired': return '驗證碼已過期，請重新寄一組';
+    case 'too_many': return '試太多次了，請重新寄一組驗證碼';
+    default: return '沒有成功，請稍後再試';
+  }
+}
+
+export async function requestEmailCode(email: string, mode: 'bind' | 'restore'): Promise<{ ok: true; retryAfter: number; hint: string } | { ok: false; err: string; retryAfter?: number }> {
+  if (!isLikelyEmail(email)) return { ok: false, err: '請輸入正確的 Email' };
+  try {
+    const r = await fetch(`${API}/auth/email/start`, {
+      method: 'POST', mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ email: email.trim(), mode, pid }),
+    });
+    if (r.status === 429) return { ok: false, err: '寄太多次了，請稍後再試' };
+    const j = await readJson(r);
+    if (j?.ok) return { ok: true, retryAfter: Number(j.retryAfter) || 60, hint: String(j.hint || '') };
+    const retryAfter = Number(j?.retryAfter) || undefined;
+    return { ok: false, err: emailErr(String(j?.err || 'fail'), retryAfter), retryAfter };
+  } catch {
+    return { ok: false, err: '連線失敗' };
+  }
+}
+
+export async function verifyEmailCode(email: string, code: string, mode: 'bind' | 'restore', opts?: AuthBootOpts): Promise<{ ok: true } | { ok: false; err: string }> {
+  if (opts) setAuthBootOpts(opts);
+  const digits = String(code || '').replace(/\D/g, '');
+  if (digits.length !== 6) return { ok: false, err: '請輸入 6 位數驗證碼' };
+  if (!isLikelyEmail(email)) return { ok: false, err: '請輸入正確的 Email' };
+  try {
+    const r = await fetch(`${API}/auth/email/verify`, {
+      method: 'POST', mode: 'cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ email: email.trim(), code: digits, mode, pid }),
+    });
+    if (r.status === 429) return { ok: false, err: '試太多次了，請稍後再試' };
+    const j = await readJson(r);
+    if (!r.ok || !j?.ok || !j.token) return { ok: false, err: emailErr(String(j?.err || 'fail')) };
+    const ex: ExchangeOk = {
+      ok: true,
+      token: String(j.token),
+      provider: String(j.provider || 'email'),
+      mode: String(j.mode || mode),
+      bound: !!j.bound,
+      pid: j.pid ? String(j.pid) : null,
+      startPid: j.startPid ? String(j.startPid) : null,
+    };
+    setToken(ex.token);
+    await finishLogin(ex, lastOpts, false);
+    return { ok: true };
+  } catch {
+    return { ok: false, err: '連線失敗' };
+  }
 }
 
 async function exchange(body: { code?: string; wait?: string }): Promise<ExchangeOk | { ok: false; err: string }> {
@@ -310,7 +379,7 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
   const markBound = (boundPid?: string) => {
     bound = true;
     provider = ex.provider || 'google';
-    if (!links.includes(provider)) links = [...links, provider];
+    rememberLink(provider);
     notify();
     if (!bounce) tellOnce(opts, 'bound:' + ex.token, `已綁定${labelOf(ex.provider)}，換裝置也可以用它取回進度。`);
     // 綁定後立刻上傳，否則之後寫入要帶憑證，雲端可能是空的，另一台取回就沒資料。
@@ -361,7 +430,7 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
     if (j?.ok) {
       bound = true;
       provider = ex.provider || 'google';
-      if (!links.includes(provider)) links = [...links, provider];
+      rememberLink(provider);
       notify();
       if (!bounce && !j.cloud?.data) tellOnce(opts, 'empty:' + ex.token, '已取回綁定，但雲端還沒有這份存檔。請先回原本那台打開遊戲，確認同步成功後再試一次。');
       return false;
@@ -513,7 +582,7 @@ export async function chooseKeepDevice(opts: AuthBootOpts): Promise<boolean> {
     if (j?.ok) {
       bound = true;
       if (!provider) provider = 'google';
-      if (!links.includes(provider)) links = [...links, provider];
+      rememberLink(provider);
       notify();
       opts.onMessage?.('已改綁到這台的進度。原本雲端那份還在，可用同步碼取回。');
       return false;

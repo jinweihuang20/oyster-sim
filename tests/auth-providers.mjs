@@ -13,7 +13,7 @@ const mod = { exports: {} };
 const fn = new Function('module', 'exports', 'require', code);
 fn(mod, mod.exports, require);
 const {
-  AUTH_PROVIDERS, providerName, visibleProviders, parseEnabledProviders, parseLinkedProviders,
+  AUTH_PROVIDERS, providerName, providerKind, visibleProviders, parseEnabledProviders, parseLinkedProviders, maskEmail, linkLabel,
 } = mod.exports;
 
 let failed = 0;
@@ -31,9 +31,15 @@ eq(visibleProviders([]), [], 'none enabled');
 eq(parseEnabledProviders({ ok: true, google: true, providers: ['google'] }), ['google'], 'providers list');
 eq(parseEnabledProviders({ ok: true, google: true }), ['google'], 'back-compat google:true');
 eq(parseEnabledProviders({ ok: false, google: false, providers: [] }), [], 'empty when not configured');
-eq(parseLinkedProviders({ bound: true, provider: 'google', links: [{ provider: 'google' }] }), ['google'], 'links objects');
-eq(parseLinkedProviders({ bound: true, provider: 'google' }), ['google'], 'back-compat single provider');
+eq(parseLinkedProviders({ bound: true, provider: 'google', links: [{ provider: 'google' }] }), [{ provider: 'google' }], 'links objects');
+eq(parseLinkedProviders({ bound: true, provider: 'google' }), [{ provider: 'google' }], 'back-compat single provider');
 eq(parseLinkedProviders({ bound: false }), [], 'unbound has no links');
+eq(parseLinkedProviders({ bound: true, provider: 'email', links: [{ provider: 'email', hint: 'm***@gmail.com' }] }), [{ provider: 'email', hint: 'm***@gmail.com' }], 'email hint');
+eq(maskEmail('mike@gmail.com'), 'm***@gmail.com', 'mask email');
+eq(linkLabel({ provider: 'email', hint: 'm***@gmail.com' }), 'Email（m***@gmail.com）', 'bound label');
+eq(providerKind('email'), 'code', 'email is code flow');
+eq(providerKind('google'), 'oauth', 'google is oauth');
+eq(AUTH_PROVIDERS.find((p) => p.id === 'email').iconSvg.includes('rect'), true, 'email envelope icon');
 
 for (const p of AUTH_PROVIDERS) {
   if (!p.iconSvg.includes('<svg') || !p.iconSvg.includes('stroke="currentColor"')) {

@@ -8,9 +8,9 @@ import {
   writeShiftDraft, clearShiftDraft, takeShiftDraft,
   cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink, installCloudLifecycle, onCloudStatus,
   cloudApplyRemote,
-  authInit, authBoot, startProvider, refreshAuthStatus, onAuthChange, authChoicePending, setAuthChoicePending,
+  authInit, authBoot, startProvider, requestEmailCode, verifyEmailCode, refreshAuthStatus, onAuthChange, authChoicePending, setAuthChoicePending,
   authConfigured, authBound, authEnabledProviders, authLinks, logoutThisDevice, unbindAccount,
-  providerName, providerDef,
+  providerName, providerDef, providerKind, linkLabel,
   chooseKeepCloud, chooseKeepDevice, summaryLines,
 } from './core';
 import {
@@ -6094,32 +6094,66 @@ $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖�
       el.appendChild(btn);
     }
   };
-  const fillLinkList = (el: HTMLElement, ids: string[]) => {
+  const fillLinkList = (el: HTMLElement, rows: { provider: string; hint?: string }[]) => {
     el.replaceChildren();
-    for (const id of ids) {
-      const def = providerDef(id);
-      const name = def?.name || providerName(id);
+    for (const link of rows) {
+      const def = providerDef(link.provider);
       const row = document.createElement('div');
       row.className = 'authLinkRow';
       const lab = document.createElement('p');
       lab.className = 'authBoundLab';
-      lab.innerHTML = `${def?.iconSvg || ''}<span>已綁定：${name}</span>`;
+      lab.innerHTML = `${def?.iconSvg || ''}<span>已綁定：${linkLabel(link)}</span>`;
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'authProvBtn authUnbindBtn';
       btn.dataset.authAction = 'unbind';
-      btn.dataset.provider = id;
+      btn.dataset.provider = link.provider;
       btn.textContent = '解除綁定';
       row.append(lab, btn);
       el.appendChild(row);
     }
+  };
+  let emailMode: 'bind' | 'restore' = 'bind';
+  let emailCool: ReturnType<typeof setTimeout> | null = null;
+  const hideEmailBox = () => {
+    $('authEmailBox').hidden = true;
+  };
+  const showEmailBox = (mode: 'bind' | 'restore') => {
+    emailMode = mode;
+    $('authEmailCap').textContent = mode === 'restore' ? '用 Email 取回進度' : '用 Email 綁定';
+    $('authEmailBox').hidden = false;
+    $('authEmailAddr').focus();
+  };
+  const startEmailCooldown = (sec: number) => {
+    const btn = $('authEmailSend') as HTMLButtonElement;
+    const hint = $('authEmailSendHint');
+    if (emailCool) { clearTimeout(emailCool); emailCool = null; }
+    let left = Math.max(0, Math.floor(sec));
+    const tick = () => {
+      if (left <= 0) {
+        btn.disabled = false;
+        btn.textContent = '寄驗證碼';
+        hint.hidden = true;
+        hint.textContent = '';
+        emailCool = null;
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = `${left} 秒後可再寄`;
+      hint.hidden = false;
+      hint.textContent = `驗證碼已寄出。若沒收到，可以在 ${left} 秒後再寄一次。`;
+      left -= 1;
+      emailCool = setTimeout(tick, 1000);
+    };
+    tick();
   };
   const renderAuth = () => {
     const ready = authConfigured();
     const on = ready && authBound();
     const enabled = authEnabledProviders();
     const linked = authLinks();
-    const remaining = enabled.filter((id) => !linked.includes(id));
+    const linkedIds = linked.map((l) => l.provider);
+    const remaining = enabled.filter((id) => !linkedIds.includes(id));
     $('authUnbound').hidden = !ready || on;
     $('authBoundBox').hidden = !on;
     $('authLogout').hidden = !on;
@@ -6139,19 +6173,26 @@ $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖�
   onAuthChange(renderAuth);
   void refreshAuthStatus();
   $('setBtn').addEventListener('click', () => { void refreshAuthStatus(); });
+  const pickProvider = async (id: string, mode: 'bind' | 'restore') => {
+    if (providerKind(id) === 'code') {
+      showEmailBox(mode);
+      return;
+    }
+    hideEmailBox();
+    const r = await startProvider(id, mode);
+    if (!r.ok) toastTop(r.err, TOP_SEC.info);
+  };
   $('authPanel').addEventListener('click', async (ev) => {
     const btn = (ev.target as HTMLElement | null)?.closest?.('[data-auth-action]') as HTMLElement | null;
     if (!btn || !$('authPanel').contains(btn)) return;
     const action = btn.dataset.authAction || '';
     const id = btn.dataset.provider || '';
     if (action === 'bind' || action === 'more') {
-      const r = await startProvider(id, 'bind');
-      if (!r.ok) toastTop(r.err, TOP_SEC.info);
+      await pickProvider(id, 'bind');
       return;
     }
     if (action === 'restore') {
-      const r = await startProvider(id, 'restore');
-      if (!r.ok) toastTop(r.err, TOP_SEC.info);
+      await pickProvider(id, 'restore');
       return;
     }
     if (action === 'unbind') {
@@ -6165,12 +6206,36 @@ $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖�
   $('authLogout').onclick = async () => {
     await logoutThisDevice();
     showAuthMsg('');
+    hideEmailBox();
     toastTop('這台已登出，進度還在，可以繼續玩。', TOP_SEC.long);
   };
   const authOpts = {
     applyCloud: cloudApplyRemote,
     onMessage: (m: string) => toastTop(m, TOP_SEC.long),
   };
+  $('authEmailSend').onclick = async () => {
+    const email = ($('authEmailAddr') as HTMLInputElement).value;
+    const r = await requestEmailCode(email, emailMode);
+    if (!r.ok) { toastTop(r.err, TOP_SEC.info); if (r.retryAfter) startEmailCooldown(r.retryAfter); return; }
+    $('authEmailCodeRow').hidden = false;
+    $('authEmailVerify').hidden = false;
+    startEmailCooldown(r.retryAfter);
+    toastTop(`驗證碼已寄到 ${r.hint}，10 分鐘內有效。`, TOP_SEC.long);
+    ($('authEmailCode') as HTMLInputElement).focus();
+  };
+  $('authEmailVerify').onclick = async () => {
+    const email = ($('authEmailAddr') as HTMLInputElement).value;
+    const code = ($('authEmailCode') as HTMLInputElement).value;
+    const r = await verifyEmailCode(email, code, emailMode, authOpts);
+    if (!r.ok) { toastTop(r.err, TOP_SEC.info); return; }
+    hideEmailBox();
+  };
+  ($('authEmailAddr') as HTMLInputElement).addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); $('authEmailSend').click(); }
+  });
+  ($('authEmailCode') as HTMLInputElement).addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); $('authEmailVerify').click(); }
+  });
   $('authKeepCloud').onclick = async () => {
     $('authConflict').classList.remove('show');
     setAuthChoicePending(false);

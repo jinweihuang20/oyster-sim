@@ -102,6 +102,18 @@ html,body{margin:0;height:100%;background:#1a120c}
    <div class="authProvList" id="authMoreList"></div>
    <button id="authLogout" type="button" hidden>這台登出</button>
   </div>
+  <div id="authEmailBox" hidden>
+   <p class="authCap" id="authEmailCap">用 Email 綁定</p>
+   <label class="authField" for="authEmailAddr"><span>Email</span>
+    <input id="authEmailAddr" type="email" inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.com">
+   </label>
+   <button type="button" class="authProvBtn" id="authEmailSend">寄驗證碼</button>
+   <p class="setHint" id="authEmailSendHint" hidden></p>
+   <label class="authField" id="authEmailCodeRow" hidden for="authEmailCode"><span>驗證碼</span>
+    <input id="authEmailCode" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="6" enterkeyhint="done" placeholder="6 位數">
+   </label>
+   <button type="button" class="authProvBtn" id="authEmailVerify" hidden>確認</button>
+  </div>
  </div>
  <p class="setHint" id="authMsg" hidden></p>
  <div class="row"><span class="rl">同步狀態</span><code id="cloudStat">…</code></div>

@@ -747,6 +747,14 @@ body.tutOn #feed{display:none!important}
 #settings .authProvBtn{display:flex;align-items:center;justify-content:center;gap:.45em;width:100%;min-width:0;min-height:48px;height:auto;margin:0!important;padding:8px 12px!important;box-sizing:border-box;font-size:15px!important;white-space:normal;line-height:1.25;color:#2a5a86!important;background:#fffdf9!important;border:1px solid #c5d0db!important;border-radius:8px!important;box-shadow:0 1px 3px rgba(20,40,60,.12)!important}
 #settings .authProvBtn.authUnbindBtn{width:auto;min-width:88px;min-height:40px;flex:0 0 auto;padding:6px 12px!important;font-size:14px!important}
 #settings #authLogout{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;margin:10px 0 0!important;padding:8px 12px!important;color:#2a5a86!important;background:#fffdf9!important;border:1px solid #c5d0db!important;border-radius:8px!important;box-shadow:0 1px 3px rgba(20,40,60,.12)!important;font-size:15px!important}
+#settings #authEmailBox{margin:10px 0 0;padding:10px;border:1px solid #c5d0db;border-radius:8px;box-shadow:0 1px 3px rgba(20,40,60,.1);background:#fffdf9}
+#settings #authEmailBox .authCap{margin:0 0 8px}
+#settings .authField{display:flex;flex-direction:column;gap:4px;text-align:left;margin:0 0 8px}
+#settings .authField span{font-size:13px;font-weight:700;color:#1b2a3a}
+#settings .authField input{width:100%;box-sizing:border-box;min-height:48px;padding:8px 12px;font-size:16px;line-height:1.3;color:#1b2a3a;background:#fff;border:1px solid #c5d0db;border-radius:8px;box-shadow:0 1px 3px rgba(20,40,60,.08)}
+#settings #authEmailSend,#settings #authEmailVerify{margin:0 0 8px!important}
+#settings #authEmailSendHint{margin:0 0 8px;text-align:left}
+
 #authMsg{margin:0 0 10px}
 .authSums{display:grid;grid-template-columns:1fr;gap:12px;margin:12px 0}
 @media (min-width:520px){.authSums{grid-template-columns:1fr 1fr}}
