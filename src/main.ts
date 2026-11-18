@@ -2735,7 +2735,7 @@ function plazaWarnTick(dt: number): PlazaWarn | null {
     if (w.left <= 0) {
       plazaWarns.splice(i, 1);
       const gen = w.gen;
-      try { plazaFlyShell(w.e); } catch { /* 動畫失敗也要結算 */ }
+      try { plazaPlayThrowFx(w.e.fromConnId); plazaFlyShell(w.e); } catch { /* 動畫失敗也要結算 */ }
       later(plazaEventFlyTime(w.e), () => { if (gen !== plazaShellGen) return; resolvePlazaInbound(w.e); });
       continue;
     }
@@ -3133,11 +3133,34 @@ function noteHostileThrow() {
   thrown++;
   if (phase === 'seam') { abandoned++; wasteShells++; }
 }
+/** 殼握在手上 sec 秒（稍微往後上舉＝蓄力），時間到放手並回傳放手點；手藏起來（第三人稱）時停在出手點 */
+function holdShellInHand(sh: THREE.Mesh, from: THREE.Vector3, sec: number, onRelease: (p0: THREE.Vector3) => void) {
+  const gen = plazaShellGen;
+  const par = oyster.parent;
+  let shown = !!par;
+  for (let o: THREE.Object3D | null = par; o; o = o.parent) if (!o.visible) { shown = false; break; }
+  if (par && shown) {
+    par.add(sh);
+    sh.position.copy(oyster.position).add(new THREE.Vector3(0, 0.05, 0.04));
+    sh.quaternion.copy(oyster.quaternion);
+  } else {
+    scene.add(sh);
+    sh.position.copy(from);
+  }
+  later(sec, () => {
+    const p0 = sh.getWorldPosition(new THREE.Vector3());
+    sh.parent?.remove(sh);
+    sh.position.set(0, 0, 0); sh.rotation.set(0, 0, 0); sh.scale.set(1, 1, 1);
+    if (gen !== plazaShellGen || !plazaMode) return;
+    onRelease(Number.isFinite(p0.x + p0.y + p0.z) ? p0 : from);
+  });
+}
 function throwShell() {
   if (state !== 'play' || (phase !== 'empty' && phase !== 'seam')) return;
   const from = worldOf(oyster); oyster.visible = false;
   const sh = new THREE.Mesh(halfGeo, shellBotMat); SFX.whoosh();
   if (plazaMode) {
+    let pickAfter = 0.6;
     try {
       const finite3 = (v: THREE.Vector3) => Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
       if (!finite3(from)) { scene.remove(sh); setPhase('busy'); later(0.6, goPick); return; }
@@ -3148,10 +3171,14 @@ function throwShell() {
         // 追著目標目前的頭飛（站著走動的人也會落在身上）；送伺服器的仍是出手當下位置
         const track = new THREE.Vector3();
         const toNow = () => { const h = plazaRemoteHead(pt.connId); return h ? track.set(h.x, h.y, h.z) : to; };
-        // 丟真人：對方要先蓄力預警 PLAZA_WINDUP 再飛 plazaFlyTime(距離) 才結算擋／反彈，
-        // 本機改成同樣長的拋物線，落點時間才會和對方擋回來對得上（阿婆由伺服器當下結算，維持快飛）
-        const [flyDur, flyArc] = plazaShellFlight({ who: 'thrower', targetIsNpc: !!pt.isNpc, fly: plazaFlyTime(from, to) });
-        fly(sh, from, toNow, flyDur, flyArc, () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); if (pt.isNpc && !isPlazaAber(pt)) rollAma(); } catch { /* */ } });
+        // 丟真人：對方要先蓄力預警 PLAZA_WINDUP 再飛 plazaFlyTime(距離) 才結算擋／反彈；
+        // 本機殼先握在手上 PLAZA_WINDUP，放手後只飛飛行秒數，落地才和對方擋回來對得上（阿婆由伺服器當下結算，直接快飛）
+        const [hold, flyDur, flyArc] = plazaShellFlight({ who: 'thrower', targetIsNpc: !!pt.isNpc, fly: plazaFlyTime(from, to) });
+        const onLand = () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${pt.nick}！`, '#ffb070'); updHud(); if (pt.isNpc && !isPlazaAber(pt)) rollAma(); } catch { /* */ } };
+        if (hold > 0) {
+          holdShellInHand(sh, from, hold, (p0) => fly(sh, p0, toNow, flyDur, flyArc, onLand));
+          pickAfter = Math.max(pickAfter, hold + 0.12);
+        } else fly(sh, from, toNow, flyDur, flyArc, onLand);
         stampPlazaNet();
         void plazaThrowAt(pt.connId, from, to);
       } else {
@@ -3165,9 +3192,9 @@ function throwShell() {
       }
     } catch (err) {
       console.error('plaza throw', err);
-      try { scene.remove(sh); } catch { /* */ }
+      try { sh.parent?.remove(sh); } catch { /* */ }
     }
-    setPhase('busy'); later(0.6, goPick);
+    setPhase('busy'); later(pickAfter, goPick);
     return;
   }
   let target: Npc | undefined;
@@ -5803,20 +5830,34 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       try {
         if (e.fromConnId && e.fromConnId === plazaConnId()) return;
         if (!plazaMode || !isPlazaActive()) return;
-        plazaPlayThrowFx(e.fromConnId);
         if (e.toConnId && e.toConnId === plazaConnId()) {
           // 新伺服器會標記反彈：立刻飛回，和 ShellReflectHit 結算同步
-          if (e.reflect === true) { plazaFlyShell(e); return; }
+          if (e.reflect === true) { plazaPlayThrowFx(e.fromConnId); plazaFlyShell(e); return; }
           // 打向自己：一般丟殼會接著收到 ShellInbound，改成先預警再飛；反彈回來的沒有 Inbound，稍等後照常飛
           const rec = { e, at: performance.now() };
           plazaThrowToMe = rec;
           const gen = plazaShellGen;
-          later(0.15, () => { if (gen !== plazaShellGen || plazaThrowToMe !== rec) return; plazaThrowToMe = null; plazaFlyShell(e); });
+          later(0.15, () => { if (gen !== plazaShellGen || plazaThrowToMe !== rec) return; plazaThrowToMe = null; plazaPlayThrowFx(e.fromConnId); plazaFlyShell(e); });
           return;
         }
         // 旁觀：丟真人（非反彈）時，被丟的人要蓄力 PLAZA_WINDUP 才飛；
-        // 用同樣長的拋物線，殼落地和對方擋／反彈／噴血才對得上。舊伺服器（reflect 未知）維持原本快飛。
-        const [flyDur, flyArc] = plazaShellFlight({ who: 'spectator', reflect: e.reflect, targetIsNpc: e.toConnId ? plazaRemoteIsNpc(e.toConnId) : null, fly: plazaEventFlyTime(e) });
+        // 殼先停在丟的人手上（出手點）PLAZA_WINDUP，再甩臂放手、只飛飛行秒數，落地和對方擋／反彈／噴血對得上。
+        // 舊伺服器（reflect 未知）、反彈、丟阿婆：直接飛。
+        const [hold, flyDur, flyArc] = plazaShellFlight({ who: 'spectator', reflect: e.reflect, targetIsNpc: e.toConnId ? plazaRemoteIsNpc(e.toConnId) : null, fly: plazaEventFlyTime(e) });
+        if (hold > 0 && plazaShellCoordsOk(e)) {
+          const held = new THREE.Mesh(halfGeo, shellBotMat);
+          held.position.set(e.fromX, e.fromY, e.fromZ);
+          scene.add(held);
+          const gen = plazaShellGen;
+          later(hold, () => {
+            scene.remove(held);
+            if (gen !== plazaShellGen || !plazaMode) return;
+            plazaPlayThrowFx(e.fromConnId);
+            plazaFlyShell(e, undefined, flyDur, flyArc);
+          });
+          return;
+        }
+        plazaPlayThrowFx(e.fromConnId);
         plazaFlyShell(e, undefined, flyDur, flyArc);
       } catch (err) { console.error('plaza shell throw', err); }
     },

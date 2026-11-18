@@ -2,9 +2,9 @@
  * 廣場丟殼時間軸（丟殼者／被丟者／旁觀者共用）。
  *
  * 被丟的人收到 ShellInbound 後：先蓄力預警 PLAZA_WINDUP 秒（固定，保留反應時間），
- * 再以固定速度飛 距離÷PLAZA_SHELL_SPEED 秒，落地時才判定擋／反彈／受傷。
+ * 再以固定速度飛 距離÷PLAZA_SHELL_SPEED 秒（最短 PLAZA_FLY_MIN、最長 PLAZA_FLY_MAX），落地時才判定擋／反彈／受傷。
  * 飛行秒數只用封包裡的出手點→目標點座標算（三方收到的數字相同），所以各端落地時間一致。
- * 丟真人時，丟殼者與旁觀者的殼花 PLAZA_WINDUP + 飛行 才落地。
+ * 丟真人時，丟殼者與旁觀者：殼先在丟的人手上握 PLAZA_WINDUP 秒，放手後只飛「飛行秒數」，落地時間＝蓄力＋飛行，和被丟者判定同時。
  * 阿婆由伺服器在轉發當下就結算噴血，維持快飛；反彈飛回不用蓄力，飛行同樣是距離÷速度。
  */
 export type V3 = { x: number; y: number; z: number };
@@ -13,22 +13,21 @@ export type V3 = { x: number; y: number; z: number };
 export const PLAZA_WINDUP = 0.65;
 /** 座標缺漏時的飛行秒數 */
 export const PLAZA_FLY_FALLBACK = 0.4;
-/**
- * 殼的固定飛行速度（公尺／秒），和丟阿婆一樣快：
- * 同桌阿婆從手上到她的頭約 1.1m（隔壁）～2.3m（斜對面），平均約 1.7m；丟阿婆固定 0.5s → 1.7÷0.5 ＝ 3.4 m/s。
- */
-export const PLAZA_SHELL_SPEED = 3.4;
+/** 殼的固定飛行速度（公尺／秒）：同桌對面約 2.3m → 約 0.29s */
+export const PLAZA_SHELL_SPEED = 8;
+/** 最長飛行秒數（廣場另一頭也不會飄太久） */
+export const PLAZA_FLY_MAX = 0.8;
 /** 極近距離的最短飛行秒數（避免 0 秒） */
 export const PLAZA_FLY_MIN = 0.12;
 /** 丟阿婆時本機快飛秒數 */
 export const PLAZA_NPC_FLY = 0.5;
 
-/** 飛行秒數＝出手點到目標點距離 ÷ 固定速度（最短 PLAZA_FLY_MIN） */
+/** 飛行秒數＝出手點到目標點距離 ÷ 固定速度（PLAZA_FLY_MIN～PLAZA_FLY_MAX） */
 export function plazaFlyTime(from: V3 | null | undefined, to: V3 | null | undefined): number {
   if (!from || !to) return PLAZA_FLY_FALLBACK;
   const d = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z);
   if (!Number.isFinite(d)) return PLAZA_FLY_FALLBACK;
-  return Math.max(PLAZA_FLY_MIN, d / PLAZA_SHELL_SPEED);
+  return Math.min(PLAZA_FLY_MAX, Math.max(PLAZA_FLY_MIN, d / PLAZA_SHELL_SPEED));
 }
 
 /** 封包（fromX..toZ）的飛行秒數 */
@@ -42,9 +41,9 @@ export type ShellFlightKind =
   /** 旁觀別人丟；reflect／targetIsNpc 為 undefined/null 代表不知道（舊伺服器或看不到目標） */
   | { who: 'spectator'; reflect?: boolean; targetIsNpc: boolean | null; fly: number };
 
-/** 回傳 [飛行秒數, 拋物線高度] */
-export function plazaShellFlight(k: ShellFlightKind): [number, number] {
-  if (k.who === 'thrower') return k.targetIsNpc ? [PLAZA_NPC_FLY, 0.3] : [PLAZA_WINDUP + k.fly, 0.55];
-  if (k.reflect === false && k.targetIsNpc === false) return [PLAZA_WINDUP + k.fly, 0.55];
-  return [k.fly, 0.3];
+/** 回傳 [握在手上秒數, 放手後飛行秒數, 拋物線高度]；落地＝握＋飛 */
+export function plazaShellFlight(k: ShellFlightKind): [number, number, number] {
+  if (k.who === 'thrower') return k.targetIsNpc ? [0, PLAZA_NPC_FLY, 0.3] : [PLAZA_WINDUP, k.fly, 0.35];
+  if (k.reflect === false && k.targetIsNpc === false) return [PLAZA_WINDUP, k.fly, 0.35];
+  return [0, k.fly, 0.3];
 }
