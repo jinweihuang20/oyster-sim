@@ -67,3 +67,8 @@
 
 /* Google 帳號（線形 G） */
 .ic-google{--i:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3Cpath d='M16 12h-5'/%3E%3Cpath d='M12 8.5a3.5 3.5 0 1 0 3.2 5'/%3E%3C/svg%3E")}
+
+/* GitHub（線形分支） */
+.ic-github{--i:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='2.2'/%3E%3Ccircle cx='6' cy='18' r='2.2'/%3E%3Ccircle cx='18' cy='12' r='2.2'/%3E%3Cpath d='M6 8.2v7.6'/%3E%3Cpath d='M8.15 7.15c3.1 0 5.15 1.55 7.55 3.2'/%3E%3C/svg%3E")}
+/* Email（線形信封） */
+.ic-mail{--i:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5.5' width='17' height='13' rx='1.5'/%3E%3Cpath d='m4.2 7.2 7.8 6 7.8-6'/%3E%3C/svg%3E")}

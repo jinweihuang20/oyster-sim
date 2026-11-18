@@ -89,12 +89,19 @@ html,body{margin:0;height:100%;background:#1a120c}
  <div class="setGrid"><button id="tutReplay"><i class="ic ic-tut"></i> 重看教學</button><button id="hgReplay"><i class="ic ic-pin"></i> 主畫面導覽</button></div>
  <div class="setSec">帳號與同步</div>
  <p class="setHint" id="cloudHint">綁定帳號（選配，不綁也能玩）。多裝置同一個進度，較新的會蓋過較舊的。也可以先在這台產生同步碼（連結碼），另一台輸入即可。</p>
- <p class="authBoundLab" id="authBoundLab" hidden>已綁定：Google</p>
- <div class="setGrid" id="authGrid">
-  <button id="authGoogleBind" type="button" hidden><i class="ic ic-google"></i> 用 Google 綁定</button>
-  <button id="authGoogleRestore" type="button" hidden><i class="ic ic-google"></i> 用 Google 登入取回進度</button>
-  <button id="authLogout" type="button" hidden>這台登出</button>
-  <button id="authUnbind" type="button" hidden>解除綁定</button>
+ <div id="authPanel">
+  <div id="authUnbound" hidden>
+   <p class="authCap">綁定帳號</p>
+   <div class="authProvList" id="authBindList"></div>
+   <p class="authCap">取回進度</p>
+   <div class="authProvList" id="authRestoreList"></div>
+  </div>
+  <div id="authBoundBox" hidden>
+   <div class="authProvList" id="authLinkList"></div>
+   <p class="authCap" id="authMoreCap" hidden>再綁一種</p>
+   <div class="authProvList" id="authMoreList"></div>
+   <button id="authLogout" type="button" hidden>這台登出</button>
+  </div>
  </div>
  <p class="setHint" id="authMsg" hidden></p>
  <div class="row"><span class="rl">同步狀態</span><code id="cloudStat">…</code></div>

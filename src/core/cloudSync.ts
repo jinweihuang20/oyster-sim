@@ -110,7 +110,7 @@ async function putCloud(rev: number, data: Record<string, string>): Promise<'ok'
       headers: cloudAuthHeaders(),
       body: JSON.stringify({ pid, data, rev }),
     });
-    if (r.status === 401) { setStatus('err', '請重新用 Google 登入這台'); return 'fail'; }
+    if (r.status === 401) { setStatus('err', '請重新登入這台'); return 'fail'; }
     if (!r.ok) return 'fail';
     const j = await r.json();
     if (j?.ok) {

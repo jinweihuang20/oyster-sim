@@ -8,8 +8,9 @@ import {
   writeShiftDraft, clearShiftDraft, takeShiftDraft,
   cloudInit, cloudBoot, cloudTouch, cloudFlush, cloudMakeLink, cloudClaimLink, installCloudLifecycle, onCloudStatus,
   cloudApplyRemote,
-  authInit, authBoot, startGoogle, refreshAuthStatus, onAuthChange, authChoicePending, setAuthChoicePending,
-  authConfigured, authBound, logoutThisDevice, unbindAccount,
+  authInit, authBoot, startProvider, refreshAuthStatus, onAuthChange, authChoicePending, setAuthChoicePending,
+  authConfigured, authBound, authEnabledProviders, authLinks, logoutThisDevice, unbindAccount,
+  providerName, providerDef,
   chooseKeepCloud, chooseKeepDevice, summaryLines,
 } from './core';
 import {
@@ -6079,36 +6080,92 @@ $('resetSave').onclick = () => { if (confirm('確定要重置存檔？錢、圖�
     el.hidden = !t;
     el.textContent = t;
   };
+  const fillProvList = (el: HTMLElement, ids: string[], action: 'bind' | 'restore' | 'more') => {
+    el.replaceChildren();
+    for (const id of ids) {
+      const def = providerDef(id);
+      const name = def?.name || providerName(id);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'authProvBtn';
+      btn.dataset.authAction = action;
+      btn.dataset.provider = id;
+      btn.innerHTML = `${def?.iconSvg || ''}<span>用 ${name}</span>`;
+      el.appendChild(btn);
+    }
+  };
+  const fillLinkList = (el: HTMLElement, ids: string[]) => {
+    el.replaceChildren();
+    for (const id of ids) {
+      const def = providerDef(id);
+      const name = def?.name || providerName(id);
+      const row = document.createElement('div');
+      row.className = 'authLinkRow';
+      const lab = document.createElement('p');
+      lab.className = 'authBoundLab';
+      lab.innerHTML = `${def?.iconSvg || ''}<span>已綁定：${name}</span>`;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'authProvBtn authUnbindBtn';
+      btn.dataset.authAction = 'unbind';
+      btn.dataset.provider = id;
+      btn.textContent = '解除綁定';
+      row.append(lab, btn);
+      el.appendChild(row);
+    }
+  };
   const renderAuth = () => {
     const ready = authConfigured();
     const on = ready && authBound();
-    $('authBoundLab').hidden = !on;
-    $('authGoogleBind').hidden = !ready || on;
-    $('authGoogleRestore').hidden = !ready || on;
+    const enabled = authEnabledProviders();
+    const linked = authLinks();
+    const remaining = enabled.filter((id) => !linked.includes(id));
+    $('authUnbound').hidden = !ready || on;
+    $('authBoundBox').hidden = !on;
     $('authLogout').hidden = !on;
-    $('authUnbind').hidden = !on;
+    if (ready && !on) {
+      fillProvList($('authBindList'), enabled, 'bind');
+      fillProvList($('authRestoreList'), enabled, 'restore');
+    }
+    if (on) {
+      fillLinkList($('authLinkList'), linked);
+      const more = remaining.length > 0;
+      $('authMoreCap').hidden = !more;
+      $('authMoreList').hidden = !more;
+      if (more) fillProvList($('authMoreList'), remaining, 'more');
+      else $('authMoreList').replaceChildren();
+    }
   };
   onAuthChange(renderAuth);
   void refreshAuthStatus();
   $('setBtn').addEventListener('click', () => { void refreshAuthStatus(); });
-  $('authGoogleBind').onclick = async () => {
-    const r = await startGoogle('bind');
-    if (!r.ok) toastTop(r.err, TOP_SEC.info);
-  };
-  $('authGoogleRestore').onclick = async () => {
-    const r = await startGoogle('restore');
-    if (!r.ok) toastTop(r.err, TOP_SEC.info);
-  };
+  $('authPanel').addEventListener('click', async (ev) => {
+    const btn = (ev.target as HTMLElement | null)?.closest?.('[data-auth-action]') as HTMLElement | null;
+    if (!btn || !$('authPanel').contains(btn)) return;
+    const action = btn.dataset.authAction || '';
+    const id = btn.dataset.provider || '';
+    if (action === 'bind' || action === 'more') {
+      const r = await startProvider(id, 'bind');
+      if (!r.ok) toastTop(r.err, TOP_SEC.info);
+      return;
+    }
+    if (action === 'restore') {
+      const r = await startProvider(id, 'restore');
+      if (!r.ok) toastTop(r.err, TOP_SEC.info);
+      return;
+    }
+    if (action === 'unbind') {
+      const name = providerName(id);
+      if (!confirm(`解除 ${name} 綁定後，這個 ${name} 就不再自動連到這份進度。這台的進度和雲端存檔都還在，之後仍可用同步碼或其他已綁定的方式取回。確定解除？`)) return;
+      const r = await unbindAccount(id);
+      if (!r.ok) { toastTop(r.err, TOP_SEC.info); return; }
+      toastTop('已解除綁定。這台的進度還在。', TOP_SEC.long);
+    }
+  });
   $('authLogout').onclick = async () => {
     await logoutThisDevice();
     showAuthMsg('');
     toastTop('這台已登出，進度還在，可以繼續玩。', TOP_SEC.long);
-  };
-  $('authUnbind').onclick = async () => {
-    if (!confirm('解除綁定後，這個 Google 就不再自動連到這份進度。這台的進度和雲端存檔都還在，之後仍可用同步碼取回。確定解除？')) return;
-    const r = await unbindAccount();
-    if (!r.ok) { toastTop(r.err, TOP_SEC.info); return; }
-    toastTop('已解除綁定。這台的進度還在。', TOP_SEC.long);
   };
   const authOpts = {
     applyCloud: cloudApplyRemote,

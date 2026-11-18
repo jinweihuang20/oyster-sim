@@ -1,8 +1,9 @@
-// Google 帳號綁定：登入只是取得同一組 pid／同一包雲端存檔的長期鑰匙。
+// 帳號綁定：登入只是取得同一組 pid／同一包雲端存檔的長期鑰匙。
 // 不綁也能玩；這台登出只撤銷憑證，本機進度和 pid 都留著。
 
 import { cloudFlush } from './cloudSync';
 import { readOysterAuth, canonicalReturnUrl, stripOysterAuthFromUrl } from './authReturn';
+import { parseEnabledProviders, parseLinkedProviders, providerName } from './authProviders';
 
 const API = 'https://game-status.gwtech.org/s';
 const TOKEN_KEY = 'oyster-auth-token';
@@ -53,6 +54,8 @@ let LS: AuthLS;
 let configured = false;
 let bound = false;
 let provider = '';
+let enabledProviders: string[] = [];
+let links: string[] = [];
 let listeners: Array<() => void> = [];
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let pollStartedAt = 0;
@@ -74,6 +77,12 @@ export function setAuthChoicePending(v: boolean) { choicePending = v; }
 export const authConfigured = () => configured;
 export const authBound = () => bound;
 export const authProvider = () => provider;
+export const authEnabledProviders = () => enabledProviders.slice();
+export const authLinks = () => links.slice();
+
+function labelOf(id?: string | null): string {
+  return providerName(id || provider || 'google');
+}
 export const authToken = () => {
   try { return LS?.getItem(TOKEN_KEY) || ''; } catch { return ''; }
 };
@@ -160,6 +169,7 @@ function clearLocalAuth() {
   try { sessionStorage.removeItem(STARTED_KEY); } catch { /* */ }
   bound = false;
   provider = '';
+  links = [];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -171,14 +181,17 @@ export async function refreshAuthStatus(): Promise<void> {
   try {
     const r = await fetch(`${API}/auth/status`, { mode: 'cors', cache: 'no-store' });
     const j = await readJson(r);
-    configured = !!(r.ok && j && j.google === true && j.err !== 'not_configured');
+    enabledProviders = parseEnabledProviders(j);
+    configured = !!(r.ok && j && j.err !== 'not_configured' && enabledProviders.length > 0);
   } catch {
     configured = false;
+    enabledProviders = [];
   }
   const token = authToken();
   if (!token) {
     bound = false;
     provider = '';
+    links = [];
     notify();
     return;
   }
@@ -190,7 +203,9 @@ export async function refreshAuthStatus(): Promise<void> {
     const j = await readJson(r);
     if (r.ok && j?.ok) {
       bound = !!j.bound;
-      provider = String(j.provider || 'google');
+      provider = String(j.provider || '');
+      links = parseLinkedProviders(j);
+      if (bound && links.length === 0 && provider) links = [provider];
     } else if (r.status === 401 || j?.err === 'auth') {
       clearLocalAuth();
     }
@@ -198,10 +213,11 @@ export async function refreshAuthStatus(): Promise<void> {
   notify();
 }
 
-export async function startGoogle(mode: 'bind' | 'restore', opts?: AuthBootOpts): Promise<{ ok: true } | { ok: false; err: string }> {
+export async function startProvider(id: string, mode: 'bind' | 'restore', opts?: AuthBootOpts): Promise<{ ok: true } | { ok: false; err: string }> {
   if (opts) setAuthBootOpts(opts);
   await refreshAuthStatus();
-  if (!configured) return { ok: false, err: '還沒開放 Google 綁定' };
+  const name = labelOf(id);
+  if (!configured || !enabledProviders.includes(id)) return { ok: false, err: `還沒開放${name}綁定` };
   const wait = crypto.randomUUID();
   try {
     LS.setItem(WAIT_KEY, wait);
@@ -210,12 +226,16 @@ export async function startGoogle(mode: 'bind' | 'restore', opts?: AuthBootOpts)
   } catch { /* */ }
   // 先開始輪詢，iOS 主畫面 App 跳去 Safari 後回來才接得到票。
   startWaitPoll(lastOpts);
-  const url = `${API}/auth/google/start?mode=${encodeURIComponent(mode)}`
+  const url = `${API}/auth/${encodeURIComponent(id)}/start?mode=${encodeURIComponent(mode)}`
     + `&return=${encodeURIComponent(returnUrl())}`
     + `&pid=${encodeURIComponent(pid)}`
     + `&wait=${encodeURIComponent(wait)}`;
   location.href = url;
   return { ok: true };
+}
+
+export async function startGoogle(mode: 'bind' | 'restore', opts?: AuthBootOpts): Promise<{ ok: true } | { ok: false; err: string }> {
+  return startProvider('google', mode, opts);
 }
 
 async function exchange(body: { code?: string; wait?: string }): Promise<ExchangeOk | { ok: false; err: string }> {
@@ -290,8 +310,9 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
   const markBound = (boundPid?: string) => {
     bound = true;
     provider = ex.provider || 'google';
+    if (!links.includes(provider)) links = [...links, provider];
     notify();
-    if (!bounce) tellOnce(opts, 'bound:' + ex.token, '已綁定 Google，換裝置也可以用它取回進度。');
+    if (!bounce) tellOnce(opts, 'bound:' + ex.token, `已綁定${labelOf(ex.provider)}，換裝置也可以用它取回進度。`);
     // 綁定後立刻上傳，否則之後寫入要帶憑證，雲端可能是空的，另一台取回就沒資料。
     if (!bounce && (!boundPid || !pid || boundPid === pid)) void cloudFlush();
   };
@@ -310,12 +331,12 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
         if (!bounce) {
           choicePending = true;
           opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
-          tellOnce(opts, 'conflict:' + ex.token, '這個 Google 已有另一份進度，請選要留哪一份。');
+          tellOnce(opts, 'conflict:' + ex.token, `這個${labelOf(ex.provider)}已有另一份進度，請選要留哪一份。`);
         }
         return false;
       }
       if (j?.ok) { markBound(bindPid); return false; }
-      if (!bounce) tellOnce(opts, 'bindfail:' + ex.token, j?.err === 'not_configured' ? '還沒開放 Google 綁定' : '綁定沒有成功，請稍後再試');
+      if (!bounce) tellOnce(opts, 'bindfail:' + ex.token, j?.err === 'not_configured' ? `還沒開放${labelOf(ex.provider)}綁定` : '綁定沒有成功，請稍後再試');
       return false;
     }
     const { j } = await postAuth('/auth/restore', { pid: bindPid || pid || undefined });
@@ -323,13 +344,13 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
       if (!bounce) {
         choicePending = true;
         opts.onConflict?.(j.cloud as SaveSummary, j.device as SaveSummary);
-        tellOnce(opts, 'conflict:' + ex.token, '這個 Google 已有另一份進度，請選要留哪一份。');
+        tellOnce(opts, 'conflict:' + ex.token, `這個${labelOf(ex.provider)}已有另一份進度，請選要留哪一份。`);
       }
       return false;
     }
     if (j?.err === 'not_linked') {
       // 取回絕不能改綁這台新的空進度，否則原本那台的綁定會被蓋掉。
-      if (!bounce) tellOnce(opts, 'notlinked:' + ex.token, '這個 Google 還沒綁過進度。請先在原本有進度的那台確認「已綁定：Google」且同步成功，再回這台取回。');
+      if (!bounce) tellOnce(opts, 'notlinked:' + ex.token, `這個${labelOf(ex.provider)}還沒綁過進度。請先在原本有進度的那台確認「已綁定：${labelOf(ex.provider)}」且同步成功，再回這台取回。`);
       return false;
     }
     if (j?.ok && j.cloud?.data && !bounce) {
@@ -340,6 +361,7 @@ async function finishLogin(ex: ExchangeOk, opts: AuthBootOpts, bounce = false): 
     if (j?.ok) {
       bound = true;
       provider = ex.provider || 'google';
+      if (!links.includes(provider)) links = [...links, provider];
       notify();
       if (!bounce && !j.cloud?.data) tellOnce(opts, 'empty:' + ex.token, '已取回綁定，但雲端還沒有這份存檔。請先回原本那台打開遊戲，確認同步成功後再試一次。');
       return false;
@@ -408,7 +430,7 @@ export async function authBoot(opts: AuthBootOpts = {}): Promise<boolean> {
     try { history.replaceState(null, '', stripOysterAuthFromUrl(location.href)); } catch { /* */ }
     if (returnErr && !code) {
       if (!( !startedInThisContext() && isIosDevice() && !isStandaloneApp() )) {
-        tellOnce(opts, 'denied:' + returnErr, returnErr === 'denied' ? '沒有完成 Google 登入。請再試一次。' : 'Google 登入沒有成功，請稍後再試。');
+        tellOnce(opts, 'denied:' + returnErr, returnErr === 'denied' ? '沒有完成登入。請再試一次。' : '登入沒有成功，請稍後再試。');
       }
       booting = false;
       return false;
@@ -428,7 +450,7 @@ export async function authBoot(opts: AuthBootOpts = {}): Promise<boolean> {
       }
       if (!bounce) {
         clearLoginPending();
-        tellOnce(opts, 'handled:' + ex.token, '登入已處理過。若進度沒有回來，請再開一次設定，或再按一次「用 Google 登入取回進度」。');
+        tellOnce(opts, 'handled:' + ex.token, '登入已處理過。若進度沒有回來，請再開一次設定，或再按一次「取回進度」。');
       }
       booting = false;
       return false;
@@ -458,7 +480,7 @@ export async function authBoot(opts: AuthBootOpts = {}): Promise<boolean> {
     let intent = '';
     try { intent = LS.getItem(INTENT_KEY) || sessionStorage.getItem(STARTED_KEY) || ''; } catch { /* */ }
     if (intent === 'restore') {
-      tellOnce(opts, 'nostart', '登入回來了，但這頁沒有收到憑證。請再按一次「用 Google 登入取回進度」。');
+      tellOnce(opts, 'nostart', '登入回來了，但這頁沒有收到憑證。請再按一次「取回進度」。');
     }
   }
   booting = false;
@@ -490,7 +512,8 @@ export async function chooseKeepDevice(opts: AuthBootOpts): Promise<boolean> {
     const { j } = await postAuth('/auth/choose', { choice: 'device', pid });
     if (j?.ok) {
       bound = true;
-      provider = 'google';
+      if (!provider) provider = 'google';
+      if (!links.includes(provider)) links = [...links, provider];
       notify();
       opts.onMessage?.('已改綁到這台的進度。原本雲端那份還在，可用同步碼取回。');
       return false;
@@ -512,14 +535,14 @@ export async function logoutThisDevice(): Promise<{ ok: true } | { ok: false; er
   return { ok: true };
 }
 
-export async function unbindAccount(): Promise<{ ok: true } | { ok: false; err: string }> {
+export async function unbindAccount(providerId?: string): Promise<{ ok: true } | { ok: false; err: string }> {
   try {
-    const { j, status } = await postAuth('/auth/unbind', {});
+    const body = providerId ? { provider: providerId } : {};
+    const { j, status } = await postAuth('/auth/unbind', body);
     if (!j?.ok && status !== 401) return { ok: false, err: '解除綁定失敗，請稍後再試' };
   } catch {
     return { ok: false, err: '連線失敗' };
   }
-  clearLocalAuth();
-  notify();
+  await refreshAuthStatus();
   return { ok: true };
 }

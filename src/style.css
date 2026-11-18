@@ -737,11 +737,16 @@ body.tutOn #feed{display:none!important}
 #settings .setGrid>button,#settings .setGrid>a,#settings #resetSave{display:flex;align-items:center;justify-content:center;gap:.35em;width:100%;min-width:0!important;height:48px;min-height:48px!important;margin:0!important;padding:0 8px!important;box-sizing:border-box;font-size:15px!important;text-decoration:none;white-space:nowrap}
 #settings .setDiv{border:0;border-top:2px dashed rgba(22,25,29,.35);margin:16px 0}
 #settings #resetSave{width:calc(100% - 6px)}
-#settings #authGrid{display:grid;grid-template-columns:1fr;gap:12px;padding:0 6px 6px 0;margin:0 0 10px}
-#settings #authGrid>button{display:flex;align-items:center;justify-content:center;gap:.35em;width:100%;min-width:0;min-height:48px;height:auto;margin:0;padding:8px 10px;box-sizing:border-box;font-size:15px;white-space:normal;line-height:1.25}
-#authGoogleBind,#authGoogleRestore{color:#2a5a86}
-#authGoogleBind .ic,#authGoogleRestore .ic{color:#2a5a86}
-#authBoundLab{margin:0 0 8px;font-weight:800;font-size:15px;text-align:left}
+#settings #authPanel{margin:0 0 10px;padding:0 6px 0 0}
+#settings .authCap{margin:10px 0 6px;font-weight:800;font-size:14px;text-align:left;color:#1b2a3a}
+#settings #authUnbound>.authCap:first-child,#settings #authBoundBox>.authCap:first-child{margin-top:0}
+#settings .authProvList{display:flex;flex-direction:column;gap:8px;margin:0 0 4px}
+#settings .authLinkRow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0;padding:8px 10px;border:1px solid #c5d0db;border-radius:8px;box-shadow:0 1px 3px rgba(20,40,60,.1);background:#fffdf9}
+#settings .authLinkRow .authBoundLab{margin:0;display:flex;align-items:center;gap:.4em;font-weight:800;font-size:15px;color:#1b2a3a;text-align:left}
+#settings .authLinkRow .authBoundLab svg,#settings .authProvBtn svg{width:20px;height:20px;flex:0 0 auto;color:#2a5a86}
+#settings .authProvBtn{display:flex;align-items:center;justify-content:center;gap:.45em;width:100%;min-width:0;min-height:48px;height:auto;margin:0!important;padding:8px 12px!important;box-sizing:border-box;font-size:15px!important;white-space:normal;line-height:1.25;color:#2a5a86!important;background:#fffdf9!important;border:1px solid #c5d0db!important;border-radius:8px!important;box-shadow:0 1px 3px rgba(20,40,60,.12)!important}
+#settings .authProvBtn.authUnbindBtn{width:auto;min-width:88px;min-height:40px;flex:0 0 auto;padding:6px 12px!important;font-size:14px!important}
+#settings #authLogout{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;margin:10px 0 0!important;padding:8px 12px!important;color:#2a5a86!important;background:#fffdf9!important;border:1px solid #c5d0db!important;border-radius:8px!important;box-shadow:0 1px 3px rgba(20,40,60,.12)!important;font-size:15px!important}
 #authMsg{margin:0 0 10px}
 .authSums{display:grid;grid-template-columns:1fr;gap:12px;margin:12px 0}
 @media (min-width:520px){.authSums{grid-template-columns:1fr 1fr}}
