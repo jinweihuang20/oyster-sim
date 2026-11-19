@@ -603,6 +603,8 @@ const PET_UMB_FLASH = 1.15;
 /** 廣場 ThrowAt／ShellReflect 共用節流（對齊伺服器 400／280ms） */
 let lastPlazaShellNet = 0;
 const PLAZA_THROW_GAP_MS = 400;
+/** 伺服器 ShellFx（丟地上／丟回堆）節流 */
+const PLAZA_FX_GAP_MS = 280;
 const PLAZA_REFLECT_GAP_MS = 280;
 type PendingPetReflect = { to: string; from: { x: number; y: number; z: number }; back: { x: number; y: number; z: number } };
 const petReflectQ: PendingPetReflect[] = [];
@@ -2465,8 +2467,10 @@ function discardShell() {
     : pileSpot();
   const sh = new THREE.Mesh(halfGeo, shellBotMat);
   fly(sh, from, to, 0.6, 0.5, () => scene.remove(sh));
-  if (plazaMode) { stampPlazaNet(); void plazaShellFx(from, to); }
-  setPhase('busy'); later(0.5, goPick);
+  // 伺服器丟殼節流 280ms：太快時只播本機動畫、不送給別人看（不擋玩家下一步）
+  if (plazaMode && plazaNetReady(PLAZA_FX_GAP_MS)) { stampPlazaNet(); void plazaShellFx(from, to); }
+  // 丟完馬上可以拿下一顆（殼照樣在空中飛）
+  goPick();
 }
 // ----- 丟肉：拿著肉時點阿婆，把肉丟到她頭上（不算入碗、不算錢）-----
 function bowlScrPt() { const p = BOWL.clone().project(viewCam()); return p.z > 1 ? null : [(p.x + 1) / 2 * innerWidth, (1 - p.y) / 2 * innerHeight]; }
@@ -3165,12 +3169,14 @@ function noteHostileThrow() {
 }
 function throwShell() {
   if (state !== 'play' || (phase !== 'empty' && phase !== 'seam')) return;
+  // 伺服器對人丟殼節流 400ms（ThrowAt）：連丟太快時這下不丟，免得本機看到打中、對方卻沒收到
+  if (plazaMode && !plazaNetReady(PLAZA_THROW_GAP_MS) && plazaThrowTarget()) return;
   const from = worldOf(oyster); oyster.visible = false;
   const sh = new THREE.Mesh(halfGeo, shellBotMat); SFX.whoosh();
   if (plazaMode) {
     try {
       const finite3 = (v: THREE.Vector3) => Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
-      if (!finite3(from)) { scene.remove(sh); setPhase('busy'); later(0.6, goPick); return; }
+      if (!finite3(from)) { scene.remove(sh); goPick(); return; }
       const pt = plazaThrowTarget();
       if (pt?.connId && pt.head && Number.isFinite(pt.head.x) && Number.isFinite(pt.head.y) && Number.isFinite(pt.head.z)) {
         noteHostileThrow();
@@ -3190,14 +3196,14 @@ function throwShell() {
         const a = aimPoint(); a.y = 0.02;
         if (!finite3(a)) a.set(from.x, 0.02, from.z - 1);
         fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh)));
-        stampPlazaNet();
-        void plazaShellFx(from, a);
+        if (plazaNetReady(PLAZA_FX_GAP_MS)) { stampPlazaNet(); void plazaShellFx(from, a); }
       }
     } catch (err) {
       console.error('plaza throw', err);
       try { sh.parent?.remove(sh); } catch { /* */ }
     }
-    setPhase('busy'); later(0.6, goPick);
+    // 丟完馬上可以拿下一顆（殼照樣在空中飛、落地判定不變）
+    goPick();
     return;
   }
   let target: Npc | undefined;
@@ -3213,7 +3219,7 @@ function throwShell() {
     const a = aimPoint(); a.y = 0.02;
     fly(sh, from, a, 0.6, 0.5, () => later(2, () => scene.remove(sh)));
   }
-  setPhase('busy'); later(0.6, goPick);
+  goPick();
 }
 // ----- 7. 阿婆擲殼仔 + 雨傘 -----
 function petAutoGuard() {
@@ -4151,12 +4157,12 @@ initWalkJoy();
 
 function giveUp() {
   if (state !== 'play' || (phase !== 'seam' && phase !== 'twist' && phase !== 'grillPlace')) return;
-  abandoned++; oysterToHand(); setPhase('busy'); oyster.visible = false; gauge.classList.remove('hit', 'miss', 'hitHold');
-  later(0.05, () => { progress = 0; combo = 0; crackedNow = false; tension = 0; shellTop.rotation.z = 0; shellTop.rotation.x = 0; rotKey = 0; grillCookT = 0; });
+  abandoned++; oysterToHand(); oyster.visible = false; gauge.classList.remove('hit', 'miss', 'hitHold');
+  progress = 0; combo = 0; crackedNow = false; tension = 0; shellTop.rotation.z = 0; shellTop.rotation.x = 0; rotKey = 0; grillCookT = 0;
   const sh = new THREE.Mesh(shellGeo, shellTopMat); fly(sh, worldOf(oyster), pileSpot(), 0.6, 0.6, () => scene.remove(sh));
-  // 先排 goPick，避免 nag／特效出錯卡在 busy 拿不到下一顆
-  later(0.6, goPick);
   hint.textContent = '丟掉了…'; try { nag(NAG_GIVEUP); } catch { /* 廣場無 NPC 等 */ } updHud();
+  // 放棄後馬上可以拿下一顆（丟掉的殼照樣飛回堆）；goPick 放最後，提示改回「點臉盆」
+  goPick();
 }
 // 入碗數達標自動解鎖地點（不用錢）
 function autoUnlock() { const tot = save.life.inBowl ?? 0; save.locs ??= []; for (const l of LOCS) if (l.need && tot >= l.need && !save.locs.includes(l.id)) { save.locs.push(l.id); persist(); Social.report('port', LOCS.indexOf(l)); track('buy', { item: 'loc-' + l.id, price: 0 }); toastTop(`新地點解鎖：${l.n}`, TOP_SEC.info); } }
