@@ -416,6 +416,8 @@ camera.rotation.order = 'YXZ';
 scene.add(camera);
 // 第三人稱另用一台鏡頭，遊戲邏輯照舊用 camera
 const tpCam = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.05, 200); let tpOn = false;
+/** 坐下當下的俯仰：平視前方 */
+const SIT_LEVEL_PITCH = 0;
 function viewCam() { return tpOn ? tpCam : camera; }
 const SEAT0 = new THREE.Vector3(0, 1.05, 2.0), SEAT = SEAT0.clone();
 camera.position.copy(SEAT);
@@ -5464,10 +5466,12 @@ function plazaEnsureTpView() {
   drawCamBtn();
 }
 /** 廣場坐下：強制第一人稱（不寫入存檔；離開廣場仍依 plazaForceTp 還原偏好） */
-function plazaEnsureFpView() {
+/** level＝剛坐下：視角改成平視前方（座位正前方、俯仰 0），之後仍可自由轉頭 */
+function plazaEnsureFpView(level = false) {
   if (flHeld) { flHeld = false; flPtr = -1; flDragId = -1; flDown = null; }
   tpv = false;
   snapSeatedFirstPerson();
+  if (level) { yaw = tYaw = 0; pitch = tPitch = SIT_LEVEL_PITCH; }
   drawCamBtn();
 }
 /** 離開廣場時清掉座落卡／搖桿等 HUD，避免殘留到主選單或其他工寮 */
@@ -5997,7 +6001,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
       // 單挑：enterWalk 會藏臉盆；入座當下先亮起來，避免 startDay／goPick 時 seatRig 還是 invisible → 黃框不出
       if (isPlazaRaceMode()) setPlazaSeatPropsVisible(true);
-      plazaEnsureFpView();
+      plazaEnsureFpView(true);
       startDay();
       scheduleSitLookWarm();
       on('standBtn', canStand);
@@ -6022,7 +6026,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       document.body.classList.remove('plazaRoam');
       handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
       if (isPlazaRaceMode()) setPlazaSeatPropsVisible(true);
-      plazaEnsureFpView();
+      plazaEnsureFpView(true);
       scheduleSitLookWarm();
       on('standBtn', !isPlazaRaceMode()); on('umbBtn', true); on('medBtn', !isPlazaRaceMode());
       // 換位：手上那顆（含撬到一半）放回原堆，盆子換成新桌難度並補滿
@@ -6046,7 +6050,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       document.body.classList.remove('plazaMgSit');
       clearMgSitLocal();
       tYaw = yaw = 0; tPitch = pitch = -0.35;
-      plazaEnsureFpView();
+      plazaEnsureFpView(true);
       scheduleSitLookWarm();
       setSmokeSitHands(true);
       on('standBtn', true); on('throwBtn', false); on('stealBtn', false);
@@ -6063,7 +6067,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       document.body.classList.remove('plazaMgSit');
       clearMgSitLocal();
       tYaw = yaw = 0; tPitch = pitch = -0.3;
-      plazaEnsureFpView();
+      plazaEnsureFpView(true);
       scheduleSitLookWarm();
       handRig.visible = false;
       on('standBtn', true); on('throwBtn', false); on('stealBtn', false);
@@ -6084,7 +6088,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       disposeFpCigarette();
       setPlazaSeatPropsVisible(false);
       tYaw = yaw = 0; tPitch = pitch = -0.12; // 死鬥同款：pitch<0 略往下看廣場
-      plazaEnsureFpView();
+      plazaEnsureFpView(true);
       scheduleSitLookWarm();
       handRig.visible = false;
       // 倒數固定本機 90 秒，不吃伺服器絕對時間戳（時鐘差／舊後端會變成 ~20 秒）
@@ -7308,7 +7312,7 @@ bindRoom({
     applyPlazaSeatPose(new THREE.Vector3(x, 0, z), seatY);
     setWalking(false); setNearSeat(null); on('seatCard', false); on('joy', false); clearWalkInput();
     setPlazaSeatPropsVisible(true);
-    handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = -0.42;
+    handRig.visible = true; tYaw = yaw = 0; tPitch = pitch = SIT_LEVEL_PITCH; // 坐下平視前方
     on('standBtn', true); on('umbBtn', roomPlay); on('medBtn', roomPlay);
     if (roomPlay) later(0.3, goPick);
     toastTop('坐下了', TOP_SEC.mid); SFX.pop();
