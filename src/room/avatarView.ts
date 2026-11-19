@@ -3,7 +3,7 @@ import { applyOutfitToRig, normalizeOutfitIds, outfitKey } from '../shop/equipVi
 import { pickAmaLook, amaShirtHex, dressPlazaAma, applyAmaAppearance } from '../plaza/amaLook';
 import {
   makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, plazaGaitRate, posePlazaJump,
-  posePlazaSit, posePlazaStand, posePlazaCarried, posePlazaCarryHold, applyPlazaBodyPose, type PlayerRig,
+  posePlazaSit, posePlazaStand, posePlazaCarried, posePlazaCarryHold, applyPlazaBodyPose, resetPlazaPoseBase, type PlayerRig,
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
@@ -159,6 +159,10 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
       return;
     }
     if (r.phase === 'crouch' || r.phase === 'lie') {
+      // 先重設腿的基準：applyPlazaBodyPose 是混合式，不重設會每幀累加把腿折爛
+      const crouchWalk = r.phase === 'crouch' && !!r.moving;
+      if (crouchWalk) r.bob += plazaGaitRate(1.1) * Math.min(dt, 0.1);
+      resetPlazaPoseBase(r.rig, crouchWalk, r.bob);
       applyPlazaBodyPose(r.rig, r.phase === 'lie' ? 'lie' : 'crouch', 1);
       return;
     }
@@ -189,6 +193,7 @@ export function createRoomAvatarView(scene: THREE.Scene, selfPid: () => string) 
       const sitY = r.seated && !r.carriedBy ? 0.02 : 0;
       r.rig.outer.position.set(r.x, sitY, r.z);
       r.rig.outer.rotation.y = r.yaw;
+      r.rig.outer.rotation.x = 0; // 躺姿每幀再疊；起身後不會卡在橫躺
       r.rig.outer.visible = true;
       poseOf(r, t, dt);
       const carrying = [...remotes.values()].some(o => o !== r && o.carriedBy && (o.carriedBy === r.pid || o.carriedBy === r.connId));

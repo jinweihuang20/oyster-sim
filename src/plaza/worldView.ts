@@ -13,7 +13,7 @@ import {
   makePlayerAvatar, posePlazaHangArms, posePlazaWalkSwingArms, posePlazaWalkCycle, plazaGaitRate, posePlazaJump,
   posePlazaSit, posePlazaStand, posePlazaSmokeSit, posePlazaCarried, posePlazaCarryHold, easeSmokePuff,
   clearPlazaSmokeCig, getPlazaSmokeCig, ensurePlazaSmokeCig,
-  plazaJumpHeight, PLAZA_JUMP_DUR, posePlazaStallKeeper, applyPlazaBodyPose, type PlayerRig,
+  plazaJumpHeight, PLAZA_JUMP_DUR, posePlazaStallKeeper, applyPlazaBodyPose, resetPlazaPoseBase, type PlayerRig,
   PLAZA_SIT_ROOT_Y,
 } from '../dm/character';
 import { makeMeshHelpers } from '../dm/mesh';
@@ -2776,11 +2776,13 @@ function hashPid(pid: string) {
         // 遠距一次到位，避免遠處第一次看到時還從站姿慢慢躺下
         if (far) rj.pk = want;
         else rj.pk = (rj.pk ?? 0) + (want - (rj.pk ?? 0)) * 0.18;
-        if (rj.pk > 0.001 && rj.pz && !r.moving) {
-          r.rig.legL.rotation.x = r.rig.legR.rotation.x = 0;
-          r.rig.shinL.rotation.x = r.rig.shinR.rotation.x = 0;
+        if (rj.pk > 0.001 && rj.pz) {
+          // 每幀先重設腿的基準再疊蹲／躺；舊版蹲著移動時沒重設，大腿角度每幀累加 → 腳折成一團
+          const crouchWalk = rj.pz === 'crouch' && !!r.moving;
+          if (crouchWalk) r.bob += plazaGaitRate(1.1) * dt;
+          resetPlazaPoseBase(r.rig, crouchWalk, r.bob);
+          applyPlazaBodyPose(r.rig, rj.pz, rj.pk);
         }
-        if (rj.pk > 0.001 && rj.pz) applyPlazaBodyPose(r.rig, rj.pz, rj.pk);
       }
       { const now = performance.now(); const mu = rj.mt ? (now - rj.mt) / 1800 : -1; const inMoon = (r.phase || '') === 'moon'; r.rig.outer.rotation.z = rotZ;
         if (mu >= 0 && mu < 1) { r.rig.outer.position.x += Math.sin(rj.mz) * 22 * mu; r.rig.outer.position.z += Math.cos(rj.mz) * 22 * mu; r.rig.outer.position.y += 22 * mu; r.rig.outer.rotation.x = mu * 14; r.rig.outer.rotation.z = mu * 9; r.rig.outer.visible = true; rj.mh = true; }

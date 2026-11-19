@@ -473,6 +473,18 @@ export function posePlazaStallKeeper(rig: PlayerRig, t: number, ph: number) {
   rig.head.rotation.y = Math.sin(t * 0.4 + ph) * 0.3;
 }
 /** 廣場蹲／躺姿勢：k 0..1 平滑；在擺臂之後呼叫（outer.rotation.order 需為 YXZ） */
+/**
+ * 遠端蹲／躺前先把腿放回站姿基準（applyPlazaBodyPose 是「基準×(1−k)＋目標」的混合，
+ * 若基準沒每幀重設，大腿會一直疊加到約 3.9 rad，腿就折成一團）。
+ * moving＝蹲著走：用小步走路循環當基準（同本機蹲走）。
+ */
+export function resetPlazaPoseBase(rig: PlayerRig, moving: boolean, ph: number) {
+  if (moving) { posePlazaWalkCycle(rig, ph, 0.35); return; }
+  rig.legL.rotation.set(0, 0, 0); rig.legR.rotation.set(0, 0, 0);
+  rig.shinL.rotation.set(0, 0, 0); rig.shinR.rotation.set(0, 0, 0);
+  rig.root.position.y = 0;
+}
+
 export function applyPlazaBodyPose(rig: PlayerRig, pose: string, k: number) {
   if (k <= 0.001) { (rig as any).torso && Math.abs((rig as any).torso.rotation.x) < 0.4 && pose === 'crouch' && ((rig as any).torso.rotation.x = 0); return; }
   const r: any = rig;
