@@ -15,9 +15,10 @@ import {
   PB, SEATS, dockSlot, stepPlazaBoat, pushStatic, pushFromBoat, isHardRam, stepSwim, freePassengerSeat, boatEmpty,
   distToLand, landSpot, hullPts, knockSpot, boatBob, pierNearest, dockEdge, nearestDrift, DRIFT, type Hull,
 } from './boatLogic';
-import { poseRider } from './boatPose';
+import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
-import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed } from './boatNet';
+import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
+import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare } from './boatNet';
 
 export type BoatSfx = 'splash' | 'bump' | 'hit' | 'dock' | 'launch' | 'warn';
 export type PlazaBoatDeps = {
@@ -43,11 +44,17 @@ export type PlazaBoatDeps = {
   smoke?: () => SmokeSitPoseOpts | null;
   /** 伺服器發的獎金入帳（跟其他廣場獎勵同一條路） */
   grantMoney?: (amount: number, via: string) => void;
+  /** 蚵棚：本機錢包（升級扣錢、偷拉罰款）與雜貨店買的蚵棚組合包 */
+  getMoney?: () => number;
+  spendMoney?: (n: number, via: string) => boolean;
+  fineMoney?: (n: number, via: string) => number;
+  rackKits?: () => number;
+  addRackKits?: (d: number) => void;
 };
 
 type Mode = 'walk' | 'boat' | 'swim';
 type BoatSt = Hull & { id: number; seats: string[]; tx: number; tz: number; th: number; tv: number; netT: number; sway: number; steer: number; wakeT: number; bumpT: number; y: number; rx: number; rz: number; fake?: { t: number; r: number; cx: number; cz: number } };
-type SwimSt = { connId: string; x: number; z: number; h: number; tx: number; tz: number; th: number; fake?: boolean };
+type SwimSt = { connId: string; x: number; z: number; h: number; tx: number; tz: number; th: number; fake?: boolean; /** 0～1：在游（自由式）／踩水，平滑 */ k?: number };
 type Prompt = { kind: 'board' | 'ride' | 'leave' | 'rescue' | 'climb' | 'out' | 'full'; label: string; boat?: number; conn?: string };
 
 const ICON = {
@@ -68,12 +75,13 @@ const swimmers = new Map<string, SwimSt>();
 let mode: Mode = 'walk';
 let myBoat = -1, mySeat = -1;
 const mySwim = { x: 0, z: 0, h: 0 };
+let mySwimK = 0;
 let own: Raft | null = null;
 let ownAnchors: THREE.Object3D[] = [];
 let localOnly = false, localNoticed = false;
 let driveAcc = 0, swimAcc = 0, ramCd = 0, throwCd = 0, throwAnim = 0, mySway = 0, busy = false, splashT = 0, t = 0;
 let prompt: Prompt | null = null;
-let ui: { root: HTMLDivElement; act: HTMLButtonElement; shell: HTMLButtonElement; dive: HTMLButtonElement; note: HTMLDivElement; dock: HTMLDivElement; dockArrow: HTMLElement; dockLbl: HTMLSpanElement; drift: HTMLDivElement; driftArrow: HTMLElement; driftLbl: HTMLSpanElement } | null = null;
+let ui: { root: HTMLDivElement; act: HTMLButtonElement; shell: HTMLButtonElement; dive: HTMLButtonElement; note: HTMLDivElement; dock: HTMLDivElement; dockArrow: HTMLElement; dockLbl: HTMLSpanElement } | null = null;
 let resyncT = 0;
 // 漂流箱（伺服器給位置；撈到由伺服器判定）
 let drifts: DriftBox[] = [];
@@ -111,16 +119,13 @@ function buildUi() {
   const note = document.createElement('div'); note.id = 'boatNote'; root.appendChild(note);
   // 碼頭方向指示：碼頭不在畫面內（或很遠）時，貼在畫面邊緣指向碼頭
   const dock = document.createElement('div'); dock.id = 'boatDockInd'; dock.setAttribute('aria-hidden', 'true');
-  const drift = document.createElement('div'); drift.id = 'boatDriftInd'; drift.setAttribute('aria-hidden', 'true');
-  drift.innerHTML = `<i class="driftArrow"><svg viewBox="0 0 24 24"><path d="M9 7l6 5-6 5"/></svg></i><span class="driftLbl"></span>`;
-  root.appendChild(drift);
   dock.innerHTML = `<i class="dockArrow"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M13 8.5l3.5 3.5-3.5 3.5"/></svg></i><span class="dockLbl"></span>`;
   root.appendChild(dock);
   const tap = (b: HTMLButtonElement, f: () => void) => b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); f(); });
   tap(act, () => doPrompt()); tap(shell, () => throwFromBoat()); tap(dive, () => void jumpIn());
   for (const b of [act, shell, dive]) b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
   document.body.appendChild(root);
-  ui = { root, act, shell, dive, note, dock, dockArrow: dock.querySelector('.dockArrow') as HTMLElement, dockLbl: dock.querySelector('.dockLbl') as HTMLSpanElement, drift, driftArrow: drift.querySelector('.driftArrow') as HTMLElement, driftLbl: drift.querySelector('.driftLbl') as HTMLSpanElement };
+  ui = { root, act, shell, dive, note, dock, dockArrow: dock.querySelector('.dockArrow') as HTMLElement, dockLbl: dock.querySelector('.dockLbl') as HTMLSpanElement };
 }
 function syncUi() {
   if (!ui) return;
@@ -152,9 +157,17 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
   if (c) {
     net = makeBoatNet(c, {
       seats: onSeats, poses: onPoses, ram: onRam, swimStart: s => upsertSwim(s, true), swimEnd: endSwim, rescued: onRescued, state: onState,
-      drift: onDrift, driftClaimed: onDriftClaimed,
+      drift: onDrift, driftClaimed: onDriftClaimed, driftShare: onDriftShare,
+      racks: onRackSnap, rackUpd: onRackUpd, rackGone: onRackGone, rackStolen: onRackStolen, cargo: onCargo, load: onLoad,
     });
   } else localOnly = true;
+  openRacks({
+    net: () => net, sea: () => sea,
+    myBoat: () => (mode === 'boat' ? boats[myBoat] ?? null : null), mySeat: () => mySeat, localOnly: () => localOnly || !net,
+    splash: (x, z, k) => splash(x, z, k), sfx: k => D?.sfx(k),
+    grantMoney: (n, via) => D?.grantMoney?.(n, via), getMoney: () => D?.getMoney?.() ?? 0, spendMoney: (n, via) => D?.spendMoney?.(n, via) ?? false,
+    fineMoney: (n, via) => D?.fineMoney?.(n, via) ?? 0, kits: () => D?.rackKits?.() ?? 0, addKits: d => D?.addRackKits?.(d),
+  }, ui!.root);
   syncUi();
 }
 export function closePlazaBoats() {
@@ -167,6 +180,7 @@ export function closePlazaBoats() {
   D.view()?.setSeaView(false);
   for (const r of fakeRigs.values()) r.outer.removeFromParent();
   fakeRigs.clear();
+  closeRacks();
   net?.close(); net = null;
   sea?.dispose(); sea = null; own = null; ownAnchors = [];
   ui?.root.remove(); ui = null;
@@ -175,6 +189,15 @@ export function closePlazaBoats() {
   D = null;
 }
 export const plazaBoatsActive = () => !!D && mode !== 'walk';
+/** 游泳時寵物站在背上：回背上那一點的世界座標＋朝向（不在游泳＝null） */
+const _back = new THREE.Vector3();
+export function plazaSwimBack(groundPet = false): { x: number; y: number; z: number; yaw: number } | null {
+  if (!D || mode !== 'swim') return null;
+  const rig = D.me(); if (!rig) return null;
+  const sp = swimPetSpot(swimForce ?? mySwimK, groundPet);
+  _back.set(0, sp.y, sp.z).applyEuler(rig.outer.rotation).add(rig.outer.position);
+  return { x: _back.x, y: _back.y, z: _back.z, yaw: mySwim.h };
+}
 export const plazaBoatsMode = () => mode;
 export const plazaBoatsOpen = () => !!D;
 
@@ -213,13 +236,24 @@ function onDriftClaimed(e: DriftClaimed) {
   drifts = drifts.filter(d => d.key !== e.key);
   if (b) splash(b.x, b.z, 1.2);
   // 自己撈到的入帳在 DriftClaim 的回應裡處理（只入一次）；別人撈到：小公告
-  if (!isMe(e.connId) && e.pay > 0) rewardToast(`${e.nick || '有人'} 撈到漂流箱`, money(e.pay), 'feed', `drift:${e.key}`);
+  // 同船分錢的人另外收到 DriftShare（自己的獎勵提示），這裡就不再放公告
+  if (!isMe(e.connId) && e.pay > 0 && !sharedKeys.has(e.key)) rewardToast(`${e.nick || '有人'} 撈到漂流箱${e.n > 1 ? `（全船 ${e.n} 人平分）` : ''}`, money(e.pay), 'feed', `drift:${e.key}`);
+}
+const sharedKeys = new Set<number>();
+/** 同船有人撈到：我分到的錢（伺服器已記 income），入帳＋自己的獎勵提示 */
+function onDriftShare(e: DriftShare) {
+  if (e.pay <= 0) return;
+  sharedKeys.add(e.key); if (sharedKeys.size > 40) sharedKeys.delete(sharedKeys.values().next().value!);
+  D?.grantMoney?.(e.pay, 'drift-share');
+  D?.sfx('launch');
+  rewardToast(`${e.by || '同船的人'} 撈到漂流箱・全船 ${e.n} 人平分`, `+${money(e.pay)}`, 'mine', `drift:${e.key}`);
 }
 const money = (n: number) => `$${n.toLocaleString('zh-TW')}`;
 function driftHint() {
   if (driftHinted || localOnly) return;
   driftHinted = true;
-  later(1.8, () => toastTop(`海上有漂流箱，找到可得 ${money(driftPay.min)}～${money(driftPay.max)}，每 5 分鐘換位置`));
+  // 只說有這回事，不說在哪（要自己出海找）
+  later(1.8, () => toastTop(`海上藏著漂流箱（${money(driftPay.min)}～${money(driftPay.max)}），位置會換，要自己找。西邊海上的公共蚵棚熟了會亮燈，靠近可以拉蚵串回碼頭賣`));
 }
 /** 靠近漂流箱：請伺服器判定（伺服器用自己知道的船／泳者位置），成功才入帳 */
 function tickDrift(dt: number) {
@@ -244,7 +278,7 @@ function tickDrift(dt: number) {
       drifts = drifts.filter(d => d.key !== key);
       D?.grantMoney?.(r.pay, 'drift-box');
       splash(n.box.x, n.box.z, 1.6); D?.sfx('launch');
-      rewardToast('撈到漂流箱！', `+${money(r.pay)}`, 'mine', `drift:${key}`);
+      rewardToast((r.n ?? 1) > 1 ? `撈到漂流箱！全船 ${r.n} 人平分（共 ${money(r.total ?? r.pay)}）` : '撈到漂流箱！', `+${money(r.pay)}`, 'mine', `drift:${key}`);
       driftCd = 1;
       return;
     }
@@ -410,6 +444,9 @@ async function leaveBoat() {
   const spot = landSpot(b.x, b.z); if (!spot) { toast('靠近碼頭或岸邊再下船', '#ffb08a'); return; }
   const yaw = Math.atan2(-(spot.x - b.x), -(spot.z - b.z));
   if (mySeat === 0) { b.v = 0; b.tv = 0; }
+  // 身上有蚵串：下船前先在碼頭賣掉
+  if (!localOnly && !b.fake) await rackBeforeLeave();
+  if (!boats[myBoat] || mode !== 'boat') return;
   if (localOnly || b.fake) { b.seats[mySeat] = ''; landAt(spot.x, spot.z, yaw); return; }
   // 駕駛下船前先把最後位置送上去（船就停在這裡）
   if (mySeat === 0) net!.drive(b.id, b.x, b.z, b.h, 0);
@@ -430,6 +467,7 @@ async function jumpIn() {
   const r = await net!.jump().finally(() => { busy = false; });
   if (!r.ok) { toast(ERR[r.err ?? ''] ?? '跳不下去', '#ffb08a'); return; }
   if (r.boat) onSeats(r.boat);
+  rackSpill(r);
   const s = r.swim; becomeSwimmer(s?.x ?? x, s?.z ?? z, s?.h ?? b.h);
 }
 async function swimOut() {
@@ -485,6 +523,7 @@ export function plazaBoatsKey(code: string): boolean {
   if (mode === 'walk') return false;
   if (code === 'KeyF' && mode === 'boat') { throwFromBoat(); return true; }
   if (code === 'KeyX' && mode === 'boat') { void jumpIn(); return true; }
+  if (code === 'KeyR' && mode === 'boat') { rackKey(code); return true; }
   // T＝抽一口：在船上交給吸菸模組（游泳時吞掉）
   if (code === 'KeyT') return mode === 'swim';
   return code === 'Space' || code === 'KeyC' || code === 'KeyZ' || code === 'KeyG' || code === 'KeyE' || code === 'KeyR';
@@ -566,9 +605,9 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
     b.sway = Math.max(0, b.sway - dt / PB.swayT); b.bumpT = Math.max(0, b.bumpT - dt);
     if (mode === 'boat' && b.id === myBoat && mySeat === 0) {
       const v0 = b.v;
-      stepPlazaBoat(b, thr, steer, dt);
+      stepPlazaBoat(b, thr, steer, dt, rackSlow(b.id));
       b.steer += (steer - b.steer) * Math.min(1, dt * 6);
-      if (pushStatic(b) && Math.abs(v0) > 1.5 && b.bumpT <= 0) { b.bumpT = 0.4; D.sfx('bump'); const [fx, fz] = fwd(b.h); splash(b.x + fx * 2, b.z + fz * 2, 0.6); }
+      if ((pushStatic(b) || rackPush(b)) && Math.abs(v0) > 1.5 && b.bumpT <= 0) { b.bumpT = 0.4; D.sfx('bump'); const [fx, fz] = fwd(b.h); splash(b.x + fx * 2, b.z + fz * 2, 0.6); }
       for (const o of boats) {
         if (o === b) continue;
         if (Math.abs(o.x - b.x) > 7 || Math.abs(o.z - b.z) > 7) continue;
@@ -582,7 +621,7 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
           if (isHardRam(v0) && ramCd <= 0 && !boatEmpty(o.seats)) {
             ramCd = PB.ramCd;
             if (localOnly || o.fake) fakeRam(b, o, hit.ux, hit.uz);
-            else void net!.ram(b.id, o.id).then(r => { if (!r.ok && r.err !== 'slow') console.debug('ram', r.err); });
+            else void net!.ram(b.id, o.id).then(r => { if (!r.ok && r.err !== 'slow') console.debug('ram', r.err); else rackSpill(r); });
           }
         }
         b.v *= PB.bump;
@@ -627,6 +666,7 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
   // 2) 游泳
   if (mode === 'swim') {
     stepSwim(mySwim, thr, steer, dt);
+    mySwimK += ((Math.abs(thr) > 0.05 ? 1 : 0) - mySwimK) * Math.min(1, dt * 3);
     for (const b of boats) { const dx = mySwim.x - b.x, dz = mySwim.z - b.z, d = Math.hypot(dx, dz); if (d < 1.5 && d > 1e-3) { mySwim.x = b.x + dx / d * 1.5; mySwim.z = b.z + dz / d * 1.5; } }
     swimAcc += dt;
     if (swimAcc >= 1 / PB.swimHz && !localOnly) { swimAcc = 0; net?.swim(mySwim.x, mySwim.z, mySwim.h); }
@@ -634,7 +674,10 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
   }
   for (const w of swimmers.values()) {
     if (w.fake) continue;
+    const ox = w.x, oz = w.z;
     w.x += (w.tx - w.x) * kk; w.z += (w.tz - w.z) * kk;
+    const mv = dt > 0 ? Math.hypot(w.x - ox, w.z - oz) / dt : 0;
+    w.k = (w.k ?? 0) + ((mv > 0.35 ? 1 : 0) - (w.k ?? 0)) * Math.min(1, dt * 3);
     let dh = w.th - w.h; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); w.h += dh * kk;
   }
 
@@ -655,6 +698,7 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
   }
   if (own && !(mode === 'boat')) own.g.visible = false;
   tickDrift(dt);
+  tickRacks(dt, cam);
   sea.end();
   sea.tick(t, dt);
 
@@ -674,7 +718,7 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
     }
   }
   for (const w of swimmers.values()) {
-    const m = { x: w.x, y: PB.waterY, z: w.z, yaw: w.h, pose: 'swim' as const };
+    const m = { x: w.x, y: PB.waterY, z: w.z, yaw: w.h, pose: 'swim' as const, swim: swimForce ?? (w.fake ? 0 : w.k ?? 0) };
     if (fakeRigs.has(w.connId)) placeFake(w.connId, m);
     else if (view) { view.setRemoteMount(w.connId, m); now.add(w.connId); }
   }
@@ -690,7 +734,7 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
     rig.outer.position.set(0, pr.dy, 0); rig.outer.rotation.set(pr.rx, 0, 0); rig.outer.visible = true;
     D.walkPos.set(b.x, 1.55, b.z);
   } else if (rig && mode === 'swim') {
-    const pr = poseRider(rig, 'swim', t, {});
+    const pr = poseRider(rig, 'swim', t, { swim: swimForce ?? mySwimK });
     rig.outer.position.set(mySwim.x, PB.waterY + pr.dy, mySwim.z); rig.outer.rotation.order = 'YXZ'; rig.outer.rotation.set(pr.rx, mySwim.h, 0); rig.outer.visible = true;
     D.walkPos.set(mySwim.x, 1.55, mySwim.z);
   }
@@ -733,27 +777,7 @@ function tickDockInd(cam: THREE.Camera) {
     }
   }
   if (show !== dockShown) { dockShown = show; ui.dock.classList.toggle('on', show); }
-  // 最近的漂流箱：比碼頭指示低調（小、半透明），畫面內看得到就收起
-  let ds = false;
-  if (mode !== 'walk' && drifts.length) {
-    const me = mode === 'boat' ? boats[myBoat] : mySwim;
-    const n = me ? nearestDrift(me.x, me.z, drifts) : null;
-    if (n) {
-      _dp.set(n.box.x, PB.waterY + 0.4, n.box.z).project(cam);
-      const W = window.innerWidth, H = window.innerHeight, ins = dockInsets(W, H);
-      const e = dockEdge(_dp.x, _dp.y, _dp.z > 1, W, H, n.dist, { ...ins, l: ins.l + 34, r: ins.r + 34, t: ins.t + 26, b: ins.b + 26 }, 70, 4);
-      if (e && e.edge) {
-        ds = true;
-        ui.drift.style.transform = `translate(${e.x.toFixed(0)}px,${e.y.toFixed(0)}px)`;
-        ui.driftArrow.style.transform = `rotate(${e.deg.toFixed(0)}deg)`;
-        const lbl = `${Math.round(n.dist)} m`;
-        if (ui.driftLbl.textContent !== lbl) ui.driftLbl.textContent = lbl;
-      }
-    }
-  }
-  if (ds !== driftShown) { driftShown = ds; ui.drift.classList.toggle('on', ds); }
 }
-let driftShown = false;
 /** 指示器要避開的邊（px）：手機橫放時下緣左邊搖桿、右邊按鈕都很高 */
 function dockInsets(W: number, H: number) {
   const short = H <= 500;
@@ -822,11 +846,11 @@ export function plazaBoatsNight(k: number, sky: THREE.Color) { sea?.setNight(k, 
 export function plazaBoatsFog(f: THREE.Fog) { sea?.setFog(f); }
 
 // ---------------- 測試／除錯 ----------------
-function placeFake(c: string, m: { x: number; y: number; z: number; yaw: number; pose: 'drive' | 'sit' | 'deck' | 'swim'; steer?: number; sway?: number; rx?: number; rz?: number }) {
+function placeFake(c: string, m: { x: number; y: number; z: number; yaw: number; pose: 'drive' | 'sit' | 'deck' | 'swim'; steer?: number; sway?: number; rx?: number; rz?: number; swim?: number }) {
   const r = fakeRigs.get(c); if (!r) return;
   // 除錯：假乘客抽菸（每 6 秒抽一口），看船上抽菸姿勢用
   const smoke = fakeSmoke && m.pose !== 'swim' ? { puffK: Math.max(0, Math.sin(t * 1.05)) ** 2 } : null;
-  const pr = poseRider(r, m.pose, t, { steer: m.steer, sway: m.sway, smoke });
+  const pr = poseRider(r, m.pose, t, { steer: m.steer, sway: m.sway, smoke, swim: m.swim });
   if (smoke) ensurePlazaSmokeCig(r, true); else if (getPlazaSmokeCig(r)) clearPlazaSmokeCig(r);
   r.outer.position.set(m.x, m.y + pr.dy, m.z); r.outer.rotation.order = 'YXZ'; r.outer.rotation.set(pr.rx + (m.rx ?? 0), m.yaw, m.rz ?? 0);
 }
@@ -845,6 +869,8 @@ function fakeRam(b: BoatSt, o: BoatSt, ux: number, uz: number) {
   if (o.fake) o.fake = undefined;
 }
 let fakeN = 0, fakeSmoke = false;
+/** 除錯：強制游泳姿勢（0＝踩水、1＝自由式；null＝照實際速度） */
+let swimForce: number | null = null;
 /** 量效能用：強制海上視野開／關（null＝照規則） */
 let seaViewForce: boolean | null = null;
 /** 除錯：追船鏡頭倍率（負＝從船頭往回看，看自己／乘客的姿勢） */
@@ -903,12 +929,33 @@ export const plazaBoatsDbg = {
   drift() { return { boxes: drifts.map(d => ({ key: d.key, x: +d.x.toFixed(1), z: +d.z.toFixed(1) })), pay: driftPay, hinted: driftHinted }; },
   /** 假乘客／假駕駛抽菸（看姿勢用） */
   smoke(on = true) { fakeSmoke = on; return 'ok'; },
+  swimK(k: number | null = null) { swimForce = k; return 'ok'; },
   /** 海上視野：遠處小人數、遠距仍畫本體數 */
   cam(k = 1) { camFront = k || 1; return 'ok'; },
   seaView(force?: boolean | null) { if (force !== undefined) seaViewForce = force; return D?.view()?.seaViewStats() ?? null; },
   night(k: number) { sea?.setNight(k, new THREE.Color(0x1d3557)); return 'ok'; },
+  /** 蚵棚：racks.list()／cargo()／near()／haul()／sell()／place()／panel()／up(line)／ui() */
+  racks: rackDbg,
+  /** 自己開的船分段開到某座蚵棚旁（伺服器一次最多跳 14 m，所以每 0.15 秒跳 12 m） */
+  tpRack(id: number, side = 2.9) {
+    const b = boats[myBoat]; if (!b || mode !== 'boat' || mySeat !== 0) return 'not driving';
+    const r = rackDbg.list().find(x => x.id === id); if (!r) return 'no rack';
+    const raw = (rackDbg as any)._raw?.(id) as { h: number } | undefined;
+    const h = raw?.h ?? 0;
+    // 架子長邊沿 (cos h, −sin h)；停在寬邊外 side 公尺，船頭跟架子平行
+    const tx = r.x + Math.sin(h) * side, tz = r.z + Math.cos(h) * side;
+    const go = () => {
+      const bb = boats[myBoat]; if (!bb || mode !== 'boat') return;
+      const dx = tx - bb.x, dz = tz - bb.z, d = Math.hypot(dx, dz), k = Math.min(1, 12 / Math.max(d, 1e-6));
+      bb.x += dx * k; bb.z += dz * k; bb.h = h + Math.PI / 2; bb.v = 0; bb.tv = 0;
+      if (!localOnly) net?.drive(bb.id, bb.x, bb.z, bb.h, 0);
+      if (k < 1) later(0.15, go);
+    };
+    go();
+    return `→ (${tx.toFixed(1)},${tz.toFixed(1)})`;
+  },
   /** 走路時傳送到某點（碼頭上） */
-  tp(x: number, z: number) { if (!D || mode !== 'walk') return 'not walking'; D.walkPos.x = x; D.walkPos.z = z; return 'ok'; },
+  tp(x: number, z: number, yaw?: number) { if (!D || mode !== 'walk') return 'not walking'; D.walkPos.x = x; D.walkPos.z = z; if (yaw != null) D.setYaw(yaw); return 'ok'; },
   /** 自己開的船直接擺到某處（測試撞船／救人；伺服器一次最多跳 14 m） */
   place(x: number, z: number, h: number, v = 0) {
     const b = boats[myBoat]; if (!b || mode !== 'boat' || mySeat !== 0) return 'not driving';

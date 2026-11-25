@@ -2,6 +2,7 @@
 import type * as signalR from '@microsoft/signalr';
 import { HubConnectionState } from '@microsoft/signalr';
 import type { PlazaClient } from '../hubClient';
+import { normRack, normRackSnap, type RackDto, type RackSnap } from './rackLogic';
 
 export type BoatDto = { id: number; x: number; z: number; h: number; v: number; seats: string[] };
 export type SwimDto = { connId: string; x: number; z: number; h: number };
@@ -32,7 +33,9 @@ function normSnap(o: any): BoatsSnap | null {
 
 export type DriftBox = { key: number; x: number; z: number };
 export type DriftSnap = { boxes: DriftBox[]; nextShuffleAt: number; minPay: number; maxPay: number };
-export type DriftClaimed = { key: number; connId: string; nick: string; pay: number };
+export type DriftClaimed = { key: number; connId: string; nick: string; pay: number; n: number };
+/** 同船有人撈到漂流箱：我分到的錢 */
+export type DriftShare = { key: number; pay: number; total: number; n: number; by: string };
 export function normDrift(o: any): DriftSnap | null {
   if (!o) return null;
   const boxes = ((g(o, 'boxes') ?? []) as any[]).map(b => ({ key: num(g(b, 'key'), -1), x: num(g(b, 'x')), z: num(g(b, 'z')) })).filter(b => b.key > 0);
@@ -43,6 +46,7 @@ export type BoatNetEvents = {
   /** 漂流箱整包（換位置／補新的／進場） */
   drift?: (s: DriftSnap) => void;
   driftClaimed?: (e: DriftClaimed) => void;
+  driftShare?: (e: DriftShare) => void;
   seats: (b: BoatDto) => void;
   poses: (p: BoatPosesDto) => void;
   ram: (r: RamDto) => void;
@@ -51,9 +55,22 @@ export type BoatNetEvents = {
   rescued: (e: { boatId: number; seat: number; by: string }) => void;
   /** Join／重連後：伺服器的完整狀態（null＝舊伺服器，不支援） */
   state: (s: BoatsSnap | null, soft?: boolean) => void;
+  /** 蚵棚：整包（進場／對帳）、單座更新、收掉 */
+  racks?: (s: RackSnap) => void;
+  rackUpd?: (r: RackDto) => void;
+  rackGone?: (id: number) => void;
+  /** 我的私人蚵棚被偷（warn＝防盜 Lv3 起：有人靠近想偷） */
+  rackStolen?: (e: { rackId: number; by: string; warn: boolean }) => void;
+  /** 我被撞下水掉了船貨 */
+  cargo?: (e: { cargo: number; lost: number }) => void;
+  /** 一艘船上所有人的船貨合計 */
+  load?: (e: { boatId: number; load: number }) => void;
 };
+export type HaulRes = { ok: boolean; err?: string; cargo?: number; cargoVal?: number; rack?: RackDto | null; fine?: number };
+export type SellRes = { ok: boolean; err?: string; pay?: number; strings?: number; kg?: number; cargo?: number };
+export type RackUpRes = { ok: boolean; err?: string; rack?: RackDto | null; line?: number; lv?: number; cost?: number };
 
-export type BoatRes = { ok: boolean; err?: string; boat?: BoatDto | null; seat?: number; swim?: SwimDto | null };
+export type BoatRes = { ok: boolean; err?: string; boat?: BoatDto | null; seat?: number; swim?: SwimDto | null; cargo?: number; lost?: number };
 
 export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
   let supported: boolean | null = null;
@@ -63,7 +80,7 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     if (!live() || supported === false) return { ok: false, err: supported === false ? 'old_server' : 'offline' };
     try { return await client.conn!.invoke(m, ...a); } catch (e: any) { return { ok: false, err: String(e?.message ?? 'fail').includes('does not exist') ? 'old_server' : 'fail' }; }
   };
-  const res = (r: any): BoatRes => ({ ok: !!r?.ok, err: r?.err, boat: normBoat(r?.boat), seat: r?.seat != null ? num(r.seat, -1) : undefined, swim: normSwim(r?.swim) });
+  const res = (r: any): BoatRes => ({ ok: !!r?.ok, err: r?.err, boat: normBoat(r?.boat), seat: r?.seat != null ? num(r.seat, -1) : undefined, swim: normSwim(r?.swim), cargo: r?.cargo != null ? num(r.cargo) : undefined, lost: r?.lost != null ? num(r.lost) : undefined });
 
   client.bindExtra((conn: signalR.HubConnection) => {
     const safe = (f: (x: any) => void) => (x: any) => { if (closed) return; try { f(x); } catch (e) { console.error('boat ev', e); } };
@@ -77,14 +94,25 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     conn.on('SwimStart', safe(x => { const s = normSwim(x); if (s) ev.swimStart(s); }));
     conn.on('SwimEnd', safe(x => { const c = String(g(x, 'connId') ?? ''); if (c) ev.swimEnd(c); }));
     conn.on('DriftBoxes', safe(x => { const d = normDrift(x); if (d) ev.drift?.(d); }));
-    conn.on('DriftClaimed', safe(x => ev.driftClaimed?.({ key: num(g(x, 'key'), -1), connId: String(g(x, 'connId') ?? ''), nick: String(g(x, 'nick') ?? ''), pay: num(g(x, 'pay')) })));
+    conn.on('DriftClaimed', safe(x => ev.driftClaimed?.({ key: num(g(x, 'key'), -1), connId: String(g(x, 'connId') ?? ''), nick: String(g(x, 'nick') ?? ''), pay: num(g(x, 'pay')), n: Math.max(1, num(g(x, 'n'), 1)) })));
+    conn.on('DriftShare', safe(x => ev.driftShare?.({ key: num(g(x, 'key'), -1), pay: num(g(x, 'pay')), total: num(g(x, 'total')), n: Math.max(1, num(g(x, 'n'), 1)), by: String(g(x, 'by') ?? '') })));
+    conn.on('RackUpd', safe(x => { const r = normRack(x); if (r) ev.rackUpd?.(r); }));
+    conn.on('RackGone', safe(x => ev.rackGone?.(num(g(x, 'id'), -1))));
+    conn.on('RackStolen', safe(x => ev.rackStolen?.({ rackId: num(g(x, 'rackId'), -1), by: String(g(x, 'by') ?? ''), warn: !!g(x, 'warn') })));
+    conn.on('BoatCargo', safe(x => ev.cargo?.({ cargo: num(g(x, 'cargo')), lost: num(g(x, 'lost')) })));
+    conn.on('BoatLoad', safe(x => ev.load?.({ boatId: num(g(x, 'boatId'), -1), load: num(g(x, 'load')) })));
     conn.on('BoatRescued', safe(x => ev.rescued({ boatId: num(g(x, 'boatId'), -1), seat: num(g(x, 'seat'), -1), by: String(g(x, 'by') ?? '') })));
   });
   const fetchState = async () => {
     const r = await call('BoatState');
     // 舊伺服器沒有 BoatState（錯誤訊息各版本不同）：只要呼叫丟例外就當不支援，改本機模式
     if (r?.err === 'old_server' || r?.err === 'fail') { supported = false; ev.state(null); return; }
-    if (r?.ok) { supported = true; ev.state(normSnap(r.state)); void fetchDrift(); }
+    if (r?.ok) { supported = true; ev.state(normSnap(r.state)); void fetchDrift(); void fetchRacks(); }
+  };
+  /** 蚵棚：舊伺服器沒有就沒有蚵棚 */
+  const fetchRacks = async () => {
+    const r = await call('RackState');
+    if (r?.ok) { const s = normRackSnap(r.state); if (s) ev.racks?.(s); }
   };
   /** 漂流箱：舊伺服器沒有這個方法就沒有箱子（不影響開船） */
   const fetchDrift = async () => {
@@ -124,7 +152,13 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     swimOut: async (x: number, z: number) => res(await call('SwimOut', x, z)),
     rescue: async (connId: string) => res(await call('BoatRescue', connId)),
     fetchDrift,
-    driftClaim: async (key: number): Promise<{ ok: boolean; err?: string; pay?: number }> => { const r = await call('DriftClaim', key); return { ok: !!r?.ok, err: r?.err, pay: r?.pay != null ? num(r.pay) : undefined }; },
+    fetchRacks,
+    rackHaul: async (id: number, steal: boolean): Promise<HaulRes> => { const r = await call('RackHaul', id, steal); return { ok: !!r?.ok, err: r?.err, cargo: r?.cargo != null ? num(r.cargo) : undefined, cargoVal: r?.cargoVal != null ? num(r.cargoVal) : undefined, rack: normRack(r?.rack), fine: num(r?.fine) }; },
+    rackSell: async (): Promise<SellRes> => { const r = await call('RackSell'); return { ok: !!r?.ok, err: r?.err, pay: num(r?.pay), strings: num(r?.strings), kg: num(r?.kg), cargo: num(r?.cargo) }; },
+    rackPlace: async (): Promise<{ ok: boolean; err?: string; rack?: RackDto | null }> => { const r = await call('RackPlace'); return { ok: !!r?.ok, err: r?.err, rack: normRack(r?.rack) }; },
+    rackRemove: async (id: number): Promise<{ ok: boolean; err?: string }> => { const r = await call('RackRemove', id); return { ok: !!r?.ok, err: r?.err }; },
+    rackUpgrade: async (id: number, line: number, from: number): Promise<RackUpRes> => { const r = await call('RackUpgrade', id, line, from); return { ok: !!r?.ok, err: r?.err, rack: normRack(r?.rack), line: num(r?.line), lv: num(r?.lv), cost: num(r?.cost) }; },
+    driftClaim: async (key: number): Promise<{ ok: boolean; err?: string; pay?: number; total?: number; n?: number }> => { const r = await call('DriftClaim', key); return { ok: !!r?.ok, err: r?.err, pay: r?.pay != null ? num(r.pay) : undefined, total: r?.total != null ? num(r.total) : undefined, n: Math.max(1, num(r?.n, 1)) }; },
     close() { closed = true; },
   };
 }

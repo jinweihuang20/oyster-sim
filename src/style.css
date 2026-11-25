@@ -4393,17 +4393,45 @@ body.tideOn #tidePill{display:flex}
 #boatDockInd .dockLbl{padding:1px 7px;border-radius:9px;background:#2a5a86;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
 @media (max-height:500px){#boatDockInd{left:-18px;top:-18px}#boatDockInd .dockArrow,#boatDockInd .dockArrow svg{width:36px;height:36px}#boatDockInd .dockLbl{font-size:11px}}
 /* 漂流箱指示：比碼頭指示低調（小、半透明、沒有底圈） */
-#boatDriftInd{position:absolute;left:-14px;top:-14px;display:none;flex-direction:column;align-items:center;gap:0;pointer-events:none;opacity:.78;will-change:transform}
-#boatDriftInd.on{display:flex}
-#boatDriftInd .driftArrow{display:flex;width:28px;height:28px}
-#boatDriftInd .driftArrow svg{width:28px;height:28px;fill:none;stroke:#ffb347;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
-#boatDriftInd .driftLbl{color:#ffe2b0;font-size:11px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.7);font-variant-numeric:tabular-nums}
 /* 船上抽菸：吸菸區同一顆「抽一口」，放在丟殼上面 */
 body.plazaBoating.plazaBoatSmoke #puffBtn.on{display:block!important;visibility:visible!important;pointer-events:auto!important;position:fixed!important;right:calc(var(--sa-right,0px) + 18px);bottom:calc(var(--sa-bottom,0px) + 214px);z-index:8601;width:auto!important;min-width:0!important}
 @media (max-height:500px){body.plazaBoating.plazaBoatSmoke #puffBtn.on{bottom:calc(var(--sa-bottom,0px) + 172px)}}
 /* 在船上／水裡：跳／蹲／躺／動作／換位置／丟殼（座位版）這些按鈕先收起來 */
 body.plazaBoating #jumpBtn,body.plazaBoating #crouchBtn,body.plazaBoating #lieBtn,body.plazaBoating #poseBtn,body.plazaBoating #standBtn,body.plazaBoating #throwBtn,body.plazaBoating #stealBtn,body.plazaBoating #umbBtn,body.plazaBoating #puffBtn,body.plazaBoating #seatCard{display:none!important}
 /* 獎勵提示（撈到漂流箱）：獨立一條，實心深底、不用毛玻璃與發光陰影 → 海面霧天也清楚 */
+/* 蚵棚：拉蚵串／賣／放／升級（在「上船／下船」鈕上方置中，避開左下搖桿與右側按鈕欄） */
+#boatRackBar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--sa-bottom,0px) + 214px);display:flex;gap:10px;pointer-events:none;align-items:center}
+#boatUi #boatRackBar .boatBtn{position:static}
+#boatUi #boatRackBar .boatBtn.steal{background:#8a3a2e!important}
+#boatUi #boatRackBar .boatBtn .key{opacity:.7;font-weight:600}
+#boatCargo{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--sa-top,0px) + 98px);display:none;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:#142231;border:1.5px solid #2a5a86;color:#e8f2ff;font-size:13px;font-weight:700;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums}
+#boatCargo.on{display:flex}
+#boatCargo .boatIc,#boatCargo .boatIc svg{width:18px;height:18px}
+#rackTag{position:absolute;left:0;top:0;display:none;padding:3px 9px;border-radius:9px;background:rgba(20,34,49,.86);border:1px solid #2a5a86;color:#e8f2ff;font-size:12px;font-weight:700;white-space:nowrap;pointer-events:none;will-change:transform;font-variant-numeric:tabular-nums}
+#rackTag.on{display:block}
+#rackTag.priv{border-color:#d84a3a;color:#ffd9d2}
+#rackTag.mine{border-color:#7fb2e0}
+#rackUpPanel{position:absolute;right:calc(var(--sa-right,0px) + 16px);top:calc(var(--sa-top,0px) + 60px);display:none;flex-direction:column;gap:6px;width:min(340px,calc(100vw - 32px));max-height:calc(100vh - 120px);overflow:auto;padding:10px 12px;border-radius:14px;background:#f7fafd;color:#1d2b3a;box-shadow:0 6px 20px rgba(0,0,0,.35);pointer-events:auto;touch-action:pan-y}
+#rackUpPanel.on{display:flex}
+#rackUpPanel .rkHead{display:flex;align-items:center;gap:8px;font-size:15px}
+#rackUpPanel .rkHead span{color:#5a6b7c;font-size:12px;font-variant-numeric:tabular-nums}
+#rackUpPanel .rkX{margin-left:auto;width:30px;height:30px;padding:4px!important;border:none!important;background:none!important;color:#2a5a86}
+#rackUpPanel svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+#rackUpPanel .rkRow{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #e1e8ef}
+#rackUpPanel .rkTx{flex:1;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;font-size:14px}
+#rackUpPanel .rkLv{padding:0 6px;border-radius:7px;background:#2a5a86;color:#fff;font-size:11px;font-weight:800}
+#rackUpPanel .rkTx small{flex-basis:100%;color:#5a6b7c;font-size:12px}
+#rackUpPanel button[data-up]{min-width:84px;padding:6px 10px!important;border-radius:10px!important;border:none!important;background:#2a5a86!important;color:#fff!important;font-weight:800;font-variant-numeric:tabular-nums}
+#rackUpPanel button[data-up]:disabled{opacity:.4}
+#rackUpPanel .rkMax{min-width:84px;text-align:center;color:#2a5a86;font-weight:800;font-size:13px}
+#rackUpPanel .rkFoot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:6px;border-top:1px solid #e1e8ef;font-size:12px;color:#5a6b7c}
+#rackUpPanel .rkRm{padding:5px 10px!important;border-radius:9px!important;border:1px solid #c9d3dd!important;background:#fff!important;color:#8a3a2e!important;font-size:12px;font-weight:700}
+@media (max-height:500px){
+  #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 150px);gap:8px}
+  #boatCargo{top:calc(var(--sa-top,0px) + 78px);font-size:12px}
+  #rackUpPanel{top:calc(var(--sa-top,0px) + 8px);max-height:calc(100vh - 16px);padding:8px 10px}
+  #rackUpPanel .rkRow{padding:4px 0}
+}
 #rewardToasts{position:fixed;left:50%;top:calc(var(--plaza-toast-top,calc(var(--sa-top,0px) + 56px)) + 34px);transform:translateX(-50%);z-index:13600;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;width:max-content;max-width:92vw}
 #rewardToasts .rwT{opacity:0;transform:translateY(-6px) scale(.96);transition:opacity .22s ease-out,transform .22s ease-out;font-variant-numeric:tabular-nums;text-shadow:none;filter:none;-webkit-backdrop-filter:none;backdrop-filter:none;-webkit-font-smoothing:antialiased;white-space:nowrap}
 #rewardToasts .rwT.on{opacity:1;transform:none}

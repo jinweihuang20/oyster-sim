@@ -41,7 +41,7 @@ import { makePlazaHq } from './hq';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
-import { poseRider, type RiderPose } from './boats/boatPose';
+import { poseRider, swimPetSpot, type RiderPose } from './boats/boatPose';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot, PlazaSeatWish, PlazaMove } from './types';
 import { pileDiffOf, DEFAULT_PILE_DIFFS, PILE_DIFF_NAMES, PILE_DIFF_MIXED } from './pileDiff';
 import { plazaDisplayName } from './types';
@@ -196,7 +196,7 @@ export type PlazaWorldView = {
   dispose: () => void;
 };
 /** 船上座位／游泳的世界位置（y＝腳底外框高度基準：座位點或水面） */
-export type RemoteMount = { x: number; y: number; z: number; yaw: number; pose: RiderPose; steer?: number; sway?: number; rx?: number; rz?: number };
+export type RemoteMount = { x: number; y: number; z: number; yaw: number; pose: RiderPose; steer?: number; sway?: number; rx?: number; rz?: number; /** 游泳：0 踩水～1 自由式 */ swim?: number };
 
 export type PlazaWorldOpts = {
   shellGeo: THREE.BufferGeometry;
@@ -2311,6 +2311,15 @@ function hashPid(pid: string) {
     // 機關槍座：不顯示寵物
     if (r.seated && isMgPile(r.pileId)) { mesh.visible = false; return; }
     mesh.visible = true;
+    // 游泳：寵物站在背上（自由式）／頭頂（踩水）；外框已前趴 rx，寵物轉回直立、面向游的方向
+    const sm = mounts.size ? mounts.get(r.connId) : undefined;
+    if (sm && sm.pose === 'swim') {
+      const k = sm.swim ?? 0, sp = swimPetSpot(k, !!mesh.userData.groundPet);
+      mesh.position.set(0, sp.y, sp.z);
+      mesh.rotation.set(-r.rig.outer.rotation.x, 0, 0);
+      if (mesh.userData.groundPet) tickPetAnim(mesh, { walk: false, speed: 0, sleep: false, dt });
+      return;
+    }
     const seated = !!r.seated;
     const lying = !seated && (r.phase === 'lie');
     const moving = !seated && !lying && !!(r as any)._walkOn;
@@ -2841,7 +2850,7 @@ function hashPid(pid: string) {
       if (mount) {
         if (!rj._mountVis) rj._mountVis = [r.rig.weaponMount.visible, r.rig.handL.visible, r.rig.handR.visible];
         const smoke = mount.pose !== 'swim' ? ((rj._boatSmoke as { puffK: number; inhale: number; away: number } | undefined) ?? { puffK: 0 }) : null;
-        const pr = poseRider(r.rig, mount.pose, t * 0.001, { steer: mount.steer, sway: mount.sway, throwK: r.throwT > 0 ? 1 - Math.min(1, r.throwT / 0.45) : 0, smoke });
+        const pr = poseRider(r.rig, mount.pose, t * 0.001, { steer: mount.steer, sway: mount.sway, throwK: r.throwT > 0 ? 1 - Math.min(1, r.throwT / 0.45) : 0, smoke, swim: mount.swim });
         ox = mount.x; oy = mount.y + pr.dy; oz = mount.z; rotX = pr.rx + (mount.rx ?? 0); rotZ = mount.rz ?? 0;
       }
       r.rig.outer.position.set(ox, oy, oz);

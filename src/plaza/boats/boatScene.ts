@@ -22,6 +22,10 @@ const ALL_LAMPS = [...DOCK_LAMPS, ...PATH_LAMPS];
 const LAMP_H = 2.6;
 /** 漂流箱上限（伺服器 4 個） */
 const DRIFT_MAX = 8;
+/** 同時畫幾座蚵棚（只畫鏡頭附近）、幾串蚵串、幾盞熟了的燈 */
+const RACK_DRAW = 24, STR_DRAW = 320, RIPE_DRAW = 24;
+/** 蚵棚架子：長 5 m、寬 2.2 m；兩排吊蚵串，每排 12 格 */
+export const RACK_GEO = { len: 5, half: 1.1, slots: 12, topY: 1.25 };
 
 function heightMap() {
   const W = 232, H = 300, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
@@ -119,6 +123,31 @@ export function driftCrateGeo(withFlag = false) {
   const g = mergeGeometries(parts); parts.forEach(p => p.dispose()); return g;
 }
 
+/** 蚵棚竹架（公共／私人同一個；私人另外插小旗）：竹竿＋橫竹＋浮球，約 300 三角形 */
+export function rackFrameGeo() {
+  const parts: THREE.BufferGeometry[] = [];
+  const { len, half, topY } = RACK_GEO;
+  const BAM = 0xc9b27a, BAM2 = 0xa8915c, FLOAT = 0xeeeee8;
+  for (const sx of [-len / 2, 0, len / 2]) for (const sz of [-half, half]) {
+    const g = new THREE.CylinderGeometry(0.06, 0.075, 2.3, 5); g.translate(sx, topY - 1.0, sz); parts.push(tint(g, sx === 0 ? BAM2 : BAM));
+  }
+  for (const sz of [-half, half]) { const g = new THREE.CylinderGeometry(0.05, 0.05, len + 0.5, 5); g.rotateZ(Math.PI / 2); g.translate(0, topY, sz); parts.push(tint(g, BAM)); }
+  for (const sx of [-len / 2, 0, len / 2]) { const g = new THREE.CylinderGeometry(0.045, 0.045, half * 2 + 0.3, 5); g.rotateX(Math.PI / 2); g.translate(sx, topY + 0.06, 0); parts.push(tint(g, BAM2)); }
+  for (const sx of [-len / 2 + 0.6, len / 2 - 0.6]) for (const sz of [-half, half]) { const g = new THREE.SphereGeometry(0.22, 7, 5); g.scale(1, 0.75, 1); g.translate(sx, -0.02, sz); parts.push(tint(g, FLOAT)); }
+  const out = mergeGeometries(parts); parts.forEach(p => p.dispose()); return out;
+}
+/** 一串蚵串：繩子＋四坨蚵（原點在橫竹上） */
+export function rackStringGeo() {
+  const parts: THREE.BufferGeometry[] = [];
+  const rope = new THREE.CylinderGeometry(0.012, 0.012, 1.25, 4); rope.translate(0, -0.62, 0); parts.push(tint(rope, 0x3a3a30));
+  const C = [0x8a8678, 0x9a9484, 0x7c786a, 0x948e7c];
+  for (let j = 0; j < 4; j++) {
+    const l = new THREE.IcosahedronGeometry(0.13 - j * 0.008, 0); l.scale(1, 0.8, 1.15); l.rotateY(j * 1.7); l.translate((j % 2 ? 0.03 : -0.03), -0.3 - j * 0.24, (j % 2 ? -0.02 : 0.02));
+    parts.push(tint(l, C[j]));
+  }
+  const out = mergeGeometries(parts); parts.forEach(p => p.dispose()); return out;
+}
+
 /** 遠處的膠筏：幾個方塊（約 60 個三角形） */
 function farBoatGeo(trim: number) {
   const parts = [
@@ -201,12 +230,26 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const crates = new THREE.InstancedMesh(crateGeo, boatMat, DRIFT_MAX); crates.name = 'plazaDriftCrates';
   crates.count = 0; crates.frustumCulled = false; crates.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(crates);
 
+  // ---------- 蚵棚：架子／蚵串／私人小旗／熟了的燈（各一個 InstancedMesh）----------
+  const rackFrames = new THREE.InstancedMesh(rackFrameGeo(), boatMat, RACK_DRAW); rackFrames.name = 'plazaRacks';
+  const rackStrs = new THREE.InstancedMesh(rackStringGeo(), boatMat, STR_DRAW); rackStrs.name = 'plazaRackStrings';
+  const flagG = (() => { const p = [box(0.04, 1.1, 0.04, 0, 0.55, 0, 0xffffff), box(0.5, 0.3, 0.02, 0.27, 0.92, 0, 0xffffff)]; const g = mergeGeometries(p); p.forEach(x => x.dispose()); return g; })();
+  const flagMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const rackFlags = new THREE.InstancedMesh(flagG, flagMat, RACK_DRAW); rackFlags.name = 'plazaRackFlags';
+  rackFlags.setColorAt(0, new THREE.Color(1, 1, 1));
+  // 熟了：竿頂一顆自己發光的燈（不受光照，白天也看得出來；霧會蓋掉遠的）
+  const ripeG = new THREE.SphereGeometry(0.16, 8, 6); ripeG.translate(0, 0.16, 0);
+  const ripeMat = new THREE.MeshBasicMaterial({ color: 0xffd84a });
+  const rackRipe = new THREE.InstancedMesh(ripeG, ripeMat, RIPE_DRAW); rackRipe.name = 'plazaRackRipe';
+  for (const m of [rackFrames, rackStrs, rackFlags, rackRipe]) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
+  const FLAG_MINE = new THREE.Color(0x2a5a86), FLAG_OTHER = new THREE.Color(0xd84a3a);
+
   // ---------- 航跡／水花 ----------
   const fx = makeFx(group, o.coarse ? 110 : 160, PB.waterY + 0.1);
 
   // ---------- 夜燈（假光）：光暈 Points、光池貼花、船頭光錐 ----------
   const glowT = glowTex(), coneT = coneTex();
-  const N_GLOW = ALL_LAMPS.length + PB.count + DRIFT_MAX + 8;
+  const N_GLOW = ALL_LAMPS.length + PB.count + DRIFT_MAX + RIPE_DRAW + 8;
   const gPos = new Float32Array(N_GLOW * 3), gCol = new Float32Array(N_GLOW * 3);
   const glowGeo = new THREE.BufferGeometry();
   glowGeo.setAttribute('position', new THREE.BufferAttribute(gPos, 3).setUsage(THREE.DynamicDrawUsage));
@@ -229,14 +272,46 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const cones = new THREE.InstancedMesh(coneG, coneMat, PB.count); cones.count = 0; cones.frustumCulled = false; cones.renderOrder = 3; cones.name = 'plazaBoatCones'; group.add(cones);
 
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
-  let nearN = 0, farN = 0, coneN = 0, glowN = 0, crateN = 0;
+  let nearN = 0, farN = 0, coneN = 0, glowN = 0, crateN = 0, rackN = 0, strN = 0, flagN = 0, ripeN = 0;
   let night = 0;
   const lampOn = new THREE.Color(0xffd890), lampOff = new THREE.Color(0xd8d4c8);
 
   return {
     group, water, fx, near, far, dock,
     /** 每幀開頭：清空這幀要畫的船 */
-    begin() { nearN = farN = coneN = 0; glowN = 0; crateN = 0; },
+    begin() { nearN = farN = coneN = 0; glowN = 0; crateN = 0; rackN = strN = flagN = ripeN = 0; },
+    /** 蚵棚架子；priv：0 公共、1 自己的（藍旗）、2 別人的私人（紅旗） */
+    rack(x: number, z: number, h: number, bob: number, priv: 0 | 1 | 2) {
+      if (rackN >= RACK_DRAW) return false;
+      _e.set(0, h, bob * 0.02); _q.setFromEuler(_e); _p.set(x, PB.waterY + bob * 0.04, z); _m.compose(_p, _q, _s);
+      rackFrames.setMatrixAt(rackN++, _m);
+      if (priv && flagN < RACK_DRAW) {
+        _p.set(x + Math.cos(h) * RACK_GEO.len / 2, PB.waterY + RACK_GEO.topY + 0.1, z - Math.sin(h) * RACK_GEO.len / 2); _m.compose(_p, _q, _s);
+        rackFlags.setMatrixAt(flagN, _m); rackFlags.setColorAt(flagN++, priv === 1 ? FLAG_MINE : FLAG_OTHER);
+      }
+      return true;
+    },
+    /** 吊 n 串（兩排各 12 格；max 少於 24 時平均分） */
+    strings(x: number, z: number, h: number, n: number, max: number, t: number) {
+      const per = Math.ceil(Math.max(1, max) / 2), step = (RACK_GEO.len - 0.6) / Math.max(1, per - 1);
+      const c = Math.cos(h), sn = Math.sin(h);
+      for (let i = 0; i < n && strN < STR_DRAW; i++) {
+        const row = i % 2, k = Math.floor(i / 2);
+        const lx = -RACK_GEO.len / 2 + 0.3 + k * step, lz = row ? RACK_GEO.half - 0.05 : -RACK_GEO.half + 0.05;
+        const sw = Math.sin(t * 1.3 + i * 0.9 + x) * 0.05;
+        _e.set(sw, h, sw * 0.6); _q.setFromEuler(_e);
+        _p.set(x + c * lx + sn * lz, PB.waterY + RACK_GEO.topY, z - sn * lx + c * lz); _m.compose(_p, _q, _s);
+        rackStrs.setMatrixAt(strN++, _m);
+      }
+    },
+    /** 長滿了：竿頂的燈（夜晚加光暈） */
+    ripe(x: number, z: number, h: number, pulse: number) {
+      if (ripeN >= RIPE_DRAW) return;
+      _p.set(x - Math.cos(h) * RACK_GEO.len / 2, PB.waterY + RACK_GEO.topY + 0.12, z + Math.sin(h) * RACK_GEO.len / 2);
+      _q.identity(); _s.setScalar(0.85 + pulse * 0.3); _m.compose(_p, _q, _s); _s.set(1, 1, 1);
+      rackRipe.setMatrixAt(ripeN++, _m);
+      this.glow(_p.x, _p.y + 0.15, _p.z, 1, 0.82, 0.3);
+    },
     /** 漂流箱（水面上下晃）；夜晚加一點暖色光暈 */
     crate(x: number, y: number, z: number, h: number, rx: number, rz: number) {
       if (crateN >= DRIFT_MAX) return;
@@ -265,6 +340,10 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
     end() {
       near.count = nearN; far.count = farN; near.instanceMatrix.needsUpdate = true; far.instanceMatrix.needsUpdate = true;
       crates.count = crateN; crates.visible = crateN > 0; if (crateN) crates.instanceMatrix.needsUpdate = true;
+      rackFrames.count = rackN; rackFrames.visible = rackN > 0; if (rackN) rackFrames.instanceMatrix.needsUpdate = true;
+      rackStrs.count = strN; rackStrs.visible = strN > 0; if (strN) rackStrs.instanceMatrix.needsUpdate = true;
+      rackFlags.count = flagN; rackFlags.visible = flagN > 0; if (flagN) { rackFlags.instanceMatrix.needsUpdate = true; if (rackFlags.instanceColor) rackFlags.instanceColor.needsUpdate = true; }
+      rackRipe.count = ripeN; rackRipe.visible = ripeN > 0; if (ripeN) rackRipe.instanceMatrix.needsUpdate = true;
       cones.count = night > 0.05 ? coneN : 0; cones.instanceMatrix.needsUpdate = true;
       if (night > 0.05) for (const p of ALL_LAMPS) this.glow(p.x, LAMP_H - 0.12, p.z, 1, 0.82, 0.5);
       glows.visible = night > 0.05 && glowN > 0;

@@ -1,0 +1,60 @@
+import { describe, it, expect } from 'vitest';
+import { normRack, normRackSnap, rackNow, rackRipe, rackNextSec, loadSlow, ripeViewR, stealFine, upCost, UP_LINES, nearestRack, parseUp, RACK } from './rackLogic';
+
+const base = { id: 3, x: -60, z: 10, h: 0, n: 4, t: 1_000_000, ok: '', owner: '', max: 12, growMs: 20_000, up: '111111' };
+
+describe('巡蚵棚', () => {
+  it('客戶端自己算現在幾串（每 growMs 一串，到 max 為止）', () => {
+    const r = normRack(base)!;
+    expect(rackNow(r, 1_000_000)).toBe(4);
+    expect(rackNow(r, 1_000_000 + 19_999)).toBe(4);
+    expect(rackNow(r, 1_000_000 + 40_000)).toBe(6);
+    expect(rackNow(r, 1_000_000 + 9e6)).toBe(12);
+    expect(rackRipe(r, 1_000_000 + 9e6)).toBe(true);
+    expect(rackNextSec(r, 1_000_000 + 5_000)).toBe(15);
+    expect(rackNextSec(r, 1_000_000 + 9e6)).toBe(0);
+  });
+  it('伺服器欄位大小寫都吃', () => {
+    const s = normRackSnap({ Racks: [{ Id: 1001, X: 1, Z: 2, H: 0, N: 0, T: 5, Ok: 'abcd1234', Owner: '阿明 #1234', Max: 24, GrowMs: 10000, Up: '535111' }], Me: 'abcd1234', CargoMax: 24, UpCost: [[1, 2, 3, 4]] })!;
+    expect(s.racks[0].ok).toBe('abcd1234');
+    expect(s.racks[0].up).toEqual([5, 3, 5, 1, 1, 1]);
+    expect(s.me).toBe('abcd1234');
+    expect(upCost(s.upCost, 0, 1)).toBe(1);
+    expect(upCost(s.upCost, 0, 5)).toBeNull();
+  });
+  it('船貨越重越慢，滿載 60%', () => {
+    expect(loadSlow(0, 24)).toBe(1);
+    expect(loadSlow(24, 24)).toBeCloseTo(0.6);
+    expect(loadSlow(99, 24)).toBeCloseTo(0.6);
+  });
+  it('警示燈只有主人自己看得遠', () => {
+    const r = normRack({ ...base, ok: 'me000001', up: '111115' })!;
+    expect(ripeViewR(r, 'me000001')).toBe(RACK.ripeR[4]);
+    expect(ripeViewR(r, 'other001')).toBe(RACK.ripeR[0]);
+  });
+  it('偷拉罰款跟防盜等級', () => {
+    const r = normRack({ ...base, ok: 'x', up: '111511' })!;
+    expect(stealFine(r, 3, 250)).toBe(1875);
+    expect(stealFine(normRack({ ...base, ok: 'x' })!, 3, 250)).toBe(750);
+  });
+  it('六條升級線、Lv1～5 都有文字；最近的蚵棚', () => {
+    expect(UP_LINES).toHaveLength(6);
+    for (const l of UP_LINES) for (let lv = 1; lv <= 5; lv++) expect(l.fx(lv).length).toBeGreaterThan(2);
+    const list = [normRack({ ...base, id: 1, x: 0, z: 0 })!, normRack({ ...base, id: 2, x: 10, z: 0 })!];
+    expect(nearestRack(8, 0, list)!.rack.id).toBe(2);
+    expect(parseUp('9x')).toEqual([1, 1, 1, 1, 1, 1]);
+  });
+});
+import { pushFromRack } from './rackLogic';
+describe('船撞蚵棚', () => {
+  it('推出架子外、減速；旁邊經過不撞', () => {
+    const b = { x: 0.5, z: 0.3, h: 0, v: 5 };
+    expect(pushFromRack(b, { x: 0, z: 0, h: 0 }, [[b.x, b.z]], 1)).toBe(true);
+    expect(b.v).toBeLessThan(5);
+    const c = { x: 0, z: 4, h: 0, v: 5 };
+    expect(pushFromRack(c, { x: 0, z: 0, h: 0 }, [[0, 4]], 1)).toBe(false);
+    // 旋轉 90°：長邊變成沿 z
+    const d = { x: 0, z: 2.2, h: 0, v: 3 };
+    expect(pushFromRack(d, { x: 0, z: 0, h: Math.PI / 2 }, [[0, 2.2]], 1)).toBe(true);
+  });
+});

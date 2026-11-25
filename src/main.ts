@@ -80,7 +80,8 @@ import {
   plazaJumpHeight, PLAZA_JUMP_DUR, applyPlazaBodyPose as applyBodyPose, type PlayerRig,
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
-import { openPlazaBoats, closePlazaBoats, tickPlazaBoats, plazaBoatsActive, plazaBoatsMode, plazaBoatsKey, plazaBoatsCam, plazaBoatsSway, plazaBoatsNight, plazaBoatsFog, plazaBoatsDbg, plazaBoatsOpen } from './plaza/boats/plazaBoats';
+import { RACK } from './plaza/boats/rackLogic';
+import { plazaSwimBack, openPlazaBoats, closePlazaBoats, tickPlazaBoats, plazaBoatsActive, plazaBoatsMode, plazaBoatsKey, plazaBoatsCam, plazaBoatsSway, plazaBoatsNight, plazaBoatsFog, plazaBoatsDbg, plazaBoatsOpen } from './plaza/boats/plazaBoats';
 import { nightK } from './plaza/boats/boatLogic';
 import { plazaBoatClient, plazaWorldView, plazaMyNick } from './plaza/session';
 import {
@@ -4564,6 +4565,8 @@ initGifts({
 const MOON_MAX = 2;
 let moonUsed = 0, moonAimOn = false, punchT = 0;
 // ---------- 道具：把你媽的愛送上月球 ----------
+// 蚵棚（雜貨店）：線條圖示，海面上的竹架＋垂下的蚵串
+const RACK_SVG = `<svg viewBox="0 0 64 40" width="72" height="45" fill="none" stroke="#2a5a86" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M6 8h52"/><path d="M10 8v22M54 8v22M32 8v22"/><path d="M18 8v12M25 8v14M39 8v12M46 8v14"/><circle cx="18" cy="22" r="2"/><circle cx="25" cy="24" r="2"/><circle cx="39" cy="22" r="2"/><circle cx="46" cy="24" r="2"/><path d="M2 32c4-3 8-3 12 0s8 3 12 0 8-3 12 0 8 3 12 0 8-3 12 0"/><path d="M2 38c4-3 8-3 12 0s8 3 12 0 8-3 12 0 8 3 12 0 8-3 12 0"/></svg>`;
 const MOON_SVG = `<svg viewBox="0 0 64 40" width="72" height="45" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M2 14h8M0 20h12M2 26h8"/><path d="M14 13l6 3v8l-6 3z"/><path d="M20 14h18v12H20z"/><path d="M24 14l-3-6h6l3 6M24 26l-3 6h6l3-6"/><path d="M38 12h12a6 6 0 0 1 6 6v4a6 6 0 0 1-6 6H38z"/><path d="M44 12v6M50 12v6M44 22h10"/><path d="M40 28v-4h4"/><path d="M58 8l4-4M60 20h4M58 32l4 4"/></svg>`;
 const ALL_NPCS = npcs.slice();
 const NPC_HOME = ALL_NPCS.map(n => ({ p: n.g.position.clone(), r: n.g.rotation.clone() }));
@@ -4741,9 +4744,21 @@ let petWalkingMode = false;
 let petLyingMode = false;
 /** 身後距離平滑：走動 1.0m，靜止湊近到 0.4m（阿康略短） */
 let petDistCur = 1.0;
+/** 游泳中：寵物站在背上（不彈跳、不走路動畫） */
+let petSwimMode = false;
 /** 把 petAnchor 擺到當前玩家世界位置／朝向。頭頂 ≈ feet+1.78；身後 +0.55、離地 0.3；躺姿 → 右手邊同躺 */
 function updatePetAnchor() {
   if (!petMesh) return;
+  // 廣場游泳：寵物站在背上（自由式）／頭頂（踩水），面向游的方向
+  const swimBack = plazaMode ? plazaSwimBack(!!petMesh.userData.groundPet) : null;
+  petSwimMode = !!swimBack;
+  if (swimBack) {
+    petWalkingMode = true; petLyingMode = false; // 不要被第一人稱藏起來，也不跑「身後跟著走」
+    petAnchor.position.set(swimBack.x, swimBack.y, swimBack.z);
+    petAnchor.rotation.set(0, swimBack.yaw, 0);
+    petMesh.position.set(0, 0, 0);
+    return;
+  }
   let bx = 0, by = 0, bz = 0, byaw = 0, isWalk = false, isLie = false;
   if (walking) {
     bx = walkPos.x; by = jumpY; bz = walkPos.z; byaw = yaw;
@@ -5128,7 +5143,7 @@ function petTick(dt: number) {
   const wasAfk = petSleeping;
   setPetSleeping(afk);
   if (wasAfk && !afk) resetApoTimers();
-  const actuallyMoving = petWalkingMode && (performance.now() - walkMovingT < 200);
+  const actuallyMoving = petWalkingMode && !petSwimMode && (performance.now() - walkMovingT < 200);
   if (petMesh.userData.tickAnim) {
     tickPetAnim(petMesh, {
       walk: actuallyMoving && !afk,
@@ -5241,6 +5256,21 @@ function moonTick(dt: number) {
 function renderItemShop() {
   const it = ITEMS[0]; const own = save.meds[it.id] ?? 0;
   $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 道具</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，沒用完的會留著。</p><div class="itemCard"><div class="itemIc">${MOON_SVG}</div><div class="itemTx"><b>${it.n}</b><small style="color:#9be37a">${it.good}</small><small style="color:#ff8a7a">${it.bad}</small><small>持有 ${own}</small>${pxCd('item-' + it.id)}</div><div class="buyRow">${qtyHtml('item-' + it.id)}<button data-ibuy="${it.id}" ${save.money < px('item-' + it.id, it.price) ? 'disabled' : ''}>${pxHtml('item-' + it.id, it.price)}</button></div></div>`);
+  // 蚵棚：可重複買；海上最多放 4 座（伺服器擋），放下後會長蚵串
+  { const k = 'item-' + RACK.kitId, own = save.meds[RACK.kitId] ?? 0;
+    $('shopList').insertAdjacentHTML('beforeend', `<div class="itemCard"><div class="itemIc">${RACK_SVG}</div><div class="itemTx"><b>蚵棚</b><small style="color:#9be37a">在廣場坐船出海，按「放蚵棚」放在船邊；會慢慢長蚵串，自己拉免費，可以就地升級</small><small style="color:#ff8a7a">每人海上最多 4 座；要離碼頭和別的蚵棚遠一點；別人偷拉要被罰錢</small><small>持有 ${own}</small>${pxCd(k)}</div><div class="buyRow">${qtyHtml(k)}<button data-rbuy="1" ${save.money < px(k, RACK.kitPrice) ? 'disabled' : ''}>${pxHtml(k, RACK.kitPrice)}</button></div></div>`);
+    const rb = $('shopList').querySelector('button[data-rbuy]') as HTMLButtonElement | null;
+    if (rb) {
+      bindQty(rb.closest('.itemCard')!, k, () => px(k, RACK.kitPrice), () => save.money, rb);
+      rb.onclick = async () => {
+        const pr = await payFor(k, RACK.kitPrice, '蚵棚'); if (pr == null) return;
+        const n = Math.min(getQty(k), Math.floor(save.money / pr), 8); if (n < 1) return;
+        save.money -= pr * n; save.meds[RACK.kitId] = (save.meds[RACK.kitId] ?? 0) + n; persist(); track('buy', { item: k, price: pr * n, qty: n });
+        if (ac) SFX.jingle(); toast(n > 1 ? `買了 ${n} 座蚵棚，到廣場坐船出海放` : '買了蚵棚，到廣場坐船出海放', '#9be37a');
+        resetQty(k); renderShop();
+      };
+    }
+  }
   $('shopList').querySelectorAll('button[data-ibuy]').forEach(b => {
     const i = ITEMS.find(x => x.id === b.getAttribute('data-ibuy'))!; const k = 'item-' + i.id;
     bindQty(b.closest('.itemCard')!, k, () => px(k, i.price), () => save.money, b as HTMLButtonElement);
@@ -5913,6 +5943,12 @@ function startPlazaBoats() {
       sfx: (k) => seaSfx(k),
       // 漂流箱：伺服器已記在 income（AddIncome），這裡跟其他廣場獎勵一樣入帳
       grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); updHud(); track('plaza_reward', { amount: n, via, money: save.money }); },
+      // 蚵棚：升級扣錢（伺服器確認後）、偷拉罰款（有多少扣多少）、雜貨店買的組合包
+      getMoney: () => save.money,
+      spendMoney: (n, via) => { const c = Math.max(0, Math.floor(n)); if (save.money < c) return false; save.money -= c; persist(); updHud(); track('plaza_spend', { amount: c, via, money: save.money }); return true; },
+      fineMoney: (n, via) => { const c = Math.min(save.money, Math.max(0, Math.floor(n))); if (!c) return 0; save.money -= c; persist(); updHud(); track('plaza_fine', { amount: c, via, money: save.money }); return c; },
+      rackKits: () => save.meds[RACK.kitId] ?? 0,
+      addRackKits: (d) => { save.meds[RACK.kitId] = Math.max(0, (save.meds[RACK.kitId] ?? 0) + d); persist(); },
       smoke: () => (boatSmoke ? { puffK: puffVisualK(), inhale: puffInhaleK(), away: puffAwayT, flick: puffFlickT } : null),
       throwShell: (from, target, to) => {
         const sh = new THREE.Mesh(halfGeo, shellBotMat);
@@ -8714,7 +8750,8 @@ function plazaPose(p: 'crouch' | 'lie') { if (!(plazaMode || isRoomActive()) || 
     poseK += ((bodyPose ? 1 : 0) - poseK) * Math.min(1, dt * 10);
     placeLookBtn();
     const pz = plazaMode && walking && state === 'play';
-    if (!pz) setPoseOpen(false);
+    // 上船／下水：動作選單收起來（回岸上也維持收起）
+    if (!pz || plazaBoatsActive()) { if (document.body.classList.contains('poseOpen')) setPoseOpen(false); }
     on('poseBtn', pz); on('jumpBtn', pz); on('crouchBtn', pz); on('lieBtn', pz);
     if (pz && state === 'play' && !isPlazaRaceMode()) on('medBtn', true);
     if (isPlazaRaceMode() && state === 'play') on('medBtn', false);
