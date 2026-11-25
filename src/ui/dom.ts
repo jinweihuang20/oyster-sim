@@ -93,7 +93,8 @@ export function toastTop(t: string, sec: number = TOP_SEC.info) {
 
 /** 主迴圈呼叫：倒數並關閉 toast */
 export function tickToast(dt: number) {
-  if (!toastEl) return;
+  // 已收起就不要每幀再 remove('on')（每幀都會觸發 class 變更）
+  if (!toastEl || toastT <= 0) return;
   toastT -= dt;
   if (toastT <= 0) hideToast();
 }

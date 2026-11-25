@@ -73,9 +73,10 @@ function bakeGroup(root: THREE.Object3D, skip?: (m: THREE.Mesh) => boolean) {
   return out;
 }
 const tint = (g: THREE.BufferGeometry, hex: number) => {
-  const c = new THREE.Color(hex), n = g.attributes.position.count, a = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  // 先轉成非索引再算頂點數（之前用索引前的 24 個頂點填色，後面 12 個頂點吃到下一塊的顏色）
   const gg = g.index ? g.toNonIndexed() : g; for (const k of Object.keys(gg.attributes)) if (k !== 'position' && k !== 'normal') gg.deleteAttribute(k);
+  const c = new THREE.Color(hex), n = gg.attributes.position.count, a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
   gg.setAttribute('color', new THREE.BufferAttribute(a, 3)); return gg;
 };
 const box = (w: number, h: number, d: number, x: number, y: number, z: number, hex: number, ry = 0) => {
@@ -84,6 +85,39 @@ const box = (w: number, h: number, d: number, x: number, y: number, z: number, h
 const cyl = (r: number, h: number, x: number, y: number, z: number, hex: number, seg = 6) => {
   const g = new THREE.CylinderGeometry(r, r, h, seg); g.translate(x, y, z); return tint(g, hex);
 };
+
+/**
+ * 漂流箱：一眼看得出是「木箱」——四面橫木條（條與條之間有深色縫）、四角立柱、上下框、每面一根斜撐、蓋子也是木條。
+ * 原點在水線附近：箱子約 1/4 泡在水裡。全部烘成一個頂點色幾何（InstancedMesh 一個 draw call）。
+ */
+export function driftCrateGeo(withFlag = false) {
+  const S = 0.96, H = 0.82, cy = 0.2, f = 0.085, t = 0.035, gap = 0.024, out = S / 2;
+  const WOOD = [0xc48d4a, 0xb27a3d, 0xcd9a57, 0xa8713a], TRIM = 0x5a381a, BRACE = 0x83542a, GAP = 0x3e2612, LID = [0xd4a464, 0xc39052, 0xd8aa6c, 0xbf8b4c];
+  const parts: THREE.BufferGeometry[] = [box(S - 0.05, H - 0.05, S - 0.05, 0, cy, 0, GAP)];
+  const y0 = cy - H / 2, y1 = cy + H / 2;
+  // 四面橫木條：上下框中間塞 4 條
+  const n = 4, ph = (H - 2 * f - (n + 1) * gap) / n;
+  for (let side = 0; side < 4; side++) {
+    const ry = side * Math.PI / 2;
+    for (let i = 0; i < n; i++) {
+      const y = y0 + f + gap + ph / 2 + i * (ph + gap);
+      const g = new THREE.BoxGeometry(S - 2 * f + 0.01, ph, t); g.translate(0, y, out - t / 2 + 0.004); g.rotateY(ry); parts.push(tint(g, WOOD[(i + side) % 4]));
+    }
+    // 斜撐（框內對角）
+    const w = S - 2 * f, hh = H - 2 * f, len = Math.hypot(w, hh), ang = Math.atan2(hh, w) * (side % 2 ? 1 : -1);
+    const b = new THREE.BoxGeometry(len - 0.02, 0.075, t); b.rotateZ(ang); b.translate(0, cy, out + t / 2 - 0.002); b.rotateY(ry); parts.push(tint(b, BRACE));
+    // 上下框（四邊）
+    for (const y of [y0 + f / 2, y1 - f / 2]) { const g = new THREE.BoxGeometry(S + 0.02, f, f); g.translate(0, y, out - f / 2 + 0.012); g.rotateY(ry); parts.push(tint(g, TRIM)); }
+    // 角柱
+    const c = new THREE.BoxGeometry(f + 0.012, H + 0.012, f + 0.012); c.translate(out - f / 2 + 0.012, cy, out - f / 2 + 0.012); c.rotateY(ry); parts.push(tint(c, TRIM));
+  }
+  // 蓋子：4 條木板＋兩根橫壓條
+  const lw = (S - 2 * f - 3 * gap) / 4;
+  for (let i = 0; i < 4; i++) parts.push(box(lw, t, S - 2 * f + 0.01, -S / 2 + f + lw / 2 + i * (lw + gap), y1 - t / 2 + 0.006, 0, LID[i]));
+  for (const z of [-0.2, 0.2]) parts.push(box(S - 2 * f + 0.01, t * 0.9, 0.07, 0, y1 + 0.012, z, BRACE));
+  if (withFlag) parts.push(box(0.04, 0.9, 0.04, out - 0.05, y1 + 0.45, out - 0.05, 0x30343a), box(0.3, 0.18, 0.02, out + 0.1, y1 + 0.78, out - 0.05, 0xff7a1a));
+  const g = mergeGeometries(parts); parts.forEach(p => p.dispose()); return g;
+}
 
 /** 遠處的膠筏：幾個方塊（約 60 個三角形） */
 function farBoatGeo(trim: number) {
@@ -162,14 +196,8 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const far = new THREE.InstancedMesh(farBoatGeo(0x2a5a86), boatMat, PB.count); far.name = 'plazaBoatsFar';
   for (const m of [near, far]) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
 
-  // ---------- 漂流箱：一個 InstancedMesh（木箱＋小旗子，遠看得到）----------
-  const crateGeo = (() => {
-    const parts = [
-      box(0.9, 0.62, 0.9, 0, 0.12, 0, 0xb07a3c), box(0.95, 0.08, 0.95, 0, 0.3, 0, 0x6b4422), box(0.95, 0.08, 0.95, 0, -0.06, 0, 0x6b4422),
-      box(0.05, 1.15, 0.05, 0.32, 0.95, 0.32, 0x30343a), box(0.38, 0.24, 0.02, 0.52, 1.38, 0.32, 0xff7a1a),
-    ];
-    const g = mergeGeometries(parts); parts.forEach(p => p.dispose()); return g;
-  })();
+  // ---------- 漂流箱：一個 InstancedMesh（木條拼的木箱，約 600 三角形，一個 draw call）----------
+  const crateGeo = driftCrateGeo();
   const crates = new THREE.InstancedMesh(crateGeo, boatMat, DRIFT_MAX); crates.name = 'plazaDriftCrates';
   crates.count = 0; crates.frustumCulled = false; crates.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(crates);
 
@@ -214,7 +242,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
       if (crateN >= DRIFT_MAX) return;
       _e.set(rx, h, rz); _q.setFromEuler(_e); _p.set(x, y, z); _m.compose(_p, _q, _s);
       crates.setMatrixAt(crateN++, _m);
-      this.glow(x, y + 0.5, z, 0.9, 0.62, 0.25);
+      this.glow(x, y + 0.45, z, 0.5, 0.34, 0.13);
     },
     /** 放一艘（instanced）；far＝遠模 */
     put(x: number, y: number, z: number, h: number, rx: number, rz: number, useFar: boolean) {

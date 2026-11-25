@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { makePlayerAvatar, posePlazaStand, ensurePlazaSmokeCig, getPlazaSmokeCig, clearPlazaSmokeCig, type PlayerRig, type SmokeSitPoseOpts } from '../../dm/character';
 import { makeMeshHelpers } from '../../dm/mesh';
 import { toast, toastTop } from '../../ui/dom';
+import { rewardToast, clearRewardToasts } from '../../ui/rewardToast';
 import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlazaClient } from '../hubClient';
 import type { PlazaWorldView } from '../worldView';
@@ -160,6 +161,7 @@ export function closePlazaBoats() {
   if (!D) return;
   // 還在船上／水裡就離開廣場：下次進場站在碼頭口
   if (mode !== 'walk') { D.walkPos.x = PB.shoreX + 1.2; D.walkPos.z = 0; restoreMe(); }
+  clearRewardToasts();
   for (const c of mounted) D.view()?.setRemoteMount(c, null);
   mounted.clear();
   D.view()?.setSeaView(false);
@@ -211,7 +213,7 @@ function onDriftClaimed(e: DriftClaimed) {
   drifts = drifts.filter(d => d.key !== e.key);
   if (b) splash(b.x, b.z, 1.2);
   // 自己撈到的入帳在 DriftClaim 的回應裡處理（只入一次）；別人撈到：小公告
-  if (!isMe(e.connId) && e.pay > 0) toast(`${e.nick || '有人'} 撈到漂流箱 $${e.pay.toLocaleString('zh-TW')}`, '#ffd76a', 2.2);
+  if (!isMe(e.connId) && e.pay > 0) rewardToast(`${e.nick || '有人'} 撈到漂流箱`, money(e.pay), 'feed', `drift:${e.key}`);
 }
 const money = (n: number) => `$${n.toLocaleString('zh-TW')}`;
 function driftHint() {
@@ -242,7 +244,7 @@ function tickDrift(dt: number) {
       drifts = drifts.filter(d => d.key !== key);
       D?.grantMoney?.(r.pay, 'drift-box');
       splash(n.box.x, n.box.z, 1.6); D?.sfx('launch');
-      toastTop(`撈到漂流箱！+${money(r.pay)}`);
+      rewardToast('撈到漂流箱！', `+${money(r.pay)}`, 'mine', `drift:${key}`);
       driftCd = 1;
       return;
     }

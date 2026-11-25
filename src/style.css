@@ -4403,3 +4403,14 @@ body.plazaBoating.plazaBoatSmoke #puffBtn.on{display:block!important;visibility:
 @media (max-height:500px){body.plazaBoating.plazaBoatSmoke #puffBtn.on{bottom:calc(var(--sa-bottom,0px) + 172px)}}
 /* 在船上／水裡：跳／蹲／躺／動作／換位置／丟殼（座位版）這些按鈕先收起來 */
 body.plazaBoating #jumpBtn,body.plazaBoating #crouchBtn,body.plazaBoating #lieBtn,body.plazaBoating #poseBtn,body.plazaBoating #standBtn,body.plazaBoating #throwBtn,body.plazaBoating #stealBtn,body.plazaBoating #umbBtn,body.plazaBoating #puffBtn,body.plazaBoating #seatCard{display:none!important}
+/* 獎勵提示（撈到漂流箱）：獨立一條，實心深底、不用毛玻璃與發光陰影 → 海面霧天也清楚 */
+#rewardToasts{position:fixed;left:50%;top:calc(var(--plaza-toast-top,calc(var(--sa-top,0px) + 56px)) + 34px);transform:translateX(-50%);z-index:13600;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;width:max-content;max-width:92vw}
+#rewardToasts .rwT{opacity:0;transform:translateY(-6px) scale(.96);transition:opacity .22s ease-out,transform .22s ease-out;font-variant-numeric:tabular-nums;text-shadow:none;filter:none;-webkit-backdrop-filter:none;backdrop-filter:none;-webkit-font-smoothing:antialiased;white-space:nowrap}
+#rewardToasts .rwT.on{opacity:1;transform:none}
+#rewardToasts .rwT.out{opacity:0;transform:translateY(-4px);transition:opacity .35s ease-in,transform .35s ease-in}
+#rewardToasts .rwT.mine{display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 20px 8px;background:#142231;border:2px solid #ffd76a;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+#rewardToasts .rwT.mine .rwLbl{color:#fff;font-size:15px;font-weight:800;letter-spacing:.04em}
+#rewardToasts .rwT.mine .rwAmt{color:#ffd76a;font-size:30px;font-weight:900;line-height:1.1}
+#rewardToasts .rwT.feed{padding:4px 12px;background:#142231;border:1px solid rgba(255,215,106,.55);border-radius:999px;color:#fff;font-size:13px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+#rewardToasts .rwT.feed .rwAmt{color:#ffd76a;font-weight:900}
+@media (max-height:500px){#rewardToasts .rwT.mine{padding:5px 16px 6px}#rewardToasts .rwT.mine .rwLbl{font-size:13px}#rewardToasts .rwT.mine .rwAmt{font-size:24px}#rewardToasts .rwT.feed{font-size:12px}}
