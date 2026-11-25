@@ -1,0 +1,765 @@
+/**
+ * 廣場西側海面：20 艘膠筏的控制器（上下船、開船、載人、撞船落水、游泳、救人、船上丟殼）。
+ * 座位／落水／救人由伺服器判定；位置由駕駛回報（10Hz）。伺服器還沒更新時＝只有自己看得到（本機模式）。
+ */
+import * as THREE from 'three';
+import { makePlayerAvatar, posePlazaStand, type PlayerRig } from '../../dm/character';
+import { makeMeshHelpers } from '../../dm/mesh';
+import { toast, toastTop } from '../../ui/dom';
+import { walkKeys, joy } from '../../world/walkSeat';
+import type { PlazaClient } from '../hubClient';
+import type { PlazaWorldView } from '../worldView';
+import type { Raft } from '../../sea/seaModels';
+import {
+  PB, SEATS, dockSlot, stepPlazaBoat, pushStatic, pushFromBoat, isHardRam, stepSwim, freePassengerSeat, boatEmpty,
+  distToLand, landSpot, hullPts, knockSpot, boatBob, type Hull,
+} from './boatLogic';
+import { poseRider } from './boatPose';
+import { makePlazaSea, type PlazaSea } from './boatScene';
+import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap } from './boatNet';
+
+export type BoatSfx = 'splash' | 'bump' | 'hit' | 'dock' | 'launch' | 'warn';
+export type PlazaBoatDeps = {
+  scene: THREE.Scene;
+  coarse: boolean;
+  fog: () => THREE.Fog | null;
+  /** 廣場吊燈位置（夜晚地面光池） */
+  plazaLamps?: readonly (readonly [number, number])[];
+  client: () => PlazaClient | null;
+  myConn: () => string;
+  myNick: () => string;
+  view: () => PlazaWorldView | null;
+  /** 自己的廣場 avatar（第三人稱同一個） */
+  me: () => PlayerRig | null;
+  walkPos: THREE.Vector3;
+  setYaw: (y: number) => void;
+  /** 可以互動（在廣場走動、沒坐著、沒開選單） */
+  canAct: () => boolean;
+  sfx: (k: BoatSfx) => void;
+  /** 船上丟殼：target＝要丟的人（null＝丟進海裡）；回 false＝節流中沒丟 */
+  throwShell: (from: THREE.Vector3, target: { connId: string; nick: string } | null, to: THREE.Vector3) => boolean;
+};
+
+type Mode = 'walk' | 'boat' | 'swim';
+type BoatSt = Hull & { id: number; seats: string[]; tx: number; tz: number; th: number; tv: number; netT: number; sway: number; steer: number; wakeT: number; bumpT: number; y: number; rx: number; rz: number; fake?: { t: number; r: number; cx: number; cz: number } };
+type SwimSt = { connId: string; x: number; z: number; h: number; tx: number; tz: number; th: number; fake?: boolean };
+type Prompt = { kind: 'board' | 'ride' | 'leave' | 'rescue' | 'climb' | 'out' | 'full'; label: string; boat?: number; conn?: string };
+
+const ICON = {
+  boat: '<svg viewBox="0 0 24 24"><path d="M3 15h18l-3 4H6z"/><path d="M12 15V5l5 7h-5"/></svg>',
+  seat: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.2"/><path d="M8 21v-6h8M12 8v7"/><path d="M3 18h18"/></svg>',
+  dock: '<svg viewBox="0 0 24 24"><path d="M3 12h18M6 12v8M12 12v8M18 12v8"/><path d="M8 8l4-4 4 4"/></svg>',
+  rescue: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M6.3 6.3l3.2 3.2M14.5 14.5l3.2 3.2M17.7 6.3l-3.2 3.2M9.5 14.5l-3.2 3.2"/></svg>',
+  dive: '<svg viewBox="0 0 24 24"><path d="M12 3v9M8 8l4 4 4-4"/><path d="M3 17c2 0 2-1.5 4.5-1.5S10 17 12 17s2-1.5 4.5-1.5S19 17 21 17M3 21c2 0 2-1.5 4.5-1.5S10 21 12 21s2-1.5 4.5-1.5S19 21 21 21"/></svg>',
+  shell: '<svg viewBox="0 0 24 24"><path d="M4 14c0-5 4-9 8-9s8 4 8 9c-3 2-13 2-16 0z"/><path d="M12 5v10M8 7l2 8M16 7l-2 8"/></svg>',
+  climb: '<svg viewBox="0 0 24 24"><path d="M6 21V9M18 21V9M6 12h12M6 17h12"/><path d="M9 6l3-3 3 3"/></svg>',
+};
+
+let D: PlazaBoatDeps | null = null;
+let sea: PlazaSea | null = null;
+let net: BoatNet | null = null;
+let boats: BoatSt[] = [];
+const swimmers = new Map<string, SwimSt>();
+let mode: Mode = 'walk';
+let myBoat = -1, mySeat = -1;
+const mySwim = { x: 0, z: 0, h: 0 };
+let own: Raft | null = null;
+let ownAnchors: THREE.Object3D[] = [];
+let localOnly = false, localNoticed = false;
+let driveAcc = 0, swimAcc = 0, ramCd = 0, throwCd = 0, throwAnim = 0, mySway = 0, busy = false, splashT = 0, t = 0;
+let prompt: Prompt | null = null;
+let ui: { root: HTMLDivElement; act: HTMLButtonElement; shell: HTMLButtonElement; dive: HTMLButtonElement; note: HTMLDivElement } | null = null;
+const mounted = new Set<string>();
+const fakeRigs = new Map<string, PlayerRig>();
+const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+let camSnap = true;
+const _o = new THREE.Object3D(), _v = new THREE.Vector3(), _e = new THREE.Euler();
+
+const fwd = (h: number) => [-Math.sin(h), -Math.cos(h)] as const;
+const myId = () => D?.myConn() || 'me';
+const isMe = (c: string) => !!c && c === myId();
+
+function newBoat(i: number): BoatSt {
+  const d = dockSlot(i);
+  return { id: i, x: d.x, z: d.z, h: d.h, v: 0, seats: ['', '', '', ''], tx: d.x, tz: d.z, th: d.h, tv: 0, netT: 0, sway: 0, steer: 0, wakeT: 0, bumpT: 0, y: PB.waterY, rx: 0, rz: 0 };
+}
+
+// ---------------- UI ----------------
+function buildUi() {
+  if (ui) return;
+  const root = document.createElement('div'); root.id = 'boatUi';
+  const mk = (id: string, ic: string, label: string, key: string) => {
+    const b = document.createElement('button'); b.id = id; b.type = 'button'; b.className = 'boatBtn';
+    b.innerHTML = `<i class="boatIc">${ic}</i><span class="lbl">${label}</span><span class="key"> (${key})</span>`;
+    root.appendChild(b); return b;
+  };
+  const act = mk('boatAct', ICON.boat, '上船', 'E');
+  const shell = mk('boatShell', ICON.shell, '丟殼', 'F');
+  const dive = mk('boatDive', ICON.dive, '跳水', 'X');
+  const note = document.createElement('div'); note.id = 'boatNote'; root.appendChild(note);
+  const tap = (b: HTMLButtonElement, f: () => void) => b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); f(); });
+  tap(act, () => doPrompt()); tap(shell, () => throwFromBoat()); tap(dive, () => void jumpIn());
+  for (const b of [act, shell, dive]) b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
+  document.body.appendChild(root);
+  ui = { root, act, shell, dive, note };
+}
+function syncUi() {
+  if (!ui) return;
+  const p = prompt;
+  ui.act.classList.toggle('on', !!p);
+  if (p) {
+    const ic = p.kind === 'leave' || p.kind === 'out' ? ICON.dock : p.kind === 'rescue' ? ICON.rescue : p.kind === 'climb' ? ICON.climb : p.kind === 'ride' ? ICON.seat : ICON.boat;
+    const lbl = ui.act.querySelector('.lbl')!;
+    if (lbl.textContent !== p.label) { lbl.textContent = p.label; (ui.act.querySelector('.boatIc') as HTMLElement).innerHTML = ic; }
+    ui.act.classList.toggle('dis', p.kind === 'full' || busy);
+  }
+  ui.shell.classList.toggle('on', mode === 'boat');
+  ui.dive.classList.toggle('on', mode === 'boat');
+  document.body.classList.toggle('plazaBoating', mode !== 'walk');
+  document.body.classList.toggle('plazaSwimming', mode === 'swim');
+}
+function note(s: string) { if (ui) { ui.note.textContent = s; ui.note.classList.toggle('on', !!s); } }
+
+// ---------------- 開／關 ----------------
+export function openPlazaBoats(deps: PlazaBoatDeps) {
+  closePlazaBoats();
+  D = deps;
+  sea = makePlazaSea(deps.scene, { coarse: deps.coarse, fog: deps.fog(), plazaLamps: deps.plazaLamps });
+  boats = Array.from({ length: PB.count }, (_, i) => newBoat(i));
+  swimmers.clear(); mode = 'walk'; myBoat = mySeat = -1; localOnly = false; localNoticed = false; prompt = null; busy = false; camSnap = true;
+  buildUi();
+  const c = deps.client();
+  if (c) {
+    net = makeBoatNet(c, {
+      seats: onSeats, poses: onPoses, ram: onRam, swimStart: s => upsertSwim(s, true), swimEnd: endSwim, rescued: onRescued, state: onState,
+    });
+  } else localOnly = true;
+  syncUi();
+}
+export function closePlazaBoats() {
+  if (!D) return;
+  // 還在船上／水裡就離開廣場：下次進場站在碼頭口
+  if (mode !== 'walk') { D.walkPos.x = PB.shoreX + 1.2; D.walkPos.z = 0; restoreMe(); }
+  for (const c of mounted) D.view()?.setRemoteMount(c, null);
+  mounted.clear();
+  for (const r of fakeRigs.values()) r.outer.removeFromParent();
+  fakeRigs.clear();
+  net?.close(); net = null;
+  sea?.dispose(); sea = null; own = null; ownAnchors = [];
+  ui?.root.remove(); ui = null;
+  document.body.classList.remove('plazaBoating', 'plazaSwimming');
+  mode = 'walk'; myBoat = mySeat = -1; boats = []; swimmers.clear();
+  D = null;
+}
+export const plazaBoatsActive = () => !!D && mode !== 'walk';
+export const plazaBoatsMode = () => mode;
+export const plazaBoatsOpen = () => !!D;
+
+// ---------------- 伺服器事件 ----------------
+function onState(s: BoatsSnap | null) {
+  if (!s) {
+    localOnly = true;
+    if (!localNoticed) { localNoticed = true; toastTop('海上同步還沒開放（伺服器未更新）：先只有你看得到自己的船'); }
+    return;
+  }
+  localOnly = false;
+  const wasBoat = myBoat, wasMode = mode;
+  for (const b of s.boats) onSeats(b, true);
+  for (const k of [...swimmers.keys()]) if (!swimmers.get(k)!.fake) swimmers.delete(k);
+  for (const w of s.swimmers) upsertSwim(w, true);
+  // 重連後：伺服器沒有我的座位／泳者紀錄（重開或斷線太久）＝回岸上
+  const me = myId();
+  const stillOn = s.boats.some(b => b.seats.includes(me)), stillSwim = s.swimmers.some(w => w.connId === me);
+  if (wasMode === 'boat' && !stillOn) {
+    const b = boats[wasBoat];
+    if (b && mySeat === 0 && boatEmpty(b.seats)) {
+      // 船還在原地等：坐回駕駛座
+      void net?.board(b.id, 0).then(r => { if (!r.ok) forceAshore('連線重新整理了，先回到碼頭'); else if (r.boat) onSeats(r.boat); });
+    } else forceAshore('連線重新整理了，先回到碼頭');
+  } else if (wasMode === 'swim' && !stillSwim) forceAshore('連線重新整理了，先回到碼頭');
+}
+function forceAshore(msg: string) {
+  if (!D) return;
+  const b = boats[myBoat];
+  if (b) b.seats = b.seats.map(c => (isMe(c) ? '' : c));
+  restoreMe();
+  D.walkPos.x = PB.shoreX + 1.2; D.walkPos.z = 0; D.setYaw(-Math.PI / 2);
+  mode = 'walk'; myBoat = mySeat = -1; toast(msg, '#9fe0ff', 2);
+  syncUi();
+}
+function onSeats(b: BoatDto, snap = false) {
+  const s = boats[b.id]; if (!s) return;
+  const me = myId();
+  const before = s.seats.indexOf(me), after = b.seats.indexOf(me);
+  s.seats = b.seats.slice();
+  const iDrive = mode === 'boat' && myBoat === b.id && mySeat === 0;
+  if (!iDrive) {
+    s.tx = b.x; s.tz = b.z; s.th = b.h; s.tv = b.v;
+    if (snap || Math.hypot(s.x - b.x, s.z - b.z) > 8) { s.x = b.x; s.z = b.z; s.h = b.h; s.v = b.v; }
+  }
+  // 我被移出這艘（撞船由 BoatRam 處理；這裡處理伺服器主動清座位）
+  if (before >= 0 && after < 0 && mode === 'boat' && myBoat === b.id && !busy) {
+    if (!swimmers.has(me)) forceAshore('你已經不在船上了');
+  }
+}
+function onPoses(p: BoatPosesDto) {
+  const now = performance.now();
+  for (const r of p.b) {
+    const id = Number(r[0]); const s = boats[id]; if (!s || s.fake) continue;
+    if (mode === 'boat' && myBoat === id && mySeat === 0) continue;
+    s.tx = Number(r[1]); s.tz = Number(r[2]); s.th = Number(r[3]); s.tv = Number(r[4]); s.netT = now;
+    if (Math.hypot(s.x - s.tx, s.z - s.tz) > 12) { s.x = s.tx; s.z = s.tz; s.h = s.th; }
+  }
+  for (const r of p.s) {
+    const c = String(r[0]); if (isMe(c)) continue;
+    const w = swimmers.get(c);
+    if (w) { w.tx = Number(r[1]); w.tz = Number(r[2]); w.th = Number(r[3]); } else upsertSwim({ connId: c, x: Number(r[1]), z: Number(r[2]), h: Number(r[3]) }, true);
+  }
+}
+function upsertSwim(s: SwimDto, snap: boolean) {
+  if (isMe(s.connId)) return;
+  const w = swimmers.get(s.connId);
+  if (w) { w.tx = s.x; w.tz = s.z; w.th = s.h; if (snap) { w.x = s.x; w.z = s.z; w.h = s.h; } return; }
+  swimmers.set(s.connId, { connId: s.connId, x: s.x, z: s.z, h: s.h, tx: s.x, tz: s.z, th: s.h });
+  splash(s.x, s.z, 1);
+}
+function endSwim(connId: string) {
+  if (isMe(connId)) return;
+  swimmers.delete(connId);
+}
+function onRam(r: RamDto) {
+  const tb = boats[r.target]; if (!D || !tb) return;
+  splash(r.x, r.z, 2);
+  D.sfx('hit');
+  tb.v = tb.tv = 0; tb.sway = 1;
+  // 對方船被撞得往外推一點（只是畫面，下一筆位置會校正）
+  tb.x += r.ix * 0.8; tb.z += r.iz * 0.8;
+  const me = myId();
+  for (const k of r.knocked) {
+    if (k.connId === me) {
+      becomeSwimmer(k.x, k.z, k.h);
+      toast(r.by === me ? '撞太猛，自己也掉下去了！' : `被 ${r.byNick || '別人'} 撞下水了！游回岸邊或等人救`, '#9fe0ff', 2.4);
+    } else upsertSwim(k, true);
+  }
+  tb.seats = tb.seats.map(c => (r.knocked.some(k => k.connId === c) ? '' : c));
+  if (r.by === me && r.knocked.length) toast(`撞翻了！${r.knocked.length} 人落水`, '#ffd23a', 1.6);
+}
+function onRescued(e: { boatId: number; seat: number; by: string }) {
+  const b = boats[e.boatId]; if (!b || !D) return;
+  b.seats[e.seat] = myId();
+  mountMe(e.boatId, e.seat);
+  toast(e.by ? `${e.by} 把你拉上船了` : '被拉上船了', '#9fe0ff', 1.6);
+}
+
+// ---------------- 自己上下船 ----------------
+function ensureOwn() {
+  if (own || !sea) return own;
+  own = sea.makeOwnRaft();
+  ownAnchors = SEATS.map(s => { const a = new THREE.Object3D(); a.position.set(s.x, s.y, s.z); own!.body.add(a); return a; });
+  own.g.visible = false;
+  return own;
+}
+function mountMe(id: number, seat: number) {
+  if (!D) return;
+  const rig = D.me(); const rf = ensureOwn(); if (!rf) return;
+  swimmers.delete(myId());
+  mode = 'boat'; myBoat = id; mySeat = seat; camSnap = true;
+  if (rig) {
+    ownAnchors[seat].add(rig.outer);
+    rig.outer.position.set(0, 0, 0); rig.outer.rotation.set(0, 0, 0); rig.outer.visible = true;
+  }
+  D.sfx('dock');
+  syncUi();
+}
+function restoreMe() {
+  const rig = D?.me();
+  if (rig && D) {
+    D.scene.attach(rig.outer);
+    rig.outer.rotation.set(0, rig.outer.rotation.y, 0);
+    posePlazaStand(rig);
+    rig.handL.visible = rig.handR.visible = true;
+  }
+  if (own) own.g.visible = false;
+}
+function becomeSwimmer(x: number, z: number, h: number) {
+  if (!D) return;
+  const b = boats[myBoat];
+  if (b) b.seats = b.seats.map(c => (isMe(c) ? '' : c));
+  restoreMe();
+  mode = 'swim'; myBoat = mySeat = -1; mySwim.x = x; mySwim.z = z; mySwim.h = h; camSnap = true;
+  splash(x, z, 1.4); D.sfx('splash');
+  syncUi();
+}
+function landAt(x: number, z: number, yaw: number) {
+  if (!D) return;
+  restoreMe();
+  mode = 'walk'; myBoat = mySeat = -1;
+  D.walkPos.x = x; D.walkPos.z = z; D.setYaw(yaw);
+  D.sfx('dock');
+  syncUi();
+}
+
+async function board(id: number, seat: number) {
+  const b = boats[id]; if (!b || busy || !D) return;
+  if (localOnly || b.fake) {
+    if (seat === 0 && b.seats[0]) return;
+    b.seats[seat] = myId(); mountMe(id, seat);
+    if (localOnly && !localNoticed) { localNoticed = true; toastTop('海上同步還沒開放（伺服器未更新）：先只有你看得到自己的船'); }
+    return;
+  }
+  busy = true; syncUi();
+  const r = await net!.board(id, seat).finally(() => { busy = false; });
+  if (!r.ok) {
+    if (r.err === 'old_server') { localOnly = true; busy = false; return board(id, seat); }
+    console.debug('boat board fail', r.err, JSON.stringify(r.boat), D.walkPos.x.toFixed(2), D.walkPos.z.toFixed(2));
+    toast(ERR[r.err ?? ''] ?? '上不了船', '#ffb08a'); if (r.boat) onSeats(r.boat); syncUi(); return;
+  }
+  if (r.boat) onSeats(r.boat, true);
+  mountMe(id, r.seat ?? seat);
+  toast(mySeat === 0 ? '上船了！W／S 油門、A／D 轉向' : '上船了！坐穩了', '#9fe0ff', 1.6);
+}
+const ERR: Record<string, string> = {
+  far: '離船太遠了', taken: '這艘已經有人在開了', full: '船上坐滿了', on_boat: '你已經在船上了', seated: '先站起來再上船', carrying: '抱著人不能上船',
+  fast: '船開太快，等它慢下來', far_shore: '離岸太遠，靠近碼頭或岸邊再下船', not_near_land: '離岸太遠，靠近碼頭或岸邊再下船', bad_spot: '這裡站不住，換個位置下船', slow: '慢一點', no_seat: '船上沒有空位了',
+};
+async function leaveBoat() {
+  const b = boats[myBoat]; if (!b || !D || busy) return;
+  const spot = landSpot(b.x, b.z); if (!spot) { toast('靠近碼頭或岸邊再下船', '#ffb08a'); return; }
+  const yaw = Math.atan2(-(spot.x - b.x), -(spot.z - b.z));
+  if (mySeat === 0) { b.v = 0; b.tv = 0; }
+  if (localOnly || b.fake) { b.seats[mySeat] = ''; landAt(spot.x, spot.z, yaw); return; }
+  // 駕駛下船前先把最後位置送上去（船就停在這裡）
+  if (mySeat === 0) net!.drive(b.id, b.x, b.z, b.h, 0);
+  busy = true;
+  const r = await net!.leave(spot.x, spot.z).finally(() => { busy = false; });
+  if (!r.ok) { toast(ERR[r.err ?? ''] ?? '下不了船', '#ffb08a'); return; }
+  if (r.boat) onSeats(r.boat);
+  landAt(spot.x, spot.z, yaw);
+}
+async function jumpIn() {
+  if (mode !== 'boat' || !D || busy) return;
+  const b = boats[myBoat]; if (!b) return;
+  const [fx, fz] = fwd(b.h), sx = -fz, sz = fx;
+  const side = mySeat % 2 ? 1 : -1;
+  const x = b.x + sx * 2.2 * side, z = b.z + sz * 2.2 * side;
+  if (localOnly || b.fake) { becomeSwimmer(x, z, b.h); return; }
+  busy = true;
+  const r = await net!.jump().finally(() => { busy = false; });
+  if (!r.ok) { toast(ERR[r.err ?? ''] ?? '跳不下去', '#ffb08a'); return; }
+  if (r.boat) onSeats(r.boat);
+  const s = r.swim; becomeSwimmer(s?.x ?? x, s?.z ?? z, s?.h ?? b.h);
+}
+async function swimOut() {
+  if (!D || busy) return;
+  const spot = landSpot(mySwim.x, mySwim.z, 2.4); if (!spot) return;
+  const yaw = Math.atan2(-(spot.x - mySwim.x), -(spot.z - mySwim.z));
+  if (localOnly) { landAt(spot.x, spot.z, yaw); toast('上岸了，全身濕透', '#9fe0ff'); return; }
+  busy = true;
+  const r = await net!.swimOut(spot.x, spot.z).finally(() => { busy = false; });
+  if (!r.ok) { toast(ERR[r.err ?? ''] ?? '爬不上去，再靠近一點', '#ffb08a'); return; }
+  landAt(spot.x, spot.z, yaw); toast('上岸了，全身濕透', '#9fe0ff');
+}
+async function climbBoat(id: number) {
+  const b = boats[id]; if (!b || busy) return;
+  const seat = b.seats[0] ? freePassengerSeat(b.seats) : 0;
+  if (seat < 0) return;
+  if (localOnly || b.fake) { b.seats[seat] = myId(); mountMe(id, seat); return; }
+  busy = true;
+  const r = await net!.board(id, seat).finally(() => { busy = false; });
+  if (!r.ok) { toast(ERR[r.err ?? ''] ?? '爬不上去', '#ffb08a'); return; }
+  if (r.boat) onSeats(r.boat, true);
+  mountMe(id, r.seat ?? seat);
+}
+async function rescue(connId: string) {
+  const b = boats[myBoat]; if (!b || busy) return;
+  const w = swimmers.get(connId); if (!w) return;
+  const seat = freePassengerSeat(b.seats); if (seat < 0) { toast('船上沒有空位了', '#ffb08a'); return; }
+  if (localOnly || w.fake) {
+    swimmers.delete(connId); b.seats[seat] = connId; splash(w.x, w.z, 0.8); toast('拉上船了！', '#9fe0ff'); return;
+  }
+  busy = true;
+  const r = await net!.rescue(connId).finally(() => { busy = false; });
+  if (!r.ok) { toast(ERR[r.err ?? ''] ?? '拉不上來', '#ffb08a'); return; }
+  swimmers.delete(connId);
+  if (r.boat) onSeats(r.boat);
+  toast('拉上船了！', '#9fe0ff');
+}
+
+function doPrompt() {
+  const p = prompt; if (!p || busy || !D) return;
+  if (p.kind === 'board') void board(p.boat!, 0);
+  else if (p.kind === 'ride') void board(p.boat!, -1);
+  else if (p.kind === 'leave') void leaveBoat();
+  else if (p.kind === 'rescue') void rescue(p.conn!);
+  else if (p.kind === 'climb') void climbBoat(p.boat!);
+  else if (p.kind === 'out') void swimOut();
+}
+
+/** 鍵盤：回 true＝吃掉這個鍵。E＝上船／下船／救人／上岸、F＝丟殼、X＝跳水；在船上／水裡擋掉跳／蹲／躺 */
+export function plazaBoatsKey(code: string): boolean {
+  if (!D) return false;
+  if (code === 'KeyE' && prompt && D.canAct()) { doPrompt(); return true; }
+  if (mode === 'walk') return false;
+  if (code === 'KeyF' && mode === 'boat') { throwFromBoat(); return true; }
+  if (code === 'KeyX' && mode === 'boat') { void jumpIn(); return true; }
+  return code === 'Space' || code === 'KeyC' || code === 'KeyZ' || code === 'KeyG' || code === 'KeyE' || code === 'KeyR' || code === 'KeyT';
+}
+
+// ---------------- 丟殼 ----------------
+function myHead(out: THREE.Vector3) {
+  const rig = D?.me();
+  if (rig) { rig.head.getWorldPosition(out); return out; }
+  const b = boats[myBoat]; return out.set(b?.x ?? 0, PB.waterY + 1.6, b?.z ?? 0);
+}
+function throwFromBoat() {
+  if (!D || mode !== 'boat' || throwCd > 0) return;
+  const b = boats[myBoat]; if (!b) return;
+  const from = myHead(new THREE.Vector3()); from.y += 0.15;
+  // 瞄準：鏡頭前方 ±40°、18 m 內最近的人（船上、水裡、岸上都算）
+  const [fx, fz] = fwd(b.h);
+  let best: { connId: string; nick: string; p: THREE.Vector3 } | null = null, bestD = 18;
+  for (const r of D.view()?.remoteList() ?? []) {
+    if (r.isNpc) continue;
+    const h = D.view()?.remoteHead(r.connId); if (!h) continue;
+    const dx = h.x - from.x, dz = h.z - from.z, d = Math.hypot(dx, dz);
+    if (d < 1 || d > bestD) continue;
+    if ((dx * fx + dz * fz) / d < Math.cos(0.7)) continue;
+    best = { connId: r.connId, nick: r.nick, p: new THREE.Vector3(h.x, h.y, h.z) }; bestD = d;
+  }
+  const to = best ? best.p : new THREE.Vector3(b.x + fx * 9, PB.waterY + 0.1, b.z + fz * 9);
+  if (!D.throwShell(from, best ? { connId: best.connId, nick: best.nick } : null, to)) return;
+  throwCd = 0.45; throwAnim = 0.45;
+  if (!best) later(0.6, () => splash(to.x, to.z, 0.5));
+}
+const timers: { t: number; f: () => void }[] = [];
+function later(s: number, f: () => void) { timers.push({ t: s, f }); }
+
+/** 被殼打中（本機或遠端）：那個人和他的船晃一下 */
+export function plazaBoatsSway(connId: string) {
+  if (!D) return;
+  if (isMe(connId) && mode === 'boat') { mySway = 1; const b = boats[myBoat]; if (b) b.sway = Math.max(b.sway, 0.6); return; }
+  for (const b of boats) if (b.seats.includes(connId)) { b.sway = Math.max(b.sway, 0.6); swayConn.set(connId, 1); }
+}
+const swayConn = new Map<string, number>();
+
+// ---------------- 水花 ----------------
+function splash(x: number, z: number, k: number) {
+  const fx = sea?.fx; if (!fx) return;
+  const n = Math.round(6 + 6 * k);
+  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; fx.spawn(x, z, { vx: Math.cos(a) * 2.4 * k, vz: Math.sin(a) * 2.4 * k, vy: 3 + Math.random() * 2.5 * k, y: PB.waterY + 0.2, life: 0.8, s0: 0.35, s1: 1.1, a: 0.7 }); }
+  fx.spawn(x, z, { life: 1.1, s0: 0.8, s1: 2.6 * k + 1, a: 0.5 });
+}
+function wake(b: BoatSt) {
+  const fx = sea?.fx; if (!fx || Math.abs(b.v) < 0.8) return;
+  const [ffx, ffz] = fwd(b.h), sx = Math.cos(b.h), sz = -Math.sin(b.h), k = Math.min(1, Math.abs(b.v) / PB.maxSpd);
+  fx.spawn(b.x - ffx * 2.6, b.z - ffz * 2.6, { vx: -ffx * 1.2, vz: -ffz * 1.2, life: 1.6, s0: 0.7, s1: 2.4 + k, a: 0.32 * k + 0.1 });
+  for (const sg of [1, -1]) fx.spawn(b.x + ffx * 1.6 + sx * sg * 0.9, b.z + ffz * 1.6 + sz * sg * 0.9, { vx: sx * sg * 1.6, vz: sz * sg * 1.6, life: 1.2, s0: 0.4, s1: 1.6, a: 0.22 * k });
+}
+
+// ---------------- 每幀 ----------------
+function input() {
+  const k = (c: string) => (walkKeys.has(c) ? 1 : 0);
+  let thr = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown');
+  let steer = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft');
+  if (Math.abs(joy.y) > 0.15) thr = -joy.y;
+  if (Math.abs(joy.x) > 0.12) steer = joy.x;
+  return { thr: Math.max(-1, Math.min(1, thr)), steer: Math.max(-1, Math.min(1, steer)) };
+}
+
+/** 主迴圈每幀呼叫（在廣場、不論在不在船上）；cam＝目前畫面用的相機（判斷遠近 LOD） */
+export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
+  if (!D || !sea) return;
+  dt = Math.min(dt, 0.1); t += dt;
+  for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= dt; if (timers[i].t <= 0) { const f = timers[i].f; timers.splice(i, 1); f(); } }
+  ramCd = Math.max(0, ramCd - dt); throwCd = Math.max(0, throwCd - dt); throwAnim = Math.max(0, throwAnim - dt); mySway = Math.max(0, mySway - dt / PB.swayT);
+  const me = myId();
+  const { thr, steer } = mode !== 'walk' ? input() : { thr: 0, steer: 0 };
+
+  // 1) 船的位置：我開的＝本機物理；別人的＝內插＋航位推算；假船＝繞圈
+  const kk = 1 - Math.exp(-8 * dt);
+  for (const b of boats) {
+    b.sway = Math.max(0, b.sway - dt / PB.swayT); b.bumpT = Math.max(0, b.bumpT - dt);
+    if (mode === 'boat' && b.id === myBoat && mySeat === 0) {
+      const v0 = b.v;
+      stepPlazaBoat(b, thr, steer, dt);
+      b.steer += (steer - b.steer) * Math.min(1, dt * 6);
+      if (pushStatic(b) && Math.abs(v0) > 1.5 && b.bumpT <= 0) { b.bumpT = 0.4; D.sfx('bump'); const [fx, fz] = fwd(b.h); splash(b.x + fx * 2, b.z + fz * 2, 0.6); }
+      for (const o of boats) {
+        if (o === b) continue;
+        if (Math.abs(o.x - b.x) > 7 || Math.abs(o.z - b.z) > 7) continue;
+        const hit = pushFromBoat(b, o);
+        if (!hit) continue;
+        if (b.bumpT <= 0) {
+          b.bumpT = 0.45; o.sway = Math.max(o.sway, 0.5);
+          const [p] = hullPts(b); splash((p[0] + o.x) / 2, (p[1] + o.z) / 2, Math.min(1.6, 0.5 + Math.abs(v0) / 4));
+          D.sfx('bump');
+          // 撞得夠猛、對方船上有人：請伺服器判定落水
+          if (isHardRam(v0) && ramCd <= 0 && !boatEmpty(o.seats)) {
+            ramCd = PB.ramCd;
+            if (localOnly || o.fake) fakeRam(b, o, hit.ux, hit.uz);
+            else void net!.ram(b.id, o.id).then(r => { if (!r.ok && r.err !== 'slow') console.debug('ram', r.err); });
+          }
+        }
+        b.v *= PB.bump;
+      }
+      driveAcc += dt;
+      if (driveAcc >= 1 / PB.driveHz && !localOnly) { driveAcc = 0; net?.drive(b.id, b.x, b.z, b.h, b.v); }
+    } else if (b.fake) {
+      const f = b.fake; f.t += dt;
+      const a = f.t * 0.22;
+      b.x = f.cx + Math.cos(a) * f.r; b.z = f.cz + Math.sin(a) * f.r; b.h = Math.PI - a; b.v = 0.22 * f.r;
+      b.steer = 0.4;
+    } else {
+      // 航位推算：目標跟著回報速度往前走（最多 0.6 秒）
+      const age = Math.min(0.6, (performance.now() - b.netT) / 1000);
+      const [fx, fz] = fwd(b.th);
+      const gx = b.tx + fx * b.tv * (b.netT ? age : 0), gz = b.tz + fz * b.tv * (b.netT ? age : 0);
+      b.x += (gx - b.x) * kk; b.z += (gz - b.z) * kk;
+      let dh = b.th - b.h; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+      b.steer += (Math.max(-1, Math.min(1, -dh * 3)) - b.steer) * Math.min(1, dt * 4);
+      b.h += dh * kk; b.v += (b.tv - b.v) * kk;
+    }
+    const bob = boatBob(b.x, b.z, t, b.v, b.sway);
+    b.y = bob.y; b.rx = bob.rx; b.rz = bob.rz;
+    b.wakeT -= dt;
+    if (b.wakeT <= 0) { b.wakeT = 0.07; if (Math.abs(b.v) > 0.8 && Math.hypot(b.x - cam.position.x, b.z - cam.position.z) < 60) wake(b); }
+  }
+  // 別人互撞：畫面上兩艘靠得很近、相對速度快就噴水花（每個人都看得到）
+  splashT -= dt;
+  if (splashT <= 0) {
+    splashT = 0.2;
+    for (let i = 0; i < boats.length; i++) for (let j = i + 1; j < boats.length; j++) {
+      const a = boats[i], c = boats[j];
+      if ((mode === 'boat' && mySeat === 0 && (a.id === myBoat || c.id === myBoat))) continue;
+      if (Math.abs(a.x - c.x) > 4.2 || Math.abs(a.z - c.z) > 4.2) continue;
+      if (Math.abs(a.v) + Math.abs(c.v) < 2.5 || Math.hypot(a.x - c.x, a.z - c.z) > 3.4) continue;
+      if (a.bumpT > 0 || c.bumpT > 0) continue;
+      a.bumpT = c.bumpT = 0.8; a.sway = Math.max(a.sway, 0.5); c.sway = Math.max(c.sway, 0.5);
+      splash((a.x + c.x) / 2, (a.z + c.z) / 2, 1);
+    }
+  }
+
+  // 2) 游泳
+  if (mode === 'swim') {
+    stepSwim(mySwim, thr, steer, dt);
+    for (const b of boats) { const dx = mySwim.x - b.x, dz = mySwim.z - b.z, d = Math.hypot(dx, dz); if (d < 1.5 && d > 1e-3) { mySwim.x = b.x + dx / d * 1.5; mySwim.z = b.z + dz / d * 1.5; } }
+    swimAcc += dt;
+    if (swimAcc >= 1 / PB.swimHz && !localOnly) { swimAcc = 0; net?.swim(mySwim.x, mySwim.z, mySwim.h); }
+    if ((thr || steer) && Math.random() < dt * 6) { const [fx, fz] = fwd(mySwim.h); sea.fx.spawn(mySwim.x - fx * 0.6, mySwim.z - fz * 0.6, { life: 0.9, s0: 0.3, s1: 1.1, a: 0.3 }); }
+  }
+  for (const w of swimmers.values()) {
+    if (w.fake) continue;
+    w.x += (w.tx - w.x) * kk; w.z += (w.tz - w.z) * kk;
+    let dh = w.th - w.h; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); w.h += dh * kk;
+  }
+
+  // 3) 畫：20 艘 instanced（我在的那艘用完整模型）＋船頭燈
+  sea.begin();
+  for (const b of boats) {
+    const mine = mode === 'boat' && b.id === myBoat;
+    if (mine && own) {
+      own.g.visible = true;
+      own.g.position.set(b.x, b.y, b.z); own.g.rotation.set(b.rx, b.h, b.rz + mySway * Math.sin(t * 14) * 0.08);
+      own.prop.rotation.z += b.v * 0.12;
+      own.motor.rotation.y += (b.steer * 0.4 - own.motor.rotation.y) * 0.2;
+    } else {
+      const far = Math.hypot(b.x - cam.position.x, b.z - cam.position.z) > PB.lodFar;
+      sea.put(b.x, b.y, b.z, b.h, b.rx, b.rz, far);
+    }
+    if (b.seats[0]) sea.headlight(b.x, b.z, b.h);
+  }
+  if (own && !(mode === 'boat')) own.g.visible = false;
+  sea.end();
+  sea.tick(t, dt);
+
+  // 4) 人：遠端坐船／游泳交給 worldView；自己在船上用 poseRider
+  const view = D.view();
+  const now = new Set<string>();
+  for (const b of boats) {
+    for (let s = 0; s < PB.seats; s++) {
+      const c = b.seats[s]; if (!c || c === me) continue;
+      seatWorld(b, s, _v);
+      const sw = swayConn.get(c) ?? 0;
+      const m = { x: _v.x, y: _v.y, z: _v.z, yaw: b.h, pose: SEATS[s].pose, steer: s === 0 ? b.steer : 0, sway: sw, rx: b.rx, rz: b.rz };
+      if (fakeRigs.has(c)) placeFake(c, m);
+      else if (view) { view.setRemoteMount(c, m); now.add(c); }
+    }
+  }
+  for (const w of swimmers.values()) {
+    const m = { x: w.x, y: PB.waterY, z: w.z, yaw: w.h, pose: 'swim' as const };
+    if (fakeRigs.has(w.connId)) placeFake(w.connId, m);
+    else if (view) { view.setRemoteMount(w.connId, m); now.add(w.connId); }
+  }
+  for (const [c, v] of swayConn) { const n = v - dt / PB.swayT; if (n <= 0) swayConn.delete(c); else swayConn.set(c, n); }
+  for (const c of mounted) if (!now.has(c)) view?.setRemoteMount(c, null);
+  mounted.clear(); for (const c of now) mounted.add(c);
+  for (const [c, r] of fakeRigs) if (!boats.some(b => b.seats.includes(c)) && !swimmers.has(c)) { r.outer.removeFromParent(); fakeRigs.delete(c); }
+
+  const rig = D.me();
+  if (rig && mode === 'boat') {
+    const b = boats[myBoat];
+    const pr = poseRider(rig, SEATS[mySeat].pose, t, { steer: mySeat === 0 ? b.steer : 0, sway: mySway, throwK: throwAnim > 0 ? 1 - throwAnim / 0.45 : 0 });
+    rig.outer.position.set(0, pr.dy, 0); rig.outer.rotation.set(pr.rx, 0, 0); rig.outer.visible = true;
+    D.walkPos.set(b.x, 1.55, b.z);
+  } else if (rig && mode === 'swim') {
+    const pr = poseRider(rig, 'swim', t, {});
+    rig.outer.position.set(mySwim.x, PB.waterY + pr.dy, mySwim.z); rig.outer.rotation.order = 'YXZ'; rig.outer.rotation.set(pr.rx, mySwim.h, 0); rig.outer.visible = true;
+    D.walkPos.set(mySwim.x, 1.55, mySwim.z);
+  }
+
+  // 5) 提示按鈕
+  prompt = D.canAct() || mode !== 'walk' ? findPrompt() : null;
+  syncUi();
+  if (mode === 'boat' && mySeat === 0) {
+    const b = boats[myBoat];
+    note(localOnly ? '只有你看得到（伺服器未更新）' : Math.abs(b.v) >= PB.ramSpeed ? '全速：撞到有人的船會把人撞下水' : '');
+  } else if (mode === 'swim') note('游回碼頭或岸邊，或游到慢下來的船旁邊');
+  else note('');
+}
+function seatWorld(b: BoatSt, s: number, out: THREE.Vector3) {
+  _o.position.set(b.x, b.y, b.z); _e.set(b.rx, b.h, b.rz); _o.quaternion.setFromEuler(_e); _o.updateMatrix();
+  return out.set(SEATS[s].x, SEATS[s].y, SEATS[s].z).applyMatrix4(_o.matrix);
+}
+function findPrompt(): Prompt | null {
+  if (!D) return null;
+  if (mode === 'walk') {
+    const p = D.walkPos; let best: BoatSt | null = null, bd: number = PB.boardR;
+    // 伺服器量船中心（4.6 m）；這裡略嚴，免得按了被拒
+    for (const b of boats) { const d = Math.hypot(p.x - b.x, p.z - b.z); if (d < bd) { bd = d; best = b; } }
+    if (!best) return null;
+    if (!best.seats[0]) return { kind: 'board', label: '上船開', boat: best.id };
+    if (freePassengerSeat(best.seats) >= 0) return { kind: 'ride', label: '搭這艘', boat: best.id };
+    return { kind: 'full', label: '船上坐滿了', boat: best.id };
+  }
+  if (mode === 'boat') {
+    const b = boats[myBoat]; if (!b) return null;
+    if (Math.abs(b.v) <= PB.rescueMaxV && freePassengerSeat(b.seats) >= 0) {
+      let bw: SwimSt | null = null, bd: number = PB.rescueR;
+      for (const w of swimmers.values()) { const d = Math.hypot(w.x - b.x, w.z - b.z); if (d < bd) { bd = d; bw = w; } }
+      if (bw) return { kind: 'rescue', label: '拉人上船', conn: bw.connId };
+    }
+    if (distToLand(b.x, b.z) <= PB.landR - 1.2 && Math.abs(b.v) < 2.5) return { kind: 'leave', label: '下船', boat: b.id };
+    return null;
+  }
+  // 游泳
+  if (distToLand(mySwim.x, mySwim.z) <= PB.climbR) return { kind: 'out', label: '爬上岸' };
+  for (const b of boats) {
+    if (Math.abs(b.v) > PB.rescueMaxV) continue;
+    if (Math.hypot(b.x - mySwim.x, b.z - mySwim.z) > PB.rescueR) continue;
+    if (b.seats[0] && freePassengerSeat(b.seats) < 0) continue;
+    return { kind: 'climb', label: '爬上船', boat: b.id };
+  }
+  return null;
+}
+
+/** 在船上／水裡：追船鏡頭（取代第三人稱走路鏡頭） */
+export function plazaBoatsCam(cam: THREE.PerspectiveCamera, dt: number) {
+  if (!D || mode === 'walk') return false;
+  const b = mode === 'boat' ? boats[myBoat] : null;
+  const x = b ? b.x : mySwim.x, z = b ? b.z : mySwim.z, h = b ? b.h : mySwim.h;
+  const [fx, fz] = fwd(h);
+  const back = b ? 7.6 : 4.6, up = b ? 4.4 : 2.6;
+  const tx = x - fx * back, tz = z - fz * back, ty = up + (b ? Math.sin(t * 2.1) * 0.05 : 0);
+  const k = camSnap ? 1 : 1 - Math.exp(-4.5 * dt);
+  camPos.x += (tx - camPos.x) * k; camPos.z += (tz - camPos.z) * k; camPos.y += (ty - camPos.y) * k;
+  // 鏡頭不要穿進碼頭木板底下
+  if (camPos.y < 0.8) camPos.y = 0.8;
+  const lx = x + fx * (b ? 5 : 3), lz = z + fz * (b ? 5 : 3), ly = PB.waterY + (b ? 0.9 : 0.4);
+  if (camSnap) camLook.set(lx, ly, lz); else camLook.lerp(_v.set(lx, ly, lz), k);
+  camSnap = false;
+  cam.position.copy(camPos); cam.lookAt(camLook);
+  if (cam.fov !== 58) { cam.fov = 58; cam.updateProjectionMatrix(); }
+  cam.updateMatrixWorld();
+  return true;
+}
+
+/** 夜晚：海面月光、碼頭燈、船頭燈、夜光藻航跡 */
+export function plazaBoatsNight(k: number, sky: THREE.Color) { sea?.setNight(k, sky); }
+export function plazaBoatsFog(f: THREE.Fog) { sea?.setFog(f); }
+
+// ---------------- 測試／除錯 ----------------
+function placeFake(c: string, m: { x: number; y: number; z: number; yaw: number; pose: 'drive' | 'sit' | 'deck' | 'swim'; steer?: number; sway?: number; rx?: number; rz?: number }) {
+  const r = fakeRigs.get(c); if (!r) return;
+  const pr = poseRider(r, m.pose, t, { steer: m.steer, sway: m.sway });
+  r.outer.position.set(m.x, m.y + pr.dy, m.z); r.outer.rotation.order = 'YXZ'; r.outer.rotation.set(pr.rx + (m.rx ?? 0), m.yaw, m.rz ?? 0);
+}
+function fakeRig(c: string) {
+  if (!D || fakeRigs.has(c)) return;
+  const { M, add } = makeMeshHelpers(D.scene, D.coarse);
+  const rig = makePlayerAvatar({ shirt: 0x3a7ab8, hair: 0x222222, pants: 0x2a2a40 }, M, add, false);
+  D.scene.add(rig.outer); fakeRigs.set(c, rig);
+}
+function fakeRam(b: BoatSt, o: BoatSt, ux: number, uz: number) {
+  const knocked: SwimDto[] = [];
+  o.seats.forEach((c, i) => { if (!c) return; const p = knockSpot(o, ux, uz, i); knocked.push({ connId: c, x: p.x, z: p.z, h: o.h }); });
+  for (const k of knocked) if (fakeRigs.has(k.connId) || isMe(k.connId)) { /* 假人／自己 */ }
+  onRam({ by: myId(), byNick: D?.myNick() ?? '', fromBoat: b.id, target: o.id, x: (b.x + o.x) / 2, z: (b.z + o.z) / 2, ix: ux, iz: uz, knocked });
+  for (const k of knocked) { const w = swimmers.get(k.connId); if (w && fakeRigs.has(k.connId)) w.fake = true; }
+  if (o.fake) o.fake = undefined;
+}
+let fakeN = 0;
+export const plazaBoatsDbg = {
+  /** 傳送到碼頭口（站在碼頭上，旁邊就是船） */
+  tpDock() {
+    if (!D) return 'closed';
+    if (mode !== 'walk') forceAshore('傳送到碼頭');
+    // 站到最靠碼頭口、還沒人開的那艘旁邊（碼頭上）
+    let best: BoatSt | null = null, bd = 1e9;
+    for (const b of boats) { if (b.seats[0] || Math.abs(b.z) > 6 || b.x < PB.pierX1 || b.x > PB.pierX0) continue; const d = PB.pierX0 - b.x; if (d < bd) { bd = d; best = b; } }
+    D.walkPos.x = best ? best.x : -28; D.walkPos.z = best ? Math.sign(best.z) * 0.7 : 0;
+    D.setYaw(best ? (best.z < 0 ? 0 : Math.PI) : Math.PI / 2);
+    return best ? `boat ${best.id}` : 'ok';
+  },
+  /** 直接坐上第 i 艘（預設 0）駕駛座 */
+  board(i = 0) { void board(i, 0); return 'ok'; },
+  /** 生一艘假的遠端船（有假駕駛＋乘客，在碼頭外繞圈） */
+  spawnBoat(i = 19, riders = 2) {
+    const b = boats[i]; if (!b || !D) return 'no boat';
+    const cx = -60, cz = 14 - (fakeN % 3) * 14;
+    b.fake = { t: 0, r: 12, cx, cz }; b.seats = ['', '', '', ''];
+    for (let s = 0; s < Math.min(PB.seats, riders); s++) { const c = `dbg-${++fakeN}`; fakeRig(c); b.seats[s] = c; }
+    return `boat ${i} @ (${cx},${cz})`;
+  },
+  /** 在自己附近生一個假的落水者（可練習拉人上船） */
+  spawnSwimmer() {
+    if (!D) return 'closed';
+    const p = mode === 'boat' ? boats[myBoat] : mode === 'swim' ? mySwim : { x: -32, z: 6, h: 0 };
+    const c = `dbg-${++fakeN}`; fakeRig(c);
+    swimmers.set(c, { connId: c, x: p.x + 2.2, z: p.z + 1.2, h: 0, tx: p.x + 2.2, tz: p.z + 1.2, th: 0, fake: true });
+    splash(p.x + 2.2, p.z + 1.2, 1);
+    return c;
+  },
+  /** 強制撞船：自己在船上＝假裝被撞下水；不然撞翻最近一艘有假人的船 */
+  ram() {
+    if (!D) return 'closed';
+    if (mode === 'boat') {
+      const b = boats[myBoat];
+      const [fx, fz] = fwd(b.h);
+      if (localOnly) { fakeRam({ ...b, id: -1 } as BoatSt, b, -fz, fx); return 'local ram'; }
+      // 線上：真的跳水（伺服器知道），畫面上演撞船
+      splash(b.x, b.z, 2); D.sfx('hit');
+      void jumpIn().then(() => toast('被撞下水了！（測試）', '#9fe0ff', 2));
+      return 'jump';
+    }
+    const o = boats.find(b => b.fake && !boatEmpty(b.seats)); if (!o) return 'no fake boat';
+    fakeRam({ ...o, id: -1 } as BoatSt, o, 1, 0);
+    return 'ok';
+  },
+  state() {
+    return { mode, myBoat, mySeat, localOnly, supported: net?.supported() ?? null, boats: boats.map(b => ({ id: b.id, x: +b.x.toFixed(1), z: +b.z.toFixed(1), v: +b.v.toFixed(1), seats: b.seats.filter(Boolean).length })), swimmers: [...swimmers.keys()], prompt: prompt?.label ?? null, sea: sea?.stats() };
+  },
+  night(k: number) { sea?.setNight(k, new THREE.Color(0x1d3557)); return 'ok'; },
+  /** 走路時傳送到某點（碼頭上） */
+  tp(x: number, z: number) { if (!D || mode !== 'walk') return 'not walking'; D.walkPos.x = x; D.walkPos.z = z; return 'ok'; },
+  /** 自己開的船直接擺到某處（測試撞船／救人；伺服器一次最多跳 14 m） */
+  place(x: number, z: number, h: number, v = 0) {
+    const b = boats[myBoat]; if (!b || mode !== 'boat' || mySeat !== 0) return 'not driving';
+    b.x = x; b.z = z; b.h = h; b.v = v; if (!localOnly) net?.drive(b.id, x, z, h, v); return 'ok';
+  },
+  /** 自己的位置（船／游泳／走路） */
+  me() { const b = boats[myBoat]; return mode === 'boat' && b ? { mode, x: b.x, z: b.z, h: b.h, v: b.v, seat: mySeat, id: b.id } : mode === 'swim' ? { mode, ...mySwim } : { mode, x: D?.walkPos.x, z: D?.walkPos.z }; },
+  /** 量效能用：整片海（含夜燈）先藏起來 */
+  hide(on = true) { if (sea) sea.group.visible = !on; if (own) own.g.visible = !on && mode === 'boat'; return 'ok'; },
+  /** 量效能用：整片海的夜燈（光池／光暈／光錐）開關 */
+  lights(on = true) { if (sea) for (const n of ['plazaSeaGlows', 'plazaSeaPools', 'plazaBoatCones']) { const o = sea.group.getObjectByName(n); if (o) o.visible = on; } return 'ok'; },
+};

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PB } from './boats/boatLogic';
 import { PlazaClient } from './hubClient';
 import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds, plazaClampWalk, plazaCafeObstacles,
@@ -132,6 +133,8 @@ export type PlazaDeps = {
   getPlazaSpawn?: () => PlazaSpawnMemory | null | undefined;
   /** 離開時寫入站位（坐著離開會帶 pileId/slot） */
   persistPlazaSpawn?: (spawn: PlazaSpawnMemory) => void;
+  /** 離開廣場前（記站位之前）：海面把人送回岸上 */
+  beforeClose?: () => void;
   /** 省電模式（廣場簡化／降負載） */
   getEco?: () => boolean;
   /** 北碼頭工寮：是否已解鎖、提示文字、站在圈內按「進入」 */
@@ -300,7 +303,16 @@ export function plazaWalkRect() {
     const h = 3.1;
     return { minX: c.x - h, maxX: c.x + h, minZ: c.z - h, maxZ: c.z + h };
   }
-  return plazaWalkBounds();
+  // 一般廣場：西側長碼頭可以走到尾端（出了西緣只准在碼頭寬度內，見 plazaWalkClamp）
+  return { ...plazaWalkBounds(), minX: PB.pierX1 + 0.35 };
+}
+/** 西側碼頭：出了廣場西緣只准在碼頭木板上（往位移較小的方向推回） */
+function pierWalkClamp(p: { x: number; z: number }) {
+  if (p.x >= PB.shoreX) return;
+  const hw = PB.pierHalfW - 0.3;
+  if (Math.abs(p.z) <= hw) return;
+  const dx = PB.shoreX - p.x, dz = Math.abs(p.z) - hw;
+  if (dx <= dz) p.x = PB.shoreX; else p.z = Math.sign(p.z) * hw;
 }
 /** 東延咖啡前庭夾限（在矩形夾限之後呼叫）；休閒房／單挑只夾矩形 */
 export function plazaWalkClamp(p: { x: number; z: number }) {
@@ -310,6 +322,7 @@ export function plazaWalkClamp(p: { x: number; z: number }) {
     p.z = Math.max(r.minZ, Math.min(r.maxZ, p.z));
     return;
   }
+  pierWalkClamp(p);
   plazaClampWalk(p);
   foodPinWalk(p);
   if (mySeat != null) { const sp = cookSeatPos(mySeat); p.x = sp.x; p.z = sp.z; }
@@ -491,6 +504,10 @@ export function plazaMyPileOrigin(out = new THREE.Vector3()) {
 }
 
 export function plazaConnId() { return client?.connectionId ?? ''; }
+/** 廣場海面用：一般廣場的連線（休閒房／單挑沒有海） */
+export function plazaBoatClient() { return raceMode || partyMode ? null : client; }
+export function plazaWorldView() { return view; }
+export function plazaMyNick() { return deps?.nick() ?? ''; }
 
 /** 坐下遠端玩家瞄準點 */
 export function plazaAimTargets(leisureNpc = false, standPlayers = false): PlazaAimTarget[] {
@@ -3178,6 +3195,7 @@ export async function closePlaza(leaveSeat = true) {
   const nick = deps?.nick() ?? '剝蚵人';
   const online = snap?.occupied ?? snap?.players?.filter((p) => !p.isNpc).length ?? null;
   const announceLeave = plazaIoAnnounced && !raceMode && !partyMode;
+  try { deps?.beforeClose?.(); } catch (e) { console.error('plaza beforeClose', e); }
   // 先記住離開站位（含坐著離開的椅旁點），再清狀態
   if (deps?.persistPlazaSpawn) {
     if (seated && myPile != null && mySlot != null) {

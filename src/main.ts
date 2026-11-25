@@ -31,7 +31,7 @@ import { initFeed, openFeed } from './cook/feed';
 import { initHudMenu } from './ui/hudMenu';
 import { initCookBroadcast, syncCookDexOnce } from './meta/cookBroadcast';
 import { initFood, openFood, openFoodStall, renderFoodStall, rollShuck, rollScoop, rollAma, dailyFoodBag, renderFoodShop } from './food/pantry';
-import { foodStallSpawn } from './plaza/layout';
+import { foodStallSpawn, PLAZA_LAMP_XZ } from './plaza/layout';
 import {
   checkCode, REDEEM_MESSAGES, type RedeemCodeDef, applyOutfitToRig, headTopLift,
   syncEqPreview, refreshEqPreview, stopEqPreview, ODD,
@@ -80,6 +80,9 @@ import {
   plazaJumpHeight, PLAZA_JUMP_DUR, applyPlazaBodyPose as applyBodyPose, type PlayerRig,
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
+import { openPlazaBoats, closePlazaBoats, tickPlazaBoats, plazaBoatsActive, plazaBoatsKey, plazaBoatsCam, plazaBoatsSway, plazaBoatsNight, plazaBoatsFog, plazaBoatsDbg, plazaBoatsOpen } from './plaza/boats/plazaBoats';
+import { nightK } from './plaza/boats/boatLogic';
+import { plazaBoatClient, plazaWorldView, plazaMyNick } from './plaza/session';
 import {
   plazaNearShed, SHED_DOORS, shedReturnSpawn, shedName,
   openPlaza, closePlaza, isPlazaActive, isPlazaRaceMode, isPlazaPartyMode, raceBeginBasinFill, tickPlaza, tickPlazaTpOcclude, plazaSetSelfBody, plazaReportEarn, plazaSettleRaceMeat, plazaMySeat, plazaScoopWeights, plazaShiftStarted,
@@ -139,6 +142,8 @@ function setPlazaMode(v: boolean) {
   applyPlazaShadowMode();
   // 進／出廣場同時切 lamp.castShadow（applyEcoGfx 內部會讀 plazaMode）
   try { applyEcoGfx(); } catch { /* applyEcoGfx 尚未定義時忽略 */ }
+  // 廣場夜景（深藍夜空、月光、碼頭燈）要在進／出廣場時馬上套用
+  try { updSky(); } catch { /* 初始化中 */ }
   refreshWorkHud();
   armPlazaShuckHint(v);
 }
@@ -1694,6 +1699,25 @@ function updSky() {
   skyDome.setColors(zenith, horizon, L(2));
   skyDome.setSun(_skySun.copy(sun.position).normalize(), Math.min(1.15, sun.intensity / 1.15));
   skyDome.setClouds(mix.eco ? 0 : night ? 0.1 : dawnDusk ? 0.38 : 0.56);
+  sun.color.setHex(0xffe8c4); hemi.groundColor.setHex(0x7a9a78);
+  // 廣場夜晚：深藍夜空（不是全黑）、環境光略亮、月光。燈都用假光（自發光＋光暈＋光池貼花），不加即時光源
+  if (plazaMode) {
+    const nk = (globalThis as any).__nightK ?? nightK(h);
+    if (nk > 0) {
+      (scene.background as THREE.Color).lerp(_c2.setHex(0x1d3557), 0.75 * nk);
+      (scene.fog as THREE.Fog).color.lerp(_c2.setHex(0x1a2c48), 0.7 * nk);
+      hemi.color.lerp(_c2.setHex(0xa8bce8), 0.5 * nk);
+      hemi.groundColor.lerp(_c2.setHex(0x34405a), 0.6 * nk);
+      hemi.intensity *= 1 + 0.3 * nk;
+      sun.color.lerp(_c2.setHex(0xb8c8ff), nk);
+      sun.intensity = Math.max(sun.intensity, 0.35 * nk);
+      const zen = _c1.setHex(zenith).lerp(_c2.setHex(0x10223f), nk).getHex();
+      const hor = _c1.setHex(horizon).lerp(_c2.setHex(0x2a4670), nk).getHex();
+      skyDome.setColors(zen, hor, (scene.fog as THREE.Fog).color.getHex());
+    }
+    plazaBoatsFog(scene.fog as THREE.Fog);
+    plazaBoatsNight(nk, scene.background as THREE.Color);
+  }
   try { applyShedLook(); } catch { /* 尚未初始化 */ }
   // 廣場期間 updSky→showLand／applyShedLook 可能又打開地標或重建棚，強制維持隱藏
   if (plazaMode) {
@@ -2397,7 +2421,7 @@ const needle = (ms = performance.now()) => {
   return u < 0.5 ? u * 2 : 2 - u * 2;
 };
 (window as any).__sim = () => ({ t: SHIFT - timeLeft, c: npcs.map(n => n.count), names: npcs.map(n => n.name) });
-(window as any).__dbg = { warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }), sea: seaDbg, seaSkip: (oy?: number, big?: number) => seaDbg.skip(oy, big), pileEnd: () => { if (seaRun && state === 'play') { seaRun.left = 0; clearBasinOysters(); syncSeaPile(); goPick(); } }, pile: () => (seaRun ? { left: seaRun.left, bigLeft: seaRun.bigLeft, basin: basinOy.length, haul: seaRun.haul, on: seaPileOn() } : null), tide: () => { if (state === 'play' && isWaisan() && !tideOnNow) startTide(); return { tideOnNow, dayBig, dayBigTide, big: basinOy.filter(o => o.userData.big).length, all: basinOy.length }; } };
+(window as any).__dbg = { boats: plazaBoatsDbg, gfx: () => { const inf = renderer.info; inf.autoReset = false; inf.reset(); renderer.render(scene, viewCam()); const r = { calls: inf.render.calls, tris: inf.render.triangles, geos: inf.memory.geometries, tex: inf.memory.textures, progs: inf.programs?.length ?? 0 }; inf.autoReset = true; return r; }, night: (k?: number) => { (globalThis as any).__nightK = k; updSky(); return k; }, warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }), sea: seaDbg, seaSkip: (oy?: number, big?: number) => seaDbg.skip(oy, big), pileEnd: () => { if (seaRun && state === 'play') { seaRun.left = 0; clearBasinOysters(); syncSeaPile(); goPick(); } }, pile: () => (seaRun ? { left: seaRun.left, bigLeft: seaRun.bigLeft, basin: basinOy.length, haul: seaRun.haul, on: seaPileOn() } : null), tide: () => { if (state === 'play' && isWaisan() && !tideOnNow) startTide(); return { tideOnNow, dayBig, dayBigTide, big: basinOy.filter(o => o.userData.big).length, all: basinOy.length }; } };
 (window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
 (window as any).__pry = () => { if (phase !== 'twist') return null; const f = prySp(), per = 1000 / f, th = (PRY_C / 2) * per; const el = (performance.now() - needleStart) % per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
 function pryFx(ok: boolean, txt: string) { gauge.classList.remove('hit', 'miss'); void gauge.offsetWidth; gauge.classList.add(ok ? 'hit' : 'miss'); const pp = $('ppop'); pp.textContent = txt; pp.className = ''; void pp.offsetWidth; pp.className = ok ? 'ok' : 'bad'; }
@@ -2954,6 +2978,7 @@ function resolvePlazaInbound(e: PlazaShellEvent) {
       const splat = document.getElementById('splat');
       if (splat) { splat.style.opacity = '1'; later(0.9, () => { splat.style.opacity = '0'; }); }
       hurt(8, `${e.fromNick || '別人'} 丟中你了！`); hitInHand();
+      plazaBoatsSway(plazaConnId());
       triggerAmeiLateUmb();
       reportPlazaShellHit();
     }
@@ -3013,6 +3038,7 @@ function plazaBleedBurst(at: THREE.Vector3) {
 function resolvePlazaShellHitFx(e: PlazaShellHitEvent) {
   if (!plazaMode || !isPlazaActive()) return;
   if (![e.x, e.y, e.z].every(Number.isFinite)) return;
+  if (e.connId) plazaBoatsSway(e.connId);
   const me = plazaConnId();
   const selfHit = !!(me && e.connId === me);
   if (selfHit && !tpv) {
@@ -4105,6 +4131,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (state !== 'play') return; audio().resume();
+  if (walking && plazaMode && isPlazaActive() && !e.repeat && plazaBoatsKey(e.code)) { e.preventDefault(); return; }
   if (walking) {
     if (e.code === 'Space' && (plazaMode || isRoomActive())) { e.preventDefault(); if (!e.repeat) plazaJump(); return; }
     if ((e.code === 'KeyC' || e.code === 'KeyZ') && (plazaMode || isRoomActive())) { if (!e.repeat) plazaPose(e.code === 'KeyC' ? 'crouch' : 'lie'); return; }
@@ -5857,6 +5884,45 @@ function returnToPlazaFromShed() {
   shiftLen = SHIFT; updSky();
   launchPlaza();
 }
+let boatTickLogged = false;
+/** 廣場西側海面：一般廣場才有（休閒房／單挑沒有） */
+function startPlazaBoats() {
+  if (!plazaBoatClient()) return;
+  try {
+    openPlazaBoats({
+      scene, coarse: COARSE || mix.eco,
+      fog: () => scene.fog as THREE.Fog,
+      plazaLamps: PLAZA_LAMP_XZ,
+      client: plazaBoatClient,
+      myConn: plazaConnId,
+      myNick: () => plazaMyNick() || myName(),
+      view: plazaWorldView,
+      me: () => ensurePlazaMe(),
+      walkPos,
+      setYaw: (y) => { yaw = tYaw = y; },
+      canAct: () => state === 'play' && walking && !plazaSeated() && !plazaSittingBusy() && !mgActive && !plazaCarrying(),
+      sfx: (k) => seaSfx(k),
+      throwShell: (from, target, to) => {
+        const sh = new THREE.Mesh(halfGeo, shellBotMat);
+        if (target) {
+          if (!plazaNetReady(PLAZA_THROW_GAP_MS)) return false;
+          SFX.whoosh();
+          const track = new THREE.Vector3();
+          const toNow = () => { const h = plazaRemoteHead(target.connId); return h ? track.set(h.x, h.y, h.z) : to; };
+          fly(sh, from, toNow, plazaFlyTime(from, to), 0.35, () => { try { scene.remove(sh); shellHits++; SFX.hitNpc(); toast(`丟向 ${target.nick}！`, '#ffb070'); } catch { /* */ } });
+          stampPlazaNet();
+          void plazaThrowAt(target.connId, from, to);
+          return true;
+        }
+        SFX.whoosh();
+        fly(sh, from, to, 0.7, 0.6, () => scene.remove(sh));
+        if (plazaNetReady(PLAZA_FX_GAP_MS)) { stampPlazaNet(); void plazaShellFx(from, to); }
+        return true;
+      },
+    });
+    updSky();
+  } catch (e) { console.error('plaza boats open', e); }
+}
 function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: boolean } }) {
   if (isDeathmatchActive() || isPlazaActive()) return;
   // 跟進工寮一樣：還沒取名字先取名，取好才進廣場（所有進廣場的路都經過這裡）
@@ -5957,6 +6023,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
     selfHatLift: () => headTopLift(equipNow('head').id),
     getPlazaSpawn: () => save.plazaSpawn,
     persistPlazaSpawn: (spawn) => { save.plazaSpawn = spawn; persist(); },
+    beforeClose: () => { try { closePlazaBoats(); } catch (e) { console.error('plaza boats close', e); } },
     shedUnlocked: (loc) => { const l = LOCS.find(x => x.id === loc); return !!l && locOwned(l); },
     shedPromptInfo: (loc) => {
       const l = LOCS.find(x => x.id === loc); const name = shedName(loc);
@@ -6268,6 +6335,7 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       if (COARSE) { const cam = $('camBtn'); if (cam) { cam.classList.add('on'); cam.style.display = ''; } }
     },
   });
+  startPlazaBoats();
 }
 $('start').onclick = () => {
   if (isPlazaPicked()) { launchPlaza(); return; }
@@ -7152,7 +7220,8 @@ function frameBody(ts?: number) {
   moonTick(rdt);
   petTick(rdt);
   shake = Math.max(0, shake - rdt);
-  if (walking && bodyPose !== 'lie') walkStep(rdt); else if (walking) { walkMotion.spd = walkMotion.strafe = 0; } else { walkMotion.spd = walkMotion.strafe = 0; }
+  if (plazaMode && plazaBoatsOpen()) { try { tickPlazaBoats(rdt, viewCam()); } catch (e) { if (!boatTickLogged) { boatTickLogged = true; console.error('plaza boats', e); } } }
+  if (plazaMode && plazaBoatsActive()) { walkMotion.spd = walkMotion.strafe = 0; } else if (walking && bodyPose !== 'lie') walkStep(rdt); else if (walking) { walkMotion.spd = walkMotion.strafe = 0; } else { walkMotion.spd = walkMotion.strafe = 0; }
   let camPitch = pitch - pe * 0.08 + (smokeSitActive && !tpv ? puffCamPitch : 0), camRoll = 0;
   camera.position.copy(walking ? walkPos : SEAT);
   if (jumpY > 0) camera.position.y += jumpY;
@@ -7212,7 +7281,7 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     ? 0
     : (mix.eco ? 18 : 26) + Math.sin(t * 1.3) * (mix.eco ? 0.5 : 1.0);
   skyDome.tick(viewCam(), t);
-  renderSceneWithLocalAvatarOnTop(renderer, scene, viewCam(), plazaMe?.outer);
+  renderSceneWithLocalAvatarOnTop(renderer, scene, viewCam(), plazaMode && plazaBoatsActive() ? null : plazaMe?.outer);
   scheduleFrame();
 }
 function plazaGuidePending() {
@@ -8015,6 +8084,14 @@ function react3(kind: 'cheer' | 'ouch') { if (!tpReady) return; if (kind === 'ch
 // 每幀：放好角色、把鏡頭拉到身後上方；手和蚵仔仍跟著鏡頭，操作不變
 function camTick(dt: number) {
   if (!tpReady) return;
+  // 廣場海面：在船上／水裡一律用追船鏡頭（人由 plazaBoats 擺）
+  if (plazaMode && plazaBoatsActive()) {
+    tpOn = true; tpWas = false; me3.visible = false; handRig.visible = false;
+    handL.children[0].visible = handR.children[0].visible = false;
+    if (plazaMe) plazaMe.outer.visible = true;
+    plazaBoatsCam(tpCam, dt);
+    return;
+  }
   const show = tpv && state === 'play';
   const enter = show && (!tpWas || tpCamSnap); tpWas = show;
   // 第三人稱一律用廣場同一套 makePlayerAvatar（工寮坐下／走動也套目前穿的衣服）

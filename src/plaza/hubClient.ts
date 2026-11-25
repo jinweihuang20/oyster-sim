@@ -276,7 +276,18 @@ export class PlazaClient {
     return this.joinHub();
   }
 
+  /** 其他模組（廣場海面）要掛的事件：每次建立連線時呼叫 */
+  extraBinds: ((conn: signalR.HubConnection) => void)[] = [];
+  /** 每次 Join／重連 Join 成功後呼叫（海面重新拿船的狀態） */
+  afterJoin: (() => void)[] = [];
+  /** 掛事件：已連線就馬上掛，之後重建連線也會再掛 */
+  bindExtra(fn: (conn: signalR.HubConnection) => void) {
+    this.extraBinds.push(fn);
+    if (this.conn) fn(this.conn);
+  }
+
   private bindHubEvents(conn: signalR.HubConnection) {
+    for (const fn of this.extraBinds) { try { fn(conn); } catch (e) { console.error('bindExtra', e); } }
     conn.on('Roster', (snap: PlazaSnapshot) => this.handlers.onRoster?.(snap));
     conn.on('PlayerJoined', (p: PlazaPlayer) => this.handlers.onJoined?.(p));
     conn.on('PlayerLeft', (p: PlazaPlayer) => this.handlers.onLeft?.(p));
@@ -445,6 +456,7 @@ export class PlazaClient {
       if (ck) queueMicrotask(() => this.handlers.onCookState?.(ck, true));
       // 新伺服器：改收 10Hz 合併走動；舊伺服器沒這個方法就維持單筆 Pose（每次 Join 後都要再宣告）
       void this.enablePoseBatch();
+      for (const fn of this.afterJoin) queueMicrotask(() => { try { fn(); } catch (e) { console.error('afterJoin', e); } });
       return { ok: true, snap: r.snap, token: this.token, chat, grills, carryNpc, flags, wishes };
     } catch (e: any) {
       return { ok: false, err: e?.message || 'join_fail' };

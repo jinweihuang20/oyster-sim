@@ -64,7 +64,7 @@ void main(){
   gl_Position = projectionMatrix*mv;
 }`;
 const WATER_FS = /* glsl */`
-uniform float uTime, uHt, uFogN, uFogF; uniform sampler2D uMap; uniform vec4 uRect; uniform vec3 uSun, uFogC, uSky;
+uniform float uTime, uHt, uFogN, uFogF, uNight; uniform sampler2D uMap; uniform vec4 uRect; uniform vec3 uSun, uFogC, uSky, uMoon;
 varying vec3 vW; varying vec3 vN; varying float vDepth;
 float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(hash(i),hash(i+vec2(1.0,0.0)),f.x),mix(hash(i+vec2(0.0,1.0)),hash(i+vec2(1.0,1.0)),f.x),f.y); }
@@ -78,7 +78,7 @@ void main(){
     float dry = smoothstep(0.0, 0.08, above);
     float n = vn(vW.xz*2.3)*0.6 + vn(vW.xz*9.0)*0.4;
     float rip = 0.5 + 0.5*sin(vW.x*1.9 + vW.z*0.8 + vn(vW.xz*0.35)*7.0);
-    col = mix(vec3(0.56,0.50,0.38), vec3(0.91,0.84,0.66), dry) * (0.88 + 0.16*n) * (0.95 + 0.07*rip*dry);
+    col = mix(vec3(0.56,0.50,0.38), vec3(0.91,0.84,0.66), dry) * (0.88 + 0.16*n) * (0.95 + 0.07*rip*dry) * mix(1.0, 0.36, uNight);
     col += (1.0-dry) * pow(max(dot(reflect(-uSun, vec3(0.0,1.0,0.0)), V), 0.0), 24.0) * 0.45;
     float edge = 1.0 - smoothstep(0.0, 0.014, above);
     col = mix(col, vec3(0.96), edge * 0.7 * smoothstep(0.4, 0.6, vn(vW.xz*3.0 + uTime*0.6)));
@@ -88,31 +88,59 @@ void main(){
     col = mix(col, vec3(0.08,0.31,0.49), smoothstep(0.12, 0.6, d));
     vec3 N = normalize(vN + vec3((vn(vW.xz*1.3 + uTime*0.35)-0.5)*0.3, 0.0, (vn(vW.zx*1.1 - uTime*0.3)-0.5)*0.3));
     col *= 0.78 + 0.22*max(dot(N, uSun), 0.0);
+    // 夜晚：水色壓暗偏藍，太陽反光換成月光反射（一條拉長的月光帶）
+    col = mix(col, col*vec3(0.30,0.40,0.62), uNight);
     float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
     col = mix(col, uSky, fres*0.5);
-    col += vec3(1.0,0.96,0.85) * pow(max(dot(reflect(-uSun, N), V), 0.0), 90.0) * 0.85;
+    col += vec3(1.0,0.96,0.85) * pow(max(dot(reflect(-uSun, N), V), 0.0), 90.0) * 0.85 * (1.0-uNight);
+    if (uNight > 0.0) {
+      float mr = max(dot(reflect(-uMoon, N), V), 0.0);
+      col += vec3(0.78,0.86,1.0) * (pow(mr, 40.0)*0.9 + pow(mr, 6.0)*0.08) * uNight;
+    }
     float fn = vn(vW.xz*1.8 + vec2(uTime*0.5, -uTime*0.3));
     float shore = 1.0 - smoothstep(0.0, 0.05, d);
     float band = smoothstep(0.55, 0.75, fn + shore*0.6 - 0.25 + 0.15*sin(d*120.0 - uTime*2.0));
     float foam = shore*band + m.g * smoothstep(0.45, 0.8, vn(vW.xz*4.0 + uTime*0.8));
-    col = mix(col, vec3(0.95,0.97,0.97), clamp(foam, 0.0, 1.0)*0.85);
+    col = mix(col, mix(vec3(0.95,0.97,0.97), vec3(0.32,0.40,0.50), uNight), clamp(foam, 0.0, 1.0)*0.85);
   }
   gl_FragColor = vec4(mix(col, uFogC, smoothstep(uFogN, uFogF, vDepth)), 1.0);
 }`;
-export function makeWater(scene: THREE.Scene, map: THREE.Texture, coarse: boolean, fog: { c: THREE.Color; n: number; f: number }) {
+export type WaterOpts = {
+  /** 高度圖對應的世界矩形（預設＝出海採蚵的 MAP） */
+  rect?: { x0: number; z0: number; w: number; h: number };
+  /** 外圈到地平線的大平面；null＝不要 */
+  outer?: { x: number; z: number; size: number } | null;
+  /** 水面高度（預設 0） */
+  y?: number;
+  seg?: [number, number];
+};
+export function makeWater(scene: THREE.Scene | THREE.Object3D, map: THREE.Texture, coarse: boolean, fog: { c: THREE.Color; n: number; f: number }, o: WaterOpts = {}) {
+  const R = o.rect ?? MAP, y = o.y ?? 0;
   const mat = new THREE.ShaderMaterial({
     vertexShader: WATER_VS, fragmentShader: WATER_FS,
     uniforms: {
-      uTime: { value: 0 }, uHt: { value: sandLevel(0) }, uMap: { value: map }, uRect: { value: new THREE.Vector4(MAP.x0, MAP.z0, MAP.w, MAP.h) },
-      uSun: { value: SUN }, uSky: { value: SKY }, uFogC: { value: fog.c }, uFogN: { value: fog.n }, uFogF: { value: fog.f },
+      uTime: { value: 0 }, uHt: { value: sandLevel(0) }, uMap: { value: map }, uRect: { value: new THREE.Vector4(R.x0, R.z0, R.w, R.h) },
+      uSun: { value: SUN }, uSky: { value: SKY.clone() }, uFogC: { value: fog.c }, uFogN: { value: fog.n }, uFogF: { value: fog.f },
+      uNight: { value: 0 }, uMoon: { value: new THREE.Vector3(-0.5, 0.35, -0.6).normalize() },
     },
   });
-  const seg = coarse ? [110, 132] : [160, 192];
-  const g = new THREE.PlaneGeometry(MAP.w, MAP.h, seg[0], seg[1]); g.rotateX(-Math.PI / 2);
-  const inner = new THREE.Mesh(g, mat); inner.position.set(MAP.x0 + MAP.w / 2, 0, MAP.z0 + MAP.h / 2); scene.add(inner);
-  const og = new THREE.PlaneGeometry(900, 900, 24, 24); og.rotateX(-Math.PI / 2);
-  const outer = new THREE.Mesh(og, mat); outer.position.set(0, -0.25, -60); scene.add(outer);
-  return { mat, set(t: number, ebb: number) { mat.uniforms.uTime.value = t; mat.uniforms.uHt.value = sandLevel(ebb); } };
+  const seg = o.seg ?? (coarse ? [110, 132] : [160, 192]);
+  const g = new THREE.PlaneGeometry(R.w, R.h, seg[0], seg[1]); g.rotateX(-Math.PI / 2);
+  const inner = new THREE.Mesh(g, mat); inner.position.set(R.x0 + R.w / 2, y, R.z0 + R.h / 2); scene.add(inner);
+  const oo = o.outer === undefined ? { x: 0, z: -60, size: 900 } : o.outer;
+  let outer: THREE.Mesh | null = null;
+  if (oo) {
+    const og = new THREE.PlaneGeometry(oo.size, oo.size, 24, 24); og.rotateX(-Math.PI / 2);
+    outer = new THREE.Mesh(og, mat); outer.position.set(oo.x, y - 0.25, oo.z); scene.add(outer);
+  }
+  return {
+    mat, inner, outer,
+    set(t: number, ebb: number) { mat.uniforms.uTime.value = t; mat.uniforms.uHt.value = sandLevel(ebb); },
+    /** 夜晚 0→1：水色壓暗、月光反射；sky＝反射用的天色 */
+    setNight(k: number, sky?: THREE.Color) { mat.uniforms.uNight.value = k; if (sky) (mat.uniforms.uSky.value as THREE.Color).copy(sky); },
+    setFog(c: THREE.Color, n: number, f: number) { (mat.uniforms.uFogC.value as THREE.Color).copy(c); mat.uniforms.uFogN.value = n; mat.uniforms.uFogF.value = f; },
+    dispose() { g.dispose(); outer?.geometry.dispose(); mat.dispose(); inner.removeFromParent(); outer?.removeFromParent(); },
+  };
 }
 
 // ---------- 天空 ----------
@@ -285,7 +313,7 @@ function person(who: Who, skin: THREE.Material) {
   }
   return { g, arm };
 }
-export function makeRaft(scene: THREE.Scene, opts: { trim: number; crew: Who[] }): Raft {
+export function makeRaft(scene: THREE.Scene | THREE.Object3D, opts: { trim: number; crew: Who[] }): Raft {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body); scene.add(g);
   // 9 根 PVC 管，船頭往上翹
   const pipes: THREE.BufferGeometry[] = [];
@@ -334,7 +362,7 @@ export function makeRaft(scene: THREE.Scene, opts: { trim: number; crew: Who[] }
 }
 
 // ---------- 水花／航跡（一池平面粒子，additive） ----------
-export function makeFx(scene: THREE.Scene, max = 160) {
+export function makeFx(scene: THREE.Scene | THREE.Object3D, max = 160, y0 = 0.12) {
   const cv = document.createElement('canvas'); cv.width = cv.height = 64; const c = cv.getContext('2d')!;
   const gr = c.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   c.fillStyle = gr; c.fillRect(0, 0, 64, 64);
@@ -343,18 +371,21 @@ export function makeFx(scene: THREE.Scene, max = 160) {
   const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }), max);
   mesh.renderOrder = 3; mesh.frustumCulled = false; scene.add(mesh);
   type P = { x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; life: number; s0: number; s1: number; a: number };
-  const ps: P[] = []; const d = new THREE.Object3D(), col = new THREE.Color();
+  const ps: P[] = []; const d = new THREE.Object3D(), col = new THREE.Color(), tint = new THREE.Color(1, 1, 1);
   for (let i = 0; i < max; i++) mesh.setColorAt(i, col.setRGB(0, 0, 0));
   return {
-    spawn(x: number, z: number, o: Partial<P> = {}) { if (ps.length >= max) ps.shift(); ps.push({ x, y: 0.12, z, vx: 0, vy: 0, vz: 0, age: 0, life: 1.4, s0: 0.6, s1: 2.2, a: 0.45, ...o }); },
+    mesh,
+    /** 粒子顏色（夜光藻：偏藍綠）；只改顏色，不加燈 */
+    setTint(r: number, g: number, b: number) { tint.setRGB(r, g, b); },
+    spawn(x: number, z: number, o: Partial<P> = {}) { if (ps.length >= max) ps.shift(); ps.push({ x, y: y0, z, vx: 0, vy: 0, vz: 0, age: 0, life: 1.4, s0: 0.6, s1: 2.2, a: 0.45, ...o }); },
     tick(dt: number) {
       let n = 0;
       for (let i = ps.length - 1; i >= 0; i--) { const p = ps[i]; p.age += dt; if (p.age >= p.life) ps.splice(i, 1); }
       for (const p of ps) {
-        p.x += p.vx * dt; p.y = Math.max(0.12, p.y + p.vy * dt); p.vy -= 9 * dt; p.z += p.vz * dt;
+        p.x += p.vx * dt; p.y = Math.max(y0, p.y + p.vy * dt); p.vy -= 9 * dt; p.z += p.vz * dt;
         const f = p.age / p.life, s = p.s0 + (p.s1 - p.s0) * f;
         d.position.set(p.x, p.y, p.z); d.scale.set(s, 1, s); d.updateMatrix(); mesh.setMatrixAt(n, d.matrix);
-        const a = p.a * (1 - f); mesh.setColorAt(n, col.setRGB(a, a, a)); n++;
+        const a = p.a * (1 - f); mesh.setColorAt(n, col.setRGB(a * tint.r, a * tint.g, a * tint.b)); n++;
       }
       mesh.count = n; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     },

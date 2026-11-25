@@ -4361,3 +4361,29 @@ body.tideOn #tidePill{display:flex}
 #seaHitFx.on{opacity:1}
 @media (max-height:420px){#seaRoot #seaSlow{top:calc(env(safe-area-inset-top,0px) + 112px);font-size:12px}}
 #seaRoot.ended #seaAct,#seaRoot.ended #seaDrop,#seaRoot.ended #seaToast,#seaRoot.ended #seaBanner,#seaRoot.ended #seaJoy,#seaRoot.ended .seaQuit{display:none!important}
+
+/* ---------- 廣場海面：上船／下船／丟殼／跳水 ---------- */
+#boatUi{position:fixed;inset:0;pointer-events:none;z-index:8600}
+#boatUi .boatBtn{position:absolute;display:none;align-items:center;gap:8px;pointer-events:auto;touch-action:none;padding:12px 18px!important;border-radius:16px!important;border:2px solid #fff!important;background:#2a5a86!important;color:#fff!important;font-size:16px;font-weight:700;letter-spacing:0;box-shadow:0 3px 12px rgba(0,0,0,.28)!important;-webkit-tap-highlight-color:transparent;user-select:none}
+#boatUi .boatBtn.on{display:flex}
+#boatUi .boatBtn.dis{opacity:.55}
+#boatUi .boatBtn:active{transform:scale(.96)}
+#boatUi .boatIc{display:inline-flex;width:22px;height:22px;font-style:normal}
+#boatUi .boatIc svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#boatUi .key{opacity:.7;font-weight:500;font-size:13px}
+#boatAct{left:50%;transform:translateX(-50%);bottom:calc(var(--sa-bottom,0px) + 150px)}
+#boatAct:active{transform:translateX(-50%) scale(.96)!important}
+#boatShell{right:calc(var(--sa-right,0px) + 18px);bottom:calc(var(--sa-bottom,0px) + 150px)}
+#boatDive{right:calc(var(--sa-right,0px) + 18px);bottom:calc(var(--sa-bottom,0px) + 86px);background:#fff!important;color:#2a5a86!important;border-color:#2a5a86!important}
+#boatNote{position:absolute;left:50%;top:calc(var(--sa-top,0px) + 64px);transform:translateX(-50%);display:none;padding:6px 12px;border-radius:12px;background:rgba(20,40,64,.72);color:#e8f2ff;font-size:13px;white-space:nowrap}
+#boatNote.on{display:block}
+@media (pointer:coarse){#boatUi .key{display:none}}
+@media (max-height:500px){
+  #boatUi .boatBtn{padding:9px 14px!important;font-size:14px;border-radius:14px!important}
+  #boatAct{bottom:calc(var(--sa-bottom,0px) + 96px)}
+  #boatShell{bottom:calc(var(--sa-bottom,0px) + 118px)}
+  #boatDive{bottom:calc(var(--sa-bottom,0px) + 64px)}
+  #boatNote{top:calc(var(--sa-top,0px) + 48px);font-size:12px}
+}
+/* 在船上／水裡：跳／蹲／躺／動作／換位置／丟殼（座位版）這些按鈕先收起來 */
+body.plazaBoating #jumpBtn,body.plazaBoating #crouchBtn,body.plazaBoating #lieBtn,body.plazaBoating #poseBtn,body.plazaBoating #standBtn,body.plazaBoating #throwBtn,body.plazaBoating #stealBtn,body.plazaBoating #umbBtn,body.plazaBoating #puffBtn,body.plazaBoating #seatCard{display:none!important}

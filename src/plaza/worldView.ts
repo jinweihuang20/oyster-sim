@@ -41,6 +41,7 @@ import { makePlazaHq } from './hq';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
+import { poseRider, type RiderPose } from './boats/boatPose';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot, PlazaSeatWish, PlazaMove } from './types';
 import { pileDiffOf, DEFAULT_PILE_DIFFS, PILE_DIFF_NAMES, PILE_DIFF_MIXED } from './pileDiff';
 import { plazaDisplayName } from './types';
@@ -185,8 +186,14 @@ export type PlazaWorldView = {
   aimMg: (slot: number, yaw: number, pitch: number) => void;
   mgFx: MgFxSystem;
   mgHitTargets: () => MgHitTarget[];
+  /** 海面：遠端玩家在船上／水裡時，由船的模組每幀給位置與姿勢（null＝回到一般走動） */
+  setRemoteMount: (connId: string, m: RemoteMount | null) => void;
+  /** 目前遠端名單（connId、暱稱）；船上丟殼找目標用 */
+  remoteList: () => { connId: string; nick: string; isNpc: boolean; x: number; z: number }[];
   dispose: () => void;
 };
+/** 船上座位／游泳的世界位置（y＝腳底外框高度基準：座位點或水面） */
+export type RemoteMount = { x: number; y: number; z: number; yaw: number; pose: RiderPose; steer?: number; sway?: number; rx?: number; rz?: number };
 
 export type PlazaWorldOpts = {
   shellGeo: THREE.BufferGeometry;
@@ -227,6 +234,7 @@ export function createPlazaWorldView(
   const root = new THREE.Group(); root.name = 'plazaWorld'; scene.add(root);
   const { M, add } = makeMeshHelpers(scene, LO);
   const remotes = new Map<string, Remote>();
+  const mounts = new Map<string, RemoteMount>();
   const seatMeshes = new Map<string, THREE.Mesh>();
   const pileGroups: THREE.Group[] = [];
   const chairsRoot = new THREE.Group();
@@ -1629,6 +1637,7 @@ function hashPid(pid: string) {
       for (const x of remotes.values()) {
         if (x.connId === connId || x.pid === connId || x.key === connId) { r = x; break; }
       }
+      if (r && mounts.has(r.connId)) { r.throwT = 0.45; return; }
       if (!r || !r.seated) return;
       r.throwT = 0.55;
       poseThrow(r);
@@ -2638,6 +2647,8 @@ function hashPid(pid: string) {
     carrierFresh = true;
     try {
     for (const r of remotes.values()) {
+      const mount = mounts.size ? mounts.get(r.connId) : undefined;
+      if (mount) { r.x = r.tx = mount.x; r.z = r.tz = mount.z; r.yaw = r.tyaw = mount.yaw; }
       snapRemoteIfFar(r);
       r.x += (r.tx - r.x) * k;
       r.z += (r.tz - r.z) * k;
@@ -2661,8 +2672,8 @@ function hashPid(pid: string) {
           jumpElapsed = -1;
         }
       }
-      // 腳步：不論距離（遠距滑行無跨步＝違體驗）
-      {
+      // 腳步：不論距離（遠距滑行無跨步＝違體驗）；在船上／水裡改由 poseRider
+      if (!mount) {
         // 平滑速度：用 ~200ms 視窗位移（單幀 lerp 殘差常→0，會誤判成沒在走）
         const nowMs = performance.now();
         // 固定大小環形緩衝（不每幀 new 物件）
@@ -2715,7 +2726,9 @@ function hashPid(pid: string) {
         }
       }
       // mid+：甩殼／頭瞄等細動畫仍可省
-      if (!far) {
+      if (mount) {
+        if (r.throwT > 0) r.throwT = Math.max(0, r.throwT - dt);
+      } else if (!far) {
         if (r.throwT > 0) {
           r.throwT -= dt;
           poseThrow(r);
@@ -2764,6 +2777,10 @@ function hashPid(pid: string) {
         oy += AMA_SIT_LIFT;
       }
       if (r.isNpc && !isAberRemote(r)) applyAmaAppearance(r.rig);
+      if (mount) {
+        const pr = poseRider(r.rig, mount.pose, t * 0.001, { steer: mount.steer, sway: mount.sway, throwK: r.throwT > 0 ? 1 - Math.min(1, r.throwT / 0.45) : 0 });
+        ox = mount.x; oy = mount.y + pr.dy; oz = mount.z; rotX = pr.rx + (mount.rx ?? 0); rotZ = mount.rz ?? 0;
+      }
       r.rig.outer.position.set(ox, oy, oz);
       r.rig.outer.rotation.order = 'YXZ';
       r.rig.outer.rotation.y = r.yaw;
@@ -3100,6 +3117,8 @@ function hashPid(pid: string) {
     setFoodStallActive: (on) => ambiance?.setFoodActive(on),
     setFoodQueueRing: (at, on) => ambiance?.setFoodQueue(at, on),
     mgMounts, aimMg, mgFx, mgHitTargets, tick, headObjects,
+    setRemoteMount: (connId, m) => { if (m) mounts.set(connId, m); else mounts.delete(connId); },
+    remoteList: () => { const out: { connId: string; nick: string; isNpc: boolean; x: number; z: number }[] = []; for (const r of remotes.values()) out.push({ connId: r.connId, nick: r.nick, isNpc: !!r.isNpc, x: r.x, z: r.z }); return out; },
     tickTpOcclude: (dt, camera, focus, snap) => applyTpOcclude(dt, camera, focus, snap),
     dispose: disposeAll,
   };
