@@ -30,7 +30,19 @@ function normSnap(o: any): BoatsSnap | null {
   };
 }
 
+export type DriftBox = { key: number; x: number; z: number };
+export type DriftSnap = { boxes: DriftBox[]; nextShuffleAt: number; minPay: number; maxPay: number };
+export type DriftClaimed = { key: number; connId: string; nick: string; pay: number };
+export function normDrift(o: any): DriftSnap | null {
+  if (!o) return null;
+  const boxes = ((g(o, 'boxes') ?? []) as any[]).map(b => ({ key: num(g(b, 'key'), -1), x: num(g(b, 'x')), z: num(g(b, 'z')) })).filter(b => b.key > 0);
+  return { boxes, nextShuffleAt: num(g(o, 'nextShuffleAt')), minPay: num(g(o, 'minPay'), 5000), maxPay: num(g(o, 'maxPay'), 20000) };
+}
+
 export type BoatNetEvents = {
+  /** 漂流箱整包（換位置／補新的／進場） */
+  drift?: (s: DriftSnap) => void;
+  driftClaimed?: (e: DriftClaimed) => void;
   seats: (b: BoatDto) => void;
   poses: (p: BoatPosesDto) => void;
   ram: (r: RamDto) => void;
@@ -38,7 +50,7 @@ export type BoatNetEvents = {
   swimEnd: (connId: string) => void;
   rescued: (e: { boatId: number; seat: number; by: string }) => void;
   /** Join／重連後：伺服器的完整狀態（null＝舊伺服器，不支援） */
-  state: (s: BoatsSnap | null) => void;
+  state: (s: BoatsSnap | null, soft?: boolean) => void;
 };
 
 export type BoatRes = { ok: boolean; err?: string; boat?: BoatDto | null; seat?: number; swim?: SwimDto | null };
@@ -64,13 +76,20 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     })));
     conn.on('SwimStart', safe(x => { const s = normSwim(x); if (s) ev.swimStart(s); }));
     conn.on('SwimEnd', safe(x => { const c = String(g(x, 'connId') ?? ''); if (c) ev.swimEnd(c); }));
+    conn.on('DriftBoxes', safe(x => { const d = normDrift(x); if (d) ev.drift?.(d); }));
+    conn.on('DriftClaimed', safe(x => ev.driftClaimed?.({ key: num(g(x, 'key'), -1), connId: String(g(x, 'connId') ?? ''), nick: String(g(x, 'nick') ?? ''), pay: num(g(x, 'pay')) })));
     conn.on('BoatRescued', safe(x => ev.rescued({ boatId: num(g(x, 'boatId'), -1), seat: num(g(x, 'seat'), -1), by: String(g(x, 'by') ?? '') })));
   });
   const fetchState = async () => {
     const r = await call('BoatState');
     // 舊伺服器沒有 BoatState（錯誤訊息各版本不同）：只要呼叫丟例外就當不支援，改本機模式
     if (r?.err === 'old_server' || r?.err === 'fail') { supported = false; ev.state(null); return; }
-    if (r?.ok) { supported = true; ev.state(normSnap(r.state)); }
+    if (r?.ok) { supported = true; ev.state(normSnap(r.state)); void fetchDrift(); }
+  };
+  /** 漂流箱：舊伺服器沒有這個方法就沒有箱子（不影響開船） */
+  const fetchDrift = async () => {
+    const r = await call('DriftState');
+    if (r?.ok) { const d = normDrift(r.state); if (d) ev.drift?.(d); }
   };
   client.afterJoin.push(() => { void fetchState(); });
 
@@ -80,6 +99,13 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     supported: () => supported,
     live,
     fetchState,
+    /** 定期對帳（只修別人的座位／泳者；失敗不當成舊伺服器） */
+    async resync() {
+      if (!supported || !live()) return;
+      const r = await call('BoatState');
+      if (r?.ok) ev.state(normSnap(r.state), true);
+      void fetchDrift();
+    },
     board: async (id: number, seat = -1) => res(await call('BoatBoard', id, seat)),
     /** 10Hz：上一筆還沒回來就跳過這筆 */
     drive(id: number, x: number, z: number, h: number, v: number) {
@@ -97,6 +123,8 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     },
     swimOut: async (x: number, z: number) => res(await call('SwimOut', x, z)),
     rescue: async (connId: string) => res(await call('BoatRescue', connId)),
+    fetchDrift,
+    driftClaim: async (key: number): Promise<{ ok: boolean; err?: string; pay?: number }> => { const r = await call('DriftClaim', key); return { ok: !!r?.ok, err: r?.err, pay: r?.pay != null ? num(r.pay) : undefined }; },
     close() { closed = true; },
   };
 }

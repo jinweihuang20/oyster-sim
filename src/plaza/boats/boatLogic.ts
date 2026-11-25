@@ -7,9 +7,9 @@ import { SEA } from '../../sea/seaLogic';
 
 /** 調整用數字（改這裡就好） */
 export const PB = {
-  count: 20, seats: 4,
+  count: 5, seats: 4,
   /** 岸線 x（再往西是海）；碼頭從岸線往西伸 */
-  shoreX: -24, pierX0: -24, pierX1: -55, pierHalfW: 1.2,
+  shoreX: -24, pierX0: -24, pierX1: -40, pierHalfW: 1.2,
   /** 廣場西緣可以上岸的 z 範圍 */
   shoreZ: 11,
   sea: { x0: -140, x1: -25, z0: -75, z1: 75 },
@@ -38,7 +38,7 @@ export const PB = {
 /** 碼頭排位：偶數在北側（船頭朝北 h=0）、奇數在南側（h=π），船尾靠碼頭。與伺服器 DockSlot 一致 */
 export function dockSlot(i: number) {
   const side = i % 2 === 0 ? -1 : 1, k = Math.floor(i / 2);
-  return { x: -27.5 - k * 2.9, z: side * 4.2, h: side < 0 ? 0 : Math.PI };
+  return { x: -28.5 - k * 4.2, z: side * 4.2, h: side < 0 ? 0 : Math.PI };
 }
 
 /** 船上的座位（船身座標）：0＝船尾駕駛座、1＝冰桶上、2／3＝甲板 */
@@ -69,7 +69,7 @@ export function stepPlazaBoat(b: Hull, thr: number, steer: number, dt: number, s
 }
 
 /** 點到碼頭矩形的最近點 */
-function pierNearest(x: number, z: number) {
+export function pierNearest(x: number, z: number) {
   return { x: clamp(x, PB.pierX1, PB.pierX0), z: clamp(z, -PB.pierHalfW, PB.pierHalfW) };
 }
 export function distToPier(x: number, z: number) {
@@ -176,4 +176,52 @@ export function nightK(hour: number) {
   if (h >= 17.5) return (h - 17.5) / 2;
   if (h < 6.5) return 1 - (h - 5) / 1.5;
   return 0;
+}
+
+/** 碼頭近到多少公尺、又在畫面內，就收起碼頭指示 */
+export const DOCK_IND_NEAR = 45;
+/** 離碼頭這麼近（公尺）不論看不看得到都收起 */
+export const DOCK_IND_HERE = 8;
+/**
+ * 畫面邊緣的碼頭指示位置（純數學，可測）：
+ * ndc＝碼頭投影（-1～1），behind＝在鏡頭後面；ins＝四邊要避開的 px（按鈕／搖桿）。
+ * 回 null＝碼頭在畫面內而且夠近（不用指）；否則回指示中心 px 與箭頭角度（0°＝朝右，順時針）。
+ */
+export function dockEdge(ndcX: number, ndcY: number, behind: boolean, W: number, H: number, dist: number,
+  ins: { l: number; r: number; t: number; b: number; bl?: readonly [number, number]; br?: readonly [number, number] }, near: number = DOCK_IND_NEAR, here: number = DOCK_IND_HERE) {
+  const minX = ins.l, maxX = W - ins.r, minY = ins.t, maxY = H - ins.b;
+  const px = W / 2 + ndcX * W / 2, py = H / 2 - ndcY * H / 2;
+  const ccx = (minX + maxX) / 2, ccy = (minY + maxY) / 2;
+  // 就在碼頭旁邊（碼頭可能剛好在鏡頭下緣外）：不用指
+  if (dist < here) return null;
+  const inside = !behind && px >= minX && px <= maxX && py >= minY && py <= maxY;
+  if (inside && dist < near) return null;
+  if (inside) {
+    // 看得到但很遠：在碼頭正上方一點、箭頭朝下指著它
+    return { x: px, y: Math.max(minY, py - 34), deg: 90, edge: false };
+  }
+  let dx = px - ccx, dy = py - ccy;
+  if (behind) {
+    // 鏡頭後面：貼左／右邊（往下斜一點），不要擺在畫面正下方蓋住自己的船
+    const sx = -(px - W / 2);
+    dx = sx >= 0 ? 1 : -1; dy = 0.5 * (maxY - minY) / Math.max(1, maxX - minX);
+  }
+  let k = Infinity;
+  if (dx > 0) k = Math.min(k, (maxX - ccx) / dx); else if (dx < 0) k = Math.min(k, (minX - ccx) / dx);
+  if (dy > 0) k = Math.min(k, (maxY - ccy) / dy); else if (dy < 0) k = Math.min(k, (minY - ccy) / dy);
+  if (!isFinite(k)) k = 0;
+  let ex = ccx + dx * k, ey = ccy + dy * k;
+  // 角落避讓：左下搖桿、右下按鈕欄
+  if (ins.bl && ex < ins.bl[0] && ey > H - ins.bl[1]) ey = H - ins.bl[1];
+  if (ins.br && ex > W - ins.br[0] && ey > H - ins.br[1]) ey = H - ins.br[1];
+  return { x: ex, y: ey, deg: Math.atan2(dy, dx) * 180 / Math.PI, edge: true };
+}
+
+/** 漂流箱：客戶端自動撈的距離（伺服器 船 3.8／泳 2.2，這裡略嚴免得被拒） */
+export const DRIFT = { boatR: 3.3, swimR: 1.8, bobHz: 1.7 };
+/** 最近的漂流箱（沒有回 null） */
+export function nearestDrift<T extends { x: number; z: number }>(x: number, z: number, boxes: readonly T[]) {
+  let best: T | null = null, bd = Infinity;
+  for (const b of boxes) { const d = Math.hypot(b.x - x, b.z - z); if (d < bd) { bd = d; best = b; } }
+  return best ? { box: best, dist: bd } : null;
 }

@@ -190,6 +190,9 @@ export type PlazaWorldView = {
   setRemoteMount: (connId: string, m: RemoteMount | null) => void;
   /** 目前遠端名單（connId、暱稱）；船上丟殼找目標用 */
   remoteList: () => { connId: string; nick: string; isNpc: boolean; x: number; z: number }[];
+  /** 自己在船上／水裡：關掉遠距隱形（遠處用一個 InstancedMesh 小人代替），回岸上恢復 */
+  setSeaView: (on: boolean) => void;
+  seaViewStats: () => { on: boolean; impostors: number; fullFar: number };
   dispose: () => void;
 };
 /** 船上座位／游泳的世界位置（y＝腳底外框高度基準：座位點或水面） */
@@ -235,6 +238,56 @@ export function createPlazaWorldView(
   const { M, add } = makeMeshHelpers(scene, LO);
   const remotes = new Map<string, Remote>();
   const mounts = new Map<string, RemoteMount>();
+  // 海上視野：自己在船上／水裡時，遠距的人不隱形。SEA_FULL 內照畫本體（便宜 LOD），更遠用 1 個 draw call 的小人
+  let seaView = false;
+  const SEA_FULL = 34, SEA_FULL_ECO = 24, IMP_MAX = 96;
+  let imp: THREE.InstancedMesh | null = null, impN = 0, impFullFar = 0;
+  const _impM = new THREE.Matrix4(), _impC = new THREE.Color();
+  function ensureImp() {
+    if (imp) return imp;
+    const body = new THREE.CylinderGeometry(0.2, 0.26, 1.15, 6, 1).translate(0, 0.58, 0);
+    const head = new THREE.SphereGeometry(0.17, 6, 4).translate(0, 1.36, 0);
+    const paint = (g: THREE.BufferGeometry, hex: number) => {
+      const c = new THREE.Color(hex), n = g.getAttribute('position').count, a = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+      return g.toNonIndexed();
+    };
+    const parts = [paint(body, 0xffffff), paint(head, 0xf0c8a0)];
+    const n = parts.reduce((k, g) => k + g.getAttribute('position').count, 0);
+    const pos = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
+    for (const g of parts) { pos.set(g.getAttribute('position').array as Float32Array, o * 3); col.set(g.getAttribute('color').array as Float32Array, o * 3); o += g.getAttribute('position').count; g.dispose(); }
+    body.dispose(); head.dispose();
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
+    imp = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }), IMP_MAX);
+    imp.name = 'plazaFarImpostors'; imp.count = 0; imp.frustumCulled = false; imp.visible = false;
+    root.add(imp);
+    return imp;
+  }
+  /** 遠處小人的衣服顏色：依 connId 固定（分得出誰是誰） */
+  function impHue(id: string) { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return (h % 360) / 360; }
+  /** 下船／爬上岸：把坐姿／游泳姿勢留下的關節與藏起來的手都還原，回到一般走路流程 */
+  function unmountRig(r: Remote) {
+    const rj = r as any, rig = r.rig;
+    const v = rj._mountVis as [boolean, boolean, boolean] | undefined;
+    rig.weaponMount.visible = v ? v[0] : true; rig.handL.visible = v ? v[1] : true; rig.handR.visible = v ? v[2] : true;
+    rj._mountVis = undefined;
+    rig.root.position.set(0, 0, 0);
+    for (const j of [rig.legL, rig.legR, rig.shinL, rig.shinR]) j.rotation.set(0, 0, 0);
+    rig.torso.rotation.set(0, 0, 0);
+    if (rig.torso.userData.boatBaseY != null) rig.torso.position.y = rig.torso.userData.boatBaseY;
+    rig.head.rotation.set(0, 0, 0);
+    rig.outer.rotation.set(0, r.yaw, 0);
+    // 走路速度視窗是船上的位置：清掉，免得一下船被當成在跑
+    rj._wh = undefined; rj._walkOn = false; rj.jt = 0; rj.pk = 0;
+    r.tx = r.x; r.tz = r.z; r.tyaw = r.yaw;
+    if (r.puff) clearRemotePuff(r);
+    clearPlazaSmokeCig(rig);
+    try { if (!r.seated) { posePlazaStand(rig); hangArms(r, false); } applyActionPose(r); } catch { /* */ }
+  }
+  /** 遠端坐在船上（不是游泳）：可以抽菸 */
+  const boatRider = (r: Remote) => { const m = mounts.size ? mounts.get(r.connId) : undefined; return !!m && m.pose !== 'swim'; };
   const seatMeshes = new Map<string, THREE.Mesh>();
   const pileGroups: THREE.Group[] = [];
   const chairsRoot = new THREE.Group();
@@ -1674,7 +1727,7 @@ function hashPid(pid: string) {
     if (!r) return;
     const aberOk = isAberRemote(r) && !r.carriedBy && (r.phase || '') !== 'carried' && (r.phase || '') !== 'moon'
       && (r.seated || (r.phase || '') === 'stand');
-    if (!(aberOk || (r.seated && isSmokePile(r.pileId)))) return;
+    if (!(aberOk || (r.seated && isSmokePile(r.pileId)) || boatRider(r))) return;
     const now = performance.now();
     const holdMs = Math.max(0, Math.min(5000, opts.holdMs | 0));
     if (opts.start) {
@@ -1763,8 +1816,9 @@ function hashPid(pid: string) {
   function tickRemotePuff(r: Remote, dt: number) {
     const pf = r.puff;
     if (!pf) return;
-    const leisure = (r.seated && isSmokePile(r.pileId)) || aberLeisureSmoke(r);
-    const mouth = aberMouthSmoke(r);
+    const onBoat = boatRider(r);
+    const leisure = (r.seated && isSmokePile(r.pileId)) || aberLeisureSmoke(r) || onBoat;
+    const mouth = !onBoat && aberMouthSmoke(r);
     if (!leisure && !mouth) { clearRemotePuff(r); return; }
     const now = performance.now();
     if (pf.held && pf.autoEndAt && now >= pf.autoEndAt) {
@@ -1787,7 +1841,12 @@ function hashPid(pid: string) {
       spawnRemoteExhale(r, pf.holdMs);
     }
     const inhale = pf.held && pf.animT >= 0.98 ? 1 : (pf.held && pf.animT > 0.7 ? (pf.animT - 0.7) / 0.3 : 0);
-    if (leisure) {
+    if (onBoat) {
+      // 船上：姿勢交給 poseRider（同一套坐姿抽菸），這裡只記進度
+      const rj = r as any;
+      rj._boatSmoke = { puffK: easeSmokePuff(pf.animT), inhale, away: pf.awayT };
+      r.smokeK = easeSmokePuff(easeSmokePuff(pf.animT));
+    } else if (leisure) {
       posePlazaSmokeSit(r.rig, {
         puffK: easeSmokePuff(pf.animT),
         inhale,
@@ -2645,6 +2704,7 @@ function hashPid(pid: string) {
     carrierIds.clear();
     for (const r of remotes.values()) if (r.carriedBy) carrierIds.add(r.carriedBy);
     carrierFresh = true;
+    impN = 0; impFullFar = 0;
     try {
     for (const r of remotes.values()) {
       const mount = mounts.size ? mounts.get(r.connId) : undefined;
@@ -2728,6 +2788,7 @@ function hashPid(pid: string) {
       // mid+：甩殼／頭瞄等細動畫仍可省
       if (mount) {
         if (r.throwT > 0) r.throwT = Math.max(0, r.throwT - dt);
+        if (r.puff) tickRemotePuff(r, dt); else (r as any)._boatSmoke = undefined;
       } else if (!far) {
         if (r.throwT > 0) {
           r.throwT -= dt;
@@ -2778,7 +2839,9 @@ function hashPid(pid: string) {
       }
       if (r.isNpc && !isAberRemote(r)) applyAmaAppearance(r.rig);
       if (mount) {
-        const pr = poseRider(r.rig, mount.pose, t * 0.001, { steer: mount.steer, sway: mount.sway, throwK: r.throwT > 0 ? 1 - Math.min(1, r.throwT / 0.45) : 0 });
+        if (!rj._mountVis) rj._mountVis = [r.rig.weaponMount.visible, r.rig.handL.visible, r.rig.handR.visible];
+        const smoke = mount.pose !== 'swim' ? ((rj._boatSmoke as { puffK: number; inhale: number; away: number } | undefined) ?? { puffK: 0 }) : null;
+        const pr = poseRider(r.rig, mount.pose, t * 0.001, { steer: mount.steer, sway: mount.sway, throwK: r.throwT > 0 ? 1 - Math.min(1, r.throwT / 0.45) : 0, smoke });
         ox = mount.x; oy = mount.y + pr.dy; oz = mount.z; rotX = pr.rx + (mount.rx ?? 0); rotZ = mount.rz ?? 0;
       }
       r.rig.outer.position.set(ox, oy, oz);
@@ -2787,11 +2850,12 @@ function hashPid(pid: string) {
       r.rig.outer.rotation.x = rotX;
       // 蹲／躺要每幀疊在剛重設的 outer 姿勢上。遠距也要套，否則遠看會變站著、靠近才躺回去
       {
-        const ph = r.seated ? '' : (r.phase || '');
+        // 在船上／水裡：不疊蹲／躺（上船前的 phase 會殘留，疊上去人就沉進海裡）
+        const ph = r.seated || mount ? '' : (r.phase || '');
         const want = ph === 'crouch' || ph === 'lie' ? 1 : 0;
         if (want) rj.pz = ph;
         // 遠距一次到位，避免遠處第一次看到時還從站姿慢慢躺下
-        if (far) rj.pk = want;
+        if (far || mount) rj.pk = want;
         else rj.pk = (rj.pk ?? 0) + (want - (rj.pk ?? 0)) * 0.18;
         if (rj.pk > 0.001 && rj.pz) {
           // 每幀先重設腿的基準再疊蹲／躺；舊版蹲著移動時沒重設，大腿角度每幀累加 → 腳折成一團
@@ -2809,8 +2873,19 @@ function hashPid(pid: string) {
       // 遠距仍顯示（只停動畫）；moon／awaiting 另控
       if (!rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
       // 視距分級：超出最遠一檔整個不畫；遠距（省電從中距起）藏臉盆、手上刀蚵與服飾細節
-      const hideFar = tier === 'hide' && !r.carriedBy && !anyoneCarriedBy(r.connId);
+      // 海上視野：SEA_FULL 內照畫本體，更遠改畫小人（不再整個不見）
+      const seaFull = seaView && dist2 < (eco ? SEA_FULL_ECO * SEA_FULL_ECO : SEA_FULL * SEA_FULL);
+      const hideFar = tier === 'hide' && !seaFull && !r.carriedBy && !anyoneCarriedBy(r.connId);
       if (hideFar) r.rig.outer.visible = false;
+      if (seaView && tier === 'hide' && seaFull) impFullFar++;
+      if (seaView && hideFar && impN < IMP_MAX && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon') {
+        const im = ensureImp();
+        const o = r.rig.outer;
+        _impM.compose(o.position, o.quaternion, o.scale);
+        im.setMatrixAt(impN, _impM);
+        im.setColorAt(impN, _impC.setHSL(impHue(r.connId || r.key || ''), 0.45, 0.42));
+        impN++;
+      }
       applyRemoteLod(r, tier === 'hide' || tier === 'far' || (LO && tier === 'mid'));
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       if (show) {
@@ -2831,7 +2906,7 @@ function hashPid(pid: string) {
         }
       }
       // 太遠不畫身體時名牌照樣顯示（只剩一個 sprite，便宜）；低畫質在人非常多時才收遠處名牌
-      const crowdCut = LO && remotes.size > 40 && (tier === 'far' || tier === 'hide');
+      const crowdCut = !seaView && LO && remotes.size > 40 && (tier === 'far' || tier === 'hide');
       const tagOnly = hideFar && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon' && !crowdCut;
       r.tag.sprite.visible = (show && !crowdCut) || tagOnly;
       {
@@ -2873,7 +2948,13 @@ function hashPid(pid: string) {
         }
       }
     }
-    } finally { carrierFresh = false; }
+    } finally {
+      carrierFresh = false;
+      if (imp) {
+        imp.count = impN; imp.visible = impN > 0;
+        if (impN) { imp.instanceMatrix.needsUpdate = true; if (imp.instanceColor) imp.instanceColor.needsUpdate = true; }
+      }
+    }
     if (selfBubUntil > t) {
       const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
       const back = selfSeated ? -0.08 : 0;
@@ -2924,7 +3005,8 @@ function hashPid(pid: string) {
     smokeJobs.length = 0;
     let smokeN = 0;
     for (const r of remotes.values()) {
-      const wantSeat = r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke');
+      // 船上的駕駛／乘客跟吸菸座一樣手上夾菸
+      const wantSeat = (r.seated && (isSmokePile(r.pileId) || (r.phase || '') === 'smoke')) || boatRider(r);
       const wantAber = isAberRemote(r) && !r.carriedBy && (r.phase || '') !== 'carried' && (r.phase || '') !== 'moon'
         && (r.seated || (r.phase || '') === 'stand');
       const want = wantSeat || wantAber;
@@ -3104,6 +3186,7 @@ function hashPid(pid: string) {
   }
   const _dispose = dispose;
   function disposeAll() {
+    if (imp) { imp.removeFromParent(); imp.geometry.dispose(); (imp.material as THREE.Material).dispose(); imp.dispose(); imp = null; }
     mgFx.dispose();
     _dispose();
   }
@@ -3117,7 +3200,13 @@ function hashPid(pid: string) {
     setFoodStallActive: (on) => ambiance?.setFoodActive(on),
     setFoodQueueRing: (at, on) => ambiance?.setFoodQueue(at, on),
     mgMounts, aimMg, mgFx, mgHitTargets, tick, headObjects,
-    setRemoteMount: (connId, m) => { if (m) mounts.set(connId, m); else mounts.delete(connId); },
+    setRemoteMount: (connId, m) => {
+      if (m) { mounts.set(connId, m); return; }
+      if (!mounts.delete(connId)) return;
+      for (const r of remotes.values()) if (r.connId === connId) { try { unmountRig(r); } catch (e) { console.error('unmount', e); } }
+    },
+    setSeaView: (on) => { seaView = on; },
+    seaViewStats: () => ({ on: seaView, impostors: impN, fullFar: impFullFar }),
     remoteList: () => { const out: { connId: string; nick: string; isNpc: boolean; x: number; z: number }[] = []; for (const r of remotes.values()) out.push({ connId: r.connId, nick: r.nick, isNpc: !!r.isNpc, x: r.x, z: r.z }); return out; },
     tickTpOcclude: (dt, camera, focus, snap) => applyTpOcclude(dt, camera, focus, snap),
     dispose: disposeAll,

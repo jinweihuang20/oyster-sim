@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { PB, dockSlot, stepPlazaBoat, pushStatic, pushFromBoat, isHardRam, stepSwim, freePassengerSeat, boatEmpty, distToLand, landSpot, onLand, knockSpot, nightK, hullPts } from './boatLogic';
+import { PB, dockSlot, stepPlazaBoat, pushStatic, pushFromBoat, isHardRam, stepSwim, freePassengerSeat, boatEmpty, distToLand, landSpot, onLand, knockSpot, nightK, hullPts, dockEdge, DOCK_IND_NEAR } from './boatLogic';
 
 describe('廣場膠筏', () => {
-  it('20 艘排在碼頭兩側、不互相重疊、船尾靠碼頭', () => {
+  it('5 艘排在碼頭兩側、不互相重疊、船尾靠碼頭', () => {
     const s = Array.from({ length: PB.count }, (_, i) => dockSlot(i));
     for (let i = 0; i < s.length; i++) for (let j = i + 1; j < s.length; j++) expect(Math.hypot(s[i].x - s[j].x, s[i].z - s[j].z)).toBeGreaterThan(2.4);
     for (const d of s) {
@@ -69,5 +69,29 @@ describe('廣場膠筏', () => {
   it('夜晚程度', () => {
     expect(nightK(12)).toBe(0); expect(nightK(22)).toBe(1); expect(nightK(2)).toBe(1);
     expect(nightK(18.5)).toBeCloseTo(0.5); expect(nightK(5.75)).toBeCloseTo(0.5);
+  });
+  it('碼頭指示：畫面內又近＝收起；畫面外＝貼邊、避開按鈕', () => {
+    const ins = { l: 56, r: 56, t: 92, b: 150 }, W = 844, H = 390;
+    expect(dockEdge(0.1, 0, false, W, H, 20, ins)).toBeNull();
+    // 就在旁邊：碼頭在畫面外也收起
+    expect(dockEdge(0, -1.4, false, W, H, 4, ins)).toBeNull();
+    // 看得到但很遠：還是指著
+    const far = dockEdge(0.1, 0, false, W, H, DOCK_IND_NEAR + 30, ins)!;
+    expect(far.deg).toBe(90); expect(far.edge).toBe(false);
+    // 在右邊畫面外：貼右緣、箭頭朝右
+    const r = dockEdge(3, 0, false, W, H, 80, ins)!;
+    expect(r.x).toBeCloseTo(W - ins.r); expect(Math.abs(r.deg)).toBeLessThan(30);
+    // 在鏡頭正後方：貼左右邊（不擺在畫面正下方蓋住自己的船）
+    const b = dockEdge(0.3, 0, true, W, H, 80, ins)!;
+    expect(b.x === ins.l || b.x === W - ins.r).toBe(true); expect(Math.abs(b.deg) < 30 || Math.abs(b.deg) > 150).toBe(true);
+    // 角落避讓：左下搖桿區
+    const c = dockEdge(-3, -3, false, W, H, 80, { ...ins, bl: [190, 150] })!;
+    expect(c.y).toBeLessThanOrEqual(H - 150 + 0.01);
+    // 不論哪個方向都在避讓框裡
+    for (let a = 0; a < Math.PI * 2; a += 0.3) {
+      const e = dockEdge(Math.cos(a) * 4, Math.sin(a) * 4, a > 3, W, H, 100, ins)!;
+      expect(e.x).toBeGreaterThanOrEqual(ins.l - 0.01); expect(e.x).toBeLessThanOrEqual(W - ins.r + 0.01);
+      expect(e.y).toBeGreaterThanOrEqual(ins.t - 0.01); expect(e.y).toBeLessThanOrEqual(H - ins.b + 0.01);
+    }
   });
 });

@@ -80,7 +80,7 @@ import {
   plazaJumpHeight, PLAZA_JUMP_DUR, applyPlazaBodyPose as applyBodyPose, type PlayerRig,
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
-import { openPlazaBoats, closePlazaBoats, tickPlazaBoats, plazaBoatsActive, plazaBoatsKey, plazaBoatsCam, plazaBoatsSway, plazaBoatsNight, plazaBoatsFog, plazaBoatsDbg, plazaBoatsOpen } from './plaza/boats/plazaBoats';
+import { openPlazaBoats, closePlazaBoats, tickPlazaBoats, plazaBoatsActive, plazaBoatsMode, plazaBoatsKey, plazaBoatsCam, plazaBoatsSway, plazaBoatsNight, plazaBoatsFog, plazaBoatsDbg, plazaBoatsOpen } from './plaza/boats/plazaBoats';
 import { nightK } from './plaza/boats/boatLogic';
 import { plazaBoatClient, plazaWorldView, plazaMyNick } from './plaza/session';
 import {
@@ -4133,6 +4133,8 @@ window.addEventListener('keydown', e => {
   if (state !== 'play') return; audio().resume();
   if (walking && plazaMode && isPlazaActive() && !e.repeat && plazaBoatsKey(e.code)) { e.preventDefault(); return; }
   if (walking) {
+    // 船上「抽一口」（吸菸區同一顆，T）
+    if (e.code === 'KeyT' && plazaMode && boatSmoke) { if (!e.repeat) startPuff(); return; }
     if (e.code === 'Space' && (plazaMode || isRoomActive())) { e.preventDefault(); if (!e.repeat) plazaJump(); return; }
     if ((e.code === 'KeyC' || e.code === 'KeyZ') && (plazaMode || isRoomActive())) { if (!e.repeat) plazaPose(e.code === 'KeyC' ? 'crouch' : 'lie'); return; }
     walkKeys.add(e.code);
@@ -5330,6 +5332,9 @@ function refreshPlazaCosmetics() {
 /** 吸菸區第一人稱手持菸 */
 let fpCig: FpCigarette | null = null;
 let smokeSitActive = false;
+/** 在膠筏上（駕駛或乘客）：吸菸區同一套「抽一口」（第三人稱、手上的菸在 avatar 上） */
+let boatSmoke = false;
+const smokeOn = () => smokeSitActive || boatSmoke;
 function ensureFpCigarette() {
   if (fpCig) return fpCig;
   fpCig = makeFpCigarette({ lowDetail: COARSE });
@@ -5435,7 +5440,7 @@ function cancelPuff(opts?: { keepAnim?: boolean }) {
   if (wasHeld && plazaMode) void plazaSendPuff(false, heldMs);
 }
 function startPuff() {
-  if (state !== 'play' || !smokeSitActive || puffHeld) return;
+  if (state !== 'play' || !smokeOn() || puffHeld) return;
   puffHeld = true;
   puffT = 0;
   puffReleaseAt = 0;
@@ -5456,7 +5461,7 @@ function endPuff() {
   puffAwayT = 0;
   const holdMs = Math.round(Math.min(PUFF_HOLD_MAX, held) * 1000);
   if (plazaMode) void plazaSendPuff(false, holdMs);
-  if (held < PUFF_MIN_HOLD || !smokeSitActive) {
+  if (held < PUFF_MIN_HOLD || !smokeOn()) {
     puffStrength = 0;
     puffReleaseAt = 0;
     return;
@@ -5465,11 +5470,11 @@ function endPuff() {
   puffReleaseAt = performance.now();
 }
 function spawnExhalePuff(strength: number) {
-  if (!smokeSitActive || strength <= 0) return;
+  if (!smokeOn() || strength <= 0) return;
   const sc = 0.35 + strength * 1.15;
   const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 5100 + Math.floor(Math.random() * 4000), reach: tpv && plazaMe ? strength : undefined, tint: gearOn('goldPipe') ? GOLD_SMOKE_TINT : undefined });
   puffExhaleHeadT = 1;
-  if (tpv && plazaMe) {
+  if ((tpv || boatSmoke) && plazaMe) {
     plazaMe.head.updateMatrixWorld(true);
     const mouth = plazaMe.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
     const yaw = plazaMe.outer.rotation.y;
@@ -5492,7 +5497,11 @@ function puffBezier(a: number, m: number, b: number, u: number) {
   return o * o * a + 2 * o * u * m + u * u * b;
 }
 function tickPuffUi(rdt: number) {
-  const show = smokeSitActive && state === 'play';
+  // 船上：駕駛／乘客都能抽（游泳不行）
+  const wasBoatSmoke = boatSmoke;
+  boatSmoke = plazaMode && plazaBoatsMode() === 'boat' && state === 'play';
+  if (boatSmoke !== wasBoatSmoke) document.body.classList.toggle('plazaBoatSmoke', boatSmoke);
+  const show = smokeOn() && state === 'play';
   on('puffBtn', show);
   if (!show) {
     if (puffHeld || puffReleaseAt || puffAnimT > 0) cancelPuff();
@@ -5564,7 +5573,7 @@ function tickPuffUi(rdt: number) {
   }
 }
 function spawnPuffAsh() {
-  if (tpv && plazaMe) {
+  if ((tpv || boatSmoke) && plazaMe) {
     const cig = getPlazaSmokeCig(plazaMe);
     if (!cig) return;
     const local = new THREE.Vector3(0.02, 0.02, -0.2);
@@ -5902,6 +5911,9 @@ function startPlazaBoats() {
       setYaw: (y) => { yaw = tYaw = y; },
       canAct: () => state === 'play' && walking && !plazaSeated() && !plazaSittingBusy() && !mgActive && !plazaCarrying(),
       sfx: (k) => seaSfx(k),
+      // 漂流箱：伺服器已記在 income（AddIncome），這裡跟其他廣場獎勵一樣入帳
+      grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); updHud(); track('plaza_reward', { amount: n, via, money: save.money }); },
+      smoke: () => (boatSmoke ? { puffK: puffVisualK(), inhale: puffInhaleK(), away: puffAwayT, flick: puffFlickT } : null),
       throwShell: (from, target, to) => {
         const sh = new THREE.Mesh(halfGeo, shellBotMat);
         if (target) {
@@ -8082,9 +8094,15 @@ tpvApi.set = setTpv;
 function drawCamBtn() { const b = document.getElementById('camBtn'); if (!b) return; b.classList.toggle('tpOn', tpv); b.title = tpv ? '視角：第三人稱（V）' : '視角：第一人稱（V）'; }
 function react3(kind: 'cheer' | 'ouch') { if (!tpReady) return; if (kind === 'cheer') cheerT = 1.4; else ouchT = 0.6; }
 // 每幀：放好角色、把鏡頭拉到身後上方；手和蚵仔仍跟著鏡頭，操作不變
+let seaFogOn = false;
 function camTick(dt: number) {
   if (!tpReady) return;
   // 廣場海面：在船上／水裡一律用追船鏡頭（人由 plazaBoats 擺）
+  // 海上：霧拉遠（遠處的船和人看得到）；回岸上還原廣場的 20／64。霧只是著色，不增加 draw call
+  {
+    const f = scene.fog as THREE.Fog | null, want = plazaMode && plazaBoatsActive();
+    if (f && want !== seaFogOn) { seaFogOn = want; if (want) { f.near = 36; f.far = 115; } else { f.near = 20; f.far = 64; } plazaBoatsFog(f); }
+  }
   if (plazaMode && plazaBoatsActive()) {
     tpOn = true; tpWas = false; me3.visible = false; handRig.visible = false;
     handL.children[0].visible = handR.children[0].visible = false;

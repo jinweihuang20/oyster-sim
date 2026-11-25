@@ -1,7 +1,7 @@
 /**
- * 廣場西側海面的場景：海（沿用出海採蚵的海面 shader）、護岸、長碼頭、20 艘膠筏、航跡水花、夜間燈光。
+ * 廣場西側海面的場景：海（沿用出海採蚵的海面 shader）、護岸、碼頭、5 艘膠筏、航跡水花、夜間燈光。
  * 手機效能：
- * - 20 艘船＝近模／遠模兩個 InstancedMesh（各 1 個 draw call），自己開的那艘才用完整可動模型。
+ * - 5 艘船＝近模／遠模兩個 InstancedMesh（各 1 個 draw call），自己開的那艘才用完整可動模型。
  * - 碼頭（木板＋樁＋護岸＋燈柱）合成一個 vertex-color mesh。
  * - 夜燈不加真的光源：燈頭自發光＋一包 Points 光暈＋疊加貼花光池（水面／木板）；船頭燈＝疊加光錐貼花＋光點。
  */
@@ -15,11 +15,13 @@ const lam = (c: number, o: THREE.MeshLambertMaterialParameters = {}) => new THRE
 /** 海面高度圖範圍 */
 const RECT = { x0: -140, z0: -75, w: 116, h: 150 };
 /** 碼頭燈柱（每 6 m 一支，南北交錯） */
-export const DOCK_LAMPS: readonly { x: number; z: number }[] = Array.from({ length: 6 }, (_, i) => ({ x: -26.5 - i * 5.6, z: (i % 2 ? 1 : -1) * (PB.pierHalfW - 0.15) }));
+export const DOCK_LAMPS: readonly { x: number; z: number }[] = Array.from({ length: 3 }, (_, i) => ({ x: -26.5 - i * 5.5, z: (i % 2 ? 1 : -1) * (PB.pierHalfW - 0.15) }));
 /** 廣場走到碼頭那段泥灘路的路燈 */
 const PATH_LAMPS: readonly { x: number; z: number }[] = [{ x: -15.6, z: 2.3 }, { x: -20.6, z: -2.3 }];
 const ALL_LAMPS = [...DOCK_LAMPS, ...PATH_LAMPS];
 const LAMP_H = 2.6;
+/** 漂流箱上限（伺服器 4 個） */
+const DRIFT_MAX = 8;
 
 function heightMap() {
   const W = 232, H = 300, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
@@ -150,7 +152,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const lampHeads = new THREE.Mesh(mergeGeometries(headParts), lampHeadMat); headParts.forEach(p => p.dispose());
   group.add(lampHeads);
 
-  // ---------- 20 艘膠筏：近模／遠模 InstancedMesh ----------
+  // ---------- 5 艘膠筏：近模／遠模 InstancedMesh ----------
   const tmp = new THREE.Group();
   const proto = makeRaft(tmp, { trim: 0x2a5a86, crew: [] });
   const nearGeo = bakeGroup(proto.g);
@@ -160,12 +162,23 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const far = new THREE.InstancedMesh(farBoatGeo(0x2a5a86), boatMat, PB.count); far.name = 'plazaBoatsFar';
   for (const m of [near, far]) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
 
+  // ---------- 漂流箱：一個 InstancedMesh（木箱＋小旗子，遠看得到）----------
+  const crateGeo = (() => {
+    const parts = [
+      box(0.9, 0.62, 0.9, 0, 0.12, 0, 0xb07a3c), box(0.95, 0.08, 0.95, 0, 0.3, 0, 0x6b4422), box(0.95, 0.08, 0.95, 0, -0.06, 0, 0x6b4422),
+      box(0.05, 1.15, 0.05, 0.32, 0.95, 0.32, 0x30343a), box(0.38, 0.24, 0.02, 0.52, 1.38, 0.32, 0xff7a1a),
+    ];
+    const g = mergeGeometries(parts); parts.forEach(p => p.dispose()); return g;
+  })();
+  const crates = new THREE.InstancedMesh(crateGeo, boatMat, DRIFT_MAX); crates.name = 'plazaDriftCrates';
+  crates.count = 0; crates.frustumCulled = false; crates.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(crates);
+
   // ---------- 航跡／水花 ----------
   const fx = makeFx(group, o.coarse ? 110 : 160, PB.waterY + 0.1);
 
   // ---------- 夜燈（假光）：光暈 Points、光池貼花、船頭光錐 ----------
   const glowT = glowTex(), coneT = coneTex();
-  const N_GLOW = ALL_LAMPS.length + PB.count + 8;
+  const N_GLOW = ALL_LAMPS.length + PB.count + DRIFT_MAX + 8;
   const gPos = new Float32Array(N_GLOW * 3), gCol = new Float32Array(N_GLOW * 3);
   const glowGeo = new THREE.BufferGeometry();
   glowGeo.setAttribute('position', new THREE.BufferAttribute(gPos, 3).setUsage(THREE.DynamicDrawUsage));
@@ -188,14 +201,21 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const cones = new THREE.InstancedMesh(coneG, coneMat, PB.count); cones.count = 0; cones.frustumCulled = false; cones.renderOrder = 3; cones.name = 'plazaBoatCones'; group.add(cones);
 
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
-  let nearN = 0, farN = 0, coneN = 0, glowN = 0;
+  let nearN = 0, farN = 0, coneN = 0, glowN = 0, crateN = 0;
   let night = 0;
   const lampOn = new THREE.Color(0xffd890), lampOff = new THREE.Color(0xd8d4c8);
 
   return {
     group, water, fx, near, far, dock,
     /** 每幀開頭：清空這幀要畫的船 */
-    begin() { nearN = farN = coneN = 0; glowN = 0; },
+    begin() { nearN = farN = coneN = 0; glowN = 0; crateN = 0; },
+    /** 漂流箱（水面上下晃）；夜晚加一點暖色光暈 */
+    crate(x: number, y: number, z: number, h: number, rx: number, rz: number) {
+      if (crateN >= DRIFT_MAX) return;
+      _e.set(rx, h, rz); _q.setFromEuler(_e); _p.set(x, y, z); _m.compose(_p, _q, _s);
+      crates.setMatrixAt(crateN++, _m);
+      this.glow(x, y + 0.5, z, 0.9, 0.62, 0.25);
+    },
     /** 放一艘（instanced）；far＝遠模 */
     put(x: number, y: number, z: number, h: number, rx: number, rz: number, useFar: boolean) {
       _e.set(rx, h, rz); _q.setFromEuler(_e); _p.set(x, y, z); _m.compose(_p, _q, _s);
@@ -216,6 +236,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
     },
     end() {
       near.count = nearN; far.count = farN; near.instanceMatrix.needsUpdate = true; far.instanceMatrix.needsUpdate = true;
+      crates.count = crateN; crates.visible = crateN > 0; if (crateN) crates.instanceMatrix.needsUpdate = true;
       cones.count = night > 0.05 ? coneN : 0; cones.instanceMatrix.needsUpdate = true;
       if (night > 0.05) for (const p of ALL_LAMPS) this.glow(p.x, LAMP_H - 0.12, p.z, 1, 0.82, 0.5);
       glows.visible = night > 0.05 && glowN > 0;

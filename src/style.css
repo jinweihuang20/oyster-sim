@@ -4385,5 +4385,21 @@ body.tideOn #tidePill{display:flex}
   #boatDive{bottom:calc(var(--sa-bottom,0px) + 64px)}
   #boatNote{top:calc(var(--sa-top,0px) + 48px);font-size:12px}
 }
+/* 碼頭方向指示（在船上／水裡；碼頭不在畫面內時貼邊） */
+#boatDockInd{position:absolute;left:-22px;top:-22px;display:none;flex-direction:column;align-items:center;gap:2px;pointer-events:none;will-change:transform}
+#boatDockInd.on{display:flex}
+#boatDockInd .dockArrow{display:flex;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.92);box-shadow:0 2px 8px rgba(0,0,0,.25)}
+#boatDockInd .dockArrow svg{width:44px;height:44px;fill:none;stroke:#2a5a86;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#boatDockInd .dockLbl{padding:1px 7px;border-radius:9px;background:#2a5a86;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+@media (max-height:500px){#boatDockInd{left:-18px;top:-18px}#boatDockInd .dockArrow,#boatDockInd .dockArrow svg{width:36px;height:36px}#boatDockInd .dockLbl{font-size:11px}}
+/* 漂流箱指示：比碼頭指示低調（小、半透明、沒有底圈） */
+#boatDriftInd{position:absolute;left:-14px;top:-14px;display:none;flex-direction:column;align-items:center;gap:0;pointer-events:none;opacity:.78;will-change:transform}
+#boatDriftInd.on{display:flex}
+#boatDriftInd .driftArrow{display:flex;width:28px;height:28px}
+#boatDriftInd .driftArrow svg{width:28px;height:28px;fill:none;stroke:#ffb347;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
+#boatDriftInd .driftLbl{color:#ffe2b0;font-size:11px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.7);font-variant-numeric:tabular-nums}
+/* 船上抽菸：吸菸區同一顆「抽一口」，放在丟殼上面 */
+body.plazaBoating.plazaBoatSmoke #puffBtn.on{display:block!important;visibility:visible!important;pointer-events:auto!important;position:fixed!important;right:calc(var(--sa-right,0px) + 18px);bottom:calc(var(--sa-bottom,0px) + 214px);z-index:8601;width:auto!important;min-width:0!important}
+@media (max-height:500px){body.plazaBoating.plazaBoatSmoke #puffBtn.on{bottom:calc(var(--sa-bottom,0px) + 172px)}}
 /* 在船上／水裡：跳／蹲／躺／動作／換位置／丟殼（座位版）這些按鈕先收起來 */
 body.plazaBoating #jumpBtn,body.plazaBoating #crouchBtn,body.plazaBoating #lieBtn,body.plazaBoating #poseBtn,body.plazaBoating #standBtn,body.plazaBoating #throwBtn,body.plazaBoating #stealBtn,body.plazaBoating #umbBtn,body.plazaBoating #puffBtn,body.plazaBoating #seatCard{display:none!important}
