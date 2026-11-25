@@ -1985,6 +1985,11 @@ function seaSfx(k: SeaSfx) {
     else if (k === 'warn') { tone(880, 0.12, 0.12, 'triangle'); later(0.18, () => tone(880, 0.12, 0.12, 'triangle')); }
     else if (k === 'dock') tone(523, 0.18, 0.12, 'triangle');
     else if (k === 'drop') noise(0.25, 1200, 0.2);
+    else if (k === 'launch') { tone(220, 0.25, 0.1, 'sawtooth', 0, 700); }
+    else if (k === 'hit') { noise(0.35, 400, 0.4); tone(160, 0.2, 0.18, 'square'); }
+    else if (k === 'splash') noise(0.4, 1400, 0.22);
+    else if (k === 'bump') noise(0.2, 300, 0.3);
+    else if (k === 'rival') tone(392, 0.15, 0.1, 'triangle');
   } catch { /* */ }
 }
 function beginSea() {

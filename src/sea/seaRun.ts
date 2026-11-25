@@ -5,13 +5,15 @@
 import * as THREE from 'three';
 import {
   SEA, mulberry32, makeLayout, ebbOf, shoalR, groundLim, pullDur, inShoal, newBoat, stepBoat, nearestStr, strContent, finishHaul,
-  type Layout, type Boat, type Load, type Haul, type Rng, type Str,
+  newRival, stepRival, bumpBoats, aimShell, shellHits,
+  type Layout, type Boat, type Load, type Haul, type Rng, type Str, type Rival, type Shell,
 } from './seaLogic';
+import { makeHeightMap, makeWater, skyTexture, makeFarms, makeFlags, makeShore, makeRaft, makeFx, makeMortarFx, SKY, type Raft, type Farm } from './seaModels';
 
 export { SEA } from './seaLogic';
 export type { Haul as SeaHaul } from './seaLogic';
 
-export type SeaSfx = 'pull' | 'got' | 'wave' | 'ground' | 'scold' | 'dock' | 'warn' | 'drop';
+export type SeaSfx = 'pull' | 'got' | 'wave' | 'ground' | 'scold' | 'dock' | 'warn' | 'drop' | 'launch' | 'hit' | 'splash' | 'bump' | 'rival';
 export type SeaOpts = { onDone: (h: Haul) => void; onAbort: () => void; sfx?: (k: SeaSfx) => void; seed?: number };
 
 const ACC = 0x2a5a86;
@@ -22,6 +24,8 @@ const ICON = {
   drop: '<svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M3 19c2 0 2-1.5 4.5-1.5S10 19 12 19s2-1.5 4.5-1.5S19 19 21 19"/></svg>',
   dock: '<svg viewBox="0 0 24 24"><path d="M3 12h18M6 12v8M12 12v8M18 12v8"/><path d="M8 8l4-4 4 4"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  slow: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 13l-3-3M12 6V3M9 3h6"/></svg>',
+  boat: '<svg viewBox="0 0 24 24"><path d="M3 15h18l-3 4H6z"/><path d="M12 15V5l5 7h-5"/></svg>',
 };
 
 let S: Run | null = null;
@@ -34,8 +38,8 @@ type Run = {
   wave: number; waveNext: number; waveDir: number; shoalNow: boolean;
   keys: Set<string>; joy: { id: number; x0: number; y0: number; x: number; y: number } | null;
   renderer: THREE.WebGLRenderer; scene: THREE.Scene; cam: THREE.PerspectiveCamera;
-  boatG: THREE.Group; stack: THREE.InstancedMesh; strMesh: THREE.InstancedMesh; ring: THREE.Mesh;
-  shoalMs: { s: THREE.Mesh; rim: THREE.Mesh; sh: Layout['shoals'][number] }[]; water: THREE.Mesh;
+  me: Raft; rv: Raft; farm: Farm; ring: THREE.Mesh; water: ReturnType<typeof makeWater>; fx: ReturnType<typeof makeFx>; mfx: ReturnType<typeof makeMortarFx>;
+  rival: Rival; rivalOn: boolean; mortarOn: boolean; shells: Shell[]; shellCd: number; throwT: number; wakeT: number; bumpT: number; hitT: number; perf: number[]; tt: number;
   root: HTMLElement; el: Record<string, HTMLElement>; map: HTMLCanvasElement; mapT: number;
   raf: number; last: number; toastT: number; abortArm: number;
   onKey: (e: KeyboardEvent) => void; onKeyUp: (e: KeyboardEvent) => void; onResize: () => void; onBlur: () => void;
@@ -47,11 +51,27 @@ export const seaActive = () => !!S && !S.ended;
 export const seaDbg = {
   skip(oy = 60, big = 0.4) { if (!S || S.ended) return false; const n = Math.max(1, Math.round(oy)); end({ strings: Math.ceil(n / 11), oy: n, big: Math.round(n * big), fine: 0, stolen: 0, lost: 0, stranded: false, secs: Math.round(S.t), skipped: true }); return true; },
   fast(k = 8) { fastK = Math.max(0.1, k); return fastK; },
-  state() { if (!S) return null; const b = S.b; return { t: +S.t.toFixed(1), len: S.L.len, load: b.load, strings: S.loads.length, grounded: b.grounded, x: +b.x.toFixed(1), z: +b.z.toFixed(1), v: +b.v.toFixed(2), fine: S.fine, near: !!nearestStr(S.L, b) }; },
+  state() { if (!S) return null; const b = S.b, r = S.rival; return { t: +S.t.toFixed(1), len: S.L.len, load: b.load, strings: S.loads.length, grounded: b.grounded, x: +b.x.toFixed(1), z: +b.z.toFixed(1), v: +b.v.toFixed(2), slowT: +b.slowT.toFixed(2), fine: S.fine, near: !!nearestStr(S.L, b), rival: S.rivalOn ? { x: +r.x.toFixed(1), z: +r.z.toFixed(1), mode: r.mode, got: r.got } : null, shells: S.shells.length, mortar: S.mortarOn }; },
   warp(x: number, z: number) { if (!S) return; S.b.x = x; S.b.z = z; S.b.v = 0; },
   /** 瞬移到最近一串旁邊（測試用） */
   toStr(owned = false) { if (!S) return null; const s = S.L.strs.find(q => !q.taken && S!.L.rows[q.row].owned === owned); if (!s) return null; const r = S.L.rows[s.row], l = Math.hypot(r.bx - r.ax, r.bz - r.az) || 1; S.b.x = s.x - (r.bz - r.az) / l * 2; S.b.z = s.z + (r.bx - r.ax) / l * 2; S.b.h = -Math.atan2(r.bz - r.az, r.bx - r.ax) + Math.PI / 2; S.b.v = 0; return { w: s.w }; },
   hold(on: boolean) { if (S) S.pullOn = on; },
+  /** 對手開關（不給參數＝切換） */
+  rival(on?: boolean) { if (!S) return null; S.rivalOn = on ?? !S.rivalOn; if (!S.rivalOn) S.shells.length = 0; return S.rivalOn; },
+  /** 迫擊砲開關 */
+  mortar(on?: boolean) { if (!S) return null; S.mortarOn = on ?? !S.mortarOn; return S.mortarOn; },
+  /** 立刻射一發：不給座標就瞄玩家；from 預設阿婆的船（關掉對手時從玩家前方 15 公尺） */
+  shell(x?: number, z?: number) {
+    if (!S) return null; const b = S.b, rv = S.rival;
+    const from = S.rivalOn ? rv : { x: b.x - Math.sin(b.h) * 15, z: b.z - Math.cos(b.h) * 15 };
+    const d = Math.hypot((x ?? b.x) - from.x, (z ?? b.z) - from.z);
+    const sh = x != null && z != null ? { x0: from.x, z0: from.z, tx: x, tz: z, t: 0, dur: SEA.mortarT0 + d * SEA.mortarTk } : aimShell(from, b, S.rng) ?? { x0: from.x, z0: from.z, tx: b.x, tz: b.z, t: 0, dur: SEA.mortarT0 + d * SEA.mortarTk };
+    S.shells.length = 0; S.shells.push(sh); S.throwT = 0.5; S.o.sfx?.('launch'); return { tx: +sh.tx.toFixed(1), tz: +sh.tz.toFixed(1), dur: +sh.dur.toFixed(2) };
+  },
+  /** 對手瞬移到玩家旁邊（測試用） */
+  rivalNear(dist = 12) { if (!S) return; const b = S.b; S.rival.x = b.x + dist; S.rival.z = b.z; S.rival.mode = 'go'; S.rival.wait = 0; },
+  /** 效能：最近 120 幀 JS＋送出繪圖的平均／最大毫秒、draw call、三角形 */
+  perf() { if (!S) return null; const p = S.perf, i = S.renderer.info; return { avgMs: +(p.reduce((a, x) => a + x, 0) / Math.max(1, p.length)).toFixed(2), maxMs: +Math.max(0, ...p).toFixed(2), calls: i.render.calls, tris: i.render.triangles, geos: i.memory.geometries, texs: i.memory.textures }; },
 };
 
 export function seaStart(o: SeaOpts) {
@@ -67,7 +87,10 @@ export function seaStart(o: SeaOpts) {
       <div class="seaRow"><span class="seaIc">${ICON.tide}</span><span class="seaLab">退潮</span><b id="seaTime">--:--</b><div class="seaBar"><i id="seaTideF"></i></div></div>
       <div class="seaRow"><span class="seaIc">${ICON.load}</span><span class="seaLab">載重</span><b id="seaLoad">0/${SEA.cap}</b><div class="seaBar seaLoadBar"><i id="seaLoadF"></i><em id="seaLim"></em></div></div>
       <div class="seaRow seaSum"><span class="seaIc">${ICON.rope}</span><span id="seaSum">還沒拉到蚵串</span></div>
+      <div class="seaRow seaSum seaRv"><span class="seaIc">${ICON.boat}</span><span id="seaRv">阿伯準備出港</span></div>
     </div>
+    <div id="seaSlow"><span class="seaIc">${ICON.slow}</span><span id="seaSlowT"></span></div>
+    <div id="seaHitFx"></div>
     <canvas id="seaMap" width="132" height="148"></canvas>
     <button id="seaQuit" class="seaQuit" type="button">${ICON.close}<span>放棄出海</span></button>
     <div id="seaToast"></div>
@@ -80,21 +103,23 @@ export function seaStart(o: SeaOpts) {
   document.body.appendChild(root);
   const q = (id: string) => root.querySelector('#' + id) as HTMLElement;
   const el: Run['el'] = {};
-  for (const id of ['seaTime', 'seaTideF', 'seaLoad', 'seaLoadF', 'seaLim', 'seaSum', 'seaToast', 'seaBanner', 'seaJoy', 'seaDrop', 'seaAct', 'seaActT', 'seaEnd', 'seaQuit', 'seaKeys']) el[id] = q(id);
+  for (const id of ['seaRv', 'seaSlow', 'seaSlowT', 'seaHitFx', 'seaTime', 'seaTideF', 'seaLoad', 'seaLoadF', 'seaLim', 'seaSum', 'seaToast', 'seaBanner', 'seaJoy', 'seaDrop', 'seaAct', 'seaActT', 'seaEnd', 'seaQuit', 'seaKeys']) el[id] = q(id);
   const cv = q('seaCv') as HTMLCanvasElement;
-  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: !matchMedia('(pointer: coarse)').matches, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 1.5 : 2));
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: !coarse, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, coarse ? 1.5 : 2));
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xbfdcea); scene.fog = new THREE.Fog(0xbfdcea, 45, 120);
+  scene.background = skyTexture(); scene.fog = new THREE.Fog(SKY.getHex(), 55, 135);
   const cam = new THREE.PerspectiveCamera(55, 1, 0.1, 300);
   scene.add(new THREE.HemisphereLight(0xeaf6ff, 0x8a9a80, 2.2));
   const sun = new THREE.DirectionalLight(0xfff2d8, 2.4); sun.position.set(30, 60, 20); scene.add(sun);
 
-  const built = buildWorld(scene, L);
+  const built = buildWorld(scene, L, rng, coarse);
   S = {
     o, rng, L, b, t: 0, loads: [], fine: 0, stolen: 0, lost: 0, warned: false, ended: false,
     pullOn: false, pullP: 0, pullTarget: null, wave: 0, waveNext: SEA.waveMin + rng() * (SEA.waveMax - SEA.waveMin), waveDir: 0, shoalNow: false,
     keys: new Set(), joy: null, renderer, scene, cam, ...built,
+    rival: newRival(rng), rivalOn: true, mortarOn: true, shells: [], shellCd: SEA.mortarStart, throwT: 0, wakeT: 0, bumpT: 0, hitT: 0, perf: [], tt: 0,
     root, el, map: q('seaMap') as HTMLCanvasElement, mapT: 0, raf: 0, last: performance.now(), toastT: 0, abortArm: 0,
     onKey: () => {}, onKeyUp: () => {}, onResize: () => {}, onBlur: () => {},
   };
@@ -112,80 +137,16 @@ function resize() {
 }
 
 // ---------- 場景 ----------
-function buildWorld(scene: THREE.Scene, L: Layout) {
-  const lam = (c: number, o: THREE.MeshLambertMaterialParameters = {}) => new THREE.MeshLambertMaterial({ color: c, ...o });
-  const add = (g: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, p: THREE.Object3D = scene) => { const me = new THREE.Mesh(g, m); me.position.set(x, y, z); p.add(me); return me; };
-  const water = add(new THREE.PlaneGeometry(420, 420), lam(0x5aa8c4), 0, 0, -60); water.rotation.x = -Math.PI / 2;
-  // 沙洲＋碼頭＋工寮
-  const sand = add(new THREE.PlaneGeometry(200, 60), lam(0xe2d3a6), 0, 0.05, 36); sand.rotation.x = -Math.PI / 2;
-  const plank = lam(0x8a6a48), post = lam(0x5a4430);
-  add(new THREE.BoxGeometry(3, 0.25, 12), plank, SEA.dock.x, 0.45, SEA.dock.z + 6);
-  for (const dz of [0, 4, 8, 12]) for (const dx of [-1.3, 1.3]) add(new THREE.CylinderGeometry(0.14, 0.14, 1.6), post, SEA.dock.x + dx, 0, SEA.dock.z + dz);
-  const tent = new THREE.Group(); tent.position.set(-8, 0, 15); scene.add(tent);
-  add(new THREE.BoxGeometry(7, 0.18, 5), lam(0xf4f1e6), 0, 2.6, 0, tent);
-  for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(1.1, 0.2, 5.04), lam(ACC), -2.4 + i * 2.4, 2.62, 0, tent);
-  for (const [x, z] of [[-3.3, -2.3], [3.3, -2.3], [-3.3, 2.3], [3.3, 2.3]]) add(new THREE.CylinderGeometry(0.08, 0.08, 2.6), post, x, 1.3, z, tent);
-  for (let i = 0; i < 8; i++) add(new THREE.BoxGeometry(0.9, 0.5, 0.6), lam(0x7a8a9a), -2.5 + (i % 4) * 1.1, 0.3 + Math.floor(i / 4) * 0.5, -1, tent);
-  // 燈塔（塭港堆）
-  const lt = new THREE.Group(); lt.position.set(14, 0, 18); scene.add(lt);
-  const steel = lam(0x9aa4ac);
-  for (const [x, z] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) { const c = add(new THREE.CylinderGeometry(0.07, 0.1, 9), steel, x * 0.7, 4.5, z * 0.7, lt); c.rotation.set(-z * 0.06, 0, x * 0.06); }
-  add(new THREE.BoxGeometry(1.2, 0.9, 1.2), lam(0xffffff), 0, 9.2, 0, lt);
-  add(new THREE.BoxGeometry(1.3, 0.25, 1.3), lam(0xc83a2a), 0, 9.8, 0, lt);
-  // 淺灘：沙色內圈＋淺水外圈（跟著退潮變大）
-  const shoalMs = L.shoals.map(sh => {
-    const rim = add(new THREE.CircleGeometry(1, 40), lam(0x9ad0d8, { transparent: true, opacity: 0.75 }), sh.x, 0.02, sh.z); rim.rotation.x = -Math.PI / 2;
-    const s = add(new THREE.CircleGeometry(1, 40), lam(0xdcc995), sh.x, 0.04, sh.z); s.rotation.x = -Math.PI / 2;
-    return { s, rim, sh };
-  });
-  // 蚵棚竹架：竹竿（instanced）＋橫桿＋旗子
-  const poleGeo = new THREE.CylinderGeometry(0.07, 0.08, 2.6);
-  const polePos: [number, number][] = [];
-  L.rows.forEach(r => {
-    const len = Math.hypot(r.bx - r.ax, r.bz - r.az), n = Math.max(2, Math.ceil(len / 3.2)) + 1;
-    const nx = -(r.bz - r.az) / len, nz = (r.bx - r.ax) / len;
-    for (let k = 0; k < n; k++) { const f = k / (n - 1), x = r.ax + (r.bx - r.ax) * f, z = r.az + (r.bz - r.az) * f; polePos.push([x + nx * 0.6, z + nz * 0.6], [x - nx * 0.6, z - nz * 0.6]); }
-    for (const sgn of [1, -1]) {
-      const bar = add(new THREE.BoxGeometry(len, 0.08, 0.08), lam(0xb89a5a), (r.ax + r.bx) / 2 + nx * 0.6 * sgn, 1.15, (r.az + r.bz) / 2 + nz * 0.6 * sgn);
-      bar.rotation.y = -Math.atan2(r.bz - r.az, r.bx - r.ax);
-    }
-    const flagM = lam(r.owned ? 0xd04030 : ACC, { side: THREE.DoubleSide });
-    for (const [x, z] of [[r.ax, r.az], [r.bx, r.bz]]) {
-      add(new THREE.CylinderGeometry(0.05, 0.05, 3.6), post, x, 1.8, z);
-      const f = add(new THREE.PlaneGeometry(1.1, 0.6), flagM, x + 0.55, 3.2, z); f.rotation.y = 0.3;
-    }
-    if (r.owned) { // 「私人蚵棚」牌子
-      const tx = document.createElement('canvas'); tx.width = 256; tx.height = 96; const c = tx.getContext('2d')!;
-      c.fillStyle = '#fff'; c.fillRect(0, 0, 256, 96); c.strokeStyle = '#d04030'; c.lineWidth = 8; c.strokeRect(4, 4, 248, 88);
-      c.fillStyle = '#b02a20'; c.font = 'bold 46px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('私人蚵棚', 128, 50);
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(tx), fog: true })); sp.scale.set(3, 1.1, 1); sp.position.set((r.ax + r.bx) / 2, 2.6, (r.az + r.bz) / 2); scene.add(sp);
-    }
-  });
-  const poles = new THREE.InstancedMesh(poleGeo, lam(0xc8ab6a), polePos.length);
-  const d = new THREE.Object3D();
-  polePos.forEach(([x, z], i) => { d.position.set(x, 0.3, z); d.rotation.set((Math.random() - 0.5) * 0.08, 0, (Math.random() - 0.5) * 0.08); d.updateMatrix(); poles.setMatrixAt(i, d.matrix); });
-  scene.add(poles);
-  // 蚵串（instanced；拉走後縮成 0）
-  const strMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.16, 1, 7), lam(0xffffff), L.strs.length);
-  L.strs.forEach((s, i) => { setStr(strMesh, i, s, true); strMesh.setColorAt(i, new THREE.Color(s.w === 3 ? 0x4a4438 : s.w === 2 ? 0x6a6252 : 0x8a826e)); });
-  scene.add(strMesh);
-  const ring = add(new THREE.TorusGeometry(1, 0.08, 6, 28), new THREE.MeshBasicMaterial({ color: ACC }), 0, 0.15, 0); ring.rotation.x = -Math.PI / 2; ring.visible = false;
-  // 漁筏
-  const boatG = new THREE.Group(); scene.add(boatG);
-  const hull = lam(0xe8e4d8), trim = lam(ACC);
-  add(new THREE.BoxGeometry(1.9, 0.4, 3.6), hull, 0, 0.2, 0, boatG);
-  add(new THREE.BoxGeometry(1.95, 0.12, 3.65), trim, 0, 0.42, 0, boatG);
-  const bow = add(new THREE.CylinderGeometry(0.95, 0.95, 0.4, 3, 1), hull, 0, 0.2, -1.8, boatG); bow.rotation.y = Math.PI / 6; bow.scale.set(1, 1, 0.55);
-  add(new THREE.BoxGeometry(0.45, 0.6, 0.5), lam(0x30343a), 0, 0.55, 1.95, boatG);
-  add(new THREE.BoxGeometry(0.5, 0.7, 0.4), lam(0xf06a1a), 0.35, 0.8, 1.2, boatG); // 救生衣的人
-  add(new THREE.BoxGeometry(0.36, 0.36, 0.36), lam(0xe8c09a), 0.35, 1.35, 1.2, boatG);
-  add(new THREE.CylinderGeometry(0.32, 0.32, 0.1, 10), lam(0xe0c860), 0.35, 1.58, 1.2, boatG);
-  const stack = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.32, 0.5), lam(0x5a5446), 12); stack.count = 0; boatG.add(stack);
-  return { water, shoalMs, strMesh, ring, boatG, stack };
-}
-function setStr(m: THREE.InstancedMesh, i: number, s: Str, vis: boolean) {
-  const d = new THREE.Object3D(); const h = 0.8 + 0.35 * s.w;
-  d.position.set(s.x, 1.1 - h / 2 + 0.2, s.z); d.scale.set(vis ? 0.75 + 0.2 * s.w : 0, vis ? h : 0, vis ? 0.75 + 0.2 * s.w : 0); d.updateMatrix(); m.setMatrixAt(i, d.matrix); m.instanceMatrix.needsUpdate = true;
+function buildWorld(scene: THREE.Scene, L: Layout, rng: Rng, coarse: boolean) {
+  const fog = scene.fog as THREE.Fog;
+  const water = makeWater(scene, makeHeightMap(L, rng), coarse, { c: fog.color, n: fog.near, f: fog.far });
+  makeShore(scene, rng);
+  const farm = makeFarms(scene, L, rng);
+  makeFlags(scene, L);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.08, 6, 28), new THREE.MeshBasicMaterial({ color: ACC })); ring.rotation.x = -Math.PI / 2; ring.visible = false; scene.add(ring);
+  const me = makeRaft(scene, { trim: ACC, crew: ['me'] });
+  const rv = makeRaft(scene, { trim: 0xc0502a, crew: ['abo', 'apo'] });
+  return { water, farm, ring, me, rv, fx: makeFx(scene, coarse ? 110 : 160), mfx: makeMortarFx(scene) };
 }
 
 // ---------- 輸入 ----------
@@ -259,7 +220,7 @@ const SCOLD = ['欸！彼排是阮兜的蚵棚啦！', '閣偷拉？莫閣來啊
 function finishPull(R: Run, s: Str) {
   const owned = R.L.rows[s.row].owned;
   if (R.b.load + s.w > SEA.cap) { toast('船滿了，載不下這串；先丟一串或回碼頭', 1.8); return; }
-  s.taken = true; setStr(R.strMesh, R.L.strs.indexOf(s), s, false);
+  s.taken = true; s.by = 'me'; R.farm.hide(R.L.strs.indexOf(s));
   const c = strContent(s.w, R.rng); c.owned = owned; R.loads.push(c); R.b.load += s.w;
   R.o.sfx?.('got');
   if (owned) {
@@ -293,6 +254,7 @@ function teardown() {
   cancelAnimationFrame(R.raf);
   removeEventListener('keydown', R.onKey, true); removeEventListener('keyup', R.onKeyUp, true); removeEventListener('resize', R.onResize); removeEventListener('blur', R.onBlur);
   R.scene.traverse(o => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); const mm = m.material as THREE.Material | THREE.Material[] | undefined; (Array.isArray(mm) ? mm : mm ? [mm] : []).forEach(x => { (x as THREE.MeshBasicMaterial).map?.dispose(); x.dispose(); }); });
+  try { (R.water.mat.uniforms.uMap.value as THREE.Texture).dispose(); (R.scene.background as THREE.Texture | null)?.dispose?.(); } catch { /* */ }
   R.renderer.dispose(); try { R.renderer.forceContextLoss(); } catch { /* */ }
   R.root.remove(); S = null;
 }
@@ -334,6 +296,7 @@ function tick(R: Run, dt: number) {
   if (st.justGrounded) { R.o.sfx?.('ground'); toast('擱淺了！船太重卡在淺灘，丟幾串蚵才走得動', 3); }
   if (st.shoal && !R.shoalNow && !b.grounded) toast('船底刮到沙了，淺灘開不快', 1.4);
   R.shoalNow = st.shoal;
+  rivalTick(R, dt, left);
   // 拉蚵串／靠岸
   const dockD = Math.hypot(b.x - SEA.dock.x, b.z - SEA.dock.z);
   const atDock = dockD < SEA.dockR && R.t > 3;
@@ -347,6 +310,46 @@ function tick(R: Run, dt: number) {
     if (R.pullP >= 1) { R.pullP = 0; finishPull(R, s); R.pullTarget = null; }
   } else if (!R.pullOn) R.pullP = Math.max(0, R.pullP - dt * 1.5);
   hud(R, ebb, left, s, atDock, slow, dt);
+}
+
+const RIVAL_TAKE = ['阿伯：「這串是我的啦！」', '阿伯搶先拉走一串好蚵', '阿伯：「少年仔，慢一步喔！」'];
+const APO_LINES = ['阿婆：「看我的蚵仔砲！」', '阿婆：「閃較遠咧！」', '阿婆：「莫搶阮的蚵仔！」'];
+function rivalTick(R: Run, dt: number, left: number) {
+  const b = R.b, rv = R.rival;
+  R.bumpT = Math.max(0, R.bumpT - dt); R.throwT = Math.max(0, R.throwT - dt); R.hitT = Math.max(0, R.hitT - dt);
+  if (R.rivalOn) {
+    const took = stepRival(rv, R.L, b, left, dt, R.rng);
+    if (took) {
+      R.farm.hide(R.L.strs.indexOf(took));
+      const mine = R.pullTarget === took;
+      if (mine) { R.pullTarget = null; R.pullP = 0; }
+      if (mine || Math.hypot(took.x - b.x, took.z - b.z) < 16) { R.o.sfx?.('rival'); toast(mine ? '阿伯搶先把你正在拉的那串拉走了！' : RIVAL_TAKE[Math.floor(R.rng() * RIVAL_TAKE.length)], 2); }
+    }
+    if (bumpBoats(b, rv) && R.bumpT <= 0) { R.bumpT = 2; R.o.sfx?.('bump'); toast(rv.mode === 'block' ? '阿伯故意擋你的路！' : '撞到阿伯的船了', 1.6); }
+  }
+  // 阿婆的蚵仔迫擊砲：一次最多一發，預告圈到落地前都看得到
+  R.shellCd -= dt;
+  const atDock = Math.hypot(b.x - SEA.dock.x, b.z - SEA.dock.z) < SEA.dockR + 3;
+  if (R.mortarOn && R.rivalOn && R.shellCd <= 0 && !R.shells.length && rv.mode !== 'wait' && rv.mode !== 'home' && !b.grounded && !atDock) {
+    const sh = aimShell(rv, b, R.rng);
+    if (sh) {
+      R.shells.push(sh); R.throwT = 0.5; R.o.sfx?.('launch');
+      R.shellCd = SEA.mortarCdMin + R.rng() * (SEA.mortarCdMax - SEA.mortarCdMin);
+      if (R.rng() < 0.35) toast(APO_LINES[Math.floor(R.rng() * APO_LINES.length)], 1.4);
+    } else R.shellCd = 0.5;
+  }
+  for (let i = R.shells.length - 1; i >= 0; i--) {
+    const sh = R.shells[i]; sh.t += dt;
+    if (sh.t < sh.dur) continue;
+    R.shells.splice(i, 1); R.mfx.hide(i);
+    for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; R.fx.spawn(sh.tx, sh.tz, { vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 4 + R.rng() * 3, y: 0.3, life: 0.9, s0: 0.5, s1: 1.4, a: 0.7 }); }
+    R.fx.spawn(sh.tx, sh.tz, { life: 1.2, s0: 1, s1: SEA.mortarR * 2.6, a: 0.6 });
+    if (shellHits(sh, b)) {
+      b.slowT = SEA.hitSlowT; R.pullP = Math.max(0, R.pullP - SEA.hitPullLoss); R.hitT = 0.5; R.shellCd += SEA.mortarHitCd;
+      R.o.sfx?.('hit'); navigator.vibrate?.([30, 40, 60]);
+      toast(`被蚵仔砲打中！船速減半 ${SEA.hitSlowT} 秒`, 2);
+    } else R.o.sfx?.('splash');
+  }
 }
 
 function hud(R: Run, ebb: number, left: number, s: Str | null, atDock: boolean, slow: boolean, dt: number) {
@@ -378,36 +381,70 @@ function hud(R: Run, ebb: number, left: number, s: Str | null, atDock: boolean, 
   A.classList.toggle('on', show); A.classList.toggle('warn', warn); A.classList.toggle('dis', dis); A.classList.toggle('dock', atDock);
   A.style.setProperty('--p', `${Math.round(R.pullP * 100)}%`);
   if (R.toastT > 0) { R.toastT -= dt; if (R.toastT <= 0) E.seaToast.classList.remove('on'); }
+  const rv = R.rival;
+  const rvTxt = !R.rivalOn ? '' : rv.mode === 'wait' ? '阿伯準備出港' : `阿伯拉走 ${rv.got} 串${rv.mode === 'home' ? '・回港了' : rv.mode === 'block' ? '・擋你的路' : ''}`;
+  if (E.seaRv.textContent !== rvTxt) E.seaRv.textContent = rvTxt;
+  (E.seaRv.parentElement as HTMLElement).style.display = R.rivalOn ? '' : 'none';
+  E.seaSlow.classList.toggle('on', b.slowT > 0);
+  if (b.slowT > 0) E.seaSlowT.textContent = `被蚵仔砲打中・減速 ${b.slowT.toFixed(1)} 秒`;
+  E.seaHitFx.classList.toggle('on', R.hitT > 0);
 }
 
+const _d = new THREE.Object3D();
+function placeRaft(rf: Raft, x: number, z: number, h: number, lf: number, wv: number, t: number, v: number, tilt = 0) {
+  rf.g.position.set(x, 0.05 - 0.22 * lf + Math.sin(t * 2.1 + x) * 0.05 * (1 + 4 * wv), z);
+  rf.g.rotation.set(Math.sin(t * 1.7 + z) * 0.03 + wv * Math.sin(t * 6) * 0.12 - Math.min(0.06, Math.abs(v) * 0.008), h, Math.sin(t * 1.3) * 0.04 + wv * Math.sin(t * 5) * 0.18 + tilt);
+  rf.prop.rotation.z += v * 0.12;
+}
+function wake(R: Run, x: number, z: number, h: number, v: number) {
+  if (Math.abs(v) < 0.8) return;
+  const fx = -Math.sin(h), fz = -Math.cos(h), sx = Math.cos(h), sz = -Math.sin(h), k = Math.min(1, Math.abs(v) / SEA.maxSpd);
+  const bx = x - fx * 2.6, bz = z - fz * 2.6;
+  R.fx.spawn(bx, bz, { vx: -fx * 1.2, vz: -fz * 1.2, life: 1.6, s0: 0.7, s1: 2.4 + k, a: 0.32 * k + 0.1 });
+  for (const sg of [1, -1]) R.fx.spawn(x + fx * 1.6 + sx * sg * 0.9, z + fz * 1.6 + sz * sg * 0.9, { vx: sx * sg * 1.6, vz: sz * sg * 1.6, life: 1.2, s0: 0.4, s1: 1.6, a: 0.22 * k });
+}
 function draw(R: Run, t: number) {
-  const b = R.b, ebb = ebbOf(R.t, R.L.len);
-  // 退潮：水面下降，淺灘變大
-  R.water.position.y = -0.35 * ebb;
-  for (const m of R.shoalMs) { const r = shoalR(m.sh, ebb); m.s.scale.setScalar(r); m.rim.scale.setScalar(r * 1.45); m.s.position.y = 0.04; }
+  const t0 = performance.now();
+  const b = R.b, ebb = ebbOf(R.t, R.L.len), dt = Math.min(0.05, Math.max(0, t - (R.tt || t))); R.tt = t;
+  R.water.set(t, ebb);
   const lf = b.load / SEA.cap;
   const wv = R.wave > 0 ? Math.sin(Math.PI * R.wave / SEA.waveLen) : 0;
-  R.boatG.position.set(b.x, 0.12 - 0.32 * lf - 0.35 * ebb + Math.sin(t * 2.1) * 0.05 * (1 + 4 * wv), b.z);
-  R.boatG.rotation.set(Math.sin(t * 1.7) * 0.03 + wv * Math.sin(t * 6) * 0.12, b.h, Math.sin(t * 1.3) * 0.04 + wv * Math.sin(t * 5) * 0.18);
-  if (b.grounded) R.boatG.rotation.z = 0.08;
+  placeRaft(R.me, b.x, b.z, b.h, lf, wv, t, b.v, b.grounded ? 0.08 : 0);
+  // 打中：船身閃紅
+  R.me.flash.color.setHex(b.slowT > 0 && Math.sin(t * 18) > 0 ? 0xf0a090 : 0xe9ece8);
+  const rv = R.rival;
+  R.rv.g.visible = R.rivalOn;
+  if (R.rivalOn) {
+    placeRaft(R.rv, rv.x, rv.z, rv.h, rv.load / SEA.cap, wv, t + 1.3, rv.v);
+    if (R.rv.arm) R.rv.arm.rotation.x = R.throwT > 0 ? -2.6 * Math.sin(Math.PI * (1 - R.throwT / 0.5)) : Math.sin(t * 2) * 0.1;
+  }
   // 船上的蚵串堆
-  const n = Math.min(12, R.loads.length); R.stack.count = n;
-  const d = new THREE.Object3D();
-  for (let i = 0; i < n; i++) { d.position.set(-0.45 + (i % 3) * 0.45, 0.6 + Math.floor(i / 6) * 0.32, -1.1 + (Math.floor(i / 3) % 2) * 0.55); d.scale.setScalar(0.8 + 0.2 * R.loads[i].w); d.updateMatrix(); R.stack.setMatrixAt(i, d.matrix); }
-  R.stack.instanceMatrix.needsUpdate = true;
+  const n = Math.min(12, R.loads.length); R.me.stack.count = n;
+  for (let i = 0; i < n; i++) { _d.position.set(-0.5 + (i % 3) * 0.5, 0.42 + Math.floor(i / 6) * 0.3, -0.9 + (Math.floor(i / 3) % 2) * 0.55); _d.rotation.set(0, i * 0.7, 0); _d.scale.setScalar(0.8 + 0.2 * R.loads[i].w); _d.updateMatrix(); R.me.stack.setMatrixAt(i, _d.matrix); }
+  R.me.stack.instanceMatrix.needsUpdate = true;
+  const rn = Math.min(12, rv.got); R.rv.stack.count = rn;
+  for (let i = 0; i < rn; i++) { _d.position.set(0.5 - (i % 3) * 0.45, 0.42 + Math.floor(i / 6) * 0.3, -1 + (Math.floor(i / 3) % 2) * 0.5); _d.rotation.set(0, i, 0); _d.scale.setScalar(1); _d.updateMatrix(); R.rv.stack.setMatrixAt(i, _d.matrix); }
+  R.rv.stack.instanceMatrix.needsUpdate = true;
+  // 航跡
+  R.wakeT -= dt;
+  if (R.wakeT <= 0 && !R.ended) { R.wakeT = 0.06; wake(R, b.x, b.z, b.h, b.v); if (R.rivalOn) wake(R, rv.x, rv.z, rv.h, rv.v); }
+  R.fx.tick(dt);
+  // 迫擊砲預告圈
+  for (let i = 0; i < 3; i++) { const sh = R.shells[i]; if (sh) R.mfx.show(i, sh, Math.min(1, sh.t / sh.dur), SEA.mortarR, t); else R.mfx.hide(i); }
   // 目標圈
   const s = R.pullTarget;
   R.ring.visible = !!s && !R.ended;
-  if (s) { R.ring.position.set(s.x, 0.15, s.z); R.ring.scale.setScalar(0.9 + 0.12 * Math.sin(t * 6)); ((R.ring.material) as THREE.MeshBasicMaterial).color.setHex(R.L.rows[s.row].owned ? 0xd04030 : 0xffffff); }
+  if (s) { R.ring.position.set(s.x, 0.3, s.z); R.ring.scale.setScalar(0.9 + 0.12 * Math.sin(t * 6)); ((R.ring.material) as THREE.MeshBasicMaterial).color.setHex(R.L.rows[s.row].owned ? 0xd04030 : 0xffffff); }
   // 鏡頭：船後上方
   const fx = -Math.sin(b.h), fz = -Math.cos(b.h);
   const back = 10 + 3 * lf, up = 7;
   const tx = b.x - fx * back, tz = b.z - fz * back;
-  R.cam.position.x += (tx - R.cam.position.x) * 0.08; R.cam.position.z += (tz - R.cam.position.z) * 0.08; R.cam.position.y = up + wv * Math.sin(t * 9) * 0.15;
+  R.cam.position.x += (tx - R.cam.position.x) * 0.08; R.cam.position.z += (tz - R.cam.position.z) * 0.08; R.cam.position.y = up + wv * Math.sin(t * 9) * 0.15 + (R.hitT > 0 ? Math.sin(t * 50) * 0.12 : 0);
   if (R.t < 0.05) R.cam.position.set(tx, up, tz);
   R.cam.lookAt(b.x + fx * 6, 0, b.z + fz * 6);
   R.renderer.render(R.scene, R.cam);
-  R.mapT -= 1 / 60; if (R.mapT <= 0) { R.mapT = 0.12; drawMap(R, ebb); }
+  R.mapT -= dt; if (R.mapT <= 0) { R.mapT = 0.12; drawMap(R, ebb); }
+  R.perf.push(performance.now() - t0); if (R.perf.length > 120) R.perf.shift();
 }
 
 function drawMap(R: Run, ebb: number) {
@@ -422,6 +459,8 @@ function drawMap(R: Run, ebb: number) {
   c.lineWidth = 2.2;
   for (const r of R.L.rows) { c.strokeStyle = r.owned ? '#d04030' : '#1d3f60'; c.beginPath(); c.moveTo(px(r.ax), pz(r.az)); c.lineTo(px(r.bx), pz(r.bz)); c.stroke(); }
   c.fillStyle = '#3a2a1a'; c.fillRect(px(SEA.dock.x) - 3, pz(SEA.dock.z), 6, 8);
+  if (R.rivalOn) { const rv = R.rival; c.save(); c.translate(px(rv.x), pz(rv.z)); c.rotate(-rv.h); c.fillStyle = '#e07a3a'; c.strokeStyle = '#5a2a10'; c.lineWidth = 1; c.beginPath(); c.moveTo(0, -6); c.lineTo(4, 5); c.lineTo(-4, 5); c.closePath(); c.fill(); c.stroke(); c.restore(); }
+  for (const sh of R.shells) { c.strokeStyle = '#d04030'; c.lineWidth = 1.5; c.beginPath(); c.arc(px(sh.tx), pz(sh.tz), Math.max(3, SEA.mortarR * sx), 0, Math.PI * 2); c.stroke(); }
   const b = R.b; c.save(); c.translate(px(b.x), pz(b.z)); c.rotate(-b.h); c.fillStyle = b.grounded ? '#d04030' : '#fff'; c.strokeStyle = '#1d3f60'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(0, -6); c.lineTo(4, 5); c.lineTo(-4, 5); c.closePath(); c.fill(); c.stroke(); c.restore();
 }

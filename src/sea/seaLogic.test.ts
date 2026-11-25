@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { SEA, mulberry32, makeLayout, newBoat, stepBoat, groundLim, finishHaul, strContent, shoalR, nearestStr } from './seaLogic.ts';
+import { SEA, mulberry32, makeLayout, newBoat, stepBoat, groundLim, finishHaul, strContent, shoalR, nearestStr, newRival, stepRival, bumpBoats, aimShell, shellHits } from './seaLogic.ts';
 
 test('每趟蚵棚／淺灘／退潮時間都不一樣，但都在範圍內', () => {
   const a = makeLayout(mulberry32(1)), b = makeLayout(mulberry32(2));
@@ -49,4 +49,53 @@ test('船邊才拉得到蚵串', () => {
   assert.equal(nearestStr(L, bt), null);
   const s = L.strs[0]; bt.x = s.x; bt.z = s.z + 1.5;
   assert.ok(nearestStr(L, bt));
+});
+
+test('阿伯會去拉自己挑的蚵串，拉走就沒了（先搶先贏），不碰私人蚵棚', () => {
+  const rng = mulberry32(11), L = makeLayout(rng), me = newBoat(), r = newRival(rng);
+  let took = 0;
+  for (let i = 0; i < 20 * 120; i++) { const s = stepRival(r, L, me, 150, 0.05, rng); if (s) { took++; assert.equal(s.taken, true); assert.equal(s.by, 'rival'); assert.equal(L.rows[s.row].owned, false); } }
+  assert.ok(took >= 2, `兩分鐘至少拉走兩串（實際 ${took}）`);
+  assert.equal(r.got, took);
+});
+
+test('快退潮時阿伯回港', () => {
+  const rng = mulberry32(5), L = makeLayout(rng), me = newBoat(), r = newRival(rng);
+  for (let i = 0; i < 100; i++) stepRival(r, L, me, 150, 0.05, rng);
+  stepRival(r, L, me, SEA.rivalHomeAt - 1, 0.05, rng);
+  assert.equal(r.mode, 'home');
+});
+
+test('兩船相撞會推開、都減速', () => {
+  const a = { x: 0, z: 0, v: 6, h: 0 }, b = { x: 1, z: 2, v: 5, h: 0 };
+  assert.ok(bumpBoats(a, b));
+  assert.ok(a.x < 0 && b.x > 1);
+  assert.ok(a.v < 6 && b.v < 5);
+});
+
+test('迫擊砲：射程外不射；預告時間在範圍內；停著不動會被打中，看到預告就開走能閃掉', () => {
+  const rng = mulberry32(9);
+  const me = newBoat(); me.x = 0; me.z = -40; me.v = 0;
+  assert.equal(aimShell({ x: 0, z: -40 - SEA.mortarMax - 5 }, me, rng), null);
+  assert.equal(aimShell({ x: 0, z: -41 }, me, rng), null);
+  const L = { len: 150, shoals: [], rows: [], strs: [] };
+  let hitStill = 0, hitDodge = 0;
+  for (let k = 0; k < 40; k++) {
+    for (const dodge of [false, true]) {
+      const b = newBoat(); b.x = 0; b.z = -40; b.v = 0; b.load = SEA.cap * 0.6;
+      const sh = aimShell({ x: 20, z: -40 }, b, rng)!;
+      assert.ok(sh.dur >= SEA.mortarT0 && sh.dur <= SEA.mortarT0 + SEA.mortarMax * SEA.mortarTk + 1e-9);
+      // 反應 0.3 秒後全速往前開（載六成重）
+      for (let t = 0; t < sh.dur; t += 0.05) stepBoat(b, L, 0, dodge && t > 0.3 ? 1 : 0, 0, 0.05);
+      if (shellHits(sh, b)) { if (dodge) hitDodge++; else hitStill++; }
+    }
+  }
+  assert.ok(hitStill >= 30, `停著大多會中（${hitStill}/40）`);
+  assert.ok(hitDodge <= 8, `開走大多閃得掉（${hitDodge}/40）`);
+});
+
+test('被打中會減速一段時間', () => {
+  const L = { len: 150, shoals: [], rows: [], strs: [] };
+  const run = (slow: boolean) => { const b = newBoat(); b.slowT = slow ? 99 : 0; for (let i = 0; i < 100; i++) stepBoat(b, L, 0, 1, 0, 0.05); return b.v; };
+  assert.ok(run(true) <= run(false) * SEA.hitSlow + 1e-6);
 });

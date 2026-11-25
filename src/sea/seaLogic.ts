@@ -24,6 +24,19 @@ export const SEA = {
   dockR: 7, minPile: 10,
   bounds: { x0: -62, x1: 62, z0: -128, z1: 6 },
   dock: { x: 0, z: 2 },
+  shoalFall: 2.55, // 畫面用：淺灘高度場 = 1 - 距離 /(r0 × 這個)，要大於 1 + shoalGrow
+  // 對手：船長阿伯的漁筏（載著阿婆）
+  rivalSpd: 6.2, rivalTurn: 1.5, rivalPullK: 1.15, rivalCap: 16, rivalStart: 3, // 極速、轉向、拉串時間倍率、載重、出港延遲
+  rivalGrabNear: 0.4, // 多少機率專挑玩家附近的好串來搶
+  rivalBlockMin: 16, rivalBlockMax: 26, rivalBlockLen: 3.5, rivalBlockAhead: 8, // 切過／擋路：間隔、持續、擋在玩家前方幾公尺
+  rivalHomeAt: 28, // 退潮剩幾秒阿伯就回港
+  bump: 0.5, boatR: 1.1, boatHalf: 1.3, hitPad: 0.9, // 兩船相撞：速度 ×0.5；船身＝前後兩個半徑 1.1 的圓（中心離船中 1.3）；迫擊砲判定多算的船身半徑
+  // 阿婆的蚵仔迫擊砲
+  mortarStart: 14, mortarCdMin: 4.5, mortarCdMax: 7.5, mortarHitCd: 2.5, // 開始時間、兩發間隔、打中後多給的喘息
+  mortarMin: 5, mortarMax: 36, // 射程
+  mortarT0: 1.7, mortarTk: 0.025, // 預告（飛行）時間 = T0 + 距離 × Tk → 約 1.8～2.6 秒
+  mortarLead: 0.8, mortarScatter: 2, mortarR: 2.2, // 瞄準提前量（0＝瞄現在位置、1＝完全預判）、散布、落點半徑
+  hitSlow: 0.5, hitSlowT: 3.5, hitPullLoss: 0.25, // 打中：極速 ×0.5、持續秒數、拉串進度掉多少
 } as const;
 
 export type Rng = () => number;
@@ -33,7 +46,7 @@ export function mulberry32(seed: number): Rng {
 }
 
 export type Shoal = { x: number; z: number; r0: number };
-export type Str = { x: number; z: number; w: 1 | 2 | 3; row: number; taken: boolean };
+export type Str = { x: number; z: number; w: 1 | 2 | 3; row: number; taken: boolean; by?: 'me' | 'rival' };
 export type Row = { ax: number; az: number; bx: number; bz: number; owned: boolean };
 export type Layout = { len: number; shoals: Shoal[]; rows: Row[]; strs: Str[] };
 
@@ -85,8 +98,8 @@ export function inShoal(L: Layout, x: number, z: number, ebb: number) {
   return L.shoals.some(s => Math.hypot(s.x - x, s.z - z) < shoalR(s, ebb));
 }
 
-export type Boat = { x: number; z: number; h: number; v: number; load: number; grounded: boolean; px: number; pz: number };
-export const newBoat = (): Boat => ({ x: SEA.dock.x, z: SEA.dock.z - 3, h: 0, v: 0, load: 0, grounded: false, px: 0, pz: 0 });
+export type Boat = { x: number; z: number; h: number; v: number; load: number; grounded: boolean; px: number; pz: number; slowT: number };
+export const newBoat = (): Boat => ({ x: SEA.dock.x, z: SEA.dock.z - 3, h: 0, v: 0, load: 0, grounded: false, px: 0, pz: 0, slowT: 0 });
 
 /** 一步船的物理；回傳這一步有沒有「剛擱淺」 */
 export function stepBoat(b: Boat, L: Layout, ebb: number, thr: number, steer: number, dt: number): { justGrounded: boolean; shoal: boolean } {
@@ -95,7 +108,8 @@ export function stepBoat(b: Boat, L: Layout, ebb: number, thr: number, steer: nu
   if (sh && lf > groundLim(ebb) + 1e-6) { if (!b.grounded) justGrounded = true; b.grounded = true; }
   else b.grounded = false;
   if (b.grounded) { b.v *= Math.exp(-8 * dt); if (Math.abs(b.v) < 0.05) b.v = 0; return { justGrounded, shoal: sh }; }
-  const maxV = SEA.maxSpd * (1 - SEA.loadSlow * lf) * (sh ? SEA.shoalSlow : 1);
+  if (b.slowT > 0) b.slowT = Math.max(0, b.slowT - dt);
+  const maxV = SEA.maxSpd * (1 - SEA.loadSlow * lf) * (sh ? SEA.shoalSlow : 1) * (b.slowT > 0 ? SEA.hitSlow : 1);
   const target = thr >= 0 ? thr * maxV : thr * maxV * SEA.rev;
   const dv = target - b.v, step = SEA.accel * (1 - 0.4 * lf) * dt;
   b.v += Math.abs(dv) <= step ? dv : Math.sign(dv) * step;
@@ -103,7 +117,11 @@ export function stepBoat(b: Boat, L: Layout, ebb: number, thr: number, steer: nu
   b.h -= steer * turnK * dt * (b.v < -0.05 ? -1 : 1);
   b.x += (-Math.sin(b.h) * b.v + b.px) * dt;
   b.z += (-Math.cos(b.h) * b.v + b.pz) * dt;
-  // 撞到蚵棚竹架：推開、減速
+  pushRows(b, L);
+  return { justGrounded, shoal: sh };
+}
+/** 撞到蚵棚竹架：推開、減速；不出邊界 */
+export function pushRows(b: { x: number; z: number; v: number }, L: Layout) {
   for (const r of L.rows) {
     const vx = r.bx - r.ax, vz = r.bz - r.az, l2 = vx * vx + vz * vz;
     const f = Math.max(0, Math.min(1, ((b.x - r.ax) * vx + (b.z - r.az) * vz) / l2));
@@ -112,8 +130,95 @@ export function stepBoat(b: Boat, L: Layout, ebb: number, thr: number, steer: nu
   }
   const B = SEA.bounds;
   b.x = Math.min(B.x1, Math.max(B.x0, b.x)); b.z = Math.min(B.z1, Math.max(B.z0, b.z));
-  return { justGrounded, shoal: sh };
 }
+
+// ---------- 對手：船長阿伯 ----------
+export type Rival = { x: number; z: number; h: number; v: number; load: number; mode: 'wait' | 'go' | 'pull' | 'block' | 'home'; target: Str | null; pullP: number; blockT: number; blockNext: number; got: number; wait: number };
+export const newRival = (rng: Rng): Rival => ({ x: SEA.dock.x + 6, z: SEA.dock.z - 2, h: 0, v: 0, load: 0, mode: 'wait', target: null, pullP: 0, blockT: 0, blockNext: SEA.rivalBlockMin + rng() * (SEA.rivalBlockMax - SEA.rivalBlockMin), got: 0, wait: SEA.rivalStart });
+const angDiff = (a: number, b: number) => { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; };
+/** 阿伯挑下一串：重的、近的優先；有時專搶玩家附近的 */
+export function rivalPick(L: Layout, r: Rival, me: Boat, rng: Rng): Str | null {
+  const free = L.strs.filter(s => !s.taken && !L.rows[s.row].owned);
+  if (!free.length) return null;
+  const grab = rng() < SEA.rivalGrabNear;
+  let best: Str | null = null, bs = -1e9;
+  for (const s of free) {
+    const dMe = Math.hypot(s.x - me.x, s.z - me.z), dR = Math.hypot(s.x - r.x, s.z - r.z);
+    const sc = grab ? s.w * 6 - dMe * 0.8 - dR * 0.1 : s.w * 8 - dR * 0.35;
+    if (sc > bs) { bs = sc; best = s; }
+  }
+  return best;
+}
+/** 一步阿伯；回傳這一步拉走的串（沒有就 null） */
+export function stepRival(r: Rival, L: Layout, me: Boat, left: number, dt: number, rng: Rng): Str | null {
+  let took: Str | null = null;
+  if (r.mode === 'wait') { r.wait -= dt; if (r.wait <= 0) r.mode = 'go'; return null; }
+  if (r.mode !== 'home' && (left <= SEA.rivalHomeAt || r.load >= SEA.rivalCap)) { r.mode = 'home'; r.target = null; }
+  // 擋路：切到玩家船頭前面
+  if (r.mode === 'go' || r.mode === 'pull') {
+    r.blockNext -= dt;
+    const dMe = Math.hypot(me.x - r.x, me.z - r.z);
+    if (r.blockNext <= 0 && Math.abs(me.v) > 3 && dMe < 25 && r.mode === 'go') { r.mode = 'block'; r.blockT = SEA.rivalBlockLen; }
+  }
+  if (r.target?.taken && r.mode !== 'block') { r.target = null; r.pullP = 0; if (r.mode === 'pull') r.mode = 'go'; }
+  let tx = r.x, tz = r.z, spd = 0;
+  if (r.mode === 'block') {
+    r.blockT -= dt;
+    tx = me.x - Math.sin(me.h) * SEA.rivalBlockAhead; tz = me.z - Math.cos(me.h) * SEA.rivalBlockAhead; spd = SEA.rivalSpd * 1.1;
+    if (r.blockT <= 0) { r.mode = 'go'; r.blockNext = SEA.rivalBlockMin + rng() * (SEA.rivalBlockMax - SEA.rivalBlockMin); }
+  } else if (r.mode === 'home') { tx = SEA.dock.x + 7; tz = SEA.dock.z - 3; spd = Math.hypot(tx - r.x, tz - r.z) > 2 ? SEA.rivalSpd : 0; }
+  else {
+    if (!r.target) { r.target = rivalPick(L, r, me, rng); r.pullP = 0; }
+    const s = r.target;
+    if (!s) { spd = 0; }
+    else {
+      const row = L.rows[s.row], l = Math.hypot(row.bx - row.ax, row.bz - row.az) || 1;
+      let nx = -(row.bz - row.az) / l, nz = (row.bx - row.ax) / l;
+      if ((r.x - s.x) * nx + (r.z - s.z) * nz < 0) { nx = -nx; nz = -nz; }
+      tx = s.x + nx * 2; tz = s.z + nz * 2;
+      const d = Math.hypot(tx - r.x, tz - r.z);
+      if (d < 1.4) {
+        r.mode = 'pull'; spd = 0;
+        r.pullP += dt / (pullDur(s.w) * SEA.rivalPullK);
+        if (r.pullP >= 1) { s.taken = true; s.by = 'rival'; r.load += s.w; r.got++; took = s; r.target = null; r.pullP = 0; r.mode = 'go'; }
+      } else { r.mode = 'go'; spd = Math.min(SEA.rivalSpd, 0.8 + d * 0.9); }
+    }
+  }
+  const want = Math.atan2(-(tx - r.x), -(tz - r.z));
+  if (Math.hypot(tx - r.x, tz - r.z) > 0.5) { const da = angDiff(want, r.h); r.h += Math.max(-1, Math.min(1, da)) * SEA.rivalTurn * dt * 1.6; if (Math.abs(da) > 1.2) spd *= 0.5; }
+  r.v += Math.max(-SEA.accel * dt, Math.min(SEA.accel * dt, spd - r.v));
+  r.x += -Math.sin(r.h) * r.v * dt; r.z += -Math.cos(r.h) * r.v * dt;
+  pushRows(r, L);
+  return took;
+}
+/** 兩船相撞：推開、都減速；回傳有沒有撞 */
+type Hull = { x: number; z: number; v: number; h: number };
+export function bumpBoats(a: Hull, b: Hull) {
+  const pts = (o: Hull) => [-1, 1].map(k => [o.x - Math.sin(o.h) * SEA.boatHalf * k, o.z - Math.cos(o.h) * SEA.boatHalf * k]);
+  const m = SEA.boatR * 2; let hit = false;
+  for (const [ax, az] of pts(a)) for (const [bx, bz] of pts(b)) {
+    const dx = ax - bx, dz = az - bz, d = Math.hypot(dx, dz);
+    if (d >= m) continue;
+    const ux = d > 1e-4 ? dx / d : 1, uz = d > 1e-4 ? dz / d : 0, k = (m - d) / 2;
+    a.x += ux * k; a.z += uz * k; b.x -= ux * k; b.z -= uz * k; hit = true;
+  }
+  if (hit) { a.v *= SEA.bump; b.v *= SEA.bump; }
+  return hit;
+}
+
+// ---------- 阿婆的蚵仔迫擊砲 ----------
+export type Shell = { x0: number; z0: number; tx: number; tz: number; t: number; dur: number };
+/** 發射：瞄玩家（帶一點提前量＋散布）；回傳 null 代表這次不射 */
+export function aimShell(from: { x: number; z: number }, me: Boat, rng: Rng): Shell | null {
+  const d = Math.hypot(me.x - from.x, me.z - from.z);
+  if (d < SEA.mortarMin || d > SEA.mortarMax) return null;
+  const dur = SEA.mortarT0 + d * SEA.mortarTk;
+  const vx = -Math.sin(me.h) * me.v, vz = -Math.cos(me.h) * me.v;
+  const a = rng() * Math.PI * 2, sc = Math.sqrt(rng()) * SEA.mortarScatter;
+  return { x0: from.x, z0: from.z, tx: me.x + vx * dur * SEA.mortarLead + Math.cos(a) * sc, tz: me.z + vz * dur * SEA.mortarLead + Math.sin(a) * sc, t: 0, dur };
+}
+/** 落地時有沒有打中（船身算進去） */
+export const shellHits = (s: Shell, me: { x: number; z: number }) => Math.hypot(me.x - s.tx, me.z - s.tz) < SEA.mortarR + SEA.hitPad;
 
 /** 船邊最近、還沒拉的蚵串 */
 export function nearestStr(L: Layout, b: Boat): Str | null {
