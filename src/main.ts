@@ -104,6 +104,7 @@ import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type 
 import { GOLD_SMOKE_TINT, encodeCosmetics } from './plaza/cosmetics';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { registerBrightRenderer, setSceneBrightness, clampBright, BRIGHT_DEF } from './world/sceneBrightness';
+import { seaStart, seaActive, seaDbg, type SeaHaul, type SeaSfx } from './sea/seaRun';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
   $, on, toast, toastTop, dismissToast, initDomToast, tickToast, TOP_SEC,
@@ -1121,6 +1122,12 @@ let holding = false, hold = 0, diff = 1, slowmo = 0, shake = 0, pearlShow = 0;
 /** 手上這顆是不是大蚵 */
 let bigNow = false, dayBig = 0, dayBigTide = 0, tideOnNow = false, tideWarned = false;
 const isWaisan = () => !plazaMode && !isRoomActive() && locNow().id === 'waisan';
+/** 外傘頂洲出海採蚵：第二段的蚵堆（剝完收工）；prevLen＝出海前的班長，下一工還原 */
+let seaRun: { haul: SeaHaul; left: number; bigLeft: number; prevLen: number } | null = null;
+let seaGo = false, seaPrevLen = 0;
+/** 第二段最長多久（安全上限，正常是剝完就收工） */
+const SEA_PILE_CAP = 900;
+const seaPileOn = () => !!seaRun && !plazaMode && !tut && !isRoomActive() && !roomPlay;
 /** 漲潮開始的經過秒數（臨時工按比例提早） */
 const tideAt = () => shiftLen * (WAISAN.tideAt / SHIFT);
 const tideOn = () => tideOnNow && isWaisan();
@@ -1775,6 +1782,9 @@ function applyCrew() {
 }
 updSky(); showLand(); applyCrew(); setInterval(updSky, 30000);
 function startDay() { if (performance.now() < guardUntil) return; inputGuard();
+  const fromSea = seaGo; seaGo = false;
+  if (!fromSea && seaRun) { shiftLen = seaRun.prevLen; seaRun = null; }
+  if (!fromSea && isWaisan() && !tut && !roomPlay && !evRun && !SHOT && shiftLen >= SHIFT) { beginSea(); return; }
   nightShift = isNight(); updSky();
   // 休閒廣場／休閒房也吃夜班加成（地點倍率另關）；單挑同
   $('nightTag').style.display = nightShift ? '' : 'none';
@@ -1792,7 +1802,13 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
   }
   const sidNow = statsSid; const pingT = setInterval(() => { if (tut || state !== 'play' || statsSid !== sidNow || document.hidden) { if (statsSid !== sidNow || state !== 'play') clearInterval(pingT); return; } track('ping'); }, 60_000);
   count = bowlStock = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = apoSteals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra(); dayBig = dayBigTide = 0; tideOnNow = tideWarned = false; bigNow = false; tideReset();
-  if (isWaisan() && !tut) { waisanArrive(); later(0.6, () => toastTop('漁筏靠岸了！上沙洲開工，兩分鐘後漲潮要搶收', TOP_SEC.info)); }
+  if (isWaisan() && !tut) {
+    waisanArrive();
+    const sr = seaPileOn() ? seaRun : null;
+    if (sr) { penalty = sr.haul.fine; later(0.6, () => toastTop(`蚵串卸上工寮：共 ${sr.haul.oy} 顆（大蚵 ${sr.haul.big} 顆），這堆剝完就收工`, TOP_SEC.info)); }
+    else later(0.6, () => toastTop('漁筏靠岸了！上沙洲開工，兩分鐘後漲潮要搶收', TOP_SEC.info));
+  }
+  syncSeaPile();
   plazaStealBanUntil = 0; plazaStealCatches = 0; plazaStealPairCd.clear(); stopPlazaSteal();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   clearPendingFlyers();
@@ -1839,10 +1855,12 @@ function updHud() {
   const hpPct = String(Math.round(hp));
   if (hudPrev.hpPct !== hpPct) { hudPrev.hpPct = hpPct; const hpEl = document.getElementById('hpPct'); if (hpEl) hpEl.textContent = hpPct; }
   const timerLab = $('timer').previousElementSibling as HTMLElement | null;
-  const labTxt = plazaMode || (roomPlay && currentRoomSnap()?.endMode !== 'timed') ? '模式' : '剩餘';
+  const labTxt = plazaMode || (roomPlay && currentRoomSnap()?.endMode !== 'timed') ? '模式' : seaPileOn() ? '蚵堆' : '剩餘';
   if (timerLab && hudPrev.timerLab !== labTxt) { hudPrev.timerLab = labTxt; timerLab.textContent = labTxt; }
   const timerTxt = plazaMode
     ? '休閒'
+    : seaPileOn() && seaRun
+    ? `${seaRun.left + basinOy.length} 顆`
     : roomPlay
     ? (currentRoomSnap()?.endMode === 'timed' ? (() => { const s = roomRemainSec(); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; })() : '好友房')
     : (() => { const s = Math.max(0, Math.ceil(timeLeft)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; })();
@@ -1957,6 +1975,46 @@ function startTide() {
   const up = (WAISAN.bigRateTide - WAISAN.bigRate) / (1 - WAISAN.bigRate);
   for (const m of basinOy) if (!m.userData.big && Math.random() < up) markBig(m);
 }
+/** 出海採蚵第一段：開漁筏拉蚵串，回來帶著蚵堆進工寮（第二段） */
+function seaSfx(k: SeaSfx) {
+  try {
+    if (k === 'got') { tone(660, 0.08, 0.14, 'triangle'); later(0.08, () => tone(990, 0.1, 0.12, 'triangle')); navigator.vibrate?.(20); }
+    else if (k === 'wave') noise(0.6, 500, 0.25);
+    else if (k === 'ground') { noise(0.5, 260, 0.35); navigator.vibrate?.([40, 30, 60]); }
+    else if (k === 'scold') tone(330, 0.18, 0.14, 'square');
+    else if (k === 'warn') { tone(880, 0.12, 0.12, 'triangle'); later(0.18, () => tone(880, 0.12, 0.12, 'triangle')); }
+    else if (k === 'dock') tone(523, 0.18, 0.12, 'triangle');
+    else if (k === 'drop') noise(0.25, 1200, 0.2);
+  } catch { /* */ }
+}
+function beginSea() {
+  seaPrevLen = shiftLen;
+  if (document.pointerLockElement) document.exitPointerLock();
+  state = 'menu'; document.body.classList.remove('tideOn');
+  ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show'));
+  seaStart({
+    sfx: seaSfx,
+    onDone: h => {
+      seaRun = { haul: h, left: h.oy, bigLeft: h.big, prevLen: seaPrevLen };
+      shiftLen = SEA_PILE_CAP; seaGo = true; guardUntil = 0;
+      startDay();
+    },
+    onAbort: () => { shiftLen = seaPrevLen; state = 'menu'; $('overlay').classList.add('show'); try { syncMenuBack(); } catch { /* */ } },
+  });
+}
+/** 第二段：蚵堆＋臉盆都剝完就收工 */
+function seaPileTick() {
+  if (!seaRun || state !== 'play') return;
+  if (seaRun.left <= 0 && !basinOy.length && phase === 'pick') { endReason = 'time'; endDay(); }
+}
+/** 中間的蚵殼山跟著蚵堆變小 */
+let seaPileMod = false;
+function syncSeaPile() {
+  if (seaPileOn() && seaRun) {
+    seaPileMod = true;
+    pile.scale.setScalar(0.3 + 0.7 * Math.min(1, seaRun.left / Math.max(1, seaRun.haul.oy))); pile.visible = seaRun.left > 0;
+  } else if (seaPileMod) { seaPileMod = false; pile.scale.setScalar(1); pile.visible = true; }
+}
 function tideTick(_dt: number) {
   if (state !== 'play' || !isWaisan()) return;
   const el = shiftLen - timeLeft, at = tideAt();
@@ -1971,7 +2029,8 @@ function makeBasinOyster(dd: number) {
   const m = new THREE.Mesh(SHELL_GEOS[Math.floor(Math.random() * 6)], basinShellM(BASIN_SHELL_COLS[dd] ?? BASIN_SHELL_COLS[0]));
   m.scale.setScalar(DIFF[dd].scale * 0.95);
   m.userData.diff = dd;
-  if (!plazaMode && !tut && isWaisan() && Math.random() < (tideOn() ? WAISAN.bigRateTide : WAISAN.bigRate)) markBig(m);
+  if (seaPileOn() && seaRun) { if (seaRun.left > 0 && Math.random() < seaRun.bigLeft / seaRun.left) markBig(m); }
+  else if (!plazaMode && !tut && isWaisan() && Math.random() < (tideOn() ? WAISAN.bigRateTide : WAISAN.bigRate)) markBig(m);
   m.castShadow = true;
   m.renderOrder = 2; // 蓋過殼堆，避免埋進堆裡難認
   const bl: THREE.Mesh[] = []; for (let i = 0; i < BARN_N[dd]; i++) { const b = new THREE.Mesh(BARN_GEO, BARN_MAT); m.add(b); bl.push(b); } placeBarn(bl, dd, 0.04);
@@ -2013,7 +2072,7 @@ function plazaRefillBasin() {
   if (phase === 'pick' && !plazaOnGrill()) hint.textContent = '點臉盆內的蚵仔';
 }
 function fillBasin(animate: boolean) {
-  const n = basinCap();
+  const n = seaPileOn() && seaRun ? Math.min(basinCap(), seaRun.left) : basinCap();
   syncBasinWorld();
   const weights = plazaMode ? plazaScoopWeights() : (newbie() ? [50, 50, 0, 0] : locW());
   // 競速：雙方共用 FairSeed，同一次補盆抽出相同難度序列
@@ -2024,6 +2083,7 @@ function fillBasin(animate: boolean) {
     const gen = basinGen;
     for (let i = 0; i < n; i++) {
       const m = makeBasinOyster(wpick(weights.map(w => ({ w }))));
+      if (seaPileOn() && seaRun) { seaRun.left--; if (m.userData.big) seaRun.bigLeft--; }
       const local = basinSlotLocal(i);
       m.rotation.set(rnd(-0.2, 0.2), rnd(0, 6), rnd(-0.2, 0.2));
       basinOy.push(m);
@@ -2132,6 +2192,7 @@ function grab(m: THREE.Mesh) {
   fly(m, from.clone(), () => worldOf(oyster), 0.3, 0.05, () => { scene.remove(m); noise(0.04, 2500, 0.25); holdOyster(m.userData.diff, !!m.userData.big); });
 }
 function scoop() {
+  if (seaPileOn() && seaRun && seaRun.left <= 0) { hint.textContent = '蚵堆剝完了，臉盆剝完就收工'; return; }
   if (isPlazaRaceMode() && isRaceInputLocked()) { toast('倒數結束後再開始', '#ffd76a'); return; }
   if (basinOy.length >= basinCap()) return;
   setPhase('scoop'); scoopT = scoopDur = 0.7 * seatNow().scoop; noise(0.45, 900, 0.3); noise(0.45, 1600, 0.2);
@@ -2330,7 +2391,7 @@ const needle = (ms = performance.now()) => {
   return u < 0.5 ? u * 2 : 2 - u * 2;
 };
 (window as any).__sim = () => ({ t: SHIFT - timeLeft, c: npcs.map(n => n.count), names: npcs.map(n => n.name) });
-(window as any).__dbg = { warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }), tide: () => { if (state === 'play' && isWaisan() && !tideOnNow) startTide(); return { tideOnNow, dayBig, dayBigTide, big: basinOy.filter(o => o.userData.big).length, all: basinOy.length }; } };
+(window as any).__dbg = { warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }), sea: seaDbg, seaSkip: (oy?: number, big?: number) => seaDbg.skip(oy, big), pileEnd: () => { if (seaRun && state === 'play') { seaRun.left = 0; clearBasinOysters(); syncSeaPile(); goPick(); } }, pile: () => (seaRun ? { left: seaRun.left, bigLeft: seaRun.bigLeft, basin: basinOy.length, haul: seaRun.haul, on: seaPileOn() } : null), tide: () => { if (state === 'play' && isWaisan() && !tideOnNow) startTide(); return { tideOnNow, dayBig, dayBigTide, big: basinOy.filter(o => o.userData.big).length, all: basinOy.length }; } };
 (window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
 (window as any).__pry = () => { if (phase !== 'twist') return null; const f = prySp(), per = 1000 / f, th = (PRY_C / 2) * per; const el = (performance.now() - needleStart) % per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
 function pryFx(ok: boolean, txt: string) { gauge.classList.remove('hit', 'miss'); void gauge.offsetWidth; gauge.classList.add(ok ? 'hit' : 'miss'); const pp = $('ppop'); pp.textContent = txt; pp.className = ''; void pp.offsetWidth; pp.className = ok ? 'ok' : 'bad'; }
@@ -3487,6 +3548,12 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     if (worked && shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
     if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
     if (dayBig > 0) titles.push(`大蚵入碗 ${dayBig} 顆${dayBigTide ? `（漲潮搶收 ${dayBigTide} 顆）` : ''}`);
+    if (seaPileOn() && seaRun) {
+      const h = seaRun.haul;
+      titles.push(`出海採蚵（拉回 ${h.strings} 串、${h.oy} 顆）`);
+      if (h.stranded) titles.push('退潮擱淺（只救回一半）');
+      if (h.fine) titles.push(`偷拉別人的蚵串（罰 $${h.fine}）`);
+    }
   }
   const LC = locNow();
   // 公開廣場：後台倍率；單挑／多人休閒房：×1（夜班仍加）。單挑剝蚵工錢另走 settleRaceShiftEarn。
@@ -5671,7 +5738,7 @@ function enterWorkShed(run: () => void) {
     try { run(); } catch (e) { console.error('enterWorkShed', e); }
     finally {
       yaw = tYaw = 0; pitch = tPitch = -0.22;
-      if (state !== 'play' && !tut) {
+      if (state !== 'play' && !tut && !seaActive()) {
         try { $('overlay').classList.add('show'); } catch { /* */ }
       }
       try { syncMenuBack(); } catch { /* */ }
@@ -6733,6 +6800,8 @@ function frameBody(ts?: number) {
   // 餘數回扣：90Hz 等非整數倍螢幕平均仍接近 60fps
   lastDrawAt = since < minMs * 2 ? fts - (since % minMs) * (since >= minMs ? 1 : 0) : fts;
   if (isDeathmatchActive()) { clock.getDelta(); scheduleFrame(); return; }
+  // 出海採蚵：用自己的畫布，主場景先不畫
+  if (seaActive()) { clock.getDelta(); scheduleFrame(); return; }
   if (shedAnim.length) { const t = now / 1000; for (const f of shedAnim) f(t); }
   if (paused) {
     clock.getDelta(); if (!pauseAt) { pauseAt = now; holding = false; stopSteal(); closeUmbrella(); down = null; flRelease(); joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
@@ -6782,7 +6851,7 @@ function frameBody(ts?: number) {
   let warnNpc: Npc | null = null;
   if (state === 'play') {
     // 廣場休閒：不倒數、不自動收工
-    if (!tut && !plazaMode && !roomPlay && !isRoomActive()) { timeLeft -= dt; tideTick(dt); if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
+    if (!tut && !plazaMode && !roomPlay && !isRoomActive()) { timeLeft -= dt; if (seaPileOn()) seaPileTick(); else tideTick(dt); if (state === 'play' && timeLeft <= 0) { timeLeft = 0; endDay(); } }
     if (isRoomActive()) roomTick(rdt);
     if (roomPlay) roomSyncScore();
     hp = Math.min(100, hp + dt / 6 * medM('regen')); tickMeds(dt);
@@ -6805,7 +6874,7 @@ function frameBody(ts?: number) {
     if (phase === 'crab') hp = Math.max(1, hp - dt * 2);
     if (evRun?.infHp) hp = 100;
     updBlood(rdt);
-    if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); on('prog', false); later(0.28, goPick); setPhase('busy'); } }
+    if (phase === 'scoop') { scoopT -= rdt; on('prog', true); ($('progFill') as HTMLElement).style.width = `${(1 - scoopT / scoopDur) * 100}%`; if (scoopT <= 0) { fillBasin(true); syncSeaPile(); on('prog', false); later(0.28, goPick); setPhase('busy'); } }
     tickFx(rdt); if (phase === 'aim' && tapAim && down?.drag) tossT0 = performance.now() - 600; // 拖畫面找阿婆時先不自動入碗
     if (phase === 'aim' && tapAim && !tutMeat() && performance.now() - tossT0 > 2000) toss(false);
     if (phase === 'empty' && !(tut && (TUT[tut.i].id === 'empty' || TUT[tut.i].id === 'shell'))) { emptyT -= rdt; if (emptyT <= 0) discardShell(); }
