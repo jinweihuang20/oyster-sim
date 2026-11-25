@@ -261,7 +261,7 @@ export function makeShore(scene: THREE.Scene, rng: () => number) {
 }
 
 // ---------- 膠筏（PVC 管筏）＋人 ----------
-export type Raft = { g: THREE.Group; body: THREE.Group; prop: THREE.Object3D; arm: THREE.Object3D | null; stack: THREE.InstancedMesh; flash: THREE.MeshLambertMaterial };
+export type Raft = { g: THREE.Group; body: THREE.Group; prop: THREE.Object3D; arm: THREE.Object3D | null; stack: THREE.InstancedMesh; flash: THREE.MeshLambertMaterial; motor: THREE.Group; tillerEnd: THREE.Object3D; seat: THREE.Object3D };
 type Who = 'me' | 'abo' | 'apo';
 function person(who: Who, skin: THREE.Material) {
   const g = new THREE.Group();
@@ -312,9 +312,15 @@ export function makeRaft(scene: THREE.Scene, opts: { trim: number; crew: Who[] }
   const foot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.42), lam(0x3a3e44)); foot.position.set(0, -0.72, 0.05); motor.add(foot);
   const prop = new THREE.Group(); prop.position.set(0, -0.72, 0.3); motor.add(prop);
   for (let i = 0; i < 3; i++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.26, 0.06), lam(0xb0b4b8)); bl.rotation.z = i * 2.09; prop.add(bl); }
-  const tiller = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 5), lam(0x2a2e34)); tiller.rotation.x = Math.PI / 2 - 0.3; tiller.position.set(0, 0.45, -0.4); motor.add(tiller);
+  // 舵柄：從引擎往前伸到船尾座位旁（握把端＝tillerEnd）
+  const tiller = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.72, 6), lam(0x2a2e34)); tiller.rotation.x = Math.PI / 2 + 0.03; tiller.position.set(0, 0.49, -0.5); motor.add(tiller);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.16, 8), lam(0xc0502a)); grip.rotation.x = Math.PI / 2; grip.position.set(0, 0.48, -0.8); motor.add(grip);
+  const tillerEnd = new THREE.Object3D(); tillerEnd.position.set(0, 0.48, -0.82); motor.add(tillerEnd);
   // 冰桶＋人
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.5), lam(0x3a7ab8)); box.position.set(-0.55, 0.48, 1.5); body.add(box);
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.5), lam(0x3a7ab8)); box.position.set(0.55, 0.48, 0.9); body.add(box);
+  // 船尾座位（木箱）：玩家坐這裡握舵柄
+  const seatBox = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.34, 0.45), lam(0x8a6a48)); seatBox.position.set(-0.4, 0.42, 1.72); body.add(seatBox);
+  const seat = new THREE.Object3D(); seat.position.set(-0.4, 0.59, 1.72); body.add(seat);
   const skin = lam(0xe8c09a);
   let arm: THREE.Object3D | null = null;
   opts.crew.forEach((w, i) => {
@@ -324,7 +330,7 @@ export function makeRaft(scene: THREE.Scene, opts: { trim: number; crew: Who[] }
     body.add(p.g); if (p.arm) arm = p.arm;
   });
   const stack = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.3, 0.5), lam(0x5a5446), 12); stack.count = 0; body.add(stack);
-  return { g, body, prop, arm, stack, flash };
+  return { g, body, prop, arm, stack, flash, motor, tillerEnd, seat };
 }
 
 // ---------- 水花／航跡（一池平面粒子，additive） ----------

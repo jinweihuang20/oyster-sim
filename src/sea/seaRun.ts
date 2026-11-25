@@ -8,13 +8,16 @@ import {
   newRival, stepRival, bumpBoats, aimShell, shellHits,
   type Layout, type Boat, type Load, type Haul, type Rng, type Str, type Rival, type Shell,
 } from './seaLogic';
+import { makePlayerAvatar, posePlazaHangArms, placePlazaArmChain, type PlayerRig } from '../dm/character';
+import { makeMeshHelpers } from '../dm/mesh';
+import { applyOutfitToRig, type OutfitIds } from '../shop/equipVisual';
 import { makeHeightMap, makeWater, skyTexture, makeFarms, makeFlags, makeShore, makeRaft, makeFx, makeMortarFx, SKY, type Raft, type Farm } from './seaModels';
 
 export { SEA } from './seaLogic';
 export type { Haul as SeaHaul } from './seaLogic';
 
 export type SeaSfx = 'pull' | 'got' | 'wave' | 'ground' | 'scold' | 'dock' | 'warn' | 'drop' | 'launch' | 'hit' | 'splash' | 'bump' | 'rival';
-export type SeaOpts = { onDone: (h: Haul) => void; onAbort: () => void; sfx?: (k: SeaSfx) => void; seed?: number };
+export type SeaOpts = { onDone: (h: Haul) => void; onAbort: () => void; sfx?: (k: SeaSfx) => void; seed?: number; /** 玩家目前穿的裝備（船上人物用） */ outfit?: () => Partial<OutfitIds> };
 
 const ACC = 0x2a5a86;
 const ICON = {
@@ -30,6 +33,7 @@ const ICON = {
 
 let S: Run | null = null;
 let fastK = 1;
+let closeCam = 0;
 
 type Run = {
   o: SeaOpts; rng: Rng; L: Layout; b: Boat; t: number; loads: Load[];
@@ -39,7 +43,7 @@ type Run = {
   keys: Set<string>; joy: { id: number; x0: number; y0: number; x: number; y: number } | null;
   renderer: THREE.WebGLRenderer; scene: THREE.Scene; cam: THREE.PerspectiveCamera;
   me: Raft; rv: Raft; farm: Farm; ring: THREE.Mesh; water: ReturnType<typeof makeWater>; fx: ReturnType<typeof makeFx>; mfx: ReturnType<typeof makeMortarFx>;
-  rival: Rival; rivalOn: boolean; mortarOn: boolean; shells: Shell[]; shellCd: number; throwT: number; wakeT: number; bumpT: number; hitT: number; perf: number[]; tt: number;
+  rival: Rival; rivalOn: boolean; mortarOn: boolean; shells: Shell[]; shellCd: number; throwT: number; wakeT: number; bumpT: number; hitT: number; perf: number[]; tt: number; av: PlayerRig | null; steerS: number; pulling: boolean; hitAnim: number; rope: THREE.Line | null;
   root: HTMLElement; el: Record<string, HTMLElement>; map: HTMLCanvasElement; mapT: number;
   raf: number; last: number; toastT: number; abortArm: number;
   onKey: (e: KeyboardEvent) => void; onKeyUp: (e: KeyboardEvent) => void; onResize: () => void; onBlur: () => void;
@@ -70,6 +74,12 @@ export const seaDbg = {
   },
   /** 對手瞬移到玩家旁邊（測試用） */
   rivalNear(dist = 12) { if (!S) return; const b = S.b; S.rival.x = b.x + dist; S.rival.z = b.z; S.rival.mode = 'go'; S.rival.wait = 0; },
+  /** 近拍鏡頭（看人物姿勢用）：side＝從右側看 */
+  closeCam(on = true, side = false) { closeCam = on ? (side ? 2 : 1) : 0; return closeCam; },
+  /** 船上人物開關（量效能用） */
+  avatar(on?: boolean) { if (!S?.av) return null; S.av.outer.visible = on ?? !S.av.outer.visible; return S.av.outer.visible; },
+  /** 船上人物：可見 mesh 數、三角形 */
+  avInfo() { if (!S?.av) return null; let n = 0, tri = 0; S.av.outer.traverseVisible(o => { const m = o as THREE.Mesh; if (m.isMesh) { n++; const g = m.geometry; tri += (g.index ? g.index.count : g.attributes.position.count) / 3; } }); let all = 0; S.scene.traverseVisible(o => { if ((o as THREE.Mesh).isMesh || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite) all++; }); return { meshes: n, tris: Math.round(tri), sceneDrawables: all }; },
   /** 效能：最近 120 幀 JS＋送出繪圖的平均／最大毫秒、draw call、三角形 */
   perf() { if (!S) return null; const p = S.perf, i = S.renderer.info; return { avgMs: +(p.reduce((a, x) => a + x, 0) / Math.max(1, p.length)).toFixed(2), maxMs: +Math.max(0, ...p).toFixed(2), calls: i.render.calls, tris: i.render.triangles, geos: i.memory.geometries, texs: i.memory.textures }; },
 };
@@ -119,10 +129,11 @@ export function seaStart(o: SeaOpts) {
     o, rng, L, b, t: 0, loads: [], fine: 0, stolen: 0, lost: 0, warned: false, ended: false,
     pullOn: false, pullP: 0, pullTarget: null, wave: 0, waveNext: SEA.waveMin + rng() * (SEA.waveMax - SEA.waveMin), waveDir: 0, shoalNow: false,
     keys: new Set(), joy: null, renderer, scene, cam, ...built,
-    rival: newRival(rng), rivalOn: true, mortarOn: true, shells: [], shellCd: SEA.mortarStart, throwT: 0, wakeT: 0, bumpT: 0, hitT: 0, perf: [], tt: 0,
+    rival: newRival(rng), rivalOn: true, mortarOn: true, shells: [], shellCd: SEA.mortarStart, throwT: 0, wakeT: 0, bumpT: 0, hitT: 0, perf: [], tt: 0, av: null, steerS: 0, pulling: false, hitAnim: 0, rope: null as THREE.Line | null,
     root, el, map: q('seaMap') as HTMLCanvasElement, mapT: 0, raf: 0, last: performance.now(), toastT: 0, abortArm: 0,
     onKey: () => {}, onKeyUp: () => {}, onResize: () => {}, onBlur: () => {},
   };
+  S.av = mountAvatar(S);
   bindInput(S);
   resize();
   toast(`漁筏出港！到外海蚵棚拉蚵串，退潮前（約 ${Math.round(L.len / 60 * 10) / 10} 分鐘）回碼頭`, 3.6);
@@ -144,7 +155,7 @@ function buildWorld(scene: THREE.Scene, L: Layout, rng: Rng, coarse: boolean) {
   const farm = makeFarms(scene, L, rng);
   makeFlags(scene, L);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.08, 6, 28), new THREE.MeshBasicMaterial({ color: ACC })); ring.rotation.x = -Math.PI / 2; ring.visible = false; scene.add(ring);
-  const me = makeRaft(scene, { trim: ACC, crew: ['me'] });
+  const me = makeRaft(scene, { trim: ACC, crew: [] });
   const rv = makeRaft(scene, { trim: 0xc0502a, crew: ['abo', 'apo'] });
   return { water, farm, ring, me, rv, fx: makeFx(scene, coarse ? 110 : 160), mfx: makeMortarFx(scene) };
 }
@@ -253,6 +264,7 @@ function teardown() {
   const R = S; if (!R) return;
   cancelAnimationFrame(R.raf);
   removeEventListener('keydown', R.onKey, true); removeEventListener('keyup', R.onKeyUp, true); removeEventListener('resize', R.onResize); removeEventListener('blur', R.onBlur);
+  if (R.av) R.av.outer.removeFromParent();
   R.scene.traverse(o => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); const mm = m.material as THREE.Material | THREE.Material[] | undefined; (Array.isArray(mm) ? mm : mm ? [mm] : []).forEach(x => { (x as THREE.MeshBasicMaterial).map?.dispose(); x.dispose(); }); });
   try { (R.water.mat.uniforms.uMap.value as THREE.Texture).dispose(); (R.scene.background as THREE.Texture | null)?.dispose?.(); } catch { /* */ }
   R.renderer.dispose(); try { R.renderer.forceContextLoss(); } catch { /* */ }
@@ -292,6 +304,7 @@ function tick(R: Run, dt: number) {
   if (R.wave > 0) { R.wave -= dt; const k = SEA.wavePush * Math.sin(Math.PI * Math.max(0, R.wave) / SEA.waveLen); b.px = Math.cos(R.waveDir) * k; b.pz = Math.sin(R.waveDir) * k; }
   else { b.px = b.pz = 0; }
   const { thr, steer } = input(R);
+  R.steerS += (steer - R.steerS) * Math.min(1, dt * 6); R.pulling = false;
   const st = stepBoat(b, R.L, ebb, thr, steer, dt);
   if (st.justGrounded) { R.o.sfx?.('ground'); toast('擱淺了！船太重卡在淺灘，丟幾串蚵才走得動', 3); }
   if (st.shoal && !R.shoalNow && !b.grounded) toast('船底刮到沙了，淺灘開不快', 1.4);
@@ -306,6 +319,7 @@ function tick(R: Run, dt: number) {
   if (atDock) {
     if (R.pullOn) { R.pullOn = false; end(finishHaul(R.loads, { fine: R.fine, stolen: R.stolen, lost: R.lost, stranded: false, secs: Math.round(R.t) })); return; }
   } else if (s && R.pullOn && slow && !b.grounded) {
+    R.pulling = true;
     R.pullP += dt / pullDur(s.w);
     if (R.pullP >= 1) { R.pullP = 0; finishPull(R, s); R.pullTarget = null; }
   } else if (!R.pullOn) R.pullP = Math.max(0, R.pullP - dt * 1.5);
@@ -345,7 +359,7 @@ function rivalTick(R: Run, dt: number, left: number) {
     for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; R.fx.spawn(sh.tx, sh.tz, { vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 4 + R.rng() * 3, y: 0.3, life: 0.9, s0: 0.5, s1: 1.4, a: 0.7 }); }
     R.fx.spawn(sh.tx, sh.tz, { life: 1.2, s0: 1, s1: SEA.mortarR * 2.6, a: 0.6 });
     if (shellHits(sh, b)) {
-      b.slowT = SEA.hitSlowT; R.pullP = Math.max(0, R.pullP - SEA.hitPullLoss); R.hitT = 0.5; R.shellCd += SEA.mortarHitCd;
+      R.hitAnim = 0.7; b.slowT = SEA.hitSlowT; R.pullP = Math.max(0, R.pullP - SEA.hitPullLoss); R.hitT = 0.5; R.shellCd += SEA.mortarHitCd;
       R.o.sfx?.('hit'); navigator.vibrate?.([30, 40, 60]);
       toast(`被蚵仔砲打中！船速減半 ${SEA.hitSlowT} 秒`, 2);
     } else R.o.sfx?.('splash');
@@ -391,10 +405,93 @@ function hud(R: Run, ebb: number, left: number, s: Str | null, atDock: boolean, 
 }
 
 const _d = new THREE.Object3D();
+// ---------- 船上的玩家人物（跟廣場同一套方塊人＋身上裝備） ----------
+let avCache: { key: string; rig: PlayerRig } | null = null;
+function mountAvatar(R: Run): PlayerRig | null {
+  try {
+    const raw = R.o.outfit?.() ?? {};
+    const key = JSON.stringify(raw);
+    if (!avCache || avCache.key !== key) {
+      const { M, add } = makeMeshHelpers(R.scene, matchMedia('(pointer: coarse)').matches);
+      const rig = makePlayerAvatar({ shirt: 0xc45c26, hair: 0x222222, pants: 0x2a2a40 }, M, add, false);
+      applyOutfitToRig(rig, raw);
+      avCache = { key, rig };
+    }
+    const rig = avCache.rig;
+    posePlazaHangArms(rig, true);
+    rig.outer.removeFromParent(); rig.outer.position.set(0, 0, 0); rig.outer.rotation.set(0, 0, 0); rig.outer.visible = true;
+    R.me.seat.add(rig.outer);
+    // 坐姿：髖在座位上方，大腿向前、小腿垂到甲板
+    rig.outer.position.set(0, 0.07 - 0.72, 0);
+    for (const th of [rig.legL, rig.legR]) th.rotation.set(1.5, 0, 0);
+    for (const sh of [rig.shinL, rig.shinR]) sh.rotation.set(-1.42, 0, 0);
+    rig.legL.rotation.z = 0.08; rig.legR.rotation.z = -0.08;
+    const rope = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0x3a3a30 }));
+    rope.frustumCulled = false; rope.visible = false; R.scene.add(rope); R.rope = rope;
+    return rig;
+  } catch (e) { console.warn('sea avatar', e); return null; }
+}
+const _w = new THREE.Vector3(), _h1 = new THREE.Vector3(), _h2 = new THREE.Vector3(), _sv = new THREE.Vector3();
+/** 手臂：肩→手（torso 座標），肘往外下彎 */
+function armTo(rig: PlayerRig, side: number, hx: number, hy: number, hz: number, bendOut = 0.1) {
+  const sx = side * 0.22, sy = 0.33, sz = 0;
+  const ex = (sx + hx) / 2 + side * bendOut, ey = (sy + hy) / 2 - 0.1, ez = (sz + hz) / 2 + 0.04;
+  placePlazaArmChain(side < 0 ? rig.upperL : rig.upperR, side < 0 ? rig.lowerL : rig.lowerR, sx, sy, sz, ex, ey, ez, hx, hy, hz);
+}
+function poseDriver(R: Run, t: number, dt: number) {
+  const rig = R.av; if (!rig) return;
+  const b = R.b;
+  R.hitAnim = Math.max(0, R.hitAnim - dt);
+  const hit = R.hitAnim > 0 ? Math.sin(Math.PI * R.hitAnim / 0.7) : 0;
+  const tr = rig.torso, hd = rig.head;
+  R.me.g.updateMatrixWorld(true);
+  // torso.rotation.x：負＝往前傾
+  let lx = -0.1, lz = -R.steerS * 0.2, ly = 0, hy = R.steerS * -0.35;
+  const s = R.pullTarget;
+  if (R.pulling && s) {
+    // 拉蚵串：轉向蚵串那一側，雙手交替往回拉繩
+    R.me.body.worldToLocal(_sv.set(s.x, 0.8, s.z));
+    const side = _sv.x >= -0.4 ? 1 : -1;
+    ly = -side * 0.75; lx = -0.35; hy = -side * 0.3;
+    const ph = t * 7;
+    const reach = [side * 0.5, 0.2, -0.45], pull = [side * 0.12, 0.02, -0.12];
+    const f1 = 0.5 + 0.5 * Math.sin(ph), f2 = 0.5 - 0.5 * Math.sin(ph);
+    const lerp = (f: number, i: number) => reach[i] + (pull[i] - reach[i]) * f;
+    armTo(rig, side, lerp(f1, 0), lerp(f1, 1) + 0.05, lerp(f1, 2), 0.12);
+    armTo(rig, -side, lerp(f2, 0), lerp(f2, 1), lerp(f2, 2) - 0.05, 0.12);
+    if (R.rope) {
+      tr.localToWorld(_h1.set(lerp(Math.max(f1, f2), 0), 0.1, lerp(Math.max(f1, f2), 2)));
+      const pos = R.rope.geometry.attributes.position as THREE.BufferAttribute;
+      pos.setXYZ(0, _h1.x, _h1.y, _h1.z); pos.setXYZ(1, s.x, 0.9, s.z); pos.needsUpdate = true; R.rope.visible = true;
+    }
+  } else {
+    if (R.rope) R.rope.visible = false;
+    if (b.grounded) {
+      // 擱淺：身體前傾、雙手往前下推
+      lx = -0.55 - Math.sin(t * 5) * 0.08; hy = 0;
+      armTo(rig, -1, -0.18, -0.15 + Math.sin(t * 5) * 0.04, -0.55, 0.06);
+      armTo(rig, 1, 0.18, -0.15 + Math.sin(t * 5) * 0.04, -0.55, 0.06);
+    } else {
+      // 開船：右手握舵柄、左手放膝上
+      R.me.tillerEnd.getWorldPosition(_w); tr.worldToLocal(_h2.copy(_w));
+      armTo(rig, 1, _h2.x, _h2.y + 0.02, _h2.z, 0.12);
+      armTo(rig, -1, -0.26, -0.05, -0.42, 0.05);
+    }
+  }
+  // 被砲打中：往後一仰、左右晃
+  lx += hit * 0.5; lz += hit * Math.sin(t * 40) * 0.15;
+  tr.rotation.x += (lx - tr.rotation.x) * Math.min(1, dt * 10) ; tr.rotation.z += (lz - tr.rotation.z) * Math.min(1, dt * 10); tr.rotation.y += (ly - tr.rotation.y) * Math.min(1, dt * 8);
+  if (hit > 0) { tr.rotation.x = lx; tr.rotation.z = lz; }
+  hd.rotation.y += (hy - hd.rotation.y) * Math.min(1, dt * 6); hd.rotation.x = -tr.rotation.x * 0.4 + hit * 0.3;
+}
 function placeRaft(rf: Raft, x: number, z: number, h: number, lf: number, wv: number, t: number, v: number, tilt = 0) {
   rf.g.position.set(x, 0.05 - 0.22 * lf + Math.sin(t * 2.1 + x) * 0.05 * (1 + 4 * wv), z);
   rf.g.rotation.set(Math.sin(t * 1.7 + z) * 0.03 + wv * Math.sin(t * 6) * 0.12 - Math.min(0.06, Math.abs(v) * 0.008), h, Math.sin(t * 1.3) * 0.04 + wv * Math.sin(t * 5) * 0.18 + tilt);
   rf.prop.rotation.z += v * 0.12;
+}
+function steerMotor(rf: Raft, steer: number) {
+  // 舷外機：舵柄往左推＝船往右轉
+  rf.motor.rotation.y += (steer * 0.4 - rf.motor.rotation.y) * 0.2;
 }
 function wake(R: Run, x: number, z: number, h: number, v: number) {
   if (Math.abs(v) < 0.8) return;
@@ -411,11 +508,14 @@ function draw(R: Run, t: number) {
   const wv = R.wave > 0 ? Math.sin(Math.PI * R.wave / SEA.waveLen) : 0;
   placeRaft(R.me, b.x, b.z, b.h, lf, wv, t, b.v, b.grounded ? 0.08 : 0);
   // 打中：船身閃紅
+  steerMotor(R.me, R.ended ? 0 : R.steerS);
+  poseDriver(R, t, dt);
   R.me.flash.color.setHex(b.slowT > 0 && Math.sin(t * 18) > 0 ? 0xf0a090 : 0xe9ece8);
   const rv = R.rival;
   R.rv.g.visible = R.rivalOn;
   if (R.rivalOn) {
     placeRaft(R.rv, rv.x, rv.z, rv.h, rv.load / SEA.cap, wv, t + 1.3, rv.v);
+    steerMotor(R.rv, Math.max(-1, Math.min(1, (rv.h - (R.rv.g.userData.h0 ?? rv.h)) * -30))); R.rv.g.userData.h0 = rv.h;
     if (R.rv.arm) R.rv.arm.rotation.x = R.throwT > 0 ? -2.6 * Math.sin(Math.PI * (1 - R.throwT / 0.5)) : Math.sin(t * 2) * 0.1;
   }
   // 船上的蚵串堆
@@ -437,11 +537,12 @@ function draw(R: Run, t: number) {
   if (s) { R.ring.position.set(s.x, 0.3, s.z); R.ring.scale.setScalar(0.9 + 0.12 * Math.sin(t * 6)); ((R.ring.material) as THREE.MeshBasicMaterial).color.setHex(R.L.rows[s.row].owned ? 0xd04030 : 0xffffff); }
   // 鏡頭：船後上方
   const fx = -Math.sin(b.h), fz = -Math.cos(b.h);
-  const back = 10 + 3 * lf, up = 7;
+  const back = 10.5 + 3 * lf, up = 7.4;
   const tx = b.x - fx * back, tz = b.z - fz * back;
   R.cam.position.x += (tx - R.cam.position.x) * 0.08; R.cam.position.z += (tz - R.cam.position.z) * 0.08; R.cam.position.y = up + wv * Math.sin(t * 9) * 0.15 + (R.hitT > 0 ? Math.sin(t * 50) * 0.12 : 0);
   if (R.t < 0.05) R.cam.position.set(tx, up, tz);
-  R.cam.lookAt(b.x + fx * 6, 0, b.z + fz * 6);
+  if (closeCam) { const sx = Math.cos(b.h), sz = -Math.sin(b.h); const k = closeCam === 2 ? 1 : 0; R.cam.position.set(b.x - fx * (3.2 - 2 * k) + sx * 3 * k, 2.2, b.z - fz * (3.2 - 2 * k) + sz * 3 * k); R.cam.lookAt(b.x - fx * -1.2, 0.8, b.z - fz * -1.2); R.renderer.render(R.scene, R.cam); return; }
+  R.cam.lookAt(b.x + fx * 7.5, 0.4, b.z + fz * 7.5);
   R.renderer.render(R.scene, R.cam);
   R.mapT -= dt; if (R.mapT <= 0) { R.mapT = 0.12; drawMap(R, ebb); }
   R.perf.push(performance.now() - t0); if (R.perf.length > 120) R.perf.shift();

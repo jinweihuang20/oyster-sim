@@ -1999,6 +1999,7 @@ function beginSea() {
   ['overlay', 'result', 'dex'].forEach(i => $(i).classList.remove('show'));
   seaStart({
     sfx: seaSfx,
+    outfit: () => ({ hair: equipNow('hair').id, head: equipNow('head').id, hand: equipNow('hand').id, body: equipNow('body').id, legs: equipNow('legs').id, feet: equipNow('feet').id }),
     onDone: h => {
       seaRun = { haul: h, left: h.oy, bigLeft: h.big, prevLen: seaPrevLen };
       shiftLen = SEA_PILE_CAP; seaGo = true; guardUntil = 0;
