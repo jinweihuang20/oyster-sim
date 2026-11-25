@@ -68,7 +68,8 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
   });
   const fetchState = async () => {
     const r = await call('BoatState');
-    if (r?.err === 'old_server') { supported = false; ev.state(null); return; }
+    // 舊伺服器沒有 BoatState（錯誤訊息各版本不同）：只要呼叫丟例外就當不支援，改本機模式
+    if (r?.err === 'old_server' || r?.err === 'fail') { supported = false; ev.state(null); return; }
     if (r?.ok) { supported = true; ev.state(normSnap(r.state)); }
   };
   client.afterJoin.push(() => { void fetchState(); });
