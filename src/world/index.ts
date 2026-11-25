@@ -5,7 +5,7 @@ export {
   SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE,
   NPC_DIFF_T, NPC_DEF, type NpcDef, type YardLook, type YardNpcMesh,
 } from './npc';
-export { DIFF, DIFF_W, LOCS, SEATS, type Loc, type Seat } from './locs';
+export { DIFF, DIFF_W, LOCS, SEATS, WAISAN, type Loc, type Seat } from './locs';
 export {
   initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
@@ -15,6 +15,6 @@ export { makeWorldLabel, bindWorldLabelRenderer, renderSceneWithLocalAvatarOnTop
 export { tickTpCamOcclude, clearTpCamOcclude, setTpCamOccludeIgnore } from './tpCamOcclude';
 export { tickCamHeadFade, clearCamHeadFade, leanFacePeekX } from './camHeadFade';
 export {
-  initYardScene, LAND, shedAnim, disposeShed, buildShed, applyShedLook, showLand, WATER_C, getShedG,
+  initYardScene, LAND, shedAnim, disposeShed, buildShed, applyShedLook, showLand, WATER_C, getShedG, waisanArrive,
   type YardSceneDeps,
 } from './yardScene';

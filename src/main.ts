@@ -17,14 +17,14 @@ import {
   createSkyDome, SHELL_GEOS, HALF_GEOS, greyPick, shellM, basinShellM, BASIN_SHELL_COLS,
   makeAma as makeAmaMesh, dressYardNpc, GOSSIP, PEEK, NAG_GIVEUP, NAG_STAB, NAG_CRACK, NAG_SLIP,
   SCOLD_HIT, SCOLD_SHELL, SCOLD_STEAL, GRUDGE, TURN_CHAT, PRAISE, NPC_DIFF_T, NPC_DEF, type NpcDef, type YardLook,
-  DIFF, DIFF_W, LOCS, SEATS, type Seat,
+  DIFF, DIFF_W, LOCS, SEATS, WAISAN, type Seat,
   initWalkSeat, initWalkJoy, standUp, sitDown, walkStep, plazaEnterWalkPose,
   walking, nearSeat, walkPos, walkKeys, joy, walkMotion, walkTune,
   setWalking, setNearSeat, clearWalkInput,
   makeWorldLabel, bindWorldLabelRenderer, renderSceneWithLocalAvatarOnTop, invalidateLocalAvatarCache, type WorldLabel,
   tickTpCamOcclude, clearTpCamOcclude, setTpCamOccludeIgnore,
   tickCamHeadFade, clearCamHeadFade, leanFacePeekX,
-  initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND,
+  initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND, waisanArrive,
 } from './world';
 import { initCook, openCook, openCookSolo, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView } from './cook/cookUi';
 import { initFeed, openFeed } from './cook/feed';
@@ -478,6 +478,7 @@ const water = mesh(new THREE.PlaneGeometry(80, 36), bootEco || COARSE
 water.rotation.x = -Math.PI / 2;
 water.castShadow = false;
 water.receiveShadow = false;
+const WATER_Y0 = water.position.y;
 const skyDome = createSkyDome({ radius: 46, lo: matchMedia('(pointer: coarse)').matches || matchMedia('(max-width: 900px)').matches });
 scene.add(skyDome.mesh);
 const boats: THREE.Group[] = [];
@@ -1116,6 +1117,14 @@ let bowlStock = 0;
 let reflects = 0, wasteShells = 0, thrown = 0, lost = 0, blockStreak = 0;
 let steals = 0, apoSteals = 0, caught = 0, penalty = 0, meatHits = 0, shellHits = 0, blocks = 0, hitsTaken = 0, crackedNow = false;
 let holding = false, hold = 0, diff = 1, slowmo = 0, shake = 0, pearlShow = 0;
+// ----- 外傘頂洲：大蚵＋漲潮搶收 -----
+/** 手上這顆是不是大蚵 */
+let bigNow = false, dayBig = 0, dayBigTide = 0, tideOnNow = false, tideWarned = false;
+const isWaisan = () => !plazaMode && !isRoomActive() && locNow().id === 'waisan';
+/** 漲潮開始的經過秒數（臨時工按比例提早） */
+const tideAt = () => shiftLen * (WAISAN.tideAt / SHIFT);
+const tideOn = () => tideOnNow && isWaisan();
+const tideK = () => (tideOn() ? WAISAN.tideNag : 1);
 let rot = 0, seamA = 0, lastTick = 0, progress = 0, tension = 0, strokeDir = 0, strokeLen = 0, strokePeak = 0, crabShakes = 0, lastKeyT = 0, lastKey = '';
 let find: ReturnType<typeof rollFind> = { kind: 'none', i: 0 };
 /** 烤蚵：放上烤網後等待開口 */
@@ -1349,10 +1358,11 @@ function setPhase(p: Phase) {
   if (p === 'seam' || p === 'twist') updDiff();
   else if (p !== 'aim' && p !== 'grillCook') $('diff').textContent = '';
 }
-function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `難度：${d.n}${phase === 'twist' ? `・要撬 ${pryNeed()} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
+function updDiff() { const d = DIFF[diff], el = $('diff'); el.style.color = d.css; el.textContent = `${bigNow ? '大蚵・' : ''}難度：${d.n}${phase === 'twist' ? `・要撬 ${pryNeed()} 下` : ''}${crackedNow ? '・⚠ 有殼屑' : ''}`; }
 function goPick() {
   if (state !== 'play' || walking) return;
   if (evRun?.steal === 'steal_only') { oyster.visible = false; setPhase('busy'); hint.textContent = '本活動只能用偷的：趁阿婆轉頭聊天，偷她碗裡的肉'; return; }
+  bigNow = false;
   oysterToHand();
   oyster.visible = false; setPhase('pick');
   // 烤位：臉盆空了自動補滿；先對齊盆座標再補，蚵才會在盆裡
@@ -1401,11 +1411,14 @@ function clearRaceWaitPrompt(ph: string) {
     if (top?.classList.contains('on') && /進場就緒|等雙方|到齊後倒數|倒數結束後/.test(top.textContent || '')) dismissToast();
   }
 }
-function holdOyster(dd: number) {
+function holdOyster(dd: number, big = false) {
   if (state !== 'play' || walking) return;
+  bigNow = big && !tut;
+  if (bigNow && Math.random() < 0.12) { const n = pick(npcs); if (n) say(n, pick(BIG_LINES), 2.5); }
   if (saltNext && !tut) { saltNext = false; if (dd > 1) dd = Math.random() < 0.5 ? 0 : 1; toast('🧂 粗鹽搓過，這顆比較好開', '#cfc3ff'); drawMeds(); }
   diff = tut ? 0 : dd; const d = DIFF[diff];
   oysterToHand();
+  if (bigNow) oyster.scale.setScalar(1.25);
   oyster.visible = true; oyster.rotation.set(0, 0, 0); rot = rnd(0, 6.28); crackedNow = false;
   seamA = rnd(0, 6.28); const r = 0.115; seamMark.position.set(Math.cos(seamA) * r, 0.012, Math.sin(seamA) * r); seamMark.rotation.y = -seamA + Math.PI / 2; seamGlow.position.copy(seamMark.position); seamGlow.rotation.copy(seamMark.rotation); seamRing.position.set(seamMark.position.x, 0.02, seamMark.position.z); sweet = false;
   seamMark.scale.set(1, 1, 1);
@@ -1745,6 +1758,11 @@ const CREW: Record<string, Crew[]> = {
     { name: '大廠組長大姐', hair: 0x1a1a1a, look: 'dajie', pal: [0x3a7a5a, 0xe8e8d8, 0x2a5a4a] },
     { name: '老師傅阿伯', hair: 0x666666, look: 'fisher', pal: [0x4a4a5a, 0xf0ebe0, 0x7a6a4a] },
   ],
+  waisan: [
+    { name: '漁筏船長阿伯', hair: 0x4a4a4a, look: 'fisher', pal: [0x1f3f6a, 0xf0ebe0, 0x2a5a86] },
+    { name: '洲頂阿嬤', hair: 0xc8c8c8, look: 'ama2', pal: [0xd8c070, 0xf2ead0, 0x8a6a3a] },
+    { name: '顧蚵棚大姐', hair: 0x2a1a10, look: 'dajie', pal: [0xf06a1a, 0xf2e8d0, 0x2a5a86] },
+  ],
 };
 function applyCrew() {
   const id = locNow().id, set = CREW[id] ?? CREW.home;
@@ -1773,7 +1791,8 @@ function startDay() { if (performance.now() < guardUntil) return; inputGuard();
     else track('start', { seat: save.seat ?? 'door', loc: locNow().id });
   }
   const sidNow = statsSid; const pingT = setInterval(() => { if (tut || state !== 'play' || statsSid !== sidNow || document.hidden) { if (statsSid !== sidNow || state !== 'play') clearInterval(pingT); return; } track('ping'); }, 60_000);
-  count = bowlStock = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = apoSteals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra();
+  count = bowlStock = bowlBonus = cracked = opened = missed = abandoned = perfects = stabs = steals = apoSteals = caught = penalty = meatHits = shellHits = blocks = hitsTaken = reflects = wasteShells = thrown = lost = blockStreak = 0; dayPearls = []; dayOdd = []; meatPay = 0; dCnt = [0, 0, 0, 0]; dStat = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; endReason = 'time'; dayMulti2 = dayMulti3 = 0; meatsLeft = 1; showExtra(); dayBig = dayBigTide = 0; tideOnNow = tideWarned = false; bigNow = false; tideReset();
+  if (isWaisan() && !tut) { waisanArrive(); later(0.6, () => toastTop('漁筏靠岸了！上沙洲開工，兩分鐘後漲潮要搶收', TOP_SEC.info)); }
   plazaStealBanUntil = 0; plazaStealCatches = 0; plazaStealPairCd.clear(); stopPlazaSteal();
   dayMaxGrudge = 0; npcs.forEach(n => { n.count = 0; n.mood = 0; n.angry = 0; n.distract = 0; n.windup = 0; n.grudge = 0; n.gAt = 0; n.calm = 0; n.clutch = 0; n.throwCd = rnd(15, 30); if (n.stuck) { n.stuck.removeFromParent(); n.stuck = null; } });
   clearPendingFlyers();
@@ -1914,17 +1933,52 @@ function hurt(dmg: number, txt: string) {
   }
 }
 
+// ----- 外傘頂洲漲潮 -----
+const TIDE_LINES = ['水欲起來矣，緊收、緊收！', '潮水欲淹過來矣，較緊咧！', '漲潮矣！大粒的先剝！'];
+const BIG_LINES = ['這粒較大粒，較歹剝，加出淡薄仔力。', '大蚵喔！撬較濟下就開矣。'];
+function tideReset() {
+  tideOnNow = false; water.position.y = WATER_Y0;
+  document.body.classList.remove('tideOn');
+}
+function tidePill() {
+  let el = document.getElementById('tidePill');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'tidePill'; el.setAttribute('role', 'status');
+    el.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2"/><path d="M2 15c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2"/><path d="M12 3v3"/></svg><span>漲潮中・大蚵變多</span>';
+    document.body.appendChild(el);
+  }
+}
+function startTide() {
+  tideOnNow = true; tidePill(); document.body.classList.add('tideOn');
+  toastTop('漲潮了！大蚵變多，阿婆也催得更兇，快搶收', TOP_SEC.info);
+  const n = pick(npcs); if (n) say(n, pick(TIDE_LINES), 3);
+  noise(1.2, 500, 0.18, 1400);
+  // 臉盆裡還沒剝的，補到漲潮後的大蚵比例
+  const up = (WAISAN.bigRateTide - WAISAN.bigRate) / (1 - WAISAN.bigRate);
+  for (const m of basinOy) if (!m.userData.big && Math.random() < up) markBig(m);
+}
+function tideTick(_dt: number) {
+  if (state !== 'play' || !isWaisan()) return;
+  const el = shiftLen - timeLeft, at = tideAt();
+  if (!tideWarned && el >= at - 15) { tideWarned = true; toastTop('再 15 秒就漲潮了！', TOP_SEC.info); }
+  if (!tideOnNow && el >= at) startTide();
+  if (tideOnNow) water.position.y = WATER_Y0 + 0.4 * Math.min(1, (el - at) / Math.max(1, shiftLen - at));
+}
+
 // ----- 0. 提蚵仔／撈蚵仔 -----
 const ray = new THREE.Raycaster();
 function makeBasinOyster(dd: number) {
   const m = new THREE.Mesh(SHELL_GEOS[Math.floor(Math.random() * 6)], basinShellM(BASIN_SHELL_COLS[dd] ?? BASIN_SHELL_COLS[0]));
   m.scale.setScalar(DIFF[dd].scale * 0.95);
   m.userData.diff = dd;
+  if (!plazaMode && !tut && isWaisan() && Math.random() < (tideOn() ? WAISAN.bigRateTide : WAISAN.bigRate)) markBig(m);
   m.castShadow = true;
   m.renderOrder = 2; // 蓋過殼堆，避免埋進堆裡難認
   const bl: THREE.Mesh[] = []; for (let i = 0; i < BARN_N[dd]; i++) { const b = new THREE.Mesh(BARN_GEO, BARN_MAT); m.add(b); bl.push(b); } placeBarn(bl, dd, 0.04);
   return m;
 }
+/** 臉盆裡這顆變成大蚵（放大、殼色偏黃） */
+function markBig(m: THREE.Mesh) { if (m.userData.big) return; m.userData.big = true; m.scale.multiplyScalar(1.35); }
 const basinCap = () => plazaMode ? 15 : 20;
 /** 臉盆本地座標（子物件），蚵仔永遠跟盆走 */
 function basinSlotLocal(i: number) {
@@ -2075,7 +2129,7 @@ function grab(m: THREE.Mesh) {
   m.removeFromParent();
   scene.add(m);
   m.position.copy(from);
-  fly(m, from.clone(), () => worldOf(oyster), 0.3, 0.05, () => { scene.remove(m); noise(0.04, 2500, 0.25); holdOyster(m.userData.diff); });
+  fly(m, from.clone(), () => worldOf(oyster), 0.3, 0.05, () => { scene.remove(m); noise(0.04, 2500, 0.25); holdOyster(m.userData.diff, !!m.userData.big); });
 }
 function scoop() {
   if (isPlazaRaceMode() && isRaceInputLocked()) { toast('倒數結束後再開始', '#ffd76a'); return; }
@@ -2231,8 +2285,8 @@ function applyBowl() {
 const pryW = () => Math.min(0.6, Math.min(1.6, 1 + 0.15 * pryHits) * PRY[diff].w * knifeNow().green * medM('green') * (newbie() ? 1.3 : 1));
 const PRY_SLOW = 0.56; // 整體放慢（0.8→0.56，再慢 30%）
 const prySp = () => PRY[diff].sp * PRY_SLOW * (gearOn('glove') ? (gearFx('glove')?.speedMul ?? 1.05) : 1) * knifeNow().speed * medM('speed') * fxAll().speed;
-const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps);
-const tolNow = () => DIFF[diff].tol * 1.85 * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
+const pryNeed = () => Math.max(1, PRY_NEED[diff] + knifeNow().steps + (bigNow ? WAISAN.bigPry : 0));
+const tolNow = () => (DIFF[diff].tol + (bigNow ? WAISAN.bigTol : 0)) * 1.85 * knifeNow().seam * (gearOn('glasses') ? (gearFx('glasses')?.seamMul ?? 1.25) : 1);
 const slipNow = () => tut ? 0 : Math.min(0.9, DIFF[diff].slip * knifeNow().stab * medM('slip') * (newbie() ? 0.6 : 1));
 function applyKnife() { ((knife.children[1] as THREE.Mesh).material as THREE.MeshStandardMaterial).color.setHex(knifeNow().blade); const k = knifeNow(); (knife.children[1] as THREE.Mesh).scale.set(k.id === 'point' ? 1.2 : k.id === 'harbor' ? 1.12 : 1, 1, k.id === 'wide' ? 1.7 : k.id === 'point' ? 0.6 : k.id === 'harbor' ? 0.82 : 1); }
 
@@ -2276,7 +2330,7 @@ const needle = (ms = performance.now()) => {
   return u < 0.5 ? u * 2 : 2 - u * 2;
 };
 (window as any).__sim = () => ({ t: SHIFT - timeLeft, c: npcs.map(n => n.count), names: npcs.map(n => n.name) });
-(window as any).__dbg = { warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }) };
+(window as any).__dbg = { warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }), tide: () => { if (state === 'play' && isWaisan() && !tideOnNow) startTide(); return { tideOnNow, dayBig, dayBigTide, big: basinOy.filter(o => o.userData.big).length, all: basinOy.length }; } };
 (window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
 (window as any).__pry = () => { if (phase !== 'twist') return null; const f = prySp(), per = 1000 / f, th = (PRY_C / 2) * per; const el = (performance.now() - needleStart) % per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
 function pryFx(ok: boolean, txt: string) { gauge.classList.remove('hit', 'miss'); void gauge.offsetWidth; gauge.classList.add(ok ? 'hit' : 'miss'); const pp = $('ppop'); pp.textContent = txt; pp.className = ''; void pp.offsetWidth; pp.className = ok ? 'ok' : 'bad'; }
@@ -2294,7 +2348,7 @@ function pry(ms = performance.now()) {
 function halfTwist(peak: number) {
   const d = DIFF[diff];
   if (peak < d.lo) { hint.textContent = '力氣不夠，再用力一點！'; return; }
-  progress += 1 / d.need; SFX.creak();
+  progress += 1 / (d.need + (bigNow ? WAISAN.bigPry : 0)); SFX.creak();
   if (peak > d.hi && !crackedNow) { crackedNow = true; dStat[diff][3]++; noise(0.1, 4000, 0.5); noise(0.25, 6000, 0.3); shake = 0.15; toast('殼碎掉了！', '#ffa860'); meatInHand.material = splatMat; nag(NAG_CRACK); updDiff(); }
   else hint.textContent = HINTS.twist;
   shellTop.rotation.z = -progress * 0.4;
@@ -2441,18 +2495,20 @@ function toss(tapped: boolean) {
   if (phase !== 'aim' || !tapAim || state !== 'play') return;
   const el = (performance.now() - tossT0) / 1000, quick = tapped && el <= 0.8;
   setPhase('busy'); meatInHand.visible = false;
-  const wasCracked = crackedNow, md = diff;
+  const wasCracked = crackedNow, md = diff, wasBig = bigNow, inTide = tideOn();
   const from = worldOf(oyster), m = new THREE.Mesh(meatGeo, wasCracked ? splatMat : meatMat);
+  if (wasBig) m.scale.setScalar(1.4);
   const land = new THREE.Vector3(BOWL.x + rnd(-0.06, 0.06), BOWL.y - 0.04 + Math.min(bowlMeat.length, 40) * 0.0015, BOWL.z + rnd(-0.06, 0.06));
   SFX.whoosh(); if (quick) { perfects++; $('gtag').textContent = ''; }
   fly(m, from, land, 0.45, 0.3, () => {
-    count++; bowlStock++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(eco.dpay[md] * eco.crumbRate)) : eco.dpay[md]) - (shiftLen < SHIFT ? eco.tempCut : 0)) + (quick ? eco.quickBonus : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m); if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
-    rollShuck(!wasCracked);
+    count++; bowlStock++; evMeat(); bowlBonus += bowlNow().bonus + fxAll().bowl; const pv = Math.max(wasCracked ? 1 : 0, (wasCracked ? Math.max(1, Math.round(eco.dpay[md] * eco.crumbRate)) : eco.dpay[md]) - (shiftLen < SHIFT ? eco.tempCut : 0)) * (wasBig ? WAISAN.bigPay : 1) + (quick ? eco.quickBonus : 0); meatPay += pv; dCnt[md]++; bowlMeat.push(m);
+    if (wasBig) { dayBig++; if (inTide) dayBigTide++; } if (bowlMeat.length > 60) scene.remove(bowlMeat.shift()!);
+    rollShuck(!wasCracked, wasBig);
     rollScoop(plazaMode ? 'plaza' : locNow().id, 1);
     burst(land.clone().setY(BOWL.y + 0.02), 8, 0xbfe4f2, 1);
     if (!wasCracked) burst(land.clone().setY(BOWL.y + 0.05), 6, 0xffd23a, 1.4);
     if (quick) { tone(980, 0.06, 0.18, 'triangle', 0, 520); tone(1568, 0.08, 0.1, 'sine', 0.05); } else SFX.plop();
-    toast(`${quick ? '俐落！' : wasCracked ? '入碗（有殼屑）' : '入碗！'} +$${pv} ${DIFF[md].n}`, quick ? '#f2b705' : DIFF[md].css); { const n = pick(npcs); if (n && Math.random() < 0.15) say(n, pick(PRAISE), 2); }
+    toast(`${wasBig ? '大蚵' : ''}${quick ? '俐落！' : wasCracked ? '入碗（有殼屑）' : '入碗！'} +$${pv} ${DIFF[md].n}`, quick ? '#f2b705' : DIFF[md].css); { const n = pick(npcs); if (n && Math.random() < 0.15) say(n, pick(PRAISE), 2); }
     updHud(); bumpShiftDraft();
   });
   later(0.35, () => { if (meatsLeft > 1 && state === 'play') { meatsLeft--; showExtra(); meatInHand.visible = true; meatInHand.material = meatMat; setPhase('aim'); hint.textContent = `還有 ${meatsLeft} 塊肉！點碗繼續丟`; } else { meatsLeft = 1; showExtra(); emptyT = 2.2; setPhase('empty'); } });
@@ -2506,7 +2562,7 @@ function anger(n: Npc, lines: string[], retaliate: number) {
 const stunned = (n: Npc) => (n.clutch ?? 0) > 0;
 const freeToSteal = (n: Npc) => n.distract > 0 || stunned(n);
 let dayMaxGrudge = 0;
-function addGrudge(n: Npc, v: number) { if (v > 0) v *= (evRun ? Math.max(1, medM('grudge')) * Math.max(1, locNow().ang) : medM('grudge') * locNow().ang * (gearOn('radio') ? (gearFx('radio')?.angerMul ?? 0.7) : 1)) * (evRun?.angerX ?? 1); const g0 = n.grudge ?? 0; n.grudge = Math.max(0, Math.min(100, g0 + v)); if (v > 0) { n.gAt = performance.now(); if (g0 < 60 && n.grudge >= 60 && state === 'play') toast(`${n.name}很生氣！會更常丟你（一陣子不惹她就會消氣）`, '#ff7a6a'); } dayMaxGrudge = Math.max(dayMaxGrudge, n.grudge); }
+function addGrudge(n: Npc, v: number) { if (v > 0) v *= (evRun ? Math.max(1, medM('grudge')) * Math.max(1, locNow().ang) : medM('grudge') * locNow().ang * tideK() * (gearOn('radio') ? (gearFx('radio')?.angerMul ?? 0.7) : 1)) * (evRun?.angerX ?? 1); const g0 = n.grudge ?? 0; n.grudge = Math.max(0, Math.min(100, g0 + v)); if (v > 0) { n.gAt = performance.now(); if (g0 < 60 && n.grudge >= 60 && state === 'play') toast(`${n.name}很生氣！會更常丟你（一陣子不惹她就會消氣）`, '#ff7a6a'); } dayMaxGrudge = Math.max(dayMaxGrudge, n.grudge); }
 function grudgeUI(n: Npc) {
   if (!n.gIcon) { n.gIcon = emojiSprite('💢', 0.12); n.gIcon.position.set(-0.1, 0.32, 0); n.head.add(n.gIcon); const bar = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff3b2f, depthTest: false })); bar.center.set(0, 0.5); bar.position.set(-0.03, 0.32, 0); n.head.add(bar); n.gBar = bar; }
   const g = n.grudge ?? 0; n.gIcon.visible = n.gBar!.visible = g > 4; n.gIcon.scale.setScalar(0.12 + g * 0.0015); n.gBar!.scale.set(0.006 + g * 0.0032, 0.035, 1);
@@ -3421,7 +3477,7 @@ function reclaimInterruptedShift() {
 }
 function endDay() { inputGuard(); if (document.pointerLockElement) document.exitPointerLock();
   if (tut) { tutEnd(false); return; }
-  if (state === 'end') return; state = 'end'; if (plazaMode) plazaShellGen++; syncShiftUi(); setTimeout(giftAlert, 1500); setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal(); clearPendingFlyers();
+  if (state === 'end') return; state = 'end'; document.body.classList.remove('tideOn'); if (plazaMode) plazaShellGen++; syncShiftUi(); setTimeout(giftAlert, 1500); setPhase('busy'); closeUmbrella(); on('umbBtn', false); on('medBtn', false); on('quitBtn', false); on('camBtn', false); $('radioBtn').style.display = 'none'; document.getElementById('vign')?.classList.remove('on'); $('medList').classList.remove('show'); on('stealBtn', false); stopSteal(); clearPendingFlyers();
   const all = [{ name: `你（${esc(myName())}）`, count, me: true }, ...npcs.map(n => ({ name: n.name, count: n.count, me: false }))].sort((a, b) => b.count - a.count);
   const temp = shiftLen < SHIFT, worked = endReason !== 'quit' && count >= eco.workedMinCount, queen = all[0].me && !temp && worked;
   const pearlMoney = dayPearls.reduce((s, r) => s + RAR[r].price, 0) + dayOdd.reduce((s, r) => s + ODD[r].price, 0);
@@ -3430,6 +3486,7 @@ function endDay() { inputGuard(); if (document.pointerLockElement) document.exit
     if (thrown === 0 && !temp && worked) { titles.push(`🕊 和平${esc(myName())}（+$${eco.peaceBonus}）`); bonus = eco.peaceBonus; }
     if (worked && shellHits >= 3 && shellHits > hitsTaken) titles.push('👊 工寮霸主');
     if (worked && blocks + reflects >= 3 && blocks + reflects > hitsTaken) titles.push('☂ 雨傘大師');
+    if (dayBig > 0) titles.push(`大蚵入碗 ${dayBig} 顆${dayBigTide ? `（漲潮搶收 ${dayBigTide} 顆）` : ''}`);
   }
   const LC = locNow();
   // 公開廣場：後台倍率；單挑／多人休閒房：×1（夜班仍加）。單挑剝蚵工錢另走 settleRaceShiftEarn。
@@ -4165,7 +4222,10 @@ function giveUp() {
   goPick();
 }
 // 入碗數達標自動解鎖地點（不用錢）
-function autoUnlock() { const tot = save.life.inBowl ?? 0; save.locs ??= []; for (const l of LOCS) if (l.need && tot >= l.need && !save.locs.includes(l.id)) { save.locs.push(l.id); persist(); Social.report('port', LOCS.indexOf(l)); track('buy', { item: 'loc-' + l.id, price: 0 }); toastTop(`新地點解鎖：${l.n}`, TOP_SEC.info); } }
+/** 前置地點已解鎖（例：外傘頂洲要先解鎖東石） */
+function locReqOk(l: typeof LOCS[number]) { if (!l.req) return true; const r = LOCS.find(x => x.id === l.req); return !r || r.need === 0 || (save.locs ?? []).includes(r.id); }
+const locReqName = (l: typeof LOCS[number]) => shedName(l.req ?? '');
+function autoUnlock() { const tot = save.life.inBowl ?? 0; save.locs ??= []; for (const l of LOCS) if (l.need && tot >= l.need && !save.locs.includes(l.id) && locReqOk(l)) { save.locs.push(l.id); persist(); Social.report('port', LOCS.indexOf(l)); track('buy', { item: 'loc-' + l.id, price: 0 }); toastTop(`新地點解鎖：${l.n}`, TOP_SEC.info); } }
 const isPlazaPicked = () => save.loc === 'plaza';
 /** 主選單目前點選的工寮（含未解鎖）；遊戲開局仍用 locNow（只認已解鎖） */
 const locPicked = () => LOCS.find(l => l.id === save.loc);
@@ -4277,7 +4337,7 @@ function bindLocPlazaPeek(el: HTMLElement) {
   row.addEventListener('scroll', sync, { passive: true });
   requestAnimationFrame(sync);
 }
-function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
+function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock(); if (state !== 'play') tideReset();
   const el = $('locPick'); const tot = save.life.inBowl ?? 0;
   const seen = save.locSeen ?? (save.locSeen = ['home']);
   const plazaCur = isPlazaPicked();
@@ -4300,8 +4360,9 @@ function renderLocs(opts?: { forcePlazaOnline?: boolean }) { autoUnlock();
     const own = l.need === 0 || save.locs!.includes(l.id), cur = !plazaCur && save.loc === l.id, nw = isNew(l) ? '<span class="nb">NEW</span>' : '';
     const head = `<span class="ln">${own ? '' : '🔒 '}${l.n}</span>${nw}<span class="lm">工錢 ×${l.m.toFixed(1)}</span>`;
     if (own) return `<button class="loc ${cur ? 'cur' : ''}" data-loc="${l.id}">${head}<small class="ld">${l.d}</small></button>`;
-    const pr = l.price ? px('loc-' + l.id, l.price) : 0;
-    return `<button type="button" class="loc locked${cur ? ' cur' : ''}" data-loc="${l.id}">${head}<small><i class="ic ic-lock"></i> 解鎖條件：入碗 ${tot}/${l.need} 顆</small>${pr ? `<span class="lbuy" data-lbuy="${l.id}" role="button">花 $${pr} 提早解鎖</span>` : ''}<small class="ld">${l.d}</small></button>`;
+    const reqOk = locReqOk(l);
+    const pr = l.price && reqOk ? px('loc-' + l.id, l.price) : 0;
+    return `<button type="button" class="loc locked${cur ? ' cur' : ''}" data-loc="${l.id}">${head}<small><i class="ic ic-lock"></i> 解鎖條件：${reqOk ? '' : `先解鎖${locReqName(l)}、`}入碗 ${tot}/${l.need} 顆</small>${pr ? `<span class="lbuy" data-lbuy="${l.id}" role="button">花 $${pr} 提早解鎖</span>` : ''}<small class="ld">${l.d}</small></button>`;
   }).join('') + '</div></div>';
   const mark = (id?: string) => { if (id && !seen.includes(id)) { seen.push(id); persist(); } };
   el.querySelectorAll<HTMLElement>('.loc[data-loc]').forEach(b => b.addEventListener('click', () => mark(b.dataset.loc), { capture: true }));
@@ -5643,6 +5704,7 @@ async function buyLocEarly(id: string): Promise<boolean> {
   save.locs ??= [];
   if (locOwned(l)) return true;
   const name = shedName(id);
+  if (!locReqOk(l)) { toast(`要先解鎖${locReqName(l)}，才能去${name}`, '#ffb08a'); return false; }
   const pr = await payFor('loc-' + id, l.price, name);
   if (pr == null) {
     toast(save.money < px('loc-' + id, l.price) ? `錢不夠，解鎖${name}要 $${px('loc-' + id, l.price)}` : '價格剛更新，請再按一次', '#ffb08a');
@@ -6720,7 +6782,7 @@ function frameBody(ts?: number) {
   let warnNpc: Npc | null = null;
   if (state === 'play') {
     // 廣場休閒：不倒數、不自動收工
-    if (!tut && !plazaMode && !roomPlay && !isRoomActive()) { timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
+    if (!tut && !plazaMode && !roomPlay && !isRoomActive()) { timeLeft -= dt; tideTick(dt); if (timeLeft <= 0) { timeLeft = 0; endDay(); } }
     if (isRoomActive()) roomTick(rdt);
     if (roomPlay) roomSyncScore();
     hp = Math.min(100, hp + dt / 6 * medM('regen')); tickMeds(dt);
@@ -6832,7 +6894,7 @@ function frameBody(ts?: number) {
       npcShuck(n, dt, t);
       n.grudge = Math.max(0, (n.grudge ?? 0) - (walking ? (performance.now() - (n.gAt ?? 0) > 2000 ? dt * 7.5 : 0) : performance.now() - (n.gAt ?? 0) > 8000 ? dt * 2.5 : 0) * (newbie() && !evRun ? 2 : 1)); n.calm = Math.max(0, (n.calm ?? 0) - dt); grudgeUI(n);
       if (n === npcs[0] && slOn('sl_89') && !tut && (scaredT -= dt) <= 0) { scaredT = rnd(8, 15); const m = pick(npcs); if (m.bubT <= 0) say(m, pick(SCARED)); }
-      n.throwCd -= dt * (evRun ? Math.max(1, seatNow().throwM) * Math.max(1, locNow().thr) : seatNow().throwM * locNow().thr) * (n.calm! > 0 && !evRun ? 0.3 : (1 + n.grudge! / 25) * (n.mood > 0 ? 2 : 1) * 1) * (evRun?.throwX ?? 1); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); if (!tut && !(newbie() && !evRun && !((n.grudge ?? 0) > 0)) && !(Math.random() > fxAll().throw)) windUp(n); }
+      n.throwCd -= dt * (evRun ? Math.max(1, seatNow().throwM) * Math.max(1, locNow().thr) : seatNow().throwM * locNow().thr * tideK()) * (n.calm! > 0 && !evRun ? 0.3 : (1 + n.grudge! / 25) * (n.mood > 0 ? 2 : 1) * 1) * (evRun?.throwX ?? 1); if (n.throwCd <= 0) { n.throwCd = rnd(20, 40); if (!tut && !(newbie() && !evRun && !((n.grudge ?? 0) > 0)) && !(Math.random() > fxAll().throw)) windUp(n); }
       if (n.windup > 0) { warnNpc = n; n.windup -= rdt; if (!n.warned && n.windup <= warnLead(n)) { n.warned = true; SFX.alert(); } if (n.windup <= 0) npcThrow(n); }
       if (n.peek && n.look <= 0 && n.distract <= 0 && Math.random() < dt * 0.05) { n.look = 2.5; say(n, pick(PEEK), 2.5); }
     }

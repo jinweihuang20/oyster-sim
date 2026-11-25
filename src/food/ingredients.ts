@@ -25,10 +25,10 @@ export const FOODS: Food[] = [
   { id: 'veg', n: '青菜', cat: 'base', icon: 'leaf', color: '#5fa84a', life: 72, price: 10, how: '廣場食材攤購買，簽到第 7 天福袋也可能有' },
   // 主料 5 種
   { id: 'oyster', n: '一般蚵仔', cat: 'main', icon: 'oyster', color: '#c9c2b0', life: 0, quality: true, how: '每剝一顆蚵仔肉進碗就多一個（不會壞）' },
-  { id: 'bigoy', n: '大蚵', cat: 'main', icon: 'oyster', color: '#b8ad94', life: 48, soon: true, how: '即將開放' },
+  { id: 'bigoy', n: '大蚵', cat: 'main', icon: 'oyster', color: '#b8ad94', life: 48, quality: true, how: '在外傘頂洲剝到大蚵，每一顆入碗就得一份（漲潮後大蚵更多）' },
   { id: 'rockoy', n: '石蚵', cat: 'main', icon: 'oyster', color: '#8f8a7e', life: 48, soon: true, how: '即將開放' },
-  { id: 'shrimp', n: '蝦仁', cat: 'extra', icon: 'shrimp', color: '#f19a8a', life: 48, how: '每一顆算進食材蚵仔的肉入碗時都有機會一起拿到：家 50%、王功 55%、東石 60%、布袋 70%、廣場和烤台 60%。拿到時蝦仁和花枝各一半' },
-  { id: 'squid', n: '花枝', cat: 'extra', icon: 'squid', color: '#f3efe6', life: 48, how: '每一顆算進食材蚵仔的肉入碗時都有機會一起拿到：家 50%、王功 55%、東石 60%、布袋 70%、廣場和烤台 60%。拿到時蝦仁和花枝各一半' },
+  { id: 'shrimp', n: '蝦仁', cat: 'extra', icon: 'shrimp', color: '#f19a8a', life: 48, how: '每一顆算進食材蚵仔的肉入碗時都有機會一起拿到：家 50%、王功 55%、東石 60%、布袋和外傘頂洲 70%、廣場和烤台 60%。拿到時蝦仁和花枝各一半' },
+  { id: 'squid', n: '花枝', cat: 'extra', icon: 'squid', color: '#f3efe6', life: 48, how: '每一顆算進食材蚵仔的肉入碗時都有機會一起拿到：家 50%、王功 55%、東石 60%、布袋和外傘頂洲 70%、廣場和烤台 60%。拿到時蝦仁和花枝各一半' },
   // 蛋
   { id: 'egg', n: '雞蛋', cat: 'egg', icon: 'egg', color: '#f2c94c', life: 72, price: 8, how: '廣場食材攤購買，簽到第 7 天福袋也可能有' },
   // 醬料 5 種
@@ -57,8 +57,8 @@ export const CAT_N: Record<FoodCat, string> = { base: '基底', main: '主料', 
 
 /** 取得機率／數值（V1） */
 export const FOOD_RATE = {
-  /** 每一顆算進食材蚵仔的肉入碗時，各自擲一次蝦仁或花枝：依地點 home / wanggong / dongshi / budai；廣場（含烤台）另計 */
-  scoop: { home: 0.50, wanggong: 0.55, dongshi: 0.60, budai: 0.70, plaza: 0.60 } as Record<string, number>,
+  /** 每一顆算進食材蚵仔的肉入碗時，各自擲一次蝦仁或花枝：依地點 home / wanggong / dongshi / budai / waisan；廣場（含烤台）另計 */
+  scoop: { home: 0.50, wanggong: 0.55, dongshi: 0.60, budai: 0.70, waisan: 0.70, plaza: 0.60 } as Record<string, number>,
   /** 撈到時是蝦仁的比例（其餘花枝） */
   shrimpShare: 0.5,
   /** 丟中阿婆掉祕傳醬 */

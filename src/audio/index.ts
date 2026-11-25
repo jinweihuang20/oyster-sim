@@ -161,6 +161,17 @@ const TRACKS: Record<string, Trk> = {
       if (i % 2 === 0) vHit(a, out, t, 'highpass', 7000, 0.018, 0.025);
       if (s % 128 >= 64) { const m = lead[i % 16]; if (m) vTone(a, soft, 'sine', MN(m), t, st * 0.85, 0.035, 0.01, 3, 5); } };
   } },
+  // 外傘頂洲：開闊的海風、慢搖的浪聲低音 + 長音主旋律（D 大調，沙洲空曠感）
+  waisan: { bpm: 108, make: (a, out) => {
+    const soft = a.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 2300; soft.connect(out);
+    const roots = [38, 38, 45, 45, 47, 47, 43, 45]; // D A Bm G A
+    const mel = [74, 0, 0, 76, 78, 0, 81, 0, 78, 0, 76, 0, 74, 0, 0, 0, 71, 0, 74, 0, 76, 0, 0, 78, 76, 0, 74, 0, 0, 0, 0, 0];
+    return (s, t, st) => { const i = s % 64, b = i % 8, r = roots[Math.floor(i / 8)];
+      if (b === 0) { vHit(a, out, t, 'lowpass', 360, 0.1, st * 6, 0.5); vPluck(a, out, MN(r), t, 0.3, st * 3.4); }
+      if (b === 3 || b === 6) vPluck(a, soft, MN(r + 12 + (b === 3 ? 7 : 4)), t, 0.06, st * 1.8, 'sine');
+      if (b === 4) vHit(a, out, t, 'highpass', 4200, 0.02, 0.06);
+      const m = mel[i % 32]; if (m && s % 128 >= 32) { let d = 1; while (d < 4 && !mel[(i + d) % 32]) d++; vTone(a, soft, 'triangle', MN(m), t, st * d * 0.92, 0.04, 0.04, 3, 4.5); } };
+  } },
   // 活動場景：熱鬧但仍明亮（輕鑼＋柔主旋律，少嗩吶／重鈸）
   event: { bpm: 128, make: (a, out) => {
     const soft = a.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 2600; soft.connect(out);

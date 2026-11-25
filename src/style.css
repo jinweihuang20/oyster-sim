@@ -4304,3 +4304,7 @@ body.uiCovered:is(.onShift,.plazaMode,.plazaRoam) :is(#btns,#btnsL,#btnsCorner,#
   #installApp .installTx,#installApp .installTx b{font-size:13px}
   #installApp .installSteps li.installEm{grid-column:1/-1}
 }
+/* 外傘頂洲：漲潮提示 */
+#tidePill{display:none;position:fixed;right:calc(env(safe-area-inset-right,0px) + 14px);top:calc(env(safe-area-inset-top,0px) + 86px);z-index:30;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.92);color:#2a5a86;font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.18);pointer-events:none;animation:tidePulse 1.6s ease-in-out infinite}
+body.tideOn #tidePill{display:flex}
+@keyframes tidePulse{0%,100%{opacity:1}50%{opacity:.7}}

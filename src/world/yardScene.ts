@@ -46,9 +46,45 @@ function buildLandmarks() {
   for (let r = 0; r < 3; r++) for (let c = 0; c < 6; c++) B(3, 0.05, 2, (r + c) % 2 ? 0xc8d8e0 : 0xb0c8d4, [-12 + c * 3.4, -0.35, -17 - r * 2.4], bd, { roughness: 0.2, metalness: 0.2 });
   for (let i = 0; i < 4; i++) D.mesh(new THREE.ConeGeometry(1.2 + i * 0.2, 1.6 + i * 0.3, 10), D.mat(0xfafafa), [7 + i * 2.6, 0.5, -22 - (i % 2) * 2], bd);
   for (let i = 0; i < 40; i++) D.mesh(rcyl(0.02, 0.03, 1.2, 4), D.mat(0x8a9a4a), [-14 + Math.random() * 28, 0.2, -26 - Math.random() * 3], bd);
+  // 外傘頂洲：退潮露出的沙洲（漲潮時海水會漫上來蓋住）、遠方竹蚵棚與辨識布條、鋼架燈塔、廢蚵架方格固沙樁、載人上洲的漁筏
+  const ws = G('waisan');
+  { const sand = D.mesh(new THREE.PlaneGeometry(44, 20), D.mat(0xe2d3ae, { roughness: 1 }), [0, -0.4, -19], ws); sand.rotation.x = -Math.PI / 2; sand.castShadow = false; sand.receiveShadow = true; }
+  for (let i = 0; i < 5; i++) { const d = D.mesh(new THREE.SphereGeometry(2.2 + i * 0.4, 10, 6), D.mat(0xd8c69c, { roughness: 1 }), [-14 + i * 7, -0.62, -24 - (i % 2) * 3], ws); d.scale.set(1.6, 0.18, 1); d.castShadow = false; }
+  const bam = D.mat(0x9a8050), flagC = [0xd04a3a, 0x2a5a86, 0xf0c040, 0x3a9a6a];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) D.mesh(rcyl(0.05, 0.05, 1.6, 5), bam, [-15 + c * 2.2 + r * 0.8, -0.1, -29 - r * 2.4], ws);
+  for (let r = 0; r < 3; r++) { const bar = D.mesh(rcyl(0.04, 0.04, 16, 5), bam, [-7.3 + r * 0.8, 0.62, -29 - r * 2.4], ws); bar.rotation.z = Math.PI / 2; }
+  for (let k = 0; k < 6; k++) { const x = -14 + k * 3.1, z = -28.6 - (k % 3) * 2.4; D.mesh(rcyl(0.025, 0.025, 2.2, 4), bam, [x, 0.6, z], ws); B(0.55, 0.32, 0.02, flagC[k % 4], [x + 0.29, 1.5, z], ws); }
+  { // 塭港堆燈塔（鋼架塔）
+    const st = D.mat(0x8a9098, { metalness: 0.5, roughness: 0.5 }), lx = 11, lz = -31;
+    for (const [dx, dz] of [[-0.6, -0.6], [0.6, -0.6], [0.6, 0.6], [-0.6, 0.6]] as const) { const leg = D.mesh(rcyl(0.06, 0.08, 7, 5), st, [lx + dx * 0.7, 3.2, lz + dz * 0.7], ws); leg.rotation.set(dz * 0.08, 0, -dx * 0.08); }
+    for (let i = 0; i < 5; i++) { const y = 0.6 + i * 1.4, w = 1.0 - i * 0.12; B(w, 0.06, 0.06, 0x8a9098, [lx, y, lz - w / 2], ws); B(w, 0.06, 0.06, 0x8a9098, [lx, y, lz + w / 2], ws); B(0.06, 0.06, w, 0x8a9098, [lx - w / 2, y, lz], ws); B(0.06, 0.06, w, 0x8a9098, [lx + w / 2, y, lz], ws); }
+    B(0.7, 0.5, 0.7, 0xf2f2ee, [lx, 7.0, lz], ws);
+    D.mesh(rcyl(0.22, 0.22, 0.4, 8), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }), [lx, 7.45, lz], ws);
+  }
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++) { const x = 4 + c * 0.9, z = -12.5 - r * 0.9; D.mesh(rcyl(0.035, 0.04, 0.7, 4), D.mat(0x7a6a4a), [x, -0.1, z], ws); if (c < 5) { const b = D.mesh(rcyl(0.02, 0.02, 0.9, 4), D.mat(0x8a7a5a), [x + 0.45, 0.1, z], ws); b.rotation.z = Math.PI / 2; } }
+  { // 漁筏：開工時從外海開進來靠岸
+    const boat = new THREE.Group(); ws.add(boat); waisanBoat = boat;
+    B(4.2, 0.35, 1.6, 0x3a7ab8, [0, 0, 0], boat); B(4.0, 0.06, 1.4, 0xd8c8a0, [0, 0.2, 0], boat);
+    B(1.3, 0.9, 1.2, 0xf2f2ee, [-0.9, 0.65, 0], boat); B(1.5, 0.08, 1.4, 0x2a5a86, [-0.9, 1.14, 0], boat);
+    D.mesh(rcyl(0.18, 0.2, 0.45, 8), D.mat(0x333333), [2.25, 0.2, 0], boat);
+    for (const z of [-0.65, 0.65]) for (let i = 0; i < 3; i++) D.mesh(new THREE.SphereGeometry(0.1, 8, 6), D.mat(0xf06a1a), [-0.2 + i * 0.8, 0.28, z], boat);
+    boat.position.set(BOAT_X1, -0.4, BOAT_Z);
+  }
   // 自家：竹竿曬衣 + 小漁船
   const hm = G('home');
   B(3, 0.5, 1.2, 0x2a6aa0, [6, -0.25, -22], hm); B(1, 0.8, 0.8, 0xf0f0e8, [6.5, 0.4, -22], hm);
+}
+// ---------- 外傘頂洲漁筏進港 ----------
+let waisanBoat: THREE.Group | null = null, boatAt = -99;
+const BOAT_X0 = 26, BOAT_X1 = 5.5, BOAT_Z = -10.4, BOAT_SEC = 5;
+/** 開工時播一次：漁筏從外海開進來靠岸 */
+export function waisanArrive() { boatAt = performance.now() / 1000; if (waisanBoat) waisanBoat.position.x = BOAT_X0; }
+function tickBoat(t: number) {
+  if (!waisanBoat) return;
+  const k = Math.min(1, Math.max(0, (t - boatAt) / BOAT_SEC)), e = 1 - (1 - k) ** 3;
+  waisanBoat.position.x = BOAT_X0 + (BOAT_X1 - BOAT_X0) * e;
+  waisanBoat.position.y = -0.4 + Math.sin(t * 1.6) * 0.04;
+  waisanBoat.rotation.z = Math.sin(t * 1.3) * 0.025;
 }
 // ---------- 各地點的蚵寮本體（裝飾用，不影響座位／碗／蚵殼山／射線目標） ----------
 type ShedStyle = { ground: number; hemi: number; hemiK: number; sun: number; sunK: number; lamp: number; lampK: number; fog: number; fogNear: number; fogFar: number };
@@ -57,6 +93,7 @@ const SHED_STYLE: Record<string, ShedStyle> = {
   wanggong: { ground: 0xd8d4ca, hemi: 0xfff4ea, hemiK: 1.12, sun: 0xfff0d8, sunK: 1.22, lamp: 0xffeedc, lampK: 11, fog: 0xc8dce8, fogNear: 16, fogFar: 52 },
   dongshi: { ground: 0xdcc8a8, hemi: 0xfff0e0, hemiK: 1.08, sun: 0xffe0b0, sunK: 1.18, lamp: 0xffe4bc, lampK: 12, fog: 0xe0c8a8, fogNear: 15, fogFar: 48 },
   budai: { ground: 0xd0d6d8, hemi: 0xfff4ec, hemiK: 1.15, sun: 0xfff2e0, sunK: 0.9, lamp: 0xfff0e0, lampK: 18, fog: 0xc0d0d8, fogNear: 15, fogFar: 46 },
+  waisan: { ground: 0xe6d8b6, hemi: 0xfff8ee, hemiK: 1.18, sun: 0xfff4e0, sunK: 1.25, lamp: 0xfff2e0, lampK: 8, fog: 0xd8e6ee, fogNear: 18, fogFar: 60 },
 };
 let shedG: THREE.Group | null = null, shedId = '';
 export function getShedG() { return shedG; }
@@ -132,6 +169,28 @@ export function buildShed(id: string) {
     // 木欄杆
     for (let i = 0; i < 14; i++) C(0.04, 0.04, 0.8, plankB, [-6 + i * 0.95, 0.4, -4.2], 6);
     { const r = C(0.035, 0.035, 13, plankA, [0.2, 0.8, -4.2], 6); r.rotation.z = Math.PI / 2; }
+  } else if (id === 'waisan') {
+    // 沙洲上的帆布工作棚：白帆布頂、竹柱、四周堆蚵串簍和救生衣
+    shedAnim.push(tickBoat);
+    const bamboo = M(0xb8a060), canvas = M(0xf2efe6, { side: THREE.DoubleSide, roughness: 0.9 }), stripe = M(0x2a5a86, { side: THREE.DoubleSide });
+    for (const x of [-3.5, 3.5]) for (const z of [-3.5, 0, 3.5]) C(0.06, 0.07, 2.9, bamboo, [x, 1.45, z], 6);
+    for (let i = 0; i < 8; i++) { const sx = -3.15 + i * 0.9, t = B(0.9, 0.02, 7.6, i % 4 === 3 ? stripe : canvas, [sx, 2.95 - Math.abs(i - 3.5) * 0.06, 0]); t.rotation.z = (i < 4 ? 1 : -1) * 0.08; }
+    // 沙地紋路（抬高避免閃爍）
+    const ripple = M(0xd6c49c, { roughness: 1, transparent: true, opacity: 0.6, depthWrite: false });
+    for (let i = 0; i < 7; i++) flat(9, 0.08, ripple, [0, 0.025, -3.6 + i * 1.2]);
+    // 蚵串簍（藍色塑膠籃裝滿蚵串）
+    const crate = M(0x2a6ad0, { roughness: 0.5 }), oyM = M(0x7a7a72, { roughness: 1 });
+    for (const [x, z] of [[-3.0, -2.8], [-2.35, -2.8], [-2.7, -2.2], [3.0, -2.6]] as const) { B(0.55, 0.32, 0.42, crate, [x, 0.16, z]); for (let k = 0; k < 4; k++) D.mesh(new THREE.DodecahedronGeometry(0.07, 0), oyM, [x - 0.15 + (k % 2) * 0.3, 0.36, z - 0.1 + Math.floor(k / 2) * 0.2], g); }
+    // 救生衣掛在竹柱上
+    const vest = M(0xf06a1a, { roughness: 0.6 });
+    for (const z of [-1.2, -0.4]) B(0.42, 0.5, 0.1, vest, [3.42, 1.4, z]);
+    // 錨、繩子
+    const iron = M(0x4a4a4a, { metalness: 0.6, roughness: 0.5 });
+    C(0.04, 0.04, 0.9, iron, [-3.0, 0.45, 2.6], 6); B(0.6, 0.06, 0.06, iron, [-3.0, 0.08, 2.6]);
+    const rope = M(0xd8b070);
+    for (let k = 0; k < 3; k++) D.mesh(new THREE.TorusGeometry(0.3 - k * 0.05, 0.03, 5, 14), rope, [2.8, 0.04 + k * 0.05, 2.6], g).rotation.x = Math.PI / 2;
+    // 冰桶
+    B(0.7, 0.45, 0.45, M(0xf2f2f2), [3.0, 0.23, 0.9], 0.3); B(0.72, 0.08, 0.47, M(0x2a5a86), [3.0, 0.49, 0.9], 0.3);
   } else if (id === 'budai') {
     // 工廠內：牆、高鋼桁架屋頂、後方大鐵捲門開口
     const wall = M(0xb8c0c4, { side: THREE.DoubleSide, metalness: 0.3 }), steel = M(0x5a6a74, { metalness: 0.6, roughness: 0.45 });
@@ -215,7 +274,7 @@ export function applyShedLook() {
   const f = D.scene.fog as THREE.Fog; f.color.lerp(_c2.setHex(s.fog), 0.45); f.near = s.fogNear; f.far = s.fogFar;
 }
 
-export const WATER_C: Record<string, number> = { home: 0x3a90b8, wanggong: 0x2a7ab0, dongshi: 0x4a8898, budai: 0x4a9aaa };
+export const WATER_C: Record<string, number> = { home: 0x3a90b8, wanggong: 0x2a7ab0, dongshi: 0x4a8898, budai: 0x4a9aaa, waisan: 0x5aa8c4 };
 type Crew = { name: string; hair: number; look: 'ama' | 'agong' | 'dajie' | 'fisher' | 'ama2'; pal: number[] };
 const CREW: Record<string, Crew[]> = {
   home: [{ name: '快手阿桃', hair: 0x999999, look: 'ama', pal: [] }, { name: '講話阿春', hair: 0x333333, look: 'ama', pal: [] }, { name: '好奇阿嬌', hair: 0xcccccc, look: 'ama', pal: [] }],

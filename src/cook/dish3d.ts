@@ -1,5 +1,5 @@
 /**
- * 蚵仔煎程序化模型：一個產生器涵蓋 2,304 種組合（同一 id 一定長一樣）。
+ * 蚵仔煎程序化模型：一個產生器涵蓋 4,608 種組合（同一 id 一定長一樣）。
  * 單位：半徑 1；放到世界時自行縮放（盤上約 0.13）。
  */
 import * as THREE from 'three';
@@ -214,10 +214,12 @@ export function buildDish(id: number, combo?: Combo, seed = 0): THREE.Group {
     g.add(m);
   };
   topRng(1); mark = g.children.length;
-  if (c.top & 1) for (let i = 0; i < 7; i++) {
+  // 大蚵：顆數少、個頭大；石蚵：小顆、數量多
+  const oyK = c.oy === 1 ? 1.45 : c.oy === 2 ? 0.68 : 1, oyN = c.oy === 1 ? 5 : c.oy === 2 ? 12 : 7;
+  if (c.top & 1) for (let i = 0; i < oyN; i++) {
     const o = new THREE.Group();
-    const body = new THREE.Mesh(G.oy, mat(c.done === 2 ? '#a89c84' : '#c4bba5', { rough: 0.35 }));
-    body.scale.set(0.12, 0.045, 0.085); o.add(body);
+    const body = new THREE.Mesh(G.oy, mat(c.done === 2 ? '#a89c84' : c.oy === 2 ? '#b3ab98' : '#c4bba5', { rough: 0.35 }));
+    body.scale.set(0.12, 0.045, 0.085); o.add(body); o.scale.setScalar(oyK);
     const frill = new THREE.Mesh(G.oy, mat('#5e5a52', { rough: 0.4 }));
     frill.scale.set(0.06, 0.03, 0.05); frill.position.set(0.06, 0.012, 0); o.add(frill);
     place(o, 0.03);

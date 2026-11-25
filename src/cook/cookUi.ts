@@ -1,5 +1,5 @@
 /** 煎台操作面板（自由煎，不計分不限時）與蚵仔煎圖鑑（三層）。 */
-import { TOPS, BATTERS, DONES, SAUCES, COMBO_TOTAL, comboId, comboOf, comboName, comboHasFood, comboFeatures, specialOf, SPECIAL_IDS, topName, cookTitle, COOK_TITLES, type Combo } from './combo';
+import { TOPS, OY_KINDS, BATTERS, DONES, SAUCES, COMBO_TOTAL, comboId, comboOf, comboName, comboHasFood, comboFeatures, specialOf, SPECIAL_IDS, topName, cookTitle, COOK_TITLES, type Combo } from './combo';
 import { dishThumb, mountDishViewer, setLivePour, pourSpread } from './dish3d';
 import { foodCount, foodCountAny, takeFood } from '../food/pantry';
 import { FOOD_BY_ID } from '../food/ingredients';
@@ -47,12 +47,12 @@ export function initCook(deps: CookDeps) {
 
 /* ───────── 煎台 ───────── */
 
-type Sel = { top: number; batter: number; egg: number; done: number; sauce: number };
+type Sel = { top: number; batter: number; egg: number; done: number; sauce: number; oy: number };
 let seat: number | null = null;
 /** 主選單的自家煎台：不連伺服器、不能展示 */
 let solo = false;
 let step = 1;
-let sel: Sel = { top: 0, batter: -1, egg: -1, done: -1, sauce: -1 };
+let sel: Sel = { top: 0, batter: -1, egg: -1, done: -1, sauce: -1, oy: 0 };
 let target: Combo | null = null;
 let stopView: (() => void) | null = null;
 let lastViewId = -2;
@@ -75,7 +75,9 @@ const DONE_EDGE = [0.38, 0.72];
 const doneOf = (f: number) => (f < DONE_EDGE[0] ? 0 : f < DONE_EDGE[1] ? 1 : 2);
 const batterOf = (f: number) => (f < 0.34 ? 1 : f < 0.67 ? 2 : 3);
 
-const curCombo = (): Combo => ({ top: sel.top, batter: Math.max(0, sel.batter), egg: Math.max(0, sel.egg), done: Math.max(0, sel.done), sauce: Math.max(0, sel.sauce) });
+const curCombo = (): Combo => ({ top: sel.top, batter: Math.max(0, sel.batter), egg: Math.max(0, sel.egg), done: Math.max(0, sel.done), sauce: Math.max(0, sel.sauce), oy: sel.top & 1 ? sel.oy : 0 });
+/** 預設蚵種：有一般蚵仔就用一般的，沒有再依序找大蚵、石蚵 */
+const defaultOy = () => { const i = OY_KINDS.findIndex(k => foodCount(k.food) > 0); return i < 0 ? 0 : i; };
 
 export function cookOpenSeat() { return seat; }
 export function cookPanelOpen() { return $('cook').classList.contains('show'); }
@@ -94,9 +96,10 @@ function resetSel(preset?: number) {
   step = 1; flipped = false; doneFrac = 0; pourFrac = 0; resultId = -1; reviewDone = false; pourT0 = 0;
   cancelAnimationFrame(pourRaf); setLivePour(null); cancelAnimationFrame(cookRaf);
   target = preset != null && preset >= 0 ? comboOf(preset) : null;
-  sel = { top: 0, batter: -1, egg: -1, done: -1, sauce: -1 };
+  sel = { top: 0, batter: -1, egg: -1, done: -1, sauce: -1, oy: defaultOy() };
   if (target) {
     for (const t of TOPS) if (target.top & t.bit && foodCountAny(t.food) > 0) sel.top |= t.bit;
+    if (target.top & 1 && target.oy && foodCount(OY_KINDS[target.oy].food) > 0) sel.oy = target.oy;
   }
   sync(0);
 }
@@ -182,7 +185,9 @@ function render() {
     const lack = TOPS.filter(t => foodCountAny(t.food) === 0);
     html += `<h3 class="ckH">選配料（可複選）</h3><div class="ckChips">${TOPS.map(t => { const n = foodCountAny(t.food); return chip(t.n, !!(sel.top & t.bit), n, `data-top="${t.bit}"`, n === 0); }).join('')}</div>`
       + (lack.length ? `<p class="ckHint">${IC.info}${lack.map(t => `${t.n}：${hint(t.food)}`).join('；')}</p>` : '')
-      + targetTip(topName(target?.top ?? 0) || '不放配料')
+      + (sel.top & 1 ? `<h3 class="ckH">用哪一種蚵仔</h3><div class="ckChips">${OY_KINDS.map((k, i) => { const n = foodCount(k.food); return chip(i ? k.n : '一般蚵仔', sel.oy === i, n, `data-oy="${i}"`, n === 0); }).join('')}</div>`
+        + (OY_KINDS.some(k => foodCount(k.food) === 0) ? `<p class="ckHint">${IC.info}${OY_KINDS.slice(1).filter(k => foodCount(k.food) === 0).map(k => `${k.n}：${hint([k.food])}`).join('；')}</p>` : '') : '')
+      + targetTip(topName(target?.top ?? 0, target?.oy ?? 0) || '不放配料')
       + `<div class="ckAct"><button type="button" class="ckBtn pri" data-ck="next">下一步</button></div>`;
   } else if (step === 2) {
     const n = foodCount('flour');
@@ -227,7 +232,8 @@ function render() {
 }
 
 function bind(body: HTMLElement) {
-  body.querySelectorAll<HTMLButtonElement>('[data-top]').forEach(b => b.onclick = () => { sel.top ^= Number(b.dataset.top); render(); });
+  body.querySelectorAll<HTMLButtonElement>('[data-top]').forEach(b => b.onclick = () => { sel.top ^= Number(b.dataset.top); if (sel.top & 1 && !foodCount(OY_KINDS[sel.oy].food)) sel.oy = defaultOy(); render(); });
+  body.querySelectorAll<HTMLButtonElement>('[data-oy]').forEach(b => b.onclick = () => { sel.oy = Number(b.dataset.oy) || 0; render(); });
   body.querySelectorAll<HTMLButtonElement>('[data-egg]').forEach(b => b.onclick = () => { sel.egg = Number(b.dataset.egg); step = 4; sync(3); startCook(); });
   body.querySelectorAll<HTMLButtonElement>('[data-sauce]').forEach(b => b.onclick = () => { sel.sauce = Number(b.dataset.sauce); sync(4); render(); }); // 只選，不馬上完成：可以換
   body.querySelectorAll<HTMLButtonElement>('[data-ck]').forEach(b => b.onclick = () => {
@@ -313,11 +319,12 @@ function scoop() {
 function finish() {
   const c = curCombo();
   // 選的時候有，煎完時可能剛好過期：缺的就當沒加
-  for (const t of TOPS) if (c.top & t.bit && !takeFood(t.food)) c.top &= ~t.bit;
+  for (const t of TOPS) if (c.top & t.bit && !takeFood(t.bit === 1 ? [OY_KINDS[c.oy ?? 0].food] : t.food)) c.top &= ~t.bit;
+  if (!(c.top & 1)) c.oy = 0;
   if (c.batter && !takeFood(['flour'])) c.batter = 0;
   if (c.egg && !takeFood(['egg'])) c.egg = 0;
   if (c.sauce && !takeFood([SAUCES[c.sauce].id])) c.sauce = 0;
-  sel = { ...c };
+  sel = { ...c, oy: c.oy ?? 0 };
   const id = comboId(c);
   const before = dexCount();
   const isNew = !has(id);
@@ -351,7 +358,7 @@ async function doDisplay(b: HTMLButtonElement) {
   else { b.disabled = false; D.toast('展示失敗，再試一次', '#ffb08a'); }
 }
 
-/* ───────── 圖鑑（平鋪：一格一種，共 2,304 格，依編號排；只畫看得到的幾列） ───────── */
+/* ───────── 圖鑑（平鋪：一格一種，共 4,608 格，依編號排；只畫看得到的幾列） ───────── */
 
 type DexFilter = 'all' | 'got' | 'un' | 'hid';
 let dexLevel: 'list' | 'detail' = 'list';

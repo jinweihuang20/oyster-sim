@@ -71,7 +71,7 @@ export function addFood(id: string, n: number, src: FoodSrc, q = 0, quiet = fals
   const s = D.getSave(); s.foodSeen ??= [];
   const first = !s.foodSeen.includes(id); if (first) s.foodSeen.push(id);
   D.persist();
-  if (src === 'shuck') { shuckPend[qq] = (shuckPend[qq] ?? 0) + n; if ((shuckPend[0] ?? 0) + (shuckPend[1] ?? 0) >= 20) flushShuckTrack(); }
+  if (src === 'shuck' && id === 'oyster') { shuckPend[qq] = (shuckPend[qq] ?? 0) + n; if ((shuckPend[0] ?? 0) + (shuckPend[1] ?? 0) >= 20) flushShuckTrack(); }
   else D.track('food', { item: 'food-' + id, kind: src, count: n, ...(qq ? { q: qq } : {}) });
   const nm = `${f.n}${f.quality ? (qq ? '（完整）' : '（一般）') : ''}`;
   if (first) D.toastTop(`第一次拿到食材「${f.n}」！主選單的「食材」可以查看`);
@@ -110,8 +110,10 @@ export function purgeFood() {
 
 // ----- 取得管道 -----
 /** 自己剝進碗的每一顆蚵仔肉都算一份食材蚵仔（完整／一般看有沒有剝破）；一般偷來、寵物產肉、新手教學不算。阿珀貓拳從阿婆碗偷來的是例外，會另外呼叫本函式。 */
-export function rollShuck(intact: boolean) {
+export function rollShuck(intact: boolean, big = false) {
   if (D.isTut()) return;
+  // 外傘頂洲的大蚵：入碗一顆就是一份大蚵（第一次拿到會跳提示）
+  if (big) { addFood('bigoy', 1, 'shuck', intact ? 1 : 0); return; }
   addFood('oyster', 1, 'shuck', intact ? 1 : 0, true);
 }
 /** used：入碗幾顆（與 rollShuck 同一批：教學、一般偷來、寵物產肉不算；烤台搶到再入碗的算）。每顆各自擲一次 */
@@ -160,7 +162,7 @@ export function foodPanelHtml() {
   const kinds = FOODS.filter(f => foodCount(f.id) > 0).length;
   const cats: FoodCat[] = ['main', 'extra', 'base', 'egg', 'sauce'];
   return `<div class="fdHead"><div class="fdTease"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M5 10v9h14v-9M4 10l2-5h12l2 5"/><path d="M10 19v-5h4v5"/></svg><span>廣場煎台開張了</span></div>`
-    + `<p class="fdSub">到廣場中央和第 5 桌的煎台，站進藍色圓圈按「開始煎」；或在主選單按「煎蚵仔煎」，用自家煎台煎。用這些食材能煎出 2,304 種蚵仔煎，現有 <b>${kinds}/${FOODS.length}</b> 種食材。</p>`
+    + `<p class="fdSub">到廣場中央和第 5 桌的煎台，站進藍色圓圈按「開始煎」；或在主選單按「煎蚵仔煎」，用自家煎台煎。用這些食材能煎出 4,608 種蚵仔煎，現有 <b>${kinds}/${FOODS.length}</b> 種食材。</p>`
     + `<p class="fdBuy">地瓜粉、青菜、雞蛋和醬料在<b>廣場食材攤</b>買得到。</p>`
     + `<div class="fdBtns"><button type="button" class="fdBtn" data-cookdex>${DEX_IC}<span>蚵仔煎圖鑑</span></button><button type="button" class="fdBtn pri" data-fdgo>${GO_IC}<span>${D.inPlaza() ? '走到食材攤' : '前往廣場'}</span></button></div></div>`
     + cats.map(c => `<div class="fdCat">${CAT_N[c]}</div>` + FOODS.filter(f => f.cat === c).map(rowHtml).join('')).join('');

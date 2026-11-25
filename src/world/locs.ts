@@ -9,13 +9,18 @@ export const DIFF = [
 ];
 export const DIFF_W = [30, 40, 22, 8];
 
-export type Loc = { id: string; n: string; m: number; w: number[]; thr: number; ang: number; price: number; need: number; tint: number | null; d: string };
+/** req：要先解鎖哪個地點（例：外傘頂洲的船從東石出發） */
+export type Loc = { id: string; n: string; m: number; w: number[]; thr: number; ang: number; price: number; need: number; tint: number | null; d: string; req?: string };
 export const LOCS: Loc[] = [
   { id: 'home', n: '🏠 自家蚵寮', m: 1, w: DIFF_W, thr: 1, ang: 1, price: 0, need: 0, tint: null, d: '熟悉的老位子，阿婆們都很和氣' },
   { id: 'wanggong', n: '⚓ 王功漁港', m: 1.2, w: [22, 40, 28, 10], thr: 1.2, ang: 1.15, price: 800, need: 60, tint: 0x5f8fb0, d: '海風大、硬殼多一點，阿婆稍微兇' },
   { id: 'dongshi', n: '🎡 東石漁人碼頭', m: 1.4, w: [14, 34, 36, 16], thr: 1.4, ang: 1.3, price: 2500, need: 200, tint: 0xe0b888, d: '觀光客多、蚵仔偏硬，阿婆丟殼更勤' },
   { id: 'budai', n: '🏭 布袋蚵寮大廠', m: 2, w: [8, 26, 40, 26], thr: 1.7, ang: 1.5, price: 6000, need: 500, tint: 0x90b0c0, d: '工錢最高，但蚵仔超硬、阿婆最兇' },
+  // 排在最後：Social.report('port', 索引) 與舊紀錄對得上
+  { id: 'waisan', n: '外傘頂洲', m: 2.2, w: [6, 22, 40, 32], thr: 1.6, ang: 1.3, price: 12000, need: 1200, tint: 0xa8c8d8, d: '從東石搭漁筏上沙洲，會剝到大蚵；兩分鐘後漲潮要搶收', req: 'dongshi' },
 ];
+/** 外傘頂洲：大蚵出現率（漲潮前／漲潮後）、漲潮開始秒數（班表經過幾秒）、大蚵多撬幾下、單價倍率、找縫容許角度加多少 */
+export const WAISAN = { bigRate: 0.3, bigRateTide: 0.5, tideAt: 120, bigPry: 2, bigPay: 2, bigTol: 0.05, tideNag: 1.5 };
 
 export type Seat = { id: string; n: string; a: number; r: number; scoop: number; bowl: number; perf: number; nag: number; throwM: number; steal: number; pro: string; con: string };
 export const SEATS: Seat[] = [
