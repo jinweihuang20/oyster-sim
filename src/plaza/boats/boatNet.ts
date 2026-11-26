@@ -69,6 +69,8 @@ export type BoatNetEvents = {
   rescued: (e: { boatId: number; seat: number; by: string }) => void;
   /** Join／重連後：伺服器的完整狀態（null＝舊伺服器，不支援） */
   state: (s: BoatsSnap | null, soft?: boolean) => void;
+  /** 每次 Join 成功之後（第一次進場、自動重連、手動重連）：沿用斷線前狀態的模組要重新對帳 */
+  rejoined?: () => void;
   /** 蚵棚：整包（進場／對帳）、單座更新、收掉 */
   racks?: (s: RackSnap) => void;
   rackUpd?: (r: RackDto) => void;
@@ -125,11 +127,23 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     conn.on('FishPose', safe(x => ev.fishPose?.({ connId: String(g(x, 'connId') ?? ''), dx: num(g(x, 'dx')), dz: num(g(x, 'dz')), yaw: num(g(x, 'yaw')), st: num(g(x, 'st')) })));
     conn.on('BoatRescued', safe(x => ev.rescued({ boatId: num(g(x, 'boatId'), -1), seat: num(g(x, 'seat'), -1), by: String(g(x, 'by') ?? '') })));
   });
-  const fetchState = async () => {
-    const r = await call('BoatState');
-    // 舊伺服器沒有 BoatState（錯誤訊息各版本不同）：只要呼叫丟例外就當不支援，改本機模式
-    if (r?.err === 'old_server' || r?.err === 'fail') { supported = false; ev.state(null); return; }
-    if (r?.ok) { supported = true; ev.state(normSnap(r.state)); void fetchDrift(); void fetchRacks(); }
+  let fetchGen = 0;
+  /**
+   * 進場／重連後拿完整狀態。只有伺服器明講「沒有這個方法」才當舊伺服器；
+   * 斷線中丟例外（fail）／還沒連上（offline）不能當成舊伺服器，不然之後整場都會卡在本機模式。
+   */
+  const fetchState = async (tries = 3, gapMs = 1500) => {
+    const gen = ++fetchGen;
+    for (let i = 0; i < tries; i++) {
+      if (closed || gen !== fetchGen) return;
+      if (i > 0) { await new Promise(r => setTimeout(r, gapMs)); if (closed || gen !== fetchGen) return; }
+      if (!live()) continue;
+      let r: any;
+      try { r = await client.conn!.invoke('BoatState'); } catch (e: any) { r = { ok: false, err: String(e?.message ?? 'fail').includes('does not exist') ? 'old_server' : 'fail' }; }
+      if (closed || gen !== fetchGen) return;
+      if (r?.err === 'old_server') { supported = false; ev.state(null); return; }
+      if (r?.ok) { supported = true; ev.state(normSnap(r.state)); void fetchDrift(); void fetchRacks(); return; }
+    }
   };
   /** 蚵棚：舊伺服器沒有就沒有蚵棚 */
   const fetchRacks = async () => {
@@ -141,7 +155,13 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     const r = await call('DriftState');
     if (r?.ok) { const d = normDrift(r.state); if (d) ev.drift?.(d); }
   };
-  client.afterJoin.push(() => { void fetchState(); });
+  client.afterJoin.push(() => {
+    // 新連線可能是更新過的伺服器：舊判斷全部重來
+    if (supported === false) supported = null;
+    fishPoseOld = false;
+    try { ev.rejoined?.(); } catch (e) { console.error('boat rejoined', e); }
+    void fetchState();
+  });
 
   let driveBusy = false, swimBusy = false, fishPoseBusy = false, fishPoseOld = false;
   return {
@@ -185,7 +205,7 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
       return { ok: !!r?.ok, err: r?.err, pay: r?.pay != null ? num(r.pay) : undefined, bonus: num(r?.bonus), total: r?.total != null ? num(r.total) : undefined, n: Math.max(1, num(r?.n, 1)), need: num(r?.need), gold: !!r?.gold };
     },
     /** 釣魚（PlazaWorld.Fish.cs）：回傳原始物件，plazaFish.ts 自己正規化 */
-    fish: (m: 'FishState' | 'FishCast' | 'FishRoll' | 'FishReel' | 'FishLand' | 'FishSell', ...a: unknown[]): Promise<any> => call(m, ...a),
+    fish: (m: 'FishState' | 'FishCast' | 'FishRoll' | 'FishReel' | 'FishLand' | 'FishSell' | 'FishAbandon', ...a: unknown[]): Promise<any> => call(m, ...a),
     /** 船上釣魚姿勢（給別人看；舊伺服器沒有就算了） */
     fishPose(dx: number, dz: number, yaw: number, st: number) {
       if (fishPoseBusy || !supported || fishPoseOld) return;

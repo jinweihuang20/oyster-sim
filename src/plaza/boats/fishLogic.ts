@@ -227,6 +227,18 @@ export class FishSM {
   }
 }
 
+// ---------------- 伺服器錯誤 → 玩家看得懂的話 ----------------
+/** ''＝不用提示（自己會處理／太頻繁） */
+export const FISH_ERR: Record<string, string> = {
+  not_at_water: '站到碼頭或岸邊才能釣', moving: '船在開：先停船才能拋竿', swimming: '游泳時不能釣魚', land: '那邊是岸上，轉向海面再拋',
+  hold_full: '魚獲滿了，先回碼頭賣魚', bad_gear: '這個餌配不上這支竿', slow: '', far_dock: '靠近碼頭再賣', empty: '還沒有魚可以賣',
+  daily_cap: '今天賣魚到上限了，明天再來', old_server: '伺服器還沒更新，暫時不能釣魚', offline: '還沒連上線', no_cast: '', too_fast: '魚跑掉了',
+  fighting: '上一竿還沒收好，再拋一次', not_joined: '重新連線中，等一下再拋', fail: '連線不穩，再拋一次',
+};
+export const fishErr = (e?: string, d = '做不到') => (e != null && Object.prototype.hasOwnProperty.call(FISH_ERR, e) ? FISH_ERR[e] || d : d);
+/** 連線問題（呼叫可能沒送到、或伺服器做了但回應沒收到）：伺服器那邊的一竿可能還掛著 */
+export const fishNetErr = (e?: string) => e === 'offline' || e === 'fail' || e === 'not_joined';
+
 // ---------------- 船上站著走（釣魚時） ----------------
 /**
  * 膠筏甲板可以站的範圍（船身座標：+z 船尾、-z 船頭；x 左右）。甲板木條 x ±1.07、z -1.13～1.95；

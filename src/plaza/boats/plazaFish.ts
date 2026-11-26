@@ -11,7 +11,7 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, castPoint, castDist, castRange, yawOf, trollOk, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, castPoint, castDist, castRange, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
 import { makeRod, type Rod } from './fishRod';
 import { fishGeometry, fishMaterial } from './fishModel';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
@@ -52,12 +52,8 @@ const ICON = {
   left: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
   right: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
 };
-const ERR: Record<string, string> = {
-  not_at_water: '站到碼頭或岸邊才能釣', moving: '船在開：先停船才能拋竿', swimming: '游泳時不能釣魚', land: '那邊是岸上，轉向海面再拋',
-  hold_full: '魚獲滿了，先回碼頭賣魚', bad_gear: '這個餌配不上這支竿', fighting: '', slow: '', far_dock: '靠近碼頭再賣', empty: '還沒有魚可以賣',
-  daily_cap: '今天賣魚到上限了，明天再來', old_server: '伺服器還沒更新，暫時不能釣魚', offline: '還沒連上線', no_cast: '', too_fast: '魚跑掉了',
-};
-const err = (e?: string, d = '做不到') => (e != null && e in ERR ? ERR[e] || d : d);
+const ERR = FISH_ERR;
+const err = fishErr;
 const money = (n: number) => `$${Math.round(n).toLocaleString('zh-TW')}`;
 const num = (v: unknown, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
 /** 除錯：每個伺服器呼叫最後一次的回應 */
@@ -73,6 +69,8 @@ const sm = new FishSM();
 let rod: Gear = 'float';
 let pick: Record<Gear, ItemKey> = { float: 'oyster', lure: 'minnow' };
 let ok = false, oldServer = false, busy = false, fetchT = 0, fetchTries = 0;
+/** 伺服器那邊可能還掛著上一竿（收魚／收竿的回應在斷線時丟了）：下次拋竿前先放棄它 */
+let staleLine = false;
 let hold: HoldFish[] = [], holdN = 0, holdVal = 0, sellLeft: number = FISH.sellMax;
 let dexView: FishDexView | null = null;
 let dex = new Map<string, { kg: number; n: number }>();
@@ -114,7 +112,7 @@ function fixPick() {
 // ---------------- 開／關 ----------------
 export function openFish(ctx: FishCtx, root: HTMLElement) {
   closeFish();
-  C = ctx; ok = false; oldServer = false; busy = false; fetchT = 2; fetchTries = 0; hold = []; holdN = holdVal = 0; sm.exit(); hooked = null; panelOn = false;
+  C = ctx; ok = false; oldServer = false; busy = false; fetchT = 2; fetchTries = 0; staleLine = false; hold = []; holdN = holdVal = 0; sm.exit(); hooked = null; panelOn = false;
   const mk = (id: string, ic: string, label: string, key = '', cls = '') => {
     const b = document.createElement('button'); b.id = id; b.type = 'button'; b.className = 'boatBtn fishBtn ' + cls;
     b.innerHTML = `<i class="boatIc">${ic}</i><span class="lbl">${label}</span>${key ? `<span class="key"> (${key})</span>` : ''}`;
@@ -195,7 +193,8 @@ function buildGfx(parent: THREE.Object3D) {
 async function fetchState() {
   const n = C?.net(); if (!n || C?.localOnly()) return;
   const r = await n.fish('FishState'); dbgLast.FishState = r;
-  if (r?.err === 'old_server' || (r && !r.ok && r.err === 'fail')) { oldServer = true; return; }
+  // 只有真的沒有這個方法才算舊伺服器；斷線中的 fail／offline 下次再問
+  if (r?.err === 'old_server') { oldServer = true; return; }
   if (!r?.ok) return;
   const s = r.state;
   ok = true;
@@ -272,14 +271,39 @@ function releaseCast() {
   const cp = castPoint(ox, oz, castH, p, sm.item); castX = cp.x; castZ = cp.z; castDst = castDist(p, sm.item);
   if (!n || C.localOnly()) { sm.castFail(); toast(ERR.offline, '#ffb08a'); return; }
   C.sfx('launch');
-  void n.fish('FishCast', sm.gear, sm.item, p, castH).then(r => {
+  void castOnServer(n, p).then(r => {
     dbgLast.FishCast = r;
+    if (!C) return;
     if (!r?.ok) { sm.castFail(); if (r?.err === 'old_server') oldServer = true; const m = err(r?.err, '拋不出去'); if (m && r?.err !== 'slow') toast(m, '#ffb08a', 1.6); return; }
     castX = num(r.x, castX); castZ = num(r.z, castZ); castDst = num(r.dist, castDst);
     sm.castOk(num(r.sid), castDst);
     // 落水
     window.setTimeout(() => { if (C && sm.lineOut) { C.splash(castX, castZ, 0.25); C.sfx('splash'); } }, FISH.flyS * 1000);
   });
+}
+/** 放棄伺服器那邊掛著的上一竿（斷線時丟掉的那條魚）；成功才清旗標 */
+async function abandonStale(n: NonNullable<ReturnType<FishCtx['net']>>) {
+  const r = await n.fish('FishAbandon'); dbgLast.FishAbandon = r;
+  if (r?.ok || r?.err === 'old_server') staleLine = false;
+  return r;
+}
+/** 拋竿：先清掉斷線留下的上一竿；伺服器還說「拉扯中」（自己這邊早就不在拉了）就放棄它再拋一次 */
+async function castOnServer(n: NonNullable<ReturnType<FishCtx['net']>>, p: number) {
+  if (staleLine) await abandonStale(n);
+  let r = await n.fish('FishCast', sm.gear, sm.item, p, castH);
+  if (r?.err === 'fighting' && C && sm.phase === 'cast') {
+    const a = await abandonStale(n);
+    if (a?.ok && C && sm.phase === 'cast') r = await n.fish('FishCast', sm.gear, sm.item, p, castH);
+  }
+  return r;
+}
+/** 重新連上廣場（自動重連／手動重連／換新連線）：重新問狀態、不要沿用斷線時的「舊伺服器」判斷 */
+export function fishRejoined() {
+  oldServer = false; ok = false; fetchTries = 0; fetchT = 0.3;
+  if (!C) return;
+  const n = C.net();
+  // 斷線期間收魚失敗、或伺服器說拉扯中的那一竿：先放棄掉，之後才拋得出去
+  if (n && staleLine && sm.phase !== 'fight' && sm.phase !== 'land' && sm.phase !== 'hook') void abandonStale(n);
 }
 function pressReel() {
   if (!C) return;
@@ -290,7 +314,7 @@ async function doReel() {
   const n = C?.net(); if (!n || !C) return;
   const r = await n.fish('FishReel', sm.sid); dbgLast.FishReel = r;
   if (!C || sm.phase !== 'hook') return;
-  if (!r?.ok) { sm.reset(); if (r?.err && err(r.err, '')) toast(err(r.err, ''), '#ffb08a'); return; }
+  if (!r?.ok) { sm.reset(); if (fishNetErr(r?.err)) staleLine = true; if (r?.err && err(r.err, '')) toast(err(r.err, ''), '#ffb08a'); return; }
   const kind = String(r.kind ?? '');
   if (r.baitUsed) useItem(sm.item);
   if (kind === 'hooked') {
@@ -314,7 +338,11 @@ async function endFight(kind: 'landed' | 'snap' | 'unhook') {
   const f = hooked; hooked = null;
   if (!C) return;
   sm.reset();
-  if (!r?.ok) { toast(err(r?.err, '魚跑掉了'), '#ffb08a', 1.6); return; }
+  if (!r?.ok) {
+    // 斷線：伺服器那邊還在「拉扯中」，不清掉之後會一直拋不出去
+    if (fishNetErr(r?.err)) { staleLine = true; toast('連線中斷，這條魚跑掉了', '#ffb08a', 1.8); return; }
+    toast(err(r?.err, '魚跑掉了'), '#ffb08a', 1.6); return;
+  }
   holdN = num(r.holdN, holdN); holdVal = num(r.holdVal, holdVal);
   if (r.lureLost) {
     useItem(sm.item);
@@ -445,7 +473,7 @@ async function roll() {
   if (!r?.ok) {
     if (r?.err === 'moving') { sm.reset(); toast('開船了，自動收線', '#9fe0ff', 1.4); }
     else if (r?.err === 'late') { useItem(sm.item); sm.reset(); toast('餌被吃掉了', '#ffb08a', 1.4); }
-    else if (r?.err === 'no_cast' || r?.err === 'fighting') sm.reset();
+    else if (r?.err === 'no_cast' || r?.err === 'fighting') { if (r.err === 'fighting') staleLine = true; sm.reset(); }
     return;
   }
   if (r.bite) sm.bite(num(r.sinkMs));
@@ -657,7 +685,7 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
 
 // ---------------- 除錯 ----------------
 export const fishDbg = {
-  state() { return { phase: sm.phase, gear: sm.gear, item: sm.item, sid: sm.sid, power: +sm.power.toFixed(2), lure: sm.lure ? { dist: +sm.lure.dist.toFixed(1), depth: +sm.lure.depth.toFixed(2), follow: sm.lure.follow } : null, fight: sm.fight ? { ten: +sm.fight.ten.toFixed(2), prog: +sm.fight.prog.toFixed(2), run: sm.fight.run } : null, ok, oldServer, holdN, holdVal, sellLeft, dex: Object.fromEntries(dex), rod, pick: { ...pick }, hooked }; },
+  state() { return { phase: sm.phase, gear: sm.gear, item: sm.item, sid: sm.sid, power: +sm.power.toFixed(2), lure: sm.lure ? { dist: +sm.lure.dist.toFixed(1), depth: +sm.lure.depth.toFixed(2), follow: sm.lure.follow } : null, fight: sm.fight ? { ten: +sm.fight.ten.toFixed(2), prog: +sm.fight.prog.toFixed(2), run: sm.fight.run } : null, ok, oldServer, staleLine, holdN, holdVal, sellLeft, dex: Object.fromEntries(dex), rod, pick: { ...pick }, hooked }; },
   enter() { enterFish(); return sm.phase; },
   exit() { exitFish(); return sm.phase; },
   /** 拋竿（power 0～1；h 不給＝鏡頭方向） */

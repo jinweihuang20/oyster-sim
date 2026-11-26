@@ -18,7 +18,7 @@ import {
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
-import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishPoseNow, fishFaceYaw, fishCanWalk, fishPostPose } from './plazaFish';
+import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishPoseNow, fishFaceYaw, fishCanWalk, fishPostPose, fishRejoined } from './plazaFish';
 import { DECK, deckStart, deckClamp, stepDeck, yawOf } from './fishLogic';
 import { makeRod, type Rod } from './fishRod';
 import { newFishPose, stepFishPose, applyFishPose, fishPoseDecode, rodTipWorld, type FishPoseSt } from './fishPose';
@@ -172,7 +172,7 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
       seats: onSeats, poses: onPoses, ram: onRam, swimStart: s => upsertSwim(s, true), swimEnd: endSwim, rescued: onRescued, state: onState,
       drift: onDrift, driftClaimed: onDriftClaimed, driftShare: onDriftShare, driftTide: onDriftTide, driftPull: onDriftPull,
       racks: onRackSnap, rackUpd: onRackUpd, rackGone: onRackGone, rackStolen: onRackStolen, cargo: onCargo, load: onLoad,
-      fishBig: onFishBig, fishPose: onFishPose,
+      fishBig: onFishBig, fishPose: onFishPose, rejoined: fishRejoined,
     });
   } else localOnly = true;
   openRacks({
