@@ -8,7 +8,7 @@ import { placePlazaArmChain, type PlayerRig } from '../../dm/character';
 import type { Rod } from './fishRod';
 import { ROD_GRIP } from './fishRod';
 
-export type FishPhase = 'off' | 'hold' | 'charge' | 'cast' | 'wait' | 'fight';
+export type FishPhase = 'off' | 'hold' | 'charge' | 'cast' | 'wait' | 'fight' | 'show';
 export type FishPoseIn = {
   phase: FishPhase;
   /** 蓄力 0～1 */
@@ -66,6 +66,11 @@ export function fishPoseTarget(inp: FishPoseIn, castT: number, t: number) {
       const wob = Math.sin(t * 9) * 0.05 * (0.4 + k);
       return { pitch: 1.0 + 0.25 * k + wob, hx: 0.1, hy: 0.12 + 0.08 * k, hz: -0.26, lean: 0.12 + 0.16 * k, bend: 0.35 + 0.6 * k + wob, side: 0.06 };
     }
+    case 'show': {
+      // 釣上來了：竿子舉高、魚掛在竿尖晃，身體微微後仰
+      const wob = Math.sin(t * 6) * 0.04;
+      return { pitch: 1.45 + wob, hx: 0.14, hy: 0.2, hz: -0.22, lean: -0.05, bend: 0.28 + wob, side: 0.12 };
+    }
     case 'hold':
       return { pitch: 0.75, hx: 0.14, hy: 0.0, hz: -0.26, lean: 0, bend: 0.03, side: 0.12 };
     default:
@@ -98,15 +103,22 @@ export function stepFishPose(st: FishPoseSt, inp: FishPoseIn, dt: number) {
   return st;
 }
 
-/** 線上同步用的姿勢代碼：0 沒在釣、1 持竿、2 蓄力、3 甩竿、4 等待、5 拉魚、6 捲線；+16＝路亞竿 */
+/** 線上同步用的姿勢代碼：0 沒在釣、1 持竿、2 蓄力、3 甩竿、4 等待、5 拉魚、6 捲線、7 秀漁獲；+16＝路亞竿 */
 export function fishPoseCode(phase: FishPhase, reel: boolean, lure: boolean) {
-  const b = phase === 'off' ? 0 : phase === 'hold' ? 1 : phase === 'charge' ? 2 : phase === 'cast' ? 3 : phase === 'fight' ? 5 : reel ? 6 : 4;
+  const b = phase === 'off' ? 0 : phase === 'hold' ? 1 : phase === 'charge' ? 2 : phase === 'cast' ? 3 : phase === 'fight' ? 5 : phase === 'show' ? 7 : reel ? 6 : 4;
   return b === 0 ? 0 : b + (lure ? 16 : 0);
 }
 export function fishPoseDecode(code: number): FishPoseIn {
   const lure = (code & 16) !== 0, b = code & 15;
-  const phase: FishPhase = b === 1 ? 'hold' : b === 2 ? 'charge' : b === 3 ? 'cast' : b === 4 || b === 6 ? 'wait' : b === 5 ? 'fight' : 'off';
+  const phase: FishPhase = b === 1 ? 'hold' : b === 2 ? 'charge' : b === 3 ? 'cast' : b === 4 || b === 6 ? 'wait' : b === 5 ? 'fight' : b === 7 ? 'show' : 'off';
   return { phase, power: 0.8, reel: b === 6 || b === 5, tension: 0.5, lure, twitch: 0 };
+}
+/** 解碼到既有物件（每幀用，不配置） */
+export function fishPoseDecodeInto(code: number, out: FishPoseIn, tension = 0.5): FishPoseIn {
+  const lure = (code & 16) !== 0, b = code & 15;
+  out.phase = b === 1 ? 'hold' : b === 2 ? 'charge' : b === 3 ? 'cast' : b === 4 || b === 6 ? 'wait' : b === 5 ? 'fight' : b === 7 ? 'show' : 'off';
+  out.power = 0.8; out.reel = b === 6 || b === 5; out.tension = tension; out.lure = lure; out.twitch = 0;
+  return out;
 }
 
 const _dir = new THREE.Vector3(), _b = new THREE.Vector3(), _x = new THREE.Vector3(), _z = new THREE.Vector3(), _m = new THREE.Matrix4(), _hl = new THREE.Vector3();

@@ -16,6 +16,7 @@ import { makeRod, type Rod } from './fishRod';
 import { fishGeometry, fishMaterial } from './fishModel';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, type FishPoseIn, type FishPhase } from './fishPose';
+import type { FishSyncMsg } from './fishSync';
 
 export type FishBoat = { id: number; x: number; z: number; h: number; v: number };
 export type FishCtx = {
@@ -558,9 +559,10 @@ function drawGfx(dt: number) {
 }
 
 // ---------------- 人物動作＋釣竿（在人物擺好姿勢之後才呼叫） ----------------
-let catchMesh: THREE.Mesh | null = null, catchT = 0;
+let catchMesh: THREE.Mesh | null = null, catchT = 0, catchSp = '', catchKg = 0;
 function showCatch(f: HoldFish) {
   if (!gfx) return;
+  catchSp = f.sp; catchKg = +f.kg.toFixed(2);
   const geo = fishGeometry(f.sp); if (!geo) return;
   catchMesh?.removeFromParent();
   catchMesh = new THREE.Mesh(geo, fishMaterial());
@@ -576,7 +578,7 @@ function dropRod() {
 }
 function phaseOf(): FishPhase {
   const ph = sm.phase;
-  return ph === 'off' ? 'off' : ph === 'idle' ? 'hold' : ph === 'charge' ? 'charge' : ph === 'cast' || ph === 'fly' ? 'cast' : ph === 'fight' || ph === 'land' ? 'fight' : 'wait';
+  return ph === 'off' ? 'off' : ph === 'idle' ? (catchT > 0 ? 'show' : 'hold') : ph === 'charge' ? 'charge' : ph === 'cast' || ph === 'fly' ? 'cast' : ph === 'fight' || ph === 'land' ? 'fight' : 'wait';
 }
 function fillPoseIn() {
   poseIn.phase = phaseOf();
@@ -586,6 +588,23 @@ function fillPoseIn() {
   poseIn.tension = sm.fight?.ten ?? 0;
   poseIn.twitch = sm.phase === 'nibble' ? Math.max(0.4, sm.twitch) : sm.phase === 'sink' ? 1 : 0;
   return poseIn;
+}
+/**
+ * 給別人看的釣魚狀態（不含站位；站位由 plazaBoats 填）：姿勢代碼、拋竿方向（世界）、線長、張力、秀漁獲。
+ * 每幀呼叫、填進既有物件，不配置。
+ */
+export function fishSyncFill(out: FishSyncMsg) {
+  if (sm.phase === 'off') { out.st = 0; out.ch = 0; out.cd = 0; out.tn = 0; out.sp = ''; out.kg = 0; return out; }
+  fillPoseIn();
+  out.st = fishPoseCode(poseIn.phase, poseIn.reel, poseIn.lure);
+  out.ch = +castH.toFixed(2);
+  const ph = sm.phase;
+  const d = (ph === 'fight' || ph === 'land') && sm.fight ? 1.5 + castDst * (1 - sm.fight.prog) : sm.lure ? sm.lure.dist : castDst;
+  out.cd = sm.lineOut || ph === 'fight' || ph === 'land' ? Math.round(d * 2) / 2 : 0;
+  out.tn = poseIn.phase === 'fight' ? Math.round(poseIn.tension * 4) / 4 : 0;
+  const show = poseIn.phase === 'show';
+  out.sp = show ? catchSp : ''; out.kg = show ? catchKg : 0;
+  return out;
 }
 /** 線上同步的姿勢代碼（0＝沒在釣） */
 export function fishPoseNow() { return sm.phase === 'off' ? 0 : fishPoseCode(fillPoseIn().phase, poseIn.reel, poseIn.lure); }

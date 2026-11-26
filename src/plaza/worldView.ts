@@ -41,6 +41,7 @@ import { makePlazaHq } from './hq';
 import { createGrillView, type PlazaGrillView } from './grillView';
 import { makeCigSmoke, makeExhalePuff, spawnAshSpeck, type CharcoalFireFx } from './fireFx';
 import { makeWorldLabel, type WorldLabel } from '../world/worldLabel';
+import { makeFishBadge, setFishBadge } from './boats/fishBadge';
 import { poseRider, swimPetSpot, type RiderPose } from './boats/boatPose';
 import type { PlazaAimTarget, PlazaPlayer, PlazaSnapshot, PlazaSeatWish, PlazaMove } from './types';
 import { pileDiffOf, DEFAULT_PILE_DIFFS, PILE_DIFF_NAMES, PILE_DIFF_MIXED } from './pileDiff';
@@ -188,6 +189,12 @@ export type PlazaWorldView = {
   mgHitTargets: () => MgHitTarget[];
   /** 海面：遠端玩家在船上／水裡時，由船的模組每幀給位置與姿勢（null＝回到一般走動） */
   setRemoteMount: (connId: string, m: RemoteMount | null) => void;
+  /** 岸上／碼頭釣魚：遠端走路姿勢擺完後再套釣魚動作（null＝收竿、手和身體還原） */
+  setRemoteFish: (connId: string, post: ((rig: PlayerRig, dt: number, hidden: boolean) => void) | null) => void;
+  /** 頭上狀態牌：0 不顯示、1 釣魚中、2 拉魚中！、3 釣到了！ */
+  setRemoteBadge: (connId: string, kind: 0 | 1 | 2 | 3) => void;
+  /** 測試：狀態牌位置／名牌位置 */
+  fishBadgeDbg: () => { connId: string; kind: number; on: boolean; y: number; tagY: number; tagTop: number; w: number }[];
   /** 目前遠端名單（connId、暱稱）；船上丟殼找目標用 */
   remoteList: () => { connId: string; nick: string; isNpc: boolean; x: number; z: number }[];
   /** 自己在船上／水裡：關掉遠距隱形（遠處用一個 InstancedMesh 小人代替），回岸上恢復 */
@@ -244,6 +251,20 @@ export function createPlazaWorldView(
   const { M, add } = makeMeshHelpers(scene, LO);
   const remotes = new Map<string, Remote>();
   const mounts = new Map<string, RemoteMount>();
+  /** 岸上釣魚的遠端（手、竿、線交給船的模組） */
+  const fishPosts = new Map<string, (rig: PlayerRig, dt: number, hidden: boolean) => void>();
+  /** 頭上狀態牌（釣魚中…）：connId → 種類 */
+  const fishBadges = new Map<string, 1 | 2 | 3>();
+  /** 岸上收竿：釣魚動作藏起來的手、拿著的東西、身體角度還原 */
+  function unfishRig(r: Remote) {
+    const rj = r as any, rig = r.rig;
+    const v = rj._fishVis as [boolean, boolean, boolean] | undefined;
+    rig.weaponMount.visible = v ? v[0] : true; rig.handL.visible = v ? v[1] : true; rig.handR.visible = v ? v[2] : true;
+    rj._fishVis = undefined;
+    rig.torso.rotation.set(0, 0, 0); rig.head.rotation.set(0, 0, 0);
+    rig.outer.rotation.set(0, r.yaw, 0);
+    try { if (!r.seated) { posePlazaStand(rig); hangArms(r, false); } applyActionPose(r); } catch { /* */ }
+  }
   // 海上視野：自己在船上／水裡時，遠距的人不隱形。SEA_FULL 內照畫本體（便宜 LOD），更遠用 1 個 draw call 的小人
   let seaView = false;
   const SEA_FULL = 34, SEA_FULL_ECO = 24, IMP_MAX = 96;
@@ -2391,6 +2412,7 @@ function hashPid(pid: string) {
     clearPlazaSmokeCig(r.rig);
     const ashes = (r as any)._aberAsh?.ashes as { dispose: () => void }[] | undefined;
     if (ashes) for (const a of ashes) { try { a.dispose(); } catch { /* */ } }
+    { const bs = (r as any)._fishBadge as THREE.Sprite | undefined; if (bs) { bs.removeFromParent(); (r as any)._fishBadge = undefined; } }
     root.remove(r.rig.outer); r.tag.dispose(); r.bubble.dispose();
     // 只刪「指向同一具模型」的 key，避免誤刪同 pid 的另一筆
     for (const [k, x] of [...remotes]) {
@@ -2906,7 +2928,15 @@ function hashPid(pid: string) {
         im.setColorAt(impN, _impC.setHSL(impHue(r.connId || r.key || ''), 0.45, 0.42));
         impN++;
       }
-      if (mount?.post) mount.post(r.rig, dt, !r.rig.outer.visible || tier === 'hide');
+      // 身體有畫（海上視野近處、遠距檔也照畫）才擺手和竿；沒畫就跳過
+      if (mount?.post) mount.post(r.rig, dt, !r.rig.outer.visible);
+      else if (fishPosts.size && !r.seated) {
+        const fp = fishPosts.get(r.connId);
+        if (fp) {
+          if (!rj._fishVis) rj._fishVis = [r.rig.weaponMount.visible, r.rig.handL.visible, r.rig.handR.visible];
+          fp(r.rig, dt, !r.rig.outer.visible);
+        }
+      }
       applyRemoteLod(r, tier === 'hide' || tier === 'far' || (LO && tier === 'mid'));
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       if (show) {
@@ -2948,6 +2978,19 @@ function hashPid(pid: string) {
       } else if (r.tag.sprite.visible) {
         placeAboveHead(r.tag.sprite, r.rig.head, tagLift);
         rj[r.seated ? '_tagDyS' : '_tagDyW'] = r.tag.sprite.position.y - r.rig.outer.position.y;
+      }
+      // 釣魚中狀態牌：名牌正上方（聊天泡泡出現時先讓位）
+      if (fishBadges.size || rj._fishBadge) {
+        const kind = fishBadges.get(r.connId) ?? 0;
+        let bs = rj._fishBadge as THREE.Sprite | undefined;
+        if (kind && !bs) { bs = rj._fishBadge = makeFishBadge(kind); root.add(bs); }
+        if (bs) {
+          if (kind && bs.userData.fishBadge !== kind) setFishBadge(bs, kind);
+          const on = !!kind && r.tag.sprite.visible && !(r.bubUntil > t && show);
+          bs.visible = on;
+          if (on) bs.position.set(r.tag.sprite.position.x, r.tag.sprite.position.y + r.tag.sprite.scale.y + 0.03, r.tag.sprite.position.z);
+          if (!kind) { bs.removeFromParent(); rj._fishBadge = undefined; }
+        }
       }
       if (r.bubUntil > t && show) {
         placeAboveHead(r.bubble.sprite, r.rig.head, bubLift);
@@ -3225,6 +3268,21 @@ function hashPid(pid: string) {
       if (m) { mounts.set(connId, m); return; }
       if (!mounts.delete(connId)) return;
       for (const r of remotes.values()) if (r.connId === connId) { try { unmountRig(r); } catch (e) { console.error('unmount', e); } }
+    },
+    setRemoteFish: (connId, post) => {
+      if (post) { fishPosts.set(connId, post); return; }
+      if (!fishPosts.delete(connId)) return;
+      for (const r of remotes.values()) if (r.connId === connId && !mounts.has(connId)) { try { unfishRig(r); } catch (e) { console.error('unfish', e); } }
+    },
+    setRemoteBadge: (connId, kind) => { if (kind) fishBadges.set(connId, kind); else fishBadges.delete(connId); },
+    fishBadgeDbg: () => {
+      const out: { connId: string; kind: number; on: boolean; y: number; tagY: number; tagTop: number; w: number }[] = [];
+      for (const r of remotes.values()) {
+        const bs = (r as any)._fishBadge as THREE.Sprite | undefined;
+        if (!bs) continue;
+        out.push({ connId: r.connId, kind: bs.userData.fishBadge, on: bs.visible, y: +bs.position.y.toFixed(3), tagY: +r.tag.sprite.position.y.toFixed(3), tagTop: +(r.tag.sprite.position.y + r.tag.sprite.scale.y).toFixed(3), w: +bs.scale.x.toFixed(3) });
+      }
+      return out;
     },
     setSeaView: (on) => { seaView = on; },
     seaViewStats: () => ({ on: seaView, impostors: impN, fullFar: impFullFar }),

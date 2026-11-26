@@ -3,6 +3,7 @@ import type * as signalR from '@microsoft/signalr';
 import { HubConnectionState } from '@microsoft/signalr';
 import type { PlazaClient } from '../hubClient';
 import { normRack, normRackSnap, type RackDto, type RackSnap } from './rackLogic';
+import { normFishSync, type FishSyncMsg } from './fishSync';
 
 export type BoatDto = { id: number; x: number; z: number; h: number; v: number; seats: string[] };
 export type SwimDto = { connId: string; x: number; z: number; h: number };
@@ -85,6 +86,8 @@ export type BoatNetEvents = {
   fishBig?: (e: { connId: string; nick: string; name: string; kg: number }) => void;
   /** 別人在船上釣魚：站的位置（船身座標）、面向、姿勢代碼（fishPose.ts） */
   fishPose?: (e: { connId: string; dx: number; dz: number; yaw: number; st: number }) => void;
+  /** 別人的釣魚動作（新版：船上／岸上、拋竿方向、線長、張力、秀漁獲） */
+  fishSync?: (e: FishSyncMsg & { connId: string }) => void;
 };
 export type HaulRes = { ok: boolean; err?: string; cargo?: number; cargoVal?: number; rack?: RackDto | null; fine?: number };
 export type SellRes = { ok: boolean; err?: string; pay?: number; strings?: number; kg?: number; cargo?: number; bonus?: number };
@@ -124,6 +127,7 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     conn.on('BoatCargo', safe(x => ev.cargo?.({ cargo: num(g(x, 'cargo')), lost: num(g(x, 'lost')) })));
     conn.on('BoatLoad', safe(x => ev.load?.({ boatId: num(g(x, 'boatId'), -1), load: num(g(x, 'load')) })));
     conn.on('FishBig', safe(x => ev.fishBig?.({ connId: String(g(x, 'connId') ?? ''), nick: String(g(x, 'nick') ?? ''), name: String(g(x, 'name') ?? ''), kg: num(g(x, 'kg')) })));
+    conn.on('FishSync', safe(x => { const m = normFishSync(x); if (m) ev.fishSync?.(m); }));
     conn.on('FishPose', safe(x => ev.fishPose?.({ connId: String(g(x, 'connId') ?? ''), dx: num(g(x, 'dx')), dz: num(g(x, 'dz')), yaw: num(g(x, 'yaw')), st: num(g(x, 'st')) })));
     conn.on('BoatRescued', safe(x => ev.rescued({ boatId: num(g(x, 'boatId'), -1), seat: num(g(x, 'seat'), -1), by: String(g(x, 'by') ?? '') })));
   });
@@ -158,12 +162,12 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
   client.afterJoin.push(() => {
     // 新連線可能是更新過的伺服器：舊判斷全部重來
     if (supported === false) supported = null;
-    fishPoseOld = false;
+    fishPoseOld = false; fishSyncOld = false;
     try { ev.rejoined?.(); } catch (e) { console.error('boat rejoined', e); }
     void fetchState();
   });
 
-  let driveBusy = false, swimBusy = false, fishPoseBusy = false, fishPoseOld = false;
+  let driveBusy = false, swimBusy = false, fishPoseBusy = false, fishPoseOld = false, fishSyncOld = false;
   return {
     /** null＝還不知道；false＝舊伺服器 */
     supported: () => supported,
@@ -211,6 +215,22 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
       if (fishPoseBusy || !supported || fishPoseOld) return;
       fishPoseBusy = true;
       void call('FishPose', dx, dz, yaw, st).then(r => { if (r?.err === 'old_server') fishPoseOld = true; }).finally(() => { fishPoseBusy = false; });
+    },
+    /**
+     * 釣魚動作同步（給別人看）。回傳 true＝送出去了（上一筆還沒回來＝false，下一幀再試）。
+     * 舊伺服器沒有 FishSync：船上改送舊的 FishPose（岸上舊伺服器沒辦法，就不送）。
+     */
+    fishSync(m: FishSyncMsg): boolean {
+      if (fishPoseBusy || !supported || !live()) return false;
+      if (fishSyncOld) {
+        if (fishPoseOld || !m.boat && m.st !== 0) return true;
+        fishPoseBusy = true;
+        void call('FishPose', m.dx, m.dz, m.yaw, m.st === 0 ? 0 : (m.st & 15) === 7 ? 1 | (m.st & 16) : m.st).then(r => { if (r?.err === 'old_server') fishPoseOld = true; }).finally(() => { fishPoseBusy = false; });
+        return true;
+      }
+      fishPoseBusy = true;
+      void call('FishSync', m.st, m.boat, m.dx, m.dz, m.yaw, m.ch, m.cd, m.tn, m.sp, m.kg).then(r => { if (r?.err === 'old_server') fishSyncOld = true; }).finally(() => { fishPoseBusy = false; });
+      return true;
     },
     close() { closed = true; },
   };

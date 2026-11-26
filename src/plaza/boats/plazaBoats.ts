@@ -18,10 +18,12 @@ import {
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
-import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishPoseNow, fishFaceYaw, fishCanWalk, fishPostPose, fishRejoined } from './plazaFish';
+import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishFaceYaw, fishCanWalk, fishPostPose, fishRejoined, fishSyncFill } from './plazaFish';
 import { DECK, deckStart, deckClamp, stepDeck, yawOf } from './fishLogic';
 import { makeRod, type Rod } from './fishRod';
-import { newFishPose, stepFishPose, applyFishPose, fishPoseDecode, rodTipWorld, type FishPoseSt } from './fishPose';
+import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWorld, type FishPoseSt, type FishPoseIn } from './fishPose';
+import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishBadgeOf, fishLineOut, fishLineEnd, type FishSyncMsg } from './fishSync';
+import { fishGeometry, fishMaterial } from './fishModel';
 import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare, type DriftTide, type DriftPull } from './boatNet';
 
 export type BoatSfx = 'splash' | 'bump' | 'hit' | 'dock' | 'launch' | 'warn';
@@ -172,7 +174,7 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
       seats: onSeats, poses: onPoses, ram: onRam, swimStart: s => upsertSwim(s, true), swimEnd: endSwim, rescued: onRescued, state: onState,
       drift: onDrift, driftClaimed: onDriftClaimed, driftShare: onDriftShare, driftTide: onDriftTide, driftPull: onDriftPull,
       racks: onRackSnap, rackUpd: onRackUpd, rackGone: onRackGone, rackStolen: onRackStolen, cargo: onCargo, load: onLoad,
-      fishBig: onFishBig, fishPose: onFishPose, rejoined: fishRejoined,
+      fishBig: onFishBig, fishPose: onFishPose, fishSync: onFishSync, rejoined: () => { fishRejoined(); fishSyncRejoined(); },
     });
   } else localOnly = true;
   openRacks({
@@ -655,9 +657,11 @@ function input() {
   return { thr: Math.max(-1, Math.min(1, thr)), steer: Math.max(-1, Math.min(1, steer)) };
 }
 
+let lastCam: THREE.Camera | null = null;
 /** 主迴圈每幀呼叫（在廣場、不論在不在船上）；cam＝目前畫面用的相機（判斷遠近 LOD） */
 export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
   if (!D || !sea) return;
+  lastCam = cam;
   dt = Math.min(dt, 0.1); t += dt; frameDt = dt;
   for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= dt; if (timers[i].t <= 0) { const f = timers[i].f; timers.splice(i, 1); f(); } }
   ramCd = Math.max(0, ramCd - dt); throwCd = Math.max(0, throwCd - dt); throwAnim = Math.max(0, throwAnim - dt); mySway = Math.max(0, mySway - dt / PB.swayT);
@@ -780,7 +784,7 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
       const sw = swayConn.get(c) ?? 0;
       const m: RemoteMountLike = { x: _v.x, y: _v.y, z: _v.z, yaw: b.h, pose: SEATS[s].pose, steer: s === 0 ? b.steer : 0, sway: sw, rx: b.rx, rz: b.rz };
       const f = fishers.get(c);
-      if (f && t - f.at < 6) {
+      if (f && f.boat && t - f.at < FISH_SYNC.stale) {
         // 站在甲板上釣魚：位置內插、面向、手和竿交給 post
         const kf = 1 - Math.exp(-6 * dt);
         const mvd = Math.hypot(f.tx - f.x, f.tz - f.z);
@@ -789,16 +793,16 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
         f.moving = mvd > 0.04;
         deckWorld(b, f.x, f.z, _v);
         m.x = _v.x; m.y = _v.y; m.z = _v.z; m.yaw = b.h + f.yaw; m.stand = true; m.post = f.post; f.boatH = b.h; f.seenT = t;
-      } else if (f) dropFisher(c);
+      } else if (f && f.boat) dropFisher(c);
       if (fakeRigs.has(c)) placeFake(c, m);
       else if (view) { view.setRemoteMount(c, m); now.add(c); }
     }
   }
   // 下船／離開的釣客：收竿
   for (const [c, f] of fishers) {
-    if (f.seenT !== t && t - f.at > 0.5) dropFisher(c);
+    if (f.boat ? f.seenT !== t && t - f.at > 0.5 : t - f.at > FISH_SYNC.stale) dropFisher(c);
     // 這個人這陣子沒被畫（不在視野名單裡）：線先藏起來，免得留在原地
-    else if (f.line?.visible && t - f.postT > 0.3) f.line.visible = false;
+    else if (t - f.postT > 0.3) { if (f.line?.visible) f.line.visible = false; if (f.bob?.visible) f.bob.visible = false; if (f.fish) { f.fish.removeFromParent(); f.fish = null; f.fishSp = ''; } }
   }
   for (const w of swimmers.values()) {
     const m = { x: w.x, y: PB.waterY, z: w.z, yaw: w.h, pose: 'swim' as const, swim: swimForce ?? (w.fake ? 0 : w.k ?? 0) };
@@ -833,6 +837,7 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
     D.walkPos.set(mySwim.x, 1.55, mySwim.z);
   }
 
+  tickFishSync(dt);
   // 定期對帳（每 15 秒，便宜）：修掉漏收事件造成的「人還在海底／船上沒人」
   resyncT += dt;
   if (resyncT >= 15) { resyncT = 0; if (!localOnly) void net?.resync(); }
@@ -893,17 +898,16 @@ function dockInsets(W: number, H: number) {
 // ---------------- 船上站著釣魚 ----------------
 type RemoteMountLike = Parameters<NonNullable<ReturnType<PlazaBoatDeps['view']>>['setRemoteMount']>[1] & object;
 /** 自己：站在甲板上的位置（船身座標）、面向、走路相位 */
-const stand = { on: false, x: 0, z: 0, yaw: 0, ph: 0, moving: false, sendT: 0, sentSt: -1, sentX: 0, sentZ: 0, sentYaw: 0, hinted: false };
+const stand = { on: false, x: 0, z: 0, yaw: 0, ph: 0, moving: false, hinted: false };
 function standUp() {
   const S = SEATS[mySeat]; if (!S) return;
   const p = deckStart(S.x, S.z);
-  stand.on = true; stand.x = p.x; stand.z = p.z; stand.yaw = 0; stand.moving = false; stand.sendT = 0; stand.sentSt = -1;
+  stand.on = true; stand.x = p.x; stand.z = p.z; stand.yaw = 0; stand.moving = false;
   if (!stand.hinted) { stand.hinted = true; toastTop(mySeat === 0 ? '站起來釣魚了：搖桿可以在船上走；要開船先按「不釣了」坐回去' : '站起來釣魚了：搖桿可以在船上走動', 3); }
 }
 function standDown() {
   if (!stand.on) return;
   stand.on = false; stand.moving = false;
-  net?.fishPose(0, 0, 0, 0);
   const rig = D?.me(); if (rig) { posePlazaStand(rig); rig.torso.rotation.set(0, 0, 0); }
 }
 const _stp = { x: 0, z: 0, yaw: 0 };
@@ -925,65 +929,163 @@ function tickStand(dt: number, cam: THREE.Camera, b: BoatSt) {
   const want = fy != null ? fy - b.h : stand.moving ? _stp.yaw : stand.yaw;
   let d = want - stand.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
   stand.yaw += d * (1 - Math.exp(-10 * dt));
-  // 同步給別人看：有變才送（最快 0.3 秒一次）；每 2 秒保底
-  stand.sendT += dt;
-  const st = fishPoseNow();
-  const changed = st !== stand.sentSt || Math.hypot(stand.x - stand.sentX, stand.z - stand.sentZ) > 0.08 || Math.abs(Math.atan2(Math.sin(stand.yaw - stand.sentYaw), Math.cos(stand.yaw - stand.sentYaw))) > 0.25;
-  if ((changed && stand.sendT >= 0.3) || stand.sendT >= 2) {
-    stand.sendT = 0; stand.sentSt = st; stand.sentX = stand.x; stand.sentZ = stand.z; stand.sentYaw = stand.yaw;
-    net?.fishPose(+stand.x.toFixed(2), +stand.z.toFixed(2), +stand.yaw.toFixed(2), st);
-  }
 }
 function deckWorld(b: BoatSt, x: number, z: number, out: THREE.Vector3) {
   _o.position.set(b.x, b.y, b.z); _e.set(b.rx, b.h, b.rz); _o.quaternion.setFromEuler(_e); _o.updateMatrix();
   return out.set(x, DECK.y, z).applyMatrix4(_o.matrix);
 }
-/** 別人：船上釣魚的站位／姿勢（FishPose 事件；6 秒沒更新就坐回去） */
-type Fisher = { seenT: number; postT: number; x: number; z: number; yaw: number; tx: number; tz: number; tyaw: number; st: number; at: number; moving: boolean; ph: number; boatH: number; pose: FishPoseSt; rod: Rod | null; line: THREE.LineSegments | null; post: (rig: PlayerRig, dt: number, hidden: boolean) => void };
+// ---------------- 釣魚動作同步：自己送出去 ----------------
+const syncCur = newFishSync(), syncLast = newFishSync();
+let syncSent = false, syncSince = 0;
+/** 每幀：自己的釣魚狀態（船上站位／岸上面向＋姿勢、拋竿方向、線長、張力、秀漁獲）有變才送 */
+function tickFishSync(dt: number) {
+  syncSince += dt;
+  fishSyncFill(syncCur);
+  const b = mode === 'boat' ? boats[myBoat] : null;
+  if (syncCur.st && b && stand.on) {
+    syncCur.boat = true; syncCur.dx = +stand.x.toFixed(2); syncCur.dz = +stand.z.toFixed(2); syncCur.yaw = +stand.yaw.toFixed(2);
+    syncCur.ch = +Math.atan2(Math.sin(syncCur.ch - b.h), Math.cos(syncCur.ch - b.h)).toFixed(2);
+  } else if (syncCur.st && mode === 'walk') {
+    const fy = fishFaceYaw();
+    syncCur.boat = false; syncCur.dx = 0; syncCur.dz = 0; syncCur.yaw = +(fy ?? D?.me()?.outer.rotation.y ?? 0).toFixed(2);
+  } else { syncCur.st = 0; syncCur.boat = false; syncCur.dx = syncCur.dz = syncCur.yaw = syncCur.ch = syncCur.cd = syncCur.tn = syncCur.kg = 0; syncCur.sp = ''; }
+  if (!net || localOnly || !fishSyncDue(syncLast, syncCur, syncSent, syncSince)) return;
+  if (!net.fishSync(syncCur)) return;
+  copyFishSync(syncCur, syncLast); syncSince = 0;
+  syncSent = syncCur.st !== 0;
+}
+/** 重新連上（新的 connId）：馬上再送一次，別人才看得到 */
+function fishSyncRejoined() { syncSent = false; syncSince = FISH_SYNC.keepAlive; }
+
+// ---------------- 釣魚動作同步：別人 ----------------
+/** 別人在釣魚：船上（甲板站位）或岸上（走路的遠端套釣魚動作）；6 秒沒更新就收竿 */
+type Fisher = {
+  c: string; boat: boolean; seenT: number; postT: number; x: number; z: number; yaw: number; tx: number; tz: number; tyaw: number;
+  st: number; stT: number; ch: number; cd: number; cdS: number; tn: number; tnS: number; sp: string; kg: number;
+  at: number; moving: boolean; ph: number; boatH: number; splT: number;
+  pose: FishPoseSt; inp: FishPoseIn; rod: Rod | null; line: THREE.LineSegments | null; bob: THREE.Mesh | null; fish: THREE.Mesh | null; fishSp: string;
+  post: (rig: PlayerRig, dt: number, hidden: boolean) => void;
+};
 const fishers = new Map<string, Fisher>();
-const _ft = new THREE.Vector3();
+const _ft = new THREE.Vector3(), _fe = { x: 0, z: 0 };
+let fisherLineMat: THREE.LineBasicMaterial | null = null, fisherBobGeo: THREE.SphereGeometry | null = null, fisherFloatMat: THREE.MeshLambertMaterial | null = null, fisherLureMat: THREE.MeshLambertMaterial | null = null, frameDt = 0.016;
+/** 舊版客戶端（只有船上、沒有線長）：當成拋 7 m */
 function onFishPose(e: { connId: string; dx: number; dz: number; yaw: number; st: number }) {
+  onFishSync({ connId: e.connId, st: e.st, boat: true, dx: e.dx, dz: e.dz, yaw: e.yaw, ch: e.yaw, cd: 7, tn: 0.5, sp: '', kg: 0 });
+}
+function onFishSync(e: FishSyncMsg & { connId: string }) {
   if (!e.connId || isMe(e.connId)) return;
   if (e.st <= 0) { dropFisher(e.connId); return; }
-  const p = deckClamp(e.dx, e.dz);
   let f = fishers.get(e.connId);
+  if (f && f.boat !== e.boat) { dropFisher(e.connId); f = undefined; }
+  const p = e.boat ? deckClamp(e.dx, e.dz) : { x: 0, z: 0 };
   if (!f) {
-    const nf: Fisher = { seenT: t, postT: t, x: p.x, z: p.z, yaw: e.yaw, tx: p.x, tz: p.z, tyaw: e.yaw, st: e.st, at: t, moving: false, ph: 0, boatH: 0, pose: newFishPose(), rod: null, line: null, post: () => {} };
+    const nf: Fisher = {
+      c: e.connId, boat: e.boat, seenT: t, postT: t, x: p.x, z: p.z, yaw: e.yaw, tx: p.x, tz: p.z, tyaw: e.yaw,
+      st: 0, stT: t, ch: e.ch, cd: e.cd, cdS: e.cd, tn: e.tn, tnS: e.tn, sp: '', kg: 0,
+      at: t, moving: false, ph: 0, boatH: 0, splT: 0,
+      pose: newFishPose(), inp: { phase: 'off', power: 0, reel: false, tension: 0, lure: false, twitch: 0 }, rod: null, line: null, bob: null, fish: null, fishSp: '',
+      post: () => {},
+    };
     nf.post = (rig, dt, hidden) => poseFisher(nf, rig, dt, hidden);
     fishers.set(e.connId, f = nf);
+    if (!e.boat) D?.view()?.setRemoteFish(e.connId, nf.post);
   }
-  f.tx = p.x; f.tz = p.z; f.tyaw = e.yaw; f.st = e.st; f.at = t;
+  if (f.st !== e.st) {
+    // 剛甩竿：線從竿尖飛出去（顯示的線長從 1 m 長到實際距離）
+    if ((e.st & 15) === 3 || ((f.st & 15) !== 3 && fishLineOut(e.st) && !fishLineOut(f.st))) f.cdS = 1;
+    f.st = e.st; f.stT = t;
+  }
+  f.tx = p.x; f.tz = p.z; f.tyaw = e.yaw; f.ch = e.ch; f.cd = e.cd; f.tn = e.tn; f.sp = e.sp; f.kg = e.kg; f.at = t;
+  D?.view()?.setRemoteBadge(e.connId, fishBadgeOf(e.st));
 }
 function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
   f.postT = t;
-  const inp = fishPoseDecode(f.st);
+  const inp = fishPoseDecodeInto(f.st, f.inp);
+  // 張力平滑（約 0.3 秒一筆）；蓄力條照甩竿開始後的時間自己長
+  f.tnS += (f.tn - f.tnS) * (1 - Math.exp(-6 * dt));
+  inp.tension = f.tnS;
+  if (inp.phase === 'charge') inp.power = Math.min(1, (t - f.stT) / 1.1);
   const gear = inp.lure ? 'lure' : 'float';
   if (!f.rod || f.rod.kind !== gear) { f.rod?.dispose(); f.rod = makeRod(gear); }
-  if (f.moving) { f.ph += plazaGaitRate(DECK.walkSpd) * dt; posePlazaWalkCycle(rig, f.ph, 0.8); }
+  if (f.boat) { if (f.moving) { f.ph += plazaGaitRate(DECK.walkSpd) * dt; posePlazaWalkCycle(rig, f.ph, 0.8); } }
+  else {
+    // 岸上：面向拋竿方向（走路的遠端位置照舊）
+    let dy = f.tyaw - f.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); f.yaw += dy * (1 - Math.exp(-10 * dt));
+    rig.outer.rotation.y = f.yaw;
+  }
   stepFishPose(f.pose, inp, dt);
   applyFishPose(rig, f.pose, f.rod, inp);
-  // 線：等魚／拉魚時從竿尖斜斜下到前方水面（不知道別人拋多遠，畫 7 m）
-  const lineOn = !hidden && (inp.phase === 'wait' || inp.phase === 'fight');
-  if (lineOn && !f.line && D) {
+  // 線＋浮標／假魚：拋多遠、往哪拋就落在哪
+  const lineOn = !hidden && fishLineOut(f.st);
+  const show = !hidden && (f.st & 15) === 7 && !!f.sp;
+  if ((lineOn || show) && !f.line && D) {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
     f.line = new THREE.LineSegments(g, fisherLineMat ??= new THREE.LineBasicMaterial({ color: 0x1d2b3a })); f.line.frustumCulled = false; D.scene.add(f.line);
   }
+  if (lineOn && !f.bob && D) {
+    f.bob = new THREE.Mesh(fisherBobGeo ??= new THREE.SphereGeometry(0.07, 8, 6), fisherFloatMat ??= new THREE.MeshLambertMaterial({ color: 0xe8432e }));
+    D.scene.add(f.bob);
+  }
+  if (f.bob) f.bob.visible = lineOn && (f.st & 15) !== 5;
+  updateFisherCatch(f, show);
   if (!f.line) return;
-  f.line.visible = lineOn;
-  if (!lineOn) return;
+  f.line.visible = lineOn || show;
+  if (!lineOn && !show) return;
   rodTipWorld(f.rod, _ft);
   const a = (f.line.geometry.getAttribute('position') as THREE.BufferAttribute);
-  const arr = a.array as Float32Array, h = f.boatH + f.yaw, d = inp.phase === 'fight' ? 4 : 7;
+  const arr = a.array as Float32Array;
   arr[0] = _ft.x; arr[1] = _ft.y; arr[2] = _ft.z;
-  arr[3] = rig.outer.position.x - Math.sin(h) * d; arr[4] = PB.waterY + 0.03; arr[5] = rig.outer.position.z - Math.cos(h) * d;
+  if (show) {
+    // 秀漁獲：魚掛在竿尖下面晃
+    const L = f.fish ? f.fish.scale.x : 0.4;
+    arr[3] = _ft.x; arr[4] = _ft.y - 0.25; arr[5] = _ft.z;
+    if (f.fish) { f.fish.position.set(_ft.x + Math.sin(t * 3.1) * 0.04, _ft.y - 0.25 - L * 0.5, _ft.z); f.fish.rotation.set(0, t * 1.6, Math.PI / 2 + Math.sin(t * 7) * 0.12); }
+  } else {
+    f.cdS += (f.cd - f.cdS) * (1 - Math.exp(-((f.st & 15) === 3 ? 5 : 3) * dt));
+    const heading = f.boat ? f.boatH + f.ch : f.ch;
+    fishLineEnd(rig.outer.position.x, rig.outer.position.z, heading, Math.max(0.8, f.cdS), _fe);
+    let ex = _fe.x, ez = _fe.z;
+    if ((f.st & 15) === 5) {
+      // 拉魚：魚左右衝、偶爾濺水花
+      const side = Math.sin(t * 1.3 + f.stT) * 1.4 * (0.5 + f.tnS);
+      ex += Math.cos(heading) * side; ez -= Math.sin(heading) * side;
+      f.splT -= dt;
+      if (f.splT <= 0) { f.splT = 0.5 + Math.random() * 0.4; splash(ex, ez, 0.15 + 0.3 * f.tnS); }
+    }
+    const wy = PB.waterY + 0.03 + Math.sin(t * 2.2 + f.stT) * 0.015;
+    arr[3] = ex; arr[4] = wy; arr[5] = ez;
+    if (f.bob?.visible) {
+      f.bob.position.set(ex, wy, ez);
+      const lure = (f.st & 16) !== 0;
+      const m = lure ? (fisherLureMat ??= new THREE.MeshLambertMaterial({ color: 0xd8e0e8 })) : fisherFloatMat!;
+      if (f.bob.material !== m) f.bob.material = m;
+      f.bob.scale.setScalar(lure ? 0.75 : 1);
+    }
+  }
   a.needsUpdate = true;
 }
-let fisherLineMat: THREE.LineBasicMaterial | null = null, frameDt = 0.016;
+/** 秀漁獲的魚（魚種模型共用、材質共用；換魚種才換幾何） */
+function updateFisherCatch(f: Fisher, show: boolean) {
+  if (!show) { if (f.fish) { f.fish.removeFromParent(); f.fish = null; f.fishSp = ''; } return; }
+  if (f.fish && f.fishSp === f.sp) return;
+  const geo = fishGeometry(f.sp); if (!geo || !D) return;
+  f.fish?.removeFromParent();
+  f.fish = new THREE.Mesh(geo, fishMaterial());
+  f.fish.scale.setScalar(Math.max(0.22, Math.min(2.2, 0.45 * Math.cbrt(Math.max(0.05, f.kg || 0.5)))));
+  f.fishSp = f.sp;
+  D.scene.add(f.fish);
+}
 function dropFisher(c: string) {
   const f = fishers.get(c); if (!f) return;
   fishers.delete(c);
   f.rod?.dispose();
   if (f.line) { f.line.removeFromParent(); f.line.geometry.dispose(); }
+  f.bob?.removeFromParent();
+  f.fish?.removeFromParent();
+  const v = D?.view();
+  if (!f.boat) v?.setRemoteFish(c, null);
+  v?.setRemoteBadge(c, 0);
 }
 
 function seatWorld(b: BoatSt, s: number, out: THREE.Vector3) {
@@ -1094,7 +1196,27 @@ export const plazaBoatsDbg = {
     if (!c) return 'no fake rider';
     onFishPose({ connId: c, dx, dz, yaw, st }); return c;
   },
-  fishers() { return [...fishers].map(([c, f]) => ({ c, x: +f.x.toFixed(2), z: +f.z.toFixed(2), st: f.st, rod: f.rod?.kind ?? null, line: !!f.line?.visible })); },
+  fishers() {
+    return [...fishers].map(([c, f]) => {
+      const a = f.line ? (f.line.geometry.getAttribute('position').array as Float32Array) : null;
+      return {
+        c, boat: f.boat, x: +f.x.toFixed(2), z: +f.z.toFixed(2), yaw: +f.yaw.toFixed(2), st: f.st, phase: f.inp.phase, rod: f.rod?.kind ?? null,
+        ch: f.ch, cd: f.cd, cdS: +f.cdS.toFixed(2), tn: f.tn, line: !!f.line?.visible, bob: !!f.bob?.visible, fish: f.fish ? f.fishSp : null,
+        tip: a ? [+a[0].toFixed(2), +a[1].toFixed(2), +a[2].toFixed(2)] : null, end: a ? [+a[3].toFixed(2), +a[4].toFixed(2), +a[5].toFixed(2)] : null,
+        pose: { pitch: +f.pose.pitch.toFixed(2), bend: +f.pose.bend.toFixed(2), lean: +f.pose.lean.toFixed(2), crank: +f.pose.crank.toFixed(2), castT: +f.pose.castT.toFixed(2) },
+        age: +(t - f.at).toFixed(2), postAge: +(t - f.postT).toFixed(2), seenAge: +(t - f.seenT).toFixed(2),
+      };
+    });
+  },
+  /** 測試：鏡頭位置／方向；轉向看某一點（世界座標） */
+  camInfo() { if (!lastCam) return null; lastCam.getWorldDirection(_v); return { x: +lastCam.position.x.toFixed(2), y: +lastCam.position.y.toFixed(2), z: +lastCam.position.z.toFixed(2), dx: +_v.x.toFixed(2), dz: +_v.z.toFixed(2) }; },
+  lookAt(x: number, z: number) { if (!lastCam || !D) return null; const y = yawOf(x - lastCam.position.x, z - lastCam.position.z); D.setYaw(y); return +y.toFixed(2); },
+  /** 別人頭上的釣魚狀態牌（位置、名牌位置） */
+  badges() { return D?.view()?.fishBadgeDbg() ?? null; },
+  /** 自己最後送出去的釣魚同步 */
+  sync() { return { sent: syncSent, since: +syncSince.toFixed(2), last: { ...syncLast }, cur: { ...syncCur } }; },
+  /** 測試：直接餵一筆別人的釣魚同步（岸上／船上） */
+  fakeSync(m: Partial<FishSyncMsg> & { connId: string }) { onFishSync({ ...newFishSync(), ...m }); return fishers.has(m.connId); },
   /** 傳送到碼頭口（站在碼頭上，旁邊就是船） */
   tpDock() {
     if (!D) return 'closed';
