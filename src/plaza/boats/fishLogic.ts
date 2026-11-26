@@ -8,7 +8,7 @@ import { PLAZA_WALK_SPD } from '../../world/walkSpeed';
 
 export type Gear = 'float' | 'lure';
 export type BaitKey = 'oyster' | 'shrimp' | 'worm' | 'squid';
-export type LureKey = 'minnow' | 'jig' | 'soft' | 'popper' | 'stickbait' | 'trollskirt' | 'slowjig' | 'egi';
+export type LureKey = 'minnow' | 'jig' | 'soft' | 'popper' | 'stickbait' | 'trollskirt' | 'slowjig' | 'egi' | 'vib' | 'tairubber' | 'deepcrank' | 'squidjig';
 export type ItemKey = BaitKey | LureKey;
 
 export const FISH = {
@@ -35,6 +35,11 @@ export const FISH = {
     { k: 'trollskirt', n: '船拖裙尾假餌', id: 'fishLureTrollSkirt', price: 5_500 },
     { k: 'slowjig', n: '慢搖鐵板', id: 'fishLureSlowJig', price: 4_800 },
     { k: 'egi', n: '大號木蝦', id: 'fishLureEgi', price: 3_200 },
+    // 2026-11 新假餌
+    { k: 'vib', n: '顫泳餌', id: 'fishLureVib', price: 2_600 },
+    { k: 'tairubber', n: '鯛魚頭', id: 'fishLureTaiRubber', price: 3_600 },
+    { k: 'deepcrank', n: '深潛胖胖餌', id: 'fishLureDeepCrank', price: 2_400 },
+    { k: 'squidjig', n: '小透抽軟餌', id: 'fishLureSquidJig', price: 3_400 },
   ] as readonly { k: LureKey; n: string; id: string; price: number }[],
   oysterPerDay: 20,
   /** 拋竿：最近／最遠（公尺，伺服器同值）、力道條來回一次幾秒、拋出去飛幾秒 */
@@ -44,7 +49,7 @@ export const FISH = {
    * 真實 8～9 呎岸拋竿：鐵板 50～80 m、波趴 30～60 m、米諾 30～50 m、軟蟲 25～45 m。
    * 2026-11 全部拉長約 1.5 倍（垂釣竿 16→24、浮標拖太遠 22→32）。
    */
-  lureCastMin: 5, lureCast: { minnow: 26, soft: 22, popper: 30, jig: 40, stickbait: 34, trollskirt: 28, slowjig: 42, egi: 24 } as Record<LureKey, number>,
+  lureCastMin: 5, lureCast: { minnow: 26, soft: 22, popper: 30, jig: 40, stickbait: 34, trollskirt: 28, slowjig: 42, egi: 24, vib: 32, tairubber: 30, deepcrank: 28, squidjig: 26 } as Record<LureKey, number>,
   /** 伺服器：每 2 秒擲一次咬餌、收竿時間窗 0.8 秒 */
   rollS: 2, windowS: 0.8,
   /** 駕駛船速超過就自動收線；拖釣船速範圍（乘客、米諾／鐵板／船拖裙尾假餌／大鉛筆餌） */
@@ -64,6 +69,7 @@ export const FISH = {
 export const ITEM_NAME: Record<ItemKey, string> = {
   oyster: '蚵仔肉', shrimp: '蝦仔餌', worm: '沙蟲', squid: '魷魚條', minnow: '米諾', jig: '鐵板', soft: '軟蟲', popper: '波趴',
   stickbait: '大鉛筆餌', trollskirt: '船拖裙尾假餌', slowjig: '慢搖鐵板', egi: '大號木蝦',
+  vib: '顫泳餌', tairubber: '鯛魚頭', deepcrank: '深潛胖胖餌', squidjig: '小透抽軟餌',
 };
 export const LURE_TIP: Record<LureKey, string> = {
   minnow: '一直收線、偶爾抽竿：假魚左右閃，掠食魚會追',
@@ -74,13 +80,18 @@ export const LURE_TIP: Record<LureKey, string> = {
   trollskirt: '坐船拖釣最強；拋出去就要一直快收',
   slowjig: '讓它沉到深處，輕輕抽一下、停一下，讓它慢慢飄落',
   egi: '抽一下、停一下讓它沉：專釣軟絲和花枝，別一直快收',
+  vib: '先讓它沉到中層，再中快速一直收：不用抽竿，靠震動引魚',
+  tairubber: '沉到底，再慢慢等速收：收收停停別抽竿，貼底魚愛吃',
+  deepcrank: '按住一直收就會自己潛下去：中速收線最好上手',
+  squidjig: '沉到底層，輕輕抽一下、停一下：專釣透抽和章魚',
 };
-export const LURE_KEYS: readonly LureKey[] = ['minnow', 'jig', 'soft', 'popper', 'stickbait', 'trollskirt', 'slowjig', 'egi'];
+export const LURE_KEYS: readonly LureKey[] = ['minnow', 'jig', 'soft', 'popper', 'stickbait', 'trollskirt', 'slowjig', 'egi', 'vib', 'tairubber', 'deepcrank', 'squidjig'];
 export const isLure = (k: string): k is LureKey => (LURE_KEYS as readonly string[]).includes(k);
 /** 可以拖釣的假魚（伺服器 FishTrollLures 同一份） */
-export const TROLL_LURES: readonly LureKey[] = ['minnow', 'jig', 'trollskirt', 'stickbait'];
-/** 頭足類（中魚時噴墨） */
-export const isSquidSp = (sp: string) => sp === 'aoriika' || sp === 'kouika';
+export const TROLL_LURES: readonly LureKey[] = ['minnow', 'jig', 'trollskirt', 'stickbait', 'vib', 'deepcrank'];
+/** 頭足類（中魚時噴墨）：大軟絲、花枝、章魚、大王烏賊 */
+export const SQUID_SP: readonly string[] = ['aoriika', 'kouika', 'tako', 'daiouika'];
+export const isSquidSp = (sp: string) => SQUID_SP.includes(sp);
 /** 這個餌／假魚的拋竿距離範圍（垂釣 4～24 m；路亞看假魚重量） */
 export const castRange = (item?: ItemKey) => (item && isLure(item) ? { min: FISH.lureCastMin, max: FISH.lureCast[item] } : { min: FISH.castMin, max: FISH.castMax });
 export const castDist = (power: number, item?: ItemKey) => { const r = castRange(item); return r.min + (r.max - r.min) * Math.max(0, Math.min(1, power)); };
@@ -125,6 +136,24 @@ export const LURE_DEPTH: Record<LureKey, { min: number; max: number }> = {
   jig: { min: 0.4, max: 1 },
   slowjig: { min: 0.45, max: 1 },
   soft: { min: 0.55, max: 1 },
+  vib: { min: 0.35, max: 0.85 },
+  tairubber: { min: 0.65, max: 1 },
+  deepcrank: { min: 0.4, max: 0.8 },
+  squidjig: { min: 0.45, max: 1 },
+};
+/**
+ * 各假餌在水裡的物理（沒列的用預設）：sink＝不收線時下沉速度倍率、rise＝收線往上浮的倍率、
+ * float＝不收線時往上浮（每秒，胖胖餌會浮）、dive＝收線時自己潛到的水層（舌板，越快越深）、vMax＝收線最快（公尺／秒，舌板阻力大）
+ */
+export const LURE_PHYS: Partial<Record<LureKey, { sink?: number; rise?: number; float?: number; dive?: [number, number]; vMax?: number }>> = {
+  // 顫泳餌：重、沉很快，收線時不太浮起來
+  vib: { sink: 2, rise: 0.3 },
+  // 鯛魚頭：鉛頭沉底快，慢收幾乎貼底
+  tairubber: { sink: 1.8, rise: 0.25 },
+  // 深潛胖胖餌：本身會浮；收線時大舌板讓它潛到 0.5～0.75；收線最快 1.6 m/s
+  deepcrank: { float: 0.1, dive: [0.5, 0.75], vMax: 1.6 },
+  // 小透抽軟餌：比木蝦沉一點快
+  squidjig: { sink: 1.2 },
 };
 export const lureDepthZone = (item: LureKey) => LURE_DEPTH[item];
 export const inDepthZone = (item: LureKey, depth: number) => {
@@ -148,24 +177,36 @@ export function rhythmOk(item: LureKey, s: LureSt) {
     case 'slowjig': return s.jerk >= 0.4 && s.jerk <= 2.5 && s.hold < 0.45;
     // 木蝦：抽一下沉一下（不能一直快收）
     case 'egi': return s.jerk >= 0.4 && s.jerk <= 3 && s.hold < 0.5 && s.spd < 1.6;
+    // 顫泳餌：中層以下、中快速一直收（不用抽竿）
+    case 'vib': return s.spd >= 1.2;
+    // 鯛魚頭：貼底慢慢等速收、不要抽竿
+    case 'tairubber': return s.spd >= 0.4 && s.spd <= 1.2 && s.jerk < 0.4;
+    // 深潛胖胖餌：中速收線（舌板自己潛到中深層）
+    case 'deepcrank': return s.spd >= 0.7 && s.spd <= 1.7;
+    // 小透抽軟餌：底層輕抽＋短停
+    case 'squidjig': return s.jerk >= 0.3 && s.jerk <= 2.8 && s.hold < 0.55 && s.spd < 1.5;
   }
 }
 
 /** 路亞每幀：reel＝按住收線、jerk＝這幀抽竿；troll＝在拖釣（假魚跟在船後、自動算節奏對）。回傳 true＝假魚收回來了 */
 export function stepLure(s: LureSt, item: LureKey, reel: boolean, jerk: boolean, dt: number, troll = false): boolean {
   if (troll) {
-    s.depth = ema(s.depth, item === 'jig' ? 0.5 : item === 'trollskirt' ? 0.08 : 0.2, dt, 1);
+    s.depth = ema(s.depth, item === 'jig' ? 0.5 : item === 'trollskirt' ? 0.08 : item === 'vib' ? 0.45 : item === 'deepcrank' ? 0.55 : 0.2, dt, 1);
     s.okT += dt; s.follow = s.okT >= FISH.followS;
     s.spd = ema(s.spd, 2, dt, 1); s.hold = ema(s.hold, 0, dt, 2); s.jerk = ema(s.jerk, 1, dt, 3);
     return false;
   }
   s.holdS = reel ? s.holdS + dt : 0;
-  const v = reel ? FISH.reelMin + (FISH.reelMax - FISH.reelMin) * Math.min(1, s.holdS / FISH.reelRamp) : 0;
+  const ph = LURE_PHYS[item];
+  const vMax = ph?.vMax ?? FISH.reelMax;
+  const v = reel ? Math.min(vMax, FISH.reelMin + (FISH.reelMax - FISH.reelMin) * Math.min(1, s.holdS / FISH.reelRamp)) : 0;
   s.dist = Math.max(0, s.dist - v * dt - (jerk ? FISH.jerkM : 0));
   if (item === 'popper') s.depth = 0;
   else {
-    // 收線會往上；不動會往下沉；抽竿往上跳一下
-    s.depth += reel ? -FISH.risePerS * dt * (v / FISH.reelMax) : FISH.sinkPerS * dt;
+    // 收線會往上；不動會往下沉；抽竿往上跳一下（舌板假餌收線會潛下去、不收會浮）
+    if (ph?.dive && reel) s.depth = ema(s.depth, ph.dive[0] + (ph.dive[1] - ph.dive[0]) * Math.min(1, v / vMax), dt, 1.2);
+    else if (ph?.float != null && !reel) s.depth -= ph.float * dt;
+    else s.depth += reel ? -FISH.risePerS * (ph?.rise ?? 1) * dt * (v / FISH.reelMax) : FISH.sinkPerS * (ph?.sink ?? 1) * dt;
     if (jerk) s.depth -= FISH.jerkLift;
     s.depth = Math.max(0, Math.min(1, s.depth));
   }

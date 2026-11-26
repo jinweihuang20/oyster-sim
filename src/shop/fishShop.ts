@@ -18,6 +18,10 @@ export const LURE_GOOD: Record<LureKey, string> = {
   trollskirt: '進階大物：坐船拖釣專用，外海高速大魚最愛',
   slowjig: '進階大物：拋最遠、沉最深，慢抽飄落引出深海巨物',
   egi: '進階大物：抽一下沉一下，專釣軟絲和花枝',
+  vib: '路亞：沉到中層一直收，靠高頻震動引魚，不用抽竿',
+  tairubber: '路亞：沉到底慢慢等速收，貼底的魚最愛',
+  deepcrank: '路亞：按住收線就自己潛到中深層，最好上手',
+  squidjig: '路亞：底層輕抽短停，專釣透抽、章魚和白帶魚',
 };
 
 export type FishShopRow = {

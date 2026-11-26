@@ -143,9 +143,9 @@ describe('釣魚動作', () => {
 });
 
 describe('魚的 3D 模型', () => {
-  it('25 種都有說明（只寫外觀）；3D 魚都有模型，韓國魚用照片', () => {
-    expect(FISH_SPECIES.length).toBe(25);
-    expect(FISH_SPECIES.at(-1)?.id).toBe('hanguoyu');
+  it('37 種都有說明（只寫外觀）；3D 魚都有模型，韓國魚用照片', () => {
+    expect(FISH_SPECIES.length).toBe(37);
+    expect(FISH_SPECIES[24]?.id).toBe('hanguoyu');
     expect(isPhotoFish('hanguoyu')).toBe(true);
     expect(FISH_PHOTO.hanguoyu).toMatch(/hanguoyu/);
     expect(fishModelIds().sort()).toEqual(FISH_SPECIES.filter(s => !isPhotoFish(s.id)).map(s => s.id).sort());

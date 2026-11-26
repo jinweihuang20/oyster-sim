@@ -104,15 +104,17 @@ describe('釣魚：路亞水深區間', () => {
   const zones: Record<LureKey, [number, number]> = {
     popper: [0, 0.12], stickbait: [0, 0.45], trollskirt: [0, 0.45], minnow: [0, 1],
     egi: [0.3, 1], jig: [0.4, 1], slowjig: [0.45, 1], soft: [0.55, 1],
+    vib: [0.35, 0.85], tairubber: [0.65, 1], deepcrank: [0.4, 0.8], squidjig: [0.45, 1],
   };
   const good: Record<LureKey, Partial<LureSt>> = {
     popper: { jerk: 1.2, hold: 0 }, stickbait: { spd: 1.5, jerk: 1 }, trollskirt: { spd: 2 },
     minnow: { spd: 2, jerk: 1 }, egi: { jerk: 1, hold: 0, spd: 0.5 }, jig: { jerk: 1, hold: 0 },
     slowjig: { jerk: 1, hold: 0 }, soft: { spd: 0.6, jerk: 0 },
+    vib: { spd: 1.5 }, tairubber: { spd: 0.8, jerk: 0 }, deepcrank: { spd: 1.2 }, squidjig: { jerk: 1, hold: 0, spd: 0.5 },
   };
   const st = (depth: number, extra: Partial<LureSt> = {}): LureSt => ({ dist: 20, depth, holdS: 0, hold: 0, spd: 0, jerk: 0, okT: 0, follow: false, ...extra });
-  it('8 種假餌的 lureDepthZone 跟 rhythmOk 水深門檻同一份，界線含內不含外', () => {
-    expect(LURE_KEYS).toHaveLength(8);
+  it('12 種假餌的 lureDepthZone 跟 rhythmOk 水深門檻同一份，界線含內不含外', () => {
+    expect(LURE_KEYS).toHaveLength(12);
     for (const k of LURE_KEYS) {
       const z = lureDepthZone(k);
       expect(z).toEqual({ min: zones[k][0], max: zones[k][1] });

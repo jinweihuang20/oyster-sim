@@ -11,9 +11,9 @@ import { plazaGaitRate } from '../../dm/character';
 const st = (o: Partial<LureSt>): LureSt => ({ dist: 10, depth: 0.2, holdS: 0, hold: 0, spd: 0, jerk: 0, okT: 0, follow: false, ...o });
 const NEW: LureKey[] = ['stickbait', 'trollskirt', 'slowjig', 'egi'];
 
-describe('進階大物路亞：8 種假魚', () => {
+describe('進階大物路亞：12 種假魚', () => {
   it('名單、價格、名字、說明', () => {
-    expect(LURE_KEYS).toEqual(['minnow', 'jig', 'soft', 'popper', 'stickbait', 'trollskirt', 'slowjig', 'egi']);
+    expect(LURE_KEYS).toEqual(['minnow', 'jig', 'soft', 'popper', 'stickbait', 'trollskirt', 'slowjig', 'egi', 'vib', 'tairubber', 'deepcrank', 'squidjig']);
     expect(FISH.lures.map(l => l.k)).toEqual(LURE_KEYS);
     const px = Object.fromEntries(FISH.lures.map(l => [l.id, l.price]));
     expect(px).toMatchObject({ fishLureStickbait: 4_000, fishLureTrollSkirt: 5_500, fishLureSlowJig: 4_800, fishLureEgi: 3_200 });
@@ -21,12 +21,12 @@ describe('進階大物路亞：8 種假魚', () => {
     expect(isLure('shrimp')).toBe(false); expect(isLure('oyster')).toBe(false);
   });
   it('拋竿距離（伺服器 FishLureCastMax 同值）', () => {
-    const want: Record<LureKey, number> = { minnow: 26, jig: 40, soft: 22, popper: 30, stickbait: 34, trollskirt: 28, slowjig: 42, egi: 24 };
+    const want: Record<LureKey, number> = { minnow: 26, jig: 40, soft: 22, popper: 30, stickbait: 34, trollskirt: 28, slowjig: 42, egi: 24, vib: 32, tairubber: 30, deepcrank: 28, squidjig: 26 };
     for (const k of LURE_KEYS) { expect(castRange(k)).toEqual({ min: 5, max: want[k] }); expect(castDist(1, k)).toBe(want[k]); expect(castDist(0, k)).toBe(5); }
     expect(castDist(1, 'slowjig')).toBeGreaterThan(castDist(1, 'jig'));
   });
-  it('拖釣：米諾、鐵板、裙尾、鉛筆餌可以；軟蟲、波趴、慢搖鐵板、木蝦不行；駕駛不行', () => {
-    expect([...TROLL_LURES].sort()).toEqual(['jig', 'minnow', 'stickbait', 'trollskirt']);
+  it('拖釣：米諾、鐵板、裙尾、鉛筆餌、顫泳餌、深潛胖胖餌可以；軟蟲、波趴、慢搖鐵板、木蝦、鯛魚頭、小透抽軟餌不行；駕駛不行', () => {
+    expect([...TROLL_LURES].sort()).toEqual(['deepcrank', 'jig', 'minnow', 'stickbait', 'trollskirt', 'vib']);
     for (const k of LURE_KEYS) expect(trollOk(1, k, 2)).toBe(TROLL_LURES.includes(k));
     expect(trollOk(0, 'trollskirt', 2)).toBe(false);
     expect(trollOk(1, 'trollskirt', 0.3)).toBe(false);
@@ -80,11 +80,11 @@ describe('進階大物路亞：8 種假魚', () => {
   });
 });
 
-describe('25 種魚（含巨物、韓國魚）', () => {
+describe('37 種魚（含巨物、韓國魚）', () => {
   it('舊的 16 種順序不變、後來的接在後面；巨物是第 3 級；韓國魚是普通', () => {
-    expect(FISH_SPECIES.length).toBe(25);
+    expect(FISH_SPECIES.length).toBe(37);
     expect(FISH_SPECIES.slice(0, 16).map(s => s.id)).toEqual(['kurodai', 'kisu', 'aigo', 'aji', 'hata', 'isaki', 'tachiuo', 'suzuki', 'katsuo', 'kanpachi', 'torahata', 'shiira', 'gt', 'tamakai', 'kajiki', 'maguro']);
-    expect(FISH_SPECIES.slice(16).map(s => [s.id, s.tier])).toEqual([['sawara', 1], ['sugi', 1], ['aoriika', 1], ['kouika', 1], ['kurokajiki', 2], ['mebachi', 2], ['shumoku', 3], ['manbou', 3], ['hanguoyu', 0]]);
+    expect(FISH_SPECIES.slice(16, 25).map(s => [s.id, s.tier])).toEqual([['sawara', 1], ['sugi', 1], ['aoriika', 1], ['kouika', 1], ['kurokajiki', 2], ['mebachi', 2], ['shumoku', 3], ['manbou', 3], ['hanguoyu', 0]]);
     expect(FISH_TIER).toEqual(['普通', '稀有', '傳說', '巨物']);
     expect(fishModelIds().sort()).toEqual(FISH_SPECIES.filter(s => !isPhotoFish(s.id)).map(s => s.id).sort());
     expect(isSquidSp('aoriika')).toBe(true); expect(isSquidSp('kouika')).toBe(true); expect(isSquidSp('tachiuo')).toBe(false);

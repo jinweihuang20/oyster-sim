@@ -32,11 +32,11 @@ describe('魚類圖鑑：魚種、巨物', () => {
     expect((html.match(/data-sil="1"/g) || []).length).toBe(FISH_SPECIES.length);
     for (const s of FISH_SPECIES) { expect(html).not.toContain(s.name); expect(html).not.toContain(FISH_DESC[s.id]); }
     expect(html).not.toMatch(/餌|碼頭|拖釣|木蝦|鐵板/);
-    // 巨物：兩張 t3 卡、標籤寫「巨物」
-    expect((html.match(/fdxCard t3 no/g) || []).length).toBe(2);
-    expect((html.match(/>巨物</g) || []).length).toBe(2);
-    expect((html.match(/>傳說</g) || []).length).toBe(6);
-    expect((html.match(/>稀有</g) || []).length).toBe(10);
+    // 巨物：五張 t3 卡、標籤寫「巨物」
+    expect((html.match(/fdxCard t3 no/g) || []).length).toBe(5);
+    expect((html.match(/>巨物</g) || []).length).toBe(5);
+    expect((html.match(/>傳說</g) || []).length).toBe(8);
+    expect((html.match(/>稀有</g) || []).length).toBe(14);
     v.stop(false);
   });
   it('釣到巨物之後：名字、重量出現，卡片是 t3', () => {
@@ -52,8 +52,8 @@ describe('魚類圖鑑：魚種、巨物', () => {
     v.stop(false);
   });
   it('韓國魚用上傳照片：沒釣過是灰色剪影，釣過顯示原圖與指定說明', () => {
-    expect(FISH_SPECIES.length).toBe(25);
-    expect(FISH_SPECIES.at(-1)).toEqual({ id: 'hanguoyu', name: '韓國魚', tier: 0 });
+    expect(FISH_SPECIES.length).toBe(37);
+    expect(FISH_SPECIES[24]).toEqual({ id: 'hanguoyu', name: '韓國魚', tier: 0 });
     expect(isPhotoFish('hanguoyu')).toBe(true);
     expect(FISH_PHOTO.hanguoyu).toMatch(/hanguoyu/);
     expect(FISH_DESC.hanguoyu).toBe('我跟你聊的是大海，你在跟我聊漱口杯？');
@@ -64,7 +64,7 @@ describe('魚類圖鑑：魚種、巨物', () => {
     expect(h.innerHTML).toMatch(/data-sp="hanguoyu"[^>]*src="/);
     expect(h.innerHTML).not.toContain('韓國魚');
     expect(h.innerHTML).not.toContain('漱口杯');
-    expect((h.innerHTML.match(/class="fdxCard t0/g) || []).length).toBe(7);
+    expect((h.innerHTML.match(/class="fdxCard t0/g) || []).length).toBe(10);
 
     v.open('hanguoyu');
     expect(h.innerHTML).toContain('fdxViewImg sil');

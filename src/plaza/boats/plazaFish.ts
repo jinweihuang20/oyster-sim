@@ -69,6 +69,7 @@ const TIER: readonly string[] = FISH_TIER;
 const LURE_LOOK: Record<LureKey, { c: number; s: number }> = {
   minnow: { c: 0xd8e0e8, s: 0.75 }, jig: { c: 0xc4ccd6, s: 0.7 }, soft: { c: 0xd88a5a, s: 0.7 }, popper: { c: 0xf0e0a0, s: 0.8 },
   stickbait: { c: 0xeef4fa, s: 0.9 }, trollskirt: { c: 0xe24a8a, s: 0.95 }, slowjig: { c: 0xf0c040, s: 0.85 }, egi: { c: 0xf07a2a, s: 0.85 },
+  vib: { c: 0x8fb4dc, s: 0.75 }, tairubber: { c: 0xe0502a, s: 0.75 }, deepcrank: { c: 0xc8dc3a, s: 0.8 }, squidjig: { c: 0xff8ab8, s: 0.8 },
 };
 
 type HoldFish = { sp: string; name: string; tier: number; kg: number; val: number };

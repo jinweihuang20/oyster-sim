@@ -1,5 +1,5 @@
 /**
- * 雜貨店「釣具」商品的 3D 模型：餌（蝦仔、沙蟲、魷魚條、蚵仔肉）和 8 種路亞假魚。
+ * 雜貨店「釣具」商品的 3D 模型：餌（蝦仔、沙蟲、魷魚條、蚵仔肉）和 12 種路亞假魚。
  * 參考實物照片做低面數造型：一個商品＝一個 BufferGeometry（頂點色、平面著色、一次 draw call），
  * 頭朝 +x、上方 +y，建好後置中、最長邊縮成 1，縮圖鏡頭直接看 +z 側面。
  * 只用 three，不碰 DOM，可以直接在 vitest 裡建。
@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import type { BaitKey, LureKey } from '../plaza/boats/fishLogic';
 
 export type TackleKey = BaitKey | LureKey;
-export const TACKLE_KEYS: readonly TackleKey[] = ['oyster', 'shrimp', 'worm', 'squid', 'minnow', 'jig', 'soft', 'popper', 'stickbait', 'trollskirt', 'slowjig', 'egi'];
+export const TACKLE_KEYS: readonly TackleKey[] = ['oyster', 'shrimp', 'worm', 'squid', 'minnow', 'jig', 'soft', 'popper', 'stickbait', 'trollskirt', 'slowjig', 'egi', 'vib', 'tairubber', 'deepcrank', 'squidjig'];
 
 type V = [number, number, number];
 
@@ -276,10 +276,76 @@ function buildEgi(T: Tris) {
   }
 }
 
+function buildVib(T: Tris) {
+  // 顫泳餌（VIB）：沒有舌板、側扁的菱形身體，線環在背上，肚子下兩組三本鉤；金屬藍背銀身
+  const prof = [[0, 0.02, 0.012], [0.1, 0.1, 0.03], [0.4, 0.17, 0.038], [0.75, 0.12, 0.03], [1, 0.03, 0.012]];
+  body(T, 0.42, -0.42, 22, 10, t => lerpProf(prof, t), (t, vm, i, j) => (vm > 0.5 ? (hash(i, j) > 0.8 ? 0x3a7ccc : 0x1e5aa8) : vm > -0.55 ? (hash(i, j) > 0.78 ? 0xf2f8fd : 0xbfd0e0) : 0xf2f5f8), t => 0.03 * Math.sin(t * Math.PI));
+  eyes(T, 0.32, 0.03, 0.034, 0.024);
+  // 鰓蓋亮片
+  for (const s of [1, -1]) T.tri([0.25, 0.08, s * 0.04], [0.22, -0.06, s * 0.04], [0.2, 0.01, s * 0.042], 0x9fc8f0);
+  // 背上的線環（VIB 的招牌）
+  ring(T, [0.18, 0.205, 0], [0, 0, 1], 0.018, 0.005, STEEL_D);
+  treble(T, [0.12, -0.15, 0], 0.12, 0.007);
+  treble(T, [-0.25, -0.1, 0], 0.12, 0.007, 1.0);
+}
+function buildTaiRubber(T: Tris) {
+  // 鯛魚頭（天亞）：圓圓的金屬紅橘鉛頭，後面拖一束矽膠裙和兩條捲捲的領帶尾，鉛頭下掛兩支小鉤
+  ball(T, [0.3, 0, 0], 0.13, (t, vm, i, j) => (vm > 0.3 ? (hash(i, j) > 0.78 ? 0xffa060 : 0xe8502a) : vm > -0.5 ? 0xd8401e : 0xb83014), 8);
+  eyes(T, 0.37, 0.05, 0.1, 0.03, 0xf6f0e0);
+  ring(T, [0.44, 0.02, 0], [0, 0, 1], 0.02, 0.006, STEEL_D);
+  // 矽膠裙：一圈細條往後散開
+  const C = [0xff6a2a, 0xffb03a, 0xe83a2a, 0xffd060];
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2, pts: V[] = [];
+    for (let i = 0; i <= 7; i++) { const t = i / 7, r = 0.04 + t * 0.05; pts.push([0.2 - t * 0.48, Math.sin(a) * r + Math.sin(t * 6 + k) * 0.012, Math.cos(a) * r]); }
+    tube(T, pts, () => [0.004, 0.006], 4, C[k % C.length], false, [Math.cos(a), 0, -Math.sin(a)]);
+  }
+  // 領帶尾：兩條扁扁的波浪帶子
+  for (const s of [1, -1]) {
+    const pts: V[] = []; for (let i = 0; i <= 14; i++) { const t = i / 14; pts.push([0.18 - t * 0.74, -0.02 + Math.sin(t * Math.PI * 3 + (s > 0 ? 0 : 1.3)) * 0.06, s * 0.03]); }
+    tube(T, pts, t => [0.032 * (1 - 0.4 * t), 0.004], 4, s > 0 ? 0xff7a2a : 0xf0402a, true, [0, 1, 0]);
+  }
+  // 子線＋兩支小鉤
+  line(T, [[0.22, -0.02, 0], [0.08, -0.06, 0.02], [-0.04, -0.08, 0.03]], 0.004, 0x302a26);
+  hook(T, [-0.04, -0.08, 0.03], [-1, -0.3, 0], [0, -1, 0], 0.08, 0.006);
+  hook(T, [-0.04, -0.08, -0.02], [-1, -0.3, 0], [0, -1, 0.3], 0.07, 0.006);
+}
+function buildDeepCrank(T: Tris) {
+  // 深潛胖胖餌：圓胖的身體（螢光黃綠背、橘肚），前面一片很長、往前下斜的透明大舌板，兩組三本鉤
+  const prof = [[0, 0.05, 0.045], [0.12, 0.13, 0.11], [0.4, 0.16, 0.13], [0.8, 0.09, 0.075], [1, 0.03, 0.025]];
+  body(T, 0.34, -0.34, 20, 14, t => lerpProf(prof, t), (t, vm, i, j) => (vm > 0.45 ? 0x5a8a1e : vm > -0.35 ? (hash(i, j) > 0.85 ? 0xf4ff8a : 0xc8e03a) : 0xff8a2a));
+  eyes(T, 0.27, 0.05, 0.09, 0.03);
+  // 大舌板（上下兩片，有一點厚度）
+  for (const dy of [0, -0.012]) T.poly([[0.33, -0.06 + dy, 0.07], [0.52, -0.2 + dy, 0.09], [0.58, -0.28 + dy, 0], [0.52, -0.2 + dy, -0.09], [0.33, -0.06 + dy, -0.07]], dy ? 0x8fc4dc : 0xb8e0f0);
+  ring(T, [0.5, -0.2, 0], [0, 0, 1], 0.014, 0.005, STEEL_D);
+  treble(T, [0.08, -0.17, 0], 0.12, 0.007);
+  treble(T, [-0.35, -0.02, 0], 0.12, 0.007, 1.0);
+}
+function buildSquidJig(T: Tris) {
+  // 小透抽軟餌（布捲）：細長的布面透抽身體（粉紅／夜光條紋），前面三角小鰭，後面短觸腳，尾端一圈傘形針
+  const prof = [[0, 0.02, 0.02], [0.12, 0.055, 0.055], [0.6, 0.06, 0.06], [0.9, 0.045, 0.045], [1, 0.03, 0.03]];
+  body(T, 0.44, -0.22, 22, 10, t => lerpProf(prof, t), (t, vm, i) => (i % 4 < 2 ? (vm > 0.3 ? 0xff5f9a : 0xff8ab8) : (vm > 0.3 ? 0xf6f8d8 : 0xe2ffc4)));
+  for (const s of [1, -1]) T.poly([[0.42, 0, s * 0.012], [0.3, 0.01, s * 0.1], [0.2, 0, s * 0.055]], 0xff9ac4);
+  eyes(T, -0.12, 0.03, 0.05, 0.02, 0x60f0c0);
+  ring(T, [0.47, 0, 0], [0, 0, 1], 0.015, 0.005, STEEL_D);
+  // 短觸腳
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2 + 0.2;
+    line(T, [[-0.2, Math.sin(a) * 0.035, Math.cos(a) * 0.035], [-0.27, Math.sin(a) * 0.055, Math.cos(a) * 0.055], [-0.33, Math.sin(a) * 0.07 - 0.01, Math.cos(a) * 0.07]], 0.006, k % 2 ? 0xffb0cc : 0xf6f8d8);
+  }
+  // 尾端：鉤柄＋兩層傘形針
+  line(T, [[-0.22, 0, 0], [-0.44, 0, 0]], 0.009, STEEL);
+  for (const [x, n, L] of [[-0.41, 10, 0.06], [-0.45, 10, 0.05]] as [number, number, number][]) for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + (x < -0.43 ? 0.3 : 0), d: V = [0.45, Math.sin(a), Math.cos(a)];
+    line(T, [[x, 0, 0], add([x, 0, 0], norm(d), L)], 0.004, 0xc0c8d0);
+  }
+}
+
 const BUILD: Record<TackleKey, (T: Tris) => void> = {
   oyster: buildOyster, shrimp: buildShrimp, worm: buildWorm, squid: buildSquidStrip,
   minnow: buildMinnow, jig: buildJig, soft: buildSoft, popper: buildPopper,
   stickbait: buildStickbait, trollskirt: buildTrollSkirt, slowjig: buildSlowJig, egi: buildEgi,
+  vib: buildVib, tairubber: buildTaiRubber, deepcrank: buildDeepCrank, squidjig: buildSquidJig,
 };
 
 /** 產生一個釣具的幾何（置中、最長邊＝1）；不認得的 key 回 null */
