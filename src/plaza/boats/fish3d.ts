@@ -3,7 +3,7 @@
  * 一條魚＝一個 mesh（fishModel.ts），一次只畫一條；縮圖記憶體快取；檢視器可以拖曳旋轉，停住就不重畫。
  */
 import * as THREE from 'three';
-import { fishGeometry, fishMaterial, fishSilMaterial, disposeFishGeometries } from './fishModel';
+import { fishGeometry, fishMaterial, fishSilMaterial, disposeFishGeometries, FISH_PHOTO } from './fishModel';
 import { tackleGeometry, disposeTackleGeometries } from '../../shop/tackleModel';
 
 let R3: THREE.WebGLRenderer | null = null;
@@ -99,6 +99,7 @@ export function fillTackleThumbs(root: ParentNode, fill: (el: HTMLElement, url: 
 
 /** 縮圖 dataURL（記憶體快取）；WebGL 不能用就回空字串（呼叫端顯示文字） */
 export function fishThumb(id: string, sil: boolean): string {
+  if (FISH_PHOTO[id]) return FISH_PHOTO[id];
   const k = id + (sil ? ':s' : '');
   const hit = thumbs.get(k); if (hit != null) return hit;
   try { const url = shoot(id, 160, 100, 0.32, 0.22, sil).toDataURL('image/png'); thumbs.set(k, url); return url; }

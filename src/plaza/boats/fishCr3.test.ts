@@ -6,7 +6,7 @@ import { ROD_LEN, ROD_GRIP, ROD_RIGID, ROD_MAX_ARC, rodBend, rodBendAngle, makeR
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, dropOtherRods, fishPoseCode, fishPoseDecode, fishPoseTarget, CAST_FLICK, HOOK_SET, type FishPoseIn } from './fishPose';
 import { makePlayerAvatar } from '../../dm/character';
 import { makeMeshHelpers } from '../../dm/mesh';
-import { FISH_SPECIES, FISH_DESC, FISH_SEG, buildFishGeometry, fishModelIds } from './fishModel';
+import { FISH_SPECIES, FISH_DESC, FISH_SEG, buildFishGeometry, fishModelIds, isPhotoFish, makeFishMesh, FISH_PHOTO } from './fishModel';
 
 describe('路亞拋竿距離（依假魚重量）', () => {
   it('鐵板最遠、軟蟲最近；垂釣竿維持 4～24 m', () => {
@@ -143,17 +143,27 @@ describe('釣魚動作', () => {
 });
 
 describe('魚的 3D 模型', () => {
-  it('24 種都有模型、說明（只寫外觀）', () => {
-    expect(FISH_SPECIES.length).toBe(24);
-    expect(fishModelIds().sort()).toEqual(FISH_SPECIES.map(s => s.id).sort());
+  it('25 種都有說明（只寫外觀）；3D 魚都有模型，韓國魚用照片', () => {
+    expect(FISH_SPECIES.length).toBe(25);
+    expect(FISH_SPECIES.at(-1)?.id).toBe('hanguoyu');
+    expect(isPhotoFish('hanguoyu')).toBe(true);
+    expect(FISH_PHOTO.hanguoyu).toMatch(/hanguoyu/);
+    expect(fishModelIds().sort()).toEqual(FISH_SPECIES.filter(s => !isPhotoFish(s.id)).map(s => s.id).sort());
     for (const s of FISH_SPECIES) {
       expect(FISH_DESC[s.id]?.length).toBeGreaterThan(10);
       expect(FISH_DESC[s.id]).not.toMatch(/餌|碼頭|拖釣|深海|晚上|白天|機率/);
     }
+    expect(FISH_DESC.hanguoyu).toBe('我跟你聊的是大海，你在跟我聊漱口杯？');
     expect(buildFishGeometry('nope')).toBeNull();
+    expect(buildFishGeometry('hanguoyu')).toBeNull();
+    expect(() => makeFishMesh('hanguoyu')).not.toThrow();
+    const mesh = makeFishMesh('hanguoyu');
+    expect(mesh).toBeTruthy();
+    mesh!.geometry.computeBoundingBox();
+    expect(mesh!.geometry.boundingBox).toBeTruthy();
   });
   it('每條魚：長度正規化成 1、頭朝 +x、有頂點色、面數不爆', () => {
-    for (const s of FISH_SPECIES) {
+    for (const s of FISH_SPECIES.filter(s => !isPhotoFish(s.id))) {
       const g = buildFishGeometry(s.id)!;
       g.computeBoundingBox();
       const bb = g.boundingBox!;

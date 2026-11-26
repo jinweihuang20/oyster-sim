@@ -5,6 +5,7 @@
  * 座標：頭朝 +x、背朝 +y、總長正規化成 1（中心在原點）。只用 three 的 BufferGeometry，不碰 WebGL（可以在測試裡跑）。
  */
 import * as THREE from 'three';
+import hanguoyuImg from '../../assets/hanguoyu.jpg';
 
 export type FishSpInfo = { id: string; name: string; tier: number };
 /** 跟伺服器 PlazaWorld.FishTable 同順序 */
@@ -18,6 +19,7 @@ export const FISH_SPECIES: readonly FishSpInfo[] = [
   { id: 'sawara', name: '土魠魚', tier: 1 }, { id: 'sugi', name: '海鱺', tier: 1 }, { id: 'aoriika', name: '大軟絲', tier: 1 }, { id: 'kouika', name: '花枝', tier: 1 },
   { id: 'kurokajiki', name: '黑皮旗魚', tier: 2 }, { id: 'mebachi', name: '大目鮪', tier: 2 },
   { id: 'shumoku', name: '雙髻鯊', tier: 3 }, { id: 'manbou', name: '翻車魚', tier: 3 },
+  { id: 'hanguoyu', name: '韓國魚', tier: 0 },
 ];
 /** 稀有度名稱（0 普通、1 稀有、2 傳說、3 巨物） */
 export const FISH_TIER = ['普通', '稀有', '傳說', '巨物'] as const;
@@ -48,7 +50,12 @@ export const FISH_DESC: Record<string, string> = {
   mebachi: '身體又高又圓的鮪魚，眼睛特別大，胸鰭長長的延伸到背鰭後方；深藍背、銀白肚，黃色小離鰭鑲黑邊，新月形尾鰭。',
   shumoku: '頭部往兩側伸成 T 字形的槌頭，眼睛長在兩端；高高的鐮刀形第一背鰭，尾鰭上葉特別長；石板灰色背、白色肚子。',
   manbou: '像一個巨大的扁圓盤，沒有正常的尾巴，只有一圈波浪狀的舵鰭；背鰭和臀鰭又高又尖、上下對稱，皮膚銀灰帶斑駁花紋。',
+  hanguoyu: '我跟你聊的是大海，你在跟我聊漱口杯？',
 };
+
+/** 用照片顯示的魚（不建 3D 模型）；Vite 會把路徑編成對應 base（正式／預覽）的 URL */
+export const FISH_PHOTO: Readonly<Record<string, string>> = { hanguoyu: hanguoyuImg };
+export const isPhotoFish = (id: string) => !!FISH_PHOTO[id];
 
 type Prof = readonly (readonly [number, number, number, number?])[]; // [t, 半高, 半寬, 中心 y]
 type Fin = { t0: number; t1: number; h: number; shape: 'spiny' | 'soft' | 'falcate' | 'sail' | 'low' | 'ribbon'; col: number; spots?: number };
@@ -622,5 +629,62 @@ let silMat: THREE.MeshBasicMaterial | null = null;
 export function fishSilMaterial() { return (silMat ??= new THREE.MeshBasicMaterial({ color: 0x55606b, side: THREE.DoubleSide })); }
 /** 幾何快取（同一種魚只產生一次）；dispose 全部清掉 */
 const cache = new Map<string, THREE.BufferGeometry>();
-export function fishGeometry(id: string) { let g = cache.get(id); if (!g) { const n = buildFishGeometry(id); if (!n) return null; g = n; cache.set(id, g); } return g; }
-export function disposeFishGeometries() { for (const g of cache.values()) g.dispose(); cache.clear(); mat?.dispose(); mat = null; silMat?.dispose(); silMat = null; }
+const photoMats = new Map<string, THREE.MeshBasicMaterial>();
+const photoTexs = new Map<string, THREE.Texture>();
+
+/** 照片魚的平面卡片（高＝1、寬依圖片比例，面向 +z）；給手上秀漁獲用 */
+function photoFishGeometry(id: string): THREE.BufferGeometry | null {
+  if (!FISH_PHOTO[id]) return null;
+  let g = cache.get(id);
+  if (g) return g;
+  // 上傳圖 168×198
+  const geo = new THREE.PlaneGeometry(168 / 198, 1);
+  geo.computeBoundingBox();
+  geo.computeBoundingSphere();
+  geo.computeVertexNormals();
+  cache.set(id, geo);
+  return geo;
+}
+
+export function fishPhotoMaterial(id: string): THREE.MeshBasicMaterial | null {
+  if (!FISH_PHOTO[id]) return null;
+  let m = photoMats.get(id);
+  if (m) return m;
+  try {
+    const tex = new THREE.TextureLoader().load(FISH_PHOTO[id]);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    photoTexs.set(id, tex);
+    m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+  } catch {
+    m = new THREE.MeshBasicMaterial({ color: 0x8899aa, side: THREE.DoubleSide, transparent: true });
+  }
+  photoMats.set(id, m);
+  return m;
+}
+
+/** 秀漁獲／圖鑑以外的 3D 場景：3D 魚或照片平面；認不得的 id 回 null，不會丟例外 */
+export function makeFishMesh(id: string): THREE.Mesh | null {
+  if (isPhotoFish(id)) {
+    const geo = photoFishGeometry(id), mat = fishPhotoMaterial(id);
+    if (!geo || !mat) return null;
+    return new THREE.Mesh(geo, mat);
+  }
+  const geo = fishGeometry(id);
+  if (!geo) return null;
+  return new THREE.Mesh(geo, fishMaterial());
+}
+
+export function fishGeometry(id: string) {
+  if (isPhotoFish(id)) return photoFishGeometry(id);
+  let g = cache.get(id); if (!g) { const n = buildFishGeometry(id); if (!n) return null; g = n; cache.set(id, g); } return g;
+}
+export function disposeFishGeometries() {
+  for (const g of cache.values()) g.dispose();
+  cache.clear();
+  mat?.dispose(); mat = null;
+  silMat?.dispose(); silMat = null;
+  for (const m of photoMats.values()) m.dispose();
+  photoMats.clear();
+  for (const t of photoTexs.values()) t.dispose();
+  photoTexs.clear();
+}

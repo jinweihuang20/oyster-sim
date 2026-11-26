@@ -24,7 +24,7 @@ import { DECK, FISH, chargePower, castFlyPoint, deckStart, deckClamp, stepDeck, 
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWorld, jerkFromSync, type FishPoseSt, type FishPoseIn } from './fishPose';
 import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishBadgeOf, fishLineOut, fishLineEnd, type FishSyncMsg } from './fishSync';
-import { fishGeometry, fishMaterial } from './fishModel';
+import { makeFishMesh } from './fishModel';
 import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare, type DriftTide, type DriftPull } from './boatNet';
 
 export type BoatSfx = 'splash' | 'bump' | 'hit' | 'dock' | 'launch' | 'warn';
@@ -1099,9 +1099,9 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
 function updateFisherCatch(f: Fisher, show: boolean) {
   if (!show) { if (f.fish) { f.fish.removeFromParent(); f.fish = null; f.fishSp = ''; } return; }
   if (f.fish && f.fishSp === f.sp) return;
-  const geo = fishGeometry(f.sp); if (!geo || !D) return;
+  const mesh = makeFishMesh(f.sp); if (!mesh || !D) return;
   f.fish?.removeFromParent();
-  f.fish = new THREE.Mesh(geo, fishMaterial());
+  f.fish = mesh;
   f.fish.scale.setScalar(Math.max(0.22, Math.min(2.2, 0.45 * Math.cbrt(Math.max(0.05, f.kg || 0.5)))));
   f.fishSp = f.sp;
   D.scene.add(f.fish);

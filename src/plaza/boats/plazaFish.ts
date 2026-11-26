@@ -13,7 +13,7 @@ import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
 import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyPoint, fishDistNow, fmtDistM, fightDistM, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
-import { fishGeometry, fishMaterial, FISH_TIER } from './fishModel';
+import { makeFishMesh, FISH_TIER } from './fishModel';
 import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, type FishPoseIn, type FishPhase } from './fishPose';
@@ -602,9 +602,9 @@ let catchMesh: THREE.Mesh | null = null, catchT = 0, catchSp = '', catchKg = 0;
 function showCatch(f: HoldFish) {
   if (!gfx) return;
   catchSp = f.sp; catchKg = +f.kg.toFixed(2);
-  const geo = fishGeometry(f.sp); if (!geo) return;
+  const mesh = makeFishMesh(f.sp); if (!mesh) return;
   catchMesh?.removeFromParent();
-  catchMesh = new THREE.Mesh(geo, fishMaterial());
+  catchMesh = mesh;
   // 魚長：約 0.45 m × kg^(1/3)（1 kg≈45 cm、100 kg≈2 m），手上看得到就好
   catchMesh.scale.setScalar(Math.max(0.22, Math.min(2.2, 0.45 * Math.cbrt(Math.max(0.05, f.kg)))));
   gfx.g.add(catchMesh); catchT = 1.8;

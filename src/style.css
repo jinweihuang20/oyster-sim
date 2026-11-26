@@ -4532,6 +4532,7 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 .fdxHost .fdxCard.no .fdxImg{background:linear-gradient(#eef1f4,#e1e6eb)}
 .fdxHost .fdxImg img{display:block;width:100%;height:100%;object-fit:contain}
 .fdxHost .fdxImg img:not([src]){visibility:hidden}
+.fdxHost .fdxPhoto.sil,.fdxHost .fdxViewImg.sil{filter:brightness(0) opacity(0.35)}
 .fdxHost .fdxTier{font-size:10px;font-weight:800;color:#5a6b7c;letter-spacing:.5px}
 .fdxHost .fdxCard .fdxTier{position:absolute;top:9px;left:12px;z-index:1;padding:0 5px;border-radius:6px;background:rgba(255,255,255,.85)}
 .fdxHost .t1 .fdxTier{color:#2a5a86}
@@ -4548,6 +4549,7 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 .fdxHost .fdxDet .fdxTier{padding:1px 8px;border-radius:8px;background:#fff;border:1.5px solid #dbe4ec}
 .fdxHost .fdxView{position:relative;border-radius:12px;background:linear-gradient(#e3eef7,#c9dceb);overflow:hidden}
 .fdxHost .fdxCv{display:block;width:100%;aspect-ratio:16/10;cursor:grab}
+.fdxHost .fdxViewImg{display:block;width:100%;aspect-ratio:16/10;object-fit:contain;padding:8px;box-sizing:border-box}
 .fdxHost .fdxView small{position:absolute;right:8px;bottom:6px;font-size:11px;color:#4a5e72;pointer-events:none}
 .fdxHost .fdxName{margin:2px 0 0;font-size:19px;color:inherit}
 .fdxHost .fdxStat{margin:0;font-size:13px;font-weight:700;color:inherit;opacity:.85;font-variant-numeric:tabular-nums}
@@ -4557,12 +4559,12 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
   .fdxHost .fdxDet>*{grid-column:2;min-width:0}
   .fdxHost .fdxDet>.fdxNav{grid-column:1/-1}
   .fdxHost .fdxDet>.fdxView{grid-column:1;grid-row:2/span 6}
-  .fdxHost .fdxCv{aspect-ratio:auto;height:min(52vh,260px)}
+  .fdxHost .fdxCv,.fdxHost .fdxViewImg{aspect-ratio:auto;height:min(52vh,260px)}
 }
 #fishPanel .fdxHost .fdxGrid{grid-template-columns:repeat(auto-fill,minmax(118px,1fr))}
 #fishPanel .fdxHost .fdxDet{display:flex}
 #fishPanel .fdxHost .fdxDet>*{grid-column:auto}
-#fishPanel .fdxHost .fdxCv{aspect-ratio:16/10;height:auto}
+#fishPanel .fdxHost .fdxCv,#fishPanel .fdxHost .fdxViewImg{aspect-ratio:16/10;height:auto}
 /* 釣魚中：右下換成釣魚按鈕，其他按鈕（丟殼／跳水／蚵棚／抽一口／走路的跳蹲躺）先收起來；面板打開時連釣魚按鈕也收起來 */
 body.plazaFishing #boatShell,body.plazaFishing #boatDive,body.plazaFishing #boatRackBar,body.plazaFishing #boatCargo,body.plazaFishing #boatAct,body.plazaFishing #rackTag,body.plazaFishing #boatDockInd{display:none!important}
 body.plazaFishing #jumpBtn,body.plazaFishing #crouchBtn,body.plazaFishing #lieBtn,body.plazaFishing #poseBtn,body.plazaFishing #standBtn,body.plazaFishing #throwBtn,body.plazaFishing #stealBtn,body.plazaFishing #umbBtn,body.plazaFishing #puffBtn,body.plazaFishing #seatCard{display:none!important}

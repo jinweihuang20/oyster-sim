@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { FISH, LURE_KEYS, LURE_TIP, ITEM_NAME, TROLL_LURES, isLure, isSquidSp, castRange, castDist, rhythmOk, stepLure, newLure, trollOk, DECK, stepDeck, type LureKey, type LureSt } from './fishLogic';
-import { FISH_SPECIES, FISH_DESC, FISH_TIER, FISH_SEG, buildFishGeometry, fishModelIds } from './fishModel';
+import { FISH_SPECIES, FISH_DESC, FISH_TIER, FISH_SEG, buildFishGeometry, fishModelIds, isPhotoFish, makeFishMesh } from './fishModel';
 import { FxPool, FX } from './fishFx';
 import { PB, stepSwim } from './boatLogic';
 import { SEA } from '../../sea/seaLogic';
@@ -80,17 +80,21 @@ describe('進階大物路亞：8 種假魚', () => {
   });
 });
 
-describe('24 種魚（含巨物）', () => {
-  it('舊的 16 種順序不變、新的 8 種接在後面；巨物是第 3 級', () => {
+describe('25 種魚（含巨物、韓國魚）', () => {
+  it('舊的 16 種順序不變、後來的接在後面；巨物是第 3 級；韓國魚是普通', () => {
+    expect(FISH_SPECIES.length).toBe(25);
     expect(FISH_SPECIES.slice(0, 16).map(s => s.id)).toEqual(['kurodai', 'kisu', 'aigo', 'aji', 'hata', 'isaki', 'tachiuo', 'suzuki', 'katsuo', 'kanpachi', 'torahata', 'shiira', 'gt', 'tamakai', 'kajiki', 'maguro']);
-    expect(FISH_SPECIES.slice(16).map(s => [s.id, s.tier])).toEqual([['sawara', 1], ['sugi', 1], ['aoriika', 1], ['kouika', 1], ['kurokajiki', 2], ['mebachi', 2], ['shumoku', 3], ['manbou', 3]]);
+    expect(FISH_SPECIES.slice(16).map(s => [s.id, s.tier])).toEqual([['sawara', 1], ['sugi', 1], ['aoriika', 1], ['kouika', 1], ['kurokajiki', 2], ['mebachi', 2], ['shumoku', 3], ['manbou', 3], ['hanguoyu', 0]]);
     expect(FISH_TIER).toEqual(['普通', '稀有', '傳說', '巨物']);
-    expect(fishModelIds().sort()).toEqual(FISH_SPECIES.map(s => s.id).sort());
+    expect(fishModelIds().sort()).toEqual(FISH_SPECIES.filter(s => !isPhotoFish(s.id)).map(s => s.id).sort());
     expect(isSquidSp('aoriika')).toBe(true); expect(isSquidSp('kouika')).toBe(true); expect(isSquidSp('tachiuo')).toBe(false);
     for (const s of FISH_SPECIES) expect(FISH_DESC[s.id]).not.toMatch(/餌|碼頭|拖釣|深海|晚上|白天|機率|木蝦|鐵板/);
+    expect(FISH_DESC.hanguoyu).toBe('我跟你聊的是大海，你在跟我聊漱口杯？');
+    expect(buildFishGeometry('hanguoyu')).toBeNull();
+    expect(() => makeFishMesh('hanguoyu')).not.toThrow();
   });
   it('每種都有正常的幾何（有頂點、沒有壞數字、面數不爆、長度 1）', () => {
-    for (const s of FISH_SPECIES) {
+    for (const s of FISH_SPECIES.filter(s => !isPhotoFish(s.id))) {
       const g = buildFishGeometry(s.id)!;
       expect(g, s.id).toBeTruthy();
       const pos = g.getAttribute('position'), col = g.getAttribute('color'), nor = g.getAttribute('normal');
