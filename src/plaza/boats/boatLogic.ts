@@ -7,7 +7,8 @@ import { SEA } from '../../sea/seaLogic';
 
 /** 調整用數字（改這裡就好） */
 export const PB = {
-  count: 5, seats: 4,
+  /** 碼頭的船（2026-11：5 → 10 艘，兩側各 5 艘；伺服器 BoatCount 同值） */
+  count: 10, seats: 4,
   /** 岸線 x（再往西是海）；碼頭從岸線往西伸 */
   shoreX: -24, pierX0: -24, pierX1: -40, pierHalfW: 1.2,
   /** 廣場西緣可以上岸的 z 範圍 */
@@ -39,7 +40,8 @@ export const PB = {
 /** 碼頭排位：偶數在北側（船頭朝北 h=0）、奇數在南側（h=π），船尾靠碼頭。與伺服器 DockSlot 一致 */
 export function dockSlot(i: number) {
   const side = i % 2 === 0 ? -1 : 1, k = Math.floor(i / 2);
-  return { x: -28.5 - k * 4.2, z: side * 4.2, h: side < 0 ? 0 : Math.PI };
+  // 每側 5 艘、間隔 3.15 m（船寬 2.2 m，留約 1 m），全部在碼頭範圍內
+  return { x: -27.2 - k * 3.15, z: side * 4.2, h: side < 0 ? 0 : Math.PI };
 }
 
 /** 船上的座位（船身座標）：0＝船尾駕駛座、1＝冰桶上、2／3＝甲板 */

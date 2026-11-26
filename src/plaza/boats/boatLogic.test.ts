@@ -2,8 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { PB, dockSlot, stepPlazaBoat, pushStatic, pushFromBoat, isHardRam, stepSwim, freePassengerSeat, boatEmpty, distToLand, landSpot, onLand, knockSpot, nightK, hullPts, dockEdge, DOCK_IND_NEAR } from './boatLogic';
 
 describe('廣場膠筏', () => {
-  it('5 艘排在碼頭兩側、不互相重疊、船尾靠碼頭', () => {
+  it('10 艘排在碼頭兩側（各 5 艘）、不互相重疊、船尾靠碼頭、從碼頭走得到', () => {
+    expect(PB.count).toBe(10);
     const s = Array.from({ length: PB.count }, (_, i) => dockSlot(i));
+    expect(s.filter(d => d.z < 0).length).toBe(5); expect(s.filter(d => d.z > 0).length).toBe(5);
+    // 船身兩個圓（半徑 hullR）：同一側相鄰的船中間至少留 0.8 m
+    for (let i = 0; i < s.length; i++) for (let j = i + 1; j < s.length; j++) {
+      const a = hullPts({ ...s[i], v: 0 }), b = hullPts({ ...s[j], v: 0 });
+      for (const p of a) for (const q of b) expect(Math.hypot(p[0] - q[0], p[1] - q[1])).toBeGreaterThan(PB.hullR * 2 + 0.8);
+    }
+    for (const d of s) {
+      // 從碼頭上最近的一點走得到（上船距離）
+      const px = Math.max(PB.pierX1, Math.min(PB.pierX0, d.x)), pz = Math.sign(d.z) * PB.pierHalfW;
+      expect(Math.hypot(d.x - px, d.z - pz)).toBeLessThan(PB.boardR);
+      // 離岸線夠遠（船身不會被推）
+      expect(d.x + PB.hullR).toBeLessThan(PB.shoreX);
+    }
     for (let i = 0; i < s.length; i++) for (let j = i + 1; j < s.length; j++) expect(Math.hypot(s[i].x - s[j].x, s[i].z - s[j].z)).toBeGreaterThan(2.4);
     for (const d of s) {
       expect(d.x).toBeLessThan(PB.pierX0); expect(d.x).toBeGreaterThan(PB.pierX1);
