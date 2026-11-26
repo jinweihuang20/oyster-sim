@@ -1,5 +1,6 @@
 import { HQ_SEAT_SLOT, isPlazaAber } from './plaza/layout';
 import { qtyHtml, bindQty, getQty, resetQty } from './shop/qty';
+import { FISH_BUY_ATTR, fishShopRows, fishShopHtml, fishBuyRowOf, shopMeds } from './shop/fishShop';
 import {
   initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl, setGeoLowDetail,
   importMove, escapeInApp, type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY,
@@ -5261,6 +5262,7 @@ function moonTick(dt: number) {
   if (moonAimOn) { if (state !== 'play') moonAimEnd(); else moonAimPos(); } plazaAimTick();
 }
 function renderItemShop() {
+  shopMeds(save);
   const it = ITEMS[0]; const own = save.meds[it.id] ?? 0;
   $('shopList').insertAdjacentHTML('beforeend', `<h3><i class="ic ic-moon"></i> 道具</h3><p style="font-size:12px;opacity:.8">消耗品：上工時按「藥品/道具」使用，沒用完的會留著。</p><div class="itemCard"><div class="itemIc">${MOON_SVG}</div><div class="itemTx"><b>${it.n}</b><small style="color:#9be37a">${it.good}</small><small style="color:#ff8a7a">${it.bad}</small><small>持有 ${own}</small>${pxCd('item-' + it.id)}</div><div class="buyRow">${qtyHtml('item-' + it.id)}<button data-ibuy="${it.id}" ${save.money < px('item-' + it.id, it.price) ? 'disabled' : ''}>${pxHtml('item-' + it.id, it.price)}</button></div></div>`);
   // 蚵棚：可重複買；海上最多放 4 座（伺服器擋），放下後會長蚵串
@@ -5294,27 +5296,20 @@ function renderItemShop() {
 /** 雜貨店「釣具」：釣竿一次買斷；餌一包一包買（消耗品）；路亞假魚可以重複用，斷線就沒了。存在 save.meds（跟蚵棚組合包一樣） */
 function renderFishShop() {
   const L = $('shopList');
-  L.insertAdjacentHTML('beforeend', `<h3><i class="ic ic-shop"></i> 釣具</h3><p style="font-size:12px;opacity:.8">在廣場碼頭邊或坐船出海按「釣魚」。蚵仔肉當餌免費，每天可以帶 ${FISH.oysterPerDay} 塊出海。釣到的魚在碼頭賣。</p>`);
-  type Row = { id: string; n: string; price: number; svg: string; good: string; bad?: string; pack?: number; once?: boolean };
-  const rows: Row[] = [
-    { id: FISH.rods.float.id, n: FISH.rods.float.n, price: FISH.rods.float.price, svg: FISH_ROD_SVG, good: '掛餌拋出去等魚咬：浮標整個沉下去再收竿，好上手', once: true },
-    { id: FISH.rods.lure.id, n: FISH.rods.lure.n, price: FISH.rods.lure.price, svg: FISH_ROD_SVG, good: '拋假魚、靠收線節奏引魚：比較難，但大魚和稀有魚比較多；坐船還能拖釣', bad: '拉扯比較難：魚會左右衝，張力太高斷線、太低脫鉤', once: true },
-    ...FISH.baits.filter(b => b.id).map(b => ({ id: b.id, n: `${b.n}（${b.pack} 個）`, price: b.price, svg: FISH_BAIT_SVG, pack: b.pack, good: b.k === 'shrimp' ? '垂釣用，什麼魚都吃一點' : b.k === 'worm' ? '垂釣用，魚比較愛咬，也比較容易釣到大魚' : '垂釣用，晚上特別有效，白帶魚愛吃', bad: '魚咬了（不管有沒有釣到）就用掉一個' })),
-    ...FISH.lures.map(l => ({ id: l.id, n: l.n, price: l.price, svg: FISH_LURE_SVG, good: l.k === 'minnow' ? '路亞：快收加偶爾抽竿，掠食魚會追' : l.k === 'jig' ? '路亞：丟得遠、沉得深，深水大魚' : l.k === 'soft' ? '路亞：慢慢收貼底爬，石斑愛吃' : '路亞：抽一下停一下濺水花，清晨和黃昏才有效', bad: '可以一直用；線斷了就沒了' })),
-  ];
-  for (const r of rows) {
-    const k = 'item-' + r.id, own = save.meds[r.id] ?? 0;
-    const btn = r.once && own > 0 ? `<span class="shopOwnPx"><i class="ic ic-check" aria-hidden="true"></i> 已擁有</span>` : `${r.once ? '' : qtyHtml(k)}<button data-fbuy="${r.id}" ${save.money < px(k, r.price) ? 'disabled' : ''}>${pxHtml(k, r.price)}</button>`;
-    L.insertAdjacentHTML('beforeend', `<div class="itemCard"><div class="itemIc">${r.svg}</div><div class="itemTx"><b>${r.n}</b><small style="color:#9be37a">${r.good}</small>${r.bad ? `<small style="color:#ff8a7a">${r.bad}</small>` : ''}<small>${r.once ? (own > 0 ? '已擁有' : '一次買斷') : `持有 ${own}`}</small>${pxCd(k)}</div><div class="buyRow">${btn}</div></div>`);
-  }
-  L.querySelectorAll<HTMLButtonElement>('button[data-fbuy]').forEach(b => {
-    const r = rows.find(x => x.id === b.dataset.fbuy)!; const k = 'item-' + r.id;
+  const rows = fishShopRows();
+  const fmt = { qtyHtml, px, pxHtml, pxCd };
+  L.insertAdjacentHTML('beforeend', fishShopHtml(save, { rod: FISH_ROD_SVG, bait: FISH_BAIT_SVG, lure: FISH_LURE_SVG }, fmt));
+  // 用 data-fishbuy，不要用廣場旗幟已經占用的 data-fbuy；對不到商品的鈕直接略過
+  L.querySelectorAll<HTMLButtonElement>(`button[${FISH_BUY_ATTR}]`).forEach(b => {
+    const r = fishBuyRowOf(b.getAttribute('data-fishbuy'), rows); if (!r) return;
+    const k = 'item-' + r.id;
     if (!r.once) bindQty(b.closest('.itemCard')!, k, () => px(k, r.price), () => save.money, b);
     b.onclick = async () => {
       const pr = await payFor(k, r.price, r.n); if (pr == null) return;
       const n = r.once ? 1 : Math.min(getQty(k), Math.floor(save.money / pr), 20); if (n < 1) return;
-      if (r.once && (save.meds[r.id] ?? 0) > 0) return;
-      save.money -= pr * n; save.meds[r.id] = (save.meds[r.id] ?? 0) + n * (r.pack ?? 1); persist(); track('buy', { item: k, price: pr * n, qty: n });
+      const meds = shopMeds(save);
+      if (r.once && (meds[r.id] ?? 0) > 0) return;
+      save.money -= pr * n; meds[r.id] = (meds[r.id] ?? 0) + n * (r.pack ?? 1); persist(); track('buy', { item: k, price: pr * n, qty: n });
       if (ac) SFX.jingle(); toast(r.once ? `買了${r.n}，到廣場碼頭邊或坐船出海按「釣魚」` : `買了 ${n * (r.pack ?? 1)} 個${r.n.replace(/（.*）/, '')}`, '#9be37a');
       if (!r.once) resetQty(k); renderShop();
     };
