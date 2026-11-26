@@ -12,7 +12,7 @@ import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
 import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, castPoint, castDist, castRange, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
-import { makeRod, type Rod } from './fishRod';
+import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { fishGeometry, fishMaterial } from './fishModel';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, type FishPoseIn, type FishPhase } from './fishPose';
@@ -179,7 +179,7 @@ function buildGfx(parent: THREE.Object3D) {
   const g = new THREE.Group(); g.name = 'plazaFish'; g.visible = false;
   const pos = new Float32Array(12);
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const line = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x1d2b3a }));
+  const line = new THREE.LineSegments(geo, makeFishLineMat());
   line.frustumCulled = false;
   const bobMat = new THREE.MeshBasicMaterial({ color: 0xe8432e });
   const bob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), bobMat);

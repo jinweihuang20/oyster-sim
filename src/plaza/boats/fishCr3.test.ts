@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { FISH, castRange, castDist, castPoint, DECK, deckClamp, deckStart, stepDeck } from './fishLogic';
 import { SEATS } from './boatLogic';
-import { ROD_LEN, ROD_GRIP, rodBend, makeRod } from './fishRod';
-import { newFishPose, stepFishPose, fishPoseCode, fishPoseDecode, fishPoseTarget, CAST_FLICK, type FishPoseIn } from './fishPose';
+import { ROD_LEN, ROD_GRIP, ROD_MAX_ARC, rodBend, rodBendAngle, makeRod, makeFishLineMat } from './fishRod';
+import { newFishPose, stepFishPose, fishPoseCode, fishPoseDecode, fishPoseTarget, CAST_FLICK, HOOK_SET, type FishPoseIn } from './fishPose';
 import { FISH_SPECIES, FISH_DESC, FISH_SEG, buildFishGeometry, fishModelIds } from './fishModel';
 
 describe('路亞拋竿距離（依假魚重量）', () => {
@@ -172,5 +172,76 @@ describe('魚的 3D 模型', () => {
     const front = (id: string) => { const g = buildFishGeometry(id)!; g.computeBoundingBox(); const mx = g.boundingBox!.max.x; const p = g.getAttribute('position'); let lo = 9, hi = -9; for (let i = 0; i < p.count; i++) if (p.getX(i) > mx - 0.08) { lo = Math.min(lo, p.getY(i)); hi = Math.max(hi, p.getY(i)); } return hi - lo; };
     expect(front('kajiki')).toBeLessThan(0.03);
     expect(front('maguro')).toBeGreaterThan(front('kajiki') * 2);
+  });
+});
+
+describe('中魚拉竿：竿子明顯彎、動作大', () => {
+  const inp = (o: Partial<FishPoseIn>): FishPoseIn => ({ phase: 'hold', power: 0, reel: false, tension: 0, lure: false, twitch: 0, ...o });
+  it('竿子沿弧線彎（竿長不變）；拉滿時竿尖往下指', () => {
+    for (const k of ['float', 'lure'] as const) {
+      const L = ROD_LEN[k], g = ROD_GRIP[k];
+      // 中心線長度≈竿長
+      let len = 0, py = g, pz = 0;
+      for (let i = 1; i <= 60; i++) { const y = g + ((L - g) * i) / 60, d = rodBend(y, L, 0.9, g); const ny = y + d.dy, nz = d.dz; len += Math.hypot(ny - py, nz - pz); py = ny; pz = nz; }
+      expect(len).toBeCloseTo(L - g, 1);
+      expect(rodBendAngle(L, L, 1, g)).toBeCloseTo(ROD_MAX_ARC[k]);
+      expect(rodBendAngle(L, L, 1, g)).toBeGreaterThan(Math.PI * 0.45);
+      // 彎很多：竿尖往旁邊偏超過竿長的 4 成
+      expect(-rodBend(L, L, 0.9, g).dz).toBeGreaterThan((L - g) * 0.4);
+      // 模型竿尖跟中心線一致（線掛在彎下去的竿尖上）
+      const r = makeRod(k); r.setBend(0.9);
+      const tip = r.tipLocal(new THREE.Vector3()), d = rodBend(L, L, 0.9, g);
+      expect(tip.y).toBeCloseTo(L + d.dy, 1); expect(tip.z).toBeCloseTo(d.dz, 1);
+      // 頂點：最高點跟著竿尖下來
+      const pos = (r.g.children[0] as THREE.Mesh).geometry.getAttribute('position');
+      let maxY = 0; for (let i = 0; i < pos.count; i++) maxY = Math.max(maxY, pos.getY(i));
+      expect(maxY).toBeLessThan(L - 0.2);
+      r.dispose();
+    }
+  });
+  it('拉魚：竿彎跟張力走，加上魚掙扎的抖動；身體大幅後仰、手舉高、腳站穩', () => {
+    const st = newFishPose();
+    for (let i = 0; i < 30; i++) stepFishPose(st, inp({ phase: 'wait' }), 1 / 60);
+    for (let i = 0; i < 180; i++) stepFishPose(st, inp({ phase: 'fight', tension: 0.15 }), 1 / 60);
+    let lo = 0; for (let i = 0; i < 120; i++) { stepFishPose(st, inp({ phase: 'fight', tension: 0.15 }), 1 / 60); lo += st.bend / 120; }
+    let hi = 0, minL = 9, maxL = -9, minB = 9, maxB = -9;
+    for (let i = 0; i < 180; i++) stepFishPose(st, inp({ phase: 'fight', tension: 1 }), 1 / 60);
+    for (let i = 0; i < 240; i++) {
+      stepFishPose(st, inp({ phase: 'fight', tension: 1 }), 1 / 60); hi += st.bend / 240;
+      minL = Math.min(minL, st.lean); maxL = Math.max(maxL, st.lean); minB = Math.min(minB, st.bend); maxB = Math.max(maxB, st.bend);
+    }
+    expect(lo).toBeGreaterThan(0.45); expect(hi).toBeGreaterThan(0.85); expect(hi).toBeGreaterThan(lo + 0.3);
+    expect(maxB - minB).toBeGreaterThan(0.04);
+    // 一拉一放（pump）：後仰角度有起伏、平均後仰很大
+    expect(maxL).toBeGreaterThan(0.5); expect(maxL - minL).toBeGreaterThan(0.08); expect(minL).toBeGreaterThan(0.3);
+    expect(st.hy).toBeGreaterThan(0.15);
+    expect(st.brace).toBeGreaterThan(0.95);
+    // 放下：站姿慢慢還原
+    for (let i = 0; i < 120; i++) stepFishPose(st, inp({ phase: 'hold' }), 1 / 60);
+    expect(st.brace).toBe(0);
+  });
+  it('中魚那一下：往上猛拉揚竿（竿子立更高、身體更後仰、竿彎一下子變大）', () => {
+    const steady = newFishPose();
+    for (let i = 0; i < 60; i++) stepFishPose(steady, inp({ phase: 'wait' }), 1 / 60);
+    const st = newFishPose();
+    for (let i = 0; i < 60; i++) stepFishPose(st, inp({ phase: 'wait' }), 1 / 60);
+    let peakP = 0, peakL = 0, peakB = 0;
+    stepFishPose(st, inp({ phase: 'fight', tension: 0.4 }), 1 / 60);
+    expect(st.hookT).toBeGreaterThanOrEqual(0);
+    for (let i = 0; i < Math.ceil(HOOK_SET * 60); i++) { stepFishPose(st, inp({ phase: 'fight', tension: 0.4 }), 1 / 60); peakP = Math.max(peakP, st.pitch); peakL = Math.max(peakL, st.lean); peakB = Math.max(peakB, st.bend); }
+    expect(st.hookT).toBe(-1);
+    const later = { p: 0, l: 0 };
+    for (let i = 0; i < 240; i++) { stepFishPose(st, inp({ phase: 'fight', tension: 0.4 }), 1 / 60); later.p = Math.max(later.p, st.pitch); later.l = Math.max(later.l, st.lean); }
+    expect(peakP).toBeGreaterThan(later.p + 0.1);
+    expect(peakL).toBeGreaterThan(later.l);
+    expect(peakB).toBeGreaterThan(0.8);
+    // 一開始就是拉魚（例如別人進來看到的時候）不揚竿
+    const fresh = newFishPose(); stepFishPose(fresh, inp({ phase: 'fight' }), 1 / 60); expect(fresh.hookT).toBe(-1);
+  });
+  it('每幀不配置：目標共用同一個物件；釣魚線是半透明細線', () => {
+    expect(fishPoseTarget(inp({ phase: 'fight' }), -1, 0)).toBe(fishPoseTarget(inp({ phase: 'wait' }), -1, 0));
+    const m = makeFishLineMat();
+    expect(m.transparent).toBe(true); expect(m.opacity).toBeLessThan(0.7); expect(m.opacity).toBeGreaterThan(0.3);
+    m.dispose();
   });
 });

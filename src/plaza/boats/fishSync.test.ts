@@ -85,7 +85,7 @@ describe('姿勢代碼：秀漁獲', () => {
   });
   it('秀漁獲：竿子比等待時舉得高、身體微後仰；拉魚：後仰、竿彎', () => {
     const base: FishPoseIn = { phase: 'wait', power: 0, reel: false, tension: 0, lure: false, twitch: 0 };
-    const w = fishPoseTarget(base, -1, 0), s = fishPoseTarget({ ...base, phase: 'show' }, -1, 0), f = fishPoseTarget({ ...base, phase: 'fight', tension: 1 }, -1, 0);
+    const w = { ...fishPoseTarget(base, -1, 0) }, s = { ...fishPoseTarget({ ...base, phase: 'show' }, -1, 0) }, f = { ...fishPoseTarget({ ...base, phase: 'fight', tension: 1 }, -1, 0) };
     expect(s.pitch).toBeGreaterThan(w.pitch + 0.5);
     expect(s.lean).toBeLessThan(0);
     expect(f.lean).toBeGreaterThan(0.2); expect(f.bend).toBeGreaterThan(0.8);

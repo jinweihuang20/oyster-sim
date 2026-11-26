@@ -1,6 +1,6 @@
 /**
  * 釣竿模型（拿在手上）：垂釣竿＝長竹竿（竹節、手把纏線、木頭線輪）；路亞竿＝短碳纖維竿（EVA／軟木握把、捲線器在竿下、5 個導線環由大到小）。
- * 一支竿＝一個合併好的 mesh（頂點色）＋路亞竿的捲線器搖把（會轉）。竿子彎曲在 CPU 改頂點（只有彎度變了才改），竿尖位置跟著彎。
+ * 一支竿＝一個合併好的 mesh（頂點色）＋路亞竿的捲線器搖把（會轉）。竿子彎曲在 CPU 改頂點（只有彎度變了才改，沿弧線、竿長不變），竿尖位置跟著彎。
  * 竿子座標：握把底＝原點、竿身沿 +Y、彎曲往 -Z（掛線的那一邊）。
  */
 import * as THREE from 'three';
@@ -13,14 +13,37 @@ export const ROD_LEN: Record<Gear, number> = { float: 3.0, lure: 1.95 };
 export const ROD_GRIP: Record<Gear, number> = { float: 0.32, lure: 0.3 };
 
 /**
- * 彎曲：竿上高度 y 的位置往 -Z 偏多少（bend 0～1；負的＝往反方向）。越靠竿尖彎越多（三次方），竿尖往下也會縮一點。
- * 手握的地方以下不彎。
+ * 彎曲＝真的弧線（竿長不變）：竿上每一點的切線角 θ(u)＝Θ·u^1.6（u＝握把到竿尖 0～1，越靠竿尖彎越多＝快調性），
+ * Θ＝bend × 最大彎角（垂釣竿 1.75 rad≈100°、路亞竿 1.5 rad）。中魚拉滿時竿尖會彎到往下指。
+ * 手握的地方以下不彎；負的 bend＝往反方向（蓄力往後甩）。
+ */
+export const ROD_MAX_ARC: Record<Gear, number> = { float: 1.75, lure: 1.5 };
+const ARC_P = 1.6;
+const arcTheta = (u: number, T: number) => T * Math.pow(Math.max(0, Math.min(1, u)), ARC_P);
+const maxArcOf = (L: number) => (L >= 2.5 ? ROD_MAX_ARC.float : ROD_MAX_ARC.lure);
+/**
+ * 竿身中心線在竿上 y（沿竿長）那一點的位移：dz（往 -Z＝掛線那面）、dy（往下縮）。數值積分 24 步，不配置。
  */
 export function rodBend(y: number, L: number, bend: number, grip = 0) {
-  const u = Math.max(0, (y - grip) / Math.max(0.01, L - grip));
-  const d = bend * 0.42 * (L - grip) * u * u * (1.4 - 0.4 * u);
-  const dy = -Math.abs(bend) * 0.12 * (L - grip) * u * u * u;
-  return { dz: -d, dy };
+  if (y <= grip || bend === 0) return { dz: 0, dy: 0 };
+  const span = Math.max(0.01, L - grip), T = Math.max(-1, Math.min(1, bend)) * maxArcOf(L);
+  const s = Math.min(y, L) - grip, n = 24, h = s / n;
+  let cy = 0, cz = 0;
+  for (let i = 0; i < n; i++) { const th = arcTheta(((i + 0.5) * h) / span, T); cy += Math.cos(th) * h; cz -= Math.sin(th) * h; }
+  return { dz: cz, dy: cy - s };
+}
+/** 竿上 y 那一點的切線角（弧度）；彎曲後掛在竿上的東西要跟著轉 */
+export function rodBendAngle(y: number, L: number, bend: number, grip = 0) {
+  return y <= grip ? 0 : arcTheta((Math.min(y, L) - grip) / Math.max(0.01, L - grip), Math.max(-1, Math.min(1, bend)) * maxArcOf(L));
+}
+
+/**
+ * 釣魚線材質：細細一條（半透明深灰藍，看起來比實心線細），海面、天空前面都還看得到。
+ * 本機每人一份（closeFish 會 dispose）；別人的線共用一份。
+ */
+export const FISH_LINE = { color: 0x1a232d, opacity: 0.6 };
+export function makeFishLineMat() {
+  return new THREE.LineBasicMaterial({ color: FISH_LINE.color, transparent: true, opacity: FISH_LINE.opacity, depthWrite: false });
 }
 
 const COL = new THREE.Color();
@@ -108,11 +131,27 @@ export function makeRod(kind: Gear): Rod {
   const mesh = new THREE.Mesh(geo, rodMat()); mesh.frustumCulled = false; mesh.castShadow = false;
   const g = new THREE.Group(); g.name = 'fishRod'; g.add(mesh); if (crank) g.add(crank);
   let bendNow = 0;
+  // 中心線取樣表（握把到竿尖 N 段）：彎度變了才重算一次，再把每個頂點沿著弧線擺回去（截面跟著轉）
+  const N = 40, span = Math.max(0.01, L - grip), T1 = ROD_MAX_ARC[kind];
+  const cY = new Float32Array(N + 1), cZ = new Float32Array(N + 1), cS = new Float32Array(N + 1), cC = new Float32Array(N + 1);
   const apply = (b: number) => {
+    const T = b * T1, h = span / N;
+    cY[0] = grip; cZ[0] = 0; cS[0] = 0; cC[0] = 1;
+    for (let i = 1; i <= N; i++) {
+      const thm = arcTheta((i - 0.5) / N, T), th = arcTheta(i / N, T);
+      cY[i] = cY[i - 1] + Math.cos(thm) * h; cZ[i] = cZ[i - 1] - Math.sin(thm) * h;
+      cS[i] = Math.sin(th); cC[i] = Math.cos(th);
+    }
     const a = pos.array as Float32Array;
     for (let i = 0; i < a.length; i += 3) {
-      const y = base[i + 1]; const d = rodBend(y, L, b, grip);
-      a[i] = base[i]; a[i + 1] = y + d.dy; a[i + 2] = base[i + 2] + d.dz;
+      const y = base[i + 1], z0 = base[i + 2];
+      a[i] = base[i];
+      if (y <= grip) { a[i + 1] = y; a[i + 2] = z0; continue; }
+      const f = Math.min(N, ((y - grip) / span) * N), k = Math.min(N - 1, Math.floor(f)), w = f - k;
+      const yy = cY[k] + (cY[k + 1] - cY[k]) * w + (y > L ? y - L : 0), zz = cZ[k] + (cZ[k + 1] - cZ[k]) * w;
+      const sn = cS[k] + (cS[k + 1] - cS[k]) * w, cs = cC[k] + (cC[k + 1] - cC[k]) * w;
+      // 截面偏移（導線環、竿身半徑）跟著切線轉：法線＝(0, sinθ, cosθ)
+      a[i + 1] = yy + z0 * sn; a[i + 2] = zz + z0 * cs;
     }
     pos.needsUpdate = true; // 平面著色：法線在 shader 裡算，不用重算頂點法線
   };
@@ -120,10 +159,12 @@ export function makeRod(kind: Gear): Rod {
     kind, g,
     setBend(b) { b = Math.max(-1, Math.min(1, b)); if (Math.abs(b - bendNow) < 0.012) return; bendNow = b; apply(b); },
     setCrank(a) { if (crank) crank.rotation.x = a; },
-    tipLocal(out) { const d = rodBend(L, L, bendNow, grip); return out.set(0, L + d.dy, d.dz); },
+    tipLocal(out) { if (bendNow === 0) return out.set(0, L, 0); return out.set(0, cY[N], cZ[N]); },
     handLLocal(out) {
       if (kind === 'lure' && crank) { const a = crank.rotation.x; return out.set(crankAt.x - 0.02, crankAt.y - Math.cos(a) * 0.07, crankAt.z - Math.sin(a) * 0.07); }
-      const d = rodBend(handL.y, L, bendNow, grip); return out.set(handL.x, handL.y + d.dy, handL.z + d.dz);
+      if (bendNow === 0 || handL.y <= grip) return out.copy(handL);
+      const f = ((handL.y - grip) / span) * N, k = Math.min(N - 1, Math.floor(f)), w = f - k;
+      return out.set(handL.x, cY[k] + (cY[k + 1] - cY[k]) * w, cZ[k] + (cZ[k + 1] - cZ[k]) * w);
     },
     dispose() { g.removeFromParent(); geo.dispose(); crank?.geometry.dispose(); },
   };

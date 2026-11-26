@@ -20,7 +20,7 @@ import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
 import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishFaceYaw, fishCanWalk, fishPostPose, fishRejoined, fishSyncFill } from './plazaFish';
 import { DECK, deckStart, deckClamp, stepDeck, yawOf } from './fishLogic';
-import { makeRod, type Rod } from './fishRod';
+import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWorld, type FishPoseSt, type FishPoseIn } from './fishPose';
 import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishBadgeOf, fishLineOut, fishLineEnd, type FishSyncMsg } from './fishSync';
 import { fishGeometry, fishMaterial } from './fishModel';
@@ -1021,7 +1021,7 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
   const show = !hidden && (f.st & 15) === 7 && !!f.sp;
   if ((lineOn || show) && !f.line && D) {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-    f.line = new THREE.LineSegments(g, fisherLineMat ??= new THREE.LineBasicMaterial({ color: 0x1d2b3a })); f.line.frustumCulled = false; D.scene.add(f.line);
+    f.line = new THREE.LineSegments(g, fisherLineMat ??= makeFishLineMat()); f.line.frustumCulled = false; D.scene.add(f.line);
   }
   if (lineOn && !f.bob && D) {
     f.bob = new THREE.Mesh(fisherBobGeo ??= new THREE.SphereGeometry(0.07, 8, 6), fisherFloatMat ??= new THREE.MeshLambertMaterial({ color: 0xe8432e }));
