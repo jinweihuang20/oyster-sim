@@ -79,6 +79,8 @@ export type BoatNetEvents = {
   cargo?: (e: { cargo: number; lost: number }) => void;
   /** 一艘船上所有人的船貨合計 */
   load?: (e: { boatId: number; load: number }) => void;
+  /** 有人釣到傳說魚（全廣場公告） */
+  fishBig?: (e: { connId: string; nick: string; name: string; kg: number }) => void;
 };
 export type HaulRes = { ok: boolean; err?: string; cargo?: number; cargoVal?: number; rack?: RackDto | null; fine?: number };
 export type SellRes = { ok: boolean; err?: string; pay?: number; strings?: number; kg?: number; cargo?: number; bonus?: number };
@@ -117,6 +119,7 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     conn.on('RackStolen', safe(x => ev.rackStolen?.({ rackId: num(g(x, 'rackId'), -1), by: String(g(x, 'by') ?? ''), warn: !!g(x, 'warn') })));
     conn.on('BoatCargo', safe(x => ev.cargo?.({ cargo: num(g(x, 'cargo')), lost: num(g(x, 'lost')) })));
     conn.on('BoatLoad', safe(x => ev.load?.({ boatId: num(g(x, 'boatId'), -1), load: num(g(x, 'load')) })));
+    conn.on('FishBig', safe(x => ev.fishBig?.({ connId: String(g(x, 'connId') ?? ''), nick: String(g(x, 'nick') ?? ''), name: String(g(x, 'name') ?? ''), kg: num(g(x, 'kg')) })));
     conn.on('BoatRescued', safe(x => ev.rescued({ boatId: num(g(x, 'boatId'), -1), seat: num(g(x, 'seat'), -1), by: String(g(x, 'by') ?? '') })));
   });
   const fetchState = async () => {
@@ -178,6 +181,8 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
       const r = await call('DriftClaim', key);
       return { ok: !!r?.ok, err: r?.err, pay: r?.pay != null ? num(r.pay) : undefined, bonus: num(r?.bonus), total: r?.total != null ? num(r.total) : undefined, n: Math.max(1, num(r?.n, 1)), need: num(r?.need), gold: !!r?.gold };
     },
+    /** 釣魚（PlazaWorld.Fish.cs）：回傳原始物件，plazaFish.ts 自己正規化 */
+    fish: (m: 'FishState' | 'FishCast' | 'FishRoll' | 'FishReel' | 'FishLand' | 'FishSell', ...a: unknown[]): Promise<any> => call(m, ...a),
     close() { closed = true; },
   };
 }

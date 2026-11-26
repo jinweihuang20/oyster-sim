@@ -4445,6 +4445,72 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
   #rackUpPanel{top:calc(var(--sa-top,0px) + 8px);max-height:calc(100vh - 16px);padding:8px 10px}
   #rackUpPanel .rkRow{padding:4px 0}
 }
+/* ---------- 廣場海面釣魚：右下「拋竿／收線／抽竿」、上方狀態卡、力道／張力條、換餌／圖鑑面板（實心、不用毛玻璃） ---------- */
+#fishBar{position:absolute;z-index:3;right:calc(var(--sa-right,0px) + 18px);bottom:calc(var(--sa-bottom,0px) + 86px);display:none;flex-direction:column-reverse;align-items:flex-end;gap:10px;pointer-events:none}
+#fishBar.on{display:flex}
+#boatUi #fishBar .boatBtn{position:static}
+#boatUi #fishCast,#boatUi #fishReel{padding:15px 22px!important;font-size:18px;border-radius:18px!important}
+#boatUi #fishReel.hot{background:#c8401a!important;border-color:#ffd76a!important}
+#boatUi #fishJerk{background:#fff!important;color:#2a5a86!important;border-color:#2a5a86!important}
+#boatUi #fishBar #fishSell{background:#1f6b45!important}
+#boatUi #boatRackBar #fishSell{background:#1f6b45!important}
+#fishHud{position:absolute;z-index:3;left:50%;transform:translateX(-50%);top:calc(var(--sa-top,0px) + 104px);display:none;align-items:center;gap:6px;max-width:calc(100vw - 24px);padding:6px 6px 6px 12px;border-radius:14px;background:#142231;border:1.5px solid #2a5a86;color:#e8f2ff;box-shadow:0 3px 10px rgba(0,0,0,.35);pointer-events:none}
+#fishHud.on{display:flex}
+#fishHud .fhTx{display:flex;flex-direction:column;gap:2px;min-width:0;padding-right:4px}
+#fishHud .fhMain{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+#fishHud .fhTip{display:none;font-size:12px;font-weight:700;color:#ffd76a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#fishHud .fhTip.on{display:block}
+#fishHud .fhB{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:48px;min-width:48px!important;height:44px;min-height:44px!important;padding:2px!important;border-radius:10px!important;border:none!important;background:#2a5a86!important;color:#fff!important;font-size:11px;font-weight:700;pointer-events:auto;touch-action:none;box-shadow:none!important}
+#fishHud .fhB svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#fishHud .fhX{background:#fff!important;color:#2a5a86!important}
+#fishMeter{position:absolute;z-index:3;left:50%;transform:translateX(-50%);bottom:calc(var(--sa-bottom,0px) + 290px);display:none;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center;width:min(300px,64vw);pointer-events:none}
+#fishMeter.on{display:flex}
+#fishMeter .fmBar{position:relative;flex:1;height:18px;border-radius:10px;background:#142231;border:2px solid #fff;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+#fishMeter .fmRed{position:absolute;top:0;bottom:0;left:80%;right:0;background:#5a2a24}
+#fishMeter .fmFill{position:absolute;inset:0;transform-origin:0 50%;transform:scaleX(0);background:#4a8ac0}
+#fishMeter.charge .fmFill{background:#ffd76a}
+#fishMeter.charge .fmRed{display:none}
+#fishMeter.red .fmFill{background:#e0392b}
+#fishMeter .fmLbl{flex-basis:100%;text-align:center;font-size:13px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000;font-variant-numeric:tabular-nums}
+#fishMeter .fmDir{display:flex;visibility:hidden;width:30px;height:30px;border-radius:50%;background:#142231;border:2px solid #ffd76a;color:#ffd76a}
+#fishMeter .fmDir.on{visibility:visible}
+#fishMeter .fmDir svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+#fishPanel{position:absolute;z-index:6;right:calc(var(--sa-right,0px) + 16px);top:calc(var(--sa-top,0px) + 60px);display:none;flex-direction:column;width:min(360px,calc(100vw - 32px));max-height:calc(100vh - 120px);overflow:auto;padding:8px 12px 12px;border-radius:14px;background:#f7fafd;color:#1d2b3a;box-shadow:0 6px 20px rgba(0,0,0,.35);pointer-events:auto;touch-action:pan-y}
+#fishPanel.on{display:flex}
+#fishPanel .fpTabs{display:flex;align-items:center;gap:6px;position:sticky;top:-8px;background:#f7fafd;padding:4px 0 6px;z-index:1}
+#fishPanel .fpTabs button{min-height:36px!important;padding:6px 12px!important;border-radius:10px!important;border:1.5px solid #c9d3dd!important;background:#fff!important;color:#2a5a86!important;font-size:14px;font-weight:800;box-shadow:none!important}
+#fishPanel .fpTabs button.on{background:#2a5a86!important;color:#fff!important;border-color:#2a5a86!important}
+#fishPanel .fpTabs .fpX{margin-left:auto;width:36px;padding:4px!important;border:none!important;background:none!important}
+#fishPanel svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+#fishPanel h4{margin:8px 0 4px;font-size:13px;color:#5a6b7c}
+#fishPanel .fpRow{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
+#fishPanel .fpPick{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:48px!important;padding:7px 9px!important;border-radius:10px!important;border:1.5px solid #c9d3dd!important;background:#fff!important;color:#1d2b3a!important;text-align:left;box-shadow:none!important}
+#fishPanel .fpPick b{font-size:14px}
+#fishPanel .fpPick small{font-size:11px;color:#5a6b7c}
+#fishPanel .fpPick.on{border-color:#2a5a86!important;background:#e3edf7!important;box-shadow:inset 0 0 0 1px #2a5a86!important}
+#fishPanel .fpPick:disabled{opacity:.45}
+#fishPanel .fpTip{margin:8px 0 0;font-size:12px;color:#2a5a86;font-weight:700}
+#fishPanel .fpFoot{margin:8px 0 0;font-size:12px;color:#5a6b7c;font-variant-numeric:tabular-nums}
+#fishPanel .fpDex{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;margin-top:6px}
+#fishPanel .fpSp{display:flex;flex-direction:column;gap:1px;padding:6px 9px;border-radius:10px;background:#fff;border:1.5px solid #e1e8ef}
+#fishPanel .fpSp b{font-size:14px}
+#fishPanel .fpSp small{font-size:11px;color:#5a6b7c;font-variant-numeric:tabular-nums}
+#fishPanel .fpTier{font-size:10px;font-weight:800;color:#5a6b7c}
+#fishPanel .fpSp.t1 .fpTier{color:#2a5a86}
+#fishPanel .fpSp.t2 .fpTier{color:#a0700a}
+#fishPanel .fpSp.t2{border-color:#e8d39a}
+/* 釣魚中：右下換成釣魚按鈕，其他按鈕（丟殼／跳水／蚵棚／抽一口／走路的跳蹲躺）先收起來；面板打開時連釣魚按鈕也收起來 */
+body.plazaFishing #boatShell,body.plazaFishing #boatDive,body.plazaFishing #boatRackBar,body.plazaFishing #boatCargo,body.plazaFishing #boatAct,body.plazaFishing #rackTag,body.plazaFishing #boatDockInd{display:none!important}
+body.plazaFishing #jumpBtn,body.plazaFishing #crouchBtn,body.plazaFishing #lieBtn,body.plazaFishing #poseBtn,body.plazaFishing #standBtn,body.plazaFishing #throwBtn,body.plazaFishing #stealBtn,body.plazaFishing #umbBtn,body.plazaFishing #puffBtn,body.plazaFishing #seatCard{display:none!important}
+body.plazaFishing.plazaBoating.plazaBoatSmoke #puffBtn.on,body.plazaFishing.plazaRoam.plazaSmokeSit #puffBtn.on{display:none!important}
+body.fishPanelOpen #fishBar,body.fishPanelOpen #fishMeter,body.fishPanelOpen #fishHud{display:none!important}
+@media (max-height:500px){
+  #fishBar{bottom:calc(var(--sa-bottom,0px) + 20px);gap:8px}
+  #boatUi #fishCast,#boatUi #fishReel{padding:11px 18px!important;font-size:16px}
+  #fishHud{top:calc(var(--sa-top,0px) + 54px)}
+  #fishMeter{bottom:calc(var(--sa-bottom,0px) + 22px);width:min(300px,40vw)}
+  #fishPanel{top:calc(var(--sa-top,0px) + 8px);max-height:calc(100vh - 16px)}
+}
 #rewardToasts{position:fixed;left:50%;top:calc(var(--plaza-toast-top,calc(var(--sa-top,0px) + 56px)) + 34px);transform:translateX(-50%);z-index:13600;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;width:max-content;max-width:92vw}
 #rewardToasts .rwT{opacity:0;transform:translateY(-6px) scale(.96);transition:opacity .22s ease-out,transform .22s ease-out;font-variant-numeric:tabular-nums;text-shadow:none;filter:none;-webkit-backdrop-filter:none;backdrop-filter:none;-webkit-font-smoothing:antialiased;white-space:nowrap}
 #rewardToasts .rwT.on{opacity:1;transform:none}
@@ -4493,4 +4559,11 @@ body.rackPanelOpen #boatRackBar,body.rackPanelOpen #boatUi>.boatBtn,body.rackPan
 /* 手機橫放：左上那排按鈕在左邊，面板靠右、貼頂列下面 */
 @media (max-height:500px){
   #rackUpPanel{top:calc(var(--sa-top,0px) + 54px);max-height:calc(100vh - var(--sa-top,0px) - var(--sa-bottom,0px) - 62px);max-height:calc(100dvh - var(--sa-top,0px) - var(--sa-bottom,0px) - 62px);width:min(380px,calc(100vw - 140px))}
+}
+/* 釣具／圖鑑面板：跟蚵棚面板一樣放最上層，放在頂列和「離開／地圖」那排下面 */
+body.fishPanelOpen #boatUi{z-index:13700}
+body.fishPanelOpen #boatUi>.boatBtn,body.fishPanelOpen #boatRackBar,body.fishPanelOpen #boatDockInd,body.fishPanelOpen #boatCargo,body.fishPanelOpen #rackTag,body.fishPanelOpen #puffBtn,body.plazaBoating.plazaBoatSmoke.fishPanelOpen #puffBtn.on{display:none!important}
+#fishPanel{top:calc(var(--sa-top,0px) + 102px);max-height:calc(100vh - var(--sa-top,0px) - var(--sa-bottom,0px) - 112px);max-height:calc(100dvh - var(--sa-top,0px) - var(--sa-bottom,0px) - 112px);box-sizing:border-box;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+@media (max-height:500px){
+  #fishPanel{top:calc(var(--sa-top,0px) + 54px);max-height:calc(100vh - var(--sa-top,0px) - var(--sa-bottom,0px) - 62px);max-height:calc(100dvh - var(--sa-top,0px) - var(--sa-bottom,0px) - 62px);width:min(380px,calc(100vw - 140px))}
 }

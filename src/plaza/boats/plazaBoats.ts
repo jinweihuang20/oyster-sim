@@ -18,6 +18,7 @@ import {
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
+import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg } from './plazaFish';
 import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare, type DriftTide, type DriftPull } from './boatNet';
 
 export type BoatSfx = 'splash' | 'bump' | 'hit' | 'dock' | 'launch' | 'warn';
@@ -50,6 +51,11 @@ export type PlazaBoatDeps = {
   fineMoney?: (n: number, via: string) => number;
   rackKits?: () => number;
   addRackKits?: (d: number) => void;
+  /** 釣具（雜貨店買的竿／餌／假魚，存檔）；蚵仔肉當餌：今天還能帶幾塊、用掉一塊 */
+  fishGear?: (id: string) => number;
+  addFishGear?: (id: string, d: number) => void;
+  fishOyster?: () => number;
+  useFishOyster?: () => void;
 };
 
 type Mode = 'walk' | 'boat' | 'swim';
@@ -163,6 +169,7 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
       seats: onSeats, poses: onPoses, ram: onRam, swimStart: s => upsertSwim(s, true), swimEnd: endSwim, rescued: onRescued, state: onState,
       drift: onDrift, driftClaimed: onDriftClaimed, driftShare: onDriftShare, driftTide: onDriftTide, driftPull: onDriftPull,
       racks: onRackSnap, rackUpd: onRackUpd, rackGone: onRackGone, rackStolen: onRackStolen, cargo: onCargo, load: onLoad,
+      fishBig: onFishBig,
     });
   } else localOnly = true;
   openRacks({
@@ -171,6 +178,13 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
     splash: (x, z, k) => splash(x, z, k), sfx: k => D?.sfx(k),
     grantMoney: (n, via) => D?.grantMoney?.(n, via), getMoney: () => D?.getMoney?.() ?? 0, spendMoney: (n, via) => D?.spendMoney?.(n, via) ?? false,
     fineMoney: (n, via) => D?.fineMoney?.(n, via) ?? 0, kits: () => D?.rackKits?.() ?? 0, addKits: d => D?.addRackKits?.(d),
+  }, ui!.root);
+  openFish({
+    net: () => net, scene: deps.scene, mode: () => mode,
+    myBoat: () => (mode === 'boat' ? boats[myBoat] ?? null : null), mySeat: () => (mode === 'boat' ? mySeat : -1),
+    walkPos: () => D?.walkPos ?? { x: 0, z: 0 }, canAct: () => !!D?.canAct(), me: () => D?.me() ?? null, localOnly: () => localOnly || !net,
+    splash: (x, z, k) => splash(x, z, k), sfx: k => D?.sfx(k), grantMoney: (n, via) => D?.grantMoney?.(n, via),
+    gear: id => D?.fishGear?.(id) ?? 0, addGear: (id, d) => D?.addFishGear?.(id, d), oyster: () => D?.fishOyster?.() ?? 0, useOyster: () => D?.useFishOyster?.(),
   }, ui!.root);
   syncUi();
 }
@@ -185,6 +199,7 @@ export function closePlazaBoats() {
   for (const r of fakeRigs.values()) r.outer.removeFromParent();
   fakeRigs.clear();
   closeRacks();
+  closeFish();
   net?.close(); net = null;
   sea?.dispose(); sea = null; own = null; ownAnchors = [];
   ui?.root.remove(); ui = null;
@@ -193,6 +208,8 @@ export function closePlazaBoats() {
   D = null;
 }
 export const plazaBoatsActive = () => !!D && mode !== 'walk';
+/** 釣魚中：岸上不能走（搖桿拿去拉魚／瞄準） */
+export const plazaFishBlocksWalk = () => !!D && fishActive() && fishHoldsInput();
 /** 游泳時寵物站在背上：回背上那一點的世界座標＋朝向（不在游泳＝null） */
 const _back = new THREE.Vector3();
 export function plazaSwimBack(groundPet = false): { x: number; y: number; z: number; yaw: number } | null {
@@ -556,6 +573,7 @@ function doPrompt() {
 /** 鍵盤：回 true＝吃掉這個鍵。E＝上船／下船／救人／上岸、F＝丟殼、X＝跳水；在船上／水裡擋掉跳／蹲／躺 */
 export function plazaBoatsKey(code: string): boolean {
   if (!D) return false;
+  if (fishKey(code)) return true;
   if (code === 'KeyE' && prompt && D.canAct()) { doPrompt(); return true; }
   if (mode === 'walk') return false;
   if (code === 'KeyF' && mode === 'boat') { throwFromBoat(); return true; }
@@ -619,6 +637,7 @@ function wake(b: BoatSt) {
 
 // ---------------- 每幀 ----------------
 function input() {
+  if (fishHoldsInput()) return { thr: 0, steer: 0 };
   const k = (c: string) => (walkKeys.has(c) ? 1 : 0);
   let thr = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown');
   let steer = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft');
@@ -737,6 +756,7 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
   tickDrift(dt);
   tickRacks(dt, cam);
   sea.end();
+  tickFish(dt, cam);
   sea.tick(t, dt);
 
   // 4) 人：遠端坐船／游泳交給 worldView；自己在船上用 poseRider
@@ -985,6 +1005,7 @@ export const plazaBoatsDbg = {
   night(k: number) { sea?.setNight(k, new THREE.Color(0x1d3557)); return 'ok'; },
   /** 蚵棚：racks.list()／cargo()／near()／haul()／sell()／place()／panel()／up(line)／ui() */
   racks: rackDbg,
+  fish: fishDbg,
   /** 自己開的船分段開到某座蚵棚旁（伺服器一次最多跳 14 m，所以每 0.15 秒跳 12 m） */
   tpRack(id: number, side = 2.9) {
     const b = boats[myBoat]; if (!b || mode !== 'boat' || mySeat !== 0) return 'not driving';

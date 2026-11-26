@@ -81,7 +81,8 @@ import {
 } from './dm/character';
 import { makeMeshHelpers } from './dm/mesh';
 import { RACK } from './plaza/boats/rackLogic';
-import { plazaSwimBack, openPlazaBoats, closePlazaBoats, tickPlazaBoats, plazaBoatsActive, plazaBoatsMode, plazaBoatsKey, plazaBoatsCam, plazaBoatsSway, plazaBoatsNight, plazaBoatsFog, plazaBoatsDbg, plazaBoatsOpen } from './plaza/boats/plazaBoats';
+import { FISH, oysterLeft, taipeiDay } from './plaza/boats/fishLogic';
+import { plazaSwimBack, openPlazaBoats, closePlazaBoats, tickPlazaBoats, plazaBoatsActive, plazaFishBlocksWalk, plazaBoatsMode, plazaBoatsKey, plazaBoatsCam, plazaBoatsSway, plazaBoatsNight, plazaBoatsFog, plazaBoatsDbg, plazaBoatsOpen } from './plaza/boats/plazaBoats';
 import { nightK } from './plaza/boats/boatLogic';
 import { plazaBoatClient, plazaWorldView, plazaMyNick } from './plaza/session';
 import {
@@ -2422,7 +2423,7 @@ const needle = (ms = performance.now()) => {
   return u < 0.5 ? u * 2 : 2 - u * 2;
 };
 (window as any).__sim = () => ({ t: SHIFT - timeLeft, c: npcs.map(n => n.count), names: npcs.map(n => n.name) });
-(window as any).__dbg = { boats: plazaBoatsDbg, gfx: () => { const inf = renderer.info; inf.autoReset = false; inf.reset(); renderer.render(scene, viewCam()); const r = { calls: inf.render.calls, tris: inf.render.triangles, geos: inf.memory.geometries, tex: inf.memory.textures, progs: inf.programs?.length ?? 0 }; inf.autoReset = true; return r; }, night: (k?: number) => { (globalThis as any).__nightK = k; updSky(); return k; }, warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }), sea: seaDbg, seaSkip: (oy?: number, big?: number) => seaDbg.skip(oy, big), pileEnd: () => { if (seaRun && state === 'play') { seaRun.left = 0; clearBasinOysters(); syncSeaPile(); goPick(); } }, pile: () => (seaRun ? { left: seaRun.left, bigLeft: seaRun.bigLeft, basin: basinOy.length, haul: seaRun.haul, on: seaPileOn() } : null), tide: () => { if (state === 'play' && isWaisan() && !tideOnNow) startTide(); return { tideOnNow, dayBig, dayBigTide, big: basinOy.filter(o => o.userData.big).length, all: basinOy.length }; } };
+(window as any).__dbg = { boats: plazaBoatsDbg, fish: plazaBoatsDbg.fish, gfx: () => { const inf = renderer.info; inf.autoReset = false; inf.reset(); renderer.render(scene, viewCam()); const r = { calls: inf.render.calls, tris: inf.render.triangles, geos: inf.memory.geometries, tex: inf.memory.textures, progs: inf.programs?.length ?? 0 }; inf.autoReset = true; return r; }, night: (k?: number) => { (globalThis as any).__nightK = k; updSky(); return k; }, warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }), sea: seaDbg, seaSkip: (oy?: number, big?: number) => seaDbg.skip(oy, big), pileEnd: () => { if (seaRun && state === 'play') { seaRun.left = 0; clearBasinOysters(); syncSeaPile(); goPick(); } }, pile: () => (seaRun ? { left: seaRun.left, bigLeft: seaRun.bigLeft, basin: basinOy.length, haul: seaRun.haul, on: seaPileOn() } : null), tide: () => { if (state === 'play' && isWaisan() && !tideOnNow) startTide(); return { tideOnNow, dayBig, dayBigTide, big: basinOy.filter(o => o.userData.big).length, all: basinOy.length }; } };
 (window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
 (window as any).__pry = () => { if (phase !== 'twist') return null; const f = prySp(), per = 1000 / f, th = (PRY_C / 2) * per; const el = (performance.now() - needleStart) % per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
 function pryFx(ok: boolean, txt: string) { gauge.classList.remove('hit', 'miss'); void gauge.offsetWidth; gauge.classList.add(ok ? 'hit' : 'miss'); const pp = $('ppop'); pp.textContent = txt; pp.className = ''; void pp.offsetWidth; pp.className = ok ? 'ok' : 'bad'; }
@@ -4567,6 +4568,10 @@ let moonUsed = 0, moonAimOn = false, punchT = 0;
 // ---------- 道具：把你媽的愛送上月球 ----------
 // 蚵棚（雜貨店）：線條圖示，海面上的竹架＋垂下的蚵串
 const RACK_SVG = `<svg viewBox="0 0 64 40" width="72" height="45" fill="none" stroke="#2a5a86" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M6 8h52"/><path d="M10 8v22M54 8v22M32 8v22"/><path d="M18 8v12M25 8v14M39 8v12M46 8v14"/><circle cx="18" cy="22" r="2"/><circle cx="25" cy="24" r="2"/><circle cx="39" cy="22" r="2"/><circle cx="46" cy="24" r="2"/><path d="M2 32c4-3 8-3 12 0s8 3 12 0 8-3 12 0 8 3 12 0 8-3 12 0"/><path d="M2 38c4-3 8-3 12 0s8 3 12 0 8-3 12 0 8 3 12 0 8-3 12 0"/></svg>`;
+// 釣具（雜貨店）：線條圖示
+const FISH_ROD_SVG = `<svg viewBox="0 0 64 40" width="72" height="45" fill="none" stroke="#2a5a86" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M6 36L50 4"/><path d="M50 4v20"/><path d="M47 24h6l-1 6h-4z"/><circle cx="14" cy="30" r="4"/><path d="M2 38h60"/></svg>`;
+const FISH_BAIT_SVG = `<svg viewBox="0 0 64 40" width="72" height="45" fill="none" stroke="#2a5a86" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M10 26c6-12 22-16 36-10 6 3 8 8 6 12"/><path d="M52 28c-4 3-10 2-12-2"/><path d="M18 22l-6-8M24 18l-3-9M31 16l0-9"/><path d="M10 26c-4 2-6 6-4 9 3-1 6-3 8-6"/><circle cx="44" cy="20" r="1.4"/></svg>`;
+const FISH_LURE_SVG = `<svg viewBox="0 0 64 40" width="72" height="45" fill="none" stroke="#2a5a86" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M8 20c8-9 26-11 40-4l8-6v20l-8-6c-14 7-32 5-40-4z"/><circle cx="16" cy="18" r="1.6"/><path d="M24 26v6a3 3 0 0 0 5 1M38 25v6a3 3 0 0 0 5 1"/><path d="M8 20H2"/></svg>`;
 const MOON_SVG = `<svg viewBox="0 0 64 40" width="72" height="45" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M2 14h8M0 20h12M2 26h8"/><path d="M14 13l6 3v8l-6 3z"/><path d="M20 14h18v12H20z"/><path d="M24 14l-3-6h6l3 6M24 26l-3 6h6l3-6"/><path d="M38 12h12a6 6 0 0 1 6 6v4a6 6 0 0 1-6 6H38z"/><path d="M44 12v6M50 12v6M44 22h10"/><path d="M40 28v-4h4"/><path d="M58 8l4-4M60 20h4M58 32l4 4"/></svg>`;
 const ALL_NPCS = npcs.slice();
 const NPC_HOME = ALL_NPCS.map(n => ({ p: n.g.position.clone(), r: n.g.rotation.clone() }));
@@ -5271,6 +5276,7 @@ function renderItemShop() {
       };
     }
   }
+  renderFishShop();
   $('shopList').querySelectorAll('button[data-ibuy]').forEach(b => {
     const i = ITEMS.find(x => x.id === b.getAttribute('data-ibuy'))!; const k = 'item-' + i.id;
     bindQty(b.closest('.itemCard')!, k, () => px(k, i.price), () => save.money, b as HTMLButtonElement);
@@ -5280,6 +5286,35 @@ function renderItemShop() {
       save.money -= pr * n; save.meds[i.id] = (save.meds[i.id] ?? 0) + n; persist(); track('buy', { item: k, price: pr * n, qty: n });
       if (ac) SFX.jingle(); if (n > 1) toast(`買了 ${n} 個${i.n}`, '#9be37a');
       resetQty(k); renderShop(); drawMeds();
+    };
+  });
+}
+/** 雜貨店「釣具」：釣竿一次買斷；餌一包一包買（消耗品）；路亞假魚可以重複用，斷線就沒了。存在 save.meds（跟蚵棚組合包一樣） */
+function renderFishShop() {
+  const L = $('shopList');
+  L.insertAdjacentHTML('beforeend', `<h3><i class="ic ic-shop"></i> 釣具</h3><p style="font-size:12px;opacity:.8">在廣場碼頭邊或坐船出海按「釣魚」。蚵仔肉當餌免費，每天可以帶 ${FISH.oysterPerDay} 塊出海。釣到的魚在碼頭賣。</p>`);
+  type Row = { id: string; n: string; price: number; svg: string; good: string; bad?: string; pack?: number; once?: boolean };
+  const rows: Row[] = [
+    { id: FISH.rods.float.id, n: FISH.rods.float.n, price: FISH.rods.float.price, svg: FISH_ROD_SVG, good: '掛餌拋出去等魚咬：浮標整個沉下去再收竿，好上手', once: true },
+    { id: FISH.rods.lure.id, n: FISH.rods.lure.n, price: FISH.rods.lure.price, svg: FISH_ROD_SVG, good: '拋假魚、靠收線節奏引魚：比較難，但大魚和稀有魚比較多；坐船還能拖釣', bad: '拉扯比較難：魚會左右衝，張力太高斷線、太低脫鉤', once: true },
+    ...FISH.baits.filter(b => b.id).map(b => ({ id: b.id, n: `${b.n}（${b.pack} 個）`, price: b.price, svg: FISH_BAIT_SVG, pack: b.pack, good: b.k === 'shrimp' ? '垂釣用，什麼魚都吃一點' : b.k === 'worm' ? '垂釣用，魚比較愛咬，也比較容易釣到大魚' : '垂釣用，晚上特別有效，白帶魚愛吃', bad: '魚咬了（不管有沒有釣到）就用掉一個' })),
+    ...FISH.lures.map(l => ({ id: l.id, n: l.n, price: l.price, svg: FISH_LURE_SVG, good: l.k === 'minnow' ? '路亞：快收加偶爾抽竿，掠食魚會追' : l.k === 'jig' ? '路亞：丟得遠、沉得深，深水大魚' : l.k === 'soft' ? '路亞：慢慢收貼底爬，石斑愛吃' : '路亞：抽一下停一下濺水花，清晨和黃昏才有效', bad: '可以一直用；線斷了就沒了' })),
+  ];
+  for (const r of rows) {
+    const k = 'item-' + r.id, own = save.meds[r.id] ?? 0;
+    const btn = r.once && own > 0 ? `<span class="shopOwnPx"><i class="ic ic-check" aria-hidden="true"></i> 已擁有</span>` : `${r.once ? '' : qtyHtml(k)}<button data-fbuy="${r.id}" ${save.money < px(k, r.price) ? 'disabled' : ''}>${pxHtml(k, r.price)}</button>`;
+    L.insertAdjacentHTML('beforeend', `<div class="itemCard"><div class="itemIc">${r.svg}</div><div class="itemTx"><b>${r.n}</b><small style="color:#9be37a">${r.good}</small>${r.bad ? `<small style="color:#ff8a7a">${r.bad}</small>` : ''}<small>${r.once ? (own > 0 ? '已擁有' : '一次買斷') : `持有 ${own}`}</small>${pxCd(k)}</div><div class="buyRow">${btn}</div></div>`);
+  }
+  L.querySelectorAll<HTMLButtonElement>('button[data-fbuy]').forEach(b => {
+    const r = rows.find(x => x.id === b.dataset.fbuy)!; const k = 'item-' + r.id;
+    if (!r.once) bindQty(b.closest('.itemCard')!, k, () => px(k, r.price), () => save.money, b);
+    b.onclick = async () => {
+      const pr = await payFor(k, r.price, r.n); if (pr == null) return;
+      const n = r.once ? 1 : Math.min(getQty(k), Math.floor(save.money / pr), 20); if (n < 1) return;
+      if (r.once && (save.meds[r.id] ?? 0) > 0) return;
+      save.money -= pr * n; save.meds[r.id] = (save.meds[r.id] ?? 0) + n * (r.pack ?? 1); persist(); track('buy', { item: k, price: pr * n, qty: n });
+      if (ac) SFX.jingle(); toast(r.once ? `買了${r.n}，到廣場碼頭邊或坐船出海按「釣魚」` : `買了 ${n * (r.pack ?? 1)} 個${r.n.replace(/（.*）/, '')}`, '#9be37a');
+      if (!r.once) resetQty(k); renderShop();
     };
   });
 }
@@ -5949,6 +5984,11 @@ function startPlazaBoats() {
       fineMoney: (n, via) => { const c = Math.min(save.money, Math.max(0, Math.floor(n))); if (!c) return 0; save.money -= c; persist(); updHud(); track('plaza_fine', { amount: c, via, money: save.money }); return c; },
       rackKits: () => save.meds[RACK.kitId] ?? 0,
       addRackKits: (d) => { save.meds[RACK.kitId] = Math.max(0, (save.meds[RACK.kitId] ?? 0) + d); persist(); },
+      // 釣魚：竿／餌／假魚存在 meds；蚵仔肉當餌每天 20 塊（fishOyDay＝台北日期、fishOyUsed＝今天用了幾塊）
+      fishGear: (id) => save.meds[id] ?? 0,
+      addFishGear: (id, d) => { save.meds[id] = Math.max(0, (save.meds[id] ?? 0) + d); persist(); },
+      fishOyster: () => oysterLeft(taipeiDay(Date.now()), save.meds.fishOyDay ?? 0, save.meds.fishOyUsed ?? 0),
+      useFishOyster: () => { const d = taipeiDay(Date.now()); if (save.meds.fishOyDay !== d) { save.meds.fishOyDay = d; save.meds.fishOyUsed = 0; } save.meds.fishOyUsed = (save.meds.fishOyUsed ?? 0) + 1; persist(); },
       smoke: () => (boatSmoke ? { puffK: puffVisualK(), inhale: puffInhaleK(), away: puffAwayT, flick: puffFlickT } : null),
       throwShell: (from, target, to) => {
         const sh = new THREE.Mesh(halfGeo, shellBotMat);
@@ -7269,7 +7309,7 @@ function frameBody(ts?: number) {
   petTick(rdt);
   shake = Math.max(0, shake - rdt);
   if (plazaMode && plazaBoatsOpen()) { try { tickPlazaBoats(rdt, viewCam()); } catch (e) { if (!boatTickLogged) { boatTickLogged = true; console.error('plaza boats', e); } } }
-  if (plazaMode && plazaBoatsActive()) { walkMotion.spd = walkMotion.strafe = 0; } else if (walking && bodyPose !== 'lie') walkStep(rdt); else if (walking) { walkMotion.spd = walkMotion.strafe = 0; } else { walkMotion.spd = walkMotion.strafe = 0; }
+  if (plazaMode && (plazaBoatsActive() || plazaFishBlocksWalk())) { walkMotion.spd = walkMotion.strafe = 0; } else if (walking && bodyPose !== 'lie') walkStep(rdt); else if (walking) { walkMotion.spd = walkMotion.strafe = 0; } else { walkMotion.spd = walkMotion.strafe = 0; }
   let camPitch = pitch - pe * 0.08 + (smokeSitActive && !tpv ? puffCamPitch : 0), camRoll = 0;
   camera.position.copy(walking ? walkPos : SEAT);
   if (jumpY > 0) camera.position.y += jumpY;
