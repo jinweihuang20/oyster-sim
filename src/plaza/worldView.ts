@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core/geo';
 import { applyOutfitToRig, normalizeOutfitIds, outfitKey, headTopLift, setOutfitDetailVisible } from '../shop/equipVisual';
 import { makePet, petRidesHead, petWorldScale, tickPetAnim } from '../shop/pets';
+import { seatedGroundPetSpot, REMOTE_SEATED_BOWL, REMOTE_SEATED_BASIN } from '../shop/petSeat';
 import { playApoPunch, apoHitSeconds } from '../shop/apoFx';
 import { apoScold } from '../shop/apoTalk';
 import {
@@ -2362,14 +2363,21 @@ function hashPid(pid: string) {
     (r as any)._petBob = bob;
     const groundPet = !!mesh.userData.groundPet;
     if (groundPet) {
-      // 阿康貼地：走在身後偏右，坐／躺在椅子右側，不跟著玩家躺平、也不跳
+      // 阿康／阿珀／阿妹貼地：走在身後偏右，坐在肉碗右前方，躺在椅子右側；不跟著玩家躺平、也不跳
       if (lying) {
         // outer 已躺平：local +X＝右手、local -Z＝朝上。反轉 x 讓阿康站直貼地，不要跟著躺
         mesh.position.set(0.5, 0, 0.16);
         mesh.rotation.set(-Math.PI / 2, 0, 0);
       } else if (seated) {
-        mesh.position.set(0.55, 0, 0.32);
-        mesh.rotation.set(0, 0, 0);
+        // 與本機相同：坐在肉碗右前方、膝蓋旁（不擋臉盆／碗）
+        const spot = seatedGroundPetSpot({
+          seat: { x: 0, z: 0 },
+          yaw: 0,
+          bowl: REMOTE_SEATED_BOWL,
+          basin: REMOTE_SEATED_BASIN,
+        });
+        mesh.position.set(spot.x, 0, spot.z);
+        mesh.rotation.set(0, spot.yaw, 0);
       } else {
         const targetDist = moving ? 0.85 : 0.45;
         const curDist = (r as any)._petDist ?? targetDist;

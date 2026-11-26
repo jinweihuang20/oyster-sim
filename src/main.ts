@@ -53,6 +53,7 @@ import {
   migrateEquip, SCARED, applySleeve, sleeveGold, eqTex, eqSvg, figSvg,
   renderEquip, renderClothShop, shareOutfit, askSet, openEquip,
 } from './shop';
+import { seatedGroundPetSpot, ownPetAnchorVisible } from './shop/petSeat';
 import {
   Social, initAnnounce, featAnnounce, featDots, initNotices, refreshNotices, initAdminTools, syncAdminBtn, initFriends, initFeedback, openFb, fbShow,
   initAchievements, achS, AS, ACHS, achTitle, achAdd, achBump, achShiftGot, clearAchShiftGot,
@@ -4786,7 +4787,7 @@ function updatePetAnchor() {
   const groundPet = !!petMesh.userData.groundPet;
   const gy = (plazaMode ? plazaGroundY(bx, bz) : 0);
   if (groundPet) {
-    // 阿康：一律貼地。走在身後偏右；坐在椅子右側（避開前方桌子）；躺也站在右側
+    // 阿康／阿珀／阿妹：一律貼地。走在身後偏右；坐在肉碗右前方、膝蓋旁（第一人稱也看得到）；躺也站在右側
     const s = Math.sin(byaw), c = Math.cos(byaw);
     if (isLie) {
       const rx = c, rz = -s;
@@ -4798,8 +4799,18 @@ function updatePetAnchor() {
       const side = 0.28;
       petAnchor.position.set(bx + s * petDistCur + c * side, gy + by, bz + c * petDistCur - s * side);
     } else {
-      const side = 0.55, back = 0.32;
-      petAnchor.position.set(bx + c * side + s * back, gy, bz - s * side + c * back);
+      // 坐下：放在肉碗右前方、膝蓋旁，第一人稱朝下看工位也入鏡，且不擋臉盆／碗
+      const basR = Math.max(0.2, BASIN_R_TOP * (basinMesh.scale.x || 1));
+      const spot = seatedGroundPetSpot({
+        seat: { x: bx, z: bz },
+        yaw: byaw,
+        bowl: { x: BOWL.x, z: BOWL.z, r: BOWL_R },
+        basin: { x: BASIN.x, z: BASIN.z, r: basR },
+      });
+      petAnchor.position.set(spot.x, gy, spot.z);
+      petAnchor.rotation.set(0, spot.yaw, 0);
+      petMesh.position.set(0, 0, 0);
+      return;
     }
     petAnchor.rotation.set(0, byaw, 0);
     petMesh.position.set(0, 0, 0);
@@ -4992,10 +5003,9 @@ function apoPunchAnchor(): THREE.Object3D {
 }
 function apoPunchVisual(to: THREE.Vector3 | (() => THREE.Vector3), empty: boolean, onHit?: () => void) {
   const anchor = apoPunchAnchor();
-  // 第一人稱坐著時阿珀仍 hideFp，爪子改掛場景，從椅邊真實位置伸進畫面
-  const fpHidden = !!petMesh?.userData.groundPet && !tpv && !petWalkingMode && !petLyingMode;
+  // 第一人稱坐下也看得到阿珀，貓拳從牠身上的 punchAnchor 打出
   const stop = playApoPunch(anchor, to, {
-    empty, onHit, worldSpace: fpHidden,
+    empty, onHit, worldSpace: false,
     onDone: () => { const i = apoPunchStops.indexOf(stop); if (i >= 0) apoPunchStops.splice(i, 1); },
   });
   apoPunchStops.push(stop);
@@ -5141,9 +5151,8 @@ function petTick(dt: number) {
     return !pileIsGrill(s.pileId) && !isSmokePile(s.pileId) && !isMgPile(s.pileId);
   })();
   const canProduce = show && (!plazaMode || plazaShellSeat);
-  // 第一人稱剝蚵時，腳邊的阿康會擋視線，先藏起來（第三人稱仍看得到）
-  const hideFp = !!petMesh.userData.groundPet && !tpv && !petWalkingMode && !petLyingMode;
-  petAnchor.visible = show && !hideFp;
+  // 貼地寵物改放在肉碗右前方，第一人稱坐下不再隱藏（機關槍／競速／暫停仍不顯示）
+  petAnchor.visible = ownPetAnchorVisible({ play: show });
   if (!show) { petAcc = 0; setPetSleeping(false); clearApoPunchFx(); return; }
   // AFK：距上次任何輸入 10 秒 → 睡著暫停（產肉、貓拳、偷肉都停）
   const idleMs = performance.now() - lastInteractAt;
