@@ -160,15 +160,25 @@ export function stepLure(s: LureSt, item: LureKey, reel: boolean, jerk: boolean,
 }
 
 // ---------------- 拉扯 ----------------
-export type Fight = { prog: number; ten: number; run: number; runT: number; hiT: number; loT: number; t: number; power: number; rate: number; lure: boolean };
+export type Fight = { prog: number; ten: number; run: number; runT: number; hiT: number; loT: number; t: number; power: number; rate: number; lure: boolean; /** 連續沒收線幾秒 */ offT?: number };
 /** fightMs＝伺服器給的拉扯時間（越大隻越久）、power 0～1＝魚的力氣 */
+/** 拉扯一開始的進度（0.2＝已經拉近一點）；prog 最低到 FIGHT_PROG_MIN＝大魚把線拉出去（距離最多到中魚時的 1.8 倍） */
+export const FIGHT_P0 = 0.2, FIGHT_PROG_MIN = -0.44;
+/** 拉扯中魚離人幾公尺：中魚時 d0 公尺，prog 到 1 就是 0 m，被拉出去可以超過 d0（最多 FIGHT_MAX_M） */
+export const FIGHT_MAX_M = 60;
+export function fightDistM(prog: number, d0: number) {
+  return Math.max(0, Math.min(FIGHT_MAX_M, d0 * (1 - prog) / (1 - FIGHT_P0)));
+}
+/** 大魚程度 0～1：power 0.45 以下＝0（小魚幾乎拉不走線），越大隻越猛（平方） */
+export const bigPull = (power: number) => { const k = Math.max(0, (power - 0.45) / 0.55); return Math.min(1, k * k); };
 export function newFight(power: number, fightMs: number, lure: boolean): Fight {
-  return { prog: 0.2, ten: 0.25, run: 0, runT: 1, hiT: 0, loT: 0, t: 0, power: Math.max(0.1, Math.min(1, power)), rate: 1.1 / Math.max(1, fightMs / 1000), lure };
+  return { prog: FIGHT_P0, ten: 0.25, run: 0, runT: 1, hiT: 0, loT: 0, t: 0, power: Math.max(0.1, Math.min(1, power)), rate: 1.1 / Math.max(1, fightMs / 1000), lure };
 }
 export type FightEnd = 'landed' | 'snap' | 'unhook' | null;
 /**
  * 拉扯一步：reel＝按住收線；dir＝搖桿左右（-1～1）。
  * 垂釣：只管張力別爆。路亞：魚會往左／右衝，搖桿往反方向拉才收得快、張力也比較低；張力太低魚會脫鉤。
+ * 大魚：不收線（或魚在衝、方向沒拉對）就會一直把線拉出去（prog 往負的走、距離變遠）；收線＋反方向拉就收得回來。
  * rnd＝0～1 亂數（測試可固定）。
  */
 export function stepFight(f: Fight, reel: boolean, dir: number, dt: number, rnd: () => number = Math.random): FightEnd {
@@ -184,11 +194,17 @@ export function stepFight(f: Fight, reel: boolean, dir: number, dt: number, rnd:
     f.prog += f.rate * dt * good;
   } else {
     f.ten -= 0.9 * dt;
-    f.prog -= 0.25 * f.rate * f.power * dt;
+    // 不收線：魚往回拉線；大魚放著越久拉得越猛（小魚幾乎不動）。一下一下放線（pump）不太會被拉走，一直放著才會
+    f.offT = (f.offT ?? 0) + dt;
+    const k = Math.max(0, Math.min(1, (f.offT - 0.35) / 0.8));
+    f.prog -= (0.25 * f.power + 1.6 * bigPull(f.power) * k * k * (3 - 2 * k)) * f.rate * dt;
   }
+  if (reel) f.offT = 0;
+  // 大魚在衝、搖桿沒往反方向拉：就算在收線也會被拉出去
+  if (bad) f.prog -= 0.9 * bigPull(f.power) * f.rate * dt;
   // 魚在衝、方向沒拉對：張力自己往上
   if (bad) f.ten += 0.3 * f.power * dt;
-  f.ten = Math.max(0, Math.min(1, f.ten)); f.prog = Math.max(0, Math.min(1, f.prog));
+  f.ten = Math.max(0, Math.min(1, f.ten)); f.prog = Math.max(FIGHT_PROG_MIN, Math.min(1, f.prog));
   f.hiT = f.ten >= FISH.snapT ? f.hiT + dt : 0;
   f.loT = f.lure && f.t > 1 && f.ten <= FISH.slackT ? f.loT + dt : 0;
   if (f.prog >= 1) return 'landed';
@@ -346,4 +362,25 @@ export function standWantYaw(fishYaw: number | null, moving: boolean, walkYaw: n
   if (fishYaw != null) return fishYaw - boatH;
   if (moving) return walkYaw;
   return camYaw - boatH;
+}
+
+/**
+ * HUD 一直顯示的「現在幾公尺」：蓄力＝這個力道會拋多遠、甩出去＝線頭飛到哪、等魚／咬餌＝浮標或假魚離人多遠（船漂、收線、抽竿都即時變）、
+ * 拉魚＝魚還有多遠（拉近 prog 到 1 就是 0 m；大魚把線拉出去會比中魚時還遠）。沒在用線（準備好、沒在釣）回 null。
+ */
+export type FishDistIn = { phase: Phase; power: number; item: ItemKey; castDst: number; flyT: number; lureDist: number | null; floatDist: number; prog: number; fightD0: number };
+export function fishDistNow(s: FishDistIn): number | null {
+  switch (s.phase) {
+    case 'charge': case 'cast': return castDist(s.power, s.item);
+    case 'fly': return Math.max(0, s.castDst * (1 - Math.max(0, Math.min(1, s.flyT / FISH.flyS))));
+    case 'wait': case 'nibble': case 'sink': case 'hook': return Math.max(0, s.lureDist ?? s.floatDist);
+    case 'fight': case 'land': return fightDistM(s.prog, s.fightD0);
+    default: return null;
+  }
+}
+/** 公尺顯示：10 m 以下一位小數（拉近最後幾公尺看得到在變），以上取整數；0 就是「0 m」 */
+export function fmtDistM(m: number | null): string {
+  if (m == null || !Number.isFinite(m)) return '';
+  const v = Math.max(0, m);
+  return v < 0.05 ? '0 m' : v < 10 ? `${v.toFixed(1)} m` : `${Math.round(v)} m`;
 }

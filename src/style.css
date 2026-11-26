@@ -4460,6 +4460,10 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 #fishHud .fhMain{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 #fishHud .fhTip{display:none;font-size:12px;font-weight:700;color:#ffd76a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #fishHud .fhTip.on{display:block}
+/* 現在幾公尺：HUD 最左邊一顆實心數字（一直顯示） */
+#fishHud .fhDist{display:none;flex:none;align-items:center;justify-content:center;min-width:58px;height:34px;padding:0 8px;margin-left:-6px;border-radius:9px;background:#2a5a86;color:#fff;font-size:17px;font-weight:900;letter-spacing:.2px;white-space:nowrap;font-variant-numeric:tabular-nums;line-height:1}
+#fishHud .fhDist.on{display:flex}
+@media (max-width:420px){#fishHud .fhDist{min-width:52px;font-size:15px;height:32px;padding:0 6px}}
 #fishHud .fhB{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:48px;min-width:48px!important;height:44px;min-height:44px!important;padding:2px!important;border-radius:10px!important;border:none!important;background:#2a5a86!important;color:#fff!important;font-size:11px;font-weight:700;pointer-events:auto;touch-action:none;box-shadow:none!important}
 #fishHud .fhB svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #fishHud .fhX{background:#fff!important;color:#2a5a86!important}

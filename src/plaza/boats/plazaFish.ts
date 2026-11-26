@@ -11,7 +11,7 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, castPoint, castDist, castRange, castFlyPoint, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, castPoint, castDist, castRange, castFlyPoint, fishDistNow, fmtDistM, fightDistM, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { fishGeometry, fishMaterial, FISH_TIER } from './fishModel';
 import { makeFishFx, FX, type FishFx } from './fishFx';
@@ -85,12 +85,17 @@ let dex = new Map<string, { kg: number; n: number }>();
 let jerkN = 0;
 /** 拉魚時搖桿左右（給人物動作）；runS＝魚往左右衝（平滑，線在水裡的那頭跟著偏） */
 let steerIn = 0, runS = 0;
+/** 中魚那一刻魚離人幾公尺（拉扯距離從這裡開始算） */
+let fightD0 = 8;
+/** 拉扯中魚現在多遠（線、同步都用這個；線最多畫到 44 m，跟伺服器同步上限一樣） */
+const fightM = () => (sm.fight ? fightDistM(sm.fight.prog, fightD0) : 0);
+const lineNow = () => { const o = origin(); return sm.lure ? sm.lure.dist : Math.hypot(castX - o.x, castZ - o.z); };
 let reelHeld = false, jerkQ = false, act = false, castH = 0, castX = 0, castZ = 0, castDst = 8, ox = 0, oz = 0;
 let hooked: HoldFish | null = null;
 let t = 0, splashT = 0, shadowA = 0, tipS = '', panelTab: 'gear' | 'dex' = 'gear', panelOn = false;
 let ui: {
   entry: HTMLButtonElement; sell: HTMLButtonElement; bar: HTMLDivElement; cast: HTMLButtonElement; reel: HTMLButtonElement; jerk: HTMLButtonElement;
-  hud: HTMLDivElement; hudTx: HTMLSpanElement; hudTip: HTMLSpanElement; meter: HTMLDivElement; fill: HTMLDivElement; mLbl: HTMLSpanElement; dirL: HTMLElement; dirR: HTMLElement; panel: HTMLDivElement;
+  hud: HTMLDivElement; hudTx: HTMLSpanElement; hudDist: HTMLSpanElement; hudTip: HTMLSpanElement; meter: HTMLDivElement; fill: HTMLDivElement; mLbl: HTMLSpanElement; dirL: HTMLElement; dirR: HTMLElement; panel: HTMLDivElement;
 } | null = null;
 // 3D：一組線段（竿＋線）、浮標／假魚、魚影
 // 3D：釣竿模型（掛在人物身上）＋釣線（一條線段）、浮標／假魚、魚影
@@ -138,7 +143,7 @@ export function openFish(ctx: FishCtx, root: HTMLElement) {
   const cast = mk('fishCast', ICON.cast, '拋竿', '空白鍵');
   bar.append(jerk, reel, cast);
   const hud = document.createElement('div'); hud.id = 'fishHud';
-  hud.innerHTML = `<div class="fhTx"><span class="fhMain"></span><span class="fhTip"></span></div><button type="button" class="fhB" data-f="gear" aria-label="換竿換餌">${ICON.gear}<span>換餌</span></button><button type="button" class="fhB" data-f="dex" aria-label="魚類圖鑑">${ICON.book}<span>圖鑑</span></button><button type="button" class="fhB fhX" data-f="exit" aria-label="不釣了">${ICON.exit}<span>不釣了</span></button>`;
+  hud.innerHTML = `<span class="fhDist" aria-label="距離"></span><div class="fhTx"><span class="fhMain"></span><span class="fhTip"></span></div><button type="button" class="fhB" data-f="gear" aria-label="換竿換餌">${ICON.gear}<span>換餌</span></button><button type="button" class="fhB" data-f="dex" aria-label="魚類圖鑑">${ICON.book}<span>圖鑑</span></button><button type="button" class="fhB fhX" data-f="exit" aria-label="不釣了">${ICON.exit}<span>不釣了</span></button>`;
   const meter = document.createElement('div'); meter.id = 'fishMeter';
   meter.innerHTML = `<i class="fmDir l">${ICON.left}</i><div class="fmBar"><div class="fmRed"></div><div class="fmFill"></div></div><i class="fmDir r">${ICON.right}</i><span class="fmLbl"></span>`;
   const panel = document.createElement('div'); panel.id = 'fishPanel';
@@ -166,7 +171,7 @@ export function openFish(ctx: FishCtx, root: HTMLElement) {
   const rackBar = root.querySelector('#boatRackBar');
   (rackBar ?? root).append(entry, sell);
   root.append(bar, hud, meter, panel);
-  ui = { entry, sell, bar, cast, reel, jerk, hud, hudTx: hud.querySelector('.fhMain')!, hudTip: hud.querySelector('.fhTip')!, meter, fill: meter.querySelector('.fmFill')!, mLbl: meter.querySelector('.fmLbl')!, dirL: meter.querySelector('.fmDir.l')!, dirR: meter.querySelector('.fmDir.r')!, panel };
+  ui = { entry, sell, bar, cast, reel, jerk, hud, hudTx: hud.querySelector('.fhMain')!, hudDist: hud.querySelector('.fhDist')!, hudTip: hud.querySelector('.fhTip')!, meter, fill: meter.querySelector('.fmFill')!, mLbl: meter.querySelector('.fmLbl')!, dirL: meter.querySelector('.fmDir.l')!, dirR: meter.querySelector('.fmDir.r')!, panel };
   addEventListener('keyup', onKeyUp);
   addEventListener('pointerdown', onAnyInput, { passive: true });
   buildGfx(ctx.scene);
@@ -336,6 +341,7 @@ async function doReel() {
     hooked = normFish(r.fish);
     try { navigator.vibrate?.(70); } catch { /* 不支援 */ }
     C.sfx('hit');
+    fightD0 = Math.max(1.5, lineNow());
     sm.hooked(num(r.power, 0.3), num(r.fightMs, 2500));
     document.body.classList.add('fishFight');
     // 頭足類一上鉤就噴墨（位置在 drawGfx 拉扯那段算）
@@ -553,7 +559,7 @@ function drawGfx(dt: number) {
     }
   } else if ((ph === 'fight' || ph === 'land') && sm.fight) {
     const f = sm.fight;
-    const d = 1.5 + castDst * (1 - f.prog);
+    const d = Math.min(44, Math.max(1.5, fightM()));
     // 魚往左右衝：落點慢慢偏過去（不要一下跳過去）
     runS += (f.run - runS) * (1 - Math.exp(-dt * 2.5));
     const side = runS * 2.2 * Math.min(1, f.t);
@@ -636,7 +642,7 @@ export function fishSyncFill(out: FishSyncMsg) {
   out.st = fishPoseCode(poseIn.phase, poseIn.reel, poseIn.lure);
   out.ch = +castH.toFixed(2);
   const ph = sm.phase;
-  const d = (ph === 'fight' || ph === 'land') && sm.fight ? 1.5 + castDst * (1 - sm.fight.prog) : sm.lure ? sm.lure.dist : castDst;
+  const d = (ph === 'fight' || ph === 'land') && sm.fight ? Math.min(44, Math.max(1.5, fightM())) : sm.lure ? sm.lure.dist : castDst;
   // 甩竿一放開就送落點距離（別人畫面的線頭才會跟自己一樣飛到同一個地方）
   out.cd = sm.lineOut || ph === 'fight' || ph === 'land' || ph === 'cast' || ph === 'fly' ? Math.round(d * 2) / 2 : 0;
   // 拉魚＝張力；路亞等待／捲線＝抽竿計數（別人看到抽竿動作；伺服器 tn 照樣夾 0～1，不用改）
@@ -725,6 +731,10 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
   const cnt = countOf(sm.item);
   const main = `${FISH.rods[sm.gear].n}・${ITEM_NAME[sm.item]}${lure ? '' : sm.item === 'oyster' ? `（今天剩 ${cnt}）` : ` ×${cnt}`}｜魚獲 ${holdN}／${FISH.holdMax}`;
   if (ui.hudTx.textContent !== main) ui.hudTx.textContent = main;
+  // 現在幾公尺：一直顯示（蓄力、飛出去、等魚、拉魚都即時變）
+  const o = origin();
+  const dm = fmtDistM(fishDistNow({ phase: ph, power: sm.power, item: sm.item, castDst, flyT: sm.flyT, lureDist: sm.lure ? sm.lure.dist : null, floatDist: Math.hypot(castX - o.x, castZ - o.z), prog: sm.fight?.prog ?? 0, fightD0 }));
+  if (ui.hudDist.textContent !== dm) { ui.hudDist.textContent = dm; ui.hudDist.classList.toggle('on', !!dm); }
   const troll = !!b && lure && trollOk(C.mySeat(), sm.item, b.v);
   const tip = ph === 'idle' ? (C.mySeat() === 0 && b && Math.abs(b.v) > FISH.driverMaxV ? '先停船才能拋竿' : '按住「拋竿」蓄力，放開拋出去')
     : ph === 'charge' ? '放開就拋出去' : ph === 'cast' || ph === 'fly' ? '' 
@@ -787,6 +797,6 @@ export const fishDbg = {
   /** 測試：噴一團墨（在現在的線頭位置） */
   ink() { ffx?.inkPuff(_end.x, PB.waterY + 0.05, _end.z, 1); return ffx?.ink.live() ?? 0; },
   /** 測試：假裝中魚（不經伺服器，只看拉扯畫面） */
-  fakeFight(power = 0.6, ms = 10000, lure = true) { sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; sm.hooked(power, ms); document.body.classList.add('fishFight'); return sm.phase; },
+  fakeFight(power = 0.6, ms = 10000, lure = true) { sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; fightD0 = castDst; sm.hooked(power, ms); document.body.classList.add('fishFight'); return sm.phase; },
 };
 export type { BaitKey, LureKey };
