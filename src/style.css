@@ -4408,10 +4408,12 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
   #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 172px);gap:8px}
   body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 222px)}
 }
-/* 橫放矮螢幕：右欄疊不下 → 蚵棚按鈕排成一列，放在右欄左邊、「下船」鈕上方 */
+/* 橫放矮螢幕：右欄疊不下 → 蚵棚按鈕排成一列，放在右欄左邊、跟「跳水」同高（上方留給提示／獎勵） */
 @media (max-height:420px){
-  #boatRackBar{flex-direction:row-reverse;align-items:center;right:calc(var(--sa-right,0px) + 132px);bottom:calc(var(--sa-bottom,0px) + 150px)}
-  body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 150px)}
+  #boatRackBar{flex-direction:row-reverse;align-items:center;right:calc(var(--sa-right,0px) + 132px);bottom:calc(var(--sa-bottom,0px) + 96px)}
+  body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 96px)}
+  /* 「上船／下船」鈕出現時（碼頭邊）讓開，排到它上面 */
+  body:has(#boatAct.on) #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 150px)}
 }
 #boatUi #boatRackBar .boatBtn.steal{background:#8a3a2e!important}
 #boatUi #boatRackBar .boatBtn .key{opacity:.7;font-weight:600}
@@ -4453,3 +4455,42 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 #rewardToasts .rwT.feed{padding:4px 12px;background:#142231;border:1px solid rgba(255,215,106,.55);border-radius:999px;color:#fff;font-size:13px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 #rewardToasts .rwT.feed .rwAmt{color:#ffd76a;font-weight:900}
 @media (max-height:500px){#rewardToasts .rwT.mine{padding:5px 16px 6px}#rewardToasts .rwT.mine .rwLbl{font-size:13px}#rewardToasts .rwT.mine .rwAmt{font-size:24px}#rewardToasts .rwT.feed{font-size:12px}}
+
+/* ---------- 廣場／海上：不用毛玻璃（backdrop-filter） ----------
+   3D 畫面上的毛玻璃很吃手機效能（會發燙），而且 iOS 上半透明＋模糊的提示框淡出時，
+   常常文字先消失、模糊框還留在畫面上 → 一片糊糊的方塊。一律改實心底、看得清楚。 */
+body.plazaMode *,body.plazaMode *::before,body.plazaMode *::after,#seaRoot *,#toast,#bcBanner,#feed{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+/* 原本靠模糊撐可讀性的半透明底：改成幾乎不透明 */
+body.plazaMode #top{background:rgba(22,28,36,.88)!important}
+body.plazaMode #btns button,body.plazaMode #btnsL button,body.plazaMode #btnsCorner button,body.plazaMode .mb,body.plazaMode #camBtn,#seaRoot .mb{background:rgba(22,28,36,.86)!important}
+body.plazaMode #partyHud .ptHudIn{background:rgba(22,28,36,.88)}
+body.plazaMode #rotTip .rtTxt,body.plazaMode #rotTipL .rtTxt,body.plazaMode #lookTip .ltTxt{background:rgba(22,28,36,.9)}
+#boatNote{background:#142231;border:1px solid #2a5a86;color:#fff}
+/* 上方提示條（toastTop）：跟獎勵提示一樣的實心深底 */
+body.plazaMode #toast.top,#seaRoot~#toast.top{background:#142231;border:1px solid #2a5a86;color:#fff!important;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+/* 收起來就真的不畫（visibility），淡出只有 0.2 秒、不縮放不模糊 */
+#toast{visibility:hidden;transition:opacity .2s ease-out,transform .2s ease-out,visibility 0s linear .2s}
+#toast.on{visibility:visible;transition:opacity .2s ease-out,transform .2s ease-out,visibility 0s}
+/* 廣場廣播條：實心白底；收起來同樣 visibility:hidden */
+#bcBanner{background:#fbfdff;visibility:hidden;transition:opacity .25s,transform .25s,visibility 0s linear .25s}
+#bcBanner.on{visibility:visible;transition:opacity .25s,transform .25s,visibility 0s}
+/* 在船上／水裡：獎勵提示緊貼船貨條（蚵串／金額）下面，上方提示／廣播再往下一格 → 不蓋船貨條、左上按鈕，也不互相疊 */
+body.plazaBoating #rewardToasts{top:max(var(--plaza-toast-top,0px),calc(var(--sa-top,0px) + 138px))}
+body.plazaBoating #toast.top,body.plazaBoating #bcBanner{top:max(var(--plaza-toast-top,0px),calc(var(--sa-top,0px) + 222px))!important}
+body.plazaBoating #toast:not(.top){top:max(var(--plaza-toast-top,0px),calc(var(--sa-top,0px) + 230px))!important}
+@media (max-height:500px){
+  body.plazaBoating #rewardToasts{top:max(var(--plaza-toast-top,0px),calc(var(--sa-top,0px) + 114px))}
+  body.plazaBoating #toast.top,body.plazaBoating #bcBanner{top:max(var(--plaza-toast-top,0px),calc(var(--sa-top,0px) + 182px))!important;max-width:min(56vw,420px)}
+  body.plazaBoating #toast:not(.top){top:max(var(--plaza-toast-top,0px),calc(var(--sa-top,0px) + 188px))!important}
+}
+/* 蚵棚升級面板打開：面板最上層；動作按鈕、碼頭箭頭、船貨條、名牌先收起來；面板放在頂列和「離開／地圖」那排下面 */
+body.rackPanelOpen #boatUi{z-index:13700}
+body.rackPanelOpen #boatRackBar,body.rackPanelOpen #boatUi>.boatBtn,body.rackPanelOpen #boatDockInd,body.rackPanelOpen #boatCargo,body.rackPanelOpen #rackTag,body.plazaBoating.rackPanelOpen #puffBtn.on,body.rackPanelOpen #puffBtn,body.rackPanelOpen #boatNote{display:none!important}
+#rackUpPanel{top:calc(var(--sa-top,0px) + 102px);max-height:calc(100vh - var(--sa-top,0px) - var(--sa-bottom,0px) - 112px);max-height:calc(100dvh - var(--sa-top,0px) - var(--sa-bottom,0px) - 112px);box-sizing:border-box;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+#rackUpPanel .rkTx{min-width:0}
+#rackUpPanel .rkTx small{overflow-wrap:anywhere;line-height:1.35}
+#rackUpPanel .rkRow>button,#rackUpPanel .rkMax{flex:0 0 auto}
+/* 手機橫放：左上那排按鈕在左邊，面板靠右、貼頂列下面 */
+@media (max-height:500px){
+  #rackUpPanel{top:calc(var(--sa-top,0px) + 54px);max-height:calc(100vh - var(--sa-top,0px) - var(--sa-bottom,0px) - 62px);max-height:calc(100dvh - var(--sa-top,0px) - var(--sa-bottom,0px) - 62px);width:min(380px,calc(100vw - 140px))}
+}

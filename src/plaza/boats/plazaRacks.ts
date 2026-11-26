@@ -96,6 +96,7 @@ export function openRacks(ctx: RackCtx, root: HTMLElement) {
 }
 export function closeRacks() {
   ui?.bar.remove(); ui?.cargo.remove(); ui?.tag.remove(); ui?.panel.remove(); ui = null;
+  document.body.classList.remove('rackPanelOpen');
   C = null; racks = []; holding = false;
 }
 
@@ -224,8 +225,9 @@ function myRackNear(): RackDto | null {
   if (!nearRack || nearRack.dist > RACK.upR) return null;
   return isMine(nearRack.rack, me) ? nearRack.rack : null;
 }
-function openPanel() { const r = myRackNear(); if (!r) return; panelRack = r.id; renderPanel(); ui?.panel.classList.add('on'); }
-function closePanel() { panelRack = -1; ui?.panel.classList.remove('on'); }
+/** 升級面板打開時：面板在最上層，船上的動作按鈕、碼頭箭頭、船貨條先收起來（body.rackPanelOpen） */
+function openPanel() { const r = myRackNear(); if (!r) return; panelRack = r.id; renderPanel(); ui?.panel.classList.add('on'); document.body.classList.add('rackPanelOpen'); }
+function closePanel() { panelRack = -1; ui?.panel.classList.remove('on'); document.body.classList.remove('rackPanelOpen'); }
 function renderPanel() {
   if (!ui) return;
   const r = racks.find(x => x.id === panelRack); if (!r) { closePanel(); return; }
