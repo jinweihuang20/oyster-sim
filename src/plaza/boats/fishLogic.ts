@@ -69,6 +69,15 @@ export function chargePower(t: number, period: number = FISH.chargePeriod) {
   return p < 0.5 ? p * 2 : 2 - p * 2;
 }
 /** 拋竿落點：前進＝(-sin h, -cos h)（跟船、伺服器一樣） */
+/**
+ * 甩竿時線頭（浮標／假魚）飛出去的位置：k＝0～1（甩出去後經過 flyS 秒到 1），從竿尖拋物線飛到落點（水面 wy）。
+ * 自己畫面和看別人用同一條曲線。直接改 out、不配置。
+ */
+export function castFlyPoint(tx: number, ty: number, tz: number, ex: number, wy: number, ez: number, k: number, out: { x: number; y: number; z: number }) {
+  k = Math.max(0, Math.min(1, k));
+  out.x = tx + (ex - tx) * k; out.y = ty + (wy - ty) * k + Math.sin(k * Math.PI) * 2.2; out.z = tz + (ez - tz) * k;
+  return out;
+}
 export const castPoint = (x: number, z: number, h: number, power: number, item?: ItemKey) => { const d = castDist(power, item); return { x: x - Math.sin(h) * d, z: z - Math.cos(h) * d }; };
 /** 鏡頭朝向（世界方向向量）→ h */
 export const yawOf = (dx: number, dz: number) => Math.atan2(-dx, -dz);
@@ -289,4 +298,24 @@ export function stepDeck(p: { x: number; z: number; yaw: number }, mx: number, m
   deckClamp(p.x + lx * DECK.walkSpd * k * dt, p.z + lz * DECK.walkSpd * k * dt, p);
   p.yaw = Math.atan2(-lx, -lz);
   return true;
+}
+
+/**
+ * 船上站著釣魚的鏡頭：跟岸上一樣的第三人稱，繞著人轉（camYaw＝玩家拖曳的鏡頭朝向，世界座標），不鎖船頭。
+ * 拋竿方向＝鏡頭看的水平方向＝camYaw，所以人面向哪就往哪拋。
+ */
+export const STAND_CAM = { dist: 4.4, el: 0.36, eye: 1.35, ahead: 2.2 } as const;
+type V3 = { x: number; y: number; z: number };
+export function standCam(x: number, y: number, z: number, camYaw: number, pos: V3, look: V3) {
+  const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), hd = STAND_CAM.dist * Math.cos(STAND_CAM.el);
+  pos.x = x - fx * hd; pos.z = z - fz * hd; pos.y = y + STAND_CAM.eye + STAND_CAM.dist * Math.sin(STAND_CAM.el);
+  look.x = x + fx * STAND_CAM.ahead; look.z = z + fz * STAND_CAM.ahead; look.y = y + STAND_CAM.eye - 0.2;
+}
+/**
+ * 站在甲板上該面向哪（船身座標，0＝船頭）：線在水裡／蓄力＝那個世界方向；走路＝走的方向；站著不動＝鏡頭方向（人跟著鏡頭轉）。
+ */
+export function standWantYaw(fishYaw: number | null, moving: boolean, walkYaw: number, camYaw: number, boatH: number) {
+  if (fishYaw != null) return fishYaw - boatH;
+  if (moving) return walkYaw;
+  return camYaw - boatH;
 }

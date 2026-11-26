@@ -5971,6 +5971,7 @@ function startPlazaBoats() {
       me: () => ensurePlazaMe(),
       walkPos,
       setYaw: (y) => { yaw = tYaw = y; },
+      getYaw: () => yaw,
       canAct: () => state === 'play' && walking && !plazaSeated() && !plazaSittingBusy() && !mgActive && !plazaCarrying(),
       sfx: (k) => seaSfx(k),
       // 漂流箱：伺服器已記在 income（AddIncome），這裡跟其他廣場獎勵一樣入帳

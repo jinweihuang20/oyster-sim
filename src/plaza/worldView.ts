@@ -256,11 +256,17 @@ export function createPlazaWorldView(
   /** 頭上狀態牌（釣魚中…）：connId → 種類 */
   const fishBadges = new Map<string, 1 | 2 | 3>();
   /** 岸上收竿：釣魚動作藏起來的手、拿著的東西、身體角度還原 */
+  /** 不釣了／下船：身上留著的釣竿拿掉（還在釣的話下一幀 post 會再掛回去，一個人只會有一支） */
+  function dropRods(rig: PlayerRig) {
+    const ch = rig.torso.children;
+    for (let i = ch.length - 1; i >= 0; i--) if (ch[i].name === 'fishRod') rig.torso.remove(ch[i]);
+  }
   function unfishRig(r: Remote) {
     const rj = r as any, rig = r.rig;
     const v = rj._fishVis as [boolean, boolean, boolean] | undefined;
     rig.weaponMount.visible = v ? v[0] : true; rig.handL.visible = v ? v[1] : true; rig.handR.visible = v ? v[2] : true;
     rj._fishVis = undefined;
+    dropRods(rig);
     rig.torso.rotation.set(0, 0, 0); rig.head.rotation.set(0, 0, 0);
     rig.outer.rotation.set(0, r.yaw, 0);
     try { if (!r.seated) { posePlazaStand(rig); hangArms(r, false); } applyActionPose(r); } catch { /* */ }
@@ -300,6 +306,7 @@ export function createPlazaWorldView(
     const v = rj._mountVis as [boolean, boolean, boolean] | undefined;
     rig.weaponMount.visible = v ? v[0] : true; rig.handL.visible = v ? v[1] : true; rig.handR.visible = v ? v[2] : true;
     rj._mountVis = undefined;
+    dropRods(rig);
     rig.root.position.set(0, 0, 0);
     for (const j of [rig.legL, rig.legR, rig.shinL, rig.shinR]) j.rotation.set(0, 0, 0);
     rig.torso.rotation.set(0, 0, 0);

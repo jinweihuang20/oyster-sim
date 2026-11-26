@@ -22,6 +22,8 @@ export type FishSyncMsg = {
 export const FISH_SYNC = {
   /** 兩次送出最短間隔（秒） */
   minGap: 0.35,
+  /** 姿勢換了（蓄力→甩竿→等魚…）最短間隔：要快，別人看到的甩竿時間點才跟自己一樣 */
+  phaseGap: 0.1,
   /** 在釣的時候多久保底送一次（秒） */
   keepAlive: 2,
   /** 別人多久沒更新就當作不釣了（秒） */
@@ -55,6 +57,7 @@ export function fishSyncDue(last: FishSyncMsg, cur: FishSyncMsg, sentOnce: boole
   if (!sentOnce) return cur.st !== 0;
   if (cur.st === 0) return last.st !== 0;
   if (since >= FISH_SYNC.keepAlive) return true;
+  if (last.st !== cur.st) return since >= FISH_SYNC.phaseGap;
   return since >= FISH_SYNC.minGap && fishSyncChanged(last, cur);
 }
 

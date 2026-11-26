@@ -11,7 +11,7 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, castPoint, castDist, castRange, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, castPoint, castDist, castRange, castFlyPoint, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { fishGeometry, fishMaterial } from './fishModel';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
@@ -503,7 +503,7 @@ function drawGfx(dt: number) {
   let lineOn = true, bobOn = false, shTarget = 0;
   if (ph === 'fly') {
     const k = 1 - Math.max(0, sm.flyT) / FISH.flyS;
-    _end.set(_tip.x + (castX - _tip.x) * k, _tip.y + (wy - _tip.y) * k + Math.sin(k * Math.PI) * 2.2, _tip.z + (castZ - _tip.z) * k);
+    castFlyPoint(_tip.x, _tip.y, _tip.z, castX, wy, castZ, k, _end);
     bobOn = true;
   } else if (ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook') {
     if (sm.gear === 'float' || !sm.lure) {
@@ -600,7 +600,8 @@ export function fishSyncFill(out: FishSyncMsg) {
   out.ch = +castH.toFixed(2);
   const ph = sm.phase;
   const d = (ph === 'fight' || ph === 'land') && sm.fight ? 1.5 + castDst * (1 - sm.fight.prog) : sm.lure ? sm.lure.dist : castDst;
-  out.cd = sm.lineOut || ph === 'fight' || ph === 'land' ? Math.round(d * 2) / 2 : 0;
+  // 甩竿一放開就送落點距離（別人畫面的線頭才會跟自己一樣飛到同一個地方）
+  out.cd = sm.lineOut || ph === 'fight' || ph === 'land' || ph === 'cast' || ph === 'fly' ? Math.round(d * 2) / 2 : 0;
   out.tn = poseIn.phase === 'fight' ? Math.round(poseIn.tension * 4) / 4 : 0;
   const show = poseIn.phase === 'show';
   out.sp = show ? catchSp : ''; out.kg = show ? catchKg : 0;
@@ -643,7 +644,7 @@ function poseDbg() {
   const rig = C?.me();
   const tip = myRod && rig ? rodTipWorld(myRod, new THREE.Vector3()) : null;
   const hand = rig ? rig.lowerR.localToWorld(new THREE.Vector3(0, -((rig.lowerR.userData.restLen as number) || 0.24), 0)) : null;
-  return { rod: myRod?.kind ?? null, phase: poseIn.phase, pitch: +myPose.pitch.toFixed(2), bend: +myPose.bend.toFixed(2), crank: +myPose.crank.toFixed(2), lean: +myPose.lean.toFixed(2), tip: tip && { x: +tip.x.toFixed(2), y: +tip.y.toFixed(2), z: +tip.z.toFixed(2) }, hand: hand && { x: +hand.x.toFixed(2), y: +hand.y.toFixed(2), z: +hand.z.toFixed(2) }, line: gfx ? Array.from(gfx.pos.slice(6, 12), v => +v.toFixed(2)) : null, catch: catchT > 0 };
+  return { rod: myRod?.kind ?? null, phase: poseIn.phase, pitch: +myPose.pitch.toFixed(2), bend: +myPose.bend.toFixed(2), crank: +myPose.crank.toFixed(2), lean: +myPose.lean.toFixed(2), tip: tip && { x: +tip.x.toFixed(2), y: +tip.y.toFixed(2), z: +tip.z.toFixed(2) }, hand: hand && { x: +hand.x.toFixed(2), y: +hand.y.toFixed(2), z: +hand.z.toFixed(2) }, line: gfx ? Array.from(gfx.pos.slice(6, 12), v => +v.toFixed(2)) : null, gap: tip && gfx && gfx.g.visible ? +tip.distanceTo(new THREE.Vector3(gfx.pos[6], gfx.pos[7], gfx.pos[8])).toFixed(3) : null, rods: myRod?.g.parent ? myRod.g.parent.children.filter(o => o.name === 'fishRod').length : 0, catch: catchT > 0 };
 }
 
 function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {

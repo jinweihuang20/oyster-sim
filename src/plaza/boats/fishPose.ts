@@ -169,11 +169,14 @@ function armTo(rig: PlayerRig, side: number, hx: number, hy: number, hz: number,
 export function applyFishPose(rig: PlayerRig, st: FishPoseSt, rod: Rod, inp: FishPoseIn, baseLean = 0) {
   rig.weaponMount.visible = false; rig.handL.visible = false; rig.handR.visible = false;
   if (rod.g.parent !== rig.torso) rig.torso.add(rod.g);
+  dropOtherRods(rig.torso, rod.g);
   // 竿方向：仰角 pitch、往右外側偏 side
   _dir.set(st.side, Math.sin(st.pitch), -Math.cos(st.pitch)).normalize();
-  // 竿彎的方向：世界往下（在 torso 座標近似）去掉沿竿分量；竿直立時改用往前
-  _b.set(0, -1, 0).addScaledVector(_dir, _dir.y);
-  if (_b.lengthSq() < 1e-4) _b.set(0, 0, -1);
+  // 竿彎的方向＝被線拉過去的那邊：線從竿尖往前下方的水面（torso 座標約 (0, -0.35, -1)），去掉沿竿分量。
+  // 不要用「世界往下」：揚竿把竿子舉過頭（pitch > 90°）時，往下會變成往人身後，竿子反彎到背後
+  _b.set(0, -0.35, -1).normalize();
+  _b.addScaledVector(_dir, -_b.dot(_dir));
+  if (_b.lengthSq() < 1e-4) _b.set(0, -1, 0);
   _b.normalize();
   _z.copy(_b).multiplyScalar(-1);
   _x.crossVectors(_dir, _z).normalize();
@@ -221,6 +224,14 @@ function braceLegs(rig: PlayerRig, st: FishPoseSt) {
   rig.root.position.y = -0.05 * b;
 }
 
+/**
+ * 一個人身上只能有一支竿：別的竿（換竿種、斷線重連換了 connId 但同一個人物、上下船換了擺姿勢的人）留在身上就拿掉。
+ * 不配置；torso 底下只有幾個子物件。
+ */
+export function dropOtherRods(torso: THREE.Object3D, keep: THREE.Object3D | null) {
+  const ch = torso.children;
+  for (let i = ch.length - 1; i >= 0; i--) { const c = ch[i]; if (c !== keep && c.name === 'fishRod') torso.remove(c); }
+}
 /** 世界座標的竿尖（線從這裡出去） */
 export function rodTipWorld(rod: Rod, out: THREE.Vector3) {
   rod.tipLocal(out);

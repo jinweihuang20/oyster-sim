@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { FISH, castRange, castDist, castPoint, DECK, deckClamp, deckStart, stepDeck } from './fishLogic';
+import { FISH, castRange, castDist, castPoint, DECK, deckClamp, deckStart, stepDeck, yawOf, standCam, standWantYaw } from './fishLogic';
 import { SEATS } from './boatLogic';
-import { ROD_LEN, ROD_GRIP, ROD_MAX_ARC, rodBend, rodBendAngle, makeRod, makeFishLineMat } from './fishRod';
-import { newFishPose, stepFishPose, fishPoseCode, fishPoseDecode, fishPoseTarget, CAST_FLICK, HOOK_SET, type FishPoseIn } from './fishPose';
+import { ROD_LEN, ROD_GRIP, ROD_RIGID, ROD_MAX_ARC, rodBend, rodBendAngle, makeRod, makeFishLineMat } from './fishRod';
+import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, dropOtherRods, fishPoseCode, fishPoseDecode, fishPoseTarget, CAST_FLICK, HOOK_SET, type FishPoseIn } from './fishPose';
+import { makePlayerAvatar } from '../../dm/character';
+import { makeMeshHelpers } from '../../dm/mesh';
 import { FISH_SPECIES, FISH_DESC, FISH_SEG, buildFishGeometry, fishModelIds } from './fishModel';
 
 describe('路亞拋竿距離（依假魚重量）', () => {
@@ -179,15 +181,15 @@ describe('中魚拉竿：竿子明顯彎、動作大', () => {
   const inp = (o: Partial<FishPoseIn>): FishPoseIn => ({ phase: 'hold', power: 0, reel: false, tension: 0, lure: false, twitch: 0, ...o });
   it('竿子沿弧線彎（竿長不變）；拉滿時竿尖往下指', () => {
     for (const k of ['float', 'lure'] as const) {
-      const L = ROD_LEN[k], g = ROD_GRIP[k];
+      const L = ROD_LEN[k], g = ROD_RIGID[k];
       // 中心線長度≈竿長
       let len = 0, py = g, pz = 0;
       for (let i = 1; i <= 60; i++) { const y = g + ((L - g) * i) / 60, d = rodBend(y, L, 0.9, g); const ny = y + d.dy, nz = d.dz; len += Math.hypot(ny - py, nz - pz); py = ny; pz = nz; }
       expect(len).toBeCloseTo(L - g, 1);
       expect(rodBendAngle(L, L, 1, g)).toBeCloseTo(ROD_MAX_ARC[k]);
       expect(rodBendAngle(L, L, 1, g)).toBeGreaterThan(Math.PI * 0.45);
-      // 彎很多：竿尖往旁邊偏超過竿長的 4 成
-      expect(-rodBend(L, L, 0.9, g).dz).toBeGreaterThan((L - g) * 0.4);
+      // 彎很多：竿尖往旁邊偏超過會彎那段的 3 成
+      expect(-rodBend(L, L, 0.9, g).dz).toBeGreaterThan((L - g) * 0.3);
       // 模型竿尖跟中心線一致（線掛在彎下去的竿尖上）
       const r = makeRod(k); r.setBend(0.9);
       const tip = r.tipLocal(new THREE.Vector3()), d = rodBend(L, L, 0.9, g);
@@ -195,7 +197,7 @@ describe('中魚拉竿：竿子明顯彎、動作大', () => {
       // 頂點：最高點跟著竿尖下來
       const pos = (r.g.children[0] as THREE.Mesh).geometry.getAttribute('position');
       let maxY = 0; for (let i = 0; i < pos.count; i++) maxY = Math.max(maxY, pos.getY(i));
-      expect(maxY).toBeLessThan(L - 0.2);
+      expect(maxY).toBeLessThan(L - 0.15);
       r.dispose();
     }
   });
@@ -243,5 +245,169 @@ describe('中魚拉竿：竿子明顯彎、動作大', () => {
     const m = makeFishLineMat();
     expect(m.transparent).toBe(true); expect(m.opacity).toBeLessThan(0.7); expect(m.opacity).toBeGreaterThan(0.3);
     m.dispose();
+  });
+});
+
+describe('竿子彎的是上半段，握把完全不彎', () => {
+  it('硬段（握把、線輪／捲線座、前手）佔竿長 25～30%，而且包住兩隻手握的地方', () => {
+    for (const k of ['float', 'lure'] as const) {
+      const f = ROD_RIGID[k] / ROD_LEN[k];
+      expect(f).toBeGreaterThanOrEqual(0.25); expect(f).toBeLessThanOrEqual(0.3);
+      expect(ROD_RIGID[k]).toBeGreaterThan(ROD_GRIP[k]);
+    }
+    // 垂釣竿前手（握把上方 0.38 m）也在硬段裡
+    expect(ROD_GRIP.float + 0.38).toBeLessThan(ROD_RIGID.float);
+  });
+  it('bend＝1：硬段頂點一個都沒動，上半段大幅彎下去', () => {
+    for (const k of ['float', 'lure'] as const) {
+      const L = ROD_LEN[k], g = ROD_RIGID[k];
+      const r = makeRod(k);
+      const pos = (r.g.children[0] as THREE.Mesh).geometry.getAttribute('position');
+      const base = Float32Array.from(pos.array as Float32Array);
+      r.setBend(1);
+      let moved = 0, rigidN = 0, flexMoved = 0;
+      for (let i = 0; i < pos.count; i++) {
+        const y0 = base[i * 3 + 1];
+        const d = Math.hypot(pos.getX(i) - base[i * 3], pos.getY(i) - y0, pos.getZ(i) - base[i * 3 + 2]);
+        if (y0 <= g) { rigidN++; if (d > 1e-6) moved++; }
+        else if (y0 > g + (L - g) * 0.6 && d > 0.1) flexMoved++;
+      }
+      expect(rigidN).toBeGreaterThan(50);
+      expect(moved).toBe(0);
+      expect(flexMoved).toBeGreaterThan(10);
+      // 中心線：硬段結束那點切線角 0、半途還很小、竿尖接近最大彎角（越往竿尖越彎）
+      expect(rodBendAngle(g + 0.001, L, 1)).toBeLessThan(0.01);
+      expect(rodBendAngle(g + (L - g) * 0.5, L, 1)).toBeLessThan(ROD_MAX_ARC[k] * 0.2);
+      expect(rodBendAngle(L, L, 1)).toBeGreaterThan(1.4);
+      expect(-rodBend(g + (L - g) * 0.5, L, 1).dz).toBeLessThan(-rodBend(L, L, 1).dz * 0.15);
+      // 竿尖在模型上＝中心線算出來的位置（線從這裡出去）
+      const tip = r.tipLocal(new THREE.Vector3()), d = rodBend(L, L, 1);
+      expect(tip.y).toBeCloseTo(L + d.dy, 2); expect(tip.z).toBeCloseTo(d.dz, 2);
+      r.dispose();
+    }
+  });
+  it('會彎的那段切了很多圈（彎起來是平滑弧線，不會在幾個點折一段一段）', () => {
+    for (const k of ['float', 'lure'] as const) {
+      const L = ROD_LEN[k], g = ROD_RIGID[k];
+      const r = makeRod(k);
+      const pos = (r.g.children[0] as THREE.Mesh).geometry.getAttribute('position');
+      const ys = new Set<number>(); for (let i = 0; i < pos.count; i++) { const y = pos.getY(i); if (y > g) ys.add(Math.round(y * 100)); }
+      expect(ys.size).toBeGreaterThan(((L - g) / 0.07) * 0.9);
+      r.dispose();
+    }
+  });
+});
+
+describe('拿竿：竿往魚那邊彎、一個人只有一支竿、線從竿尖出去', () => {
+  const mk = () => { const { M, add } = makeMeshHelpers(new THREE.Scene(), true); return makePlayerAvatar({ shirt: 0x3a7ab8, hair: 0x222222, pants: 0x2a2a40 }, M, add, false) as any; };
+  const inp = (o: Partial<FishPoseIn>): FishPoseIn => ({ phase: 'fight', power: 0, reel: true, tension: 0.9, lure: false, twitch: 0, ...o });
+  it('揚竿把竿舉過頭也是往前（魚那邊）彎，不會反彎到人背後', () => {
+    for (const lure of [false, true]) {
+      const rig = mk(); const scene = new THREE.Scene(); scene.add(rig.outer);
+      rig.outer.rotation.y = 0; // 面向 -z
+      const st = newFishPose(); const rod = makeRod(lure ? 'lure' : 'float');
+      for (const pitch of [0.6, 1.2, 1.7]) {
+        st.pitch = pitch; st.bend = 0.9;
+        applyFishPose(rig, st, rod, inp({ lure }));
+        scene.updateMatrixWorld(true);
+        // 竿子硬段頂端（彎的起點）和竿尖：竿尖要在起點前面（-z）
+        const top = new THREE.Vector3(0, ROD_RIGID[rod.kind], 0).applyMatrix4(rod.g.matrixWorld);
+        const straight = new THREE.Vector3(0, ROD_LEN[rod.kind], 0).applyMatrix4(rod.g.matrixWorld);
+        const tip = rodTipWorld(rod, new THREE.Vector3());
+        expect(tip.z).toBeLessThan(straight.z + 1e-3);
+        expect(tip.z).toBeLessThan(top.z + 0.05);
+      }
+      rod.dispose();
+    }
+  });
+  it('換竿種／別的竿留在身上：套姿勢時只留現在這支', () => {
+    const rig = mk();
+    const old = makeRod('float'), cur = makeRod('lure');
+    rig.torso.add(old.g);
+    const st = newFishPose(); st.pitch = 0.8;
+    applyFishPose(rig, st, cur, inp({ lure: true }));
+    const rods = rig.torso.children.filter((o: THREE.Object3D) => o.name === 'fishRod');
+    expect(rods.length).toBe(1); expect(rods[0]).toBe(cur.g);
+    rig.torso.add(old.g); dropOtherRods(rig.torso, null);
+    expect(rig.torso.children.some((o: THREE.Object3D) => o.name === 'fishRod')).toBe(false);
+  });
+  it('竿尖世界座標＝畫出來的竿尖（不管人在哪、轉向、彎多少）', () => {
+    const rig = mk(); const boat = new THREE.Group(); const scene = new THREE.Scene(); scene.add(boat); boat.add(rig.outer);
+    const st = newFishPose(); const rod = makeRod('float');
+    for (const [bx, bh, ry, b] of [[0, 0, 0, 0], [12, 1.1, 2.4, 0.5], [-30, -2, -1, 1]]) {
+      boat.position.set(bx, 0.3, 4); boat.rotation.set(0.02, bh, -0.03); rig.outer.position.set(0.4, 0.2, -0.6); rig.outer.rotation.set(0, ry, 0);
+      st.pitch = 1.1; st.bend = b;
+      applyFishPose(rig, st, rod, inp({}));
+      const tip = rodTipWorld(rod, new THREE.Vector3());
+      // 跟真的頂點比：最靠竿尖的頂點（世界）離 tip 不到 3 cm
+      scene.updateMatrixWorld(true);
+      const pos = (rod.g.children[0] as THREE.Mesh).geometry.getAttribute('position'), m = (rod.g.children[0] as THREE.Mesh).matrixWorld;
+      let best = 9; const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(m); best = Math.min(best, v.distanceTo(tip)); }
+      expect(best).toBeLessThan(0.03);
+    }
+    rod.dispose();
+  });
+});
+
+describe('船上站著釣魚：鏡頭跟人、往面向的方向拋（不是船頭）', () => {
+  const boatH = 0.7, ox = -60, oz = 20;
+  const dirs = { 船頭: boatH, 船尾: boatH + Math.PI, 左舷: boatH + Math.PI / 2, 右舷: boatH - Math.PI / 2 } as const;
+  const ang = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  for (const [nm, yaw] of Object.entries(dirs)) {
+    it(`面向${nm}：鏡頭在人身後看同一邊，拋竿方向＝面向`, () => {
+      const pos = { x: 0, y: 0, z: 0 }, look = { x: 0, y: 0, z: 0 };
+      standCam(ox, 0.5, oz, yaw, pos, look);
+      const camYaw = yawOf(look.x - pos.x, look.z - pos.z);
+      expect(ang(camYaw, yaw)).toBeLessThan(1e-6);
+      // 鏡頭在人身後（不是船尾固定位置）
+      expect(ang(yawOf(ox - pos.x, oz - pos.z), yaw)).toBeLessThan(1e-6);
+      // 站著不動：人轉去面向鏡頭方向（船身座標＝世界－船頭）
+      expect(ang(standWantYaw(null, false, 0, camYaw, boatH) + boatH, yaw)).toBeLessThan(1e-6);
+      // 蓄力／線在水裡：照拋竿方向
+      expect(ang(standWantYaw(camYaw, true, 1.2, 0, boatH) + boatH, yaw)).toBeLessThan(1e-6);
+      // 落點在面向那邊，不在船頭
+      const cp = castPoint(ox, oz, camYaw, 0.6, 'worm');
+      expect(ang(yawOf(cp.x - ox, cp.z - oz), yaw)).toBeLessThan(1e-4);
+      if (nm !== '船頭') expect(ang(yawOf(cp.x - ox, cp.z - oz), boatH)).toBeGreaterThan(1);
+    });
+  }
+});
+
+describe('拋竿動作：自己看和別人看完全一樣', () => {
+  it('蓄力條（來回擺盪）＋往前甩＋竿彎：用開始蓄力後的時間重算，每一幀都跟自己畫面相同', async () => {
+    const { FishSM, chargePower } = await import('./fishLogic');
+    const sm = new FishSM(); sm.phase = 'idle'; sm.gear = 'float'; sm.item = 'worm';
+    const me = newFishPose(), other = newFishPose();
+    const inpA: FishPoseIn = { phase: 'hold', power: 0, reel: false, tension: 0, lure: false, twitch: 0 };
+    const inpB: FishPoseIn = { ...inpA };
+    const dt = 1 / 60;
+    for (let i = 0; i < 20; i++) { stepFishPose(me, inpA, dt); stepFishPose(other, inpB, dt); }
+    sm.startCharge(); let el = 0;
+    for (let i = 0; i < 80; i++) { // 蓄力 1.33 秒（超過半個週期，蓄力條已經往回掉）
+      sm.tick(dt, { reel: false, jerk: false, dir: 0 }); el += dt;
+      inpA.phase = 'charge'; inpA.power = sm.power;
+      inpB.phase = 'charge'; inpB.power = chargePower(el);
+      stepFishPose(me, inpA, dt); stepFishPose(other, inpB, dt);
+      expect(other.pitch).toBeCloseTo(me.pitch, 6); expect(other.bend).toBeCloseTo(me.bend, 6);
+    }
+    sm.release();
+    let maxDiff = 0, peakBend = 0;
+    for (let i = 0; i < 50; i++) {
+      inpA.phase = inpB.phase = 'cast';
+      stepFishPose(me, inpA, dt); stepFishPose(other, inpB, dt);
+      maxDiff = Math.max(maxDiff, Math.abs(me.pitch - other.pitch), Math.abs(me.bend - other.bend), Math.abs(me.hy - other.hy), Math.abs(me.lean - other.lean));
+      peakBend = Math.max(peakBend, me.bend);
+    }
+    expect(maxDiff).toBeLessThan(1e-9);
+    expect(peakBend).toBeGreaterThan(0.2);
+  });
+  it('線頭飛出去：同一條拋物線，從竿尖出發、flyS 後落在落點', async () => {
+    const { castFlyPoint } = await import('./fishLogic');
+    const o = { x: 0, y: 0, z: 0 };
+    castFlyPoint(1, 3, 2, 11, 0.04, -6, 0, o); expect(o).toEqual({ x: 1, y: 3, z: 2 });
+    castFlyPoint(1, 3, 2, 11, 0.04, -6, 1, o); expect(o.x).toBeCloseTo(11); expect(o.y).toBeCloseTo(0.04); expect(o.z).toBeCloseTo(-6);
+    castFlyPoint(1, 3, 2, 11, 0.04, -6, 0.5, o); expect(o.y).toBeGreaterThan(3);
+    castFlyPoint(1, 3, 2, 11, 0.04, -6, 2, o); expect(o.x).toBeCloseTo(11);
   });
 });

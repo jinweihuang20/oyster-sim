@@ -13,10 +13,14 @@ describe('釣魚動作同步：什麼時候送', () => {
     expect(fishSyncDue(last, msg({ st: 0 }), false, 99)).toBe(false);
     expect(fishSyncDue(last, msg({ st: 1 }), false, 0)).toBe(true);
   });
-  it('姿勢換了：過了最短間隔才送；沒變就等保底', () => {
+  it('姿勢換了：很快就送（甩竿時間點跟自己一樣）；其他變化過了最短間隔才送；沒變就等保底', () => {
     const last = msg({ st: 4, cd: 12 });
-    expect(fishSyncDue(last, msg({ st: 5, cd: 12 }), true, 0.1)).toBe(false);
-    expect(fishSyncDue(last, msg({ st: 5, cd: 12 }), true, FISH_SYNC.minGap)).toBe(true);
+    expect(FISH_SYNC.phaseGap).toBeLessThanOrEqual(0.12);
+    expect(fishSyncDue(last, msg({ st: 5, cd: 12 }), true, 0.05)).toBe(false);
+    expect(fishSyncDue(last, msg({ st: 5, cd: 12 }), true, FISH_SYNC.phaseGap)).toBe(true);
+    expect(fishSyncDue(msg({ st: 2 }), msg({ st: 3, cd: 9 }), true, FISH_SYNC.phaseGap)).toBe(true);
+    expect(fishSyncDue(last, msg({ st: 4, cd: 14 }), true, 0.2)).toBe(false);
+    expect(fishSyncDue(last, msg({ st: 4, cd: 14 }), true, FISH_SYNC.minGap)).toBe(true);
     expect(fishSyncDue(last, msg({ st: 4, cd: 12 }), true, 1.5)).toBe(false);
     expect(fishSyncDue(last, msg({ st: 4, cd: 12 }), true, FISH_SYNC.keepAlive)).toBe(true);
   });
