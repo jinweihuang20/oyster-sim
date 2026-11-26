@@ -83,6 +83,8 @@ let dexView: FishDexView | null = null;
 let dex = new Map<string, { kg: number; n: number }>();
 /** jerkN＝這次登入抽竿幾下（人物抽竿動作、送給別人看） */
 let jerkN = 0;
+/** 拉魚時搖桿左右（給人物動作）；runS＝魚往左右衝（平滑，線在水裡的那頭跟著偏） */
+let steerIn = 0, runS = 0;
 let reelHeld = false, jerkQ = false, act = false, castH = 0, castX = 0, castZ = 0, castDst = 8, ox = 0, oz = 0;
 let hooked: HoldFish | null = null;
 let t = 0, splashT = 0, shadowA = 0, tipS = '', panelTab: 'gear' | 'dex' = 'gear', panelOn = false;
@@ -460,6 +462,7 @@ export function tickFish(dt: number, cam: THREE.Camera) {
     if (walkKeys.has('KeyD') || walkKeys.has('ArrowRight')) dir += 1;
     if (Math.abs(joy.x) > 0.15) dir = joy.x;
     if (dir !== 0) act = true;
+    steerIn = Math.max(-1, Math.min(1, dir));
     const troll = !!b && sm.gear === 'lure' && trollOk(C.mySeat(), sm.item, b.v);
     // 抽竿（路亞等待／捲線中才算）：人物甩一下竿
     if (jerkQ && sm.lure && sm.phase === 'wait') jerkN++;
@@ -509,6 +512,7 @@ function drawGfx(dt: number) {
   ffx?.tick(dt);
   if (!gfx || !C) return;
   const ph = sm.phase;
+  if (!((ph === 'fight' || ph === 'land') && sm.fight)) runS = 0;
   gfx.g.visible = sm.phase !== 'off';
   if (!gfx.g.visible) return;
   // 線從竿尖出去（竿子模型由 fishPostPose 擺好）
@@ -550,7 +554,9 @@ function drawGfx(dt: number) {
   } else if ((ph === 'fight' || ph === 'land') && sm.fight) {
     const f = sm.fight;
     const d = 1.5 + castDst * (1 - f.prog);
-    const side = f.run * 2.2 * Math.min(1, f.t);
+    // 魚往左右衝：落點慢慢偏過去（不要一下跳過去）
+    runS += (f.run - runS) * (1 - Math.exp(-dt * 2.5));
+    const side = runS * 2.2 * Math.min(1, f.t);
     const sx = Math.cos(castH), sz = -Math.sin(castH);
     const x = ox + fx * d + sx * side + Math.sin(t * 5) * 0.2, z = oz + fz * d + sz * side + Math.cos(t * 4) * 0.2;
     _end.set(x, wy, z);
@@ -617,6 +623,7 @@ function fillPoseIn() {
   poseIn.tension = sm.fight?.ten ?? 0;
   poseIn.twitch = sm.phase === 'nibble' ? Math.max(0.4, sm.twitch) : sm.phase === 'sink' ? 1 : 0;
   poseIn.jerk = jerkN;
+  poseIn.steer = poseIn.phase === 'fight' ? steerIn : 0;
   return poseIn;
 }
 /**

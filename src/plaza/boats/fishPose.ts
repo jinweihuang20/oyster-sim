@@ -24,6 +24,8 @@ export type FishPoseIn = {
   twitch: number;
   /** 抽竿次數（每按一次 +1；跟上次不一樣＝這幀抽竿）。路亞等待／捲線中才有動作 */
   jerk?: number;
+  /** 拉魚時搖桿左右 -1～1（往左拉＜0、往右拉＞0）；別人的沒有就當 0 */
+  steer?: number;
 };
 export type FishPoseSt = {
   pitch: number; side: number;
@@ -39,6 +41,8 @@ export type FishPoseSt = {
   brace: number; braceW: boolean;
   /** 抽竿動作開始後經過的秒數（<0＝不在抽）；jerkN＝看過的抽竿次數 */
   jerkT: number; jerkN: number;
+  /** 拉魚往左右拉（平滑後 -1～1）；rollW＝torso 側傾被這裡改過（收掉時還原一次） */
+  steer: number; rollW: boolean;
   prev: FishPhase;
   t: number;
 };
@@ -57,10 +61,16 @@ export function jerkEnv(u: number) {
   return u < JERK_UP ? Math.sin((Math.PI / 2) * (u / JERK_UP)) : 0.5 + 0.5 * Math.cos((Math.PI * (u - JERK_UP)) / (1 - JERK_UP));
 }
 /** 抽竿疊在目標姿勢上的量：竿子猛往上、手往上往胸口收、身體往後仰一點、竿彎（竿尖被線拉住） */
+/** 拉魚往左右拉：平滑速度（越小越沉、越有重量）、竿子往那邊掃、右手往那邊、身體側傾、上身轉向 */
+export const STEER = { rate: 4.5, side: 0.55, hx: 0.12, roll: 0.17, twist: 0.24 };
+/** 拉魚左右拉疊上去的量（純數值，給 applyFishPose 和測試用）；s＝平滑後的 steer */
+export function steerPose(s: number) {
+  return { side: STEER.side * s, hx: STEER.hx * s, roll: -STEER.roll * s, twist: -STEER.twist * s };
+}
 export const JERK_AMP = { pitch: 0.78, hy: 0.14, hz: 0.1, lean: 0.13, bend: 0.3, side: -0.04 };
 
 export function newFishPose(): FishPoseSt {
-  return { pitch: 0.6, side: 0.1, hx: 0.14, hy: 0.02, hz: -0.3, lean: 0, bend: 0, bendV: 0, crank: 0, castT: -1, hookT: -1, brace: 0, braceW: false, jerkT: -1, jerkN: 0, prev: 'off', t: 0 };
+  return { pitch: 0.6, side: 0.1, hx: 0.14, hy: 0.02, hz: -0.3, lean: 0, bend: 0, bendV: 0, crank: 0, castT: -1, hookT: -1, brace: 0, braceW: false, jerkT: -1, jerkN: 0, steer: 0, rollW: false, prev: 'off', t: 0 };
 }
 
 export type FishPoseTg = { pitch: number; hx: number; hy: number; hz: number; lean: number; bend: number; side: number; brace: number };
@@ -142,6 +152,10 @@ export function stepFishPose(st: FishPoseSt, inp: FishPoseIn, dt: number) {
     }
   } else if (st.jerkT >= 0) { st.jerkT += dt; if (st.jerkT >= JERK_T) st.jerkT = -1; }
   if (inp.phase !== 'wait') st.jerkT = -1;
+  // 拉魚往左右拉：有重量地慢慢轉過去，離開拉魚就慢慢回正
+  const sg = inp.phase === 'fight' ? Math.max(-1, Math.min(1, inp.steer ?? 0)) : 0;
+  st.steer += (sg - st.steer) * (1 - Math.exp(-dt * STEER.rate));
+  if (sg === 0 && Math.abs(st.steer) < 0.002) st.steer = 0;
   st.prev = inp.phase;
   const tg = fishPoseTarget(inp, st.castT, st.t, st.hookT);
   const jerking = st.jerkT >= 0;
@@ -215,7 +229,9 @@ export function applyFishPose(rig: PlayerRig, st: FishPoseSt, rod: Rod, inp: Fis
   // 保險：竿子一定看得到（舊版合併人物網格會把它藏起來）
   for (const c of rod.g.children) if (!c.visible) c.visible = true;
   // 竿方向：仰角 pitch、往右外側偏 side
-  _dir.set(st.side, Math.sin(st.pitch), -Math.cos(st.pitch)).normalize();
+  // 拉魚往左右拉：竿子往那邊掃、右手跟過去（左手握在竿上會跟著）
+  const sp = steerPose(st.steer), hx = st.hx + sp.hx;
+  _dir.set(st.side + sp.side, Math.sin(st.pitch), -Math.cos(st.pitch)).normalize();
   // 竿彎的方向＝被線拉過去的那邊：線從竿尖往前下方的水面（torso 座標約 (0, -0.35, -1)），去掉沿竿分量。
   // 不要用「世界往下」：揚竿把竿子舉過頭（pitch > 90°）時，往下會變成往人身後，竿子反彎到背後
   _b.set(0, -0.35, -1).normalize();
@@ -228,10 +244,10 @@ export function applyFishPose(rig: PlayerRig, st: FishPoseSt, rod: Rod, inp: Fis
   _m.makeBasis(_x, _dir, _z);
   rod.g.quaternion.setFromRotationMatrix(_m);
   const grip = ROD_GRIP[rod.kind];
-  rod.g.position.set(st.hx - _dir.x * grip, st.hy - _dir.y * grip, st.hz - _dir.z * grip);
+  rod.g.position.set(hx - _dir.x * grip, st.hy - _dir.y * grip, st.hz - _dir.z * grip);
   rod.setBend(st.bend);
   rod.setCrank(st.crank);
-  armTo(rig, 1, st.hx, st.hy, st.hz, 0.08);
+  armTo(rig, 1, hx, st.hy, st.hz, 0.08);
   // 左手：路亞竿捲線／等待時握搖把；其他時候握竿前段（雙手持竿）
   rod.g.updateMatrix();
   const crankHand = inp.lure && (inp.phase === 'wait' || inp.phase === 'fight');
@@ -244,7 +260,10 @@ export function applyFishPose(rig: PlayerRig, st: FishPoseSt, rod: Rod, inp: Fis
     armTo(rig, -1, -0.2, -0.12, -0.2, 0.06);
   }
   rig.torso.rotation.x = baseLean + st.lean;
-  rig.torso.rotation.y = -0.12 - 0.1 * st.brace;
+  rig.torso.rotation.y = -0.12 - 0.1 * st.brace + sp.twist;
+  // 側傾：只在拉魚左右拉時改（走路擺動自己管 z）；剛回正時還原一次
+  if (st.steer !== 0) { rig.torso.rotation.z = sp.roll; st.rollW = true; }
+  else if (st.rollW) { rig.torso.rotation.z = 0; st.rollW = false; }
   // 頭：後仰時還是看著魚（往前低一點），不要跟著身體一起朝天
   rig.head.rotation.x = Math.min(0.3, Math.max(-0.2, -st.lean * 0.45 + (inp.phase === 'wait' ? 0.12 : 0) + 0.12 * st.brace));
   braceLegs(rig, st);
