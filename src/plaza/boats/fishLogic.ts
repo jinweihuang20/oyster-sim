@@ -57,7 +57,8 @@ export const FISH = {
   followS: 1.0,
   /** 拉扯：張力超過 snapT 持續 snapS 秒斷線；路亞張力低於 slackT 持續 slackS 秒脫鉤；紅區 */
   snapT: 0.95, snapS: 0.35, slackT: 0.06, slackS: 1.6, redT: 0.8,
-  holdMax: 20, sellMax: 40_000,
+  /** 魚獲最多幾條（賣魚沒有每日上限） */
+  holdMax: 20,
 };
 
 export const ITEM_NAME: Record<ItemKey, string> = {
@@ -285,7 +286,7 @@ export class FishSM {
 export const FISH_ERR: Record<string, string> = {
   not_at_water: '站到碼頭或岸邊才能釣', moving: '船在開：先停船才能拋竿', swimming: '游泳時不能釣魚', land: '那邊是岸上，轉向海面再拋',
   hold_full: '魚獲滿了，先回碼頭賣魚', bad_gear: '這個餌配不上這支竿', slow: '', far_dock: '靠近碼頭再賣', empty: '還沒有魚可以賣',
-  daily_cap: '今天賣魚到上限了，明天再來', old_server: '伺服器還沒更新，暫時不能釣魚', offline: '還沒連上線', no_cast: '', too_fast: '魚跑掉了',
+  daily_cap: '伺服器還沒更新：今天賣魚到舊的上限了', old_server: '伺服器還沒更新，暫時不能釣魚', offline: '還沒連上線', no_cast: '', too_fast: '魚跑掉了',
   fighting: '上一竿還沒收好，再拋一次', not_joined: '重新連線中，等一下再拋', fail: '連線不穩，再拋一次',
 };
 export const fishErr = (e?: string, d = '做不到') => (e != null && Object.prototype.hasOwnProperty.call(FISH_ERR, e) ? FISH_ERR[e] || d : d);

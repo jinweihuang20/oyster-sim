@@ -1,6 +1,6 @@
 /**
  * 廣場海面釣魚（客戶端）：釣魚模式的按鈕（拋竿／收線／抽竿）、力道條、張力條、換餌面板、圖鑑、釣線浮標魚影、賣魚。
- * 判定在伺服器（PlazaWorld.Fish.cs）：能不能拋、每 2 秒擲咬餌、收竿時間窗、魚種重量、拉扯最短時間、魚獲、賣魚上限。
+ * 判定在伺服器（PlazaWorld.Fish.cs）：能不能拋、每 2 秒擲咬餌、收竿時間窗、魚種重量、拉扯最短時間、魚獲、賣魚（沒有每日上限）。
  * 釣竿／餌／假魚在本機存檔（跟蚵棚組合包一樣）；伺服器說用掉才扣。
  * 手機省電：只有在釣魚時才畫 3 個東西（1 條線段組＋浮標＋魚影），每幀不 new 物件，DOM 只在字變了才改。
  */
@@ -78,7 +78,7 @@ let pick: Record<Gear, ItemKey> = { float: 'oyster', lure: 'minnow' };
 let ok = false, oldServer = false, busy = false, fetchT = 0, fetchTries = 0;
 /** 伺服器那邊可能還掛著上一竿（收魚／收竿的回應在斷線時丟了）：下次拋竿前先放棄它 */
 let staleLine = false;
-let hold: HoldFish[] = [], holdN = 0, holdVal = 0, sellLeft: number = FISH.sellMax;
+let hold: HoldFish[] = [], holdN = 0, holdVal = 0;
 let dexView: FishDexView | null = null;
 let dex = new Map<string, { kg: number; n: number }>();
 /** jerkN＝這次登入抽竿幾下（人物抽竿動作、送給別人看） */
@@ -219,7 +219,6 @@ async function fetchState() {
   ok = true;
   hold = ((g(s, 'hold') ?? []) as any[]).map(normFish).filter((f): f is HoldFish => !!f);
   holdN = hold.length; holdVal = num(g(s, 'holdVal'));
-  sellLeft = num(g(s, 'sellLeft'), FISH.sellMax);
   dex = new Map(((g(s, 'dex') ?? []) as any[]).map(o => [String(g(o, 'sp') ?? ''), { kg: num(g(o, 'kg')), n: num(g(o, 'n')) }]));
   const ch = fishDexMerge([...dex].map(([sp, d]) => ({ sp, kg: d.kg, n: d.n })));
   if (panelOn && (panelTab !== 'dex' || ch)) renderPanel();
@@ -396,12 +395,11 @@ async function sellFish() {
   if (!r?.ok) { if (r?.err !== 'slow') toast(err(r?.err, '賣不掉'), '#ffb08a'); return; }
   const pay = num(r.pay);
   C.grantMoney?.(pay, 'fish-sell');
-  holdN = num(r.left); sellLeft = num(r.sellLeft, sellLeft);
+  holdN = num(r.left);
   hold = holdN === 0 ? [] : hold.slice(-holdN);
   holdVal = holdN === 0 ? 0 : hold.reduce((s, f) => s + f.val, 0);
   C.sfx('launch');
   rewardToast(`賣魚 ${num(r.n)} 條・${num(r.kg).toFixed(1)} kg`, `+${money(pay)}`, 'mine', `fish-sell:${Date.now()}`);
-  if (holdN > 0) toast('今天賣魚到上限了，剩下的明天再賣', '#ffd76a', 2.2);
   void fetchState();
 }
 
@@ -418,7 +416,7 @@ function renderPanel() {
     const itemRow = items.map(it => { const c = countOf(it.k); return `<button type="button" data-item="${it.k}" class="fpPick ${pick[rod] === it.k ? 'on' : ''}" ${c > 0 ? '' : 'disabled'}><b>${it.n}</b><small>${it.k === 'oyster' ? `今天剩 ${c} 塊` : `剩 ${c}`}</small></button>`; }).join('');
     const cr = castRange(pick[rod]);
     const tip = (rod === 'lure' ? `<p class="fpTip">${LURE_TIP[pick.lure as LureKey]}</p>` : '<p class="fpTip">浮標小小抖動是魚在試吃，等整個沉下去再收竿</p>') + `<p class="fpTip">拋竿距離 ${cr.min}～${cr.max} m${rod === 'lure' ? '（越重的假魚拋越遠）' : ''}</p>`;
-    body = `<h4>釣竿</h4><div class="fpRow">${rodRow}</div><h4>${rod === 'float' ? '餌' : '假魚'}</h4><div class="fpRow">${itemRow}</div>${tip}<p class="fpFoot">魚獲 ${holdN}／${FISH.holdMax}・約 ${money(holdVal)}　今天還能賣 ${money(sellLeft)}</p>`;
+    body = `<h4>釣竿</h4><div class="fpRow">${rodRow}</div><h4>${rod === 'float' ? '餌' : '假魚'}</h4><div class="fpRow">${itemRow}</div>${tip}<p class="fpFoot">魚獲 ${holdN}／${FISH.holdMax}・約 ${money(holdVal)}（到碼頭全部賣得掉）</p>`;
   }
   dexView?.stop(false); dexView = null;
   ui.panel.innerHTML = tabs + `<div class="fpBody">${body}</div>`;
@@ -759,7 +757,7 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
 
 // ---------------- 除錯 ----------------
 export const fishDbg = {
-  state() { return { phase: sm.phase, gear: sm.gear, item: sm.item, sid: sm.sid, power: +sm.power.toFixed(2), lure: sm.lure ? { dist: +sm.lure.dist.toFixed(1), depth: +sm.lure.depth.toFixed(2), follow: sm.lure.follow } : null, fight: sm.fight ? { ten: +sm.fight.ten.toFixed(2), prog: +sm.fight.prog.toFixed(2), run: sm.fight.run } : null, ok, oldServer, staleLine, holdN, holdVal, sellLeft, dex: Object.fromEntries(dex), rod, pick: { ...pick }, hooked }; },
+  state() { return { phase: sm.phase, gear: sm.gear, item: sm.item, sid: sm.sid, power: +sm.power.toFixed(2), lure: sm.lure ? { dist: +sm.lure.dist.toFixed(1), depth: +sm.lure.depth.toFixed(2), follow: sm.lure.follow } : null, fight: sm.fight ? { ten: +sm.fight.ten.toFixed(2), prog: +sm.fight.prog.toFixed(2), run: sm.fight.run } : null, ok, oldServer, staleLine, holdN, holdVal, dex: Object.fromEntries(dex), rod, pick: { ...pick }, hooked }; },
   enter() { enterFish(); return sm.phase; },
   exit() { exitFish(); return sm.phase; },
   /** 拋竿（power 0～1；h 不給＝鏡頭方向） */

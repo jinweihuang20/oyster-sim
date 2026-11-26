@@ -20,8 +20,7 @@ export const DOCK_LAMPS: readonly { x: number; z: number }[] = Array.from({ leng
 const PATH_LAMPS: readonly { x: number; z: number }[] = [{ x: -15.6, z: 2.3 }, { x: -20.6, z: -2.3 }];
 const ALL_LAMPS = [...DOCK_LAMPS, ...PATH_LAMPS];
 const LAMP_H = 2.6;
-/** 漂流箱上限（伺服器 4 個） */
-/** 平常 3 個＋漂流潮 8 個（留一點餘裕） */
+/** 同時畫幾個漂流箱：平常 2 個＋漂流潮 4 個（2026-11 降低頻率；舊伺服器 3＋8，留著餘裕） */
 const DRIFT_MAX = 14;
 /** 同時畫幾座蚵棚（只畫鏡頭附近）、幾串蚵串、幾盞熟了的燈 */
 const RACK_DRAW = 24, STR_DRAW = 320, RIPE_DRAW = 24;
