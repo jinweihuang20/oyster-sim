@@ -42,6 +42,12 @@ export function fishDexMerge(list: Iterable<{ sp: string; kg: number; n: number 
   return ch;
 }
 
+/**
+ * 圖鑑顯示順序：普通 → 稀有 → 傳說 → 巨物，同一級照 FISH_SPECIES 定義順序（穩定排序）。
+ * FISH_SPECIES 本身只能往後加（跟伺服器同順序、舊存檔照 id 對），之後新增魚種也會自動排進對的稀有度。
+ */
+export const fishDexOrder = () => FISH_SPECIES.map((s, i) => ({ s, i })).sort((a, b) => a.s.tier - b.s.tier || a.i - b.i).map(x => x.s);
+
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
 const kgS = (kg: number) => kg.toFixed(kg < 10 ? 2 : 1);
 
@@ -78,7 +84,7 @@ export function mountFishDex(host: HTMLElement, opts: { onOpenDetail?: (id: stri
       return;
     }
     const got = FISH_SPECIES.filter(s => m.has(s.id)).length;
-    host.innerHTML = `<p class="fdxHead">已經釣過 ${got}／${FISH_SPECIES.length} 種</p><div class="fdxGrid">${FISH_SPECIES.map(s => {
+    host.innerHTML = `<p class="fdxHead">已經釣過 ${got}／${FISH_SPECIES.length} 種</p><div class="fdxGrid">${fishDexOrder().map(s => {
       const d = m.get(s.id);
       const photo = FISH_PHOTO[s.id];
       const img = photo
