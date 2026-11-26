@@ -38,6 +38,26 @@ export const CULL_MID = 14;
 export const CULL_FAR = 20;
 export const CULL_ECO_SCALE = 0.75;
 
+/**
+ * 遠端玩家兩段 LOD：門檻內畫完整角色（舊版 20 m／省電 15 m 外整個隱形），
+ * 門檻外改畫共用的簡易小人（1 個 instanced draw call），不再隱形。
+ * 加遲滯：進簡模要超過 R+H、回完整要小於 R−H，邊界附近不會每幀切來切去。
+ */
+export const REMOTE_FULL_R = 34;
+export const REMOTE_FULL_R_ECO = 26;
+export const REMOTE_LOD_HYST = 3.5;
+
+export function remoteFullR(eco: boolean): number {
+  return eco ? REMOTE_FULL_R_ECO : REMOTE_FULL_R;
+}
+
+/** 遠端玩家這幀要不要用簡易小人（prevSimple＝上一幀狀態；pinned＝被抱／抱人中，一律完整） */
+export function remoteLodSimple(prevSimple: boolean, dist: number, eco: boolean, pinned = false): boolean {
+  if (pinned || !Number.isFinite(dist)) return false;
+  const r = remoteFullR(eco);
+  return prevSimple ? dist > r - REMOTE_LOD_HYST : dist > r + REMOTE_LOD_HYST;
+}
+
 export const ZONE_AABB: Record<PlazaZoneId, ZoneAabb> = {
   // 中央棚下 4×4（不含南烤／西菸／東街／北工寮）
   core: { minX: -WALK_BOUND, maxX: WALK_BOUND, minZ: -WALK_BOUND, maxZ: WALK_BOUND },

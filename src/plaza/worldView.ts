@@ -53,7 +53,7 @@ import type { PlazaFlagState } from './flags';
 import {
   type PlazaZoneId, ZONE_LOAD_R, ZONE_UNLOAD_R, ZONE_PIN_R, ZONE_DISPOSE,
   CULL_NEAR, CULL_MID, CULL_ECO_SCALE,
-  zoneAt, zonesWanted, zoneShouldUnload, distToZone, cullTier,
+  zoneAt, zonesWanted, zoneShouldUnload, distToZone, cullTier, remoteLodSimple,
   corePilesInQuadrant, southGrillPiles, quadrantCenter,
 } from './zones';
 type Remote = {
@@ -272,11 +272,11 @@ export function createPlazaWorldView(
     rig.outer.rotation.set(0, r.yaw, 0);
     try { if (!r.seated) { posePlazaStand(rig); hangArms(r, false); } applyActionPose(r); } catch { /* */ }
   }
-  // 海上視野：自己在船上／水裡時，遠距的人不隱形。SEA_FULL 內照畫本體（便宜 LOD），更遠用 1 個 draw call 的小人
+  // 遠端玩家 LOD：岸上、海上都一樣。REMOTE_FULL_R 內畫完整角色，更遠改畫 1 個 draw call 的共用小人（不隱形）
   let seaView = false;
-  const SEA_FULL = 34, SEA_FULL_ECO = 24, IMP_MAX = 96;
+  const IMP_MAX = 160;
   let imp: THREE.InstancedMesh | null = null, impN = 0, impFullFar = 0;
-  const _impM = new THREE.Matrix4(), _impC = new THREE.Color();
+  const _impM = new THREE.Matrix4(), _impC = new THREE.Color(), _impS = new THREE.Vector3();
   function ensureImp() {
     if (imp) return imp;
     const body = new THREE.CylinderGeometry(0.2, 0.26, 1.15, 6, 1).translate(0, 0.58, 0);
@@ -2773,7 +2773,11 @@ function hashPid(pid: string) {
       const rj = r as any;
       const dist2 = (r.x - cx) * (r.x - cx) + (r.z - cz) * (r.z - cz);
       const tier = cullTier(Math.sqrt(dist2), eco);
-      // mid+：停甩殼／頭瞄等細動畫；不隱形。腳步／跳躍不論遠近都播
+      // 兩段 LOD（含遲滯）：太遠改畫共用小人，完整角色不擺四肢、不畫寵物／釣竿／傘
+      const pinned = !!r.carriedBy || anyoneCarriedBy(r.connId);
+      const lodS = remoteLodSimple(!!rj._lodS, Math.sqrt(dist2), eco, pinned);
+      rj._lodS = lodS;
+      // mid+：停甩殼／頭瞄等細動畫；不隱形。腳步／跳躍在完整角色範圍內都播
       const far = tier === 'mid' || tier === 'far' || tier === 'hide';
       if ((r.phase || '') === 'jump' && !r.seated) { if (!rj.jt) rj.jt = performance.now(); }
       let jumpElapsed = -1;
@@ -2811,7 +2815,9 @@ function hashPid(pid: string) {
         const gaitSp = walkOn ? Math.max(moveSp, r.moving ? 0.9 : 0.55) : moveSp;
         const walkAmp = Math.min(1, gaitSp / 1.2);
         const wantWalk = !r.seated && !posed && jumpElapsed < 0 && walkOn;
-        if (!r.seated && jumpElapsed >= 0) {
+        if (lodS) {
+          // 簡易小人：身體不畫，四肢不用每幀擺
+        } else if (!r.seated && jumpElapsed >= 0) {
           posePlazaJump(r.rig, jumpElapsed);
           if (r.throwT <= 0) { hangArms(r, false); hideHold(r); }
           rj._loco = 'jump';
@@ -2914,7 +2920,7 @@ function hashPid(pid: string) {
         // 遠距一次到位，避免遠處第一次看到時還從站姿慢慢躺下
         if (far || mount) rj.pk = want;
         else rj.pk = (rj.pk ?? 0) + (want - (rj.pk ?? 0)) * 0.18;
-        if (rj.pk > 0.001 && rj.pz) {
+        if (rj.pk > 0.001 && rj.pz && !lodS) {
           // 每幀先重設腿的基準再疊蹲／躺；舊版蹲著移動時沒重設，大腿角度每幀累加 → 腳折成一團
           const crouchWalk = rj.pz === 'crouch' && !!r.moving;
           if (crouchWalk) r.bob += plazaGaitRate(1.1) * dt;
@@ -2929,16 +2935,19 @@ function hashPid(pid: string) {
         else if (mu >= 1 && !inMoon) { rj.mt = 0; rj.mh = false; r.rig.outer.visible = true; } }
       // 遠距仍顯示（只停動畫）；moon／awaiting 另控
       if (!rj.mh && (r.phase || '') !== 'moon' && !r.awaitingPose) r.rig.outer.visible = true;
-      // 視距分級：超出最遠一檔整個不畫；遠距（省電從中距起）藏臉盆、手上刀蚵與服飾細節
-      // 海上視野：SEA_FULL 內照畫本體，更遠改畫小人（不再整個不見）
-      const seaFull = seaView && dist2 < (eco ? SEA_FULL_ECO * SEA_FULL_ECO : SEA_FULL * SEA_FULL);
-      const hideFar = tier === 'hide' && !seaFull && !r.carriedBy && !anyoneCarriedBy(r.connId);
+      // 兩段 LOD：完整角色範圍外，本體換成共用小人（岸上／船上／水裡／釣魚／坐著都一樣，不再整個不見）
+      // 遠距（省電從中距起）的完整角色另外藏臉盆、手上刀蚵與服飾細節
+      const hideFar = lodS;
       if (hideFar) r.rig.outer.visible = false;
-      if (seaView && tier === 'hide' && seaFull) impFullFar++;
-      if (seaView && hideFar && impN < IMP_MAX && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon') {
+      if (!lodS && tier === 'hide') impFullFar++;
+      if (hideFar && impN < IMP_MAX && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon') {
         const im = ensureImp();
         const o = r.rig.outer;
-        _impM.compose(o.position, o.quaternion, o.scale);
+        // 坐著／坐船／蹲：小人壓矮；躺：更扁（不擺關節，只縮高度）
+        const ph = r.seated || mount ? '' : (r.phase || '');
+        const sy = ph === 'lie' ? 0.4 : (r.seated || (mount && !mount.stand) || ph === 'crouch') ? 0.72 : 1;
+        _impS.set(o.scale.x, o.scale.y * sy, o.scale.z);
+        _impM.compose(o.position, o.quaternion, _impS);
         im.setMatrixAt(impN, _impM);
         im.setColorAt(impN, _impC.setHSL(impHue(r.connId || r.key || ''), 0.45, 0.42));
         impN++;
@@ -2952,7 +2961,7 @@ function hashPid(pid: string) {
           fp(r.rig, dt, !r.rig.outer.visible);
         }
       }
-      applyRemoteLod(r, tier === 'hide' || tier === 'far' || (LO && tier === 'mid'));
+      applyRemoteLod(r, lodS || tier === 'hide' || tier === 'far' || (LO && tier === 'mid'));
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       if (show) {
         // 寵物逐幀：坐著→頭頂；走動→身後彈跳
