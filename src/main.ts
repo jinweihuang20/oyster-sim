@@ -5979,6 +5979,7 @@ function startPlazaBoats() {
       getYaw: () => yaw,
       canAct: () => state === 'play' && walking && !plazaSeated() && !plazaSittingBusy() && !mgActive && !plazaCarrying(),
       sfx: (k) => seaSfx(k),
+      sfxBus: () => { try { const a = audio(); return a && sfxG ? { ac: a, dest: sfxG } : null; } catch { return null; } },
       // 漂流箱：伺服器已記在 income（AddIncome），這裡跟其他廣場獎勵一樣入帳
       grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); updHud(); track('plaza_reward', { amount: n, via, money: save.money }); },
       // 蚵棚：升級扣錢（伺服器確認後）、偷拉罰款（有多少扣多少）、雜貨店買的組合包

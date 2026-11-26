@@ -18,6 +18,7 @@ import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, type FishPoseIn, type FishPhase } from './fishPose';
 import type { FishSyncMsg } from './fishSync';
+import { bindReelFeel, makeReelClickSfx, reelPressLabel, steerDirFromPad, type ReelFeel, type ReelSfxOut } from './fishReelFeel';
 
 export type FishBoat = { id: number; x: number; z: number; h: number; v: number };
 export type FishCtx = {
@@ -32,6 +33,8 @@ export type FishCtx = {
   localOnly: () => boolean;
   splash: (x: number, z: number, k: number) => void;
   sfx: (k: 'splash' | 'bump' | 'hit' | 'dock' | 'launch' | 'warn') => void;
+  /** 收線棘輪音接到遊戲 sfx 總線（跟著音量／靜音）；沒給就安靜） */
+  sfxBus?: () => ReelSfxOut | null;
   grantMoney?: (n: number, via: string) => void;
   /** 釣具存檔：gear(id) 有幾個、addGear(id, ±n) */
   gear?: (id: string) => number;
@@ -91,6 +94,8 @@ let fightD0 = 8;
 const fightM = () => (sm.fight ? fightDistM(sm.fight.prog, fightD0) : 0);
 const lineNow = () => { const o = origin(); return sm.lure ? sm.lure.dist : Math.hypot(castX - o.x, castZ - o.z); };
 let reelHeld = false, jerkQ = false, act = false, castH = 0, castX = 0, castZ = 0, castDst = 8, ox = 0, oz = 0;
+let reelFeel: ReelFeel | null = null;
+let reelSfx = makeReelClickSfx(() => { try { return C?.sfxBus?.() ?? null; } catch { return null; } });
 let hooked: HoldFish | null = null;
 let t = 0, splashT = 0, shadowA = 0, tipS = '', panelTab: 'gear' | 'dex' = 'gear', panelOn = false;
 let ui: {
@@ -155,11 +160,18 @@ export function openFish(ctx: FishCtx, root: HTMLElement) {
   tap(sell, () => void sellFish());
   tap(jerk, () => { jerkQ = true; });
   cast.addEventListener('pointerdown', e => { stop(e); act = true; pressCast(); });
-  reel.addEventListener('pointerdown', e => { stop(e); act = true; pressReel(); });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
     cast.addEventListener(ev, () => releaseCast());
-    reel.addEventListener(ev, () => { reelHeld = false; });
   }
+  reelFeel?.dispose();
+  reelFeel = bindReelFeel(reel, {
+    onDown: () => { act = true; pressReel(); },
+    onUp: () => { reelHeld = false; },
+    haptic: () => { try { navigator.vibrate?.(12); } catch { /* 不支援 */ } },
+    sfx: reelSfx,
+    shouldSpin: () => sm.phase === 'fight' || (sm.phase === 'wait' && sm.gear === 'lure'),
+    getTension: () => sm.phase === 'fight' ? (sm.fight?.ten ?? 0) : -1,
+  });
   for (const b of [entry, sell, jerk, reel, cast]) b.addEventListener('click', stop);
   acts.addEventListener('pointerdown', e => {
     e.stopPropagation();
@@ -180,6 +192,7 @@ export function openFish(ctx: FishCtx, root: HTMLElement) {
   buildGfx(ctx.scene);
 }
 export function closeFish() {
+  reelFeel?.dispose(); reelFeel = null; reelSfx.stop();
   if (ui) { ui.entry.remove(); ui.sell.remove(); ui.bar.remove(); ui.hud.remove(); ui.acts.remove(); ui.meter.remove(); ui.panel.remove(); ui = null; }
   removeEventListener('keyup', onKeyUp);
   removeEventListener('pointerdown', onAnyInput);
@@ -192,7 +205,7 @@ export function closeFish() {
 }
 function onAnyInput() { act = true; }
 function onKeyUp(e: KeyboardEvent) {
-  if (e.code === 'Space') { releaseCast(); reelHeld = false; }
+  if (e.code === 'Space') { releaseCast(); if (reelFeel) reelFeel.keyUp(); else reelHeld = false; }
 }
 
 function buildGfx(parent: THREE.Object3D) {
@@ -262,7 +275,7 @@ export function exitFish(why = '') {
     if (sm.phase === 'fight') void n?.fish('FishLand', sm.sid, false, false);
     else void n?.fish('FishReel', sm.sid);
   }
-  sm.exit(); sm.sid = 0; reelHeld = false; hooked = null;
+  sm.exit(); sm.sid = 0; reelHeld = false; reelFeel?.release(); hooked = null;
   catchT = 0; catchMesh?.removeFromParent(); catchMesh = null;
   closePanel();
   document.body.classList.remove('plazaFishing', 'fishFight');
@@ -438,7 +451,7 @@ export function fishKey(code: string): boolean {
   if (sm.phase === 'off') return false;
   act = true;
   if (code === 'Escape') { if (panelOn) closePanel(); else exitFish(); return true; }
-  if (code === 'Space') { if (sm.phase === 'idle') pressCast(); else pressReel(); return true; }
+  if (code === 'Space') { if (sm.phase === 'idle') pressCast(); else if (reelFeel) reelFeel.keyDown(); else pressReel(); return true; }
   if (code === 'KeyJ') { jerkQ = true; return true; }
   return code === 'KeyR' || code === 'KeyF' || code === 'KeyX';
 }
@@ -464,18 +477,16 @@ export function tickFish(dt: number, cam: THREE.Camera) {
     else if (C.mySeat() === 0 && b && Math.abs(b.v) > FISH.driverMaxV && sm.lineOut) { void C.net()?.fish('FishReel', sm.sid); sm.reset(); toast('開船了，自動收線', '#9fe0ff', 1.4); }
   }
   if (sm.phase !== 'off') {
-    let dir = 0;
-    if (walkKeys.has('KeyA') || walkKeys.has('ArrowLeft')) dir -= 1;
-    if (walkKeys.has('KeyD') || walkKeys.has('ArrowRight')) dir += 1;
-    if (Math.abs(joy.x) > 0.15) dir = joy.x;
+    const dir = steerDirFromPad(c => walkKeys.has(c), joy.x);
     if (dir !== 0) act = true;
-    steerIn = Math.max(-1, Math.min(1, dir));
+    steerIn = dir;
     const troll = !!b && sm.gear === 'lure' && trollOk(C.mySeat(), sm.item, b.v);
     // 抽竿（路亞等待／捲線中才算）：人物甩一下竿
     if (jerkQ && sm.lure && sm.phase === 'wait') jerkN++;
     const ev = sm.tick(dt, { reel: reelHeld, jerk: jerkQ, dir, troll });
     if (jerkQ && sm.lure && gfx) C.splash(lurePos().x, lurePos().z, sm.item === 'popper' ? 0.3 : 0.12);
     jerkQ = false;
+    reelFeel?.tick();
     if (ev === 'sink') { C.sfx('warn'); C.splash(castX, castZ, 0.2); }
     else if (ev === 'missed') void doReel();
     else if (ev === 'back') { void C.net()?.fish('FishReel', sm.sid); sm.reset(); }
@@ -718,7 +729,7 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
   ui.bar.classList.toggle('on', on);
   ui.hud.classList.toggle('on', on);
   ui.acts.classList.toggle('on', on);
-  if (!on) { ui.meter.classList.remove('on'); ui.depth.classList.remove('on'); ui.depth.setAttribute('aria-hidden', 'true'); return; }
+  if (!on) { reelFeel?.release(); ui.meter.classList.remove('on'); ui.depth.classList.remove('on'); ui.depth.setAttribute('aria-hidden', 'true'); return; }
   const ph = sm.phase, lure = sm.gear === 'lure';
   ui.cast.classList.toggle('on', ph === 'idle' || ph === 'charge' || ph === 'cast');
   ui.cast.classList.toggle('dis', ph === 'cast');
@@ -726,7 +737,8 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
   ui.reel.classList.toggle('on', reelOn);
   ui.reel.classList.toggle('dis', ph === 'hook' || ph === 'fly');
   ui.reel.classList.toggle('hot', ph === 'sink');
-  const rl = ph === 'fight' || lure ? '收線' : ph === 'sink' ? '收竿！' : '收竿';
+  const rl0 = ph === 'fight' || lure ? '收線' : ph === 'sink' ? '收竿！' : '收竿';
+  const rl = (reelHeld || !!reelFeel?.held()) ? reelPressLabel(rl0) : rl0;
   const rlEl = ui.reel.querySelector('.lbl')!; if (rlEl.textContent !== rl) rlEl.textContent = rl;
   ui.jerk.classList.toggle('on', lure && ph === 'wait' && !(b && trollOk(C.mySeat(), sm.item, b.v)));
   // HUD
@@ -807,7 +819,7 @@ export const fishDbg = {
   fetch() { void fetchState(); return 'ok'; },
   /** 測試：站到岸上某一點（碼頭尾端約 x＝-39, z＝0） */
   tp(x: number, z: number) { const p = C?.walkPos() as { x: number; z: number } | undefined; if (!p || C?.mode() !== 'walk') return 'not walking'; p.x = x; p.z = z; return 'ok'; },
-  ui() { return ui ? { entry: ui.entry.classList.contains('on'), sell: ui.sell.classList.contains('on'), bar: ui.bar.classList.contains('on'), cast: ui.cast.classList.contains('on'), reel: ui.reel.classList.contains('on') ? ui.reel.textContent : null, jerk: ui.jerk.classList.contains('on'), hud: ui.hud.classList.contains('on') ? ui.hud.textContent : null, acts: ui.acts.classList.contains('on'), depth: ui.depth.classList.contains('on'), meter: ui.meter.classList.contains('on') ? ui.mLbl.textContent : null, panel: panelOn } : null; },
+  ui() { return ui ? { entry: ui.entry.classList.contains('on'), sell: ui.sell.classList.contains('on'), bar: ui.bar.classList.contains('on'), cast: ui.cast.classList.contains('on'), reel: ui.reel.classList.contains('on') ? ui.reel.textContent : null, reelPressed: ui.reel.classList.contains('pressed'), jerk: ui.jerk.classList.contains('on'), hud: ui.hud.classList.contains('on') ? ui.hud.textContent : null, acts: ui.acts.classList.contains('on'), depth: ui.depth.classList.contains('on'), meter: ui.meter.classList.contains('on') ? ui.mLbl.textContent : null, panel: panelOn } : null; },
   /** 測試：特效粒子數（氣泡、墨） */
   fx() { return ffx ? { bubbles: ffx.bubbles.live(), ink: ffx.ink.live() } : null; },
   /** 測試：噴一團墨（在現在的線頭位置） */

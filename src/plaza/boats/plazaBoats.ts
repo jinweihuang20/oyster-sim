@@ -47,6 +47,8 @@ export type PlazaBoatDeps = {
   /** 可以互動（在廣場走動、沒坐著、沒開選單） */
   canAct: () => boolean;
   sfx: (k: BoatSfx) => void;
+  /** 釣魚收線棘輪音：接到遊戲 sfx 總線（音量／靜音跟設定走） */
+  sfxBus?: () => { ac: AudioContext; dest: AudioNode } | null;
   /** 船上丟殼：target＝要丟的人（null＝丟進海裡）；回 false＝節流中沒丟 */
   throwShell: (from: THREE.Vector3, target: { connId: string; nick: string } | null, to: THREE.Vector3) => boolean;
   /** 船上抽菸：吸菸區同一套「抽一口」的目前進度（null＝沒在抽／不能抽） */
@@ -192,7 +194,7 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
     net: () => net, scene: deps.scene, mode: () => mode,
     myBoat: () => (mode === 'boat' ? boats[myBoat] ?? null : null), mySeat: () => (mode === 'boat' ? mySeat : -1),
     walkPos: () => D?.walkPos ?? { x: 0, z: 0 }, canAct: () => !!D?.canAct(), me: () => D?.me() ?? null, localOnly: () => localOnly || !net,
-    splash: (x, z, k) => splash(x, z, k), sfx: k => D?.sfx(k), grantMoney: (n, via) => D?.grantMoney?.(n, via),
+    splash: (x, z, k) => splash(x, z, k), sfx: k => D?.sfx(k), sfxBus: () => D?.sfxBus?.() ?? null, grantMoney: (n, via) => D?.grantMoney?.(n, via),
     gear: id => D?.fishGear?.(id) ?? 0, addGear: (id, d) => D?.addFishGear?.(id, d), oyster: () => D?.fishOyster?.() ?? 0, useOyster: () => D?.useFishOyster?.(),
   }, ui!.root);
   syncUi();
