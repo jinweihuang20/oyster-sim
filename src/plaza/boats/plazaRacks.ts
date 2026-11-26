@@ -9,7 +9,7 @@ import { PB, distToLand, pierNearest, hullPts } from './boatLogic';
 import type { PlazaSea } from './boatScene';
 import type { BoatNet } from './boatNet';
 import {
-  RACK, UP_LINES, UP_MAX, isMine, isPrivate, loadSlow, nearestRack, pushFromRack, rackNextSec, rackNow, rackRipe, ripeViewR, stealFine, upCost,
+  RACK, UP_LINES, UP_MAX, isMine, isPrivate, loadSlow, nearestRack, pushFromRack, rackNextSec, rackNow, rackRipe, rackCooling, rackAgePct, fmtWait, ripeViewR, stealFine, upCost,
   type RackDto, type RackSnap,
 } from './rackLogic';
 
@@ -46,7 +46,7 @@ let C: RackCtx | null = null;
 let racks: RackDto[] = [];
 let me = '';
 let off = 0; // 伺服器時間 − 本機時間
-let cfg = { price: 250, kgPer: 3, finePerKg: 250, cargoMax: 24, ownMax: 4, upCost: [] as number[][] };
+let cfg = { price: 200, kgPer: 3, finePerKg: 250, cargoMax: 24, ownMax: 4, upCost: [] as number[][], ageStartMs: 2 * 3600_000, ageSpanMs: 2 * 3600_000, ageFloor: 50, sellBonusPct: 0, sellBonusLeft: false };
 let cargo = 0, cargoVal = 0;
 const loads = new Map<number, number>();
 let ok = false;
@@ -104,7 +104,7 @@ export function onRackSnap(s: RackSnap) {
   ok = true;
   racks = s.racks.slice(0, 400);
   me = s.me; off = s.now - Date.now();
-  cfg = { price: s.price, kgPer: s.kgPer, finePerKg: s.finePerKg, cargoMax: s.cargoMax, ownMax: s.ownMax, upCost: s.upCost };
+  cfg = { price: s.price, kgPer: s.kgPer, finePerKg: s.finePerKg, cargoMax: s.cargoMax, ownMax: s.ownMax, upCost: s.upCost, ageStartMs: s.ageStartMs, ageSpanMs: s.ageSpanMs, ageFloor: s.ageFloor, sellBonusPct: s.sellBonusPct, sellBonusLeft: s.sellBonusLeft };
   cargo = s.myCargo; cargoVal = s.myCargoVal;
 }
 export function onRackUpd(r: RackDto) {
@@ -199,10 +199,13 @@ async function sellCargo() {
   busy = true;
   const r = await n.rackSell().finally(() => { busy = false; });
   if (!r.ok) { if (r.err !== 'slow') toast(err(r.err, '賣不掉'), '#ffb08a'); return; }
-  C.grantMoney?.(r.pay ?? 0, 'rack-sell');
+  const bonus = r.bonus ?? 0;
+  C.grantMoney?.((r.pay ?? 0) + bonus, 'rack-sell');
   setCargo(r.cargo ?? 0); if (!cargo) cargoVal = 0;
+  if (bonus > 0) cfg.sellBonusLeft = false;
   C.sfx('launch');
-  rewardToast(`卸貨 ${r.strings} 串・${r.kg} kg`, `+${money(r.pay ?? 0)}`, 'mine', `rack-sell:${Date.now()}`);
+  // 今天第一次卸貨：加碼直接算進金額，標籤寫出來
+  rewardToast(bonus > 0 ? `卸貨 ${r.strings} 串・今日第一次加碼 +${money(bonus)}` : `卸貨 ${r.strings} 串・${r.kg} kg`, `+${money((r.pay ?? 0) + bonus)}`, 'mine', `rack-sell:${Date.now()}`);
 }
 async function placeRack() {
   const n = C?.net(); if (!n || busy || !C) return;
@@ -316,7 +319,7 @@ function syncRackUi(cam: THREE.Camera, b: RackBoat | null, now: number) {
   const showCargo = on && (cargo > 0 || !!tr);
   ui.cargo.classList.toggle('on', showCargo);
   if (showCargo) {
-    const s = `<i class="boatIc">${ICON.cargo}</i><span>蚵串 ${cargo}／${cfg.cargoMax}・${cargo * cfg.kgPer} kg${cargoVal > 0 ? `・約 ${money(cargoVal)}` : ''}</span>`;
+    const s = `<i class="boatIc">${ICON.cargo}</i><span>蚵串 ${cargo}／${cfg.cargoMax}・${cargo * cfg.kgPer} kg${cargoVal > 0 ? `・約 ${money(cargoVal)}` : ''}${cargo > 0 && cfg.sellBonusLeft && cfg.sellBonusPct > 0 ? `・今日第一次賣 +${cfg.sellBonusPct}%` : ''}</span>`;
     if (ui.cargo.dataset.s !== s) { ui.cargo.dataset.s = s; ui.cargo.innerHTML = s; }
   }
   // 附近蚵棚的名牌（公共／私人＋主人＋串數）
@@ -328,7 +331,9 @@ function syncRackUi(cam: THREE.Camera, b: RackBoat | null, now: number) {
     if (vis) {
       const n = rackNow(nr, now), nx = rackNextSec(nr, now);
       const who = !isPrivate(nr) ? '公共蚵棚' : isMine(nr, me) ? '我的蚵棚' : `私人・${nr.owner || '別人'}的蚵棚`;
-      const s = `${who}｜${n}／${nr.max} 串${nx ? `・${nx} 秒後長一串` : '・長滿了'}`;
+      const age = rackAgePct(nr, now, cfg);
+      const grow = rackCooling(nr, now) ? `・剛被拉過，${fmtWait(nx)}後再長` : nx ? `・${fmtWait(nx)}後長一串` : age < 100 ? `・放太久了，賣價剩 ${age}%` : '・長滿了';
+      const s = `${who}｜${n}／${nr.max} 串${grow}`;
       if (ui.tag.textContent !== s) ui.tag.textContent = s;
       ui.tag.classList.toggle('priv', isPrivate(nr) && !isMine(nr, me));
       ui.tag.classList.toggle('mine', isMine(nr, me));

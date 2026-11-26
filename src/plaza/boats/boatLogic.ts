@@ -218,7 +218,8 @@ export function dockEdge(ndcX: number, ndcY: number, behind: boolean, W: number,
 }
 
 /** 漂流箱：客戶端自動撈的距離（伺服器 船 3.8／泳 2.2，這裡略嚴免得被拒） */
-export const DRIFT = { boatR: 3.3, swimR: 1.8, bobHz: 1.7 };
+/** 撈箱子距離（伺服器 3.8／2.2；金箱 5.5／3.5，客戶端略嚴） */
+export const DRIFT = { boatR: 3.3, swimR: 1.8, goldBoatR: 5, goldSwimR: 3.1, bobHz: 1.7 };
 /** 最近的漂流箱（沒有回 null） */
 export function nearestDrift<T extends { x: number; z: number }>(x: number, z: number, boxes: readonly T[]) {
   let best: T | null = null, bd = Infinity;

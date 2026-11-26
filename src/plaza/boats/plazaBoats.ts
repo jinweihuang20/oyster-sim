@@ -18,7 +18,7 @@ import {
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
-import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare } from './boatNet';
+import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare, type DriftTide, type DriftPull } from './boatNet';
 
 export type BoatSfx = 'splash' | 'bump' | 'hit' | 'dock' | 'launch' | 'warn';
 export type PlazaBoatDeps = {
@@ -86,6 +86,10 @@ let resyncT = 0;
 // 漂流箱（伺服器給位置；撈到由伺服器判定）
 let drifts: DriftBox[] = [];
 let driftPay = { min: 5000, max: 20000 };
+/** 最新一包漂流箱設定（漂流潮、金箱、今日加碼） */
+let driftCfg: DriftSnap | null = null;
+/** 金箱子：上次提示「要幾個人一起拉」的時間（別一直跳） */
+let goldNoteT = -99;
 let driftBusy = false, driftCd = 0, driftCapNoted = false;
 /** 每次開網頁只提示一次 */
 let driftHinted = false;
@@ -157,7 +161,7 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
   if (c) {
     net = makeBoatNet(c, {
       seats: onSeats, poses: onPoses, ram: onRam, swimStart: s => upsertSwim(s, true), swimEnd: endSwim, rescued: onRescued, state: onState,
-      drift: onDrift, driftClaimed: onDriftClaimed, driftShare: onDriftShare,
+      drift: onDrift, driftClaimed: onDriftClaimed, driftShare: onDriftShare, driftTide: onDriftTide, driftPull: onDriftPull,
       racks: onRackSnap, rackUpd: onRackUpd, rackGone: onRackGone, rackStolen: onRackStolen, cargo: onCargo, load: onLoad,
     });
   } else localOnly = true;
@@ -228,8 +232,32 @@ function onState(s: BoatsSnap | null, soft = false) {
   } else if (wasMode === 'swim' && !stillSwim) forceAshore('連線重新整理了，先回到碼頭');
 }
 function onDrift(s: DriftSnap) {
-  drifts = s.boxes.slice(0, 8);
+  drifts = s.boxes.slice(0, 14);
   driftPay = { min: s.minPay, max: s.maxPay };
+  // 整包廣播不帶我的 bonusLeft：沿用進場時拿到的
+  const left = driftCfg?.bonusLeft ?? s.bonusLeft;
+  driftCfg = { ...s, bonusLeft: s.bonusLeft || left };
+}
+/** 漂流潮開始（台北整點）：大字提示，不說在哪 */
+function onDriftTide(e: DriftTide) {
+  if (!D) return;
+  D.sfx('launch');
+  toastTop(`漂流潮來了！接下來 10 分鐘海上多了 ${e.n} 個漂流箱${e.gold ? '，還有一個金色大箱子（要 2 個人以上一起拉）' : ''}`, 4);
+}
+/** 有人在拉金箱子：附近的人看得到，叫人來幫忙 */
+function onDriftPull(e: DriftPull) {
+  const b = drifts.find(d => d.key === e.key); if (!b || !D || mode === 'walk') return;
+  const me = mode === 'boat' ? boats[myBoat] : mySwim; if (!me) return;
+  if (Math.hypot(b.x - me.x, b.z - me.z) > 60) return;
+  if (t - goldNoteT < 2) return; goldNoteT = t;
+  toast(`${e.nick || '有人'} 在拉金色大箱子（${e.n}／${e.need} 人），快來一起拉！`, '#ffd76a', 2);
+}
+/** 獎勵提示文字：分錢、今天第一次加碼 */
+function driftLabel(head: string, n: number, bonus: number, gold: boolean) {
+  const parts = [head];
+  if (n > 1) parts.push(gold ? `${n} 人平分` : `全船 ${n} 人平分`);
+  if (bonus > 0) parts.push(`今日第一次 +${money(bonus)}`);
+  return parts.join('・');
 }
 function onDriftClaimed(e: DriftClaimed) {
   const b = drifts.find(d => d.key === e.key);
@@ -237,23 +265,24 @@ function onDriftClaimed(e: DriftClaimed) {
   if (b) splash(b.x, b.z, 1.2);
   // 自己撈到的入帳在 DriftClaim 的回應裡處理（只入一次）；別人撈到：小公告
   // 同船分錢的人另外收到 DriftShare（自己的獎勵提示），這裡就不再放公告
-  if (!isMe(e.connId) && e.pay > 0 && !sharedKeys.has(e.key)) rewardToast(`${e.nick || '有人'} 撈到漂流箱${e.n > 1 ? `（全船 ${e.n} 人平分）` : ''}`, money(e.pay), 'feed', `drift:${e.key}`);
+  if (!isMe(e.connId) && e.pay > 0 && !sharedKeys.has(e.key)) rewardToast(`${e.nick || '有人'} ${e.gold ? '一起拉上金色大箱子' : '撈到漂流箱'}${e.n > 1 ? `（${e.n} 人平分）` : ''}`, money(e.pay), 'feed', `drift:${e.key}`);
 }
 const sharedKeys = new Set<number>();
 /** 同船有人撈到：我分到的錢（伺服器已記 income），入帳＋自己的獎勵提示 */
 function onDriftShare(e: DriftShare) {
   if (e.pay <= 0) return;
   sharedKeys.add(e.key); if (sharedKeys.size > 40) sharedKeys.delete(sharedKeys.values().next().value!);
-  D?.grantMoney?.(e.pay, 'drift-share');
+  D?.grantMoney?.(e.pay + e.bonus, 'drift-share');
   D?.sfx('launch');
-  rewardToast(`${e.by || '同船的人'} 撈到漂流箱・全船 ${e.n} 人平分`, `+${money(e.pay)}`, 'mine', `drift:${e.key}`);
+  if (e.bonus > 0 && driftCfg) driftCfg.bonusLeft = false;
+  rewardToast(driftLabel(e.gold ? '拉上金色大箱子！' : `${e.by || '同船的人'} 撈到漂流箱`, e.n, e.bonus, e.gold), `+${money(e.pay + e.bonus)}`, 'mine', `drift:${e.key}`);
 }
 const money = (n: number) => `$${n.toLocaleString('zh-TW')}`;
 function driftHint() {
   if (driftHinted || localOnly) return;
   driftHinted = true;
   // 只說有這回事，不說在哪（要自己出海找）
-  later(1.8, () => toastTop(`海上藏著漂流箱（${money(driftPay.min)}～${money(driftPay.max)}），位置會換，要自己找。西邊海上的公共蚵棚熟了會亮燈，靠近可以拉蚵串回碼頭賣`));
+  later(1.8, () => toastTop(`海上藏著漂流箱（${money(driftPay.min)}～${money(driftPay.max)}），位置會換，要自己找；每個整點有 10 分鐘「漂流潮」。西邊海上的公共蚵棚熟了會亮燈，靠近可以拉蚵串回碼頭賣`));
 }
 /** 靠近漂流箱：請伺服器判定（伺服器用自己知道的船／泳者位置），成功才入帳 */
 function tickDrift(dt: number) {
@@ -261,13 +290,13 @@ function tickDrift(dt: number) {
   if (!D || !sea) return;
   for (const d of drifts) {
     const ph = t * DRIFT.bobHz + d.key * 1.3;
-    sea.crate(d.x, PB.waterY + 0.02 + Math.sin(ph) * 0.07, d.z, d.key * 0.7 + Math.sin(ph * 0.4) * 0.3, Math.sin(ph * 0.8) * 0.08, Math.cos(ph * 0.9) * 0.08);
+    sea.crate(d.x, PB.waterY + 0.02 + Math.sin(ph) * 0.07, d.z, d.key * 0.7 + Math.sin(ph * 0.4) * 0.3, Math.sin(ph * 0.8) * 0.08, Math.cos(ph * 0.9) * 0.08, !!d.gold);
   }
   if (mode === 'walk' || localOnly || driftBusy || driftCd > 0 || !net) return;
   const b = mode === 'boat' ? boats[myBoat] : null;
   const x = b ? b.x : mySwim.x, z = b ? b.z : mySwim.z;
   const n = nearestDrift(x, z, drifts);
-  if (!n || n.dist > (b ? DRIFT.boatR : DRIFT.swimR)) return;
+  if (!n || n.dist > (n.box.gold ? (b ? DRIFT.goldBoatR : DRIFT.goldSwimR) : (b ? DRIFT.boatR : DRIFT.swimR))) return;
   const key = n.box.key;
   // 駕駛：先把最新位置送上去，伺服器才看得到我已經到了
   if (b && mySeat === 0) net.drive(b.id, b.x, b.z, b.h, b.v); else if (!b) net.swim(mySwim.x, mySwim.z, mySwim.h);
@@ -276,12 +305,20 @@ function tickDrift(dt: number) {
     driftBusy = false;
     if (r.ok && r.pay) {
       drifts = drifts.filter(d => d.key !== key);
-      D?.grantMoney?.(r.pay, 'drift-box');
-      splash(n.box.x, n.box.z, 1.6); D?.sfx('launch');
-      rewardToast((r.n ?? 1) > 1 ? `撈到漂流箱！全船 ${r.n} 人平分（共 ${money(r.total ?? r.pay)}）` : '撈到漂流箱！', `+${money(r.pay)}`, 'mine', `drift:${key}`);
+      const bonus = r.bonus ?? 0;
+      D?.grantMoney?.(r.pay + bonus, 'drift-box');
+      if (bonus > 0 && driftCfg) driftCfg.bonusLeft = false;
+      splash(n.box.x, n.box.z, r.gold ? 2.4 : 1.6); D?.sfx('launch');
+      rewardToast(driftLabel(r.gold ? '拉上金色大箱子！' : '撈到漂流箱！', r.n ?? 1, bonus, !!r.gold), `+${money(r.pay + bonus)}`, 'mine', `drift:${key}`);
       driftCd = 1;
       return;
     }
+    // 金箱子：一個人拉不動，要等別人一起拉（8 秒內）；每 1.5 秒再拉一次
+    if (r.err === 'pull_more') {
+      if (t - goldNoteT >= 2.5) { goldNoteT = t; toast(`金色大箱子太重了，要 ${r.need || 2} 個人一起拉（現在 ${r.n ?? 1} 人）`, '#ffd76a', 2); }
+      driftCd = 1.5; return;
+    }
+    if (r.err === 'gold_cap') { toast('今天拉金色大箱子的次數用完了', '#ffb08a'); driftCd = 30; return; }
     if (r.err === 'gone') { drifts = drifts.filter(d => d.key !== key); return; }
     if (r.err === 'daily_cap') { if (!driftCapNoted) { driftCapNoted = true; toast('今天撈太多漂流箱了，明天再來', '#ffb08a'); } driftCd = 60; return; }
     // far／slow：位置還沒同步到，等一下再試
@@ -926,7 +963,7 @@ export const plazaBoatsDbg = {
     return { mode, myBoat, mySeat, localOnly, supported: net?.supported() ?? null, boats: boats.map(b => ({ id: b.id, x: +b.x.toFixed(1), z: +b.z.toFixed(1), v: +b.v.toFixed(1), seats: b.seats.filter(Boolean).length })), swimmers: [...swimmers.keys()], prompt: prompt?.label ?? null, sea: sea?.stats() };
   },
   /** 漂流箱：目前位置；把最近一個拉到自己旁邊（只改畫面，伺服器判定照舊） */
-  drift() { return { boxes: drifts.map(d => ({ key: d.key, x: +d.x.toFixed(1), z: +d.z.toFixed(1) })), pay: driftPay, hinted: driftHinted }; },
+  drift() { return { boxes: drifts.map(d => ({ key: d.key, x: +d.x.toFixed(1), z: +d.z.toFixed(1), gold: !!d.gold, tide: !!d.tide })), pay: driftPay, hinted: driftHinted, tideUntil: driftCfg?.tideUntil ?? 0, nextTideAt: driftCfg?.nextTideAt ?? 0, bonusLeft: driftCfg?.bonusLeft ?? null }; },
   /** 假乘客／假駕駛抽菸（看姿勢用） */
   smoke(on = true) { fakeSmoke = on; return 'ok'; },
   swimK(k: number | null = null) { swimForce = k; return 'ok'; },

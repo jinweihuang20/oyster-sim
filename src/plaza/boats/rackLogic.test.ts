@@ -58,3 +58,35 @@ describe('船撞蚵棚', () => {
     expect(pushFromRack(d, { x: 0, z: 0, h: Math.PI / 2 }, [[0, 2.2]], 1)).toBe(true);
   });
 });
+
+import { rackAgePct, rackFullAt, rackCooling, fmtWait, UP_FULL_MIN } from './rackLogic';
+describe('私人蚵棚：放太久變老、公共冷卻', () => {
+  const c = { ageStartMs: 2 * 3600_000, ageSpanMs: 2 * 3600_000, ageFloor: 50 };
+  const priv = (n: number, t: number, a = 0) => ({ id: 1001, x: 0, z: 0, h: 0, n, t, ok: 'k', owner: 'o', max: 12, growMs: 150_000, up: [1, 1, 1, 1, 1, 1], a });
+  it('長滿 2 小時內原價，之後線性降到 5 折，不會更低（跟伺服器一樣）', () => {
+    const t0 = 1_000_000_000;
+    expect(rackFullAt(priv(0, t0), t0 + 1000)).toBe(0);
+    expect(rackFullAt(priv(0, t0), t0 + 12 * 150_000)).toBe(t0 + 12 * 150_000);
+    expect(rackAgePct(priv(12, t0), t0 + 2 * 3600_000, c)).toBe(100);
+    expect(rackAgePct(priv(12, t0), t0 + 3 * 3600_000, c)).toBe(75);
+    expect(rackAgePct(priv(12, t0), t0 + 30 * 3600_000, c)).toBe(50);
+    // 拉過一半：a 記住開始變老的時間
+    expect(rackAgePct(priv(5, t0 + 5 * 3600_000, t0), t0 + 5 * 3600_000, c)).toBe(50);
+    // 公共蚵棚不會變老
+    expect(rackAgePct({ ...priv(12, t0), ok: '' }, t0 + 30 * 3600_000, c)).toBe(100);
+  });
+  it('公共蚵棚 t 在未來＝冷卻中；時間格式', () => {
+    expect(rackCooling({ ...priv(3, 2000), ok: '' }, 1000)).toBe(true);
+    expect(rackCooling(priv(3, 2000), 1000)).toBe(false);
+    expect(rackCooling({ ...priv(3, 500), ok: '' }, 1000)).toBe(false);
+    expect(fmtWait(45)).toBe('45 秒');
+    expect(fmtWait(125)).toBe('2 分 05 秒');
+  });
+  it('生長速度：30 分鐘起、Lv5 約 19 分鐘；舊伺服器沒送也有預設', () => {
+    expect(UP_FULL_MIN[0]).toBe(30);
+    expect(UP_FULL_MIN[4]).toBeGreaterThanOrEqual(18); expect(UP_FULL_MIN[4]).toBeLessThanOrEqual(20);
+    const s = normRackSnap({ racks: [] })!;
+    expect(s.upFullMs[0]).toBe(30 * 60_000);
+    expect(s.ageFloor).toBe(50);
+  });
+});

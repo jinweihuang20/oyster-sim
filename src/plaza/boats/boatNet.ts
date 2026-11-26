@@ -31,15 +31,26 @@ function normSnap(o: any): BoatsSnap | null {
   };
 }
 
-export type DriftBox = { key: number; x: number; z: number };
-export type DriftSnap = { boxes: DriftBox[]; nextShuffleAt: number; minPay: number; maxPay: number };
-export type DriftClaimed = { key: number; connId: string; nick: string; pay: number; n: number };
-/** 同船有人撈到漂流箱：我分到的錢 */
-export type DriftShare = { key: number; pay: number; total: number; n: number; by: string };
+/** gold＝金色大箱子（要多人一起拉）；tide＝漂流潮多出來的 */
+export type DriftBox = { key: number; x: number; z: number; gold?: boolean; tide?: boolean };
+export type DriftSnap = {
+  boxes: DriftBox[]; nextShuffleAt: number; minPay: number; maxPay: number;
+  /** 漂流潮進行中到幾點（0＝沒有）、下一次幾點；金箱金額、要幾人、幾秒內一起拉；今天第一次撈加碼 */
+  tideUntil: number; nextTideAt: number; goldMin: number; goldMax: number; goldNeed: number; goldWindowMs: number; bonusPct: number; bonusLeft: boolean;
+};
+export type DriftClaimed = { key: number; connId: string; nick: string; pay: number; n: number; gold: boolean };
+/** 同船（或一起拉金箱）有人撈到漂流箱：我分到的錢（bonus＝今天第一次的加碼） */
+export type DriftShare = { key: number; pay: number; bonus: number; total: number; n: number; by: string; gold: boolean };
+export type DriftTide = { until: number; n: number; gold: boolean };
+export type DriftPull = { key: number; n: number; need: number; nick: string };
 export function normDrift(o: any): DriftSnap | null {
   if (!o) return null;
-  const boxes = ((g(o, 'boxes') ?? []) as any[]).map(b => ({ key: num(g(b, 'key'), -1), x: num(g(b, 'x')), z: num(g(b, 'z')) })).filter(b => b.key > 0);
-  return { boxes, nextShuffleAt: num(g(o, 'nextShuffleAt')), minPay: num(g(o, 'minPay'), 5000), maxPay: num(g(o, 'maxPay'), 20000) };
+  const boxes = ((g(o, 'boxes') ?? []) as any[]).map(b => ({ key: num(g(b, 'key'), -1), x: num(g(b, 'x')), z: num(g(b, 'z')), gold: !!g(b, 'gold'), tide: !!g(b, 'tide') })).filter(b => b.key > 0);
+  return {
+    boxes, nextShuffleAt: num(g(o, 'nextShuffleAt')), minPay: num(g(o, 'minPay'), 5000), maxPay: num(g(o, 'maxPay'), 20000),
+    tideUntil: num(g(o, 'tideUntil')), nextTideAt: num(g(o, 'nextTideAt')), goldMin: num(g(o, 'goldMin'), 30000), goldMax: num(g(o, 'goldMax'), 45000),
+    goldNeed: Math.max(2, num(g(o, 'goldNeed'), 2)), goldWindowMs: num(g(o, 'goldWindowMs'), 8000), bonusPct: num(g(o, 'bonusPct')), bonusLeft: !!g(o, 'bonusLeft'),
+  };
 }
 
 export type BoatNetEvents = {
@@ -47,6 +58,9 @@ export type BoatNetEvents = {
   drift?: (s: DriftSnap) => void;
   driftClaimed?: (e: DriftClaimed) => void;
   driftShare?: (e: DriftShare) => void;
+  /** 漂流潮開始（整點）／有人在拉金箱子 */
+  driftTide?: (e: DriftTide) => void;
+  driftPull?: (e: DriftPull) => void;
   seats: (b: BoatDto) => void;
   poses: (p: BoatPosesDto) => void;
   ram: (r: RamDto) => void;
@@ -67,7 +81,7 @@ export type BoatNetEvents = {
   load?: (e: { boatId: number; load: number }) => void;
 };
 export type HaulRes = { ok: boolean; err?: string; cargo?: number; cargoVal?: number; rack?: RackDto | null; fine?: number };
-export type SellRes = { ok: boolean; err?: string; pay?: number; strings?: number; kg?: number; cargo?: number };
+export type SellRes = { ok: boolean; err?: string; pay?: number; strings?: number; kg?: number; cargo?: number; bonus?: number };
 export type RackUpRes = { ok: boolean; err?: string; rack?: RackDto | null; line?: number; lv?: number; cost?: number };
 
 export type BoatRes = { ok: boolean; err?: string; boat?: BoatDto | null; seat?: number; swim?: SwimDto | null; cargo?: number; lost?: number };
@@ -94,8 +108,10 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     conn.on('SwimStart', safe(x => { const s = normSwim(x); if (s) ev.swimStart(s); }));
     conn.on('SwimEnd', safe(x => { const c = String(g(x, 'connId') ?? ''); if (c) ev.swimEnd(c); }));
     conn.on('DriftBoxes', safe(x => { const d = normDrift(x); if (d) ev.drift?.(d); }));
-    conn.on('DriftClaimed', safe(x => ev.driftClaimed?.({ key: num(g(x, 'key'), -1), connId: String(g(x, 'connId') ?? ''), nick: String(g(x, 'nick') ?? ''), pay: num(g(x, 'pay')), n: Math.max(1, num(g(x, 'n'), 1)) })));
-    conn.on('DriftShare', safe(x => ev.driftShare?.({ key: num(g(x, 'key'), -1), pay: num(g(x, 'pay')), total: num(g(x, 'total')), n: Math.max(1, num(g(x, 'n'), 1)), by: String(g(x, 'by') ?? '') })));
+    conn.on('DriftClaimed', safe(x => ev.driftClaimed?.({ key: num(g(x, 'key'), -1), connId: String(g(x, 'connId') ?? ''), nick: String(g(x, 'nick') ?? ''), pay: num(g(x, 'pay')), n: Math.max(1, num(g(x, 'n'), 1)), gold: !!g(x, 'gold') })));
+    conn.on('DriftShare', safe(x => ev.driftShare?.({ key: num(g(x, 'key'), -1), pay: num(g(x, 'pay')), bonus: num(g(x, 'bonus')), total: num(g(x, 'total')), n: Math.max(1, num(g(x, 'n'), 1)), by: String(g(x, 'by') ?? ''), gold: !!g(x, 'gold') })));
+    conn.on('DriftTide', safe(x => ev.driftTide?.({ until: num(g(x, 'until')), n: num(g(x, 'n')), gold: !!g(x, 'gold') })));
+    conn.on('DriftPull', safe(x => ev.driftPull?.({ key: num(g(x, 'key'), -1), n: num(g(x, 'n')), need: Math.max(2, num(g(x, 'need'), 2)), nick: String(g(x, 'nick') ?? '') })));
     conn.on('RackUpd', safe(x => { const r = normRack(x); if (r) ev.rackUpd?.(r); }));
     conn.on('RackGone', safe(x => ev.rackGone?.(num(g(x, 'id'), -1))));
     conn.on('RackStolen', safe(x => ev.rackStolen?.({ rackId: num(g(x, 'rackId'), -1), by: String(g(x, 'by') ?? ''), warn: !!g(x, 'warn') })));
@@ -154,11 +170,14 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     fetchDrift,
     fetchRacks,
     rackHaul: async (id: number, steal: boolean): Promise<HaulRes> => { const r = await call('RackHaul', id, steal); return { ok: !!r?.ok, err: r?.err, cargo: r?.cargo != null ? num(r.cargo) : undefined, cargoVal: r?.cargoVal != null ? num(r.cargoVal) : undefined, rack: normRack(r?.rack), fine: num(r?.fine) }; },
-    rackSell: async (): Promise<SellRes> => { const r = await call('RackSell'); return { ok: !!r?.ok, err: r?.err, pay: num(r?.pay), strings: num(r?.strings), kg: num(r?.kg), cargo: num(r?.cargo) }; },
+    rackSell: async (): Promise<SellRes> => { const r = await call('RackSell'); return { ok: !!r?.ok, err: r?.err, pay: num(r?.pay), strings: num(r?.strings), kg: num(r?.kg), cargo: num(r?.cargo), bonus: num(r?.bonus) }; },
     rackPlace: async (): Promise<{ ok: boolean; err?: string; rack?: RackDto | null }> => { const r = await call('RackPlace'); return { ok: !!r?.ok, err: r?.err, rack: normRack(r?.rack) }; },
     rackRemove: async (id: number): Promise<{ ok: boolean; err?: string }> => { const r = await call('RackRemove', id); return { ok: !!r?.ok, err: r?.err }; },
     rackUpgrade: async (id: number, line: number, from: number): Promise<RackUpRes> => { const r = await call('RackUpgrade', id, line, from); return { ok: !!r?.ok, err: r?.err, rack: normRack(r?.rack), line: num(r?.line), lv: num(r?.lv), cost: num(r?.cost) }; },
-    driftClaim: async (key: number): Promise<{ ok: boolean; err?: string; pay?: number; total?: number; n?: number }> => { const r = await call('DriftClaim', key); return { ok: !!r?.ok, err: r?.err, pay: r?.pay != null ? num(r.pay) : undefined, total: r?.total != null ? num(r.total) : undefined, n: Math.max(1, num(r?.n, 1)) }; },
+    driftClaim: async (key: number): Promise<{ ok: boolean; err?: string; pay?: number; bonus?: number; total?: number; n?: number; need?: number; gold?: boolean }> => {
+      const r = await call('DriftClaim', key);
+      return { ok: !!r?.ok, err: r?.err, pay: r?.pay != null ? num(r.pay) : undefined, bonus: num(r?.bonus), total: r?.total != null ? num(r.total) : undefined, n: Math.max(1, num(r?.n, 1)), need: num(r?.need), gold: !!r?.gold };
+    },
     close() { closed = true; },
   };
 }

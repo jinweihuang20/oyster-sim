@@ -21,7 +21,8 @@ const PATH_LAMPS: readonly { x: number; z: number }[] = [{ x: -15.6, z: 2.3 }, {
 const ALL_LAMPS = [...DOCK_LAMPS, ...PATH_LAMPS];
 const LAMP_H = 2.6;
 /** 漂流箱上限（伺服器 4 個） */
-const DRIFT_MAX = 8;
+/** 平常 3 個＋漂流潮 8 個（留一點餘裕） */
+const DRIFT_MAX = 14;
 /** 同時畫幾座蚵棚（只畫鏡頭附近）、幾串蚵串、幾盞熟了的燈 */
 const RACK_DRAW = 24, STR_DRAW = 320, RIPE_DRAW = 24;
 /** 蚵棚架子：長 5 m、寬 2.2 m；兩排吊蚵串，每排 12 格 */
@@ -229,6 +230,9 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const crateGeo = driftCrateGeo();
   const crates = new THREE.InstancedMesh(crateGeo, boatMat, DRIFT_MAX); crates.name = 'plazaDriftCrates';
   crates.count = 0; crates.frustumCulled = false; crates.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(crates);
+  // 金色大箱子：同一個 instanced mesh、只換顏色（不多 draw call）
+  crates.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(DRIFT_MAX * 3).fill(1), 3); crates.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  const _gold = new THREE.Color(1.35, 1.05, 0.35), _white = new THREE.Color(1, 1, 1);
 
   // ---------- 蚵棚：架子／蚵串／私人小旗／熟了的燈（各一個 InstancedMesh）----------
   const rackFrames = new THREE.InstancedMesh(rackFrameGeo(), boatMat, RACK_DRAW); rackFrames.name = 'plazaRacks';
@@ -313,11 +317,14 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
       this.glow(_p.x, _p.y + 0.15, _p.z, 1, 0.82, 0.3);
     },
     /** 漂流箱（水面上下晃）；夜晚加一點暖色光暈 */
-    crate(x: number, y: number, z: number, h: number, rx: number, rz: number) {
+    crate(x: number, y: number, z: number, h: number, rx: number, rz: number, gold = false) {
       if (crateN >= DRIFT_MAX) return;
-      _e.set(rx, h, rz); _q.setFromEuler(_e); _p.set(x, y, z); _m.compose(_p, _q, _s);
+      _e.set(rx, h, rz); _q.setFromEuler(_e); _p.set(x, y, z);
+      if (gold) _s.setScalar(1.45);
+      _m.compose(_p, _q, _s); _s.set(1, 1, 1);
+      crates.setColorAt(crateN, gold ? _gold : _white);
       crates.setMatrixAt(crateN++, _m);
-      this.glow(x, y + 0.45, z, 0.5, 0.34, 0.13);
+      if (gold) this.glow(x, y + 0.7, z, 1, 0.8, 0.25); else this.glow(x, y + 0.45, z, 0.5, 0.34, 0.13);
     },
     /** 放一艘（instanced）；far＝遠模 */
     put(x: number, y: number, z: number, h: number, rx: number, rz: number, useFar: boolean) {
@@ -339,7 +346,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
     },
     end() {
       near.count = nearN; far.count = farN; near.instanceMatrix.needsUpdate = true; far.instanceMatrix.needsUpdate = true;
-      crates.count = crateN; crates.visible = crateN > 0; if (crateN) crates.instanceMatrix.needsUpdate = true;
+      crates.count = crateN; crates.visible = crateN > 0; if (crateN) { crates.instanceMatrix.needsUpdate = true; if (crates.instanceColor) crates.instanceColor.needsUpdate = true; }
       rackFrames.count = rackN; rackFrames.visible = rackN > 0; if (rackN) rackFrames.instanceMatrix.needsUpdate = true;
       rackStrs.count = strN; rackStrs.visible = strN > 0; if (strN) rackStrs.instanceMatrix.needsUpdate = true;
       rackFlags.count = flagN; rackFlags.visible = flagN > 0; if (flagN) { rackFlags.instanceMatrix.needsUpdate = true; if (rackFlags.instanceColor) rackFlags.instanceColor.needsUpdate = true; }
