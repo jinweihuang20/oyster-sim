@@ -130,6 +130,20 @@ export function upCost(upCost: number[][], line: number, lv: number): number | n
   return Number.isFinite(c) && c! > 0 ? c! : null;
 }
 
+/**
+ * 連按升級：還在等伺服器回覆的那幾下也算進去（等級往上疊、錢先預扣），判斷這一下能不能再排進去。
+ * up＝伺服器確認的等級、pending＝這一項還在排隊的次數、pendingCost＝所有排隊中要花的錢。
+ */
+export function planUpTap(up: readonly number[], pending: number, line: number, money: number, pendingCost: number, costs: number[][]):
+  { ok: true; cost: number; lv: number } | { ok: false; err: 'max' | 'money' | 'none' } {
+  const lv = (up[line] ?? 1) + Math.max(0, pending);
+  if (lv >= UP_MAX) return { ok: false, err: 'max' };
+  const c = upCost(costs, line, lv);
+  if (c == null) return { ok: false, err: 'none' };
+  if (money - pendingCost < c) return { ok: false, err: 'money' };
+  return { ok: true, cost: c, lv };
+}
+
 /** 蚵棚架子的佔地（半長／半寬，跟 boatScene RACK_GEO 一樣） */
 export const RACK_HALF = { len: 2.6, wid: 1.2 };
 /** 一次最多推多少（m）：慢慢推出去，不會一下彈飛 */

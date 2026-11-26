@@ -9,7 +9,7 @@ import { PB, distToLand, pierNearest, hullPts } from './boatLogic';
 import type { PlazaSea } from './boatScene';
 import type { BoatNet } from './boatNet';
 import {
-  RACK, UP_LINES, UP_MAX, isMine, isPrivate, loadSlow, nearestRack, pushFromRack, rackNextSec, rackNow, rackRipe, rackCooling, rackAgePct, fmtWait, ripeViewR, stealFine, upCost,
+  RACK, UP_LINES, UP_MAX, planUpTap, isMine, isPrivate, loadSlow, nearestRack, pushFromRack, rackNextSec, rackNow, rackRipe, rackCooling, rackAgePct, fmtWait, ripeViewR, stealFine, upCost,
   type RackDto, type RackSnap,
 } from './rackLogic';
 
@@ -54,6 +54,15 @@ let holding = false, haulT = 0, busy = false, armSteal: { id: number; until: num
 const stealOk = new Set<number>();
 let ui: { bar: HTMLDivElement; haul: HTMLButtonElement; sell: HTMLButtonElement; place: HTMLButtonElement; up: HTMLButtonElement; cargo: HTMLDivElement; tag: HTMLDivElement; panel: HTMLDivElement } | null = null;
 let panelRack = -1;
+/** 連按升級的排隊：每一下都排進去，一個一個送給伺服器（不會掉按、也不會一次扣兩次錢） */
+type UpJob = { id: number; line: number; cost: number };
+let upQ: UpJob[] = [];
+let upRun = false;
+/** 每座蚵棚每一項還在排隊的次數、排隊中總共要花的錢 */
+const upPend = new Map<number, number[]>();
+let upPendCost = 0;
+const pendOf = (id: number) => { let a = upPend.get(id); if (!a) { a = [0, 0, 0, 0, 0, 0]; upPend.set(id, a); } return a; };
+function clearUpQ() { upQ = []; upPend.clear(); upPendCost = 0; }
 let t = 0, refetchT = 0, nearRack: { rack: RackDto; dist: number } | null = null;
 const _p = new THREE.Vector3();
 
@@ -70,7 +79,7 @@ const err = (e?: string, d = '做不到') => (e != null && e in ERR ? ERR[e] : d
 // ---------------- 開／關 ----------------
 export function openRacks(ctx: RackCtx, root: HTMLElement) {
   closeRacks();
-  C = ctx; racks = []; me = ''; cargo = 0; cargoVal = 0; loads.clear(); ok = false; stealOk.clear(); armSteal = null; holding = false; busy = false; panelRack = -1;
+  C = ctx; racks = []; me = ''; cargo = 0; cargoVal = 0; loads.clear(); ok = false; stealOk.clear(); armSteal = null; holding = false; busy = false; panelRack = -1; clearUpQ();
   const bar = document.createElement('div'); bar.id = 'boatRackBar';
   const mk = (id: string, ic: string, label: string, key = '') => {
     const b = document.createElement('button'); b.id = id; b.type = 'button'; b.className = 'boatBtn rackBtn';
@@ -97,7 +106,7 @@ export function openRacks(ctx: RackCtx, root: HTMLElement) {
 export function closeRacks() {
   ui?.bar.remove(); ui?.cargo.remove(); ui?.tag.remove(); ui?.panel.remove(); ui = null;
   document.body.classList.remove('rackPanelOpen');
-  C = null; racks = []; holding = false;
+  C = null; racks = []; holding = false; clearUpQ();
 }
 
 // ---------------- 伺服器事件 ----------------
@@ -231,9 +240,11 @@ function closePanel() { panelRack = -1; ui?.panel.classList.remove('on'); docume
 function renderPanel() {
   if (!ui) return;
   const r = racks.find(x => x.id === panelRack); if (!r) { closePanel(); return; }
-  const m = C?.getMoney?.() ?? 0;
+  // 連按中：畫面先照「排隊的都會成功」顯示（等級往上疊、錢先扣），伺服器回來再對齊
+  const m = (C?.getMoney?.() ?? 0) - upPendCost;
+  const pend = pendOf(r.id);
   const rows = UP_LINES.map((l, i) => {
-    const lv = r.up[i], c = upCost(cfg.upCost, i, lv);
+    const lv = Math.min(UP_MAX, r.up[i] + pend[i]), c = upCost(cfg.upCost, i, lv);
     const btn = lv >= UP_MAX ? '<span class="rkMax">滿級</span>' : `<button type="button" data-up="${i}" ${c == null || m < c ? 'disabled' : ''}>${c == null ? '—' : money(c)}</button>`;
     return `<div class="rkRow"><div class="rkTx"><b>${l.n}</b><span class="rkLv">Lv${lv}</span><small>${l.fx(lv)}${lv < UP_MAX ? `　→　${l.fx(lv + 1)}` : ''}</small></div>${btn}</div>`;
   }).join('');
@@ -242,19 +253,52 @@ function renderPanel() {
   ui.panel.querySelector('.rkRm')?.addEventListener('pointerdown', e => { e.preventDefault(); void removeRack(r.id); });
   ui.panel.querySelectorAll<HTMLButtonElement>('button[data-up]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); void upgrade(r.id, Number(b.dataset.up)); }));
 }
-async function upgrade(id: number, line: number) {
-  const n = C?.net(); const r = racks.find(x => x.id === id); if (!n || !r || busy || !C) return;
-  const lv = r.up[line], c = upCost(cfg.upCost, line, lv); if (c == null) return;
-  if ((C.getMoney?.() ?? 0) < c) { toast('錢不夠', '#ffb08a'); return; }
-  busy = true;
-  const res = await n.rackUpgrade(id, line, lv).finally(() => { busy = false; });
-  if (!res.ok || !res.rack) { toast(err(res.err, '升級失敗'), '#ffb08a'); renderPanel(); return; }
-  // 伺服器確認後才扣錢（跟雜貨店一樣，錢在本機存檔）
-  C.spendMoney?.(res.cost ?? c, 'rack-up');
-  onRackUpd(res.rack);
-  C.sfx('launch');
-  toast(`${UP_LINES[line].n} 升到 Lv${res.lv}`, '#9be37a', 1.6);
+/** 按一下升級：先排進隊伍（照排隊中的等級、錢判斷），畫面馬上更新，不用等伺服器 */
+function upgrade(id: number, line: number) {
+  const n = C?.net(); const r = racks.find(x => x.id === id); if (!n || !r || !C) return;
+  const pend = pendOf(id);
+  const p = planUpTap(r.up, pend[line], line, C.getMoney?.() ?? 0, upPendCost, cfg.upCost);
+  if (!p.ok) { if (p.err === 'money') toast('錢不夠', '#ffb08a'); return; }
+  pend[line]++; upPendCost += p.cost;
+  upQ.push({ id, line, cost: p.cost });
+  C.sfx('dock');
   renderPanel();
+  void pumpUp();
+}
+/** 一個一個送：每次都帶伺服器最新確認的等級（from），所以連按不會被當成舊資料、也不會多扣 */
+async function pumpUp() {
+  if (upRun) return;
+  upRun = true;
+  try {
+    while (upQ.length && C) {
+      const job = upQ[0];
+      const n = C.net(); const r = racks.find(x => x.id === job.id);
+      const pend = pendOf(job.id);
+      const drop = (msg?: string) => {
+        // 這一項後面排的也一起取消（錢退回排隊額度）
+        const rest = upQ.filter(q => q.id === job.id && q.line === job.line);
+        upQ = upQ.filter(q => !(q.id === job.id && q.line === job.line));
+        for (const q of rest) upPendCost -= q.cost;
+        pend[job.line] = 0;
+        if (msg) toast(msg, '#ffb08a');
+      };
+      if (!n || !r) { drop(); continue; }
+      const res = await n.rackUpgrade(job.id, job.line, r.up[job.line]);
+      if (!C) break;
+      if (res.ok && res.rack) {
+        upQ.shift(); pend[job.line] = Math.max(0, pend[job.line] - 1); upPendCost -= job.cost;
+        // 伺服器確認後才扣錢（跟雜貨店一樣，錢在本機存檔）
+        C.spendMoney?.(res.cost ?? job.cost, 'rack-up');
+        onRackUpd(res.rack);
+        C.sfx('launch');
+        toast(`${UP_LINES[job.line].n} 升到 Lv${res.lv}`, '#9be37a', 1.2);
+      } else if (res.err === 'slow') {
+        // 伺服器說太快：等一下再送同一個，不丟掉
+        await new Promise(f => setTimeout(f, 400));
+      } else drop(err(res.err, '升級失敗'));
+      renderPanel();
+    }
+  } finally { upRun = false; }
 }
 async function removeRack(id: number) {
   const n = C?.net(); if (!n || busy || !C) return;

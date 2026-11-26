@@ -120,3 +120,35 @@ describe('剛放好的蚵棚壓在船上：往哪個方向開都開得走', () =
     expect(b.z - 0.5).toBeLessThanOrEqual(0.2 + 1e-9);
   });
 });
+
+import { planUpTap } from './rackLogic';
+describe('連按升級蚵棚', () => {
+  const costs = [[6000, 12000, 20000, 32000], [7000, 14000, 24000, 38000], [8000, 16000, 27000, 42000], [6000, 12000, 20000, 32000], [4000, 8000, 14000, 22000], [3000, 6000, 10000, 16000]];
+  /** 模擬伺服器還沒回覆前連按 n 下：回傳排進去幾下、預扣多少 */
+  const tapMany = (up: number[], line: number, money: number, n: number) => {
+    let pend = 0, cost = 0; const lvs: number[] = [];
+    for (let i = 0; i < n; i++) { const p = planUpTap(up, pend, line, money, cost, costs); if (!p.ok) continue; pend++; cost += p.cost; lvs.push(p.lv); }
+    return { pend, cost, lvs };
+  };
+  it('等伺服器的時候連按也排得進去，一路疊到 Lv5 就停', () => {
+    const r = tapMany([1, 1, 1, 1, 1, 1], 0, 1_000_000, 10);
+    expect(r.pend).toBe(4);
+    expect(r.lvs).toEqual([1, 2, 3, 4]);
+    expect(r.cost).toBe(6000 + 12000 + 20000 + 32000);
+  });
+  it('錢只夠幾下就只排幾下（排隊中的錢先算掉，不會扣成負的）', () => {
+    const r = tapMany([1, 1, 1, 1, 1, 1], 0, 20_000, 10);
+    expect(r.pend).toBe(2); expect(r.cost).toBe(18000);
+    expect(planUpTap([1, 1, 1, 1, 1, 1], 2, 0, 20_000, 18000, costs)).toEqual({ ok: false, err: 'money' });
+  });
+  it('已經升過的、滿級的', () => {
+    expect(planUpTap([3, 1, 1, 1, 1, 1], 0, 0, 1e9, 0, costs)).toEqual({ ok: true, cost: 20000, lv: 3 });
+    expect(planUpTap([5, 1, 1, 1, 1, 1], 0, 0, 1e9, 0, costs)).toEqual({ ok: false, err: 'max' });
+    expect(planUpTap([4, 1, 1, 1, 1, 1], 1, 0, 1e9, 0, costs)).toEqual({ ok: false, err: 'max' });
+    // 不同項目各自排，錢共用
+    const a = planUpTap([1, 1, 1, 1, 1, 1], 0, 5, 10000, 0, costs);
+    expect(a).toEqual({ ok: true, cost: 3000, lv: 1 });
+    expect(planUpTap([1, 1, 1, 1, 1, 1], 0, 4, 10000, 3000, costs)).toEqual({ ok: true, cost: 4000, lv: 1 });
+    expect(planUpTap([1, 1, 1, 1, 1, 1], 0, 0, 10000, 7000, costs)).toEqual({ ok: false, err: 'money' });
+  });
+});
