@@ -5,6 +5,7 @@
  */
 
 import { PLAZA_WALK_SPD } from '../../world/walkSpeed';
+import { PB } from './boatLogic';
 
 export type Gear = 'float' | 'lure';
 export type BaitKey = 'oyster' | 'shrimp' | 'worm' | 'squid';
@@ -443,4 +444,36 @@ export function fmtDistM(m: number | null): string {
   if (m == null || !Number.isFinite(m)) return '';
   const v = Math.max(0, m);
   return v < 0.05 ? '0 m' : v < 10 ? `${v.toFixed(1)} m` : `${Math.round(v)} m`;
+}
+
+// ---------------- 能釣的地方／沒釣竿提示 ----------------
+/** 岸上可釣魚區的東界（碼頭岸線 -24 再往內 0.5 m）；西岸淺灘 |z| 跟 PB.shoreZ 一樣是 11。 */
+export const FISH_SHORE_X = -23.5;
+/** 沒有釣竿、走進可釣魚區時的上方提示（雜貨店「釣具」分頁）。 */
+export const NO_ROD_HINT = '還沒買釣竿，可到「雜貨店 → 釣具」購買';
+/** 離開後再進來，至少隔幾秒才再提示，避免在區界來回踩洗版。 */
+export const NO_ROD_HINT_COOLDOWN = 20;
+
+/** 現在站的地方能不能釣（岸上碼頭／西岸淺灘，或在船上）。 */
+export function canFishAt(mode: string, walk?: { x: number; z: number } | null, onBoat = false): boolean {
+  if (mode === 'boat') return onBoat;
+  if (mode !== 'walk' || !walk) return false;
+  const onPier = walk.x <= FISH_SHORE_X && walk.x >= PB.pierX1 - 0.3 && Math.abs(walk.z) <= PB.pierHalfW + 0.3;
+  const onShore = walk.x <= FISH_SHORE_X && Math.abs(walk.z) <= PB.shoreZ;
+  return onPier || onShore;
+}
+
+export type NoRodHintSt = { inZone: boolean; lastAt: number };
+export function newNoRodHint(): NoRodHintSt { return { inZone: false, lastAt: -Infinity }; }
+/**
+ * 沒有釣竿、剛走進可釣魚區時回 true（顯示一次提示）。
+ * 待在區內不會重覆；有竿永遠不提示。離開後再進來要過冷卻時間。
+ */
+export function stepNoRodHint(st: NoRodHintSt, inZone: boolean, hasRod: boolean, now: number, cooldown = NO_ROD_HINT_COOLDOWN): boolean {
+  if (hasRod) { st.inZone = inZone; return false; }
+  const entered = inZone && !st.inZone;
+  st.inZone = inZone;
+  if (!entered || now - st.lastAt < cooldown) return false;
+  st.lastAt = now;
+  return true;
 }

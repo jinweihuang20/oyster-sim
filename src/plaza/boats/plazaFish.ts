@@ -11,7 +11,7 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyPoint, fishDistNow, fmtDistM, fightDistM, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyPoint, fishDistNow, fmtDistM, fightDistM, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, canFishAt, newNoRodHint, stepNoRodHint, NO_ROD_HINT, type Gear, type ItemKey, type BaitKey, type LureKey, type NoRodHintSt } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { makeFishMesh, FISH_TIER } from './fishModel';
 import { makeFishFx, FX, type FishFx } from './fishFx';
@@ -100,6 +100,7 @@ let reelFeel: ReelFeel | null = null;
 let reelSfx = makeReelClickSfx(() => { try { return C?.sfxBus?.() ?? null; } catch { return null; } });
 let hooked: HoldFish | null = null;
 let t = 0, splashT = 0, shadowA = 0, tipS = '', panelTab: 'gear' | 'dex' = 'gear', panelOn = false;
+let noRodHint: NoRodHintSt = newNoRodHint();
 let ui: {
   entry: HTMLButtonElement; sell: HTMLButtonElement; bar: HTMLDivElement; cast: HTMLButtonElement; reel: HTMLButtonElement; jerk: HTMLButtonElement;
   hud: HTMLDivElement; acts: HTMLDivElement; hudTx: HTMLSpanElement; hudDist: HTMLSpanElement; hudTip: HTMLSpanElement; depth: HTMLDivElement; depthZone: HTMLDivElement; depthDot: HTMLDivElement; meter: HTMLDivElement; fill: HTMLDivElement; mLbl: HTMLSpanElement; dirL: HTMLElement; dirR: HTMLElement; panel: HTMLDivElement;
@@ -136,7 +137,7 @@ function fixPick() {
 // ---------------- 開／關 ----------------
 export function openFish(ctx: FishCtx, root: HTMLElement) {
   closeFish();
-  C = ctx; ok = false; oldServer = false; busy = false; fetchT = 2; fetchTries = 0; staleLine = false; hold = []; holdN = holdVal = 0; sm.exit(); hooked = null; panelOn = false;
+  C = ctx; ok = false; oldServer = false; busy = false; fetchT = 2; fetchTries = 0; staleLine = false; hold = []; holdN = holdVal = 0; sm.exit(); hooked = null; panelOn = false; noRodHint = newNoRodHint();
   const mk = (id: string, ic: string, label: string, key = '', cls = '') => {
     const b = document.createElement('button'); b.id = id; b.type = 'button'; b.className = 'boatBtn fishBtn ' + cls;
     b.innerHTML = `<i class="boatIc">${ic}</i><span class="lbl">${label}</span>${key ? `<span class="key"> (${key})</span>` : ''}`;
@@ -252,15 +253,12 @@ export function onFishBig(e: { connId: string; nick: string; name: string; kg: n
 function canFishHere(): boolean {
   if (!C) return false;
   const m = C.mode();
-  if (m === 'boat') return !!C.myBoat();
-  if (m !== 'walk') return false;
-  const p = C.walkPos();
-  return (p.x <= -23.5 && p.x >= PB.pierX1 - 0.3 && Math.abs(p.z) <= PB.pierHalfW + 0.3) || (p.x <= -23.5 && Math.abs(p.z) <= 11);
+  return canFishAt(m, m === 'walk' ? C.walkPos() : undefined, !!C.myBoat());
 }
 function toggleFish() { if (sm.phase === 'off') enterFish(); else exitFish(); }
 function enterFish() {
   if (!C || sm.phase !== 'off') return;
-  if (!anyRod()) { toast('先到雜貨店買「垂釣竿」或「路亞竿」', '#ffb08a', 2); return; }
+  if (!anyRod()) { toast(NO_ROD_HINT, '#ffb08a', 2); return; }
   if (oldServer) { toast(ERR.old_server, '#ffb08a', 2); return; }
   if (!canFishHere()) { toast(ERR.not_at_water, '#ffb08a', 1.6); return; }
   fixPick();
@@ -473,6 +471,8 @@ export function tickFish(dt: number, cam: THREE.Camera) {
   // 第一次進場：拿魚獲／圖鑑（舊伺服器就算了）
   if (!ok && !oldServer && fetchTries < 6) { fetchT -= dt; if (fetchT <= 0) { fetchT = 10; fetchTries++; void fetchState(); } }
   const mode = C.mode(); const b = C.myBoat();
+  // 沒釣竿走進可釣魚區：上方提示一次「雜貨店 → 釣具」，待在區內不重覆
+  if (stepNoRodHint(noRodHint, canFishHere(), anyRod(), t)) toastTop(NO_ROD_HINT, 4);
   if (sm.phase !== 'off') {
     // 離開能釣的地方（下船、跳水、走開）：收竿
     if (!canFishHere()) exitFish(mode === 'swim' ? '掉進海裡，釣竿收起來了' : '');
