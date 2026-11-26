@@ -26,7 +26,9 @@ import {
   tickCamHeadFade, clearCamHeadFade, leanFacePeekX,
   initYardScene, shedAnim, applyShedLook, showLand, getShedG, LAND, waisanArrive,
 } from './world';
-import { initCook, openCook, openCookSolo, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView } from './cook/cookUi';
+import { initCook, openCook, openCookSolo, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView, setFishDexHook } from './cook/cookUi';
+import { mountFishDex, fishDexMerge, type FishDexView } from './plaza/boats/fishDex';
+import { fish3dDbg } from './plaza/boats/fish3d';
 import { initFeed, openFeed } from './cook/feed';
 import { initHudMenu } from './ui/hudMenu';
 import { initCookBroadcast, syncCookDexOnce } from './meta/cookBroadcast';
@@ -82,7 +84,7 @@ import {
 import { makeMeshHelpers } from './dm/mesh';
 import { RACK } from './plaza/boats/rackLogic';
 import { FISH, oysterLeft, taipeiDay } from './plaza/boats/fishLogic';
-import { plazaSwimBack, openPlazaBoats, closePlazaBoats, tickPlazaBoats, plazaBoatsActive, plazaFishBlocksWalk, plazaBoatsMode, plazaBoatsKey, plazaBoatsCam, plazaBoatsSway, plazaBoatsNight, plazaBoatsFog, plazaBoatsDbg, plazaBoatsOpen } from './plaza/boats/plazaBoats';
+import { plazaSwimBack, openPlazaBoats, closePlazaBoats, tickPlazaBoats, plazaBoatsActive, plazaFishBlocksWalk, plazaBoatsMode, plazaBoatsKey, plazaBoatsCam, plazaBoatsSway, plazaBoatsNight, plazaBoatsFog, plazaBoatsDbg, plazaBoatsOpen, plazaFishPostPose, plazaFishing } from './plaza/boats/plazaBoats';
 import { nightK } from './plaza/boats/boatLogic';
 import { plazaBoatClient, plazaWorldView, plazaMyNick } from './plaza/session';
 import {
@@ -2423,7 +2425,7 @@ const needle = (ms = performance.now()) => {
   return u < 0.5 ? u * 2 : 2 - u * 2;
 };
 (window as any).__sim = () => ({ t: SHIFT - timeLeft, c: npcs.map(n => n.count), names: npcs.map(n => n.name) });
-(window as any).__dbg = { boats: plazaBoatsDbg, fish: plazaBoatsDbg.fish, gfx: () => { const inf = renderer.info; inf.autoReset = false; inf.reset(); renderer.render(scene, viewCam()); const r = { calls: inf.render.calls, tris: inf.render.triangles, geos: inf.memory.geometries, tex: inf.memory.textures, progs: inf.programs?.length ?? 0 }; inf.autoReset = true; return r; }, night: (k?: number) => { (globalThis as any).__nightK = k; updSky(); return k; }, warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }), sea: seaDbg, seaSkip: (oy?: number, big?: number) => seaDbg.skip(oy, big), pileEnd: () => { if (seaRun && state === 'play') { seaRun.left = 0; clearBasinOysters(); syncSeaPile(); goPick(); } }, pile: () => (seaRun ? { left: seaRun.left, bigLeft: seaRun.bigLeft, basin: basinOy.length, haul: seaRun.haul, on: seaPileOn() } : null), tide: () => { if (state === 'play' && isWaisan() && !tideOnNow) startTide(); return { tideOnNow, dayBig, dayBigTide, big: basinOy.filter(o => o.userData.big).length, all: basinOy.length }; } };
+(window as any).__dbg = { boats: plazaBoatsDbg, fish: plazaBoatsDbg.fish, fish3d: fish3dDbg, gfx: () => { const inf = renderer.info; inf.autoReset = false; inf.reset(); renderer.render(scene, viewCam()); const r = { calls: inf.render.calls, tris: inf.render.triangles, geos: inf.memory.geometries, tex: inf.memory.textures, progs: inf.programs?.length ?? 0 }; inf.autoReset = true; return r; }, night: (k?: number) => { (globalThis as any).__nightK = k; updSky(); return k; }, warn: () => { const n = npcs[npcs.length - 1]; if (n) { n.throwCd = 999; windUp(n); n.windup = (window as any).__wu ?? 60; n.w0 = n.windup; } }, state: () => ({ state, phase, walking, paused: (globalThis as any).__paused }), sea: seaDbg, seaSkip: (oy?: number, big?: number) => seaDbg.skip(oy, big), pileEnd: () => { if (seaRun && state === 'play') { seaRun.left = 0; clearBasinOysters(); syncSeaPile(); goPick(); } }, pile: () => (seaRun ? { left: seaRun.left, bigLeft: seaRun.bigLeft, basin: basinOy.length, haul: seaRun.haul, on: seaPileOn() } : null), tide: () => { if (state === 'play' && isWaisan() && !tideOnNow) startTide(); return { tideOnNow, dayBig, dayBigTide, big: basinOy.filter(o => o.userData.big).length, all: basinOy.length }; } };
 (window as any).__pryReset = (d = 2) => { diff = d; progress = 0; crackedNow = false; setPhase('twist'); };
 (window as any).__pry = () => { if (phase !== 'twist') return null; const f = prySp(), per = 1000 / f, th = (PRY_C / 2) * per; const el = (performance.now() - needleStart) % per; return { wait: ((th - el) % per + per) % per, phase, progress }; };
 function pryFx(ok: boolean, txt: string) { gauge.classList.remove('hit', 'miss'); void gauge.offsetWidth; gauge.classList.add(ok ? 'hit' : 'miss'); const pp = $('ppop'); pp.textContent = txt; pp.className = ''; void pp.offsetWidth; pp.className = ok ? 'ok' : 'bad'; }
@@ -6747,6 +6749,17 @@ document.addEventListener('pointerlockchange', () => { const l = document.pointe
 }
 window.addEventListener('pointerdown', () => audio(), { once: true });
 $('dexClose').onclick = () => closeCookDexView();
+// 圖鑑「魚類」分頁：本機快取先畫，再跟伺服器拿（有新的才重畫）；離開分頁放掉 3D
+{
+  let fv: FishDexView | null = null;
+  setFishDexHook({
+    show(host) {
+      fv?.stop(false); fv = mountFishDex(host);
+      void Social.fishDex().then(r => { if (r && fishDexMerge(r) && fv && !host.hidden) fv.refresh(); });
+    },
+    hide() { fv?.stop(); fv = null; },
+  });
+}
 
 // ---------- 阿婆真正咧剝 ----------
 function npcShuck(n: Npc, dt: number, t: number) {
@@ -7329,7 +7342,12 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     camRoll = sy * 0.007 * w + Math.max(-1, Math.min(1, walkMotion.strafe / walkRef)) * 0.018 * Math.min(1, walkMotion.bobW + 0.2);
   } else if (!walking) { walkMotion.bobW = 0; walkMotion.bobPh = 0; }
   camera.rotation.set(camPitch, yaw + flYaw + (walking ? 0 : seatYaw), camRoll);
-  camera.updateMatrixWorld(); camTick(dt); umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
+  // 岸上釣魚：一律第三人稱（要看得到人拿竿、甩竿）
+  if (plazaMode && walking && !tpv && plazaBoatsOpen() && plazaFishing()) plazaEnsureTpView();
+  camera.updateMatrixWorld(); camTick(dt);
+  // 釣魚動作／釣竿／釣線：人物姿勢都擺好之後才套（釣線從竿尖出去）
+  if (plazaMode && plazaBoatsOpen()) { try { plazaFishPostPose(rdt); } catch (e) { if (!boatTickLogged) { boatTickLogged = true; console.error('plaza fish pose', e); } } }
+  umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   tickMgFireAfterCam();
   // 第三人稱透視：僅淡化「鏡頭與玩家之間」的物件；焦點＝玩家胸口（失敗不可中斷渲染）
   try {

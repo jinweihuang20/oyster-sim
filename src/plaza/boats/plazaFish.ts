@@ -11,7 +11,11 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, castPoint, castDist, yawOf, trollOk, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, castPoint, castDist, castRange, yawOf, trollOk, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
+import { makeRod, type Rod } from './fishRod';
+import { fishGeometry, fishMaterial } from './fishModel';
+import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
+import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, type FishPoseIn, type FishPhase } from './fishPose';
 
 export type FishBoat = { id: number; x: number; z: number; h: number; v: number };
 export type FishCtx = {
@@ -62,7 +66,6 @@ const g = (o: any, k: string) => o?.[k] ?? o?.[k[0].toUpperCase() + k.slice(1)];
 const TIER = ['普通', '稀有', '傳說'];
 
 type HoldFish = { sp: string; name: string; tier: number; kg: number; val: number };
-type Sp = { id: string; name: string; tier: number };
 const normFish = (o: any): HoldFish | null => o ? { sp: String(g(o, 'sp') ?? ''), name: String(g(o, 'name') ?? ''), tier: num(g(o, 'tier')), kg: num(g(o, 'kg')), val: num(g(o, 'val')) } : null;
 
 let C: FishCtx | null = null;
@@ -71,7 +74,7 @@ let rod: Gear = 'float';
 let pick: Record<Gear, ItemKey> = { float: 'oyster', lure: 'minnow' };
 let ok = false, oldServer = false, busy = false, fetchT = 0, fetchTries = 0;
 let hold: HoldFish[] = [], holdN = 0, holdVal = 0, sellLeft: number = FISH.sellMax;
-let species: Sp[] = [];
+let dexView: FishDexView | null = null;
 let dex = new Map<string, { kg: number; n: number }>();
 let reelHeld = false, jerkQ = false, act = false, castH = 0, castX = 0, castZ = 0, castDst = 8, ox = 0, oz = 0;
 let hooked: HoldFish | null = null;
@@ -81,8 +84,12 @@ let ui: {
   hud: HTMLDivElement; hudTx: HTMLSpanElement; hudTip: HTMLSpanElement; meter: HTMLDivElement; fill: HTMLDivElement; mLbl: HTMLSpanElement; dirL: HTMLElement; dirR: HTMLElement; panel: HTMLDivElement;
 } | null = null;
 // 3D：一組線段（竿＋線）、浮標／假魚、魚影
+// 3D：釣竿模型（掛在人物身上）＋釣線（一條線段）、浮標／假魚、魚影
+let myRod: Rod | null = null;
+const myPose = newFishPose();
+const poseIn: FishPoseIn = { phase: 'off', power: 0, reel: false, tension: 0, lure: false, twitch: 0 };
 let gfx: { g: THREE.Group; line: THREE.LineSegments; pos: Float32Array; bob: THREE.Mesh; bobMat: THREE.MeshBasicMaterial; shadow: THREE.Mesh; shMat: THREE.MeshBasicMaterial } | null = null;
-const _a = new THREE.Vector3(), _tip = new THREE.Vector3(), _end = new THREE.Vector3(), _dir = new THREE.Vector3();
+const _tip = new THREE.Vector3(), _end = new THREE.Vector3(), _dir = new THREE.Vector3();
 
 const owns = (gr: Gear) => (C?.gear?.(FISH.rods[gr].id) ?? 0) > 0;
 const anyRod = () => owns('float') || owns('lure');
@@ -160,6 +167,8 @@ export function closeFish() {
   removeEventListener('pointerdown', onAnyInput);
   document.body.classList.remove('plazaFishing', 'fishPanelOpen', 'fishFight');
   if (gfx) { gfx.g.removeFromParent(); gfx.line.geometry.dispose(); (gfx.line.material as THREE.Material).dispose(); gfx.bob.geometry.dispose(); gfx.bobMat.dispose(); gfx.shadow.geometry.dispose(); gfx.shMat.dispose(); gfx = null; }
+  dexView?.stop(); dexView = null;
+  dropRod(); catchT = 0; catchMesh?.removeFromParent(); catchMesh = null;
   sm.exit(); C = null; reelHeld = false;
 }
 function onAnyInput() { act = true; }
@@ -193,9 +202,9 @@ async function fetchState() {
   hold = ((g(s, 'hold') ?? []) as any[]).map(normFish).filter((f): f is HoldFish => !!f);
   holdN = hold.length; holdVal = num(g(s, 'holdVal'));
   sellLeft = num(g(s, 'sellLeft'), FISH.sellMax);
-  species = ((g(s, 'species') ?? []) as any[]).map(o => ({ id: String(g(o, 'id') ?? ''), name: String(g(o, 'name') ?? ''), tier: num(g(o, 'tier')) }));
   dex = new Map(((g(s, 'dex') ?? []) as any[]).map(o => [String(g(o, 'sp') ?? ''), { kg: num(g(o, 'kg')), n: num(g(o, 'n')) }]));
-  if (panelOn) renderPanel();
+  const ch = fishDexMerge([...dex].map(([sp, d]) => ({ sp, kg: d.kg, n: d.n })));
+  if (panelOn && (panelTab !== 'dex' || ch)) renderPanel();
 }
 export function onFishBig(e: { connId: string; nick: string; name: string; kg: number }) {
   if (!C) return;
@@ -233,6 +242,7 @@ export function exitFish(why = '') {
     else void n?.fish('FishReel', sm.sid);
   }
   sm.exit(); sm.sid = 0; reelHeld = false; hooked = null;
+  catchT = 0; catchMesh?.removeFromParent(); catchMesh = null;
   closePanel();
   document.body.classList.remove('plazaFishing', 'fishFight');
   if (why) toast(why, '#9fe0ff', 1.6);
@@ -259,7 +269,7 @@ function releaseCast() {
   const n = C.net();
   const cam = camRef; if (cam) { cam.getWorldDirection(_dir); castH = yawOf(_dir.x, _dir.z); }
   const o = origin(); ox = o.x; oz = o.z;
-  const cp = castPoint(ox, oz, castH, p); castX = cp.x; castZ = cp.z; castDst = castDist(p);
+  const cp = castPoint(ox, oz, castH, p, sm.item); castX = cp.x; castZ = cp.z; castDst = castDist(p, sm.item);
   if (!n || C.localOnly()) { sm.castFail(); toast(ERR.offline, '#ffb08a'); return; }
   C.sfx('launch');
   void n.fish('FishCast', sm.gear, sm.item, p, castH).then(r => {
@@ -316,8 +326,10 @@ async function endFight(kind: 'landed' | 'snap' | 'unhook') {
   const fish = normFish(r.fish) ?? f;
   if (!fish) return;
   hold.push(fish);
+  showCatch(fish);
   const d = dex.get(fish.sp);
   dex.set(fish.sp, { kg: Math.max(d?.kg ?? 0, fish.kg), n: (d?.n ?? 0) + 1 });
+  fishDexMerge([{ sp: fish.sp, ...dex.get(fish.sp)! }]);
   C.sfx('dock');
   const tag = r.first ? '・新魚種' : r.record ? '・最大紀錄' : '';
   rewardToast(`釣到${TIER[fish.tier] === '普通' ? '' : TIER[fish.tier]} ${fish.name}${tag}`, `${fish.kg.toFixed(fish.kg < 10 ? 2 : 1)} kg・約 ${money(fish.val)}`, 'mine', `fish:${Date.now()}`);
@@ -340,8 +352,8 @@ async function sellFish() {
 }
 
 // ---------------- 換餌／圖鑑面板 ----------------
-function openPanel(tab: 'gear' | 'dex') { panelTab = tab; panelOn = true; renderPanel(); ui?.panel.classList.add('on'); document.body.classList.add('fishPanelOpen'); if (tab === 'dex' && !ok) void fetchState(); }
-function closePanel() { panelOn = false; ui?.panel.classList.remove('on'); document.body.classList.remove('fishPanelOpen'); }
+function openPanel(tab: 'gear' | 'dex') { panelTab = tab; panelOn = true; renderPanel(); ui?.panel.classList.add('on'); document.body.classList.add('fishPanelOpen'); if (tab === 'dex') void fetchState(); }
+function closePanel() { dexView?.stop(); dexView = null; panelOn = false; ui?.panel.classList.remove('on'); document.body.classList.remove('fishPanelOpen'); }
 function renderPanel() {
   if (!ui) return;
   const tabs = `<div class="fpTabs"><button type="button" data-tab="gear" class="${panelTab === 'gear' ? 'on' : ''}">釣具</button><button type="button" data-tab="dex" class="${panelTab === 'dex' ? 'on' : ''}">魚類圖鑑</button><button type="button" class="fpX" aria-label="關閉">${ICON.exit}</button></div>`;
@@ -350,17 +362,13 @@ function renderPanel() {
     const rodRow = (['float', 'lure'] as Gear[]).map(gr => `<button type="button" data-rod="${gr}" class="fpPick ${rod === gr ? 'on' : ''}" ${owns(gr) ? '' : 'disabled'}><b>${FISH.rods[gr].n}</b><small>${owns(gr) ? (gr === 'float' ? '掛餌等魚咬' : '操控假魚') : '雜貨店有賣'}</small></button>`).join('');
     const items: { k: ItemKey; n: string }[] = rod === 'float' ? FISH.baits.map(b => ({ k: b.k, n: b.n })) : FISH.lures.map(l => ({ k: l.k, n: l.n }));
     const itemRow = items.map(it => { const c = countOf(it.k); return `<button type="button" data-item="${it.k}" class="fpPick ${pick[rod] === it.k ? 'on' : ''}" ${c > 0 ? '' : 'disabled'}><b>${it.n}</b><small>${it.k === 'oyster' ? `今天剩 ${c} 塊` : `剩 ${c}`}</small></button>`; }).join('');
-    const tip = rod === 'lure' ? `<p class="fpTip">${LURE_TIP[pick.lure as LureKey]}</p>` : '<p class="fpTip">浮標小小抖動是魚在試吃，等整個沉下去再收竿</p>';
+    const cr = castRange(pick[rod]);
+    const tip = (rod === 'lure' ? `<p class="fpTip">${LURE_TIP[pick.lure as LureKey]}</p>` : '<p class="fpTip">浮標小小抖動是魚在試吃，等整個沉下去再收竿</p>') + `<p class="fpTip">拋竿距離 ${cr.min}～${cr.max} m${rod === 'lure' ? '（越重的假魚拋越遠）' : ''}</p>`;
     body = `<h4>釣竿</h4><div class="fpRow">${rodRow}</div><h4>${rod === 'float' ? '餌' : '假魚'}</h4><div class="fpRow">${itemRow}</div>${tip}<p class="fpFoot">魚獲 ${holdN}／${FISH.holdMax}・約 ${money(holdVal)}　今天還能賣 ${money(sellLeft)}</p>`;
-  } else {
-    const list = species.length ? species : [];
-    const got = list.filter(s => dex.has(s.id)).length;
-    body = list.length ? `<p class="fpFoot">已經釣過 ${got}／${list.length} 種</p><div class="fpDex">${list.map(s => {
-      const d = dex.get(s.id);
-      return `<div class="fpSp t${s.tier}"><span class="fpTier">${TIER[s.tier] ?? ''}</span><b>${d ? s.name : '？？？'}</b><small>${d ? `最大 ${d.kg.toFixed(d.kg < 10 ? 2 : 1)} kg・${d.n} 條` : '還沒釣過'}</small></div>`;
-    }).join('')}</div>` : '<p class="fpTip">連上線之後才看得到圖鑑</p>';
   }
+  dexView?.stop(false); dexView = null;
   ui.panel.innerHTML = tabs + `<div class="fpBody">${body}</div>`;
+  if (panelTab === 'dex') { const host = ui.panel.querySelector<HTMLElement>('.fpBody')!; host.classList.add('fdxHost'); dexView = mountFishDex(host); }
   ui.panel.querySelector('.fpX')?.addEventListener('pointerdown', e => { e.preventDefault(); closePanel(); });
   ui.panel.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); panelTab = b.dataset.tab as 'gear' | 'dex'; renderPanel(); }));
   ui.panel.querySelectorAll<HTMLButtonElement>('[data-rod]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); if (b.disabled || sm.lineOut || sm.phase === 'fight') return; rod = b.dataset.rod as Gear; fixPick(); sm.gear = rod; sm.item = pick[rod]; renderPanel(); }));
@@ -424,7 +432,6 @@ export function tickFish(dt: number, cam: THREE.Camera) {
       if (rollAcc >= FISH.rollS && !rollBusy) { rollAcc = 0; void roll(); }
     } else rollAcc = 0;
   }
-  drawGfx(dt);
   syncUi(mode, b);
 }
 async function roll() {
@@ -455,16 +462,13 @@ function drawGfx(dt: number) {
   const ph = sm.phase;
   gfx.g.visible = sm.phase !== 'off';
   if (!gfx.g.visible) return;
-  // 竿：從右手往前上方
+  // 線從竿尖出去（竿子模型由 fishPostPose 擺好）
   const rig = C.me();
-  if (rig) rig.handR.getWorldPosition(_a); else { const o = origin(); _a.set(o.x, PB.waterY + 1.4, o.z); }
-  let h = castH;
-  if (!sm.lineOut && ph !== 'fight' && ph !== 'land' && camRef) { camRef.getWorldDirection(_dir); h = yawOf(_dir.x, _dir.z); }
-  const fx = -Math.sin(h), fz = -Math.cos(h);
-  const bend = ph === 'fight' && sm.fight ? sm.fight.ten * 0.6 : ph === 'charge' ? -0.5 * sm.power : 0;
-  _tip.set(_a.x + fx * (1.3 - bend * 0.3), _a.y + 1.3 - bend, _a.z + fz * (1.3 - bend * 0.3));
+  if (myRod && rig) rodTipWorld(myRod, _tip);
+  else { const o = origin(); _tip.set(o.x, PB.waterY + 2.4, o.z); }
+  const fx = -Math.sin(castH), fz = -Math.cos(castH);
   const p = gfx.pos;
-  p[0] = _a.x; p[1] = _a.y; p[2] = _a.z; p[3] = _tip.x; p[4] = _tip.y; p[5] = _tip.z;
+  p[0] = p[3] = _tip.x; p[1] = p[4] = _tip.y; p[2] = p[5] = _tip.z;
   // 線的另一頭
   const wy = PB.waterY + 0.04;
   let lineOn = true, bobOn = false, shTarget = 0;
@@ -501,6 +505,14 @@ function drawGfx(dt: number) {
     gfx.shadow.rotation.z = Math.atan2(sx * f.run, sz * f.run) || 0;
     splashT -= dt;
     if (splashT <= 0) { splashT = 0.45 + Math.random() * 0.3; C.splash(x, z, 0.15 + 0.25 * f.power); }
+  } else if (catchMesh && catchT > 0) {
+    // 剛釣上來：魚掛在竿尖下面晃（約 1.8 秒）
+    catchT -= dt;
+    _end.set(_tip.x, _tip.y - 0.25, _tip.z);
+    const L = catchMesh.scale.x;
+    catchMesh.position.set(_end.x + Math.sin(t * 3.1) * 0.04, _end.y - L * 0.5, _end.z);
+    catchMesh.rotation.set(0, t * 1.6, Math.PI / 2 + Math.sin(t * 7) * 0.12);
+    if (catchT <= 0) { catchMesh.removeFromParent(); catchMesh = null; }
   } else lineOn = false;
   if (lineOn) { p[6] = _tip.x; p[7] = _tip.y; p[8] = _tip.z; p[9] = _end.x; p[10] = _end.y; p[11] = _end.z; }
   else { p[6] = p[9] = _tip.x; p[7] = p[10] = _tip.y; p[8] = p[11] = _tip.z; }
@@ -515,6 +527,76 @@ function drawGfx(dt: number) {
   shadowA += (shTarget - shadowA) * Math.min(1, dt * 3);
   gfx.shMat.opacity = shadowA;
   gfx.shadow.visible = shadowA > 0.02;
+}
+
+// ---------------- 人物動作＋釣竿（在人物擺好姿勢之後才呼叫） ----------------
+let catchMesh: THREE.Mesh | null = null, catchT = 0;
+function showCatch(f: HoldFish) {
+  if (!gfx) return;
+  const geo = fishGeometry(f.sp); if (!geo) return;
+  catchMesh?.removeFromParent();
+  catchMesh = new THREE.Mesh(geo, fishMaterial());
+  // 魚長：約 0.45 m × kg^(1/3)（1 kg≈45 cm、100 kg≈2 m），手上看得到就好
+  catchMesh.scale.setScalar(Math.max(0.22, Math.min(2.2, 0.45 * Math.cbrt(Math.max(0.05, f.kg)))));
+  gfx.g.add(catchMesh); catchT = 1.8;
+}
+function dropRod() {
+  if (!myRod) return;
+  myRod.dispose(); myRod = null;
+  const rig = C?.me();
+  if (rig) { rig.torso.rotation.set(0, 0, 0); rig.head.rotation.x = 0; }
+}
+function phaseOf(): FishPhase {
+  const ph = sm.phase;
+  return ph === 'off' ? 'off' : ph === 'idle' ? 'hold' : ph === 'charge' ? 'charge' : ph === 'cast' || ph === 'fly' ? 'cast' : ph === 'fight' || ph === 'land' ? 'fight' : 'wait';
+}
+function fillPoseIn() {
+  poseIn.phase = phaseOf();
+  poseIn.power = sm.power;
+  poseIn.lure = sm.gear === 'lure';
+  poseIn.reel = reelHeld && (poseIn.phase === 'fight' || (poseIn.lure && poseIn.phase === 'wait'));
+  poseIn.tension = sm.fight?.ten ?? 0;
+  poseIn.twitch = sm.phase === 'nibble' ? Math.max(0.4, sm.twitch) : sm.phase === 'sink' ? 1 : 0;
+  return poseIn;
+}
+/** 線上同步的姿勢代碼（0＝沒在釣） */
+export function fishPoseNow() { return sm.phase === 'off' ? 0 : fishPoseCode(fillPoseIn().phase, poseIn.reel, poseIn.lure); }
+/**
+ * 人物該面向哪（世界 yaw）：線在水裡／拉魚＝拋出去的方向；蓄力＝鏡頭方向；其他＝null（自由）
+ */
+let faceTest: number | null = null;
+export function fishFaceYaw(): number | null {
+  const ph = sm.phase;
+  if (ph === 'off') return null;
+  if (faceTest != null) return faceTest;
+  if (sm.lineOut || ph === 'fight' || ph === 'land' || ph === 'cast' || ph === 'fly') return castH;
+  if (ph === 'charge' && camRef) { camRef.getWorldDirection(_dir); return yawOf(_dir.x, _dir.z); }
+  return null;
+}
+/** 能不能在船上走動：拿著竿等魚的時候可以；蓄力、甩竿、拉魚時站定 */
+export function fishCanWalk() { const ph = sm.phase; return ph === 'idle' || ph === 'wait' || ph === 'nibble'; }
+/**
+ * 每幀在人物擺完姿勢之後呼叫（main.ts camTick 之後）：套釣魚動作、釣竿、再畫線（線要從竿尖出去）。
+ */
+export function fishPostPose(dt: number) {
+  if (!C) return;
+  const rig = C.me();
+  if (sm.phase !== 'off' && rig) {
+    if (!myRod || myRod.kind !== sm.gear) { myRod?.dispose(); myRod = makeRod(sm.gear); }
+    fillPoseIn();
+    stepFishPose(myPose, poseIn, dt);
+    // 岸上：線在水裡就面向線（鏡頭可以轉去看別的地方）
+    if (C.mode() === 'walk') { const fy = fishFaceYaw(); if (fy != null) rig.outer.rotation.y = fy; }
+    applyFishPose(rig, myPose, myRod, poseIn);
+  } else if (myRod) dropRod();
+  drawGfx(dt);
+}
+/** 除錯：釣竿／姿勢 */
+function poseDbg() {
+  const rig = C?.me();
+  const tip = myRod && rig ? rodTipWorld(myRod, new THREE.Vector3()) : null;
+  const hand = rig ? rig.lowerR.localToWorld(new THREE.Vector3(0, -((rig.lowerR.userData.restLen as number) || 0.24), 0)) : null;
+  return { rod: myRod?.kind ?? null, phase: poseIn.phase, pitch: +myPose.pitch.toFixed(2), bend: +myPose.bend.toFixed(2), crank: +myPose.crank.toFixed(2), lean: +myPose.lean.toFixed(2), tip: tip && { x: +tip.x.toFixed(2), y: +tip.y.toFixed(2), z: +tip.z.toFixed(2) }, hand: hand && { x: +hand.x.toFixed(2), y: +hand.y.toFixed(2), z: +hand.z.toFixed(2) }, line: gfx ? Array.from(gfx.pos.slice(6, 12), v => +v.toFixed(2)) : null, catch: catchT > 0 };
 }
 
 function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
@@ -566,7 +648,7 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
     ui.fill.style.transform = `scaleX(${v.toFixed(3)})`;
     ui.meter.classList.toggle('charge', ph === 'charge');
     ui.meter.classList.toggle('red', ph === 'fight' && v >= FISH.redT);
-    const lbl = ph === 'charge' ? `力道 ${Math.round(castDist(sm.power))} m` : `張力・拉近 ${Math.round((sm.fight?.prog ?? 0) * 100)}%`;
+    const lbl = ph === 'charge' ? `力道 ${Math.round(castDist(sm.power, sm.item))} m` : `張力・拉近 ${Math.round((sm.fight?.prog ?? 0) * 100)}%`;
     if (ui.mLbl.textContent !== lbl) ui.mLbl.textContent = lbl;
     const run = ph === 'fight' && lure ? sm.fight?.run ?? 0 : 0;
     ui.dirL.classList.toggle('on', run > 0); ui.dirR.classList.toggle('on', run < 0);
@@ -592,6 +674,15 @@ export const fishDbg = {
   jerk() { jerkQ = true; return 'ok'; },
   async sell() { await sellFish(); return dbgLast.FishSell; },
   last() { return dbgLast; },
+  pose() { return poseDbg(); },
+  /** 測試：固定人物面向（截側面圖用；null＝還原） */
+  face(h: number | null = null) { faceTest = h; return h; },
+  /** 測試：按住拋竿蓄力到 power（不放開） */
+  charge(power = 0.7) { if (sm.phase === 'off') enterFish(); if (sm.phase === 'idle') pressCast(); sm.power = power; return sm.phase; },
+  /** 測試：放開拋竿（h＝方向；不給就用鏡頭方向） */
+  release(h?: number) { const cam = camRef; if (h != null) { camRef = null; castH = h; } releaseCast(); camRef = cam; return sm.phase; },
+  /** 測試：假裝釣上一條魚（只看掛在竿上的樣子） */
+  fakeCatch(sp = 'kurodai', kg = 1.2) { showCatch({ sp, name: sp, tier: 0, kg, val: 0 }); return catchT; },
   panel(tab: 'gear' | 'dex' = 'gear') { openPanel(tab); return 'ok'; },
   close() { closePanel(); return 'ok'; },
   pick(r: Gear, item?: ItemKey) { rod = r; if (item) pick[r] = item; sm.gear = rod; sm.item = pick[rod]; return { rod, item: sm.item }; },

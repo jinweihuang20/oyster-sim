@@ -1,0 +1,441 @@
+/**
+ * 魚類圖鑑的 3D 魚模型（程式產生、低面數、平面著色）：每種魚一個 BufferGeometry（頂點色），一個 mesh＝一個 draw call。
+ * 外形照真實魚的資料做（體高／側扁、背鰭幾段、尾鰭叉形／新月形／圓形、斑紋顏色），參考：
+ * FishBase、Fishes of Australia、FAO 物種表、臺灣生命大百科、Florida Museum Discover Fishes 等。
+ * 座標：頭朝 +x、背朝 +y、總長正規化成 1（中心在原點）。只用 three 的 BufferGeometry，不碰 WebGL（可以在測試裡跑）。
+ */
+import * as THREE from 'three';
+
+export type FishSpInfo = { id: string; name: string; tier: number };
+/** 跟伺服器 PlazaWorld.FishTable 同順序 */
+export const FISH_SPECIES: readonly FishSpInfo[] = [
+  { id: 'kurodai', name: '黑鯛', tier: 0 }, { id: 'kisu', name: '沙梭', tier: 0 }, { id: 'aigo', name: '臭肚魚', tier: 0 },
+  { id: 'aji', name: '竹莢魚', tier: 0 }, { id: 'hata', name: '小石斑', tier: 0 }, { id: 'isaki', name: '黃雞魚', tier: 0 },
+  { id: 'tachiuo', name: '白帶魚', tier: 1 }, { id: 'suzuki', name: '鱸魚', tier: 1 }, { id: 'katsuo', name: '鰹魚', tier: 1 },
+  { id: 'kanpachi', name: '紅甘', tier: 1 }, { id: 'torahata', name: '虎斑', tier: 1 }, { id: 'shiira', name: '鬼頭刀', tier: 1 },
+  { id: 'gt', name: '浪人鰺', tier: 2 }, { id: 'tamakai', name: '龍膽石斑', tier: 2 }, { id: 'kajiki', name: '雨傘旗魚', tier: 2 }, { id: 'maguro', name: '黑鮪魚', tier: 2 },
+];
+
+/** 圖鑑說明（只寫外觀，不寫在哪裡釣、用什麼餌） */
+export const FISH_DESC: Record<string, string> = {
+  kurodai: '身體高、側扁，灰黑帶銀光，有幾條淡淡的暗色橫帶；鰓蓋上角一個黑點，胸鰭橘黃。',
+  kisu: '細長近圓筒形、尖嘴，沙黃色背、白肚子；兩個背鰭，尾鰭邊緣偏暗。',
+  aigo: '橢圓側扁、小嘴，橄欖褐色布滿淡藍白色小點；背鰭和臀鰭的硬棘有毒。',
+  aji: '紡錘形，灰藍背、銀白肚；側線上一整排稜鱗，鰓蓋有黑斑，尾鰭黃色深叉。',
+  hata: '身體粗壯、大嘴，灰褐底色布滿橘褐色小點，身上 5 條斜斜的暗色橫帶；尾鰭圓。',
+  isaki: '長橢圓形，橄欖褐背、銀色肚，身體上半有 3 條縱帶（年輕時最明顯）；尾鰭叉形。',
+  tachiuo: '像一條銀色緞帶，沒有尾鰭，尾巴尖細；背鰭從頭一路長到尾，嘴裡有利牙。',
+  suzuki: '修長、下巴突出，暗銀色背、白肚；上半身散著黑色小圓點（七星鱸），兩個背鰭。',
+  katsuo: '魚雷形，深藍紫色背、銀色肚子上 4～6 條黑色縱紋；背鰭後面一排小離鰭，尾鰭新月形。',
+  kanpachi: '修長，藍灰背、銀白肚，身體中間一條琥珀色縱帶，從嘴經過眼睛有一條斜斜的暗帶。',
+  torahata: '粗壯、大嘴，淡黃褐色布滿褐色小點，加上 5 列不規則的深褐色大斑塊；尾柄上有黑色鞍斑。',
+  shiira: '額頭陡直（公魚更明顯），背鰭從頭一路到尾；藍綠色背、金黃色身體、散著藍色小點，尾鰭深叉。',
+  gt: '身體高、頭部輪廓陡，銀灰到幾乎全黑；側線後段有粗大稜鱗，鐮刀形背鰭臀鰭、深叉尾。',
+  tamakai: '石斑裡最大的一種，深灰褐色帶淡黃斑塊，鰭是黃色帶黑點；大嘴、圓尾。',
+  kajiki: '長長的尖嘴，背上一片像傘的大帆（深藍帶黑點）；深藍背、銀白肚，身上一條條淺藍點組成的直紋。',
+  maguro: '巨大魚雷形，黑藍色背、銀灰色肚；背鰭和臀鰭後面一排黃色小離鰭，胸鰭短，新月形尾鰭。',
+};
+
+type Prof = readonly (readonly [number, number, number, number?])[]; // [t, 半高, 半寬, 中心 y]
+type Fin = { t0: number; t1: number; h: number; shape: 'spiny' | 'soft' | 'falcate' | 'sail' | 'low' | 'ribbon'; col: number; spots?: number };
+type Tail = { kind: 'fork' | 'lunate' | 'round' | 'trunc' | 'none'; len: number; span: number; col: number; edge?: number };
+type Paint = (t: number, v: number, r: number) => number;
+type Spec = {
+  /** 尾鰭佔全長多少 */
+  tailLen: number;
+  prof: Prof;
+  dorsal: Fin[]; anal: Fin[];
+  pect: { t: number; len: number; col: number; v?: number }; pelv?: { t: number; len: number; col: number };
+  tail: Tail;
+  eye: { t: number; v: number; r: number; iris: number };
+  paint: Paint;
+  finlets?: { n: number; col: number };
+  bill?: number;
+  /** 稜鱗線（側線後段的硬鱗）顏色 */
+  scutes?: number;
+};
+
+// ---------- 顏色小工具 ----------
+const _c1 = new THREE.Color(), _c2 = new THREE.Color();
+function mix(a: number, b: number, k: number) { _c1.setHex(a); _c2.setHex(b); _c1.lerp(_c2, Math.max(0, Math.min(1, k))); return _c1.getHex(); }
+const ss = (e0: number, e1: number, x: number) => { const k = Math.max(0, Math.min(1, (x - e0) / (e1 - e0))); return k * k * (3 - 2 * k); };
+/** 背深肚淺 */
+const shade = (back: number, belly: number, split = 0, blend = 0.35) => (v: number) => mix(belly, back, ss(split - blend, split + blend, v));
+/** 穩定亂數（同一點同一值） */
+function hash(a: number, b: number, c = 0) { let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 2147483647); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+/** 斑點：(t,v) 切格子，每格一個隨機圓心 */
+function spot(t: number, v: number, st: number, sv: number, r: number, seed = 1) {
+  const gi = Math.floor(t / st), gj = Math.floor((v + 1) / sv);
+  for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+    const i = gi + di, j = gj + dj;
+    const cx = (i + hash(i, j, seed)) * st, cy = (j + hash(j, i, seed + 7)) * sv - 1;
+    const dx = (t - cx) / st, dy = (v - cy) / sv;
+    if (dx * dx + dy * dy < r * r) return true;
+  }
+  return false;
+}
+
+// ---------- 各魚種 ----------
+const S: Record<string, Spec> = {
+  // 黑鯛：體高側扁、背隆起；灰黑銀光＋淡暗橫帶；鰓蓋上角黑點；胸鰭橘黃、其他鰭暗灰；背鰭單一硬棘長；尾叉形
+  kurodai: {
+    tailLen: 0.2, prof: [[0, 0.006, 0.004, 0.0], [0.08, 0.08, 0.03, 0.01], [0.3, 0.2, 0.06, 0.02], [0.55, 0.17, 0.05, 0.0], [0.85, 0.07, 0.025, 0.0], [1, 0.045, 0.015, 0]],
+    dorsal: [{ t0: 0.24, t1: 0.82, h: 0.1, shape: 'spiny', col: 0x4a4e55 }], anal: [{ t0: 0.6, t1: 0.82, h: 0.08, shape: 'soft', col: 0x5a5e66 }],
+    pect: { t: 0.27, len: 0.2, col: 0xe09a3a }, pelv: { t: 0.32, len: 0.1, col: 0x4a4e55 },
+    tail: { kind: 'fork', len: 0.2, span: 0.15, col: 0x4a4e55 }, eye: { t: 0.08, v: 0.35, r: 0.03, iris: 0xd8d0b0 },
+    paint: (t, v) => {
+      if (t > 0.15 && t < 0.19 && v > 0.45 && v < 0.75) return 0x111316; // 鰓蓋黑點
+      let c = shade(0x30353d, 0xc8ccd2, -0.25, 0.4)(v);
+      const bar = Math.sin((t - 0.18) * Math.PI * 2 / 0.11);
+      if (t > 0.18 && t < 0.85 && v > -0.3 && bar > 0.55) c = mix(c, 0x1a1c20, 0.35);
+      return c;
+    },
+  },
+  // 沙梭：細長近圓筒、尖嘴；沙黃背白肚、體側淡藍縱帶；兩背鰭（第一短高、第二低長）；尾鰭微凹、邊緣暗
+  kisu: {
+    tailLen: 0.13, prof: [[0, 0.004, 0.004, -0.005], [0.1, 0.04, 0.035, 0], [0.35, 0.075, 0.065, 0], [0.7, 0.055, 0.045, 0], [1, 0.025, 0.018, 0]],
+    dorsal: [{ t0: 0.3, t1: 0.44, h: 0.075, shape: 'spiny', col: 0xe6dcc4, spots: 0x8a6c4c }, { t0: 0.47, t1: 0.88, h: 0.04, shape: 'low', col: 0xece4d0 }],
+    anal: [{ t0: 0.52, t1: 0.88, h: 0.035, shape: 'low', col: 0xf2ece0 }],
+    pect: { t: 0.22, len: 0.1, col: 0xd8d0a8 }, pelv: { t: 0.32, len: 0.06, col: 0xf2ece0 },
+    tail: { kind: 'trunc', len: 0.13, span: 0.08, col: 0xe2d8c0, edge: 0x6a5a48 }, eye: { t: 0.08, v: 0.3, r: 0.022, iris: 0xe8e0c8 },
+    paint: (t, v) => { let c = shade(0xb4945e, 0xf2ede2, 0.05, 0.35)(v); if (Math.abs(v - 0.05) < 0.1 && t > 0.15) c = mix(c, 0x8aa4b8, 0.4); if (t < 0.2 && v > 0.4) c = mix(c, 0x7c6440, 0.4); return c; },
+  },
+  // 臭肚魚：橢圓側扁、小嘴鈍頭；橄欖褐到銀色，滿身淡藍白小點；側線起點下暗斑；背鰭臀鰭硬棘長
+  aigo: {
+    tailLen: 0.17, prof: [[0, 0.01, 0.006, -0.01], [0.07, 0.08, 0.03, 0.0], [0.3, 0.17, 0.05, 0.0], [0.6, 0.15, 0.045, 0.0], [0.88, 0.06, 0.02, 0], [1, 0.045, 0.014, 0]],
+    dorsal: [{ t0: 0.18, t1: 0.88, h: 0.08, shape: 'spiny', col: 0x6a6a46 }], anal: [{ t0: 0.42, t1: 0.88, h: 0.07, shape: 'spiny', col: 0x7a7a5a }],
+    pect: { t: 0.24, len: 0.13, col: 0x9a9a7a }, pelv: { t: 0.28, len: 0.08, col: 0x8a8a6a },
+    tail: { kind: 'fork', len: 0.17, span: 0.13, col: 0x6a6a46 }, eye: { t: 0.1, v: 0.3, r: 0.028, iris: 0xd8c070 },
+    paint: (t, v) => {
+      let c = shade(0x5c5c34, 0xb8b8a4, -0.3, 0.45)(v);
+      if (t > 0.2 && t < 0.28 && v > 0.2 && v < 0.5) return 0x2c2a1a;
+      if (t > 0.06 && t < 0.95 && spot(t, v, 0.045, 0.16, 0.32, 3)) c = mix(c, 0xd6e6f0, 0.85);
+      return c;
+    },
+  },
+  // 竹莢魚：紡錘形；灰藍背銀白肚；鰓蓋黑斑；整排稜鱗；兩背鰭；尾鰭黃色深叉、尾柄細
+  aji: {
+    tailLen: 0.2, prof: [[0, 0.006, 0.005, -0.004], [0.1, 0.06, 0.04, 0], [0.35, 0.11, 0.06, 0], [0.7, 0.07, 0.04, 0], [1, 0.022, 0.016, 0]],
+    dorsal: [{ t0: 0.3, t1: 0.43, h: 0.07, shape: 'spiny', col: 0x8a96a2 }, { t0: 0.46, t1: 0.92, h: 0.04, shape: 'low', col: 0x9aa6b2 }],
+    anal: [{ t0: 0.54, t1: 0.92, h: 0.035, shape: 'low', col: 0xe8ecef }],
+    pect: { t: 0.24, len: 0.18, col: 0x8a96a2 }, pelv: { t: 0.3, len: 0.07, col: 0xe8ecef },
+    tail: { kind: 'fork', len: 0.2, span: 0.15, col: 0xe8c84a }, eye: { t: 0.08, v: 0.3, r: 0.034, iris: 0xe8e8e0 }, scutes: 0x9aa4ae,
+    paint: (t, v) => { if (t > 0.16 && t < 0.2 && v > 0.4 && v < 0.7) return 0x101418; return shade(0x41618a, 0xe8ecf0, 0.15, 0.3)(v); },
+  },
+  // 小石斑（點帶石斑）：粗壯大嘴；灰褐底、橘褐小點；5 條斜暗帶往下分叉；背鰭連續；尾圓
+  hata: {
+    tailLen: 0.17, prof: [[0, 0.03, 0.02, -0.02], [0.07, 0.09, 0.07, 0], [0.3, 0.15, 0.09, 0.0], [0.65, 0.12, 0.07, 0.0], [1, 0.06, 0.03, 0]],
+    dorsal: [{ t0: 0.28, t1: 0.85, h: 0.08, shape: 'spiny', col: 0x7a6a52, spots: 0xc06a2a }], anal: [{ t0: 0.62, t1: 0.85, h: 0.08, shape: 'soft', col: 0x7a6a52, spots: 0xc06a2a }],
+    pect: { t: 0.25, len: 0.15, col: 0x8a7a62 }, pelv: { t: 0.29, len: 0.1, col: 0x6a5a44 },
+    tail: { kind: 'round', len: 0.17, span: 0.1, col: 0x7a6a52 }, eye: { t: 0.09, v: 0.45, r: 0.027, iris: 0xc8a050 },
+    paint: (t, v) => {
+      let c = shade(0x847460, 0xe2d8c6, -0.4, 0.45)(v);
+      const b = (t * 6.2 - v * 0.35) % 1;
+      if (t > 0.18 && t < 0.95 && v > -0.55 && b > 0.0 && b < 0.22) c = mix(c, 0x4a3c2c, 0.55);
+      if (spot(t, v, 0.04, 0.14, 0.3, 5)) c = mix(c, 0xc06a2a, 0.8);
+      return c;
+    },
+  },
+  // 黃雞魚：長橢圓；橄欖褐背、銀肚；上半 3 條縱帶；鰭灰褐帶黃；尾叉形
+  isaki: {
+    tailLen: 0.18, prof: [[0, 0.008, 0.006, -0.005], [0.1, 0.08, 0.045, 0], [0.35, 0.14, 0.065, 0.01], [0.7, 0.1, 0.05, 0], [1, 0.04, 0.02, 0]],
+    dorsal: [{ t0: 0.28, t1: 0.85, h: 0.07, shape: 'spiny', col: 0x9a8e58 }], anal: [{ t0: 0.62, t1: 0.85, h: 0.06, shape: 'soft', col: 0xb0a060 }],
+    pect: { t: 0.25, len: 0.15, col: 0xa89a5a }, pelv: { t: 0.3, len: 0.08, col: 0xb0a060 },
+    tail: { kind: 'fork', len: 0.18, span: 0.13, col: 0x8a7e4a }, eye: { t: 0.09, v: 0.35, r: 0.028, iris: 0xd8d0b0 },
+    paint: (t, v) => { let c = shade(0x56603e, 0xd6d8ce, -0.1, 0.4)(v); for (const s of [0.82, 0.5, 0.18]) if (Math.abs(v - s) < 0.08 && t > 0.08) c = mix(c, 0xc8a83a, 0.75); return c; },
+  },
+  // 白帶魚：緞帶形、沒有尾鰭、尾巴尖細；背鰭從頭到尾；銀色帶鋼藍
+  tachiuo: {
+    tailLen: 0, prof: [[0, 0.01, 0.004, -0.004], [0.04, 0.04, 0.012, 0], [0.12, 0.05, 0.014, 0], [0.5, 0.042, 0.012, 0], [0.85, 0.016, 0.006, 0], [1, 0.002, 0.002, 0]],
+    dorsal: [{ t0: 0.06, t1: 0.97, h: 0.022, shape: 'ribbon', col: 0xe6e4c0 }], anal: [],
+    pect: { t: 0.08, len: 0.04, col: 0xdde4ea }, tail: { kind: 'none', len: 0, span: 0, col: 0 },
+    eye: { t: 0.025, v: 0.35, r: 0.012, iris: 0xe8e0a0 },
+    paint: (t, v) => { if (t < 0.035 && v < 0.0 && v > -0.4) return 0x5a6068; return mix(0xd2dce6, 0xa8b8c8, ss(0.3, 0.9, v) + t * 0.2); },
+  },
+  // 鱸魚（七星鱸）：修長、下巴突出；暗銀背白肚；上半身黑色小圓點；兩背鰭；尾微叉
+  suzuki: {
+    tailLen: 0.17, prof: [[0, 0.008, 0.006, -0.01], [0.1, 0.07, 0.05, 0], [0.35, 0.12, 0.065, 0.01], [0.7, 0.085, 0.045, 0], [1, 0.04, 0.022, 0]],
+    dorsal: [{ t0: 0.3, t1: 0.48, h: 0.08, shape: 'spiny', col: 0x5a6470, spots: 0x1a1c20 }, { t0: 0.52, t1: 0.74, h: 0.06, shape: 'soft', col: 0x6a7480 }],
+    anal: [{ t0: 0.62, t1: 0.78, h: 0.05, shape: 'soft', col: 0xd0d6dc }],
+    pect: { t: 0.24, len: 0.12, col: 0xb0b8c0 }, pelv: { t: 0.3, len: 0.08, col: 0xe0e4e8 },
+    tail: { kind: 'fork', len: 0.17, span: 0.13, col: 0x5a6470 }, eye: { t: 0.09, v: 0.4, r: 0.025, iris: 0xd8d8c8 },
+    paint: (t, v) => { let c = shade(0x4e5864, 0xe8ecf0, 0.0, 0.35)(v); if (v > 0.1 && t > 0.15 && t < 0.9 && spot(t, v, 0.05, 0.22, 0.24, 9)) c = 0x16181c; return c; },
+  },
+  // 鰹魚：魚雷形；深藍紫背、銀肚 4～6 條黑縱紋；第一背鰭、小第二背鰭、離鰭；尾新月形、尾柄細
+  katsuo: {
+    tailLen: 0.2, prof: [[0, 0.01, 0.008, -0.004], [0.1, 0.08, 0.065, 0], [0.35, 0.14, 0.11, 0], [0.7, 0.08, 0.06, 0], [0.95, 0.018, 0.022, 0], [1, 0.014, 0.02, 0]],
+    dorsal: [{ t0: 0.28, t1: 0.45, h: 0.08, shape: 'spiny', col: 0x22284a }, { t0: 0.54, t1: 0.6, h: 0.05, shape: 'falcate', col: 0x2a3050 }],
+    anal: [{ t0: 0.6, t1: 0.65, h: 0.04, shape: 'falcate', col: 0xc8ccd4 }],
+    pect: { t: 0.24, len: 0.1, col: 0x2a3050 }, pelv: { t: 0.28, len: 0.06, col: 0x6a7080 },
+    tail: { kind: 'lunate', len: 0.2, span: 0.2, col: 0x22284a }, eye: { t: 0.08, v: 0.3, r: 0.026, iris: 0xd8d8d0 },
+    finlets: { n: 7, col: 0x3a4060 },
+    paint: (t, v) => { let c = shade(0x262a58, 0xdce0e8, 0.25, 0.2)(v); if (v < 0.1 && v > -0.8 && t > 0.22 && t < 0.92) { const b = ((v + 0.8) / 0.9) * 4.5; if (b % 1 < 0.42) c = mix(c, 0x24263a, 0.85); } return c; },
+  },
+  // 紅甘：修長；藍灰背、銀白肚、中間琥珀色縱帶；嘴經眼睛到第一背鰭的斜暗帶；尾叉形
+  kanpachi: {
+    tailLen: 0.19, prof: [[0, 0.01, 0.007, -0.004], [0.1, 0.075, 0.05, 0], [0.35, 0.13, 0.07, 0], [0.7, 0.085, 0.045, 0], [1, 0.022, 0.018, 0]],
+    dorsal: [{ t0: 0.3, t1: 0.38, h: 0.035, shape: 'spiny', col: 0x5a6068 }, { t0: 0.42, t1: 0.86, h: 0.07, shape: 'falcate', col: 0x6a6a5a }],
+    anal: [{ t0: 0.6, t1: 0.86, h: 0.055, shape: 'falcate', col: 0xb8a060 }],
+    pect: { t: 0.24, len: 0.12, col: 0x8a8a7a }, pelv: { t: 0.3, len: 0.09, col: 0xd8c070 },
+    tail: { kind: 'fork', len: 0.19, span: 0.15, col: 0xa89050 }, eye: { t: 0.08, v: 0.35, r: 0.026, iris: 0xe0d8b8 },
+    paint: (t, v) => {
+      let c = shade(0x5a6270, 0xeef0f2, 0.1, 0.3)(v);
+      if (Math.abs(v - 0.05) < 0.11 && t > 0.1) c = mix(c, 0xd8a040, 0.8);
+      if (t < 0.32 && Math.abs(v - (0.1 + t * 2.6)) < 0.26 && v > 0.05) c = mix(c, 0x2a2a30, 0.8);
+      return c;
+    },
+  },
+  // 虎斑（老虎斑）：粗壯；淡黃褐、密褐點＋5 列深褐大斑；尾柄黑鞍斑；尾圓
+  torahata: {
+    tailLen: 0.16, prof: [[0, 0.03, 0.022, -0.02], [0.07, 0.1, 0.08, 0], [0.3, 0.17, 0.1, 0.0], [0.65, 0.13, 0.08, 0.0], [1, 0.065, 0.035, 0]],
+    dorsal: [{ t0: 0.28, t1: 0.86, h: 0.085, shape: 'spiny', col: 0xa88a58, spots: 0x5a3e22 }], anal: [{ t0: 0.62, t1: 0.86, h: 0.08, shape: 'soft', col: 0xa88a58, spots: 0x5a3e22 }],
+    pect: { t: 0.25, len: 0.15, col: 0xb89a62 }, pelv: { t: 0.29, len: 0.1, col: 0x8a6a42 },
+    tail: { kind: 'round', len: 0.16, span: 0.11, col: 0xa88a58 }, eye: { t: 0.09, v: 0.45, r: 0.025, iris: 0xc8a050 },
+    paint: (t, v) => {
+      let c = shade(0xb4945c, 0xe0cfa4, -0.5, 0.4)(v);
+      if (t > 0.88 && v > 0.4) return 0x1a1410;
+      const blot = Math.sin(t * Math.PI * 2 * 5 + 0.8) * Math.sin((v + 1) * Math.PI * 1.6 + t * 4);
+      if (t > 0.12 && t < 0.9 && blot > 0.45) c = mix(c, 0x5a3e22, 0.8);
+      if (spot(t, v, 0.03, 0.11, 0.3, 11)) c = mix(c, 0x6a4a2a, 0.6);
+      return c;
+    },
+  },
+  // 鬼頭刀：額頭陡直；背鰭從頭到尾；藍綠背、金黃身體、藍點；尾深叉
+  shiira: {
+    tailLen: 0.18, prof: [[0, 0.06, 0.02, -0.02], [0.03, 0.12, 0.035, 0.0], [0.12, 0.14, 0.05, 0], [0.45, 0.11, 0.045, 0], [0.85, 0.045, 0.02, 0], [1, 0.022, 0.014, 0]],
+    dorsal: [{ t0: 0.03, t1: 0.9, h: 0.06, shape: 'soft', col: 0x1a5a8a }], anal: [{ t0: 0.5, t1: 0.9, h: 0.05, shape: 'soft', col: 0xc8b040 }],
+    pect: { t: 0.18, len: 0.11, col: 0xc8b040 }, pelv: { t: 0.2, len: 0.08, col: 0xd8c860 },
+    tail: { kind: 'fork', len: 0.18, span: 0.15, col: 0xb8a040 }, eye: { t: 0.06, v: -0.05, r: 0.024, iris: 0xe8d8a0 },
+    paint: (t, v) => {
+      let c = mix(0xeee2a0, 0xd8b428, ss(-0.7, -0.2, v));
+      c = mix(c, 0x1a7a8a, ss(0.35, 0.8, v));
+      if (t > 0.08 && v > -0.6 && spot(t, v, 0.05, 0.2, 0.25, 13)) c = mix(c, 0x2a6ab0, 0.8);
+      return c;
+    },
+  },
+  // 浪人鰺：體高、頭陡；銀灰到深灰背；散黑點；側線後段粗稜鱗；鐮刀形第二背鰭臀鰭；尾深叉
+  gt: {
+    tailLen: 0.21, prof: [[0, 0.02, 0.01, -0.03], [0.04, 0.1, 0.04, 0.02], [0.25, 0.19, 0.07, 0.02], [0.55, 0.15, 0.06, 0], [0.88, 0.04, 0.025, 0], [1, 0.022, 0.02, 0]],
+    dorsal: [{ t0: 0.28, t1: 0.36, h: 0.04, shape: 'spiny', col: 0x3a4048 }, { t0: 0.4, t1: 0.82, h: 0.12, shape: 'falcate', col: 0x3a4048 }],
+    anal: [{ t0: 0.52, t1: 0.82, h: 0.1, shape: 'falcate', col: 0x5a6068 }],
+    pect: { t: 0.24, len: 0.24, col: 0x7a8088 }, pelv: { t: 0.28, len: 0.08, col: 0x9aa0a6 },
+    tail: { kind: 'fork', len: 0.21, span: 0.2, col: 0x3a4048 }, eye: { t: 0.07, v: 0.4, r: 0.028, iris: 0xd8d8c8 }, scutes: 0x5a6068,
+    paint: (t, v) => { let c = shade(0x3e444c, 0xb6bcc2, 0.1, 0.45)(v); if (t > 0.15 && spot(t, v, 0.07, 0.3, 0.12, 17)) c = 0x14161a; return c; },
+  },
+  // 龍膽石斑：巨大；深灰褐＋淡黃斑塊；鰭黃色帶黑點；大嘴；尾圓
+  tamakai: {
+    tailLen: 0.15, prof: [[0, 0.04, 0.03, -0.025], [0.07, 0.11, 0.1, 0], [0.3, 0.16, 0.12, 0.0], [0.65, 0.13, 0.09, 0.0], [1, 0.07, 0.04, 0]],
+    dorsal: [{ t0: 0.28, t1: 0.86, h: 0.07, shape: 'spiny', col: 0xd8b830, spots: 0x1a1810 }], anal: [{ t0: 0.62, t1: 0.86, h: 0.07, shape: 'soft', col: 0xd8b830, spots: 0x1a1810 }],
+    pect: { t: 0.25, len: 0.14, col: 0xd8b830 }, pelv: { t: 0.29, len: 0.1, col: 0xc8a828 },
+    tail: { kind: 'round', len: 0.15, span: 0.11, col: 0xd0b030 }, eye: { t: 0.09, v: 0.45, r: 0.022, iris: 0xc8a040 },
+    paint: (t, v) => {
+      let c = shade(0x403a30, 0x6a6250, -0.6, 0.4)(v);
+      const b = Math.sin(t * 17 + Math.sin(v * 5) * 1.5) * Math.sin(v * 6 + t * 9);
+      if (b > 0.4 && t > 0.06) c = mix(c, 0xc8b060, 0.75);
+      return c;
+    },
+  },
+  // 雨傘旗魚：長尖嘴、大帆背鰭（深藍黑點）；深藍背銀白肚；淺藍點組成的直紋；尾新月形
+  kajiki: {
+    tailLen: 0.17, prof: [[0, 0.012, 0.01, -0.01], [0.08, 0.06, 0.04, 0], [0.3, 0.085, 0.05, 0], [0.7, 0.055, 0.035, 0], [0.95, 0.016, 0.018, 0], [1, 0.012, 0.016, 0]],
+    dorsal: [{ t0: 0.1, t1: 0.66, h: 0.26, shape: 'sail', col: 0x2a4c96, spots: 0x101c3a }, { t0: 0.86, t1: 0.9, h: 0.03, shape: 'falcate', col: 0x1a2a5a }],
+    anal: [{ t0: 0.58, t1: 0.68, h: 0.05, shape: 'falcate', col: 0x8a9ab0 }],
+    pect: { t: 0.18, len: 0.12, col: 0x2a3a6a }, pelv: { t: 0.2, len: 0.22, col: 0x1a2a5a },
+    tail: { kind: 'lunate', len: 0.17, span: 0.2, col: 0x1a2a5a }, eye: { t: 0.06, v: 0.25, r: 0.018, iris: 0xd0d8e8 }, bill: 0.24,
+    paint: (t, v) => {
+      let c = shade(0x1c2a58, 0xe4e8f0, -0.1, 0.25)(v);
+      const bar = (t * 18) % 1;
+      if (t > 0.15 && t < 0.92 && v > -0.4 && bar > 0.35 && bar < 0.6 && ((Math.floor((v + 1) * 6) % 2) === 0)) c = 0x7ab8e8;
+      return c;
+    },
+  },
+  // 黑鮪魚：巨大魚雷形；黑藍背、銀灰肚帶淡斑；黃色離鰭鑲黑邊；短胸鰭；尾新月形
+  maguro: {
+    tailLen: 0.19, prof: [[0, 0.014, 0.012, -0.004], [0.1, 0.1, 0.085, 0], [0.38, 0.16, 0.13, 0], [0.72, 0.09, 0.075, 0], [0.95, 0.02, 0.028, 0], [1, 0.016, 0.024, 0]],
+    dorsal: [{ t0: 0.3, t1: 0.46, h: 0.07, shape: 'spiny', col: 0x1a2038 }, { t0: 0.52, t1: 0.6, h: 0.07, shape: 'falcate', col: 0x8a8040 }],
+    anal: [{ t0: 0.58, t1: 0.66, h: 0.06, shape: 'falcate', col: 0xa8a080 }],
+    pect: { t: 0.24, len: 0.1, col: 0x1a2038 }, pelv: { t: 0.27, len: 0.06, col: 0x6a7080 },
+    tail: { kind: 'lunate', len: 0.19, span: 0.22, col: 0x141a30 }, eye: { t: 0.08, v: 0.25, r: 0.022, iris: 0xc8ccd8 },
+    finlets: { n: 8, col: 0xe0c040 },
+    paint: (t, v) => { let c = shade(0x121a36, 0xc6cad4, 0.2, 0.25)(v); if (v < -0.05 && t > 0.3 && t < 0.85 && spot(t, v, 0.06, 0.2, 0.22, 19)) c = mix(c, 0xeef0f4, 0.6); return c; },
+  },
+};
+
+export const fishModelIds = () => Object.keys(S);
+
+// ---------- 產生幾何 ----------
+function prof(p: Prof, t: number) {
+  for (let i = 0; i < p.length - 1; i++) {
+    const a = p[i], b = p[i + 1];
+    if (t <= b[0] || i === p.length - 2) {
+      const k = Math.max(0, Math.min(1, (t - a[0]) / (b[0] - a[0] || 1)));
+      const e = k * k * (3 - 2 * k);
+      return { h: a[1] + (b[1] - a[1]) * e, w: a[2] + (b[2] - a[2]) * e, y: (a[3] ?? 0) + ((b[3] ?? 0) - (a[3] ?? 0)) * e };
+    }
+  }
+  return { h: 0, w: 0, y: 0 };
+}
+
+class Tris {
+  pos: number[] = []; col: number[] = [];
+  private c = new THREE.Color();
+  tri(ax: number, ay: number, az: number, bx: number, by: number, bz: number, cx: number, cy: number, cz: number, hex: number) {
+    this.pos.push(ax, ay, az, bx, by, bz, cx, cy, cz);
+    this.c.setHex(hex);
+    // 頂點色要線性（材質會轉回 sRGB）
+    const r = this.c.r, g = this.c.g, b = this.c.b;
+    for (let i = 0; i < 3; i++) this.col.push(r, g, b);
+  }
+  quad(a: number[], b: number[], c: number[], d: number[], hex: number) { this.tri(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], hex); this.tri(a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2], hex); }
+}
+
+/** 身體段數（沿身長 × 一圈）：夠看出斑點、又不會太多面 */
+export const FISH_SEG = { along: 30, around: 20 };
+
+/** 產生一條魚的幾何（頂點色、平面著色用）；不認得的 id 回 null */
+export function buildFishGeometry(id: string): THREE.BufferGeometry | null {
+  const s = S[id]; if (!s) return null;
+  const T = new Tris();
+  const Lb = 1 - s.tailLen;
+  const X = (t: number) => 0.5 - t * Lb;
+  const N = FISH_SEG.along, M = FISH_SEG.around;
+  // 身體：一圈一圈
+  const ring = (t: number) => {
+    const p = prof(s.prof, t); const out: number[][] = [];
+    for (let j = 0; j < M; j++) { const a = (j / M) * Math.PI * 2; out.push([X(t), p.y + p.h * Math.sin(a), p.w * Math.cos(a)]); }
+    return out;
+  };
+  const tAt = (i: number) => Math.pow(i / N, 1.08);
+  let prev = ring(0);
+  for (let i = 1; i <= N; i++) {
+    const t0 = tAt(i - 1), t1 = tAt(i), cur = ring(t1);
+    for (let j = 0; j < M; j++) {
+      const j2 = (j + 1) % M;
+      const vm = Math.sin(((j + 0.5) / M) * Math.PI * 2);
+      const col = s.paint((t0 + t1) / 2, vm, hash(i, j));
+      T.quad(prev[j], cur[j], cur[j2], prev[j2], col);
+    }
+    prev = cur;
+  }
+  // 嘴尖、尾柄封口
+  { const p0 = prof(s.prof, 0), r0 = ring(0); const tip = [X(0) + 0.012, p0.y, 0]; for (let j = 0; j < M; j++) { const j2 = (j + 1) % M; T.tri(tip[0], tip[1], tip[2], r0[j2][0], r0[j2][1], r0[j2][2], r0[j][0], r0[j][1], r0[j][2], s.paint(0, Math.sin(((j + 0.5) / M) * Math.PI * 2), 0)); } }
+  { const p1 = prof(s.prof, 1), r1 = prev; const c = [X(1) - 0.004, p1.y, 0]; for (let j = 0; j < M; j++) { const j2 = (j + 1) % M; T.tri(c[0], c[1], c[2], r1[j][0], r1[j][1], r1[j][2], r1[j2][0], r1[j2][1], r1[j2][2], s.paint(1, 0, 0)); } }
+  // 稜鱗：側線後段一排凸起的硬鱗（薄長條，左右各一）
+  if (s.scutes) for (const sd of [-1, 1]) {
+    const K = 10;
+    for (let k = 0; k < K; k++) {
+      const ta = 0.5 + 0.48 * k / K, tb = 0.5 + 0.48 * (k + 0.8) / K;
+      const pa = prof(s.prof, ta), pb = prof(s.prof, tb);
+      const ya = pa.y + pa.h * 0.05, yb = pb.y + pb.h * 0.05;
+      T.quad([X(ta), ya + 0.008, sd * (pa.w + 0.003)], [X(tb), yb + 0.008, sd * (pb.w + 0.003)], [X(tb), yb - 0.008, sd * (pb.w + 0.003)], [X(ta), ya - 0.008, sd * (pa.w + 0.003)], s.scutes);
+    }
+  }
+  // 背鰭／臀鰭：沿基部的條帶
+  const finStrip = (f: Fin, up: number) => {
+    const K = 10;
+    const top = (u: number) => {
+      switch (f.shape) {
+        case 'spiny': return 0.75 + 0.25 * Math.sin(Math.min(1, u * 1.6) * Math.PI * 0.5) - 0.2 * ss(0.55, 0.7, u) * (1 - ss(0.7, 0.95, u)) - 0.6 * ss(0.85, 1, u);
+        case 'soft': return Math.sin(Math.min(1, u * 1.3 + 0.2) * Math.PI * 0.75) * (1 - 0.7 * ss(0.8, 1, u));
+        case 'falcate': return (1 - u) * (1 - u) * 1.1 + 0.15 * (1 - u);
+        case 'sail': return 0.35 + 0.65 * Math.sin(Math.min(1, u * 2.2) * Math.PI * 0.5) - 0.45 * ss(0.3, 0.85, u) - 0.45 * ss(0.85, 1, u);
+        case 'low': return 0.85 - 0.3 * u;
+        case 'ribbon': return 1;
+      }
+    };
+    for (let k = 0; k < K; k++) {
+      const ua = k / K, ub = (k + 1) / K;
+      const ta = f.t0 + (f.t1 - f.t0) * ua, tb = f.t0 + (f.t1 - f.t0) * ub;
+      const pa = prof(s.prof, ta), pb = prof(s.prof, tb);
+      const ba = pa.y + up * pa.h * 0.94, bb = pb.y + up * pb.h * 0.94;
+      const ha = Math.max(0.002, f.h * top(ua)), hb = Math.max(0.002, f.h * top(ub));
+      // 帆往後倒一點
+      const lean = f.shape === 'falcate' ? 0.35 : f.shape === 'sail' ? 0.12 : 0.15;
+      const col = f.spots && hash(k, up * 7 + Math.round(f.t0 * 100)) > 0.55 ? f.spots : f.col;
+      T.quad([X(ta), ba, 0], [X(tb), bb, 0], [X(tb) - hb * lean, bb + up * hb, 0], [X(ta) - ha * lean, ba + up * ha, 0], col);
+    }
+  };
+  for (const f of s.dorsal) finStrip(f, 1);
+  for (const f of s.anal) finStrip(f, -1);
+  // 離鰭（鮪魚類）：背／腹後段一排小三角
+  if (s.finlets) {
+    const n = s.finlets.n;
+    for (let k = 0; k < n; k++) {
+      const t = 0.68 + 0.3 * (k + 0.5) / n; const p = prof(s.prof, t); const sz = 0.018 * (1 - k / (n * 1.6));
+      for (const up of [1, -1]) { const by = p.y + up * p.h * 0.92; T.tri(X(t) + sz * 0.5, by, 0, X(t) - sz * 0.6, by, 0, X(t) - sz * 0.9, by + up * sz * 1.2, 0, s.finlets.col); }
+    }
+  }
+  // 胸鰭／腹鰭：身體兩側斜往後
+  const paired = (t: number, len: number, col: number, vv: number, spread: number) => {
+    const p = prof(s.prof, t);
+    for (const sd of [-1, 1]) {
+      const x = X(t), y = p.y + p.h * vv, z = sd * p.w * Math.cos(Math.asin(Math.max(-1, Math.min(1, vv))));
+      T.tri(x, y + 0.018, z, x, y - 0.018, z, x - len, y - len * 0.25, z + sd * len * spread, col);
+      T.tri(x, y - 0.018, z, x - len * 0.8, y - len * 0.45, z + sd * len * spread * 0.8, x - len, y - len * 0.25, z + sd * len * spread, col);
+    }
+  };
+  paired(s.pect.t, s.pect.len, s.pect.col, s.pect.v ?? -0.25, 0.35);
+  if (s.pelv) paired(s.pelv.t, s.pelv.len, s.pelv.col, -0.85, 0.25);
+  // 尾鰭
+  if (s.tail.kind !== 'none') {
+    const pe = prof(s.prof, 1); const x0 = X(1), y0 = pe.y, L = s.tail.len, H = s.tail.span;
+    let pts: number[][];
+    switch (s.tail.kind) {
+      case 'fork': pts = [[x0, y0 + pe.h], [x0 - L * 0.55, y0 + H * 0.6], [x0 - L, y0 + H], [x0 - L * 0.62, y0 + H * 0.15], [x0 - L * 0.45, y0], [x0 - L * 0.62, y0 - H * 0.15], [x0 - L, y0 - H], [x0 - L * 0.55, y0 - H * 0.6], [x0, y0 - pe.h]]; break;
+      case 'lunate': pts = [[x0, y0 + pe.h], [x0 - L * 0.5, y0 + H * 0.45], [x0 - L * 0.95, y0 + H], [x0 - L * 0.55, y0 + H * 0.25], [x0 - L * 0.42, y0], [x0 - L * 0.55, y0 - H * 0.25], [x0 - L * 0.95, y0 - H], [x0 - L * 0.5, y0 - H * 0.45], [x0, y0 - pe.h]]; break;
+      case 'round': pts = [[x0, y0 + pe.h], [x0 - L * 0.5, y0 + H * 0.85], [x0 - L * 0.85, y0 + H * 0.6], [x0 - L, y0 + H * 0.2], [x0 - L, y0 - H * 0.2], [x0 - L * 0.85, y0 - H * 0.6], [x0 - L * 0.5, y0 - H * 0.85], [x0, y0 - pe.h]]; break;
+      default: pts = [[x0, y0 + pe.h], [x0 - L * 0.6, y0 + H * 0.8], [x0 - L, y0 + H], [x0 - L * 0.93, y0], [x0 - L, y0 - H], [x0 - L * 0.6, y0 - H * 0.8], [x0, y0 - pe.h]];
+    }
+    const cx = x0 + 0.01, cy = y0;
+    for (let k = 0; k < pts.length - 1; k++) {
+      const a = pts[k], b = pts[k + 1];
+      const outer = Math.min(Math.abs(a[0] - x0), Math.abs(b[0] - x0)) > L * 0.75;
+      T.tri(cx, cy, 0, a[0], a[1], 0, b[0], b[1], 0, s.tail.edge && outer ? s.tail.edge : s.tail.col);
+    }
+  }
+  // 尖嘴（旗魚）
+  if (s.bill) {
+    const p = prof(s.prof, 0.02); const x = X(0.02), y = p.y + 0.004, b = 0.008, L = s.bill;
+    const tip = [x + L, y - 0.004, 0];
+    const q = [[x, y + b, 0], [x, y, b], [x, y - b, 0], [x, y, -b]];
+    for (let k = 0; k < 4; k++) { const a = q[k], c = q[(k + 1) % 4]; T.tri(tip[0], tip[1], tip[2], a[0], a[1], a[2], c[0], c[1], c[2], 0x1a2440); }
+  }
+  // 眼睛：虹膜（淺色八角盤）＋黑瞳（小八面體），左右各一
+  {
+    const p = prof(s.prof, s.eye.t); const x = X(s.eye.t), y = p.y + p.h * s.eye.v;
+    const zc = p.w * Math.cos(Math.asin(Math.max(-1, Math.min(1, s.eye.v))));
+    for (const sd of [-1, 1]) {
+      const z = sd * (zc + 0.002), r = s.eye.r;
+      for (let k = 0; k < 8; k++) {
+        const a0 = k / 8 * Math.PI * 2, a1 = (k + 1) / 8 * Math.PI * 2;
+        T.tri(x, y, z, x + Math.cos(a0) * r, y + Math.sin(a0) * r, z, x + Math.cos(a1) * r, y + Math.sin(a1) * r, z, s.eye.iris);
+      }
+      const pr = r * 0.62, pz = z + sd * pr * 0.5;
+      const P = [[x + pr, y, pz], [x - pr, y, pz], [x, y + pr, pz], [x, y - pr, pz], [x, y, pz + sd * pr * 0.6], [x, y, pz - sd * pr * 0.6]];
+      const F = [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]];
+      for (const f of F) { const a = P[f[0]], b = P[f[1]], c = P[f[2]]; T.tri(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], 0x0c0d10); }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(T.pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(T.col, 3));
+  // 正規化：全長 1、置中
+  g.computeBoundingBox();
+  const bb = g.boundingBox!; const len = bb.max.x - bb.min.x || 1;
+  g.translate(-(bb.max.x + bb.min.x) / 2, -(bb.max.y + bb.min.y) / 2, -(bb.max.z + bb.min.z) / 2);
+  g.scale(1 / len, 1 / len, 1 / len);
+  g.computeVertexNormals();
+  g.computeBoundingBox(); g.computeBoundingSphere();
+  return g;
+}
+
+/** 共用材質：頂點色、雙面（鰭是單片）、平面著色 */
+let mat: THREE.MeshLambertMaterial | null = null;
+export function fishMaterial() { return (mat ??= new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, flatShading: true })); }
+/** 剪影（還沒釣過）：一樣外形、全暗 */
+let silMat: THREE.MeshBasicMaterial | null = null;
+export function fishSilMaterial() { return (silMat ??= new THREE.MeshBasicMaterial({ color: 0x55606b, side: THREE.DoubleSide })); }
+/** 幾何快取（同一種魚只產生一次）；dispose 全部清掉 */
+const cache = new Map<string, THREE.BufferGeometry>();
+export function fishGeometry(id: string) { let g = cache.get(id); if (!g) { const n = buildFishGeometry(id); if (!n) return null; g = n; cache.set(id, g); } return g; }
+export function disposeFishGeometries() { for (const g of cache.values()) g.dispose(); cache.clear(); mat?.dispose(); mat = null; silMat?.dispose(); silMat = null; }

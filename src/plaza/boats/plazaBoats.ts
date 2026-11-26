@@ -3,7 +3,7 @@
  * 座位／落水／救人由伺服器判定；位置由駕駛回報（10Hz）。伺服器還沒更新時＝只有自己看得到（本機模式）。
  */
 import * as THREE from 'three';
-import { makePlayerAvatar, posePlazaStand, ensurePlazaSmokeCig, getPlazaSmokeCig, clearPlazaSmokeCig, type PlayerRig, type SmokeSitPoseOpts } from '../../dm/character';
+import { makePlayerAvatar, posePlazaStand, posePlazaWalkCycle, plazaGaitRate, ensurePlazaSmokeCig, getPlazaSmokeCig, clearPlazaSmokeCig, type PlayerRig, type SmokeSitPoseOpts } from '../../dm/character';
 import { makeMeshHelpers } from '../../dm/mesh';
 import { toast, toastTop } from '../../ui/dom';
 import { rewardToast, clearRewardToasts } from '../../ui/rewardToast';
@@ -18,7 +18,10 @@ import {
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
-import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg } from './plazaFish';
+import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishPoseNow, fishFaceYaw, fishCanWalk, fishPostPose } from './plazaFish';
+import { DECK, deckStart, deckClamp, stepDeck, yawOf } from './fishLogic';
+import { makeRod, type Rod } from './fishRod';
+import { newFishPose, stepFishPose, applyFishPose, fishPoseDecode, rodTipWorld, type FishPoseSt } from './fishPose';
 import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare, type DriftTide, type DriftPull } from './boatNet';
 
 export type BoatSfx = 'splash' | 'bump' | 'hit' | 'dock' | 'launch' | 'warn';
@@ -169,7 +172,7 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
       seats: onSeats, poses: onPoses, ram: onRam, swimStart: s => upsertSwim(s, true), swimEnd: endSwim, rescued: onRescued, state: onState,
       drift: onDrift, driftClaimed: onDriftClaimed, driftShare: onDriftShare, driftTide: onDriftTide, driftPull: onDriftPull,
       racks: onRackSnap, rackUpd: onRackUpd, rackGone: onRackGone, rackStolen: onRackStolen, cargo: onCargo, load: onLoad,
-      fishBig: onFishBig,
+      fishBig: onFishBig, fishPose: onFishPose,
     });
   } else localOnly = true;
   openRacks({
@@ -200,6 +203,8 @@ export function closePlazaBoats() {
   fakeRigs.clear();
   closeRacks();
   closeFish();
+  for (const c of [...fishers.keys()]) dropFisher(c);
+  stand.on = false;
   net?.close(); net = null;
   sea?.dispose(); sea = null; own = null; ownAnchors = [];
   ui?.root.remove(); ui = null;
@@ -208,6 +213,9 @@ export function closePlazaBoats() {
   D = null;
 }
 export const plazaBoatsActive = () => !!D && mode !== 'walk';
+/** main.ts：人物都擺好之後（camTick 之後）套釣魚動作／釣竿／釣線 */
+export function plazaFishPostPose(dt: number) { if (D) fishPostPose(Math.min(dt, 0.1)); }
+export { fishActive as plazaFishing };
 /** 釣魚中：岸上不能走（搖桿拿去拉魚／瞄準） */
 export const plazaFishBlocksWalk = () => !!D && fishActive() && fishHoldsInput();
 /** 游泳時寵物站在背上：回背上那一點的世界座標＋朝向（不在游泳＝null） */
@@ -637,7 +645,8 @@ function wake(b: BoatSt) {
 
 // ---------------- 每幀 ----------------
 function input() {
-  if (fishHoldsInput()) return { thr: 0, steer: 0 };
+  // 站起來釣魚：搖桿拿去在甲板上走（駕駛站著不能開船，坐回去才能開）
+  if (fishHoldsInput() || stand.on) return { thr: 0, steer: 0 };
   const k = (c: string) => (walkKeys.has(c) ? 1 : 0);
   let thr = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown');
   let steer = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft');
@@ -649,7 +658,7 @@ function input() {
 /** 主迴圈每幀呼叫（在廣場、不論在不在船上）；cam＝目前畫面用的相機（判斷遠近 LOD） */
 export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
   if (!D || !sea) return;
-  dt = Math.min(dt, 0.1); t += dt;
+  dt = Math.min(dt, 0.1); t += dt; frameDt = dt;
   for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= dt; if (timers[i].t <= 0) { const f = timers[i].f; timers.splice(i, 1); f(); } }
   ramCd = Math.max(0, ramCd - dt); throwCd = Math.max(0, throwCd - dt); throwAnim = Math.max(0, throwAnim - dt); mySway = Math.max(0, mySway - dt / PB.swayT);
   const me = myId();
@@ -769,10 +778,27 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
       const c = b.seats[s]; if (!c || c === me) continue;
       seatWorld(b, s, _v);
       const sw = swayConn.get(c) ?? 0;
-      const m = { x: _v.x, y: _v.y, z: _v.z, yaw: b.h, pose: SEATS[s].pose, steer: s === 0 ? b.steer : 0, sway: sw, rx: b.rx, rz: b.rz };
+      const m: RemoteMountLike = { x: _v.x, y: _v.y, z: _v.z, yaw: b.h, pose: SEATS[s].pose, steer: s === 0 ? b.steer : 0, sway: sw, rx: b.rx, rz: b.rz };
+      const f = fishers.get(c);
+      if (f && t - f.at < 6) {
+        // 站在甲板上釣魚：位置內插、面向、手和竿交給 post
+        const kf = 1 - Math.exp(-6 * dt);
+        const mvd = Math.hypot(f.tx - f.x, f.tz - f.z);
+        f.x += (f.tx - f.x) * kf; f.z += (f.tz - f.z) * kf;
+        let dy = f.tyaw - f.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); f.yaw += dy * kf;
+        f.moving = mvd > 0.04;
+        deckWorld(b, f.x, f.z, _v);
+        m.x = _v.x; m.y = _v.y; m.z = _v.z; m.yaw = b.h + f.yaw; m.stand = true; m.post = f.post; f.boatH = b.h; f.seenT = t;
+      } else if (f) dropFisher(c);
       if (fakeRigs.has(c)) placeFake(c, m);
       else if (view) { view.setRemoteMount(c, m); now.add(c); }
     }
+  }
+  // 下船／離開的釣客：收竿
+  for (const [c, f] of fishers) {
+    if (f.seenT !== t && t - f.at > 0.5) dropFisher(c);
+    // 這個人這陣子沒被畫（不在視野名單裡）：線先藏起來，免得留在原地
+    else if (f.line?.visible && t - f.postT > 0.3) f.line.visible = false;
   }
   for (const w of swimmers.values()) {
     const m = { x: w.x, y: PB.waterY, z: w.z, yaw: w.h, pose: 'swim' as const, swim: swimForce ?? (w.fake ? 0 : w.k ?? 0) };
@@ -787,10 +813,21 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
   const rig = D.me();
   if (rig && mode === 'boat') {
     const b = boats[myBoat];
-    const pr = poseRider(rig, SEATS[mySeat].pose, t, { steer: mySeat === 0 ? b.steer : 0, sway: mySway, throwK: throwAnim > 0 ? 1 - throwAnim / 0.45 : 0, smoke: D.smoke?.() ?? null });
-    rig.outer.position.set(0, pr.dy, 0); rig.outer.rotation.set(pr.rx, 0, 0); rig.outer.visible = true;
+    tickStand(dt, cam, b);
+    if (stand.on) {
+      // 站在甲板上（座位錨點的相對位置）
+      const S = SEATS[mySeat];
+      if (stand.moving) { stand.ph += plazaGaitRate(DECK.walkSpd) * dt; posePlazaStand(rig); posePlazaWalkCycle(rig, stand.ph, 0.8); }
+      else { posePlazaStand(rig); rig.legL.rotation.z = 0.06; rig.legR.rotation.z = -0.06; }
+      rig.torso.rotation.set(0, 0, 0);
+      rig.outer.position.set(stand.x - S.x, DECK.y - S.y, stand.z - S.z); rig.outer.rotation.set(0, stand.yaw, 0); rig.outer.visible = true;
+    } else {
+      const pr = poseRider(rig, SEATS[mySeat].pose, t, { steer: mySeat === 0 ? b.steer : 0, sway: mySway, throwK: throwAnim > 0 ? 1 - throwAnim / 0.45 : 0, smoke: D.smoke?.() ?? null });
+      rig.outer.position.set(0, pr.dy, 0); rig.outer.rotation.set(pr.rx, 0, 0); rig.outer.visible = true;
+    }
     D.walkPos.set(b.x, 1.55, b.z);
-  } else if (rig && mode === 'swim') {
+  } else if (stand.on) standDown();
+  if (rig && mode === 'swim') {
     const pr = poseRider(rig, 'swim', t, { swim: swimForce ?? mySwimK });
     rig.outer.position.set(mySwim.x, PB.waterY + pr.dy, mySwim.z); rig.outer.rotation.order = 'YXZ'; rig.outer.rotation.set(pr.rx, mySwim.h, 0); rig.outer.visible = true;
     D.walkPos.set(mySwim.x, 1.55, mySwim.z);
@@ -853,6 +890,102 @@ function dockInsets(W: number, H: number) {
   // 下緣中間只有「下船」鈕（碼頭附近才出現，那時指示已收起），可以壓低；左下搖桿、右下按鈕欄另外避開
   return { l: 40, r: 40, t: short ? 92 : 110, b: short ? 64 : 90, bl: [short ? 190 : 230, short ? 150 : 200] as const, br: [short ? 150 : 170, short ? 258 : 310] as const };
 }
+// ---------------- 船上站著釣魚 ----------------
+type RemoteMountLike = Parameters<NonNullable<ReturnType<PlazaBoatDeps['view']>>['setRemoteMount']>[1] & object;
+/** 自己：站在甲板上的位置（船身座標）、面向、走路相位 */
+const stand = { on: false, x: 0, z: 0, yaw: 0, ph: 0, moving: false, sendT: 0, sentSt: -1, sentX: 0, sentZ: 0, sentYaw: 0, hinted: false };
+function standUp() {
+  const S = SEATS[mySeat]; if (!S) return;
+  const p = deckStart(S.x, S.z);
+  stand.on = true; stand.x = p.x; stand.z = p.z; stand.yaw = 0; stand.moving = false; stand.sendT = 0; stand.sentSt = -1;
+  if (!stand.hinted) { stand.hinted = true; toastTop(mySeat === 0 ? '站起來釣魚了：搖桿可以在船上走；要開船先按「不釣了」坐回去' : '站起來釣魚了：搖桿可以在船上走動', 3); }
+}
+function standDown() {
+  if (!stand.on) return;
+  stand.on = false; stand.moving = false;
+  net?.fishPose(0, 0, 0, 0);
+  const rig = D?.me(); if (rig) { posePlazaStand(rig); rig.torso.rotation.set(0, 0, 0); }
+}
+const _stp = { x: 0, z: 0, yaw: 0 };
+function tickStand(dt: number, cam: THREE.Camera, b: BoatSt) {
+  const fishing = fishActive();
+  if (fishing && !stand.on) standUp();
+  else if (!fishing && stand.on) { standDown(); return; }
+  if (!stand.on) return;
+  // 走動：WASD／搖桿（鏡頭方向為前）
+  const k = (c: string) => (walkKeys.has(c) ? 1 : 0);
+  let mx = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft'), mz = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown');
+  if (Math.hypot(joy.x, joy.y) > 0.15) { mx = joy.x; mz = -joy.y; }
+  cam.getWorldDirection(_v);
+  _stp.x = stand.x; _stp.z = stand.z; _stp.yaw = stand.yaw;
+  stand.moving = fishCanWalk() && stepDeck(_stp, mx, mz, yawOf(_v.x, _v.z), b.h, dt);
+  if (stand.moving) { stand.x = _stp.x; stand.z = _stp.z; }
+  // 面向：線在水裡／蓄力＝那個方向；走路＝走的方向
+  const fy = fishFaceYaw();
+  const want = fy != null ? fy - b.h : stand.moving ? _stp.yaw : stand.yaw;
+  let d = want - stand.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+  stand.yaw += d * (1 - Math.exp(-10 * dt));
+  // 同步給別人看：有變才送（最快 0.3 秒一次）；每 2 秒保底
+  stand.sendT += dt;
+  const st = fishPoseNow();
+  const changed = st !== stand.sentSt || Math.hypot(stand.x - stand.sentX, stand.z - stand.sentZ) > 0.08 || Math.abs(Math.atan2(Math.sin(stand.yaw - stand.sentYaw), Math.cos(stand.yaw - stand.sentYaw))) > 0.25;
+  if ((changed && stand.sendT >= 0.3) || stand.sendT >= 2) {
+    stand.sendT = 0; stand.sentSt = st; stand.sentX = stand.x; stand.sentZ = stand.z; stand.sentYaw = stand.yaw;
+    net?.fishPose(+stand.x.toFixed(2), +stand.z.toFixed(2), +stand.yaw.toFixed(2), st);
+  }
+}
+function deckWorld(b: BoatSt, x: number, z: number, out: THREE.Vector3) {
+  _o.position.set(b.x, b.y, b.z); _e.set(b.rx, b.h, b.rz); _o.quaternion.setFromEuler(_e); _o.updateMatrix();
+  return out.set(x, DECK.y, z).applyMatrix4(_o.matrix);
+}
+/** 別人：船上釣魚的站位／姿勢（FishPose 事件；6 秒沒更新就坐回去） */
+type Fisher = { seenT: number; postT: number; x: number; z: number; yaw: number; tx: number; tz: number; tyaw: number; st: number; at: number; moving: boolean; ph: number; boatH: number; pose: FishPoseSt; rod: Rod | null; line: THREE.LineSegments | null; post: (rig: PlayerRig, dt: number, hidden: boolean) => void };
+const fishers = new Map<string, Fisher>();
+const _ft = new THREE.Vector3();
+function onFishPose(e: { connId: string; dx: number; dz: number; yaw: number; st: number }) {
+  if (!e.connId || isMe(e.connId)) return;
+  if (e.st <= 0) { dropFisher(e.connId); return; }
+  const p = deckClamp(e.dx, e.dz);
+  let f = fishers.get(e.connId);
+  if (!f) {
+    const nf: Fisher = { seenT: t, postT: t, x: p.x, z: p.z, yaw: e.yaw, tx: p.x, tz: p.z, tyaw: e.yaw, st: e.st, at: t, moving: false, ph: 0, boatH: 0, pose: newFishPose(), rod: null, line: null, post: () => {} };
+    nf.post = (rig, dt, hidden) => poseFisher(nf, rig, dt, hidden);
+    fishers.set(e.connId, f = nf);
+  }
+  f.tx = p.x; f.tz = p.z; f.tyaw = e.yaw; f.st = e.st; f.at = t;
+}
+function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
+  f.postT = t;
+  const inp = fishPoseDecode(f.st);
+  const gear = inp.lure ? 'lure' : 'float';
+  if (!f.rod || f.rod.kind !== gear) { f.rod?.dispose(); f.rod = makeRod(gear); }
+  if (f.moving) { f.ph += plazaGaitRate(DECK.walkSpd) * dt; posePlazaWalkCycle(rig, f.ph, 0.8); }
+  stepFishPose(f.pose, inp, dt);
+  applyFishPose(rig, f.pose, f.rod, inp);
+  // 線：等魚／拉魚時從竿尖斜斜下到前方水面（不知道別人拋多遠，畫 7 m）
+  const lineOn = !hidden && (inp.phase === 'wait' || inp.phase === 'fight');
+  if (lineOn && !f.line && D) {
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    f.line = new THREE.LineSegments(g, fisherLineMat ??= new THREE.LineBasicMaterial({ color: 0x1d2b3a })); f.line.frustumCulled = false; D.scene.add(f.line);
+  }
+  if (!f.line) return;
+  f.line.visible = lineOn;
+  if (!lineOn) return;
+  rodTipWorld(f.rod, _ft);
+  const a = (f.line.geometry.getAttribute('position') as THREE.BufferAttribute);
+  const arr = a.array as Float32Array, h = f.boatH + f.yaw, d = inp.phase === 'fight' ? 4 : 7;
+  arr[0] = _ft.x; arr[1] = _ft.y; arr[2] = _ft.z;
+  arr[3] = rig.outer.position.x - Math.sin(h) * d; arr[4] = PB.waterY + 0.03; arr[5] = rig.outer.position.z - Math.cos(h) * d;
+  a.needsUpdate = true;
+}
+let fisherLineMat: THREE.LineBasicMaterial | null = null, frameDt = 0.016;
+function dropFisher(c: string) {
+  const f = fishers.get(c); if (!f) return;
+  fishers.delete(c);
+  f.rod?.dispose();
+  if (f.line) { f.line.removeFromParent(); f.line.geometry.dispose(); }
+}
+
 function seatWorld(b: BoatSt, s: number, out: THREE.Vector3) {
   _o.position.set(b.x, b.y, b.z); _e.set(b.rx, b.h, b.rz); _o.quaternion.setFromEuler(_e); _o.updateMatrix();
   return out.set(SEATS[s].x, SEATS[s].y, SEATS[s].z).applyMatrix4(_o.matrix);
@@ -915,8 +1048,14 @@ export function plazaBoatsNight(k: number, sky: THREE.Color) { sea?.setNight(k, 
 export function plazaBoatsFog(f: THREE.Fog) { sea?.setFog(f); }
 
 // ---------------- 測試／除錯 ----------------
-function placeFake(c: string, m: { x: number; y: number; z: number; yaw: number; pose: 'drive' | 'sit' | 'deck' | 'swim'; steer?: number; sway?: number; rx?: number; rz?: number; swim?: number }) {
+function placeFake(c: string, m: RemoteMountLike) {
   const r = fakeRigs.get(c); if (!r) return;
+  if (m.stand) {
+    posePlazaStand(r); r.torso.rotation.set(0, 0, 0);
+    r.outer.position.set(m.x, m.y, m.z); r.outer.rotation.order = 'YXZ'; r.outer.rotation.set(m.rx ?? 0, m.yaw, m.rz ?? 0);
+    m.post?.(r, frameDt, false);
+    return;
+  }
   // 除錯：假乘客抽菸（每 6 秒抽一口），看船上抽菸姿勢用
   const smoke = fakeSmoke && m.pose !== 'swim' ? { puffK: Math.max(0, Math.sin(t * 1.05)) ** 2 } : null;
   const pr = poseRider(r, m.pose, t, { steer: m.steer, sway: m.sway, smoke, swim: m.swim });
@@ -945,6 +1084,17 @@ let seaViewForce: boolean | null = null;
 /** 除錯：追船鏡頭倍率（負＝從船頭往回看，看自己／乘客的姿勢） */
 let camFront = 1;
 export const plazaBoatsDbg = {
+  /** 船上站著釣魚的狀態 */
+  stand() { return { on: stand.on, x: +stand.x.toFixed(2), z: +stand.z.toFixed(2), yaw: +stand.yaw.toFixed(2), moving: stand.moving, seat: mySeat }; },
+  /** 測試：甲板上走到（船身座標） */
+  standAt(x: number, z: number) { if (!stand.on) return 'not standing'; const p = deckClamp(x, z); stand.x = p.x; stand.z = p.z; return p; },
+  /** 測試：假乘客（或任何 connId）在船上站著釣魚；st＝姿勢代碼（fishPose.ts） */
+  fakeFish(st = 4 + 16, dx = 0.3, dz = -0.5, yaw = 0.6, connId?: string) {
+    const c = connId ?? [...fakeRigs.keys()].find(k => boats.some(b => b.seats.includes(k)));
+    if (!c) return 'no fake rider';
+    onFishPose({ connId: c, dx, dz, yaw, st }); return c;
+  },
+  fishers() { return [...fishers].map(([c, f]) => ({ c, x: +f.x.toFixed(2), z: +f.z.toFixed(2), st: f.st, rod: f.rod?.kind ?? null, line: !!f.line?.visible })); },
   /** 傳送到碼頭口（站在碼頭上，旁邊就是船） */
   tpDock() {
     if (!D) return 'closed';
@@ -965,6 +1115,14 @@ export const plazaBoatsDbg = {
     b.fake = { t: 0, r: 12, cx, cz }; b.seats = ['', '', '', ''];
     for (let s = 0; s < Math.min(PB.seats, riders); s++) { const c = `dbg-${++fakeN}`; fakeRig(c); b.seats[s] = c; }
     return `boat ${i} @ (${cx},${cz})`;
+  },
+  /** 測試：轉鏡頭（岸上） */
+  yaw(v: number) { D?.setYaw(v); return v; },
+  /** 測試：把假船停在自己前方（dx／dz 世界座標偏移） */
+  parkFake(dx = -7, dz = 0) {
+    const b = boats.find(x => x.fake); const m = boats[myBoat] ?? null; if (!b || !b.fake) return 'no fake';
+    const ox = m ? m.x : D?.walkPos.x ?? 0, oz = m ? m.z : D?.walkPos.z ?? 0;
+    b.fake.cx = ox + dx; b.fake.cz = oz + dz; b.fake.r = 0.01; return 'ok';
   },
   /** 在自己附近生一個假的落水者（可練習拉人上船） */
   spawnSwimmer() {

@@ -42,7 +42,7 @@ const fmtDate = (t: number) => { const d = new Date(t); return `${d.getFullYear(
 export function initCook(deps: CookDeps) {
   D = deps;
   $('cookClose').addEventListener('click', () => closeCook(true));
-  document.querySelectorAll<HTMLButtonElement>('#dexTabs button').forEach(b => b.onclick = () => dexTab(b.dataset.t === 'cook' ? 'cook' : 'pearl'));
+  document.querySelectorAll<HTMLButtonElement>('#dexTabs button').forEach(b => b.onclick = () => dexTab(b.dataset.t === 'cook' ? 'cook' : b.dataset.t === 'fish' ? 'fish' : 'pearl'));
 }
 
 /* ───────── 煎台 ───────── */
@@ -382,16 +382,23 @@ export function openDex(id?: number, owner = '') {
   dexTab('cook');
 }
 
-/** 圖鑑分頁：珍珠和奇物（原本的）／蚵仔煎 */
-export function dexTab(t: 'pearl' | 'cook') {
+/** 魚類圖鑑分頁（廣場釣魚）：由 main.ts 掛上；show 進分頁、hide 離開分頁／關圖鑑 */
+let fishDexHook: { show(host: HTMLElement): void; hide(): void } | null = null;
+export function setFishDexHook(h: typeof fishDexHook) { fishDexHook = h; }
+/** 圖鑑分頁：珍珠和奇物（原本的）／蚵仔煎／魚類 */
+export function dexTab(t: 'pearl' | 'cook' | 'fish') {
   document.querySelectorAll<HTMLButtonElement>('#dexTabs button').forEach(b => { const on = b.dataset.t === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
   ($('dexList') as HTMLElement).hidden = t !== 'pearl';
   ($('cookDexBody') as HTMLElement).hidden = t !== 'cook';
+  const fb = document.getElementById('fishDexBody');
+  if (fb) fb.hidden = t !== 'fish';
+  if (t === 'fish' && fb) fishDexHook?.show(fb); else fishDexHook?.hide();
   if (t === 'cook') { renderDex(); void loadCookFirsts(); }
   else { stopDexView?.(); stopDexView = null; cancelAnimationFrame(virtRaf); cancelAnimationFrame(thumbRaf); thumbQ.length = 0; }
 }
 export function closeDex() {
   stopDexView?.(); stopDexView = null;
+  fishDexHook?.hide();
   cancelAnimationFrame(virtRaf); cancelAnimationFrame(thumbRaf); thumbQ.length = 0;
   $('dex').classList.remove('show');
 }

@@ -32,6 +32,11 @@ export const FISH = {
   oysterPerDay: 20,
   /** 拋竿：最近／最遠（公尺，伺服器同值）、力道條來回一次幾秒、拋出去飛幾秒 */
   castMin: 4, castMax: 16, chargePeriod: 1.6, flyS: 0.55,
+  /**
+   * 路亞竿：照真實岸拋距離約 1／3 縮小（伺服器 FishLureCastMax 同值）。
+   * 真實 8～9 呎岸拋竿：鐵板 50～80 m、波趴 30～60 m、米諾 30～50 m、軟蟲 25～45 m。
+   */
+  lureCastMin: 5, lureCast: { minnow: 17, soft: 15, popper: 20, jig: 26 } as Record<LureKey, number>,
   /** 伺服器：每 2 秒擲一次咬餌、收竿時間窗 0.8 秒 */
   rollS: 2, windowS: 0.8,
   /** 駕駛船速超過就自動收線；拖釣船速範圍（乘客、米諾／鐵板） */
@@ -55,14 +60,16 @@ export const LURE_TIP: Record<LureKey, string> = {
   popper: '抽一下停一下：水面濺水花，只有清晨和黃昏有效',
 };
 export const isLure = (k: string): k is LureKey => k === 'minnow' || k === 'jig' || k === 'soft' || k === 'popper';
-export const castDist = (power: number) => FISH.castMin + (FISH.castMax - FISH.castMin) * Math.max(0, Math.min(1, power));
+/** 這個餌／假魚的拋竿距離範圍（垂釣 4～16 m；路亞看假魚重量） */
+export const castRange = (item?: ItemKey) => (item && isLure(item) ? { min: FISH.lureCastMin, max: FISH.lureCast[item] } : { min: FISH.castMin, max: FISH.castMax });
+export const castDist = (power: number, item?: ItemKey) => { const r = castRange(item); return r.min + (r.max - r.min) * Math.max(0, Math.min(1, power)); };
 /** 力道條：來回擺動（0→1→0） */
 export function chargePower(t: number, period: number = FISH.chargePeriod) {
   const p = ((t % period) + period) % period / period;
   return p < 0.5 ? p * 2 : 2 - p * 2;
 }
 /** 拋竿落點：前進＝(-sin h, -cos h)（跟船、伺服器一樣） */
-export const castPoint = (x: number, z: number, h: number, power: number) => { const d = castDist(power); return { x: x - Math.sin(h) * d, z: z - Math.cos(h) * d }; };
+export const castPoint = (x: number, z: number, h: number, power: number, item?: ItemKey) => { const d = castDist(power, item); return { x: x - Math.sin(h) * d, z: z - Math.cos(h) * d }; };
 /** 鏡頭朝向（世界方向向量）→ h */
 export const yawOf = (dx: number, dz: number) => Math.atan2(-dx, -dz);
 /** 拖釣：乘客、米諾／鐵板、船速在範圍內 */
@@ -218,4 +225,56 @@ export class FishSM {
     }
     return null;
   }
+}
+
+// ---------------- 船上站著走（釣魚時） ----------------
+/**
+ * 膠筏甲板可以站的範圍（船身座標：+z 船尾、-z 船頭；x 左右）。甲板木條 x ±1.07、z -1.13～1.95；
+ * 留邊不掉下去，避開冰桶（x 0.2～0.9, z 0.65～1.15）和駕駛座木箱（x -0.65～-0.15, z 1.5～1.95）。
+ */
+export const DECK = {
+  x0: -0.82, x1: 0.82, z0: -0.95, z1: 1.55,
+  /** 障礙（含人的半徑） */
+  boxes: [
+    { x0: 0.05, x1: 1.05, z0: 0.5, z1: 1.3 },
+    { x0: -0.8, x1: 0, z0: 1.35, z1: 2.1 },
+  ] as readonly { x0: number; x1: number; z0: number; z1: number }[],
+  /** 走路速度（m/s） */
+  walkSpd: 1.1,
+  /** 甲板面高度（船身座標） */
+  y: 0.255,
+};
+/** 夾在甲板內、推出障礙（往最近而且還在甲板內的邊推）；寫進 out（不配置新物件） */
+export function deckClamp(x: number, z: number, out: { x: number; z: number } = { x: 0, z: 0 }) {
+  x = Math.max(DECK.x0, Math.min(DECK.x1, x));
+  z = Math.max(DECK.z0, Math.min(DECK.z1, z));
+  for (const b of DECK.boxes) {
+    if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1) {
+      let bx = x, bz = z, bd = Infinity;
+      const tryP = (d: number, px: number, pz: number) => { if (d < bd && px >= DECK.x0 && px <= DECK.x1 && pz >= DECK.z0 && pz <= DECK.z1) { bd = d; bx = px; bz = pz; } };
+      tryP(x - b.x0, b.x0, z); tryP(b.x1 - x, b.x1, z); tryP(z - b.z0, x, b.z0); tryP(b.z1 - z, x, b.z1);
+      x = bx; z = bz;
+    }
+  }
+  out.x = x; out.z = z;
+  return out;
+}
+/** 站起來的起點：座位旁邊（夾在甲板內） */
+export function deckStart(seatX: number, seatZ: number) { return deckClamp(seatX, seatZ - 0.35); }
+/**
+ * 甲板上走一步（直接改 p）：mx／mz＝搖桿（螢幕：右、前），camYaw＝鏡頭在世界的朝向，boatH＝船頭方向。
+ * p＝船身座標的位置和面向（yaw 0＝面向船頭 -z）。回傳有沒有在走。
+ */
+export function stepDeck(p: { x: number; z: number; yaw: number }, mx: number, mz: number, camYaw: number, boatH: number, dt: number): boolean {
+  const m = Math.hypot(mx, mz);
+  if (m < 0.12) return false;
+  const k = Math.min(1, m);
+  // 鏡頭座標 → 世界：前＝(-sin cy, -cos cy)、右＝(cos cy, -sin cy)
+  const wx = (-Math.sin(camYaw) * mz + Math.cos(camYaw) * mx) / m, wz = (-Math.cos(camYaw) * mz - Math.sin(camYaw) * mx) / m;
+  // 世界 → 船身（轉 -boatH）
+  const c = Math.cos(-boatH), s = Math.sin(-boatH);
+  const lx = wx * c + wz * s, lz = -wx * s + wz * c;
+  deckClamp(p.x + lx * DECK.walkSpd * k * dt, p.z + lz * DECK.walkSpd * k * dt, p);
+  p.yaw = Math.atan2(-lx, -lz);
+  return true;
 }

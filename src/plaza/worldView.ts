@@ -196,7 +196,13 @@ export type PlazaWorldView = {
   dispose: () => void;
 };
 /** 船上座位／游泳的世界位置（y＝腳底外框高度基準：座位點或水面） */
-export type RemoteMount = { x: number; y: number; z: number; yaw: number; pose: RiderPose; steer?: number; sway?: number; rx?: number; rz?: number; /** 游泳：0 踩水～1 自由式 */ swim?: number };
+export type RemoteMount = {
+  x: number; y: number; z: number; yaw: number; pose: RiderPose; steer?: number; sway?: number; rx?: number; rz?: number; /** 游泳：0 踩水～1 自由式 */ swim?: number;
+  /** 站在甲板上（船上釣魚）：不套坐姿，y＝腳底 */
+  stand?: boolean;
+  /** 擺完姿勢、位置之後再呼叫（船上釣魚：手、釣竿、釣線）；hidden＝這幀沒畫 */
+  post?: (rig: PlayerRig, dt: number, hidden: boolean) => void;
+};
 
 export type PlazaWorldOpts = {
   shellGeo: THREE.BufferGeometry;
@@ -2850,8 +2856,13 @@ function hashPid(pid: string) {
       if (mount) {
         if (!rj._mountVis) rj._mountVis = [r.rig.weaponMount.visible, r.rig.handL.visible, r.rig.handR.visible];
         const smoke = mount.pose !== 'swim' ? ((rj._boatSmoke as { puffK: number; inhale: number; away: number } | undefined) ?? { puffK: 0 }) : null;
-        const pr = poseRider(r.rig, mount.pose, t * 0.001, { steer: mount.steer, sway: mount.sway, throwK: r.throwT > 0 ? 1 - Math.min(1, r.throwT / 0.45) : 0, smoke, swim: mount.swim });
-        ox = mount.x; oy = mount.y + pr.dy; oz = mount.z; rotX = pr.rx + (mount.rx ?? 0); rotZ = mount.rz ?? 0;
+        if (mount.stand) {
+          posePlazaStand(r.rig); r.rig.torso.rotation.set(0, 0, 0);
+          ox = mount.x; oy = mount.y; oz = mount.z; rotX = mount.rx ?? 0; rotZ = mount.rz ?? 0;
+        } else {
+          const pr = poseRider(r.rig, mount.pose, t * 0.001, { steer: mount.steer, sway: mount.sway, throwK: r.throwT > 0 ? 1 - Math.min(1, r.throwT / 0.45) : 0, smoke, swim: mount.swim });
+          ox = mount.x; oy = mount.y + pr.dy; oz = mount.z; rotX = pr.rx + (mount.rx ?? 0); rotZ = mount.rz ?? 0;
+        }
       }
       r.rig.outer.position.set(ox, oy, oz);
       r.rig.outer.rotation.order = 'YXZ';
@@ -2895,6 +2906,7 @@ function hashPid(pid: string) {
         im.setColorAt(impN, _impC.setHSL(impHue(r.connId || r.key || ''), 0.45, 0.42));
         impN++;
       }
+      if (mount?.post) mount.post(r.rig, dt, !r.rig.outer.visible || tier === 'hide');
       applyRemoteLod(r, tier === 'hide' || tier === 'far' || (LO && tier === 'mid'));
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       if (show) {

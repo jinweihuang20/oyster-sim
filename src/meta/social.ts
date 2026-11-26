@@ -324,6 +324,12 @@ export function init(d: Deps) {
 export function resume() { showNext(); }
 /** 本機提示不再進跑馬燈（只播傳說奇物）；保留 API 以免呼叫端改動。 */
 export function local(_txt: string) { /* no-op: feed is legend-only */ }
+// ---------- 魚類圖鑑（廣場釣魚；舊伺服器沒有就回 null） ----------
+export async function fishDex(): Promise<{ sp: string; kg: number; n: number }[] | null> {
+  if (!D) return null;
+  const r = await get(`/fishdex?pid=${encodeURIComponent(D.id)}${tq()}`);
+  return Array.isArray(r?.dex) ? r.dex.map((o: any) => ({ sp: String(o?.sp ?? o?.Sp ?? ''), kg: Number(o?.kg ?? o?.Kg) || 0, n: Number(o?.n ?? o?.N) || 0 })).filter((o: { sp: string }) => o.sp) : null;
+}
 // ---------- 禮物信箱 ----------
 export type Gift = { id: string; type: 'money' | 'equip' | 'odd' | 'pearl' | 'item'; amount?: number; itemId?: string | number; tier?: number; message?: string; createdAt?: number | string };
 export async function gifts(): Promise<Gift[]> { const r = await get(`/gifts?pid=${encodeURIComponent(D.id)}&caps=item${tq()}`); return Array.isArray(r?.gifts) ? r.gifts : []; }

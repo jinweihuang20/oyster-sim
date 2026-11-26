@@ -81,6 +81,8 @@ export type BoatNetEvents = {
   load?: (e: { boatId: number; load: number }) => void;
   /** 有人釣到傳說魚（全廣場公告） */
   fishBig?: (e: { connId: string; nick: string; name: string; kg: number }) => void;
+  /** 別人在船上釣魚：站的位置（船身座標）、面向、姿勢代碼（fishPose.ts） */
+  fishPose?: (e: { connId: string; dx: number; dz: number; yaw: number; st: number }) => void;
 };
 export type HaulRes = { ok: boolean; err?: string; cargo?: number; cargoVal?: number; rack?: RackDto | null; fine?: number };
 export type SellRes = { ok: boolean; err?: string; pay?: number; strings?: number; kg?: number; cargo?: number; bonus?: number };
@@ -120,6 +122,7 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     conn.on('BoatCargo', safe(x => ev.cargo?.({ cargo: num(g(x, 'cargo')), lost: num(g(x, 'lost')) })));
     conn.on('BoatLoad', safe(x => ev.load?.({ boatId: num(g(x, 'boatId'), -1), load: num(g(x, 'load')) })));
     conn.on('FishBig', safe(x => ev.fishBig?.({ connId: String(g(x, 'connId') ?? ''), nick: String(g(x, 'nick') ?? ''), name: String(g(x, 'name') ?? ''), kg: num(g(x, 'kg')) })));
+    conn.on('FishPose', safe(x => ev.fishPose?.({ connId: String(g(x, 'connId') ?? ''), dx: num(g(x, 'dx')), dz: num(g(x, 'dz')), yaw: num(g(x, 'yaw')), st: num(g(x, 'st')) })));
     conn.on('BoatRescued', safe(x => ev.rescued({ boatId: num(g(x, 'boatId'), -1), seat: num(g(x, 'seat'), -1), by: String(g(x, 'by') ?? '') })));
   });
   const fetchState = async () => {
@@ -140,7 +143,7 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
   };
   client.afterJoin.push(() => { void fetchState(); });
 
-  let driveBusy = false, swimBusy = false;
+  let driveBusy = false, swimBusy = false, fishPoseBusy = false, fishPoseOld = false;
   return {
     /** null＝還不知道；false＝舊伺服器 */
     supported: () => supported,
@@ -183,6 +186,12 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     },
     /** 釣魚（PlazaWorld.Fish.cs）：回傳原始物件，plazaFish.ts 自己正規化 */
     fish: (m: 'FishState' | 'FishCast' | 'FishRoll' | 'FishReel' | 'FishLand' | 'FishSell', ...a: unknown[]): Promise<any> => call(m, ...a),
+    /** 船上釣魚姿勢（給別人看；舊伺服器沒有就算了） */
+    fishPose(dx: number, dz: number, yaw: number, st: number) {
+      if (fishPoseBusy || !supported || fishPoseOld) return;
+      fishPoseBusy = true;
+      void call('FishPose', dx, dz, yaw, st).then(r => { if (r?.err === 'old_server') fishPoseOld = true; }).finally(() => { fishPoseBusy = false; });
+    },
     close() { closed = true; },
   };
 }
