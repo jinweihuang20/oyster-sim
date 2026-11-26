@@ -16,7 +16,7 @@ import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { fishGeometry, fishMaterial, FISH_TIER } from './fishModel';
 import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
-import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, type FishPoseIn, type FishPhase } from './fishPose';
+import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, type FishPoseIn, type FishPhase } from './fishPose';
 import type { FishSyncMsg } from './fishSync';
 
 export type FishBoat = { id: number; x: number; z: number; h: number; v: number };
@@ -81,6 +81,8 @@ let staleLine = false;
 let hold: HoldFish[] = [], holdN = 0, holdVal = 0, sellLeft: number = FISH.sellMax;
 let dexView: FishDexView | null = null;
 let dex = new Map<string, { kg: number; n: number }>();
+/** jerkN＝這次登入抽竿幾下（人物抽竿動作、送給別人看） */
+let jerkN = 0;
 let reelHeld = false, jerkQ = false, act = false, castH = 0, castX = 0, castZ = 0, castDst = 8, ox = 0, oz = 0;
 let hooked: HoldFish | null = null;
 let t = 0, splashT = 0, shadowA = 0, tipS = '', panelTab: 'gear' | 'dex' = 'gear', panelOn = false;
@@ -92,7 +94,7 @@ let ui: {
 // 3D：釣竿模型（掛在人物身上）＋釣線（一條線段）、浮標／假魚、魚影
 let myRod: Rod | null = null;
 const myPose = newFishPose();
-const poseIn: FishPoseIn = { phase: 'off', power: 0, reel: false, tension: 0, lure: false, twitch: 0 };
+const poseIn: FishPoseIn = { phase: 'off', power: 0, reel: false, tension: 0, lure: false, twitch: 0, jerk: 0 };
 let ffx: FishFx | null = null, bubbleT = 0, inkT = 0, fightX = 0, fightZ = 0;
 let gfx: { g: THREE.Group; line: THREE.LineSegments; pos: Float32Array; bob: THREE.Mesh; bobMat: THREE.MeshBasicMaterial; shadow: THREE.Mesh; shMat: THREE.MeshBasicMaterial } | null = null;
 const _tip = new THREE.Vector3(), _end = new THREE.Vector3(), _dir = new THREE.Vector3();
@@ -459,6 +461,8 @@ export function tickFish(dt: number, cam: THREE.Camera) {
     if (Math.abs(joy.x) > 0.15) dir = joy.x;
     if (dir !== 0) act = true;
     const troll = !!b && sm.gear === 'lure' && trollOk(C.mySeat(), sm.item, b.v);
+    // 抽竿（路亞等待／捲線中才算）：人物甩一下竿
+    if (jerkQ && sm.lure && sm.phase === 'wait') jerkN++;
     const ev = sm.tick(dt, { reel: reelHeld, jerk: jerkQ, dir, troll });
     if (jerkQ && sm.lure && gfx) C.splash(lurePos().x, lurePos().z, sm.item === 'popper' ? 0.3 : 0.12);
     jerkQ = false;
@@ -612,6 +616,7 @@ function fillPoseIn() {
   poseIn.reel = reelHeld && (poseIn.phase === 'fight' || (poseIn.lure && poseIn.phase === 'wait'));
   poseIn.tension = sm.fight?.ten ?? 0;
   poseIn.twitch = sm.phase === 'nibble' ? Math.max(0.4, sm.twitch) : sm.phase === 'sink' ? 1 : 0;
+  poseIn.jerk = jerkN;
   return poseIn;
 }
 /**
@@ -627,7 +632,8 @@ export function fishSyncFill(out: FishSyncMsg) {
   const d = (ph === 'fight' || ph === 'land') && sm.fight ? 1.5 + castDst * (1 - sm.fight.prog) : sm.lure ? sm.lure.dist : castDst;
   // 甩竿一放開就送落點距離（別人畫面的線頭才會跟自己一樣飛到同一個地方）
   out.cd = sm.lineOut || ph === 'fight' || ph === 'land' || ph === 'cast' || ph === 'fly' ? Math.round(d * 2) / 2 : 0;
-  out.tn = poseIn.phase === 'fight' ? Math.round(poseIn.tension * 4) / 4 : 0;
+  // 拉魚＝張力；路亞等待／捲線＝抽竿計數（別人看到抽竿動作；伺服器 tn 照樣夾 0～1，不用改）
+  out.tn = poseIn.phase === 'fight' ? Math.round(poseIn.tension * 4) / 4 : poseIn.phase === 'wait' && poseIn.lure ? jerkTn(jerkN) : 0;
   const show = poseIn.phase === 'show';
   out.sp = show ? catchSp : ''; out.kg = show ? catchKg : 0;
   return out;

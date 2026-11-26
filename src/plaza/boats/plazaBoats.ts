@@ -22,7 +22,7 @@ import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen,
 import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishFaceYaw, fishCanWalk, fishPostPose, fishRejoined, fishSyncFill, fishBodyVerts } from './plazaFish';
 import { DECK, FISH, chargePower, castFlyPoint, deckStart, deckClamp, stepDeck, yawOf, standCam, standWantYaw } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
-import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWorld, type FishPoseSt, type FishPoseIn } from './fishPose';
+import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWorld, jerkFromSync, type FishPoseSt, type FishPoseIn } from './fishPose';
 import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishBadgeOf, fishLineOut, fishLineEnd, type FishSyncMsg } from './fishSync';
 import { fishGeometry, fishMaterial } from './fishModel';
 import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare, type DriftTide, type DriftPull } from './boatNet';
@@ -977,6 +977,8 @@ function fishSyncRejoined() { syncSent = false; syncSince = FISH_SYNC.keepAlive;
 type Fisher = { rigRef?: PlayerRig;
   c: string; boat: boolean; seenT: number; postT: number; x: number; z: number; yaw: number; tx: number; tz: number; tyaw: number;
   st: number; stT: number; ch: number; cd: number; cdS: number; tn: number; tnS: number; sp: string; kg: number;
+  /** 看到對方抽竿幾下（路亞等待時 tn 換了） */
+  jerkN: number;
   at: number; moving: boolean; ph: number; boatH: number; splT: number;
   pose: FishPoseSt; inp: FishPoseIn; rod: Rod | null; line: THREE.LineSegments | null; bob: THREE.Mesh | null; fish: THREE.Mesh | null; fishSp: string;
   post: (rig: PlayerRig, dt: number, hidden: boolean) => void;
@@ -997,15 +999,17 @@ function onFishSync(e: FishSyncMsg & { connId: string }) {
   if (!f) {
     const nf: Fisher = {
       c: e.connId, boat: e.boat, seenT: t, postT: t, x: p.x, z: p.z, yaw: e.yaw, tx: p.x, tz: p.z, tyaw: e.yaw,
-      st: 0, stT: t, ch: e.ch, cd: e.cd, cdS: e.cd, tn: e.tn, tnS: e.tn, sp: '', kg: 0,
+      st: 0, stT: t, ch: e.ch, cd: e.cd, cdS: e.cd, tn: e.tn, tnS: e.tn, sp: '', kg: 0, jerkN: 0,
       at: t, moving: false, ph: 0, boatH: 0, splT: 0,
-      pose: newFishPose(), inp: { phase: 'off', power: 0, reel: false, tension: 0, lure: false, twitch: 0 }, rod: null, line: null, bob: null, fish: null, fishSp: '',
+      pose: newFishPose(), inp: { phase: 'off', power: 0, reel: false, tension: 0, lure: false, twitch: 0, jerk: 0 }, rod: null, line: null, bob: null, fish: null, fishSp: '',
       post: () => {},
     };
     nf.post = (rig, dt, hidden) => poseFisher(nf, rig, dt, hidden);
     fishers.set(e.connId, f = nf);
     if (!e.boat) D?.view()?.setRemoteFish(e.connId, nf.post);
   }
+  // 對方抽竿：tn 在路亞等待／捲線時是抽竿計數，換了就抽一下
+  if (jerkFromSync(f.st, f.tn, e.st, e.tn)) f.jerkN++;
   if (f.st !== e.st) {
     // 剛甩竿：線從竿尖飛出去（顯示的線長從 1 m 長到實際距離）
     if ((e.st & 15) === 3 || ((f.st & 15) !== 3 && fishLineOut(e.st) && !fishLineOut(f.st))) f.cdS = 1;
@@ -1017,6 +1021,7 @@ function onFishSync(e: FishSyncMsg & { connId: string }) {
 function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
   f.postT = t; f.rigRef = rig;
   const inp = fishPoseDecodeInto(f.st, f.inp);
+  inp.jerk = f.jerkN;
   // 張力平滑（約 0.3 秒一筆）；蓄力條照甩竿開始後的時間自己長
   f.tnS += (f.tn - f.tnS) * (1 - Math.exp(-6 * dt));
   inp.tension = f.tnS;

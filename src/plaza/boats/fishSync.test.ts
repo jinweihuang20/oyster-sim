@@ -49,7 +49,7 @@ describe('釣魚動作同步：什麼時候送', () => {
 describe('收到別人的同步', () => {
   it('PascalCase／camelCase、壞數字、沒有 connId', () => {
     const m = normFishSync({ ConnId: 'c1', St: 21, Boat: true, Dx: 0.2, Dz: '0.4', Yaw: 1, Ch: 2, Cd: 999, Tn: 3, Sp: 'kurodai', Kg: 1.5 })!;
-    expect(m).toMatchObject({ connId: 'c1', st: 21, boat: true, dx: 0.2, dz: 0.4, yaw: 1, ch: 2, cd: 40, tn: 1, sp: 'kurodai', kg: 1.5 });
+    expect(m).toMatchObject({ connId: 'c1', st: 21, boat: true, dx: 0.2, dz: 0.4, yaw: 1, ch: 2, cd: 44, tn: 1, sp: 'kurodai', kg: 1.5 });
     const b = normFishSync({ connId: 'c2', st: 'x', cd: NaN })!;
     expect(b.st).toBe(0); expect(b.cd).toBe(0); expect(b.boat).toBe(false);
     expect(normFishSync({ st: 4 })).toBeNull();

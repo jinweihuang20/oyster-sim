@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { placePlazaArmChain, type PlayerRig } from '../../dm/character';
 import type { Rod } from './fishRod';
 import { ROD_GRIP } from './fishRod';
+import { jerkSt } from './fishSync';
 
 export type FishPhase = 'off' | 'hold' | 'charge' | 'cast' | 'wait' | 'fight' | 'show';
 export type FishPoseIn = {
@@ -21,6 +22,8 @@ export type FishPoseIn = {
   lure: boolean;
   /** 魚在咬／動竿：小抖動 0～1 */
   twitch: number;
+  /** 抽竿次數（每按一次 +1；跟上次不一樣＝這幀抽竿）。路亞等待／捲線中才有動作 */
+  jerk?: number;
 };
 export type FishPoseSt = {
   pitch: number; side: number;
@@ -34,6 +37,8 @@ export type FishPoseSt = {
   hookT: number;
   /** 腳站穩（弓步、膝蓋微彎、重心放低）0～1；braceW＝腳現在是不是被這裡改過（收掉時要還原一次） */
   brace: number; braceW: boolean;
+  /** 抽竿動作開始後經過的秒數（<0＝不在抽）；jerkN＝看過的抽竿次數 */
+  jerkT: number; jerkN: number;
   prev: FishPhase;
   t: number;
 };
@@ -42,9 +47,20 @@ export type FishPoseSt = {
 export const CAST_FLICK = 0.32;
 /** 中魚揚竿：往上猛拉的時間（秒） */
 export const HOOK_SET = 0.38;
+/** 抽竿：手腕往上往後一甩、再慢慢放回（秒） */
+export const JERK_T = 0.36;
+/** 抽竿往上甩到頂的時間點（佔整段比例） */
+const JERK_UP = 0.24;
+/** 抽竿的力道曲線 0→1→0：前段很快甩到頂、後段平順放回 */
+export function jerkEnv(u: number) {
+  if (u <= 0 || u >= 1) return 0;
+  return u < JERK_UP ? Math.sin((Math.PI / 2) * (u / JERK_UP)) : 0.5 + 0.5 * Math.cos((Math.PI * (u - JERK_UP)) / (1 - JERK_UP));
+}
+/** 抽竿疊在目標姿勢上的量：竿子猛往上、手往上往胸口收、身體往後仰一點、竿彎（竿尖被線拉住） */
+export const JERK_AMP = { pitch: 0.78, hy: 0.14, hz: 0.1, lean: 0.13, bend: 0.3, side: -0.04 };
 
 export function newFishPose(): FishPoseSt {
-  return { pitch: 0.6, side: 0.1, hx: 0.14, hy: 0.02, hz: -0.3, lean: 0, bend: 0, bendV: 0, crank: 0, castT: -1, hookT: -1, brace: 0, braceW: false, prev: 'off', t: 0 };
+  return { pitch: 0.6, side: 0.1, hx: 0.14, hy: 0.02, hz: -0.3, lean: 0, bend: 0, bendV: 0, crank: 0, castT: -1, hookT: -1, brace: 0, braceW: false, jerkT: -1, jerkN: 0, prev: 'off', t: 0 };
 }
 
 export type FishPoseTg = { pitch: number; hx: number; hy: number; hz: number; lean: number; bend: number; side: number; brace: number };
@@ -115,11 +131,28 @@ export function stepFishPose(st: FishPoseSt, inp: FishPoseIn, dt: number) {
   if (inp.phase === 'fight' && st.prev !== 'fight') st.hookT = st.prev === 'off' ? -1 : 0;
   else if (inp.phase === 'fight' && st.hookT >= 0) { st.hookT += dt; if (st.hookT >= HOOK_SET) st.hookT = -1; }
   else if (inp.phase !== 'fight') st.hookT = -1;
+  // 抽竿：只有路亞等待／捲線時才甩；連續抽也接得順（從目前的高度接著往上甩，不會先掉回原位）
+  const jn = inp.jerk ?? st.jerkN;
+  if (jn !== st.jerkN) {
+    st.jerkN = jn;
+    if (inp.phase === 'wait' && inp.lure) {
+      const e = st.jerkT >= 0 ? jerkEnv(st.jerkT / JERK_T) : 0;
+      st.jerkT = (Math.asin(Math.min(1, e)) / (Math.PI / 2)) * JERK_UP * JERK_T;
+      st.bendV += 7 * (1 - 0.5 * e);
+    }
+  } else if (st.jerkT >= 0) { st.jerkT += dt; if (st.jerkT >= JERK_T) st.jerkT = -1; }
+  if (inp.phase !== 'wait') st.jerkT = -1;
   st.prev = inp.phase;
   const tg = fishPoseTarget(inp, st.castT, st.t, st.hookT);
+  const jerking = st.jerkT >= 0;
+  if (jerking) {
+    const e = jerkEnv(st.jerkT / JERK_T);
+    tg.pitch += JERK_AMP.pitch * e; tg.hy += JERK_AMP.hy * e; tg.hz += JERK_AMP.hz * e;
+    tg.lean += JERK_AMP.lean * e; tg.bend += JERK_AMP.bend * e; tg.side += JERK_AMP.side * e;
+  }
   const flick = inp.phase === 'cast' && st.castT >= 0 && st.castT < CAST_FLICK;
   const yank = st.hookT >= 0;
-  const k = flick ? 1 : 1 - Math.exp(-dt * (yank ? 22 : inp.phase === 'charge' ? 7 : inp.phase === 'fight' ? 11 : 9));
+  const k = flick ? 1 : 1 - Math.exp(-dt * (yank ? 22 : jerking ? 28 : inp.phase === 'charge' ? 7 : inp.phase === 'fight' ? 11 : 9));
   st.brace += (tg.brace - st.brace) * (1 - Math.exp(-dt * 6));
   if (st.brace < 0.002 && tg.brace === 0) st.brace = 0;
   st.pitch += (tg.pitch - st.pitch) * k;
@@ -127,7 +160,7 @@ export function stepFishPose(st: FishPoseSt, inp: FishPoseIn, dt: number) {
   st.hx += (tg.hx - st.hx) * k; st.hy += (tg.hy - st.hy) * k; st.hz += (tg.hz - st.hz) * k;
   st.lean += (tg.lean - st.lean) * k;
   // 竿彎：彈簧（甩完會抖幾下）
-  st.bendV += ((tg.bend - st.bend) * (yank ? 520 : 260) - st.bendV * 18) * dt;
+  st.bendV += ((tg.bend - st.bend) * (yank || jerking ? 520 : 260) - st.bendV * 18) * dt;
   st.bend += st.bendV * dt;
   if (st.bend > 1) { st.bend = 1; st.bendV = 0; } else if (st.bend < -1) { st.bend = -1; st.bendV = 0; }
   // 捲線：左手轉搖把（約每秒 2.2 圈；拉魚時跟著張力慢一點）
@@ -152,6 +185,15 @@ export function fishPoseDecodeInto(code: number, out: FishPoseIn, tension = 0.5)
   out.phase = b === 1 ? 'hold' : b === 2 ? 'charge' : b === 3 ? 'cast' : b === 4 || b === 6 ? 'wait' : b === 5 ? 'fight' : b === 7 ? 'show' : 'off';
   out.power = 0.8; out.reel = b === 6 || b === 5; out.tension = tension; out.lure = lure; out.twitch = 0;
   return out;
+}
+/**
+ * 抽竿透過 FishSync 的 tn 送給別人（不用改伺服器）：tn 只有拉魚時是張力，路亞等待／捲線（st 4／6）時改送抽竿計數
+ * 0.1～0.9 輪流（0＝還沒抽過）；舊版客戶端在等待時不看 tn，不受影響。
+ */
+export const jerkTn = (n: number) => (n > 0 ? ((n - 1) % 9 + 1) / 10 : 0);
+/** 收到別人的 FishSync：前後都是路亞等待／捲線、tn 換了（不是 0）＝對方抽了一下竿 */
+export function jerkFromSync(prevSt: number, prevTn: number, st: number, tn: number) {
+  return jerkSt(prevSt) && jerkSt(st) && tn > 0 && Math.abs(tn - prevTn) > 0.04;
 }
 
 const _dir = new THREE.Vector3(), _b = new THREE.Vector3(), _x = new THREE.Vector3(), _z = new THREE.Vector3(), _m = new THREE.Matrix4(), _hl = new THREE.Vector3();

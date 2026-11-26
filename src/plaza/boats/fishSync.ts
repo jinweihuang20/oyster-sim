@@ -29,6 +29,8 @@ export const FISH_SYNC = {
   /** 別人多久沒更新就當作不釣了（秒） */
   stale: 6,
   cdStep: 1, tnStep: 0.25, posStep: 0.08, yawStep: 0.25, chStep: 0.12,
+  /** 抽竿（路亞等待／捲線時 tn 換了）最短間隔：要快，別人看到的抽竿才跟得上節奏；伺服器限 3 秒 16 筆 */
+  jerkGap: 0.25,
 };
 
 export const newFishSync = (): FishSyncMsg => ({ st: 0, boat: false, dx: 0, dz: 0, yaw: 0, ch: 0, cd: 0, tn: 0, sp: '', kg: 0 });
@@ -36,6 +38,8 @@ export function copyFishSync(from: FishSyncMsg, to: FishSyncMsg) {
   to.st = from.st; to.boat = from.boat; to.dx = from.dx; to.dz = from.dz; to.yaw = from.yaw; to.ch = from.ch; to.cd = from.cd; to.tn = from.tn; to.sp = from.sp; to.kg = from.kg;
   return to;
 }
+/** 路亞等待／捲線（tn 拿來送抽竿計數） */
+export const jerkSt = (st: number) => (st & 16) !== 0 && ((st & 15) === 4 || (st & 15) === 6);
 const angD = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 /** 跟上次送出的比：有沒有「看得出來」的變化 */
@@ -44,6 +48,7 @@ export function fishSyncChanged(last: FishSyncMsg, cur: FishSyncMsg) {
   if (cur.st === 0) return false;
   return Math.abs(last.cd - cur.cd) >= FISH_SYNC.cdStep
     || ((cur.st & 15) === 5 && Math.abs(last.tn - cur.tn) >= FISH_SYNC.tnStep)
+    || (jerkSt(cur.st) && last.tn !== cur.tn)
     || (cur.boat && Math.hypot(last.dx - cur.dx, last.dz - cur.dz) > FISH_SYNC.posStep)
     || angD(last.yaw, cur.yaw) > FISH_SYNC.yawStep
     || angD(last.ch, cur.ch) > FISH_SYNC.chStep;
@@ -58,6 +63,7 @@ export function fishSyncDue(last: FishSyncMsg, cur: FishSyncMsg, sentOnce: boole
   if (cur.st === 0) return last.st !== 0;
   if (since >= FISH_SYNC.keepAlive) return true;
   if (last.st !== cur.st) return since >= FISH_SYNC.phaseGap;
+  if (jerkSt(cur.st) && jerkSt(last.st) && last.tn !== cur.tn) return since >= FISH_SYNC.jerkGap;
   return since >= FISH_SYNC.minGap && fishSyncChanged(last, cur);
 }
 
@@ -71,7 +77,7 @@ export function normFishSync(x: any): (FishSyncMsg & { connId: string }) | null 
   return {
     connId, st, boat: !!g(x, 'boat'),
     dx: num(g(x, 'dx')), dz: num(g(x, 'dz')), yaw: num(g(x, 'yaw')), ch: num(g(x, 'ch')),
-    cd: Math.max(0, Math.min(40, num(g(x, 'cd')))), tn: Math.max(0, Math.min(1, num(g(x, 'tn')))),
+    cd: Math.max(0, Math.min(44, num(g(x, 'cd')))), tn: Math.max(0, Math.min(1, num(g(x, 'tn')))),
     sp: String(g(x, 'sp') ?? '').slice(0, 24), kg: Math.max(0, num(g(x, 'kg'))),
   };
 }
