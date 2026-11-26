@@ -62,7 +62,7 @@ const money = (n: number) => `$${Math.round(n).toLocaleString('zh-TW')}`;
 const ERR: Record<string, string> = {
   far: '離蚵棚太遠，再靠近一點', fast: '船太快了，慢下來才拉得到', empty: '這座還沒長出蚵串', full: '船貨滿了，先回碼頭卸貨', slow: '',
   not_on_boat: '要在船上才行', far_dock: '靠近碼頭再卸貨', daily_cap: '今天賣太多了，明天再來', own_max: '你的私人蚵棚已經放滿了',
-  sea_full: '海上蚵棚太多了，先收掉一座', near_land: '離碼頭／岸邊太近，往外海開一點', near_rack: '離別的蚵棚太近，換個地方', edge: '太靠海的邊邊了',
+  sea_full: '海上蚵棚太多了，先收掉一座', near_land: '離碼頭／岸邊太近，往外海開一點', near_rack: '離別的蚵棚太近，換個地方', edge: '太靠海的邊邊了', near_boat: '旁邊有船擋著，換個地方再放',
   not_owner: '這不是你的蚵棚', max: '已經升到最高級了', stale: '等級剛剛變了，再按一次', gone: '這座蚵棚不見了', old_server: '伺服器還沒更新', offline: '還沒連上線',
 };
 const err = (e?: string, d = '做不到') => (e != null && e in ERR ? ERR[e] : d);

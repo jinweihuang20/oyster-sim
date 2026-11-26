@@ -217,7 +217,32 @@ export function dockEdge(ndcX: number, ndcY: number, behind: boolean, W: number,
   return { x: ex, y: ey, deg: Math.atan2(dy, dx) * 180 / Math.PI, edge: true };
 }
 
-/** 漂流箱：客戶端自動撈的距離（伺服器 船 3.8／泳 2.2，這裡略嚴免得被拒） */
+export type ScreenBox = { l: number; t: number; r: number; b: number };
+/**
+ * 碼頭指示不要壓到按鈕：指示框（中心 x,y 往外 hw／上 up／下 down）跟任何按鈕框重疊，
+ * 就往上下左右四個方向推出去，選移動最少、而且還在畫面內的；推完可能碰到別顆，最多重複幾次。
+ */
+export function avoidBoxes(x: number, y: number, W: number, H: number, boxes: readonly ScreenBox[],
+  sz: { hw: number; up: number; down: number } = { hw: 30, up: 24, down: 42 }, pad = 6) {
+  for (let it = 0; it < 5; it++) {
+    let moved = false;
+    for (const q of boxes) {
+      const l = q.l - sz.hw - pad, r = q.r + sz.hw + pad, t = q.t - sz.down - pad, b = q.b + sz.up + pad;
+      if (x <= l || x >= r || y <= t || y >= b) continue;
+      let best: [number, number] | null = null, bd = Infinity;
+      for (const [cx, cy] of [[x, t], [x, b], [l, y], [r, y]] as [number, number][]) {
+        if (cx < sz.hw || cx > W - sz.hw || cy < sz.up || cy > H - sz.down) continue;
+        const d = Math.abs(cx - x) + Math.abs(cy - y);
+        if (d < bd) { bd = d; best = [cx, cy]; }
+      }
+      if (!best) continue;
+      x = best[0]; y = best[1]; moved = true;
+    }
+    if (!moved) break;
+  }
+  return { x, y };
+}
+
 /** 撈箱子距離（伺服器 3.8／2.2；金箱 5.5／3.5，客戶端略嚴） */
 export const DRIFT = { boatR: 3.3, swimR: 1.8, goldBoatR: 5, goldSwimR: 3.1, bobHz: 1.7 };
 /** 最近的漂流箱（沒有回 null） */

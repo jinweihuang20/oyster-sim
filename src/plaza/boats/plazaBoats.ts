@@ -13,7 +13,7 @@ import type { PlazaWorldView } from '../worldView';
 import type { Raft } from '../../sea/seaModels';
 import {
   PB, SEATS, dockSlot, stepPlazaBoat, pushStatic, pushFromBoat, isHardRam, stepSwim, freePassengerSeat, boatEmpty,
-  distToLand, landSpot, hullPts, knockSpot, boatBob, pierNearest, dockEdge, nearestDrift, DRIFT, type Hull,
+  distToLand, landSpot, hullPts, knockSpot, boatBob, pierNearest, dockEdge, avoidBoxes, nearestDrift, type ScreenBox, DRIFT, type Hull,
 } from './boatLogic';
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
@@ -792,6 +792,17 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
 }
 const _dp = new THREE.Vector3();
 let dockShown = false;
+/** 畫面上看得到的按鈕框（碼頭指示要避開）；每 0.3 秒量一次就好，不要每格都排版 */
+let btnBoxes: ScreenBox[] = [], btnBoxT = -99;
+function measureBtns() {
+  if (t - btnBoxT < 0.3) return btnBoxes;
+  btnBoxT = t; btnBoxes = [];
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>('#boatUi .boatBtn, #puffBtn, #boatCargo'))) {
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) btnBoxes.push({ l: r.left, t: r.top, r: r.right, b: r.bottom });
+  }
+  return btnBoxes;
+}
 /** 碼頭指示：在船上／水裡、碼頭不在畫面內或還很遠 → 畫面邊緣箭頭＋距離 */
 function tickDockInd(cam: THREE.Camera) {
   if (!ui) return;
@@ -806,7 +817,8 @@ function tickDockInd(cam: THREE.Camera) {
       const e = dockEdge(_dp.x, _dp.y, _dp.z > 1, W, H, dist, dockInsets(W, H));
       if (e) {
         show = true;
-        ui.dock.style.transform = `translate(${e.x.toFixed(0)}px,${e.y.toFixed(0)}px)`;
+        const p2 = avoidBoxes(e.x, e.y, W, H, measureBtns());
+        ui.dock.style.transform = `translate(${p2.x.toFixed(0)}px,${p2.y.toFixed(0)}px)`;
         ui.dockArrow.style.transform = `rotate(${e.deg.toFixed(0)}deg)`;
         const lbl = `${Math.round(dist)} m`;
         if (ui.dockLbl.textContent !== lbl) ui.dockLbl.textContent = lbl;

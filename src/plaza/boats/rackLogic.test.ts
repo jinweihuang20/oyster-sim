@@ -90,3 +90,33 @@ describe('私人蚵棚：放太久變老、公共冷卻', () => {
     expect(s.ageFloor).toBe(50);
   });
 });
+
+import { hullPts, PB } from './boatLogic';
+describe('剛放好的蚵棚壓在船上：往哪個方向開都開得走', () => {
+  const clear = (b: { x: number; z: number; h: number }, r: { x: number; z: number; h: number }) => {
+    const t = { ...b, v: 0 };
+    return !pushFromRack(t, r, hullPts(b), PB.hullR);
+  };
+  it('舊版放法（架子壓在船身上）＋ 8 個方向、前進／倒車都能脫困', () => {
+    for (let k = 0; k < 8; k++) for (const dir of [1, -1]) {
+      const h0 = 0.3;
+      // 舊版：右舷 2.2 m、架子跟船同向 → 架子橫跨船身
+      const r = { x: Math.cos(h0) * 2.2, z: -Math.sin(h0) * 2.2, h: h0 };
+      const b = { x: 0, z: 0, h: h0 + k * Math.PI / 4, v: 0 };
+      for (let i = 0; i < 180; i++) {
+        b.v = 4 * dir; // 一直踩油門
+        b.x += -Math.sin(b.h) * b.v / 60; b.z += -Math.cos(b.h) * b.v / 60;
+        pushFromRack(b, r, hullPts(b), PB.hullR);
+      }
+      expect(clear(b, r)).toBe(true);
+      expect(Math.hypot(b.x, b.z)).toBeGreaterThan(2.5);
+    }
+  });
+  it('往外開不減速，一次最多推 0.2 m', () => {
+    const r = { x: 0, z: 0, h: 0 };
+    const b = { x: 0, z: 0.5, h: Math.PI, v: 3 }; // h=π → 往 +z 開（離開架子）
+    pushFromRack(b, r, hullPts(b), PB.hullR);
+    expect(b.v).toBe(3);
+    expect(b.z - 0.5).toBeLessThanOrEqual(0.2 + 1e-9);
+  });
+});

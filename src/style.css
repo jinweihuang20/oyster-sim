@@ -4364,7 +4364,8 @@ body.tideOn #tidePill{display:flex}
 
 /* ---------- 廣場海面：上船／下船／丟殼／跳水 ---------- */
 #boatUi{position:fixed;inset:0;pointer-events:none;z-index:8600}
-#boatUi .boatBtn{position:absolute;display:none;align-items:center;gap:8px;pointer-events:auto;touch-action:none;padding:12px 18px!important;border-radius:16px!important;border:2px solid #fff!important;background:#2a5a86!important;color:#fff!important;font-size:16px;font-weight:700;letter-spacing:0;box-shadow:0 3px 12px rgba(0,0,0,.28)!important;-webkit-tap-highlight-color:transparent;user-select:none}
+#boatUi .boatBtn{position:absolute;display:none;align-items:center;gap:8px;pointer-events:auto;touch-action:none;padding:12px 18px!important;border-radius:16px!important;border:2px solid #fff!important;background:#2a5a86!important;color:#fff!important;font-size:16px;font-weight:700;letter-spacing:0;box-shadow:0 3px 12px rgba(0,0,0,.28)!important;-webkit-tap-highlight-color:transparent;user-select:none;white-space:nowrap;flex-shrink:0;width:auto!important;height:auto!important;min-width:0!important;min-height:0!important;line-height:1.2;writing-mode:horizontal-tb}
+#boatUi .boatBtn .lbl,#boatUi .boatBtn .key{white-space:nowrap}
 #boatUi .boatBtn.on{display:flex}
 #boatUi .boatBtn.dis{opacity:.55}
 #boatUi .boatBtn:active{transform:scale(.96)}
@@ -4399,15 +4400,25 @@ body.plazaBoating.plazaBoatSmoke #puffBtn.on{display:block!important;visibility:
 /* 在船上／水裡：跳／蹲／躺／動作／換位置／丟殼（座位版）這些按鈕先收起來 */
 body.plazaBoating #jumpBtn,body.plazaBoating #crouchBtn,body.plazaBoating #lieBtn,body.plazaBoating #poseBtn,body.plazaBoating #standBtn,body.plazaBoating #throwBtn,body.plazaBoating #stealBtn,body.plazaBoating #umbBtn,body.plazaBoating #puffBtn,body.plazaBoating #seatCard{display:none!important}
 /* 獎勵提示（撈到漂流箱）：獨立一條，實心深底、不用毛玻璃與發光陰影 → 海面霧天也清楚 */
-/* 蚵棚：拉蚵串／賣／放／升級（在「上船／下船」鈕上方置中，避開左下搖桿與右側按鈕欄） */
-#boatRackBar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--sa-bottom,0px) + 214px);display:flex;gap:10px;pointer-events:none;align-items:center}
+/* 蚵棚：拉蚵串／賣／放／升級：跟「跳水／丟殼／抽一口」同一欄（右下往上疊），一顆一行、不換行 */
+#boatRackBar{position:absolute;z-index:2;right:calc(var(--sa-right,0px) + 18px);bottom:calc(var(--sa-bottom,0px) + 214px);display:flex;flex-direction:column-reverse;align-items:flex-end;gap:10px;pointer-events:none;max-width:calc(100vw - 36px)}
+body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 #boatUi #boatRackBar .boatBtn{position:static}
+@media (max-height:500px){
+  #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 172px);gap:8px}
+  body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 222px)}
+}
+/* 橫放矮螢幕：右欄疊不下 → 蚵棚按鈕排成一列，放在右欄左邊、「下船」鈕上方 */
+@media (max-height:420px){
+  #boatRackBar{flex-direction:row-reverse;align-items:center;right:calc(var(--sa-right,0px) + 132px);bottom:calc(var(--sa-bottom,0px) + 150px)}
+  body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 150px)}
+}
 #boatUi #boatRackBar .boatBtn.steal{background:#8a3a2e!important}
 #boatUi #boatRackBar .boatBtn .key{opacity:.7;font-weight:600}
 #boatCargo{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--sa-top,0px) + 98px);display:none;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:#142231;border:1.5px solid #2a5a86;color:#e8f2ff;font-size:13px;font-weight:700;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums}
 #boatCargo.on{display:flex}
 #boatCargo .boatIc,#boatCargo .boatIc svg{width:18px;height:18px}
-#rackTag{position:absolute;left:0;top:0;display:none;padding:3px 9px;border-radius:9px;background:rgba(20,34,49,.86);border:1px solid #2a5a86;color:#e8f2ff;font-size:12px;font-weight:700;white-space:nowrap;pointer-events:none;will-change:transform;font-variant-numeric:tabular-nums}
+#rackTag{position:absolute;z-index:0;left:0;top:0;display:none;padding:3px 9px;border-radius:9px;background:rgba(20,34,49,.86);border:1px solid #2a5a86;color:#e8f2ff;font-size:12px;font-weight:700;white-space:nowrap;pointer-events:none;will-change:transform;font-variant-numeric:tabular-nums}
 #rackTag.on{display:block}
 #rackTag.priv{border-color:#d84a3a;color:#ffd9d2}
 #rackTag.mine{border-color:#7fb2e0}

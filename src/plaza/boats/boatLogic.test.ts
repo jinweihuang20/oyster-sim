@@ -95,3 +95,18 @@ describe('廣場膠筏', () => {
     }
   });
 });
+
+import { avoidBoxes } from './boatLogic';
+describe('碼頭指示避開按鈕', () => {
+  const W = 390, H = 844, sz = { hw: 30, up: 24, down: 42 };
+  it('沒重疊不動；壓到右下按鈕就推出去，推完不再碰到任何一顆', () => {
+    expect(avoidBoxes(100, 100, W, H, [{ l: 260, t: 500, r: 372, b: 548 }])).toEqual({ x: 100, y: 100 });
+    const boxes = [{ l: 260, t: 500, r: 372, b: 548 }, { l: 250, t: 440, r: 372, b: 488 }, { l: 280, t: 630, r: 372, b: 676 }];
+    const p = avoidBoxes(350, 470, W, H, boxes);
+    for (const q of boxes) {
+      const hit = p.x > q.l - sz.hw && p.x < q.r + sz.hw && p.y > q.t - sz.down && p.y < q.b + sz.up;
+      expect(hit).toBe(false);
+    }
+    expect(p.x).toBeGreaterThanOrEqual(sz.hw); expect(p.x).toBeLessThanOrEqual(W - sz.hw);
+  });
+});

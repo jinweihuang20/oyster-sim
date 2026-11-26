@@ -132,28 +132,43 @@ export function upCost(upCost: number[][], line: number, lv: number): number | n
 
 /** 蚵棚架子的佔地（半長／半寬，跟 boatScene RACK_GEO 一樣） */
 export const RACK_HALF = { len: 2.6, wid: 1.2 };
-/** 船撞到蚵棚架子：把船身兩個圓推出架子的矩形外、減速；回 true＝有撞到 */
+/** 一次最多推多少（m）：慢慢推出去，不會一下彈飛 */
+export const RACK_PUSH_STEP = 0.2;
+/**
+ * 船撞到蚵棚架子：把船身兩個圓推出架子的矩形外；回 true＝有撞到。
+ * - 船身壓在架子裡（例如剛放好的蚵棚、舊資料）：兩個圓都往「船中心那一側」推，方向一致，不會左右拉扯卡住
+ * - 每次最多推 RACK_PUSH_STEP，慢慢滑出去
+ * - 只有往架子裡開才減速；往外開不減速 → 絕對不會被釘住
+ */
 export function pushFromRack(b: { x: number; z: number; h: number; v: number }, r: { x: number; z: number; h: number }, pts: readonly (readonly [number, number])[], hullR: number) {
   const c = Math.cos(r.h), s = Math.sin(r.h);
-  let hit = false;
+  const L = RACK_HALF.len, Wd = RACK_HALF.wid;
+  // 船中心在架子本地座標：決定「壓在裡面」時往哪邊推
+  const cdx = b.x - r.x, cdz = b.z - r.z;
+  const cl = c * cdx - s * cdz, cw = s * cdx + c * cdz;
+  let hit = false, pushX = 0, pushZ = 0;
   for (const [px, pz] of pts) {
     const dx = px - r.x, dz = pz - r.z;
     const lx = c * dx - s * dz, lz = s * dx + c * dz;
-    const qx = Math.max(-RACK_HALF.len, Math.min(RACK_HALF.len, lx)), qz = Math.max(-RACK_HALF.wid, Math.min(RACK_HALF.wid, lz));
-    let ox = lx - qx, oz = lz - qz, d = Math.hypot(ox, oz);
+    const qx = Math.max(-L, Math.min(L, lx)), qz = Math.max(-Wd, Math.min(Wd, lz));
+    const ox = lx - qx, oz = lz - qz, d = Math.hypot(ox, oz);
     if (d >= hullR) continue;
+    let ux: number, uz: number, pen: number;
     if (d < 1e-4) {
-      // 船身圓心在架子裡：往最近的邊推
-      const ex = RACK_HALF.len - Math.abs(lx), ez = RACK_HALF.wid - Math.abs(lz);
-      if (ex < ez) { ox = Math.sign(lx) || 1; oz = 0; d = 0; const push = ex + hullR; b.x += c * ox * push; b.z += -s * ox * push; }
-      else { oz = Math.sign(lz) || 1; ox = 0; const push = ez + hullR; b.x += s * oz * push; b.z += c * oz * push; }
-      hit = true; continue;
-    }
-    const push = hullR - d, ux = ox / d, uz = oz / d;
-    // 本地 → 世界
-    b.x += (c * ux + s * uz) * push; b.z += (-s * ux + c * uz) * push;
+      // 圓心在架子裡：沿船中心那一側推（架子細長，通常往側邊最快出去）
+      if (Math.abs(cl) > L) { ux = Math.sign(cl) || 1; uz = 0; pen = L - ux * lx + hullR; }
+      else { uz = Math.sign(cw) || 1; ux = 0; pen = Wd - uz * lz + hullR; }
+    } else { ux = ox / d; uz = oz / d; pen = hullR - d; }
+    // 本地 → 世界；兩個圓取推最多的那個方向量（不疊加，免得推太猛）
+    const wx = (c * ux + s * uz) * pen, wz = (-s * ux + c * uz) * pen;
+    if (Math.hypot(wx, wz) > Math.hypot(pushX, pushZ)) { pushX = wx; pushZ = wz; }
     hit = true;
   }
-  if (hit) b.v *= 0.6;
-  return hit;
+  if (!hit) return false;
+  const m = Math.hypot(pushX, pushZ), k = m > RACK_PUSH_STEP ? RACK_PUSH_STEP / m : 1;
+  b.x += pushX * k; b.z += pushZ * k;
+  // 往架子裡開（速度跟推出方向相反）才減速
+  const vx = -Math.sin(b.h) * b.v, vz = -Math.cos(b.h) * b.v;
+  if (m > 1e-6 && (vx * pushX + vz * pushZ) / m < -0.05) b.v *= 0.6;
+  return true;
 }
