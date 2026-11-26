@@ -45,6 +45,7 @@ export type FishCtx = {
 };
 
 const ICON = {
+  rank: '<svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M8 20h8"/></svg>',
   rod: '<svg viewBox="0 0 24 24"><path d="M4 20L19 3"/><path d="M19 3v12"/><circle cx="19" cy="17" r="2"/><path d="M6 18l2 2"/></svg>',
   cast: '<svg viewBox="0 0 24 24"><path d="M4 20L17 5"/><path d="M17 5c3 3 4 8 2 13"/><circle cx="19" cy="19" r="1.6"/></svg>',
   reel: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 5V2M19 12h3"/></svg>',
@@ -425,7 +426,7 @@ function openPanel(tab: 'gear' | 'dex') { panelTab = tab; panelOn = true; render
 function closePanel() { dexView?.stop(); dexView = null; panelOn = false; ui?.panel.classList.remove('on'); document.body.classList.remove('fishPanelOpen'); }
 function renderPanel() {
   if (!ui) return;
-  const tabs = `<div class="fpTabs"><button type="button" data-tab="gear" class="${panelTab === 'gear' ? 'on' : ''}">釣具</button><button type="button" data-tab="dex" class="${panelTab === 'dex' ? 'on' : ''}">魚類圖鑑</button><button type="button" class="fpX" aria-label="關閉">${ICON.exit}</button></div>`;
+  const tabs = `<div class="fpTabs"><button type="button" data-tab="gear" class="${panelTab === 'gear' ? 'on' : ''}">釣具</button><button type="button" data-tab="dex" class="${panelTab === 'dex' ? 'on' : ''}">魚類圖鑑</button><button type="button" class="fpLb" aria-label="釣魚排行榜">${ICON.rank}<span>排行榜</span></button><button type="button" class="fpX" aria-label="關閉">${ICON.exit}</button></div>`;
   let body = '';
   if (panelTab === 'gear') {
     const rodRow = (['float', 'lure'] as Gear[]).map(gr => `<button type="button" data-rod="${gr}" class="fpPick ${rod === gr ? 'on' : ''}" ${owns(gr) ? '' : 'disabled'}><b>${FISH.rods[gr].n}</b><small>${owns(gr) ? (gr === 'float' ? '掛餌等魚咬' : '操控假魚') : '雜貨店有賣'}</small></button>`).join('');
@@ -439,6 +440,7 @@ function renderPanel() {
   ui.panel.innerHTML = tabs + `<div class="fpBody">${body}</div>`;
   if (panelTab === 'dex') { const host = ui.panel.querySelector<HTMLElement>('.fpBody')!; host.classList.add('fdxHost'); dexView = mountFishDex(host); }
   ui.panel.querySelector('.fpX')?.addEventListener('pointerdown', e => { e.preventDefault(); closePanel(); });
+  ui.panel.querySelector('.fpLb')?.addEventListener('pointerdown', e => { e.preventDefault(); closePanel(); void import('../../meta/social').then(m => m.openFishBoard()); });
   ui.panel.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); panelTab = b.dataset.tab as 'gear' | 'dex'; renderPanel(); }));
   ui.panel.querySelectorAll<HTMLButtonElement>('[data-rod]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); if (b.disabled || sm.lineOut || sm.phase === 'fight') return; rod = b.dataset.rod as Gear; fixPick(); sm.gear = rod; sm.item = pick[rod]; renderPanel(); }));
   ui.panel.querySelectorAll<HTMLButtonElement>('[data-item]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); if (b.disabled || sm.lineOut || sm.phase === 'fight') return; pick[rod] = b.dataset.item as ItemKey; sm.item = pick[rod]; renderPanel(); }));

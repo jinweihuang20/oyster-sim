@@ -1,6 +1,7 @@
 // 全服彈幕＋全球排行榜（後端：StatsServer /s/*）。後端關機時全部安靜失敗。
 import { postDiscordFirstPlay, postDiscordRename } from '../core/discord';
 import { COMBO_TOTAL } from '../cook/combo';
+import { FISH_BOARDS, isFishBoard, parseFishLb, fishScoreHtml, fishEmptyHint, fishMeText, type FishBoardId } from './fishBoard';
 const API = 'https://game-status.gwtech.org/s';
 type Deps = { id: string; test: boolean; nick: () => string; setNick: (v: string) => void; inTut: () => boolean; on: () => boolean; label: (kind: string, item: number) => string; title?: () => string; foil?: () => boolean; toast: (t: string, c?: string, sec?: number, place?: 'mid' | 'top') => void; LS: { getItem(k: string): string | null; setItem(k: string, v: string): void } };
 let D: Deps;
@@ -92,7 +93,7 @@ export function syncTitle() { if (D?.on()) post('/score', { scores: {} }); }
 export function report(kind: 'pearl' | 'legend' | 'odd' | 'port' | 'ach', item: number) { if (D?.on() && !D.inTut()) post('/event', { kind, item }); }
 
 // ---------- 排行榜 ----------
-type BoardId = 'income' | 'earn' | 'oysters' | 'oy0' | 'oy1' | 'oy2' | 'oy3' | 'pearls' | 'dmKills' | 'dmWaves' | 'seat' | 'ckFirst' | 'ckDex' | 'ckAma';
+type BoardId = 'income' | 'earn' | 'oysters' | 'oy0' | 'oy1' | 'oy2' | 'oy3' | 'pearls' | 'dmKills' | 'dmWaves' | 'seat' | 'ckFirst' | 'ckDex' | 'ckAma' | FishBoardId;
 const BOARDS: { id: BoardId; label: string; unit: string }[] = [
   { id: 'income', label: '今日收入', unit: '$' },
   { id: 'oysters', label: '單班最多蚵仔', unit: '' },
@@ -108,14 +109,23 @@ const BOARDS: { id: BoardId; label: string; unit: string }[] = [
   { id: 'ckFirst', label: '首創王', unit: '' },
   { id: 'ckDex', label: '圖鑑收集', unit: '' },
   { id: 'ckAma', label: '阿婆好評', unit: '' },
+  ...FISH_BOARDS.map(b => ({ id: b.id, label: b.label, unit: '' })),
 ];
 const CATS: { id: string; label: string; boards: BoardId[] }[] = [
   { id: 'daily', label: '日常', boards: ['income', 'oysters', 'pearls'] },
   { id: 'career', label: '生涯', boards: ['earn', 'oy0', 'oy1', 'oy2', 'oy3'] },
-  { id: 'dm', label: '死鬥', boards: ['dmKills', 'dmWaves'] },
-  { id: 'plaza', label: '廣場', boards: ['seat'] },
+  // 死鬥（dmKills／dmWaves）、廣場（送座位 seat）分頁先從遊戲端隱藏；伺服器照常記分，之後要再開把這兩行加回來即可
   { id: 'cook', label: '蚵仔煎', boards: ['ckFirst', 'ckDex', 'ckAma'] },
+  { id: 'fish', label: '釣魚', boards: ['fBig', 'fWeight', 'fRev'] },
 ];
+/** 釣魚歷史榜：三個榜同一支 API，切榜時 20 秒內共用 */
+let fishLbCache: { at: number; r: unknown } | null = null;
+async function fishLbGet(force = false) {
+  if (!force && fishLbCache && Date.now() - fishLbCache.at < 20_000) return fishLbCache.r;
+  const r = await get(`/fish/lb?pid=${encodeURIComponent(D.id)}&n=50${tq()}`);
+  if (r) fishLbCache = { at: Date.now(), r };
+  return r;
+}
 const CAREER = new Set<BoardId>(['earn', 'oy0', 'oy1', 'oy2', 'oy3']);
 /** 蚵仔煎榜：伺服器自己算（煎出／請阿婆吃時記錄），只有一種檢視 */
 const COOK = new Set<BoardId>(['ckFirst', 'ckDex', 'ckAma']);
@@ -202,7 +212,8 @@ async function render() {
   const viewBtns = Array.from($('lbView').querySelectorAll('button') as NodeListOf<HTMLButtonElement>);
   const career = CAREER.has(board);
   const cook = COOK.has(board);
-  if (career || cook) {
+  const fishB = isFishBoard(board) ? board : null;
+  if (career || cook || fishB) {
     viewBtns.forEach((b, i) => { b.textContent = board === 'ckAma' ? '本週' : '總榜'; b.style.display = i === 0 ? '' : 'none'; });
   } else if (board === 'seat') {
     const labels = ['今日榜', '總榜'] as const;
@@ -212,10 +223,16 @@ async function render() {
     viewBtns.forEach((b, i) => { b.textContent = labels[i] ?? b.textContent; b.style.display = ''; });
   }
   const apiView = career || (board === 'seat' && view === 'weekly') ? 'all' : view;
-  viewBtns.forEach(b => b.classList.toggle('on', career || cook ? b.dataset.v === 'daily' : b.dataset.v === view));
+  viewBtns.forEach(b => b.classList.toggle('on', career || cook || fishB ? b.dataset.v === 'daily' : b.dataset.v === view));
   list.innerHTML = '<div class="lbEmpty"><i class="ic ic-timer"></i><span>讀取中…</span></div>';
-  const r = await get(`/top?board=${board}&view=${apiView}&n=${cook ? 50 : 20}&me=${D.id}${tq()}`);
+  let r: any = fishB ? await fishLbGet() : await get(`/top?board=${board}&view=${apiView}&n=${cook ? 50 : 20}&me=${D.id}${tq()}`);
   if (seq !== renderSeq) return; // 讀取中換了榜，交給新的那次
+  if (fishB && r) {
+    const fl = parseFishLb(r);
+    if (!fl) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-timer"></i><span>釣魚排行榜快要開放了<br><small>伺服器更新後就會出現</small></span></div>'; $('lbMe').innerHTML = ''; return; }
+    const fb = fl[FISH_BOARDS.find(b => b.id === fishB)!.key];
+    r = { rows: fb.rows, mine: fb.mine };
+  }
   if (!r) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-warn"></i><span>排行榜暫時連不上<br><small>等一下再試試</small></span></div>'; $('lbMe').innerHTML = ''; return; }
   // 舊伺服器不認得蚵仔煎榜，會回別的榜：不要把別的榜的數字當成蚵仔煎成績
   if (cook && r.board !== board) { list.innerHTML = '<div class="lbEmpty"><i class="ic ic-timer"></i><span>蚵仔煎排行榜快要開放了<br><small>伺服器更新後就會出現</small></span></div>'; $('lbMe').innerHTML = ''; return; }
@@ -244,19 +261,21 @@ async function render() {
     return null;
   };
   const row = (x: any) => {
-    const side = x.me
+    const side = fishB
+      ? (x.me ? '' : `<span class="lbFrAct">${fr.friendActionBtn(x.k, x.tag, x.nick)}</span>`)
+      : x.me
       ? `<span class="lbA"><span><i class="ic ic-like"></i>${x.likes}</span><span><i class="ic ic-oyster"></i>${x.shells}</span></span>`
       : `<span class="lbA"><button data-k="${x.k}" data-r="like" aria-label="讚"><i class="ic ic-like"></i>${x.likes}</button><button data-k="${x.k}" data-r="shell" aria-label="丟蚵殼"><i class="ic ic-oyster"></i>${x.shells}</button></span><span class="lbFrAct">${fr.friendActionBtn(x.k, x.tag, x.nick)}</span>`;
-    const score = cookScore(x.v) ?? `<span class="lbV">${unit ? `<span class="lbUnit">${esc(unit)}</span>` : ''}<b class="lbNum">${esc(fmtV(x.v))}</b></span>`;
+    const score = fishB ? fishScoreHtml(fishB, x) : cookScore(x.v) ?? `<span class="lbV">${unit ? `<span class="lbUnit">${esc(unit)}</span>` : ''}<b class="lbNum">${esc(fmtV(x.v))}</b></span>`;
     const rank = Number(x.rank);
     const medal = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
     const rankEl = medal
       ? `<span class="lbR lbMedal ${medal}" title="第 ${rank} 名" aria-label="第 ${rank} 名"><span class="lbMedalIc"></span><b>${rank}</b></span>`
-      : `<span class="lbR">${esc(x.rank)}</span>`;
+      : `<span class="lbR">${x.rank == null ? '－' : esc(x.rank)}</span>`;
     return `<div class="lbRow${x.me ? ' me' : ''}${foilOn(x) ? ' foil' : ''}${medal ? ` top${rank}` : ''}">${rankEl}<div class="lbBody"><div class="lbN">${foilOn(x) ? `<span class="lbFoil">${nameInner(x)}</span>` : nameInner(x)}${x.title ? `<em class="lbT"><i class="ic ic-crown"></i>${esc(x.title)}</em>` : ''}</div><div class="lbFoot">${score}<div class="lbSide">${side}</div></div></div></div>`;
   };
   const rows = r.rows as any[];
-  const emptyHint = board === 'ckFirst' ? '煎出還沒有人煎過的組合，就是全服首創！'
+  const emptyHint = fishB ? fishEmptyHint(fishB) : board === 'ckFirst' ? '煎出還沒有人煎過的組合，就是全服首創！'
     : board === 'ckDex' ? '每煎出一款新組合就會加一！'
     : board === 'ckAma' ? '請阿婆吃拿到 90 分以上就會上榜！'
     : board === 'seat' ? '把鄰居送到指定位子後就會出現成績！'
@@ -272,7 +291,7 @@ async function render() {
   {
     const mine = r.mine as { rank?: number } | null | undefined;
     const rankN = Number(mine?.rank);
-    const rankTxt = Number.isFinite(rankN) && rankN > 0
+    const rankTxt = fishB ? fishMeText(fishB, r.mine ?? null) : Number.isFinite(rankN) && rankN > 0
       ? `你目前第 <b>${esc(rankN)}</b> 名`
       : '你尚未上榜';
     const titleTxt = r.myTitle ? `<span class="lbMeTitle"><i class="ic ic-crown"></i> ${esc(r.myTitle)}</span>` : '';
@@ -281,6 +300,8 @@ async function render() {
   }
 }
 export function open() { ($('lbNick') as HTMLInputElement).value = D.nick() === '剝蚵人' ? '' : D.nick(); cat = catOf(board).id; $('lb').classList.add('show'); render(); }
+/** 釣魚面板的「排行榜」：直接開到釣魚分頁（預設大物榜） */
+export function openFishBoard(which: FishBoardId = 'fBig') { if (!D) return; if (!isFishBoard(board)) board = which; fishLbCache = null; open(); }
 
 export function init(d: Deps) {
   D = d;

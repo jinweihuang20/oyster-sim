@@ -4654,3 +4654,8 @@ body.fishPanelOpen #boatUi>.boatBtn,body.fishPanelOpen #boatRackBar,body.fishPan
 .itemCard .itemIc.tkIc{width:72px;height:45px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:linear-gradient(180deg,#eef4f9,#dde8f1);box-shadow:inset 0 0 0 1px rgba(42,90,134,.18);overflow:hidden}
 .itemCard .itemIc.tkIc svg{width:64px;height:40px}
 .itemCard .itemIc .tkImg{display:block;width:72px;height:45px;pointer-events:none;user-select:none;-webkit-user-drag:none}
+/* 釣魚面板「排行榜」鈕（開全球排行榜的釣魚分頁）＋釣魚榜魚種名 */
+#fishPanel .fpTabs .fpLb{display:inline-flex;align-items:center;gap:4px;padding:6px 10px!important}
+#fishPanel .fpTabs .fpLb svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+@media (max-width:380px){#fishPanel .fpTabs button{padding:6px 8px!important;font-size:13px}#fishPanel .fpTabs .fpLb span{display:none}}
+#lb .lbV .lbFishSp{color:#2a5a86;font-weight:800;margin-right:4px}
