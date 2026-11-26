@@ -1495,7 +1495,7 @@ function buildUi() {
 #pzNet.on{display:block}
 #pzNet.ok{background:rgba(20,48,28,.92);border-color:#9be37a;color:#d8ffc8}
 /* 右下：避開上方狀態列、左下搖桿／聊天 */
-/* 地圖／離開：狀態列下方左側並排圓形圖示鈕。top 由 syncPlazaHudLayout 依 #top 實際底緣覆寫 */
+/* 地圖／離開：狀態列下方左側並排圓形圖示鈕。釣魚中「換餌／圖鑑／不釣了」另掛在同一排右側（#fishActs）。top 由 syncPlazaHudLayout 依 #top 實際底緣覆寫 */
 #pzLeftFabs{pointer-events:none;position:absolute;left:calc(var(--sa-left) + 10px);right:auto;top:var(--pz-fabs-top, calc(var(--sa-top) + 58px));bottom:auto;z-index:2;display:flex;flex-direction:row;align-items:center;gap:8px}
 #pzLeftFabs>button{pointer-events:auto;position:relative;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border:1px solid rgba(232,246,255,.4);border-radius:50%;background:rgba(32,72,96,.5);color:#e8f6ff;font-weight:900;font-size:0;box-shadow:0 2px 8px rgba(0,0,0,.22);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:inline-flex;align-items:center;justify-content:center}
 #pzLeftFabs>button:active{background:rgba(42,90,134,.72)}
