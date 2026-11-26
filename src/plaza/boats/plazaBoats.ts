@@ -18,7 +18,7 @@ import {
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
-import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishFaceYaw, fishCanWalk, fishPostPose, fishRejoined, fishSyncFill } from './plazaFish';
+import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishFaceYaw, fishCanWalk, fishPostPose, fishRejoined, fishSyncFill, fishBodyVerts } from './plazaFish';
 import { DECK, FISH, chargePower, castFlyPoint, deckStart, deckClamp, stepDeck, yawOf, standCam, standWantYaw } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWorld, type FishPoseSt, type FishPoseIn } from './fishPose';
@@ -971,7 +971,7 @@ function fishSyncRejoined() { syncSent = false; syncSince = FISH_SYNC.keepAlive;
 
 // ---------------- 釣魚動作同步：別人 ----------------
 /** 別人在釣魚：船上（甲板站位）或岸上（走路的遠端套釣魚動作）；6 秒沒更新就收竿 */
-type Fisher = {
+type Fisher = { rigRef?: PlayerRig;
   c: string; boat: boolean; seenT: number; postT: number; x: number; z: number; yaw: number; tx: number; tz: number; tyaw: number;
   st: number; stT: number; ch: number; cd: number; cdS: number; tn: number; tnS: number; sp: string; kg: number;
   at: number; moving: boolean; ph: number; boatH: number; splT: number;
@@ -1012,7 +1012,7 @@ function onFishSync(e: FishSyncMsg & { connId: string }) {
   D?.view()?.setRemoteBadge(e.connId, fishBadgeOf(e.st));
 }
 function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
-  f.postT = t;
+  f.postT = t; f.rigRef = rig;
   const inp = fishPoseDecodeInto(f.st, f.inp);
   // 張力平滑（約 0.3 秒一筆）；蓄力條照甩竿開始後的時間自己長
   f.tnS += (f.tn - f.tnS) * (1 - Math.exp(-6 * dt));
@@ -1240,6 +1240,8 @@ export const plazaBoatsDbg = {
         pose: { pitch: +f.pose.pitch.toFixed(2), bend: +f.pose.bend.toFixed(2), lean: +f.pose.lean.toFixed(2), crank: +f.pose.crank.toFixed(2), castT: +f.pose.castT.toFixed(2) },
         gap: a && f.rod && f.line?.visible ? +rodTipWorld(f.rod, new THREE.Vector3()).distanceTo(new THREE.Vector3(a[0], a[1], a[2])).toFixed(3) : null,
         rods: f.rod?.g.parent ? f.rod.g.parent.children.filter(o => o.name === 'fishRod').length : 0,
+        rodVis: f.rod ? f.rod.g.children.every(c => c.visible) : null,
+        bodyVerts: f.rigRef ? fishBodyVerts(f.rigRef.torso) : 0,
         age: +(t - f.at).toFixed(2), postAge: +(t - f.postT).toFixed(2), seenAge: +(t - f.seenT).toFixed(2),
       };
     });

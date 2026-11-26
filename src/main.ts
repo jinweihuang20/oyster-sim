@@ -8147,6 +8147,8 @@ function snapSeatedFirstPerson() {
   camera.updateMatrixWorld();
 }
 function setTpv(v: boolean) {
+  // 廣場釣魚中（岸上、船上）固定第三人稱：要看得到人拿竿、竿子彎、線從竿尖出去、往哪看就往哪拋
+  if (!v && plazaMode && plazaBoatsOpen() && plazaFishing()) { toastTop('釣魚時固定第三人稱，按「不釣了」之後再切換視角', TOP_SEC.info); drawCamBtn(); const c = document.getElementById('tpvSel') as HTMLInputElement | null; if (c) c.checked = tpv; return; }
   clearApoPunchFx();
   // 先改 tpv，再清環視；不要走 flRelease 的回彈，否則切回第一人稱會滑 0.3 秒
   if (flHeld) { flHeld = false; flPtr = -1; flDragId = -1; flDown = null; }

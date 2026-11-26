@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Gear } from './fishLogic';
+import { NO_MERGE } from '../../dm/avatarMerge';
 
 /** 竿長（公尺）：人物約 1.5 公尺高，垂釣竿比人長一倍、路亞竿比較短 */
 export const ROD_LEN: Record<Gear, number> = { float: 3.0, lure: 1.95 };
@@ -137,6 +138,8 @@ export function makeRod(kind: Gear): Rod {
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const mesh = new THREE.Mesh(geo, rodMat()); mesh.frustumCulled = false; mesh.castShadow = false;
   const g = new THREE.Group(); g.name = 'fishRod'; g.add(mesh); if (crank) g.add(crank);
+  // 掛在人物 torso 底下，但不能被換裝／切視角時的「合併人物網格」烤進身體（會留下一支不會動的竿、真的竿被藏起來）
+  g.userData[NO_MERGE] = true;
   let bendNow = 0;
   // 中心線取樣表（硬段結束到竿尖 N 段）：彎度變了才重算一次，再把每個頂點沿著弧線擺回去（截面跟著轉）；硬段的頂點完全不動
   const N = 40, span = Math.max(0.01, L - rigid), T1 = ROD_MAX_ARC[kind];

@@ -411,3 +411,36 @@ describe('拋竿動作：自己看和別人看完全一樣', () => {
     castFlyPoint(1, 3, 2, 11, 0.04, -6, 2, o); expect(o.x).toBeCloseTo(11);
   });
 });
+
+describe('釣魚中切換視角／換裝（會重新合併人物網格）', () => {
+  const mk = () => { const { M, add } = makeMeshHelpers(new THREE.Scene(), true); return makePlayerAvatar({ shirt: 0x3a7ab8, hair: 0x222222, pants: 0x2a2a40 }, M, add, false) as any; };
+  const inp: FishPoseIn = { phase: 'fight', power: 0, reel: true, tension: 0.6, lure: false, twitch: 0 };
+  it('竿子不會被烤進身體：真的竿一直看得到、身上不會多一支不會動的竿、線還是從竿尖出去', async () => {
+    const { rebuildAvatarMerged } = await import('../../dm/avatarMerge');
+    for (const kind of ['float', 'lure'] as const) {
+      const rig = mk(); const scene = new THREE.Scene(); scene.add(rig.outer);
+      // 先量沒拿竿時合併後的身體網格（三角形總數）
+      rebuildAvatarMerged(rig);
+      const visTris = () => { let n = 0; rig.torso.traverse((o: any) => { if (o.isMesh && o.visible && !o.parent?.userData?.noMerge && o.parent?.name !== 'fishRod') n += o.geometry.getAttribute('position').count; }); return n; };
+      const before = visTris();
+      const st = newFishPose(); st.pitch = 1.1; st.bend = 0.6;
+      const rod = makeRod(kind);
+      applyFishPose(rig, st, rod, { ...inp, lure: kind === 'lure' });
+      // 連按好幾次切換視角＝每次都重新合併
+      for (let i = 0; i < 4; i++) rebuildAvatarMerged(rig);
+      expect(visTris()).toBe(before);
+      const mesh = rod.g.children[0] as THREE.Mesh;
+      expect(mesh.visible).toBe(true);
+      expect(rod.g.parent).toBe(rig.torso);
+      expect(rig.torso.children.filter((o: THREE.Object3D) => o.name === 'fishRod').length).toBe(1);
+      // 之後竿子照樣會彎、竿尖＝畫出來的竿尖
+      st.bend = 1; applyFishPose(rig, st, rod, { ...inp, lure: kind === 'lure' });
+      const tip = rodTipWorld(rod, new THREE.Vector3());
+      scene.updateMatrixWorld(true);
+      const pos = mesh.geometry.getAttribute('position'); let best = 9; const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld); best = Math.min(best, v.distanceTo(tip)); }
+      expect(best).toBeLessThan(0.03);
+      rod.dispose();
+    }
+  });
+});

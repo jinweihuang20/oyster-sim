@@ -170,6 +170,8 @@ export function applyFishPose(rig: PlayerRig, st: FishPoseSt, rod: Rod, inp: Fis
   rig.weaponMount.visible = false; rig.handL.visible = false; rig.handR.visible = false;
   if (rod.g.parent !== rig.torso) rig.torso.add(rod.g);
   dropOtherRods(rig.torso, rod.g);
+  // 保險：竿子一定看得到（舊版合併人物網格會把它藏起來）
+  for (const c of rod.g.children) if (!c.visible) c.visible = true;
   // 竿方向：仰角 pitch、往右外側偏 side
   _dir.set(st.side, Math.sin(st.pitch), -Math.cos(st.pitch)).normalize();
   // 竿彎的方向＝被線拉過去的那邊：線從竿尖往前下方的水面（torso 座標約 (0, -0.35, -1)），去掉沿竿分量。

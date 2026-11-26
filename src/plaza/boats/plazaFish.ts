@@ -639,12 +639,18 @@ export function fishPostPose(dt: number) {
   } else if (myRod) dropRod();
   drawGfx(dt);
 }
+/** 除錯：身體上看得到的網格頂點數（不含釣竿）；被烤進身體的竿子會讓它變多 */
+export function fishBodyVerts(torso: THREE.Object3D) {
+  let n = 0;
+  torso.traverse(o => { const m = o as THREE.Mesh; if (!m.isMesh || !m.visible) return; for (let p: THREE.Object3D | null = m; p; p = p.parent) if (p.name === 'fishRod') return; n += m.geometry.getAttribute('position').count; });
+  return n;
+}
 /** 除錯：釣竿／姿勢 */
 function poseDbg() {
   const rig = C?.me();
   const tip = myRod && rig ? rodTipWorld(myRod, new THREE.Vector3()) : null;
   const hand = rig ? rig.lowerR.localToWorld(new THREE.Vector3(0, -((rig.lowerR.userData.restLen as number) || 0.24), 0)) : null;
-  return { rod: myRod?.kind ?? null, phase: poseIn.phase, pitch: +myPose.pitch.toFixed(2), bend: +myPose.bend.toFixed(2), crank: +myPose.crank.toFixed(2), lean: +myPose.lean.toFixed(2), tip: tip && { x: +tip.x.toFixed(2), y: +tip.y.toFixed(2), z: +tip.z.toFixed(2) }, hand: hand && { x: +hand.x.toFixed(2), y: +hand.y.toFixed(2), z: +hand.z.toFixed(2) }, line: gfx ? Array.from(gfx.pos.slice(6, 12), v => +v.toFixed(2)) : null, gap: tip && gfx && gfx.g.visible ? +tip.distanceTo(new THREE.Vector3(gfx.pos[6], gfx.pos[7], gfx.pos[8])).toFixed(3) : null, rods: myRod?.g.parent ? myRod.g.parent.children.filter(o => o.name === 'fishRod').length : 0, catch: catchT > 0 };
+  return { rod: myRod?.kind ?? null, phase: poseIn.phase, pitch: +myPose.pitch.toFixed(2), bend: +myPose.bend.toFixed(2), crank: +myPose.crank.toFixed(2), lean: +myPose.lean.toFixed(2), tip: tip && { x: +tip.x.toFixed(2), y: +tip.y.toFixed(2), z: +tip.z.toFixed(2) }, hand: hand && { x: +hand.x.toFixed(2), y: +hand.y.toFixed(2), z: +hand.z.toFixed(2) }, line: gfx ? Array.from(gfx.pos.slice(6, 12), v => +v.toFixed(2)) : null, gap: tip && gfx && gfx.g.visible ? +tip.distanceTo(new THREE.Vector3(gfx.pos[6], gfx.pos[7], gfx.pos[8])).toFixed(3) : null, rods: myRod?.g.parent ? myRod.g.parent.children.filter(o => o.name === 'fishRod').length : 0, rodVis: myRod ? myRod.g.children.every(c => c.visible) : null, bodyVerts: rig ? fishBodyVerts(rig.torso) : 0, catch: catchT > 0 };
 }
 
 function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
