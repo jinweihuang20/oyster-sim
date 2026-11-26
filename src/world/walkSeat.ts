@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PLAZA_WALK_SPD } from './walkSpeed';
 import type { Seat } from './locs';
 import { SEATS } from './locs';
 
@@ -105,6 +106,8 @@ export const joy = { x: 0, y: 0 };
 export const walkMotion = { bobPh: 0, bobW: 0, spd: 0, strafe: 0 };
 /** 廣場蹲下等姿勢的移動倍率 */
 export const walkTune = { mul: 1 };
+/** 廣場走路速度（含裝備加速、蹲下減速）：船上甲板走路也用這個，跟廣場走路一樣快 */
+export function plazaWalkSpeedNow() { return PLAZA_WALK_SPD * walkTune.mul * (D?.walkSpeedMul?.() ?? 1); }
 
 const NAG_STAND = ['剝一半就要走喔？', '蚵仔丟著就走，好浪費！', '要去哪裡？工作先做完啦'];
 
@@ -237,7 +240,7 @@ export function walkStep(dt: number) {
   let f = k('KeyW') + k('ArrowUp') - k('KeyS') - k('ArrowDown') - joy.y, r = k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft') + joy.x;
   const l = Math.hypot(f, r); if (l > 1) { f /= l; r /= l; }
   const room = !!D.isRoomMode?.();
-  const moveSp = (D.isPlazaMode() ? 3.0 : room ? 2.0 : 1.7) * walkTune.mul * (D.walkSpeedMul?.() ?? 1);
+  const moveSp = (D.isPlazaMode() ? PLAZA_WALK_SPD : room ? 2.0 : 1.7) * walkTune.mul * (D.walkSpeedMul?.() ?? 1);
   walkMotion.spd = l * moveSp; walkMotion.strafe = r * moveSp;
   const yaw = D.getYaw();
   const prevX = walkPos.x, prevZ = walkPos.z;

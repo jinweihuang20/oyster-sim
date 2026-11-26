@@ -3,9 +3,21 @@
  * 購買鈕用 data-fishbuy（不要用 data-fbuy：廣場旗幟的購買鈕已經用這個名字，
  * 整份商店清單一起 query 會對不到商品、一開雜貨店就炸掉）。
  */
-import { FISH } from '../plaza/boats/fishLogic';
+import { FISH, type LureKey } from '../plaza/boats/fishLogic';
 
 export const FISH_BUY_ATTR = 'data-fishbuy';
+
+/** 假魚卡片的說明（簡短；不寫出現機率） */
+export const LURE_GOOD: Record<LureKey, string> = {
+  minnow: '路亞：快收加偶爾抽竿，掠食魚會追',
+  jig: '路亞：丟得遠、沉得深，深水大魚',
+  soft: '路亞：慢慢收貼底爬，石斑愛吃',
+  popper: '路亞：抽一下停一下濺水花，清晨和黃昏才有效',
+  stickbait: '進階大物：水面下 S 字滑行，整天都能引出水面大物',
+  trollskirt: '進階大物：坐船拖釣專用，外海高速大魚最愛',
+  slowjig: '進階大物：拋最遠、沉最深，慢抽飄落引出深海巨物',
+  egi: '進階大物：抽一下沉一下，專釣軟絲和花枝',
+};
 
 export type FishShopRow = {
   id: string; n: string; price: number; kind: 'rod' | 'bait' | 'lure';
@@ -37,7 +49,7 @@ export function fishShopRows(): FishShopRow[] {
     })),
     ...FISH.lures.map(l => ({
       id: l.id, n: l.n, price: l.price, kind: 'lure' as const,
-      good: l.k === 'minnow' ? '路亞：快收加偶爾抽竿，掠食魚會追' : l.k === 'jig' ? '路亞：丟得遠、沉得深，深水大魚' : l.k === 'soft' ? '路亞：慢慢收貼底爬，石斑愛吃' : '路亞：抽一下停一下濺水花，清晨和黃昏才有效',
+      good: LURE_GOOD[l.k],
       bad: '可以一直用；線斷了就沒了',
     })),
   ];

@@ -83,7 +83,7 @@ export type BoatNetEvents = {
   /** 一艘船上所有人的船貨合計 */
   load?: (e: { boatId: number; load: number }) => void;
   /** 有人釣到傳說魚（全廣場公告） */
-  fishBig?: (e: { connId: string; nick: string; name: string; kg: number }) => void;
+  fishBig?: (e: { connId: string; nick: string; name: string; kg: number; tier?: number }) => void;
   /** 別人在船上釣魚：站的位置（船身座標）、面向、姿勢代碼（fishPose.ts） */
   fishPose?: (e: { connId: string; dx: number; dz: number; yaw: number; st: number }) => void;
   /** 別人的釣魚動作（新版：船上／岸上、拋竿方向、線長、張力、秀漁獲） */
@@ -126,7 +126,7 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
     conn.on('RackStolen', safe(x => ev.rackStolen?.({ rackId: num(g(x, 'rackId'), -1), by: String(g(x, 'by') ?? ''), warn: !!g(x, 'warn') })));
     conn.on('BoatCargo', safe(x => ev.cargo?.({ cargo: num(g(x, 'cargo')), lost: num(g(x, 'lost')) })));
     conn.on('BoatLoad', safe(x => ev.load?.({ boatId: num(g(x, 'boatId'), -1), load: num(g(x, 'load')) })));
-    conn.on('FishBig', safe(x => ev.fishBig?.({ connId: String(g(x, 'connId') ?? ''), nick: String(g(x, 'nick') ?? ''), name: String(g(x, 'name') ?? ''), kg: num(g(x, 'kg')) })));
+    conn.on('FishBig', safe(x => ev.fishBig?.({ connId: String(g(x, 'connId') ?? ''), nick: String(g(x, 'nick') ?? ''), name: String(g(x, 'name') ?? ''), kg: num(g(x, 'kg')), tier: num(g(x, 'tier'), 2) })));
     conn.on('FishSync', safe(x => { const m = normFishSync(x); if (m) ev.fishSync?.(m); }));
     conn.on('FishPose', safe(x => ev.fishPose?.({ connId: String(g(x, 'connId') ?? ''), dx: num(g(x, 'dx')), dz: num(g(x, 'dz')), yaw: num(g(x, 'yaw')), st: num(g(x, 'st')) })));
     conn.on('BoatRescued', safe(x => ev.rescued({ boatId: num(g(x, 'boatId'), -1), seat: num(g(x, 'seat'), -1), by: String(g(x, 'by') ?? '') })));

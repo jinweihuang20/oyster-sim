@@ -7,7 +7,8 @@ import { makePlayerAvatar, posePlazaStand, posePlazaWalkCycle, plazaGaitRate, en
 import { makeMeshHelpers } from '../../dm/mesh';
 import { toast, toastTop } from '../../ui/dom';
 import { rewardToast, clearRewardToasts } from '../../ui/rewardToast';
-import { walkKeys, joy } from '../../world/walkSeat';
+import { walkKeys, joy, plazaWalkSpeedNow } from '../../world/walkSeat';
+import { walkAmpOf } from '../../world/walkSpeed';
 import type { PlazaClient } from '../hubClient';
 import type { PlazaWorldView } from '../worldView';
 import type { Raft } from '../../sea/seaModels';
@@ -823,7 +824,8 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
     if (stand.on) {
       // 站在甲板上（座位錨點的相對位置）
       const S = SEATS[mySeat];
-      if (stand.moving) { stand.ph += plazaGaitRate(DECK.walkSpd) * dt; posePlazaStand(rig); posePlazaWalkCycle(rig, stand.ph, 0.8); }
+      // 甲板走路：速度、步頻、擺腿幅度都跟廣場走路一樣
+      if (stand.moving) { stand.ph += plazaGaitRate(stand.spd) * dt; posePlazaStand(rig); posePlazaWalkCycle(rig, stand.ph, walkAmpOf(stand.spd)); }
       else { posePlazaStand(rig); rig.legL.rotation.z = 0.06; rig.legR.rotation.z = -0.06; }
       rig.torso.rotation.set(0, 0, 0);
       rig.outer.position.set(stand.x - S.x, DECK.y - S.y, stand.z - S.z); rig.outer.rotation.set(0, stand.yaw, 0); rig.outer.visible = true;
@@ -900,7 +902,7 @@ function dockInsets(W: number, H: number) {
 // ---------------- 船上站著釣魚 ----------------
 type RemoteMountLike = Parameters<NonNullable<ReturnType<PlazaBoatDeps['view']>>['setRemoteMount']>[1] & object;
 /** 自己：站在甲板上的位置（船身座標）、面向、走路相位 */
-const stand = { on: false, x: 0, z: 0, yaw: 0, ph: 0, moving: false, hinted: false };
+const stand = { on: false, x: 0, z: 0, yaw: 0, ph: 0, moving: false, hinted: false, spd: DECK.walkSpd };
 function standUp() {
   const S = SEATS[mySeat]; if (!S) return;
   const p = deckStart(S.x, S.z);
@@ -935,7 +937,8 @@ function tickStand(dt: number, cam: THREE.Camera, b: BoatSt) {
   standH = b.h;
   const cy = standCamYaw(cam);
   _stp.x = stand.x; _stp.z = stand.z; _stp.yaw = stand.yaw;
-  stand.moving = fishCanWalk() && stepDeck(_stp, mx, mz, cy, b.h, dt);
+  stand.spd = plazaWalkSpeedNow();
+  stand.moving = fishCanWalk() && stepDeck(_stp, mx, mz, cy, b.h, dt, stand.spd);
   if (stand.moving) { stand.x = _stp.x; stand.z = _stp.z; }
   // 面向：線在水裡／蓄力＝那個方向；走路＝走的方向；站著＝鏡頭方向（拖曳轉鏡頭，人跟著轉）
   const want = standWantYaw(fishFaceYaw(), stand.moving, _stp.yaw, cy, b.h);
@@ -1021,7 +1024,7 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
   if (inp.phase === 'charge') inp.power = chargePower(t - f.stT);
   const gear = inp.lure ? 'lure' : 'float';
   if (!f.rod || f.rod.kind !== gear) { f.rod?.dispose(); f.rod = makeRod(gear); }
-  if (f.boat) { if (f.moving) { f.ph += plazaGaitRate(DECK.walkSpd) * dt; posePlazaWalkCycle(rig, f.ph, 0.8); } }
+  if (f.boat) { if (f.moving) { f.ph += plazaGaitRate(DECK.walkSpd) * dt; posePlazaWalkCycle(rig, f.ph, walkAmpOf(DECK.walkSpd)); } }
   else {
     // 岸上：面向拋竿方向（走路的遠端位置照舊）
     let dy = f.tyaw - f.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); f.yaw += dy * (1 - Math.exp(-10 * dt));

@@ -42,9 +42,11 @@ function shoot(id: string, w: number, h: number, yaw: number, pitch: number, sil
   const geo = fishGeometry(id); if (!geo) throw new Error('no fish');
   M.geometry = geo; M.material = sil ? fishSilMaterial() : fishMaterial();
   M.rotation.set(0, yaw, 0); M.rotation.z = 0;
-  // 魚身長 1：鏡頭距離依畫面比例，整條魚都在畫面內
+  // 魚身長 1：鏡頭距離依畫面比例，整條魚都在畫面內（翻車魚這種比長度還高的也要整隻放得下）
   const asp = w / h; C.aspect = asp;
-  const fitW = 1.18 / asp, d = Math.max(1.05, fitW) / (2 * Math.tan((C.fov * Math.PI) / 360));
+  if (!geo.boundingBox) geo.computeBoundingBox();
+  const bb = geo.boundingBox!, tall = (bb.max.y - bb.min.y) * 1.12;
+  const fitW = 1.18 / asp, d = Math.max(1.05, fitW, tall) / (2 * Math.tan((C.fov * Math.PI) / 360));
   C.position.set(0, Math.sin(pitch) * d, Math.cos(pitch) * d); C.lookAt(0, 0, 0); C.updateProjectionMatrix();
   R.setClearColor(0x000000, 0); R.clear();
   R.render(S, C);

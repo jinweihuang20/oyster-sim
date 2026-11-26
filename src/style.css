@@ -4499,6 +4499,8 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 #fishPanel .fpSp.t1 .fpTier{color:#2a5a86}
 #fishPanel .fpSp.t2 .fpTier{color:#a0700a}
 #fishPanel .fpSp.t2{border-color:#e8d39a}
+#fishPanel .fpSp.t3{border-color:#2a5a86}
+#fishPanel .fpSp.t3 .fpTier{color:#fff;background:#2a5a86;padding:0 5px;border-radius:6px;align-self:flex-start}
 /* 魚類圖鑑（釣魚面板＋主圖鑑「魚類」分頁共用）：卡片＝3D 縮圖；沒釣過＝灰剪影＋？？？ */
 #fishDexBody{text-align:left}
 #fishDexBody[hidden]{display:none!important}
@@ -4519,6 +4521,11 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 .fdxHost .fdxCard .fdxTier{position:absolute;top:9px;left:12px;z-index:1;padding:0 5px;border-radius:6px;background:rgba(255,255,255,.85)}
 .fdxHost .t1 .fdxTier{color:#2a5a86}
 .fdxHost .t2 .fdxTier{color:#a0700a}
+/* 巨物：實底深藍標籤、深藍框（不用模糊） */
+.fdxHost .fdxCard.t3{border-color:#2a5a86;box-shadow:inset 0 0 0 1px #2a5a86}
+.fdxHost .t3 .fdxTier,.fdxHost .fdxCard.t3 .fdxTier,.fdxHost .fdxDet.t3 .fdxTier{color:#fff;background:#2a5a86;border-color:#2a5a86}
+.fdxHost .fdxCard.t3.no{border-color:#7a95ad;box-shadow:none}
+.fdxHost .fdxCard.t3.no .fdxTier{background:#5a7590;border-color:#5a7590}
 .fdxHost .fdxDet{display:flex;flex-direction:column;gap:6px;color:inherit}
 .fdxHost .fdxNav{display:flex;align-items:center;gap:10px;margin-top:4px}
 .fdxHost .fdxBack{display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:10px;background:#2a5a86;color:#fff;font-size:14px;font-weight:800;cursor:pointer;user-select:none}

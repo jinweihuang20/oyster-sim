@@ -14,12 +14,13 @@ const fmt = {
 const svgs = { rod: '<svg id="rod"></svg>', bait: '<svg id="bait"></svg>', lure: '<svg id="lure"></svg>' };
 
 describe('雜貨店釣具', () => {
-  it('商品列有垂釣竿、路亞竿、三種餌、四種假魚，不含免費蚵仔肉', () => {
+  it('商品列有垂釣竿、路亞竿、三種餌、八種假魚，不含免費蚵仔肉', () => {
     const ids = fishShopRows().map(r => r.id);
     expect(ids).toEqual([
       FISH.rods.float.id, FISH.rods.lure.id,
       'fishBaitShrimp', 'fishBaitWorm', 'fishBaitSquid',
       'fishLureMinnow', 'fishLureJig', 'fishLureSoft', 'fishLurePopper',
+      'fishLureStickbait', 'fishLureTrollSkirt', 'fishLureSlowJig', 'fishLureEgi',
     ]);
     expect(ids.some(id => !id)).toBe(false);
   });
@@ -81,5 +82,20 @@ describe('雜貨店釣具', () => {
     };
     expect(() => eachFishBuyButton(root, fishShopRows(), (_b, r) => { bound.push(r.id); })).not.toThrow();
     expect(bound).toEqual(['fishBaitShrimp']);
+  });
+
+  it('四款進階大物路亞：價格、data-fishbuy、說明都有', () => {
+    const want: Record<string, number> = { fishLureStickbait: 4_000, fishLureTrollSkirt: 5_500, fishLureSlowJig: 4_800, fishLureEgi: 3_200 };
+    const rows = fishShopRows();
+    for (const [id, price] of Object.entries(want)) {
+      const r = rows.find(x => x.id === id)!;
+      expect(r.kind).toBe('lure'); expect(r.price).toBe(price); expect(r.once).toBeFalsy();
+      expect(r.good.length).toBeGreaterThan(6);
+    }
+    const html = fishShopHtml({ money: 99_000, meds: {} }, svgs, fmt);
+    for (const id of Object.keys(want)) expect(html).toContain(`${FISH_BUY_ATTR}="${id}"`);
+    for (const n of ['大鉛筆餌', '船拖裙尾假餌', '慢搖鐵板', '大號木蝦']) expect(html).toContain(n);
+    expect(html).not.toMatch(/data-fbuy[\s=>]/);
+    expect((html.match(/data-fishbuy="fishLure/g) || []).length).toBe(8);
   });
 });

@@ -4,9 +4,11 @@
  * 這裡是客戶端的手感：拋竿力道、等魚／收線狀態機、路亞節奏、拉扯張力。數字集中在 FISH，跟伺服器 Fish* 常數對齊。
  */
 
+import { PLAZA_WALK_SPD } from '../../world/walkSpeed';
+
 export type Gear = 'float' | 'lure';
 export type BaitKey = 'oyster' | 'shrimp' | 'worm' | 'squid';
-export type LureKey = 'minnow' | 'jig' | 'soft' | 'popper';
+export type LureKey = 'minnow' | 'jig' | 'soft' | 'popper' | 'stickbait' | 'trollskirt' | 'slowjig' | 'egi';
 export type ItemKey = BaitKey | LureKey;
 
 export const FISH = {
@@ -28,6 +30,11 @@ export const FISH = {
     { k: 'jig', n: '鐵板', id: 'fishLureJig', price: 2_500 },
     { k: 'soft', n: '軟蟲', id: 'fishLureSoft', price: 800 },
     { k: 'popper', n: '波趴', id: 'fishLurePopper', price: 2_000 },
+    // 進階大物路亞
+    { k: 'stickbait', n: '大鉛筆餌', id: 'fishLureStickbait', price: 4_000 },
+    { k: 'trollskirt', n: '船拖裙尾假餌', id: 'fishLureTrollSkirt', price: 5_500 },
+    { k: 'slowjig', n: '慢搖鐵板', id: 'fishLureSlowJig', price: 4_800 },
+    { k: 'egi', n: '大號木蝦', id: 'fishLureEgi', price: 3_200 },
   ] as readonly { k: LureKey; n: string; id: string; price: number }[],
   oysterPerDay: 20,
   /** 拋竿：最近／最遠（公尺，伺服器同值）、力道條來回一次幾秒、拋出去飛幾秒 */
@@ -36,10 +43,10 @@ export const FISH = {
    * 路亞竿：照真實岸拋距離約 1／3 縮小（伺服器 FishLureCastMax 同值）。
    * 真實 8～9 呎岸拋竿：鐵板 50～80 m、波趴 30～60 m、米諾 30～50 m、軟蟲 25～45 m。
    */
-  lureCastMin: 5, lureCast: { minnow: 17, soft: 15, popper: 20, jig: 26 } as Record<LureKey, number>,
+  lureCastMin: 5, lureCast: { minnow: 17, soft: 15, popper: 20, jig: 26, stickbait: 22, trollskirt: 18, slowjig: 28, egi: 16 } as Record<LureKey, number>,
   /** 伺服器：每 2 秒擲一次咬餌、收竿時間窗 0.8 秒 */
   rollS: 2, windowS: 0.8,
-  /** 駕駛船速超過就自動收線；拖釣船速範圍（乘客、米諾／鐵板） */
+  /** 駕駛船速超過就自動收線；拖釣船速範圍（乘客、米諾／鐵板／船拖裙尾假餌／大鉛筆餌） */
   driverMaxV: 0.55, trollMinV: 0.8, trollMaxV: 3.5,
   /** 浮標離人太遠（船漂走）就自動收線 */
   dragR: 22,
@@ -52,14 +59,26 @@ export const FISH = {
   holdMax: 20, sellMax: 40_000,
 };
 
-export const ITEM_NAME: Record<ItemKey, string> = { oyster: '蚵仔肉', shrimp: '蝦仔餌', worm: '沙蟲', squid: '魷魚條', minnow: '米諾', jig: '鐵板', soft: '軟蟲', popper: '波趴' };
+export const ITEM_NAME: Record<ItemKey, string> = {
+  oyster: '蚵仔肉', shrimp: '蝦仔餌', worm: '沙蟲', squid: '魷魚條', minnow: '米諾', jig: '鐵板', soft: '軟蟲', popper: '波趴',
+  stickbait: '大鉛筆餌', trollskirt: '船拖裙尾假餌', slowjig: '慢搖鐵板', egi: '大號木蝦',
+};
 export const LURE_TIP: Record<LureKey, string> = {
   minnow: '一直收線、偶爾抽竿：假魚左右閃，掠食魚會追',
   jig: '先讓它沉幾秒，再用力抽竿：釣深水大魚',
   soft: '慢慢收、收收停停：貼著海底爬，石斑愛吃',
   popper: '抽一下停一下：水面濺水花，只有清晨和黃昏有效',
+  stickbait: '中快速收線、每隔一下抽竿：在水面下左右滑，整天都有效',
+  trollskirt: '坐船拖釣最強；拋出去就要一直快收',
+  slowjig: '讓它沉到深處，輕輕抽一下、停一下，讓它慢慢飄落',
+  egi: '抽一下、停一下讓它沉：專釣軟絲和花枝，別一直快收',
 };
-export const isLure = (k: string): k is LureKey => k === 'minnow' || k === 'jig' || k === 'soft' || k === 'popper';
+export const LURE_KEYS: readonly LureKey[] = ['minnow', 'jig', 'soft', 'popper', 'stickbait', 'trollskirt', 'slowjig', 'egi'];
+export const isLure = (k: string): k is LureKey => (LURE_KEYS as readonly string[]).includes(k);
+/** 可以拖釣的假魚（伺服器 FishTrollLures 同一份） */
+export const TROLL_LURES: readonly LureKey[] = ['minnow', 'jig', 'trollskirt', 'stickbait'];
+/** 頭足類（中魚時噴墨） */
+export const isSquidSp = (sp: string) => sp === 'aoriika' || sp === 'kouika';
 /** 這個餌／假魚的拋竿距離範圍（垂釣 4～16 m；路亞看假魚重量） */
 export const castRange = (item?: ItemKey) => (item && isLure(item) ? { min: FISH.lureCastMin, max: FISH.lureCast[item] } : { min: FISH.castMin, max: FISH.castMax });
 export const castDist = (power: number, item?: ItemKey) => { const r = castRange(item); return r.min + (r.max - r.min) * Math.max(0, Math.min(1, power)); };
@@ -82,7 +101,7 @@ export const castPoint = (x: number, z: number, h: number, power: number, item?:
 /** 鏡頭朝向（世界方向向量）→ h */
 export const yawOf = (dx: number, dz: number) => Math.atan2(-dx, -dz);
 /** 拖釣：乘客、米諾／鐵板、船速在範圍內 */
-export const trollOk = (seat: number, item: string, v: number) => seat > 0 && (item === 'minnow' || item === 'jig') && Math.abs(v) >= FISH.trollMinV && Math.abs(v) <= FISH.trollMaxV;
+export const trollOk = (seat: number, item: string, v: number) => seat > 0 && (TROLL_LURES as readonly string[]).includes(item) && Math.abs(v) >= FISH.trollMinV && Math.abs(v) <= FISH.trollMaxV;
 
 /** 蚵仔肉：每天 oysterPerDay 塊（day＝台北日期 yyyymmdd） */
 export function oysterLeft(day: number, usedDay: number, used: number) { return Math.max(0, FISH.oysterPerDay - (usedDay === day ? used : 0)); }
@@ -94,20 +113,28 @@ export type LureSt = { dist: number; depth: number; holdS: number; hold: number;
 export const newLure = (dist: number, item: LureKey): LureSt => ({ dist, depth: item === 'popper' ? 0 : 0.05, holdS: 0, hold: 0, spd: 0, jerk: 0, okT: 0, follow: false });
 const ema = (v: number, x: number, dt: number, tau: number) => v + (x - v) * (1 - Math.exp(-dt / tau));
 
-/** 這一刻的節奏對不對（看平滑平均）：軟蟲慢收貼底、米諾快收加抽竿、鐵板沉了再抽、波趴抽停 */
+/** 這一刻的節奏對不對（看平滑平均）：軟蟲慢收貼底、米諾快收加抽竿、鐵板沉了再抽、波趴抽停；大鉛筆餌上層收加抽、裙尾快收、慢搖鐵板沉了輕抽停、木蝦抽沉 */
 export function rhythmOk(item: LureKey, s: LureSt) {
   switch (item) {
     case 'soft': return s.depth >= 0.55 && s.spd > 0.15 && s.spd < 1.3 && s.jerk < 1.2;
     case 'minnow': return s.spd >= 1.5 && s.jerk >= 0.5 && s.jerk <= 3.5;
     case 'jig': return s.depth >= 0.4 && s.jerk >= 0.5 && s.hold < 0.6;
     case 'popper': return s.jerk >= 0.7 && s.jerk <= 3.2 && s.hold < 0.35;
+    // 大鉛筆餌：上層、中快速收線＋每隔一下抽竿（S 字滑行）
+    case 'stickbait': return s.depth <= 0.45 && s.spd >= 1.0 && s.jerk >= 0.5 && s.jerk <= 3.5;
+    // 船拖裙尾假餌：拋投時要一直快收、維持在上層
+    case 'trollskirt': return s.spd >= 1.6 && s.depth <= 0.45;
+    // 慢搖鐵板：沉深、輕抽加停頓（不能一直收）
+    case 'slowjig': return s.depth >= 0.45 && s.jerk >= 0.4 && s.jerk <= 2.5 && s.hold < 0.45;
+    // 木蝦：抽一下沉一下（不能一直快收）
+    case 'egi': return s.depth >= 0.3 && s.jerk >= 0.4 && s.jerk <= 3 && s.hold < 0.5 && s.spd < 1.6;
   }
 }
 
 /** 路亞每幀：reel＝按住收線、jerk＝這幀抽竿；troll＝在拖釣（假魚跟在船後、自動算節奏對）。回傳 true＝假魚收回來了 */
 export function stepLure(s: LureSt, item: LureKey, reel: boolean, jerk: boolean, dt: number, troll = false): boolean {
   if (troll) {
-    s.depth = ema(s.depth, item === 'jig' ? 0.5 : 0.2, dt, 1);
+    s.depth = ema(s.depth, item === 'jig' ? 0.5 : item === 'trollskirt' ? 0.08 : 0.2, dt, 1);
     s.okT += dt; s.follow = s.okT >= FISH.followS;
     s.spd = ema(s.spd, 2, dt, 1); s.hold = ema(s.hold, 0, dt, 2); s.jerk = ema(s.jerk, 1, dt, 3);
     return false;
@@ -260,8 +287,8 @@ export const DECK = {
     { x0: 0.05, x1: 1.05, z0: 0.5, z1: 1.3 },
     { x0: -0.8, x1: 0, z0: 1.35, z1: 2.1 },
   ] as readonly { x0: number; x1: number; z0: number; z1: number }[],
-  /** 走路速度（m/s） */
-  walkSpd: 1.1,
+  /** 走路速度（m/s）：跟廣場走路一樣（PLAZA_WALK_SPD）；有裝備加速時 stepDeck 另外帶 spd */
+  walkSpd: PLAZA_WALK_SPD,
   /** 甲板面高度（船身座標） */
   y: 0.255,
 };
@@ -286,7 +313,7 @@ export function deckStart(seatX: number, seatZ: number) { return deckClamp(seatX
  * 甲板上走一步（直接改 p）：mx／mz＝搖桿（螢幕：右、前），camYaw＝鏡頭在世界的朝向，boatH＝船頭方向。
  * p＝船身座標的位置和面向（yaw 0＝面向船頭 -z）。回傳有沒有在走。
  */
-export function stepDeck(p: { x: number; z: number; yaw: number }, mx: number, mz: number, camYaw: number, boatH: number, dt: number): boolean {
+export function stepDeck(p: { x: number; z: number; yaw: number }, mx: number, mz: number, camYaw: number, boatH: number, dt: number, spd: number = DECK.walkSpd): boolean {
   const m = Math.hypot(mx, mz);
   if (m < 0.12) return false;
   const k = Math.min(1, m);
@@ -295,7 +322,7 @@ export function stepDeck(p: { x: number; z: number; yaw: number }, mx: number, m
   // 世界 → 船身（轉 -boatH）
   const c = Math.cos(-boatH), s = Math.sin(-boatH);
   const lx = wx * c + wz * s, lz = -wx * s + wz * c;
-  deckClamp(p.x + lx * DECK.walkSpd * k * dt, p.z + lz * DECK.walkSpd * k * dt, p);
+  deckClamp(p.x + lx * spd * k * dt, p.z + lz * spd * k * dt, p);
   p.yaw = Math.atan2(-lx, -lz);
   return true;
 }

@@ -26,7 +26,8 @@ export const PB = {
   /** 撞船：撞人那艘要多快（m/s）才會把對方撞下水（伺服器同值） */
   ramSpeed: 4.0, ramCd: 2.5,
   /** 游泳：速度、倒退、轉向、上岸距離 */
-  swimSpd: 1.35, swimRev: 0.5, swimTurn: 2.2, climbR: 1.6,
+  // 2026-11：游泳速度 1.35 → 2.1 m/s（快約 55%，還是比船慢很多；伺服器 SwimMaxV 同值）
+  swimSpd: 2.1, swimRev: 0.5, swimTurn: 2.2, climbR: 1.6,
   /** 被殼打中：船晃秒數 */
   swayT: 1.1,
   /** 網路：駕駛回報頻率、游泳回報頻率 */

@@ -51,7 +51,7 @@ describe('船上站著走（甲板範圍）', () => {
     // 船頭朝 +x 世界（h＝-π/2）、鏡頭朝 -z 世界：往前推＝世界 -z ＝ 船身的左邊（-x）
     const q = { x: 0, z: 0, yaw: 0 };
     stepDeck(q, 0, 1, 0, -Math.PI / 2, 0.1);
-    expect(q.x).toBeCloseTo(-0.11); expect(q.z).toBeCloseTo(0);
+    expect(q.x).toBeCloseTo(-DECK.walkSpd * 0.1); expect(q.z).toBeCloseTo(0);
     // 沒推搖桿：不動
     const r = { x: 0.2, z: 0.3, yaw: 1 };
     expect(stepDeck(r, 0.05, 0.05, 0, 0, 0.1)).toBe(false); expect(r).toEqual({ x: 0.2, z: 0.3, yaw: 1 });
@@ -143,8 +143,8 @@ describe('釣魚動作', () => {
 });
 
 describe('魚的 3D 模型', () => {
-  it('16 種都有模型、說明（只寫外觀）', () => {
-    expect(FISH_SPECIES.length).toBe(16);
+  it('24 種都有模型、說明（只寫外觀）', () => {
+    expect(FISH_SPECIES.length).toBe(24);
     expect(fishModelIds().sort()).toEqual(FISH_SPECIES.map(s => s.id).sort());
     for (const s of FISH_SPECIES) {
       expect(FISH_DESC[s.id]?.length).toBeGreaterThan(10);

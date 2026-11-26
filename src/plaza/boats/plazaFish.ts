@@ -11,9 +11,10 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, castPoint, castDist, castRange, castFlyPoint, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, castPoint, castDist, castRange, castFlyPoint, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
-import { fishGeometry, fishMaterial } from './fishModel';
+import { fishGeometry, fishMaterial, FISH_TIER } from './fishModel';
+import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, type FishPoseIn, type FishPhase } from './fishPose';
 import type { FishSyncMsg } from './fishSync';
@@ -60,7 +61,12 @@ const num = (v: unknown, d = 0) => { const n = Number(v); return Number.isFinite
 /** 除錯：每個伺服器呼叫最後一次的回應 */
 const dbgLast: Record<string, unknown> = {};
 const g = (o: any, k: string) => o?.[k] ?? o?.[k[0].toUpperCase() + k.slice(1)];
-const TIER = ['普通', '稀有', '傳說'];
+const TIER: readonly string[] = FISH_TIER;
+/** 假魚在線頭的顏色／大小（米諾維持原本的銀白） */
+const LURE_LOOK: Record<LureKey, { c: number; s: number }> = {
+  minnow: { c: 0xd8e0e8, s: 0.75 }, jig: { c: 0xc4ccd6, s: 0.7 }, soft: { c: 0xd88a5a, s: 0.7 }, popper: { c: 0xf0e0a0, s: 0.8 },
+  stickbait: { c: 0xeef4fa, s: 0.9 }, trollskirt: { c: 0xe24a8a, s: 0.95 }, slowjig: { c: 0xf0c040, s: 0.85 }, egi: { c: 0xf07a2a, s: 0.85 },
+};
 
 type HoldFish = { sp: string; name: string; tier: number; kg: number; val: number };
 const normFish = (o: any): HoldFish | null => o ? { sp: String(g(o, 'sp') ?? ''), name: String(g(o, 'name') ?? ''), tier: num(g(o, 'tier')), kg: num(g(o, 'kg')), val: num(g(o, 'val')) } : null;
@@ -87,6 +93,7 @@ let ui: {
 let myRod: Rod | null = null;
 const myPose = newFishPose();
 const poseIn: FishPoseIn = { phase: 'off', power: 0, reel: false, tension: 0, lure: false, twitch: 0 };
+let ffx: FishFx | null = null, bubbleT = 0, inkT = 0, fightX = 0, fightZ = 0;
 let gfx: { g: THREE.Group; line: THREE.LineSegments; pos: Float32Array; bob: THREE.Mesh; bobMat: THREE.MeshBasicMaterial; shadow: THREE.Mesh; shMat: THREE.MeshBasicMaterial } | null = null;
 const _tip = new THREE.Vector3(), _end = new THREE.Vector3(), _dir = new THREE.Vector3();
 
@@ -165,6 +172,7 @@ export function closeFish() {
   removeEventListener('keyup', onKeyUp);
   removeEventListener('pointerdown', onAnyInput);
   document.body.classList.remove('plazaFishing', 'fishPanelOpen', 'fishFight');
+  ffx?.dispose(); ffx = null;
   if (gfx) { gfx.g.removeFromParent(); gfx.line.geometry.dispose(); (gfx.line.material as THREE.Material).dispose(); gfx.bob.geometry.dispose(); gfx.bobMat.dispose(); gfx.shadow.geometry.dispose(); gfx.shMat.dispose(); gfx = null; }
   dexView?.stop(); dexView = null;
   dropRod(); catchT = 0; catchMesh?.removeFromParent(); catchMesh = null;
@@ -187,6 +195,7 @@ function buildGfx(parent: THREE.Object3D) {
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 10), shMat);
   shadow.rotation.x = -Math.PI / 2; shadow.scale.set(0.55, 1.4, 1);
   g.add(line, bob, shadow); parent.add(g);
+  ffx = makeFishFx(parent);
   gfx = { g, line, pos, bob, bobMat, shadow, shMat };
 }
 
@@ -206,9 +215,10 @@ async function fetchState() {
   const ch = fishDexMerge([...dex].map(([sp, d]) => ({ sp, kg: d.kg, n: d.n })));
   if (panelOn && (panelTab !== 'dex' || ch)) renderPanel();
 }
-export function onFishBig(e: { connId: string; nick: string; name: string; kg: number }) {
+export function onFishBig(e: { connId: string; nick: string; name: string; kg: number; tier?: number }) {
   if (!C) return;
-  rewardToast(`${e.nick || '有人'} 釣到傳說魚：${e.name}`, `${e.kg.toFixed(1)} kg`, 'feed', `fishbig:${e.connId}:${e.kg}`);
+  const giant = num(e.tier) >= 3;
+  rewardToast(`${e.nick || '有人'} 釣到${giant ? '巨物' : '傳說魚'}：${e.name}`, `${e.kg.toFixed(1)} kg`, 'feed', `fishbig:${e.connId}:${e.kg}`, giant ? 6 : undefined);
 }
 
 // ---------------- 進出釣魚模式 ----------------
@@ -324,7 +334,9 @@ async function doReel() {
     C.sfx('hit');
     sm.hooked(num(r.power, 0.3), num(r.fightMs, 2500));
     document.body.classList.add('fishFight');
-    toastTop(hooked && hooked.tier >= 2 ? '中魚！好重……是大傢伙！' : '中魚！按住「收線」，張力別到紅色' + (sm.gear === 'lure' ? '；魚往哪邊衝，搖桿就往反方向拉' : ''), 2.4);
+    // 頭足類一上鉤就噴墨（位置在 drawGfx 拉扯那段算）
+    inkT = hooked && isSquidSp(hooked.sp) ? 0 : 1e9;
+    toastTop(hooked && hooked.tier >= 3 ? '中魚！力道大得不得了……是巨物！穩住張力慢慢拉' : hooked && hooked.tier >= 2 ? '中魚！好重……是大傢伙！' : '中魚！按住「收線」，張力別到紅色' + (sm.gear === 'lure' ? '；魚往哪邊衝，搖桿就往反方向拉' : ''), 2.4);
     return;
   }
   sm.reset();
@@ -361,7 +373,10 @@ async function endFight(kind: 'landed' | 'snap' | 'unhook') {
   fishDexMerge([{ sp: fish.sp, ...dex.get(fish.sp)! }]);
   C.sfx('dock');
   const tag = r.first ? '・新魚種' : r.record ? '・最大紀錄' : '';
-  rewardToast(`釣到${TIER[fish.tier] === '普通' ? '' : TIER[fish.tier]} ${fish.name}${tag}`, `${fish.kg.toFixed(fish.kg < 10 ? 2 : 1)} kg・約 ${money(fish.val)}`, 'mine', `fish:${Date.now()}`);
+  if (isSquidSp(fish.sp)) ffx?.inkPuff(fightX, PB.waterY + 0.05, fightZ, 1.2);
+  const giant = fish.tier >= 3;
+  if (giant) toastTop(`釣到巨物：${fish.name}！`, 3);
+  rewardToast(`釣到${TIER[fish.tier] === '普通' ? '' : TIER[fish.tier] ?? ''} ${fish.name}${tag}`, `${fish.kg.toFixed(fish.kg < 10 ? 2 : 1)} kg・約 ${money(fish.val)}`, 'mine', `fish:${Date.now()}`, giant ? 6 : undefined);
   if (holdN >= FISH.holdMax) toast('魚獲滿了！回碼頭賣魚', '#ffd76a', 2);
 }
 async function sellFish() {
@@ -487,6 +502,7 @@ function lurePos() {
   return { x: ox - Math.sin(castH) * d, z: oz - Math.cos(castH) * d };
 }
 function drawGfx(dt: number) {
+  ffx?.tick(dt);
   if (!gfx || !C) return;
   const ph = sm.phase;
   gfx.g.visible = sm.phase !== 'off';
@@ -517,6 +533,11 @@ function drawGfx(dt: number) {
       _end.set(lp.x, wy - d * 0.5, lp.z);
       bobOn = d < 0.25;
       if (sm.lure.follow) shTarget = 0.38;
+      // 船拖裙尾假餌：拖釣或快收時，假魚後面拉出一條氣泡
+      if (sm.item === 'trollskirt' && ffx) {
+        const b = C.myBoat();
+        if ((b && trollOk(C.mySeat(), sm.item, b.v)) || sm.lure.spd >= 1.6) { bubbleT -= dt; if (bubbleT <= 0) { bubbleT = FX.bubbleGap; ffx.bubble(lp.x, wy, lp.z); } }
+      }
       // 魚影跟在假魚後面一點
       const bx = lp.x - ox, bz = lp.z - oz, bl = Math.hypot(bx, bz) || 1;
       gfx.shadow.position.set(lp.x + bx / bl * 1.1, wy - 0.01, lp.z + bz / bl * 1.1);
@@ -529,6 +550,9 @@ function drawGfx(dt: number) {
     const sx = Math.cos(castH), sz = -Math.sin(castH);
     const x = ox + fx * d + sx * side + Math.sin(t * 5) * 0.2, z = oz + fz * d + sz * side + Math.cos(t * 4) * 0.2;
     _end.set(x, wy, z);
+    fightX = x; fightZ = z;
+    // 大軟絲／花枝：拉扯時每隔一下噴墨
+    if (hooked && isSquidSp(hooked.sp) && ffx) { inkT -= dt; if (inkT <= 0) { inkT = 1.4 + Math.random() * 0.6; ffx.inkPuff(x, wy + 0.01, z, 0.8); } }
     shTarget = 0.55;
     gfx.shadow.position.set(x, wy - 0.01, z);
     gfx.shadow.rotation.z = Math.atan2(sx * f.run, sz * f.run) || 0;
@@ -550,8 +574,9 @@ function drawGfx(dt: number) {
   if (gfx.bob.visible) {
     gfx.bob.position.copy(_end);
     const lure = sm.gear === 'lure';
-    gfx.bobMat.color.setHex(lure ? 0xd8e0e8 : 0xe8432e);
-    gfx.bob.scale.setScalar(lure ? 0.75 : 1);
+    const look = lure && isLure(sm.item) ? LURE_LOOK[sm.item] : null;
+    gfx.bobMat.color.setHex(look ? look.c : 0xe8432e);
+    gfx.bob.scale.setScalar(look ? look.s : 1);
   }
   shadowA += (shTarget - shadowA) * Math.min(1, dt * 3);
   gfx.shMat.opacity = shadowA;
@@ -744,6 +769,10 @@ export const fishDbg = {
   /** 測試：站到岸上某一點（碼頭尾端約 x＝-39, z＝0） */
   tp(x: number, z: number) { const p = C?.walkPos() as { x: number; z: number } | undefined; if (!p || C?.mode() !== 'walk') return 'not walking'; p.x = x; p.z = z; return 'ok'; },
   ui() { return ui ? { entry: ui.entry.classList.contains('on'), sell: ui.sell.classList.contains('on'), bar: ui.bar.classList.contains('on'), cast: ui.cast.classList.contains('on'), reel: ui.reel.classList.contains('on') ? ui.reel.textContent : null, jerk: ui.jerk.classList.contains('on'), hud: ui.hud.classList.contains('on') ? ui.hud.textContent : null, meter: ui.meter.classList.contains('on') ? ui.mLbl.textContent : null, panel: panelOn } : null; },
+  /** 測試：特效粒子數（氣泡、墨） */
+  fx() { return ffx ? { bubbles: ffx.bubbles.live(), ink: ffx.ink.live() } : null; },
+  /** 測試：噴一團墨（在現在的線頭位置） */
+  ink() { ffx?.inkPuff(_end.x, PB.waterY + 0.05, _end.z, 1); return ffx?.ink.live() ?? 0; },
   /** 測試：假裝中魚（不經伺服器，只看拉扯畫面） */
   fakeFight(power = 0.6, ms = 10000, lure = true) { sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; sm.hooked(power, ms); document.body.classList.add('fishFight'); return sm.phase; },
 };

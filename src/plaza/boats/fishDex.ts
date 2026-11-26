@@ -1,14 +1,14 @@
 /**
- * 魚類圖鑑（廣場釣魚的面板、主選單的「圖鑑」頁共用）：16 種魚的卡片（3D 縮圖）＋點進去看可以轉的 3D 模型。
+ * 魚類圖鑑（廣場釣魚的面板、主選單的「圖鑑」頁共用）：24 種魚（普通／稀有／傳說／巨物）的卡片（3D 縮圖）＋點進去看可以轉的 3D 模型。
  * 沒釣過的只顯示灰色剪影和「？？？」，不寫在哪裡、用什麼釣。
  * 資料：本機快取（localStorage）＋廣場伺服器 FishState＋REST /s/fishdex，取最大值合併。
  */
-import { FISH_SPECIES, FISH_DESC } from './fishModel';
+import { FISH_SPECIES, FISH_DESC, FISH_TIER } from './fishModel';
 import { fishThumb, mountFishViewer, releaseFish3d } from './fish3d';
 
 export type FishDexRow = { kg: number; n: number };
 const LS_KEY = 'oysterFishDex1';
-const TIER = ['普通', '稀有', '傳說'];
+const TIER: readonly string[] = FISH_TIER;
 let rows: Map<string, FishDexRow> | null = null;
 
 function load(): Map<string, FishDexRow> {
