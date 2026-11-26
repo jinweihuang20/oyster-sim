@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FISH, FishSM, chargePower, castDist, castPoint, yawOf, newLure, stepLure, rhythmOk, newFight, stepFight, trollOk, oysterLeft, taipeiDay } from './fishLogic';
+import { FISH, FishSM, chargePower, castDist, castPoint, yawOf, newLure, stepLure, rhythmOk, lureDepthZone, inDepthZone, LURE_KEYS, newFight, stepFight, trollOk, oysterLeft, taipeiDay, type LureKey, type LureSt } from './fishLogic';
 
 const run = (sm: FishSM, s: number, inp = { reel: false, jerk: false, dir: 0 }) => { const evs: string[] = []; for (let t = 0; t < s; t += 1 / 60) { const e = sm.tick(1 / 60, inp); if (e) evs.push(e); } return evs; };
 
@@ -100,7 +100,36 @@ describe('釣魚：路亞節奏', () => {
   });
 });
 
+describe('釣魚：路亞水深區間', () => {
+  const zones: Record<LureKey, [number, number]> = {
+    popper: [0, 0.12], stickbait: [0, 0.45], trollskirt: [0, 0.45], minnow: [0, 1],
+    egi: [0.3, 1], jig: [0.4, 1], slowjig: [0.45, 1], soft: [0.55, 1],
+  };
+  const good: Record<LureKey, Partial<LureSt>> = {
+    popper: { jerk: 1.2, hold: 0 }, stickbait: { spd: 1.5, jerk: 1 }, trollskirt: { spd: 2 },
+    minnow: { spd: 2, jerk: 1 }, egi: { jerk: 1, hold: 0, spd: 0.5 }, jig: { jerk: 1, hold: 0 },
+    slowjig: { jerk: 1, hold: 0 }, soft: { spd: 0.6, jerk: 0 },
+  };
+  const st = (depth: number, extra: Partial<LureSt> = {}): LureSt => ({ dist: 20, depth, holdS: 0, hold: 0, spd: 0, jerk: 0, okT: 0, follow: false, ...extra });
+  it('8 種假餌的 lureDepthZone 跟 rhythmOk 水深門檻同一份，界線含內不含外', () => {
+    expect(LURE_KEYS).toHaveLength(8);
+    for (const k of LURE_KEYS) {
+      const z = lureDepthZone(k);
+      expect(z).toEqual({ min: zones[k][0], max: zones[k][1] });
+      expect(inDepthZone(k, z.min)).toBe(true);
+      expect(inDepthZone(k, z.max)).toBe(true);
+      if (z.min > 0) expect(inDepthZone(k, z.min - 1e-6)).toBe(false);
+      if (z.max < 1) expect(inDepthZone(k, z.max + 1e-6)).toBe(false);
+      expect(rhythmOk(k, st(z.min, good[k]))).toBe(true);
+      expect(rhythmOk(k, st(z.max, good[k]))).toBe(true);
+      if (z.min > 0) expect(rhythmOk(k, st(z.min - 1e-6, good[k]))).toBe(false);
+      if (z.max < 1) expect(rhythmOk(k, st(z.max + 1e-6, good[k]))).toBe(false);
+    }
+  });
+});
+
 describe('釣魚：拉扯張力', () => {
+
   it('一直按著收線 → 張力爆 → 斷線', () => {
     const f = newFight(0.9, 20000, true); let r = null;
     for (let i = 0; i < 600 && !r; i++) r = stepFight(f, true, 0, 1 / 60, () => 0.9);

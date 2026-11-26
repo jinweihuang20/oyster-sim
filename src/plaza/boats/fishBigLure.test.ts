@@ -37,7 +37,7 @@ describe('進階大物路亞：8 種假魚', () => {
     expect(rhythmOk('minnow', st({ spd: 2, jerk: 1 }))).toBe(true);
     expect(rhythmOk('jig', st({ depth: 0.5, jerk: 1, hold: 0.2 }))).toBe(true);
     expect(rhythmOk('soft', st({ depth: 0.7, spd: 0.6, jerk: 0.2 }))).toBe(true);
-    expect(rhythmOk('popper', st({ jerk: 1, hold: 0.1 }))).toBe(true);
+    expect(rhythmOk('popper', st({ depth: 0, jerk: 1, hold: 0.1 }))).toBe(true);
     // 大鉛筆餌：上層、中快收＋抽竿
     expect(rhythmOk('stickbait', st({ depth: 0.2, spd: 1.4, jerk: 1.2 }))).toBe(true);
     expect(rhythmOk('stickbait', st({ depth: 0.7, spd: 1.4, jerk: 1.2 }))).toBe(false);

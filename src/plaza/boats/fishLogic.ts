@@ -115,21 +115,39 @@ export type LureSt = { dist: number; depth: number; holdS: number; hold: number;
 export const newLure = (dist: number, item: LureKey): LureSt => ({ dist, depth: item === 'popper' ? 0 : 0.05, holdS: 0, hold: 0, spd: 0, jerk: 0, okT: 0, follow: false });
 const ema = (v: number, x: number, dt: number, tau: number) => v + (x - v) * (1 - Math.exp(-dt / tau));
 
+/** 各假餌的目標水層（0＝水面、1＝海底），跟 rhythmOk／HUD 水深條同一份 */
+export const LURE_DEPTH: Record<LureKey, { min: number; max: number }> = {
+  popper: { min: 0, max: 0.12 },
+  stickbait: { min: 0, max: 0.45 },
+  trollskirt: { min: 0, max: 0.45 },
+  minnow: { min: 0, max: 1 },
+  egi: { min: 0.3, max: 1 },
+  jig: { min: 0.4, max: 1 },
+  slowjig: { min: 0.45, max: 1 },
+  soft: { min: 0.55, max: 1 },
+};
+export const lureDepthZone = (item: LureKey) => LURE_DEPTH[item];
+export const inDepthZone = (item: LureKey, depth: number) => {
+  const z = LURE_DEPTH[item];
+  return depth >= z.min && depth <= z.max;
+};
+
 /** 這一刻的節奏對不對（看平滑平均）：軟蟲慢收貼底、米諾快收加抽竿、鐵板沉了再抽、波趴抽停；大鉛筆餌上層收加抽、裙尾快收、慢搖鐵板沉了輕抽停、木蝦抽沉 */
 export function rhythmOk(item: LureKey, s: LureSt) {
+  if (!inDepthZone(item, s.depth)) return false;
   switch (item) {
-    case 'soft': return s.depth >= 0.55 && s.spd > 0.15 && s.spd < 1.3 && s.jerk < 1.2;
+    case 'soft': return s.spd > 0.15 && s.spd < 1.3 && s.jerk < 1.2;
     case 'minnow': return s.spd >= 1.5 && s.jerk >= 0.5 && s.jerk <= 3.5;
-    case 'jig': return s.depth >= 0.4 && s.jerk >= 0.5 && s.hold < 0.6;
+    case 'jig': return s.jerk >= 0.5 && s.hold < 0.6;
     case 'popper': return s.jerk >= 0.7 && s.jerk <= 3.2 && s.hold < 0.35;
     // 大鉛筆餌：上層、中快速收線＋每隔一下抽竿（S 字滑行）
-    case 'stickbait': return s.depth <= 0.45 && s.spd >= 1.0 && s.jerk >= 0.5 && s.jerk <= 3.5;
+    case 'stickbait': return s.spd >= 1.0 && s.jerk >= 0.5 && s.jerk <= 3.5;
     // 船拖裙尾假餌：拋投時要一直快收、維持在上層
-    case 'trollskirt': return s.spd >= 1.6 && s.depth <= 0.45;
+    case 'trollskirt': return s.spd >= 1.6;
     // 慢搖鐵板：沉深、輕抽加停頓（不能一直收）
-    case 'slowjig': return s.depth >= 0.45 && s.jerk >= 0.4 && s.jerk <= 2.5 && s.hold < 0.45;
+    case 'slowjig': return s.jerk >= 0.4 && s.jerk <= 2.5 && s.hold < 0.45;
     // 木蝦：抽一下沉一下（不能一直快收）
-    case 'egi': return s.depth >= 0.3 && s.jerk >= 0.4 && s.jerk <= 3 && s.hold < 0.5 && s.spd < 1.6;
+    case 'egi': return s.jerk >= 0.4 && s.jerk <= 3 && s.hold < 0.5 && s.spd < 1.6;
   }
 }
 

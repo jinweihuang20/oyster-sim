@@ -4464,6 +4464,17 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 #fishHud .fhDist{display:none;flex:none;align-items:center;justify-content:center;min-width:58px;height:34px;padding:0 8px;margin-left:-6px;border-radius:9px;background:#2a5a86;color:#fff;font-size:17px;font-weight:900;letter-spacing:.2px;white-space:nowrap;font-variant-numeric:tabular-nums;line-height:1}
 #fishHud .fhDist.on{display:flex}
 @media (max-width:420px){#fishHud .fhDist{min-width:52px;font-size:15px;height:32px;padding:0 6px}}
+/* 路亞水深條：HUD 左側直向軌道（上淺下深），目標水層淡藍區間＋假魚圓點；只在假魚下水時出現 */
+#fishDepth{display:none;flex:none;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:22px;height:52px;margin:0 2px 0 -6px;pointer-events:none}
+#fishDepth.on{display:flex}
+#fishDepth .fdLo,#fishDepth .fdHi{flex:none;font-size:9px;font-weight:800;line-height:1;color:#9ec0de;letter-spacing:0}
+#fishDepth .fdTrack{position:relative;flex:1;width:10px;min-height:0;border-radius:6px;background:#0c1824;border:1.5px solid #2a5a86;overflow:hidden}
+#fishDepth .fdRail{position:absolute;left:0;right:0;top:6px;bottom:6px}
+#fishDepth .fdZone{position:absolute;left:0;right:0;background:#2a5a86;opacity:.55}
+#fishDepth .fdDot{position:absolute;left:50%;width:10px;height:10px;border-radius:50%;background:#8aa4bc;border:1.5px solid #142231;transform:translate(-50%,-50%);box-shadow:none}
+#fishDepth .fdDot.in{background:#3ecf8e;border-color:#142231}
+#fishDepth .fdDot.in.follow{background:#ffd76a}
+@media (max-width:420px){#fishDepth{width:20px;height:48px;margin:0 1px 0 -6px}#fishDepth .fdTrack{width:8px}#fishDepth .fdDot{width:9px;height:9px}}
 #fishHud .fhB{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:48px;min-width:48px!important;height:44px;min-height:44px!important;padding:2px!important;border-radius:10px!important;border:none!important;background:#2a5a86!important;color:#fff!important;font-size:11px;font-weight:700;pointer-events:auto;touch-action:none;box-shadow:none!important}
 #fishHud .fhB svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #fishHud .fhX{background:#fff!important;color:#2a5a86!important}
@@ -4561,6 +4572,8 @@ body.fishPanelOpen #fishBar,body.fishPanelOpen #fishMeter,body.fishPanelOpen #fi
   #fishBar{bottom:calc(var(--sa-bottom,0px) + 20px);gap:8px}
   #boatUi #fishCast,#boatUi #fishReel{padding:11px 18px!important;font-size:16px}
   #fishHud{top:calc(var(--sa-top,0px) + 54px)}
+  #fishDepth{height:44px;width:18px}
+  #fishDepth .fdLo,#fishDepth .fdHi{font-size:8px}
   #fishMeter{bottom:calc(var(--sa-bottom,0px) + 22px);width:min(300px,40vw)}
   #fishPanel{top:calc(var(--sa-top,0px) + 8px);max-height:calc(100vh - 16px)}
 }

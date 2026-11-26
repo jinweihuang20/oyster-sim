@@ -11,7 +11,7 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, castPoint, castDist, castRange, castFlyPoint, fishDistNow, fmtDistM, fightDistM, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyPoint, fishDistNow, fmtDistM, fightDistM, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, type Gear, type ItemKey, type BaitKey, type LureKey } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { fishGeometry, fishMaterial, FISH_TIER } from './fishModel';
 import { makeFishFx, FX, type FishFx } from './fishFx';
@@ -95,7 +95,7 @@ let hooked: HoldFish | null = null;
 let t = 0, splashT = 0, shadowA = 0, tipS = '', panelTab: 'gear' | 'dex' = 'gear', panelOn = false;
 let ui: {
   entry: HTMLButtonElement; sell: HTMLButtonElement; bar: HTMLDivElement; cast: HTMLButtonElement; reel: HTMLButtonElement; jerk: HTMLButtonElement;
-  hud: HTMLDivElement; hudTx: HTMLSpanElement; hudDist: HTMLSpanElement; hudTip: HTMLSpanElement; meter: HTMLDivElement; fill: HTMLDivElement; mLbl: HTMLSpanElement; dirL: HTMLElement; dirR: HTMLElement; panel: HTMLDivElement;
+  hud: HTMLDivElement; hudTx: HTMLSpanElement; hudDist: HTMLSpanElement; hudTip: HTMLSpanElement; depth: HTMLDivElement; depthZone: HTMLDivElement; depthDot: HTMLDivElement; meter: HTMLDivElement; fill: HTMLDivElement; mLbl: HTMLSpanElement; dirL: HTMLElement; dirR: HTMLElement; panel: HTMLDivElement;
 } | null = null;
 // 3D：一組線段（竿＋線）、浮標／假魚、魚影
 // 3D：釣竿模型（掛在人物身上）＋釣線（一條線段）、浮標／假魚、魚影
@@ -143,7 +143,7 @@ export function openFish(ctx: FishCtx, root: HTMLElement) {
   const cast = mk('fishCast', ICON.cast, '拋竿', '空白鍵');
   bar.append(jerk, reel, cast);
   const hud = document.createElement('div'); hud.id = 'fishHud';
-  hud.innerHTML = `<span class="fhDist" aria-label="距離"></span><div class="fhTx"><span class="fhMain"></span><span class="fhTip"></span></div><button type="button" class="fhB" data-f="gear" aria-label="換竿換餌">${ICON.gear}<span>換餌</span></button><button type="button" class="fhB" data-f="dex" aria-label="魚類圖鑑">${ICON.book}<span>圖鑑</span></button><button type="button" class="fhB fhX" data-f="exit" aria-label="不釣了">${ICON.exit}<span>不釣了</span></button>`;
+  hud.innerHTML = `<div id="fishDepth" aria-label="水深" aria-hidden="true"><span class="fdLo">淺</span><div class="fdTrack"><div class="fdRail"><div class="fdZone"></div><div class="fdDot"></div></div></div><span class="fdHi">深</span></div><span class="fhDist" aria-label="距離"></span><div class="fhTx"><span class="fhMain"></span><span class="fhTip"></span></div><button type="button" class="fhB" data-f="gear" aria-label="換竿換餌">${ICON.gear}<span>換餌</span></button><button type="button" class="fhB" data-f="dex" aria-label="魚類圖鑑">${ICON.book}<span>圖鑑</span></button><button type="button" class="fhB fhX" data-f="exit" aria-label="不釣了">${ICON.exit}<span>不釣了</span></button>`;
   const meter = document.createElement('div'); meter.id = 'fishMeter';
   meter.innerHTML = `<i class="fmDir l">${ICON.left}</i><div class="fmBar"><div class="fmRed"></div><div class="fmFill"></div></div><i class="fmDir r">${ICON.right}</i><span class="fmLbl"></span>`;
   const panel = document.createElement('div'); panel.id = 'fishPanel';
@@ -171,7 +171,7 @@ export function openFish(ctx: FishCtx, root: HTMLElement) {
   const rackBar = root.querySelector('#boatRackBar');
   (rackBar ?? root).append(entry, sell);
   root.append(bar, hud, meter, panel);
-  ui = { entry, sell, bar, cast, reel, jerk, hud, hudTx: hud.querySelector('.fhMain')!, hudDist: hud.querySelector('.fhDist')!, hudTip: hud.querySelector('.fhTip')!, meter, fill: meter.querySelector('.fmFill')!, mLbl: meter.querySelector('.fmLbl')!, dirL: meter.querySelector('.fmDir.l')!, dirR: meter.querySelector('.fmDir.r')!, panel };
+  ui = { entry, sell, bar, cast, reel, jerk, hud, hudTx: hud.querySelector('.fhMain')!, hudDist: hud.querySelector('.fhDist')!, hudTip: hud.querySelector('.fhTip')!, depth: hud.querySelector('#fishDepth')!, depthZone: hud.querySelector('.fdZone')!, depthDot: hud.querySelector('.fdDot')!, meter, fill: meter.querySelector('.fmFill')!, mLbl: meter.querySelector('.fmLbl')!, dirL: meter.querySelector('.fmDir.l')!, dirR: meter.querySelector('.fmDir.r')!, panel };
   addEventListener('keyup', onKeyUp);
   addEventListener('pointerdown', onAnyInput, { passive: true });
   buildGfx(ctx.scene);
@@ -714,7 +714,7 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
   else if (!on && ui.sell.parentElement === ui.bar) (document.getElementById('boatRackBar') ?? ui.bar).append(ui.sell);
   ui.bar.classList.toggle('on', on);
   ui.hud.classList.toggle('on', on);
-  if (!on) { ui.meter.classList.remove('on'); return; }
+  if (!on) { ui.meter.classList.remove('on'); ui.depth.classList.remove('on'); ui.depth.setAttribute('aria-hidden', 'true'); return; }
   const ph = sm.phase, lure = sm.gear === 'lure';
   ui.cast.classList.toggle('on', ph === 'idle' || ph === 'charge' || ph === 'cast');
   ui.cast.classList.toggle('dis', ph === 'cast');
@@ -753,6 +753,20 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
     const run = ph === 'fight' && lure ? sm.fight?.run ?? 0 : 0;
     ui.dirL.classList.toggle('on', run > 0); ui.dirR.classList.toggle('on', run < 0);
   }
+  // 路亞水深條：假魚在水裡才顯示（等魚／試吃／沉／等伺服器）；蓄力、飛線、拉魚、垂釣竿都藏起來
+  const depthOn = lure && !!sm.lure && (ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook');
+  ui.depth.classList.toggle('on', depthOn);
+  ui.depth.setAttribute('aria-hidden', depthOn ? 'false' : 'true');
+  if (depthOn && sm.lure && isLure(sm.item)) {
+    const z = lureDepthZone(sm.item);
+    ui.depthZone.style.top = (z.min * 100).toFixed(1) + '%';
+    ui.depthZone.style.height = ((z.max - z.min) * 100).toFixed(1) + '%';
+    const d = sm.lure.depth;
+    ui.depthDot.style.top = (d * 100).toFixed(1) + '%';
+    const okD = inDepthZone(sm.item, d);
+    ui.depthDot.classList.toggle('in', okD);
+    ui.depthDot.classList.toggle('follow', okD && sm.lure.follow);
+  }
 }
 
 // ---------------- 除錯 ----------------
@@ -789,7 +803,7 @@ export const fishDbg = {
   fetch() { void fetchState(); return 'ok'; },
   /** 測試：站到岸上某一點（碼頭尾端約 x＝-39, z＝0） */
   tp(x: number, z: number) { const p = C?.walkPos() as { x: number; z: number } | undefined; if (!p || C?.mode() !== 'walk') return 'not walking'; p.x = x; p.z = z; return 'ok'; },
-  ui() { return ui ? { entry: ui.entry.classList.contains('on'), sell: ui.sell.classList.contains('on'), bar: ui.bar.classList.contains('on'), cast: ui.cast.classList.contains('on'), reel: ui.reel.classList.contains('on') ? ui.reel.textContent : null, jerk: ui.jerk.classList.contains('on'), hud: ui.hud.classList.contains('on') ? ui.hud.textContent : null, meter: ui.meter.classList.contains('on') ? ui.mLbl.textContent : null, panel: panelOn } : null; },
+  ui() { return ui ? { entry: ui.entry.classList.contains('on'), sell: ui.sell.classList.contains('on'), bar: ui.bar.classList.contains('on'), cast: ui.cast.classList.contains('on'), reel: ui.reel.classList.contains('on') ? ui.reel.textContent : null, jerk: ui.jerk.classList.contains('on'), hud: ui.hud.classList.contains('on') ? ui.hud.textContent : null, depth: ui.depth.classList.contains('on'), meter: ui.meter.classList.contains('on') ? ui.mLbl.textContent : null, panel: panelOn } : null; },
   /** 測試：特效粒子數（氣泡、墨） */
   fx() { return ffx ? { bubbles: ffx.bubbles.live(), ink: ffx.ink.live() } : null; },
   /** 測試：噴一團墨（在現在的線頭位置） */
