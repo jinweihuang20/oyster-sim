@@ -45,7 +45,7 @@ type ExchangeOk = {
 export type AuthBootOpts = {
   onSafariHint?: () => void;
   onConflict?: (cloud: SaveSummary, device: SaveSummary) => void;
-  applyCloud?: (data: Record<string, string>, rev: number, newPid: string) => void;
+  applyCloud?: (data: Record<string, unknown>, rev: number, newPid: string) => void;
   onMessage?: (msg: string) => void;
 };
 
@@ -362,12 +362,12 @@ export function summaryLines(s: SaveSummary | null | undefined): string {
   return `${nick}${hash ? ' ' + hash : ''}\n錢：${money.toLocaleString('zh-Hant-TW')}\n天數：${days} 天\n上次同步：${when}`;
 }
 
-export function asCloudMap(data: unknown): Record<string, string> {
-  const o: Record<string, string> = {};
-  if (!data || typeof data !== 'object') return o;
+export function asCloudMap(data: unknown): Record<string, unknown> {
+  const o: Record<string, unknown> = {};
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return o;
   for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
-    if (typeof v === 'string') o[k] = v;
-    else if (v != null) o[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    if (typeof v === 'string' || (v !== null && typeof v === 'object')) o[k] = v;
+    else if (v != null) o[k] = String(v);
   }
   return o;
 }

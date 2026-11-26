@@ -57,6 +57,66 @@ export function defaultSave(): Save {
   };
 }
 
+
+/** 圖鑑日期只顯示年月日，存檔用 yyyymmdd 就夠（與 fmtDate 同一套本機日曆）。 */
+export function dayNum(ts: number) {
+  const d = new Date(ts);
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+export function dayNumToTs(n: number) {
+  const y = Math.floor(n / 10000), m = Math.floor(n / 100) % 100, d = n % 100;
+  if (!Number.isInteger(n) || n <= 0 || y < 1970 || m < 1 || m > 12 || d < 1 || d > 31) return 0;
+  return new Date(y, m - 1, d, 12, 0, 0).getTime();
+}
+
+function parseCookDex(raw: unknown): Record<string, number> | undefined {
+  const out: Record<string, number> = {};
+  const add = (id: number, ts: number) => {
+    if (Number.isInteger(id) && id >= 0 && id < COMBO_TOTAL && ts > 0) out[String(id)] = ts;
+  };
+  if (Array.isArray(raw)) {
+    for (let i = 0; i + 1 < raw.length; i += 2) {
+      const id = Number(raw[i]), day = Number(raw[i + 1]);
+      add(id, day > 1e11 ? day : dayNumToTs(day)); // 舊毫秒誤存成陣列時也能讀
+    }
+  } else if (raw && typeof raw === 'object') {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) add(Number(k), typeof v === 'number' && isFinite(v) ? v : 0);
+  } else return undefined;
+  return Object.keys(out).length ? out : undefined;
+}
+function parseCookDish(raw: unknown): Record<string, number> | undefined {
+  const out: Record<string, number> = {};
+  const add = (id: number, n: number) => {
+    if (comboHasFood(id) && Number.isInteger(n) && n > 0) out[String(id)] = Math.min(n, 99_999);
+  };
+  if (Array.isArray(raw)) {
+    for (let i = 0; i + 1 < raw.length; i += 2) add(Number(raw[i]), Math.floor(Number(raw[i + 1])));
+  } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) add(Number(k), Math.floor(typeof v === 'number' && isFinite(v) ? v : 0));
+  } else return undefined;
+  return Object.keys(out).length ? out : undefined;
+}
+export function packCookDex(dex?: Record<string, number>): number[] | undefined {
+  if (!dex) return undefined;
+  const out: number[] = [];
+  for (const id of Object.keys(dex).map(Number).filter(n => Number.isInteger(n)).sort((a, b) => a - b)) {
+    const ts = dex[String(id)];
+    if (!(ts > 0) || id < 0 || id >= COMBO_TOTAL) continue;
+    out.push(id, dayNum(ts));
+  }
+  return out.length ? out : undefined;
+}
+export function packCookDish(dish?: Record<string, number>): number[] | undefined {
+  if (!dish) return undefined;
+  const out: number[] = [];
+  for (const id of Object.keys(dish).map(Number).filter(n => Number.isInteger(n)).sort((a, b) => a - b)) {
+    const n = Math.floor(Number(dish[String(id)]));
+    if (!comboHasFood(id) || n <= 0) continue;
+    out.push(id, Math.min(n, 99_999));
+  }
+  return out.length ? out : undefined;
+}
+
 export function loadSave(LS: SaveStorage): Save {
   const d = defaultSave(); let raw: any = null;
   try { raw = JSON.parse(LS.getItem('oyster-sim') || 'null'); } catch { raw = null; }
@@ -114,20 +174,8 @@ export function loadSave(LS: SaveStorage): Save {
       if (n > 0 && at > 0) out.food.push(q === 1 ? { id: b.id, n, at, q } : { id: b.id, n, at });
     }
   }
-  if (raw.cookDex && typeof raw.cookDex === 'object' && !Array.isArray(raw.cookDex)) {
-    out.cookDex = {};
-    for (const [k, v] of Object.entries(raw.cookDex as Record<string, unknown>)) {
-      const id = Number(k), t = num(v);
-      if (Number.isInteger(id) && id >= 0 && id < COMBO_TOTAL && t > 0) out.cookDex[String(id)] = t;
-    }
-  }
-  if (raw.cookDish && typeof raw.cookDish === 'object' && !Array.isArray(raw.cookDish)) {
-    out.cookDish = {};
-    for (const [k, v] of Object.entries(raw.cookDish as Record<string, unknown>)) {
-      const id = Number(k), n = Math.floor(num(v));
-      if (comboHasFood(id) && Number.isInteger(n) && n > 0) out.cookDish[String(id)] = Math.min(n, 99_999);
-    }
-  }
+  const dex = parseCookDex(raw.cookDex); if (dex) out.cookDex = dex;
+  const dish = parseCookDish(raw.cookDish); if (dish) out.cookDish = dish;
   if (raw.feedDay && typeof raw.feedDay === 'object' && typeof (raw.feedDay as any).d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test((raw.feedDay as any).d)) {
     const fd = raw.feedDay as { d: string; c?: unknown };
     out.feedDay = { d: fd.d, c: {} };
@@ -143,7 +191,14 @@ export function loadSave(LS: SaveStorage): Save {
 }
 
 export function writeSave(LS: SaveStorage, save: Save) {
-  try { LS.setItem('oyster-sim', JSON.stringify(save)); } catch { /* 私密模式等 */ }
+  try {
+    const out: Record<string, unknown> = { ...save };
+    const dex = packCookDex(save.cookDex);
+    const dish = packCookDish(save.cookDish);
+    if (dex) out.cookDex = dex; else delete out.cookDex;
+    if (dish) out.cookDish = dish; else delete out.cookDish;
+    LS.setItem('oyster-sim', JSON.stringify(out));
+  } catch { /* 私密模式等 */ }
 }
 
 export const DAILY_PAYS = [1000, 1200, 1500, 1800, 2200, 2600, 3000];

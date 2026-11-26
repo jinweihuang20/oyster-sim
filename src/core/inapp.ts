@@ -1,4 +1,5 @@
 // Threads／IG／FB／LINE 內建瀏覽器：自動改用系統瀏覽器開，存檔用一次性代碼搬過去
+import { isCloudSkipKey, packCloudValue, unpackCloudValue } from './cloudSync';
 const API = 'https://game-status.gwtech.org/s';
 const P = __PREVIEW__ ? 'preview:' : '';
 const UA = navigator.userAgent;
@@ -18,14 +19,24 @@ export async function importMove(): Promise<boolean> {
     const r = await fetch(API + '/move/' + encodeURIComponent(code), { mode: 'cors', cache: 'no-store' });
     if (!r.ok || hadProgress) return false; // 有進度：代碼已被取用作廢，保留本機
     const j = await r.json(); const data = j?.data; if (!data || typeof data !== 'object') return false;
-    for (const [k, v] of Object.entries(data)) if (typeof k === 'string' && k.startsWith('oyster') && typeof v === 'string') localStorage.setItem(P + k, v);
+    for (const [k, v] of Object.entries(data)) {
+      if (typeof k !== 'string' || !k.startsWith('oyster') || isCloudSkipKey(k)) continue;
+      const s = unpackCloudValue(v);
+      if (s !== null) localStorage.setItem(P + k, s);
+    }
     location.reload(); return true;
   } catch { return false; }
 }
 
-function collect(): Record<string, string> {
-  const o: Record<string, string> = {};
-  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i)!; if (!k.startsWith(P)) continue; const n = k.slice(P.length); if (n.startsWith('oyster') && !n.startsWith('preview:')) o[n] = localStorage.getItem(k)!; }
+function collect(): Record<string, unknown> {
+  const o: Record<string, unknown> = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)!; if (!k.startsWith(P)) continue;
+    const n = k.slice(P.length);
+    if (!n.startsWith('oyster') || n.startsWith('preview:') || isCloudSkipKey(n)) continue;
+    const v = localStorage.getItem(k);
+    if (typeof v === 'string') o[n] = packCloudValue(v);
+  }
   return o;
 }
 

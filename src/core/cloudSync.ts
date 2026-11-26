@@ -23,6 +23,12 @@ export const onCloudStatus = (f: (s: Status, err: string) => void) => { listener
 export const cloudStatus = () => ({ status, err: lastErr });
 
 function setStatus(s: Status, err = '') { status = s; lastErr = err; notify(); }
+const TOO_LARGE = '存檔過大，無法同步到雲端';
+function setPutStatus(put: 'ok' | 'stale' | 'fail' | 'too_large', failMsg: string, failStatus: Status = 'err') {
+  if (put === 'ok') { setStatus('ok'); return; }
+  if (put === 'too_large') { setStatus('err', TOO_LARGE); return; }
+  setStatus(failStatus, failMsg);
+}
 
 function localRev(): number {
   const n = Number(LS.getItem(REV_KEY) || '0');
@@ -35,12 +41,36 @@ function bumpRev(): number {
   return r;
 }
 
-/** 未結算草稿／已領名單：只留本機，不上雲（避免雲端覆寫把進度冲掉或重複領）。 */
-const CLOUD_SKIP = new Set(['oyster-shift-draft', 'oyster-shift-claimed', SYNC_AT, 'oyster-auth-token', 'oyster-auth-wait', 'oyster-auth-intent', 'oyster-auth-handled']);
+/** 未結算草稿／已領名單／提示與介面狀態：只留本機，不上雲（避免雲端覆寫把進度冲掉或重複領）。設定 oyster-mix 仍上雲。 */
+const CLOUD_SKIP = new Set([
+  'oyster-shift-draft', 'oyster-shift-claimed', SYNC_AT,
+  'oyster-auth-token', 'oyster-auth-wait', 'oyster-auth-intent', 'oyster-auth-handled',
+  'oyster-lb-day', 'oyster-homeguide', 'oyster-dc-first', 'oyster-dm-set',
+]);
+export function isCloudSkipKey(k: string) {
+  if (CLOUD_SKIP.has(k)) return true;
+  if (k.startsWith('oyster-fr-watch:') || k.startsWith('oyster-fr-ping:')) return true;
+  if (k.startsWith('oyster-ck-seen-up')) return true;
+  return false;
+}
+/** localStorage 字串若是 JSON 物件／陣列就解析，避免雲端 payload 再跳脫一次。 */
+export function packCloudValue(v: string): unknown {
+  const t = v.trim();
+  if (t.startsWith('{') || t.startsWith('[')) {
+    try { return JSON.parse(v); } catch { /* 當純文字 */ }
+  }
+  return v;
+}
+/** 舊雲端存檔是字串、新的可能是物件；寫回 localStorage 一律轉成字串。 */
+export function unpackCloudValue(v: unknown): string | null {
+  if (typeof v === 'string') return v;
+  if (v !== null && typeof v === 'object') return JSON.stringify(v);
+  return null;
+}
 
 /** 收集本機 oyster* 鍵（與 inapp collect 一致；含 stats-id／存檔／設定）。 */
-export function collectCloudData(): Record<string, string> {
-  const o: Record<string, string> = {};
+export function collectCloudData(): Record<string, unknown> {
+  const o: Record<string, unknown> = {};
   const prefix = typeof __PREVIEW__ !== 'undefined' && __PREVIEW__ ? 'preview:' : '';
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -48,9 +78,9 @@ export function collectCloudData(): Record<string, string> {
       if (prefix) { if (!full.startsWith(prefix)) continue; }
       else if (full.startsWith('preview:')) continue;
       const k = prefix ? full.slice(prefix.length) : full;
-      if (!k.startsWith('oyster') || CLOUD_SKIP.has(k)) continue;
+      if (!k.startsWith('oyster') || isCloudSkipKey(k)) continue;
       const v = localStorage.getItem(full);
-      if (typeof v === 'string') o[k] = v;
+      if (typeof v === 'string') o[k] = packCloudValue(v);
     }
   } catch { /* */ }
   if (pid) o['oyster-stats-id'] = pid;
@@ -58,11 +88,13 @@ export function collectCloudData(): Record<string, string> {
   return o;
 }
 
-function applyCloudData(data: Record<string, string>, rev: number, newPid: string) {
+export function applyCloudData(data: Record<string, unknown>, rev: number, newPid: string) {
   for (const [k, v] of Object.entries(data)) {
-    if (typeof k !== 'string' || !k.startsWith('oyster') || typeof v !== 'string') continue;
-    if (CLOUD_SKIP.has(k) || k === REV_KEY) continue;
-    try { LS.setItem(k, v); } catch { /* */ }
+    if (typeof k !== 'string' || !k.startsWith('oyster')) continue;
+    if (isCloudSkipKey(k) || k === REV_KEY) continue;
+    const s = unpackCloudValue(v);
+    if (s === null) continue;
+    try { LS.setItem(k, s); } catch { /* */ }
   }
   try {
     LS.setItem('oyster-stats-id', newPid);
@@ -71,7 +103,7 @@ function applyCloudData(data: Record<string, string>, rev: number, newPid: strin
 }
 
 /** 套用遠端存檔並重新載入（取回綁定進度時用）。 */
-export function cloudApplyRemote(data: Record<string, string>, rev: number, newPid: string) {
+export function cloudApplyRemote(data: Record<string, unknown>, rev: number, newPid: string) {
   if (newPid) pid = newPid;
   applyCloudData(data, rev, newPid || pid);
   setStatus('ok');
@@ -82,14 +114,14 @@ export function cloudSetPid(playerId: string) {
   if (playerId) pid = playerId;
 }
 
-async function getCloud(): Promise<{ found: boolean; pid?: string; data?: Record<string, string>; rev?: number } | null> {
+async function getCloud(): Promise<{ found: boolean; pid?: string; data?: Record<string, unknown>; rev?: number } | null> {
   try {
     const r = await fetch(`${API}/cloud?pid=${encodeURIComponent(pid)}`, { mode: 'cors', cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json();
     if (!j?.ok) return null;
     if (!j.found) return { found: false };
-    const data = j.data && typeof j.data === 'object' ? j.data as Record<string, string> : {};
+    const data = j.data && typeof j.data === 'object' && !Array.isArray(j.data) ? j.data as Record<string, unknown> : {};
     return { found: true, pid: String(j.pid || pid), data, rev: Number(j.rev) || 0 };
   } catch { return null; }
 }
@@ -103,7 +135,7 @@ function cloudAuthHeaders(): Record<string, string> {
   return h;
 }
 
-async function putCloud(rev: number, data: Record<string, string>): Promise<'ok' | 'stale' | 'fail'> {
+async function putCloud(rev: number, data: Record<string, unknown>): Promise<'ok' | 'stale' | 'fail' | 'too_large'> {
   try {
     const r = await fetch(`${API}/cloud`, {
       method: 'POST', mode: 'cors',
@@ -111,6 +143,7 @@ async function putCloud(rev: number, data: Record<string, string>): Promise<'ok'
       body: JSON.stringify({ pid, data, rev }),
     });
     if (r.status === 401) { setStatus('err', '請重新登入這台'); return 'fail'; }
+    if (r.status === 413) return 'too_large';
     if (!r.ok) return 'fail';
     const j = await r.json();
     if (j?.ok) {
@@ -118,7 +151,7 @@ async function putCloud(rev: number, data: Record<string, string>): Promise<'ok'
       return 'ok';
     }
     if (j?.err === 'stale' && j.data) {
-      applyCloudData(j.data as Record<string, string>, Number(j.rev) || 0, String(j.pid || pid));
+      applyCloudData(j.data as Record<string, unknown>, Number(j.rev) || 0, String(j.pid || pid));
       return 'stale';
     }
     return 'fail';
@@ -142,7 +175,7 @@ export async function cloudBoot(playerId?: string, ls?: CloudLS): Promise<boolea
   if (!remote.found) {
     const rev = loc > 0 ? loc : bumpRev();
     const put = await putCloud(rev, collectCloudData());
-    setStatus(put === 'ok' ? 'ok' : 'err', put === 'ok' ? '' : '首次上傳失敗');
+    setPutStatus(put, '首次上傳失敗');
     return false;
   }
   const rRev = remote.rev ?? 0;
@@ -155,7 +188,7 @@ export async function cloudBoot(playerId?: string, ls?: CloudLS): Promise<boolea
   if (loc > rRev) {
     const put = await putCloud(loc, collectCloudData());
     if (put === 'stale') { setStatus('ok'); location.reload(); return true; }
-    setStatus(put === 'ok' ? 'ok' : 'err', put === 'ok' ? '' : '上傳失敗');
+    setPutStatus(put, '上傳失敗');
     return false;
   }
   setStatus('ok');
@@ -177,7 +210,7 @@ export async function cloudFlush(): Promise<boolean> {
   const put = await putCloud(rev, collectCloudData());
   if (put === 'stale') { setStatus('ok'); location.reload(); return true; }
   if (put === 'ok') { setStatus('ok'); return false; }
-  setStatus('offline', '同步失敗');
+  setPutStatus(put, '同步失敗', put === 'too_large' ? 'err' : 'offline');
   return false;
 }
 
