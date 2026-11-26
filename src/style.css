@@ -4616,3 +4616,8 @@ body.fishPanelOpen #boatUi>.boatBtn,body.fishPanelOpen #boatRackBar,body.fishPan
 @media (max-height:500px){
   #fishPanel{top:calc(var(--sa-top,0px) + 54px);max-height:calc(100vh - var(--sa-top,0px) - var(--sa-bottom,0px) - 62px);max-height:calc(100dvh - var(--sa-top,0px) - var(--sa-bottom,0px) - 62px);width:min(380px,calc(100vw - 140px))}
 }
+
+/* 雜貨店釣具：3D 縮圖底板（餌、假魚；釣竿也同一格大小對齊） */
+.itemCard .itemIc.tkIc{width:72px;height:45px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:linear-gradient(180deg,#eef4f9,#dde8f1);box-shadow:inset 0 0 0 1px rgba(42,90,134,.18);overflow:hidden}
+.itemCard .itemIc.tkIc svg{width:64px;height:40px}
+.itemCard .itemIc .tkImg{display:block;width:72px;height:45px;pointer-events:none;user-select:none;-webkit-user-drag:none}

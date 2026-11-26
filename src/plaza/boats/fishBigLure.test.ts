@@ -21,7 +21,7 @@ describe('進階大物路亞：8 種假魚', () => {
     expect(isLure('shrimp')).toBe(false); expect(isLure('oyster')).toBe(false);
   });
   it('拋竿距離（伺服器 FishLureCastMax 同值）', () => {
-    const want: Record<LureKey, number> = { minnow: 17, jig: 26, soft: 15, popper: 20, stickbait: 22, trollskirt: 18, slowjig: 28, egi: 16 };
+    const want: Record<LureKey, number> = { minnow: 26, jig: 40, soft: 22, popper: 30, stickbait: 34, trollskirt: 28, slowjig: 42, egi: 24 };
     for (const k of LURE_KEYS) { expect(castRange(k)).toEqual({ min: 5, max: want[k] }); expect(castDist(1, k)).toBe(want[k]); expect(castDist(0, k)).toBe(5); }
     expect(castDist(1, 'slowjig')).toBeGreaterThan(castDist(1, 'jig'));
   });

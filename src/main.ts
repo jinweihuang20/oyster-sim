@@ -1,6 +1,6 @@
 import { HQ_SEAT_SLOT, isPlazaAber } from './plaza/layout';
 import { qtyHtml, bindQty, getQty, resetQty } from './shop/qty';
-import { FISH_BUY_ATTR, fishShopRows, fishShopHtml, fishBuyRowOf, shopMeds } from './shop/fishShop';
+import { FISH_BUY_ATTR, fishShopRows, fishShopHtml, fishBuyRowOf, shopMeds, tackleImgHtml } from './shop/fishShop';
 import {
   initUpdate, postDiscordFeedback, installBackGuard, rbox, rboxEnv, crease, rcyl, setGeoLowDetail,
   importMove, escapeInApp, type Save, type Life, LIFE_KEYS, SAVE_V, START_MONEY,
@@ -29,7 +29,7 @@ import {
 } from './world';
 import { initCook, openCook, openCookSolo, closeCook, cookPanelOpen, openDex as openCookDex, dexTab, closeDex as closeCookDexView, setFishDexHook } from './cook/cookUi';
 import { mountFishDex, fishDexMerge, type FishDexView } from './plaza/boats/fishDex';
-import { fish3dDbg } from './plaza/boats/fish3d';
+import { fish3dDbg, fillTackleThumbs, tackleThumbCached } from './plaza/boats/fish3d';
 import { initFeed, openFeed } from './cook/feed';
 import { initHudMenu } from './ui/hudMenu';
 import { initCookBroadcast, syncCookDexOnce } from './meta/cookBroadcast';
@@ -5293,12 +5293,17 @@ function renderItemShop() {
     };
   });
 }
+/** 釣具 3D 縮圖的實際像素：顯示 72×45，依螢幕密度畫 2～3 倍才清楚 */
+const tackleThumbPx = () => { const k = Math.min(3, Math.max(2, Math.round(window.devicePixelRatio || 1))); return { w: 72 * k, h: 45 * k }; };
 /** 雜貨店「釣具」：釣竿一次買斷；餌一包一包買（消耗品）；路亞假魚可以重複用，斷線就沒了。存在 save.meds（跟蚵棚組合包一樣） */
 function renderFishShop() {
   const L = $('shopList');
   const rows = fishShopRows();
   const fmt = { qtyHtml, px, pxHtml, pxCd };
-  L.insertAdjacentHTML('beforeend', fishShopHtml(save, { rod: FISH_ROD_SVG, bait: FISH_BAIT_SVG, lure: FISH_LURE_SVG }, fmt));
+  const tw = tackleThumbPx();
+  L.insertAdjacentHTML('beforeend', fishShopHtml(save, { rod: FISH_ROD_SVG, bait: FISH_BAIT_SVG, lure: FISH_LURE_SVG }, fmt, k => tackleThumbCached(k, tw.w, tw.h)));
+  // 餌和假魚的 3D 縮圖：共用圖鑑那一個離屏 WebGL，每幀畫 2 張；不能 3D 就留線條圖示
+  fillTackleThumbs(L, (el, url) => { if (url) el.innerHTML = tackleImgHtml(url, el.closest('.itemCard')?.querySelector('b')?.textContent ?? ''); }, tw.w, tw.h);
   // 用 data-fishbuy，不要用廣場旗幟已經占用的 data-fbuy；對不到商品的鈕直接略過
   L.querySelectorAll<HTMLButtonElement>(`button[${FISH_BUY_ATTR}]`).forEach(b => {
     const r = fishBuyRowOf(b.getAttribute('data-fishbuy'), rows); if (!r) return;

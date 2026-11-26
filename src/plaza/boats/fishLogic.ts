@@ -38,18 +38,19 @@ export const FISH = {
   ] as readonly { k: LureKey; n: string; id: string; price: number }[],
   oysterPerDay: 20,
   /** 拋竿：最近／最遠（公尺，伺服器同值）、力道條來回一次幾秒、拋出去飛幾秒 */
-  castMin: 4, castMax: 16, chargePeriod: 1.6, flyS: 0.55,
+  castMin: 4, castMax: 24, chargePeriod: 1.6, flyS: 0.55,
   /**
    * 路亞竿：照真實岸拋距離約 1／3 縮小（伺服器 FishLureCastMax 同值）。
    * 真實 8～9 呎岸拋竿：鐵板 50～80 m、波趴 30～60 m、米諾 30～50 m、軟蟲 25～45 m。
+   * 2026-11 全部拉長約 1.5 倍（垂釣竿 16→24、浮標拖太遠 22→32）。
    */
-  lureCastMin: 5, lureCast: { minnow: 17, soft: 15, popper: 20, jig: 26, stickbait: 22, trollskirt: 18, slowjig: 28, egi: 16 } as Record<LureKey, number>,
+  lureCastMin: 5, lureCast: { minnow: 26, soft: 22, popper: 30, jig: 40, stickbait: 34, trollskirt: 28, slowjig: 42, egi: 24 } as Record<LureKey, number>,
   /** 伺服器：每 2 秒擲一次咬餌、收竿時間窗 0.8 秒 */
   rollS: 2, windowS: 0.8,
   /** 駕駛船速超過就自動收線；拖釣船速範圍（乘客、米諾／鐵板／船拖裙尾假餌／大鉛筆餌） */
   driverMaxV: 0.55, trollMinV: 0.8, trollMaxV: 3.5,
   /** 浮標離人太遠（船漂走）就自動收線 */
-  dragR: 22,
+  dragR: 32,
   /** 路亞：收線速度（剛按 → 按久）、抽竿往回跳幾公尺、假魚下沉／上浮速度（0 水面～1 貼底）、收回來多近算收完 */
   reelMin: 0.8, reelMax: 3.0, reelRamp: 1.5, jerkM: 0.6, sinkPerS: 0.22, risePerS: 0.3, jerkLift: 0.15, backR: 1.6,
   /** 節奏對了要維持幾秒魚影才會跟上來 */
@@ -79,7 +80,7 @@ export const isLure = (k: string): k is LureKey => (LURE_KEYS as readonly string
 export const TROLL_LURES: readonly LureKey[] = ['minnow', 'jig', 'trollskirt', 'stickbait'];
 /** 頭足類（中魚時噴墨） */
 export const isSquidSp = (sp: string) => sp === 'aoriika' || sp === 'kouika';
-/** 這個餌／假魚的拋竿距離範圍（垂釣 4～16 m；路亞看假魚重量） */
+/** 這個餌／假魚的拋竿距離範圍（垂釣 4～24 m；路亞看假魚重量） */
 export const castRange = (item?: ItemKey) => (item && isLure(item) ? { min: FISH.lureCastMin, max: FISH.lureCast[item] } : { min: FISH.castMin, max: FISH.castMax });
 export const castDist = (power: number, item?: ItemKey) => { const r = castRange(item); return r.min + (r.max - r.min) * Math.max(0, Math.min(1, power)); };
 /** 力道條：來回擺動（0→1→0） */

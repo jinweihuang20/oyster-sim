@@ -4,13 +4,13 @@ import { FISH, FishSM, chargePower, castDist, castPoint, yawOf, newLure, stepLur
 const run = (sm: FishSM, s: number, inp = { reel: false, jerk: false, dir: 0 }) => { const evs: string[] = []; for (let t = 0; t < s; t += 1 / 60) { const e = sm.tick(1 / 60, inp); if (e) evs.push(e); } return evs; };
 
 describe('釣魚：拋竿', () => {
-  it('力道條來回擺、距離 4～16 m、落點在面向前方', () => {
+  it('力道條來回擺、距離 4～24 m、落點在面向前方', () => {
     expect(chargePower(0)).toBe(0);
     expect(chargePower(FISH.chargePeriod / 2)).toBeCloseTo(1);
     expect(chargePower(FISH.chargePeriod)).toBeCloseTo(0);
-    expect(castDist(0)).toBe(4); expect(castDist(1)).toBe(16); expect(castDist(9)).toBe(16);
+    expect(castDist(0)).toBe(4); expect(castDist(1)).toBe(24); expect(castDist(9)).toBe(24);
     const p = castPoint(-30, 0, Math.PI / 2, 0.5);
-    expect(p.x).toBeCloseTo(-40); expect(p.z).toBeCloseTo(0);
+    expect(p.x).toBeCloseTo(-44); expect(p.z).toBeCloseTo(0);
     expect(yawOf(-1, 0)).toBeCloseTo(Math.PI / 2);
   });
   it('拖釣：乘客、米諾／鐵板、船速 0.8～3.5', () => {

@@ -4,6 +4,7 @@
  */
 import * as THREE from 'three';
 import { fishGeometry, fishMaterial, fishSilMaterial, disposeFishGeometries } from './fishModel';
+import { tackleGeometry, disposeTackleGeometries } from '../../shop/tackleModel';
 
 let R3: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
@@ -38,19 +39,62 @@ function ensure(w: number, h: number) {
 
 /** 畫一條魚（yaw＝繞直立軸、pitch＝俯仰）；sil＝沒釣過的剪影 */
 function shoot(id: string, w: number, h: number, yaw: number, pitch: number, sil: boolean) {
-  const { R, S, C, M } = ensure(w, h);
   const geo = fishGeometry(id); if (!geo) throw new Error('no fish');
-  M.geometry = geo; M.material = sil ? fishSilMaterial() : fishMaterial();
-  M.rotation.set(0, yaw, 0); M.rotation.z = 0;
-  // 魚身長 1：鏡頭距離依畫面比例，整條魚都在畫面內（翻車魚這種比長度還高的也要整隻放得下）
-  const asp = w / h; C.aspect = asp;
   if (!geo.boundingBox) geo.computeBoundingBox();
   const bb = geo.boundingBox!, tall = (bb.max.y - bb.min.y) * 1.12;
-  const fitW = 1.18 / asp, d = Math.max(1.05, fitW, tall) / (2 * Math.tan((C.fov * Math.PI) / 360));
+  // 魚身長 1：鏡頭距離依畫面比例，整條魚都在畫面內（翻車魚這種比長度還高的也要整隻放得下）
+  return shootGeo(geo, sil, w, h, yaw, pitch, Math.max(1.05, 1.18 / (w / h), tall));
+}
+function shootGeo(geo: THREE.BufferGeometry, sil: boolean, w: number, h: number, yaw: number, pitch: number, fit: number) {
+  const { R, S, C, M } = ensure(w, h);
+  M.geometry = geo; M.material = sil ? fishSilMaterial() : fishMaterial();
+  M.rotation.set(0, yaw, 0);
+  C.aspect = w / h;
+  const d = fit / (2 * Math.tan((C.fov * Math.PI) / 360));
   C.position.set(0, Math.sin(pitch) * d, Math.cos(pitch) * d); C.lookAt(0, 0, 0); C.updateProjectionMatrix();
   R.setClearColor(0x000000, 0); R.clear();
   R.render(S, C);
   return R.domElement;
+}
+
+/** 雜貨店釣具縮圖：餌／假魚（tackleModel.ts）側面稍微俯看；寬高是實際像素。WebGL 不能用回空字串 */
+export function tackleThumb(k: string, w = 144, h = 90): string {
+  const key = 'tk:' + k + ':' + w + 'x' + h;
+  const hit = thumbs.get(key); if (hit != null) return hit;
+  try {
+    const geo = tackleGeometry(k); if (!geo) return '';
+    const yaw = 0.42, pitch = 0.3, s = geo.boundingBox!.getSize(new THREE.Vector3());
+    // 轉過 yaw 之後的水平寬、垂直高（含俯角看到的深度），留一點邊
+    const hw = Math.abs(s.x * Math.cos(yaw)) + Math.abs(s.z * Math.sin(yaw));
+    const vh = s.y * Math.cos(pitch) + (Math.abs(s.z * Math.cos(yaw)) + Math.abs(s.x * Math.sin(yaw))) * Math.sin(pitch);
+    const url = shootGeo(geo, false, w, h, yaw, pitch, Math.max(hw / (w / h), vh) * 1.08).toDataURL('image/png');
+    thumbs.set(key, url); return url;
+  } catch { return ''; }
+}
+/** 已經畫好的釣具縮圖（沒畫過回 undefined；重畫商店時直接用，不閃） */
+export const tackleThumbCached = (k: string, w = 144, h = 90) => thumbs.get('tk:' + k + ':' + w + 'x' + h);
+
+let viewers = 0, tkJob = 0;
+/**
+ * 把 root 裡還沒畫的 [data-tk] 換成 3D 縮圖：每幀 2 張分批畫（不卡）；畫完沒有圖鑑檢視器在用就放掉 WebGL。
+ * fill(el, url) 由呼叫端決定怎麼放圖（url 空字串＝這台不能 3D，保留原本的線條圖示）。
+ */
+export function fillTackleThumbs(root: ParentNode, fill: (el: HTMLElement, url: string) => void, w = 144, h = 90) {
+  cancelAnimationFrame(tkJob);
+  const els = Array.from(root.querySelectorAll<HTMLElement>('[data-tk]:not([data-tkok])'));
+  let i = 0;
+  const step = () => {
+    tkJob = 0;
+    for (let n = 0; n < 2 && i < els.length; i++) {
+      const el = els[i]; if (!el.isConnected) continue;
+      const k = el.dataset.tk!, had = tackleThumbCached(k, w, h) != null;
+      el.setAttribute('data-tkok', '1'); fill(el, tackleThumb(k, w, h));
+      if (!had) n++;
+    }
+    if (i < els.length) { tkJob = requestAnimationFrame(step); return; }
+    if (!viewers) releaseFish3d();
+  };
+  if (els.length) tkJob = requestAnimationFrame(step);
 }
 
 /** 縮圖 dataURL（記憶體快取）；WebGL 不能用就回空字串（呼叫端顯示文字） */
@@ -91,10 +135,11 @@ export function mountFishViewer(canvas: HTMLCanvasElement, id: string, sil: bool
   canvas.style.touchAction = 'none';
   const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => { fit(); if (dirty && !stopped) paint(); }) : null;
   ro?.observe(canvas);
+  viewers++;
   fit(); paint(); draw();
   function stop() {
     if (stopped) return;
-    stopped = true; cancelAnimationFrame(raf); ro?.disconnect();
+    stopped = true; viewers--; cancelAnimationFrame(raf); ro?.disconnect();
     canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move); canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', up);
   }
   return stop;
@@ -105,7 +150,7 @@ export function releaseFish3d() {
   if (!R3) return;
   try { R3.dispose(); R3.forceContextLoss(); } catch { /* */ }
   R3 = null; scene = null; cam = null; mesh = null; glLost = false;
-  disposeFishGeometries();
+  disposeFishGeometries(); disposeTackleGeometries();
 }
 /** 除錯：renderer 有沒有開著、快取幾張縮圖 */
 export const fish3dDbg = () => ({ live: !!R3, thumbs: thumbs.size });

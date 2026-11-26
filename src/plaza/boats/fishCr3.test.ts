@@ -9,18 +9,18 @@ import { makeMeshHelpers } from '../../dm/mesh';
 import { FISH_SPECIES, FISH_DESC, FISH_SEG, buildFishGeometry, fishModelIds } from './fishModel';
 
 describe('路亞拋竿距離（依假魚重量）', () => {
-  it('鐵板最遠、軟蟲最近；垂釣竿維持 4～16 m', () => {
+  it('鐵板最遠、軟蟲最近；垂釣竿維持 4～24 m', () => {
     expect(castRange('oyster')).toEqual({ min: FISH.castMin, max: FISH.castMax });
-    expect(castDist(1, 'jig')).toBe(26);
-    expect(castDist(1, 'popper')).toBe(20);
-    expect(castDist(1, 'minnow')).toBe(17);
-    expect(castDist(1, 'soft')).toBe(15);
+    expect(castDist(1, 'jig')).toBe(40);
+    expect(castDist(1, 'popper')).toBe(30);
+    expect(castDist(1, 'minnow')).toBe(26);
+    expect(castDist(1, 'soft')).toBe(22);
     expect(castDist(0, 'jig')).toBe(5);
     expect(castDist(1, 'jig')).toBeGreaterThan(castDist(1, 'minnow'));
     expect(castDist(1, 'minnow')).toBeGreaterThan(castDist(1, 'soft'));
-    expect(castDist(1)).toBe(16);
+    expect(castDist(1)).toBe(24);
     const p = castPoint(-40, 0, Math.PI / 2, 1, 'jig');
-    expect(p.x).toBeCloseTo(-66); expect(p.z).toBeCloseTo(0);
+    expect(p.x).toBeCloseTo(-80); expect(p.z).toBeCloseTo(0);
   });
 });
 
