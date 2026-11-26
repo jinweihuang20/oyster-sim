@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, steerPose, STEER, type FishPoseIn, type FishPoseSt } from './fishPose';
+import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, steerPose, STEER, fishPoseDecode, type FishPoseIn, type FishPoseSt } from './fishPose';
 import { makeRod } from './fishRod';
 import { makePlayerAvatar } from '../../dm/character';
 import { makeMeshHelpers } from '../../dm/mesh';
@@ -72,5 +72,23 @@ describe('拉魚往左右拉的人物動作', () => {
     const a = run(newFishPose(), { phase: 'fight', power: 0, reel: true, tension: 0.6, lure: true, twitch: 0 }, 120);
     expect(a.steer).toBe(0);
     expect(steerPose(a.steer).side).toBe(0);
+  });
+
+  it('遠端：從同步代碼解出左右，人物會側傾、竿子掃過去（垂釣／路亞都一樣）', () => {
+    const go = (code: number) => {
+      const i = fishPoseDecode(code);
+      i.tension = 0.6;
+      return run(newFishPose(), i, 120);
+    };
+    for (const lure of [0, 16]) {
+      const L = go(5 | lure | 32), R = go(5 | lure | 64), N = go(5 | lure);
+      expect(L.steer).toBeCloseTo(-1, 2); expect(R.steer).toBeCloseTo(1, 2); expect(N.steer).toBe(0);
+      expect(steerPose(L.steer).side).toBeLessThan(0);
+      expect(steerPose(R.steer).side).toBeGreaterThan(0);
+      expect(L.pitch).toBeCloseTo(N.pitch, 5); expect(R.lean).toBeCloseTo(N.lean, 5);
+    }
+    // 舊代碼沒有高位：不偏
+    expect(go(5).steer).toBe(0);
+    expect(go(21).steer).toBe(0);
   });
 });

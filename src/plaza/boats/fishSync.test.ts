@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { FISH_SYNC, newFishSync, copyFishSync, fishSyncChanged, fishSyncDue, normFishSync, fishBadgeOf, FISH_BADGE_TEXT, fishLineOut, fishLineEnd } from './fishSync';
-import { fishPoseCode, fishPoseDecode, fishPoseDecodeInto, newFishPose, stepFishPose, fishPoseTarget, type FishPoseIn } from './fishPose';
+import { FISH_SYNC, newFishSync, copyFishSync, fishSyncChanged, fishSyncDue, normFishSync, fishBadgeOf, FISH_BADGE_TEXT, fishLineOut, fishLineEnd, jerkSt } from './fishSync';
+import { fishPoseCode, fishPoseDecode, fishPoseDecodeInto, fishSteerOf, newFishPose, stepFishPose, fishPoseTarget, jerkFromSync, type FishPoseIn } from './fishPose';
 import { castPoint } from './fishLogic';
 import { HubConnectionState } from '@microsoft/signalr';
 import { makeBoatNet } from './boatNet';
@@ -99,6 +99,71 @@ describe('姿勢代碼：秀漁獲', () => {
   });
 });
 
+describe('拉魚左右拉同步（st 高位 bit）', () => {
+  it('編碼：-1＝+32、+1＝+64；垂釣／路亞都加上去；不是拉魚不加', () => {
+    expect(fishPoseCode('fight', true, false, -1)).toBe(5 | 32);
+    expect(fishPoseCode('fight', true, false, 0)).toBe(5);
+    expect(fishPoseCode('fight', true, false, 1)).toBe(5 | 64);
+    expect(fishPoseCode('fight', true, true, -1)).toBe(5 | 16 | 32);
+    expect(fishPoseCode('fight', true, true, 0)).toBe(21);
+    expect(fishPoseCode('fight', true, true, 1)).toBe(5 | 16 | 64);
+    expect(fishPoseCode('wait', false, false, -1)).toBe(4);
+    expect(fishPoseCode('hold', false, true, 1)).toBe(17);
+    expect(fishPoseCode('off', false, false, -1)).toBe(0);
+    // 類比搖桿：超過死區才算方向
+    expect(fishPoseCode('fight', true, false, -0.4)).toBe(5 | 32);
+    expect(fishPoseCode('fight', true, false, 0.1)).toBe(5);
+    expect(fishSteerOf(5 | 32)).toBe(-1);
+    expect(fishSteerOf(5 | 64)).toBe(1);
+    expect(fishSteerOf(5 | 32 | 64)).toBe(0);
+  });
+  it('解碼：左右／中間；舊代碼沒有高位＝中間（向後相容）', () => {
+    expect(fishPoseDecode(5).steer).toBe(0);
+    expect(fishPoseDecode(5 | 16).steer).toBe(0);
+    expect(fishPoseDecode(5 | 32).steer).toBe(-1);
+    expect(fishPoseDecode(5 | 64).steer).toBe(1);
+    expect(fishPoseDecode(5 | 16 | 32)).toMatchObject({ phase: 'fight', lure: true, steer: -1 });
+    expect(fishPoseDecode(5 | 16 | 64)).toMatchObject({ phase: 'fight', lure: true, steer: 1 });
+    expect(fishPoseDecode(4 | 32).steer).toBe(0);
+    expect(fishPoseDecode(1).steer).toBe(0);
+    expect(fishPoseDecode(21).phase).toBe('fight');
+    expect(fishPoseDecode(21).lure).toBe(true);
+    expect(fishPoseDecode(21).steer).toBe(0);
+    const o: FishPoseIn = { phase: 'off', power: 0, reel: false, tension: 0, lure: false, twitch: 0 };
+    expect(fishPoseDecodeInto(5 | 64, o)).toBe(o);
+    expect(o).toMatchObject({ phase: 'fight', steer: 1, lure: false });
+    fishPoseDecodeInto(5 | 16 | 32, o, 0.75);
+    expect(o).toMatchObject({ phase: 'fight', steer: -1, lure: true, tension: 0.75 });
+  });
+  it('頭上牌子、有沒有線、抽竿判定：有左右 bit 也不會看錯', () => {
+    expect(fishBadgeOf(5 | 32)).toBe(2);
+    expect(fishBadgeOf(5 | 16 | 64)).toBe(2);
+    expect(fishBadgeOf(4 | 32)).toBe(1);
+    expect(fishBadgeOf(7 | 32)).toBe(3);
+    expect(fishLineOut(5 | 32)).toBe(true);
+    expect(fishLineOut(5 | 16 | 64)).toBe(true);
+    expect(fishLineOut(1 | 32)).toBe(false);
+    expect(jerkSt(5 | 16 | 32)).toBe(false);
+    expect(jerkFromSync(20, 0.1, 20, 0.2)).toBe(true);
+    expect(jerkFromSync(20 | 32, 0.1, 20 | 64, 0.2)).toBe(true);
+    expect(jerkFromSync(5 | 32, 0.5, 5 | 64, 0.75)).toBe(false);
+    expect(normFishSync({ connId: 'c', st: 5 | 16 | 64 })!.st).toBe(5 | 16 | 64);
+  });
+  it('方向換了很快送（steerGap），但不當姿勢轉換、也不超過伺服器 3 秒 16 筆', () => {
+    const mid = msg({ st: 5, cd: 12, tn: 0.5 }), left = msg({ st: 5 | 32, cd: 12, tn: 0.5 });
+    expect(fishSyncChanged(mid, left)).toBe(true);
+    expect(fishSyncDue(mid, left, true, 0.05)).toBe(false);
+    expect(fishSyncDue(mid, left, true, FISH_SYNC.steerGap)).toBe(true);
+    expect(FISH_SYNC.steerGap).toBeGreaterThan(FISH_SYNC.phaseGap);
+    expect(3 / FISH_SYNC.steerGap).toBeLessThanOrEqual(16);
+    // 真的換姿勢（等待→拉魚）還是走 phaseGap
+    expect(fishSyncDue(msg({ st: 4, cd: 12 }), mid, true, 0.05)).toBe(false);
+    expect(fishSyncDue(msg({ st: 4, cd: 12 }), mid, true, FISH_SYNC.phaseGap)).toBe(true);
+    // 路亞拉魚左右切換同樣套 steerGap
+    expect(fishSyncDue(msg({ st: 21, tn: 0.5 }), msg({ st: 21 | 64, tn: 0.5 }), true, FISH_SYNC.steerGap)).toBe(true);
+  });
+});
+
 describe('送出：新伺服器 FishSync、舊伺服器退回 FishPose', () => {
   const mk = (fishSyncOk: boolean) => {
     const calls: [string, unknown[]][] = [];
@@ -136,5 +201,14 @@ describe('送出：新伺服器 FishSync、舊伺服器退回 FishPose', () => {
     const fp = calls.filter(c => c[0] === 'FishPose');
     expect(fp).toHaveLength(1);
     expect(fp[0][1]).toEqual([0.2, 0.3, 1, 1 + 16]);
+  });
+  it('舊伺服器：拉魚左右 bit 不送給 FishPose', async () => {
+    const { calls, net } = mk(false);
+    await net.fetchState(); await flush();
+    net.fishSync(msg({ st: 4, boat: true, dx: 0.2, dz: 0.3, yaw: 1 })); await flush(); await flush();
+    net.fishSync(msg({ st: 5 | 32, boat: true, dx: 0.2, dz: 0.3, yaw: 1 })); await flush();
+    const fp = calls.filter(c => c[0] === 'FishPose');
+    expect(fp).toHaveLength(1);
+    expect(fp[0][1]).toEqual([0.2, 0.3, 1, 5]);
   });
 });

@@ -637,7 +637,7 @@ function fillPoseIn() {
 export function fishSyncFill(out: FishSyncMsg) {
   if (sm.phase === 'off') { out.st = 0; out.ch = 0; out.cd = 0; out.tn = 0; out.sp = ''; out.kg = 0; return out; }
   fillPoseIn();
-  out.st = fishPoseCode(poseIn.phase, poseIn.reel, poseIn.lure);
+  out.st = fishPoseCode(poseIn.phase, poseIn.reel, poseIn.lure, poseIn.steer);
   out.ch = +castH.toFixed(2);
   const ph = sm.phase;
   const d = (ph === 'fight' || ph === 'land') && sm.fight ? Math.min(44, Math.max(1.5, fightM())) : sm.lure ? sm.lure.dist : castDst;
@@ -650,7 +650,7 @@ export function fishSyncFill(out: FishSyncMsg) {
   return out;
 }
 /** 線上同步的姿勢代碼（0＝沒在釣） */
-export function fishPoseNow() { return sm.phase === 'off' ? 0 : fishPoseCode(fillPoseIn().phase, poseIn.reel, poseIn.lure); }
+export function fishPoseNow() { return sm.phase === 'off' ? 0 : fishPoseCode(fillPoseIn().phase, poseIn.reel, poseIn.lure, poseIn.steer); }
 /**
  * 人物該面向哪（世界 yaw）：線在水裡／拉魚＝拋出去的方向；蓄力＝鏡頭方向；其他＝null（自由）
  */

@@ -225,7 +225,7 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
       if (fishSyncOld) {
         if (fishPoseOld || !m.boat && m.st !== 0) return true;
         fishPoseBusy = true;
-        void call('FishPose', m.dx, m.dz, m.yaw, m.st === 0 ? 0 : (m.st & 15) === 7 ? 1 | (m.st & 16) : m.st).then(r => { if (r?.err === 'old_server') fishPoseOld = true; }).finally(() => { fishPoseBusy = false; });
+        void call('FishPose', m.dx, m.dz, m.yaw, m.st === 0 ? 0 : (m.st & 15) === 7 ? 1 | (m.st & 16) : m.st & 31).then(r => { if (r?.err === 'old_server') fishPoseOld = true; }).finally(() => { fishPoseBusy = false; });
         return true;
       }
       fishPoseBusy = true;

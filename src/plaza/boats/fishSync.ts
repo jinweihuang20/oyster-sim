@@ -4,7 +4,7 @@
  */
 
 export type FishSyncMsg = {
-  /** 姿勢代碼（fishPose.ts）：0 沒在釣、1 持竿、2 蓄力、3 甩竿、4 等待、5 拉魚、6 捲線、7 秀漁獲；+16 路亞竿 */
+  /** 姿勢代碼（fishPose.ts）：0 沒在釣、1 持竿、2 蓄力、3 甩竿、4 等待、5 拉魚、6 捲線、7 秀漁獲；+16 路亞竿；拉魚時 +32＝往左拉、+64＝往右拉 */
   st: number;
   /** 在船上（dx/dz/yaw＝船身座標）；岸上（yaw＝世界面向） */
   boat: boolean;
@@ -31,6 +31,8 @@ export const FISH_SYNC = {
   cdStep: 1, tnStep: 0.25, posStep: 0.08, yawStep: 0.25, chStep: 0.12,
   /** 抽竿（路亞等待／捲線時 tn 換了）最短間隔：要快，別人看到的抽竿才跟得上節奏；伺服器限 3 秒 16 筆 */
   jerkGap: 0.25,
+  /** 拉魚左右拉方向換了的最短間隔：要快，別人看到側傾才跟得上；比姿勢轉換稍慢，以免洗爆伺服器 3 秒 16 筆 */
+  steerGap: 0.2,
 };
 
 export const newFishSync = (): FishSyncMsg => ({ st: 0, boat: false, dx: 0, dz: 0, yaw: 0, ch: 0, cd: 0, tn: 0, sp: '', kg: 0 });
@@ -62,7 +64,9 @@ export function fishSyncDue(last: FishSyncMsg, cur: FishSyncMsg, sentOnce: boole
   if (!sentOnce) return cur.st !== 0;
   if (cur.st === 0) return last.st !== 0;
   if (since >= FISH_SYNC.keepAlive) return true;
-  if (last.st !== cur.st) return since >= FISH_SYNC.phaseGap;
+  // 姿勢／路亞 bit 換了走 phaseGap；只有左右拉方向換了走 steerGap（較慢，避免左右狂切洗爆限速）
+  if ((last.st & 31) !== (cur.st & 31)) return since >= FISH_SYNC.phaseGap;
+  if (((last.st ^ cur.st) & (32 | 64)) !== 0) return since >= FISH_SYNC.steerGap;
   if (jerkSt(cur.st) && jerkSt(last.st) && last.tn !== cur.tn) return since >= FISH_SYNC.jerkGap;
   return since >= FISH_SYNC.minGap && fishSyncChanged(last, cur);
 }

@@ -183,21 +183,37 @@ export function stepFishPose(st: FishPoseSt, inp: FishPoseIn, dt: number) {
   return st;
 }
 
-/** 線上同步用的姿勢代碼：0 沒在釣、1 持竿、2 蓄力、3 甩竿、4 等待、5 拉魚、6 捲線、7 秀漁獲；+16＝路亞竿 */
-export function fishPoseCode(phase: FishPhase, reel: boolean, lure: boolean) {
+/** 拉魚往左拉（st bit 5）／往右拉（st bit 6）。舊客戶端只看 code & 15 跟 code & 16，不受影響。 */
+export const FISH_STEER_LEFT = 32;
+export const FISH_STEER_RIGHT = 64;
+/** 超過這個才編碼成左／右，避免搖桿在中間附近來回送 */
+export const FISH_STEER_DEAD = 0.25;
+export function fishSteerBits(steer: number) {
+  return steer <= -FISH_STEER_DEAD ? FISH_STEER_LEFT : steer >= FISH_STEER_DEAD ? FISH_STEER_RIGHT : 0;
+}
+/** 拉魚時解出左右方向（-1 左、0 中、+1 右）；不是拉魚或左右同時設＝0 */
+export function fishSteerOf(code: number): -1 | 0 | 1 {
+  if ((code & 15) !== 5) return 0;
+  const L = (code & FISH_STEER_LEFT) !== 0, R = (code & FISH_STEER_RIGHT) !== 0;
+  return L === R ? 0 : L ? -1 : 1;
+}
+
+/** 線上同步用的姿勢代碼：0 沒在釣、1 持竿、2 蓄力、3 甩竿、4 等待、5 拉魚、6 捲線、7 秀漁獲；+16＝路亞竿；拉魚時 +32＝往左拉、+64＝往右拉 */
+export function fishPoseCode(phase: FishPhase, reel: boolean, lure: boolean, steer = 0) {
   const b = phase === 'off' ? 0 : phase === 'hold' ? 1 : phase === 'charge' ? 2 : phase === 'cast' ? 3 : phase === 'fight' ? 5 : phase === 'show' ? 7 : reel ? 6 : 4;
-  return b === 0 ? 0 : b + (lure ? 16 : 0);
+  return b === 0 ? 0 : b + (lure ? 16 : 0) + (b === 5 ? fishSteerBits(steer) : 0);
 }
 export function fishPoseDecode(code: number): FishPoseIn {
   const lure = (code & 16) !== 0, b = code & 15;
   const phase: FishPhase = b === 1 ? 'hold' : b === 2 ? 'charge' : b === 3 ? 'cast' : b === 4 || b === 6 ? 'wait' : b === 5 ? 'fight' : b === 7 ? 'show' : 'off';
-  return { phase, power: 0.8, reel: b === 6 || b === 5, tension: 0.5, lure, twitch: 0 };
+  return { phase, power: 0.8, reel: b === 6 || b === 5, tension: 0.5, lure, twitch: 0, steer: fishSteerOf(code) };
 }
 /** 解碼到既有物件（每幀用，不配置） */
 export function fishPoseDecodeInto(code: number, out: FishPoseIn, tension = 0.5): FishPoseIn {
   const lure = (code & 16) !== 0, b = code & 15;
   out.phase = b === 1 ? 'hold' : b === 2 ? 'charge' : b === 3 ? 'cast' : b === 4 || b === 6 ? 'wait' : b === 5 ? 'fight' : b === 7 ? 'show' : 'off';
   out.power = 0.8; out.reel = b === 6 || b === 5; out.tension = tension; out.lure = lure; out.twitch = 0;
+  out.steer = fishSteerOf(code);
   return out;
 }
 /**
