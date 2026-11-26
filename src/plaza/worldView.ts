@@ -33,6 +33,7 @@ import { makeInstancedPlazaChairs, makeInstancedPads, type ChairPose } from './i
 import { bakeStaticLighting } from './bakeLighting';
 import { mergeStaticMeshes, countMeshes } from './mergeStatic';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
+import { FarProxyPool, farLodStep, farProxyKind, farProxyHeight, type FarProxyKind } from './farProxy';
 import { makePlazaSmokeArea } from './smokeArea';
 import { makePlazaTidalFlat } from './tidalFlat';
 import { buildMgMounts, aimMgMount, MgFxSystem, type MgHitTarget } from './mgGun';
@@ -53,7 +54,7 @@ import type { PlazaFlagState } from './flags';
 import {
   type PlazaZoneId, ZONE_LOAD_R, ZONE_UNLOAD_R, ZONE_PIN_R, ZONE_DISPOSE,
   CULL_NEAR, CULL_MID, CULL_ECO_SCALE,
-  zoneAt, zonesWanted, zoneShouldUnload, distToZone, cullTier, remoteLodSimple,
+  zoneAt, zonesWanted, zoneShouldUnload, distToZone, cullTier,
   corePilesInQuadrant, southGrillPiles, quadrantCenter,
 } from './zones';
 type Remote = {
@@ -274,33 +275,28 @@ export function createPlazaWorldView(
   }
   // 遠端玩家 LOD：岸上、海上都一樣。REMOTE_FULL_R 內畫完整角色，更遠改畫 1 個 draw call 的共用小人（不隱形）
   let seaView = false;
-  const IMP_MAX = 160;
-  let imp: THREE.InstancedMesh | null = null, impN = 0, impFullFar = 0;
-  const _impM = new THREE.Matrix4(), _impC = new THREE.Color(), _impS = new THREE.Vector3();
-  function ensureImp() {
-    if (imp) return imp;
-    const body = new THREE.CylinderGeometry(0.2, 0.26, 1.15, 6, 1).translate(0, 0.58, 0);
-    const head = new THREE.SphereGeometry(0.17, 6, 4).translate(0, 1.36, 0);
-    const paint = (g: THREE.BufferGeometry, hex: number) => {
-      const c = new THREE.Color(hex), n = g.getAttribute('position').count, a = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
-      g.setAttribute('color', new THREE.BufferAttribute(a, 3));
-      return g.toNonIndexed();
-    };
-    const parts = [paint(body, 0xffffff), paint(head, 0xf0c8a0)];
-    const n = parts.reduce((k, g) => k + g.getAttribute('position').count, 0);
-    const pos = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
-    for (const g of parts) { pos.set(g.getAttribute('position').array as Float32Array, o * 3); col.set(g.getAttribute('color').array as Float32Array, o * 3); o += g.getAttribute('position').count; g.dispose(); }
-    body.dispose(); head.dispose();
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
-    imp = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }), IMP_MAX);
-    imp.name = 'plazaFarImpostors'; imp.count = 0; imp.frustumCulled = false; imp.visible = false;
-    root.add(imp);
-    return imp;
-  }
+  // 小人池：一般玩家／阿伯一池、阿婆一池，各 1 個 draw call（沒人在遠處就不畫）
+  const impPlayer = new FarProxyPool('player', root), impAma = new FarProxyPool('ama', root);
+  let impFullFar = 0;
+  const _impC = new THREE.Color();
   /** 遠處小人的衣服顏色：依 connId 固定（分得出誰是誰） */
   function impHue(id: string) { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return (h % 360) / 360; }
+  /** 遠端的小人顏色＋外型（建一次就快取）：阿婆用花衫底色、阿伯灰藍、玩家依 id 色相 */
+  function remoteProxyStyle(r: Remote): { kind: FarProxyKind; color: THREE.Color } {
+    const rj = r as any;
+    let st = rj._impSt as { kind: FarProxyKind; color: THREE.Color } | undefined;
+    if (st) return st;
+    const aber = isAberRemote(r);
+    const kind = farProxyKind(!!r.isNpc, aber);
+    const color = new THREE.Color();
+    if (kind === 'ama') color.setHex(amaShirtHex(pickAmaLook(r.pid || r.key)));
+    else if (aber) color.setHex(0x4a6a8a);
+    else color.setHSL(impHue(r.connId || r.key || ''), 0.45, 0.42);
+    st = rj._impSt = { kind, color };
+    return st;
+  }
+  function impBegin() { impPlayer.begin(); impAma.begin(); }
+  function impFlush() { impPlayer.flush(); impAma.flush(); }
   /** 下船／爬上岸：把坐姿／游泳姿勢留下的關節與藏起來的手都還原，回到一般走路流程 */
   function unmountRig(r: Remote) {
     const rj = r as any, rig = r.rig;
@@ -684,7 +680,7 @@ export function createPlazaWorldView(
     }
   }
 
-  const stallKeepers: { rig: PlayerRig; ph: number; lines: string[]; bub: WorldLabel | null; next: number; until: number; li: number }[] = [];
+  const stallKeepers: { rig: PlayerRig; ph: number; lines: string[]; bub: WorldLabel | null; next: number; until: number; li: number; impC: THREE.Color; lodS: boolean }[] = [];
   const KEEPER_LINES: Record<string, string[]> = {
     bbq: ['烤肉喔！剛烤好的！', '香腸一支三十，兩支五十五！', '來喔來喔，烤玉米也有！', '要辣的跟我說喔～'],
     'drink-s': ['冰涼的青草茶喔！', '剝蚵剝到口渴了吧？來一杯！', '冬瓜茶、楊桃汁，現倒現喝！', '大杯的才三十喔！'],
@@ -706,7 +702,7 @@ export function createPlazaWorldView(
       rig.outer.rotation.y = out;
       rig.outer.userData.skipTpOcclude = true;
       root.add(rig.outer);
-      stallKeepers.push({ rig, ph: idx * 1.7, lines: KEEPER_LINES[site.id], bub: null, next: 3 + idx * 4, until: 0, li: idx });
+      stallKeepers.push({ rig, ph: idx * 1.7, lines: KEEPER_LINES[site.id], bub: null, next: 3 + idx * 4, until: 0, li: idx, impC: new THREE.Color(amaShirtHex(look)), lodS: false });
     });
   }
 
@@ -1030,14 +1026,19 @@ export function createPlazaWorldView(
     const h = Math.abs(hashPid('smoke-npc-aber') + ((performance.now() / 1000) | 0));
     return 8 + (h % 70) / 10; // 8.0–14.9
   }
+  let smokeNpcLodS = false;
+  const smokeNpcImpC = new THREE.Color(0x4a6a8a);
   function tickSmokeNpc(dt: number, tSec: number, eco: boolean, cx: number, cz: number) {
     if (leisureHideNpc) return;
     const sn = smokeNpc;
     const dist = Math.hypot(sn.rig.outer.position.x - cx, sn.rig.outer.position.z - cz);
     const tier = cullTier(dist, eco);
     const far = tier === 'mid' || tier === 'far' || tier === 'hide';
-    sn.rig.outer.visible = true;
+    // 太遠：換坐姿小人（一般小人池），不抽菸、不播動作
+    smokeNpcLodS = farLodStep(smokeNpcLodS, dist, eco, {});
+    sn.rig.outer.visible = !smokeNpcLodS;
     sn.tag.sprite.visible = tier !== 'hide'; // 名牌可關；人仍在
+    if (smokeNpcLodS) { impPlayer.push(sn.rig.outer, 0.72, smokeNpcImpC); return; }
     if (far) return;
     ensurePlazaSmokeCig(sn.rig, LO);
     const cig = getPlazaSmokeCig(sn.rig);
@@ -2756,7 +2757,7 @@ function hashPid(pid: string) {
     carrierIds.clear();
     for (const r of remotes.values()) if (r.carriedBy) carrierIds.add(r.carriedBy);
     carrierFresh = true;
-    impN = 0; impFullFar = 0;
+    impBegin(); impFullFar = 0;
     try {
     for (const r of remotes.values()) {
       const mount = mounts.size ? mounts.get(r.connId) : undefined;
@@ -2774,8 +2775,9 @@ function hashPid(pid: string) {
       const dist2 = (r.x - cx) * (r.x - cx) + (r.z - cz) * (r.z - cz);
       const tier = cullTier(Math.sqrt(dist2), eco);
       // 兩段 LOD（含遲滯）：太遠改畫共用小人，完整角色不擺四肢、不畫寵物／釣竿／傘
-      const pinned = !!r.carriedBy || anyoneCarriedBy(r.connId);
-      const lodS = remoteLodSimple(!!rj._lodS, Math.sqrt(dist2), eco, pinned);
+      const lodS = farLodStep(!!rj._lodS, Math.sqrt(dist2), eco, {
+        carried: !!r.carriedBy, carrying: anyoneCarriedBy(r.connId), phase: r.phase || '', moonFlight: !!rj.mt || !!rj.mh,
+      });
       rj._lodS = lodS;
       // mid+：停甩殼／頭瞄等細動畫；不隱形。腳步／跳躍在完整角色範圍內都播
       const far = tier === 'mid' || tier === 'far' || tier === 'hide';
@@ -2940,17 +2942,11 @@ function hashPid(pid: string) {
       const hideFar = lodS;
       if (hideFar) r.rig.outer.visible = false;
       if (!lodS && tier === 'hide') impFullFar++;
-      if (hideFar && impN < IMP_MAX && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon') {
-        const im = ensureImp();
-        const o = r.rig.outer;
-        // 坐著／坐船／蹲：小人壓矮；躺：更扁（不擺關節，只縮高度）
-        const ph = r.seated || mount ? '' : (r.phase || '');
-        const sy = ph === 'lie' ? 0.4 : (r.seated || (mount && !mount.stand) || ph === 'crouch') ? 0.72 : 1;
-        _impS.set(o.scale.x, o.scale.y * sy, o.scale.z);
-        _impM.compose(o.position, o.quaternion, _impS);
-        im.setMatrixAt(impN, _impM);
-        im.setColorAt(impN, _impC.setHSL(impHue(r.connId || r.key || ''), 0.45, 0.42));
-        impN++;
+      if (hideFar && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon') {
+        // 坐著／坐船／蹲：小人壓矮；躺：更扁（不擺關節，只縮高度）。池滿了就只剩名牌
+        const st = remoteProxyStyle(r);
+        const hk = farProxyHeight({ seated: r.seated, mounted: !!mount, mountStand: !!mount?.stand, phase: r.phase || '' });
+        (st.kind === 'ama' ? impAma : impPlayer).push(r.rig.outer, hk, st.color);
       }
       // 身體有畫（海上視野近處、遠距檔也照畫）才擺手和竿；沒畫就跳過
       if (mount?.post) mount.post(r.rig, dt, !r.rig.outer.visible);
@@ -3038,10 +3034,7 @@ function hashPid(pid: string) {
     }
     } finally {
       carrierFresh = false;
-      if (imp) {
-        imp.count = impN; imp.visible = impN > 0;
-        if (impN) { imp.instanceMatrix.needsUpdate = true; if (imp.instanceColor) imp.instanceColor.needsUpdate = true; }
-      }
+      impFlush();
     }
     if (selfBubUntil > t) {
       const headY = selfSeated ? CHAIR_SEAT_Y + SIT_HIP_LIFT + 0.95 : 1.72;
@@ -3143,8 +3136,16 @@ function hashPid(pid: string) {
     if (!leisureHideNpc) for (const k of stallKeepers) {
       const dx = k.rig.outer.position.x - cx, dz = k.rig.outer.position.z - cz;
       const kd2 = dx * dx + dz * dz;
-      const kt = cullTier(Math.sqrt(kd2), eco);
-      k.rig.outer.visible = true;
+      const kd = Math.sqrt(kd2);
+      const kt = cullTier(kd, eco);
+      // 太遠：換阿婆小人（站姿高度），完整角色不畫、不播動作、不冒泡
+      k.lodS = farLodStep(k.lodS, kd, eco, {});
+      k.rig.outer.visible = !k.lodS;
+      if (k.lodS) {
+        if (k.bub) k.bub.sprite.visible = false;
+        impAma.push(k.rig.outer, 1, k.impC);
+        continue;
+      }
       if (kt === 'far' || kt === 'hide') continue; // 遠距：站樁不播動作
       k.rig.torso.rotation.y = Math.sin(tSec * 0.5 + k.ph) * 0.15;
       if (kt === 'near') posePlazaStallKeeper(k.rig, tSec, k.ph);
@@ -3161,6 +3162,8 @@ function hashPid(pid: string) {
     } else {
       tickSmokeNpc(dt, tSec, eco, cx, cz);
     }
+    // 攤販阿婆／抽菸阿伯的小人在上面才加進池：再送一次
+    impFlush();
   }
 
   /** 站立／蹲／躺／跳躍的遠端：擋路（不推擠）；坐下、尚未現身：不擋；躺＝isLie */
@@ -3274,7 +3277,7 @@ function hashPid(pid: string) {
   }
   const _dispose = dispose;
   function disposeAll() {
-    if (imp) { imp.removeFromParent(); imp.geometry.dispose(); (imp.material as THREE.Material).dispose(); imp.dispose(); imp = null; }
+    impPlayer.dispose(); impAma.dispose();
     mgFx.dispose();
     _dispose();
   }
@@ -3309,7 +3312,7 @@ function hashPid(pid: string) {
       return out;
     },
     setSeaView: (on) => { seaView = on; },
-    seaViewStats: () => ({ on: seaView, impostors: impN, fullFar: impFullFar }),
+    seaViewStats: () => ({ on: seaView, impostors: impPlayer.n + impAma.n, fullFar: impFullFar }),
     remoteList: () => { const out: { connId: string; nick: string; isNpc: boolean; x: number; z: number }[] = []; for (const r of remotes.values()) out.push({ connId: r.connId, nick: r.nick, isNpc: !!r.isNpc, x: r.x, z: r.z }); return out; },
     tickTpOcclude: (dt, camera, focus, snap) => applyTpOcclude(dt, camera, focus, snap),
     dispose: disposeAll,
