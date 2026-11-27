@@ -20,8 +20,9 @@ import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
 import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishFaceYaw, fishCanWalk, fishPostPose, fishRejoined, fishSyncFill, fishBodyVerts } from './plazaFish';
-import { DECK, FISH, chargePower, castFlyPoint, deckStart, deckClamp, stepDeck, yawOf, standCam, standWantYaw } from './fishLogic';
+import { DECK, FISH, chargePower, castFlyPoint, castFlyDur, deckStart, deckClamp, stepDeck, yawOf, standCam, standWantYaw } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
+import { CAST_RELEASE_S } from './castArc';
 import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWorld, jerkFromSync, type FishPoseSt, type FishPoseIn } from './fishPose';
 import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishSyncLost, fishBadgeOf, fishLineOut, fishLineEnd, remoteFightSide, type FishSyncMsg } from './fishSync';
 import { makeFishMesh } from './fishModel';
@@ -1087,8 +1088,8 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
     }
     let wy = PB.waterY + 0.03 + Math.sin(t * 2.2 + f.stT) * 0.015;
     if ((f.st & 15) === 3) {
-      // 甩竿：線頭跟自己畫面一樣，從竿尖拋物線飛到落點（flyS 秒）
-      castFlyPoint(_ft.x, _ft.y, _ft.z, ex, PB.waterY + 0.04, ez, (t - f.stT) / FISH.flyS, _fly);
+      // 甩竿：線頭跟自己畫面一樣，竿子甩到放手點才出去，沿拋物線飛到落點（飛行時間看拋多遠）
+      castFlyPoint(_ft.x, _ft.y, _ft.z, ex, PB.waterY + 0.04, ez, (t - f.stT - CAST_RELEASE_S) / castFlyDur(f.cd), _fly);
       ex = _fly.x; wy = _fly.y; ez = _fly.z;
     }
     arr[3] = ex; arr[4] = wy; arr[5] = ez;

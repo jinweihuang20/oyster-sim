@@ -102,15 +102,8 @@ export function chargePower(t: number, period: number = FISH.chargePeriod) {
   return p < 0.5 ? p * 2 : 2 - p * 2;
 }
 /** 拋竿落點：前進＝(-sin h, -cos h)（跟船、伺服器一樣） */
-/**
- * 甩竿時線頭（浮標／假魚）飛出去的位置：k＝0～1（甩出去後經過 flyS 秒到 1），從竿尖拋物線飛到落點（水面 wy）。
- * 自己畫面和看別人用同一條曲線。直接改 out、不配置。
- */
-export function castFlyPoint(tx: number, ty: number, tz: number, ex: number, wy: number, ez: number, k: number, out: { x: number; y: number; z: number }) {
-  k = Math.max(0, Math.min(1, k));
-  out.x = tx + (ex - tx) * k; out.y = ty + (wy - ty) * k + Math.sin(k * Math.PI) * 2.2; out.z = tz + (ez - tz) * k;
-  return out;
-}
+/** 甩竿時線頭飛出去的拋物線（自己畫面和看別人共用，見 castArc.ts） */
+export { castFlyPoint, castFlyDur } from './castArc';
 export const castPoint = (x: number, z: number, h: number, power: number, item?: ItemKey) => { const d = castDist(power, item); return { x: x - Math.sin(h) * d, z: z - Math.cos(h) * d }; };
 /** 鏡頭朝向（世界方向向量）→ h */
 export const yawOf = (dx: number, dz: number) => Math.atan2(-dx, -dz);
@@ -286,7 +279,7 @@ export class FishSM {
   phase: Phase = 'off';
   gear: Gear = 'float';
   item: ItemKey = 'shrimp';
-  t = 0; chargeT = 0; power = 0; flyT = 0; sinkAt = 0; winEnd = 0; rollT = 0;
+  t = 0; chargeT = 0; power = 0; flyT = 0; flyDur = 0; flyDelay = 0; sinkAt = 0; winEnd = 0; rollT = 0;
   sid = 0;
   lure: LureSt | null = null;
   fight: Fight | null = null;
@@ -298,9 +291,11 @@ export class FishSM {
   startCharge() { if (this.phase !== 'idle') return false; this.phase = 'charge'; this.chargeT = 0; this.power = 0; return true; }
   /** 放開拋竿：回傳力道（不是蓄力中＝null） */
   release(): number | null { if (this.phase !== 'charge') return null; this.phase = 'cast'; return this.power; }
-  castOk(sid: number, dist: number) {
+  /** 伺服器答應拋竿：flyS＝線頭飛多久、delay＝竿子還沒甩到放手點要再等多久（畫面用，落水＝flyT 歸零） */
+  castOk(sid: number, dist: number, flyS: number = FISH.flyS, delay = 0) {
     if (this.phase !== 'cast') return;
-    this.sid = sid; this.phase = 'fly'; this.flyT = FISH.flyS; this.rollT = FISH.rollS * 0.75;
+    this.flyDelay = Math.max(0, delay); this.flyDur = this.flyDelay + Math.max(0.05, flyS);
+    this.sid = sid; this.phase = 'fly'; this.flyT = this.flyDur; this.rollT = FISH.rollS * 0.75;
     this.lure = isLure(this.item) ? newLure(dist, this.item) : null;
   }
   castFail() { if (this.phase === 'cast') this.phase = 'idle'; }
@@ -429,11 +424,11 @@ export function standWantYaw(fishYaw: number | null, moving: boolean, walkYaw: n
  * HUD 一直顯示的「現在幾公尺」：蓄力＝這個力道會拋多遠、甩出去＝線頭飛到哪、等魚／咬餌＝浮標或假魚離人多遠（船漂、收線、抽竿都即時變）、
  * 拉魚＝魚還有多遠（拉近 prog 到 1 就是 0 m；大魚把線拉出去會比中魚時還遠）。沒在用線（準備好、沒在釣）回 null。
  */
-export type FishDistIn = { phase: Phase; power: number; item: ItemKey; castDst: number; flyT: number; lureDist: number | null; floatDist: number; prog: number; fightD0: number };
+export type FishDistIn = { phase: Phase; power: number; item: ItemKey; castDst: number; flyT: number; flyDur?: number; lureDist: number | null; floatDist: number; prog: number; fightD0: number };
 export function fishDistNow(s: FishDistIn): number | null {
   switch (s.phase) {
     case 'charge': case 'cast': return castDist(s.power, s.item);
-    case 'fly': return Math.max(0, s.castDst * (1 - Math.max(0, Math.min(1, s.flyT / FISH.flyS))));
+    case 'fly': return Math.max(0, s.castDst * (1 - Math.max(0, Math.min(1, s.flyT / (s.flyDur || FISH.flyS)))));
     case 'wait': case 'nibble': case 'sink': case 'hook': return Math.max(0, s.lureDist ?? s.floatDist);
     case 'fight': case 'land': return fightDistM(s.prog, s.fightD0);
     default: return null;

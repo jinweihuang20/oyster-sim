@@ -11,8 +11,9 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyPoint, fishDistNow, fmtDistM, fightDistM, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, canFishAt, newNoRodHint, stepNoRodHint, NO_ROD_HINT, type Gear, type ItemKey, type BaitKey, type LureKey, type NoRodHintSt } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyDur, fishDistNow, fmtDistM, fightDistM, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, canFishAt, newNoRodHint, stepNoRodHint, NO_ROD_HINT, type Gear, type ItemKey, type BaitKey, type LureKey, type NoRodHintSt } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
+import { castFlyPoint, castLine, CAST_LINE_SEGS, CAST_RELEASE_S, CAST_SETTLE_S, type CastLineOpt } from './castArc';
 import { makeFishMesh, FISH_TIER } from './fishModel';
 import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
@@ -111,8 +112,12 @@ let myRod: Rod | null = null;
 const myPose = newFishPose();
 const poseIn: FishPoseIn = { phase: 'off', power: 0, reel: false, tension: 0, lure: false, twitch: 0, jerk: 0 };
 let ffx: FishFx | null = null, bubbleT = 0, inkT = 0, fightX = 0, fightZ = 0;
-let gfx: { g: THREE.Group; line: THREE.LineSegments; pos: Float32Array; bob: THREE.Mesh; bobMat: THREE.MeshBasicMaterial; shadow: THREE.Mesh; shMat: THREE.MeshBasicMaterial } | null = null;
+let gfx: { g: THREE.Group; line: THREE.Line; pos: Float32Array; bob: THREE.Mesh; bobMat: THREE.MeshBasicMaterial; shadow: THREE.Mesh; shMat: THREE.MeshBasicMaterial } | null = null;
 const _tip = new THREE.Vector3(), _end = new THREE.Vector3(), _dir = new THREE.Vector3();
+/** 拋竿弧線：放手點、落點、鬆線計時（落水後線慢慢鬆成懸垂）、放開拋竿的時間 */
+const _rel = new THREE.Vector3(), _land = new THREE.Vector3();
+const lineOpt: CastLineOpt = { k: 1, settle: 1, sag: 0, wy: 0 };
+let settleT = CAST_SETTLE_S, flying = false, relT = 0;
 
 const owns = (gr: Gear) => (C?.gear?.(FISH.rods[gr].id) ?? 0) > 0;
 const anyRod = () => owns('float') || owns('lure');
@@ -213,9 +218,10 @@ function onKeyUp(e: KeyboardEvent) {
 
 function buildGfx(parent: THREE.Object3D) {
   const g = new THREE.Group(); g.name = 'plazaFish'; g.visible = false;
-  const pos = new Float32Array(12);
+  // 一條多段曲線（竿尖→線頭），每幀直接改同一塊 buffer
+  const pos = new Float32Array((CAST_LINE_SEGS + 1) * 3);
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const line = new THREE.LineSegments(geo, makeFishLineMat());
+  const line = new THREE.Line(geo, makeFishLineMat());
   line.frustumCulled = false;
   const bobMat = new THREE.MeshBasicMaterial({ color: 0xe8432e });
   const bob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), bobMat);
@@ -305,15 +311,15 @@ function releaseCast() {
   const o = origin(); ox = o.x; oz = o.z;
   const cp = castPoint(ox, oz, castH, p, sm.item); castX = cp.x; castZ = cp.z; castDst = castDist(p, sm.item);
   if (!n || C.localOnly()) { sm.castFail(); toast(ERR.offline, '#ffb08a'); return; }
+  relT = t;
   C.sfx('launch');
   void castOnServer(n, p).then(r => {
     dbgLast.FishCast = r;
     if (!C) return;
     if (!r?.ok) { sm.castFail(); if (r?.err === 'old_server') oldServer = true; const m = err(r?.err, '拋不出去'); if (m && r?.err !== 'slow') toast(m, '#ffb08a', 1.6); return; }
     castX = num(r.x, castX); castZ = num(r.z, castZ); castDst = num(r.dist, castDst);
-    sm.castOk(num(r.sid), castDst);
-    // 落水
-    window.setTimeout(() => { if (C && sm.lineOut) { C.splash(castX, castZ, 0.25); C.sfx('splash'); } }, FISH.flyS * 1000);
+    // 竿子甩到放手點才讓線頭飛出去（伺服器回得快就等一下），落水＝拋物線碰到水面那一幀（drawGfx）
+    sm.castOk(num(r.sid), castDst, castFlyDur(castDst), CAST_RELEASE_S - (t - relT));
   });
 }
 /** 放棄伺服器那邊掛著的上一竿（斷線時丟掉的那條魚）；成功才清旗標 */
@@ -542,13 +548,19 @@ function drawGfx(dt: number) {
   else { const o = origin(); _tip.set(o.x, PB.waterY + 2.4, o.z); }
   const fx = -Math.sin(castH), fz = -Math.cos(castH);
   const p = gfx.pos;
-  p[0] = p[3] = _tip.x; p[1] = p[4] = _tip.y; p[2] = p[5] = _tip.z;
   // 線的另一頭
   const wy = PB.waterY + 0.04;
   let lineOn = true, bobOn = false, shTarget = 0;
+  lineOpt.wy = wy; lineOpt.k = 1;
+  _land.set(castX, wy, castZ);
   if (ph === 'fly') {
-    const k = 1 - Math.max(0, sm.flyT) / FISH.flyS;
-    castFlyPoint(_tip.x, _tip.y, _tip.z, castX, wy, castZ, k, _end);
+    // 竿子還沒甩到放手點：線頭貼在竿尖（放手點跟著竿尖走）；之後沿拋物線飛到落點
+    const span = Math.max(0.05, sm.flyDur - sm.flyDelay);
+    const k = Math.max(0, Math.min(1, (sm.flyDur - Math.max(0, sm.flyT) - sm.flyDelay) / span));
+    if (k <= 0 || !flying) _rel.copy(_tip);
+    flying = true; settleT = 0;
+    lineOpt.k = k;
+    castFlyPoint(_rel.x, _rel.y, _rel.z, castX, wy, castZ, k, _end);
     bobOn = true;
   } else if (ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook') {
     if (sm.gear === 'float' || !sm.lure) {
@@ -598,8 +610,24 @@ function drawGfx(dt: number) {
     catchMesh.rotation.set(0, t * 1.6, Math.PI / 2 + Math.sin(t * 7) * 0.12);
     if (catchT <= 0) { catchMesh.removeFromParent(); catchMesh = null; }
   } else lineOn = false;
-  if (lineOn) { p[6] = _tip.x; p[7] = _tip.y; p[8] = _tip.z; p[9] = _end.x; p[10] = _end.y; p[11] = _end.z; }
-  else { p[6] = p[9] = _tip.x; p[7] = p[10] = _tip.y; p[8] = p[11] = _tip.z; }
+  // 拋物線碰到水面：濺水花＋聲音（剛好落在落點那一幀）
+  if (flying && ph !== 'fly') {
+    flying = false;
+    if (sm.lineOut) { C.splash(castX, castZ, 0.25); C.sfx('splash'); } else settleT = CAST_SETTLE_S;
+  }
+  if (ph !== 'fly' && settleT < CAST_SETTLE_S) settleT += dt;
+  if (lineOn) {
+    // 靜止時線往下垂多少：浮標鬆、假魚收線時拉直、拉魚越緊越直、掛魚在竿尖＝直的
+    const L = Math.hypot(_end.x - _tip.x, _end.z - _tip.z);
+    let sag = 0;
+    if (ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook') {
+      sag = sm.gear === 'float' || !sm.lure ? Math.min(0.8, 0.12 + 0.025 * L) : reelHeld ? Math.min(0.25, 0.04 + 0.006 * L) : Math.min(0.55, 0.08 + 0.015 * L);
+      if (ph === 'sink' || ph === 'hook') sag *= 0.4;
+    } else if ((ph === 'fight' || ph === 'land') && sm.fight) sag = Math.min(0.4, (0.03 + 0.008 * L) * (1 - Math.min(1, sm.fight.ten)));
+    lineOpt.sag = sag;
+    lineOpt.settle = ph === 'fly' ? 0 : ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook' ? settleT / CAST_SETTLE_S : 1;
+    castLine(p, CAST_LINE_SEGS, _tip, _rel, _land, _end, lineOpt);
+  } else { for (let i = 0; i < p.length; i += 3) { p[i] = _tip.x; p[i + 1] = _tip.y; p[i + 2] = _tip.z; } }
   (gfx.line.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
   gfx.bob.visible = bobOn && lineOn;
   if (gfx.bob.visible) {
@@ -709,7 +737,7 @@ function poseDbg() {
   const rig = C?.me();
   const tip = myRod && rig ? rodTipWorld(myRod, new THREE.Vector3()) : null;
   const hand = rig ? rig.lowerR.localToWorld(new THREE.Vector3(0, -((rig.lowerR.userData.restLen as number) || 0.24), 0)) : null;
-  return { rod: myRod?.kind ?? null, phase: poseIn.phase, pitch: +myPose.pitch.toFixed(2), bend: +myPose.bend.toFixed(2), crank: +myPose.crank.toFixed(2), lean: +myPose.lean.toFixed(2), tip: tip && { x: +tip.x.toFixed(2), y: +tip.y.toFixed(2), z: +tip.z.toFixed(2) }, hand: hand && { x: +hand.x.toFixed(2), y: +hand.y.toFixed(2), z: +hand.z.toFixed(2) }, line: gfx ? Array.from(gfx.pos.slice(6, 12), v => +v.toFixed(2)) : null, gap: tip && gfx && gfx.g.visible ? +tip.distanceTo(new THREE.Vector3(gfx.pos[6], gfx.pos[7], gfx.pos[8])).toFixed(3) : null, rods: myRod?.g.parent ? myRod.g.parent.children.filter(o => o.name === 'fishRod').length : 0, rodVis: myRod ? myRod.g.children.every(c => c.visible) : null, bodyVerts: rig ? fishBodyVerts(rig.torso) : 0, catch: catchT > 0 };
+  return { rod: myRod?.kind ?? null, phase: poseIn.phase, pitch: +myPose.pitch.toFixed(2), bend: +myPose.bend.toFixed(2), crank: +myPose.crank.toFixed(2), lean: +myPose.lean.toFixed(2), tip: tip && { x: +tip.x.toFixed(2), y: +tip.y.toFixed(2), z: +tip.z.toFixed(2) }, hand: hand && { x: +hand.x.toFixed(2), y: +hand.y.toFixed(2), z: +hand.z.toFixed(2) }, line: gfx ? [...Array.from(gfx.pos.slice(0, 3)), ...Array.from(gfx.pos.slice(-3))].map(v => +v.toFixed(2)) : null, gap: tip && gfx && gfx.g.visible ? +tip.distanceTo(new THREE.Vector3(gfx.pos[0], gfx.pos[1], gfx.pos[2])).toFixed(3) : null, rods: myRod?.g.parent ? myRod.g.parent.children.filter(o => o.name === 'fishRod').length : 0, rodVis: myRod ? myRod.g.children.every(c => c.visible) : null, bodyVerts: rig ? fishBodyVerts(rig.torso) : 0, catch: catchT > 0 };
 }
 
 function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
@@ -750,7 +778,7 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
   if (ui.hudTx.textContent !== main) ui.hudTx.textContent = main;
   // 現在幾公尺：一直顯示（蓄力、飛出去、等魚、拉魚都即時變）
   const o = origin();
-  const dm = fmtDistM(fishDistNow({ phase: ph, power: sm.power, item: sm.item, castDst, flyT: sm.flyT, lureDist: sm.lure ? sm.lure.dist : null, floatDist: Math.hypot(castX - o.x, castZ - o.z), prog: sm.fight?.prog ?? 0, fightD0 }));
+  const dm = fmtDistM(fishDistNow({ phase: ph, power: sm.power, item: sm.item, castDst, flyT: sm.flyT, flyDur: sm.flyDur, lureDist: sm.lure ? sm.lure.dist : null, floatDist: Math.hypot(castX - o.x, castZ - o.z), prog: sm.fight?.prog ?? 0, fightD0 }));
   if (ui.hudDist.textContent !== dm) { ui.hudDist.textContent = dm; ui.hudDist.classList.toggle('on', !!dm); }
   const troll = !!b && lure && trollOk(C.mySeat(), sm.item, b.v);
   const tip = ph === 'idle' ? (C.mySeat() === 0 && b && Math.abs(b.v) > FISH.driverMaxV ? '先停船才能拋竿' : '按住「拋竿」蓄力，放開拋出去')
