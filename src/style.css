@@ -4581,6 +4581,39 @@ body.plazaFishing #boatShell,body.plazaFishing #boatDive,body.plazaFishing #boat
 body.plazaFishing #jumpBtn,body.plazaFishing #crouchBtn,body.plazaFishing #lieBtn,body.plazaFishing #poseBtn,body.plazaFishing #standBtn,body.plazaFishing #throwBtn,body.plazaFishing #stealBtn,body.plazaFishing #umbBtn,body.plazaFishing #puffBtn,body.plazaFishing #seatCard{display:none!important}
 body.plazaFishing.plazaBoating.plazaBoatSmoke #puffBtn.on,body.plazaFishing.plazaRoam.plazaSmokeSit #puffBtn.on{display:none!important}
 body.fishPanelOpen #fishBar,body.fishPanelOpen #fishMeter,body.fishPanelOpen #fishHud,body.fishPanelOpen #fishActs{display:none!important}
+/* 精彩回放：釣魚列的「回放」鈕（有片段才出現）、釣到魚的卡片、回放畫面 */
+#fishActs .fhRp{display:none}
+#fishActs.hasRp .fhRp{display:flex}
+#fishCatchCard{position:fixed;z-index:13650;left:50%;transform:translateX(-50%);bottom:calc(var(--sa-bottom,0px) + 150px);display:none;align-items:center;gap:10px;max-width:calc(100vw - 24px);box-sizing:border-box;padding:8px 8px 8px 14px;border-radius:14px;background:#fff;color:#1d2b3a;border:2px solid #2a5a86;box-shadow:0 4px 14px rgba(0,0,0,.3);pointer-events:auto;touch-action:none;font-family:inherit}
+#fishCatchCard.on{display:flex}
+#fishCatchCard .fccTx{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+#fishCatchCard .fccName{font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#fishCatchCard .fccSub{font-size:12px;color:#4a5d70;white-space:nowrap}
+#fishCatchCard button{display:flex;align-items:center;justify-content:center;gap:6px;border:none!important;border-radius:10px!important;cursor:pointer;font:inherit;font-weight:800!important;pointer-events:auto}
+#fishCatchCard .fccRp{height:42px!important;padding:0 14px!important;background:#2a5a86!important;color:#fff!important;font-size:15px!important;white-space:nowrap}
+#fishCatchCard.busy .fccRp{background:#4f7aa3!important}
+#fishCatchCard .fccX{width:34px!important;height:34px!important;padding:0!important;background:#eef3f8!important;color:#2a5a86!important}
+#fishCatchCard svg,#fishReplay svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+body.fishReplayOn #fishCatchCard,body.fishReplayOn #fishBar,body.fishReplayOn #fishMeter,body.fishReplayOn #fishHud,body.fishReplayOn #fishActs,body.fishReplayOn #fishPanel,body.fishReplayOn #boatUi .boatBtn,body.fishReplayOn :is(#btns,#btnsL,#btnsCorner,#pzLeftFabs,#pzX,#pzChatFab,#pzChatPeek,#pzMap,#pzHud,#pzCamCluster,#pzPlayersDrop,#flagBtn,#flagPullBtn,#seatCard,#sitBtn,#sitAltBtn,#camBtn,#joy,#hint,#hud,#top){visibility:hidden!important;pointer-events:none!important}
+#fishReplay{position:fixed;inset:0;z-index:14000;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;font-family:inherit;color:#fff}
+#fishReplay:active{cursor:grabbing}
+#fishReplay .frTop{position:absolute;left:calc(var(--sa-left,0px) + 12px);right:calc(var(--sa-right,0px) + 12px);top:calc(var(--sa-top,0px) + 10px);display:flex;align-items:center;gap:10px;pointer-events:none}
+#fishReplay .frTag{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;background:#2a5a86;font-size:15px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+#fishReplay .frName{padding:6px 10px;border-radius:10px;background:#142231;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#fishReplay .frB{display:flex;align-items:center;justify-content:center;gap:5px;min-width:44px!important;height:42px!important;padding:0 12px!important;border:none!important;border-radius:10px!important;background:#2a5a86!important;color:#fff!important;font:inherit;font-size:14px!important;font-weight:800!important;cursor:pointer;pointer-events:auto;box-shadow:0 2px 8px rgba(0,0,0,.28)!important;white-space:nowrap}
+#fishReplay .frBack{margin-left:auto!important;background:#fff!important;color:#2a5a86!important}
+#fishReplay .frSpd{min-width:52px!important}
+#fishReplay .frSpd.on{background:#fff!important;color:#2a5a86!important}
+#fishReplay .frZ{min-width:42px!important;padding:0!important}
+#fishReplay .frHint{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--sa-top,0px) + 62px);padding:6px 12px;border-radius:10px;background:#142231;font-size:13px;font-weight:700;pointer-events:none;transition:opacity .4s}
+#fishReplay .frHint.off{opacity:0}
+#fishReplay .frBar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--sa-bottom,0px) + 14px);display:flex;align-items:center;gap:8px;width:min(760px,calc(100vw - 24px));box-sizing:border-box;padding:8px;border-radius:14px;background:#142231;border:1.5px solid #2a5a86;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:default}
+#fishReplay .frTrack{flex:1;min-width:80px;height:42px;display:flex;align-items:center;cursor:pointer;touch-action:none}
+#fishReplay .frRail{position:relative;width:100%;height:6px;border-radius:3px;background:#3a4c60}
+#fishReplay .frFill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:3px;background:#7fb6e6}
+#fishReplay .frKnob{position:absolute;top:50%;left:0;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:#fff;border:3px solid #2a5a86;box-sizing:border-box}
+#fishReplay .frTime{flex:none;min-width:88px;text-align:center;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+@media (max-width:560px){#fishReplay .frBar{flex-wrap:wrap;gap:6px}#fishReplay .frTrack{order:-1;flex-basis:100%;height:30px}#fishReplay .frB span{display:none}#fishReplay .frBack span{display:inline}#fishReplay .frTime{min-width:76px}#fishCatchCard{bottom:calc(var(--sa-bottom,0px) + 210px)}}
 @media (max-height:500px){
   #fishBar{bottom:calc(var(--sa-bottom,0px) + 20px);gap:8px}
   #boatUi #fishCast,#boatUi #fishReel{padding:11px 18px!important;font-size:16px}

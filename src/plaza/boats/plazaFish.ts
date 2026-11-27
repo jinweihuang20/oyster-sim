@@ -20,6 +20,7 @@ import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, steerablePhase, type FishPoseIn, type FishPhase } from './fishPose';
 import { remoteReelSide, type FishSyncMsg } from './fishSync';
+import { RF, RF_STRIDE, RP_PHASE, RFISH, REPLAY_TAIL_S, newReplayRec, recStart, recStop, recReset, recTick, recPush, recSplash, recClip, clipSample, clipSplashes, newReplayPlay, playStep, playSeek, playToggle, playRestart, playSpeed, fmtReplayT, orbitStart, orbitDist, orbitDrag, orbitZoom, orbitPos, rpPhaseCode, type ReplayClip, type ReplayMeta, type ReplayPlay, type Orbit } from './fishReplay';
 import { bindReelFeel, makeReelClickSfx, reelPressLabel, steerDirFromPad, type ReelFeel, type ReelSfxOut } from './fishReelFeel';
 
 export type FishBoat = { id: number; x: number; z: number; h: number; v: number };
@@ -59,6 +60,13 @@ const ICON = {
   exit: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   left: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
   right: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
+  replay: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M10 9l5 3-5 3z"/></svg>',
+  play: '<svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>',
+  restart: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg>',
+  back: '<svg viewBox="0 0 24 24"><path d="M10 6l-6 6 6 6"/><path d="M4 12h11a5 5 0 0 1 5 5v1"/></svg>',
+  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  minus: '<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>',
 };
 const ERR = FISH_ERR;
 const err = fishErr;
@@ -159,7 +167,7 @@ export function openFish(ctx: FishCtx, root: HTMLElement) {
   const hud = document.createElement('div'); hud.id = 'fishHud';
   hud.innerHTML = `<div id="fishDepth" aria-label="水深" aria-hidden="true"><span class="fdLo">淺</span><div class="fdTrack"><div class="fdRail"><div class="fdZone"></div><div class="fdDot"></div></div></div><span class="fdHi">深</span></div><span class="fhDist" aria-label="距離"></span><div class="fhTx"><span class="fhMain"></span><span class="fhTip"></span></div>`;
   const acts = document.createElement('div'); acts.id = 'fishActs';
-  acts.innerHTML = `<button type="button" class="fhB" data-f="gear" aria-label="換竿換餌">${ICON.gear}<span>換餌</span></button><button type="button" class="fhB" data-f="dex" aria-label="魚類圖鑑">${ICON.book}<span>圖鑑</span></button><button type="button" class="fhB fhX" data-f="exit" aria-label="不釣了">${ICON.exit}<span>不釣了</span></button>`;
+  acts.innerHTML = `<button type="button" class="fhB" data-f="gear" aria-label="換竿換餌">${ICON.gear}<span>換餌</span></button><button type="button" class="fhB" data-f="dex" aria-label="魚類圖鑑">${ICON.book}<span>圖鑑</span></button><button type="button" class="fhB fhRp" data-f="replay" aria-label="精彩回放">${ICON.replay}<span>回放</span></button><button type="button" class="fhB fhX" data-f="exit" aria-label="不釣了">${ICON.exit}<span>不釣了</span></button>`;
   const meter = document.createElement('div'); meter.id = 'fishMeter';
   meter.innerHTML = `<i class="fmDir l">${ICON.left}</i><div class="fmBar"><div class="fmRed"></div><div class="fmFill"></div></div><i class="fmDir r">${ICON.right}</i><span class="fmLbl"></span>`;
   const panel = document.createElement('div'); panel.id = 'fishPanel';
@@ -187,13 +195,14 @@ export function openFish(ctx: FishCtx, root: HTMLElement) {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-f]'); if (!b) return;
     e.preventDefault(); act = true;
     const f = b.dataset.f;
-    if (f === 'exit') exitFish(); else openPanel(f === 'dex' ? 'dex' : 'gear');
+    if (f === 'exit') exitFish(); else if (f === 'replay') askReplay(); else openPanel(f === 'dex' ? 'dex' : 'gear');
   });
   panel.addEventListener('pointerdown', e => e.stopPropagation());
   // 把「釣魚」「賣魚」放進船上那一欄（跟拉蚵串同一排）；沒有那一欄就放自己的
   const rackBar = root.querySelector('#boatRackBar');
   (rackBar ?? root).append(entry, sell);
   root.append(bar, hud, meter, panel);
+  mountCatchCard();
   (document.getElementById('plazaRoot') ?? root).append(acts);
   ui = { entry, sell, bar, cast, reel, jerk, hud, acts, hudTx: hud.querySelector('.fhMain')!, hudDist: hud.querySelector('.fhDist')!, hudTip: hud.querySelector('.fhTip')!, depth: hud.querySelector('#fishDepth')!, depthZone: hud.querySelector('.fdZone')!, depthDot: hud.querySelector('.fdDot')!, meter, fill: meter.querySelector('.fmFill')!, mLbl: meter.querySelector('.fmLbl')!, dirL: meter.querySelector('.fmDir.l')!, dirR: meter.querySelector('.fmDir.r')!, panel };
   addEventListener('keyup', onKeyUp);
@@ -201,6 +210,9 @@ export function openFish(ctx: FishCtx, root: HTMLElement) {
   buildGfx(ctx.scene);
 }
 export function closeFish() {
+  stopReplay(); hideCatchCard(); cardEl?.remove(); cardEl = null;
+  recReset(rec); recEndT = -1; wantReplay = false;
+  if (cardTimer) { clearTimeout(cardTimer); cardTimer = 0; }
   reelFeel?.dispose(); reelFeel = null; reelSfx.stop();
   if (ui) { ui.entry.remove(); ui.sell.remove(); ui.bar.remove(); ui.hud.remove(); ui.acts.remove(); ui.meter.remove(); ui.panel.remove(); ui = null; }
   removeEventListener('keyup', onKeyUp);
@@ -282,6 +294,8 @@ export function exitFish(why = '') {
     if (sm.phase === 'fight') void n?.fish('FishLand', sm.sid, false, false);
     else void n?.fish('FishReel', sm.sid);
   }
+  stopReplay(); hideCatchCard();
+  if (rec.on) { if (recEndT > 0) finishRec(); else recReset(rec); }
   sm.exit(); sm.sid = 0; reelHeld = false; reelFeel?.release(); hooked = null;
   catchT = 0; dropFishMesh();
   closePanel();
@@ -289,12 +303,12 @@ export function exitFish(why = '') {
   if (why) toast(why, '#9fe0ff', 1.6);
 }
 /** 釣魚中要吃掉搖桿：岸上一直擋（不然走掉）；船上只有拉扯時擋（駕駛開船＝自動收線） */
-export function fishHoldsInput() { return sm.phase !== 'off' && (C?.mode() === 'walk' || sm.phase === 'fight' || sm.phase === 'land'); }
+export function fishHoldsInput() { return sm.phase !== 'off' && (!!rp || C?.mode() === 'walk' || sm.phase === 'fight' || sm.phase === 'land'); }
 export const fishActive = () => sm.phase !== 'off';
 
 // ---------------- 動作 ----------------
 function pressCast() {
-  if (sm.phase === 'off') return;
+  if (sm.phase === 'off' || rp) return;
   if (sm.phase === 'idle') {
     fixPick(); sm.gear = rod; sm.item = pick[rod];
     if (!owns(rod)) { toast(`還沒有${FISH.rods[rod].n}`, '#ffb08a'); return; }
@@ -302,6 +316,9 @@ function pressCast() {
     if (holdN >= FISH.holdMax) { toast(ERR.hold_full, '#ffd76a', 1.8); return; }
     const b = C?.myBoat();
     if (C?.mySeat() === 0 && b && Math.abs(b.v) > FISH.driverMaxV) { toast(ERR.moving, '#ffb08a', 1.4); return; }
+    // 又要拋了：上一條魚的回放收尾（卡片收掉，回放按鈕還在）
+    if (rec.on && recEndT > 0) finishRec();
+    hideCatchCard();
     sm.startCharge();
   }
 }
@@ -348,7 +365,7 @@ export function fishRejoined() {
   if (n && staleLine && sm.phase !== 'fight' && sm.phase !== 'land' && sm.phase !== 'hook') void abandonStale(n);
 }
 function pressReel() {
-  if (!C) return;
+  if (!C || rp) return;
   if (sm.phase === 'fight' || (sm.phase === 'wait' && sm.gear === 'lure')) { reelHeld = true; return; }
   if (sm.gear === 'float' && sm.pressReel()) void doReel();
 }
@@ -367,6 +384,8 @@ async function doReel() {
     C.sfx('hit');
     fightD0 = Math.max(1.5, lineNow());
     sm.hooked(num(r.power, 0.3), num(r.fightMs, 2500));
+    // 精彩回放：從中魚開始錄（只留最後 10 秒）；上一條的片段留著，釣上來才換掉
+    recStart(rec); recEndT = -1; wantReplay = false;
     document.body.classList.add('fishFight');
     // 頭足類一上鉤就噴墨（位置在 drawGfx 拉扯那段算）
     inkT = hooked && isSquidSp(hooked.sp) ? 0 : 1e9;
@@ -386,7 +405,7 @@ async function endFight(kind: 'landed' | 'snap' | 'unhook') {
   if (!C) return;
   sm.reset();
   // 沒釣上來（線斷、脫鉤、斷線）：水裡那條魚濺一下就不見（拉上來的才接著吊出水面）
-  if (!(r?.ok && r.landed && !r.lureLost)) escapeFish();
+  if (!(r?.ok && r.landed && !r.lureLost)) { escapeFish(); recReset(rec); recEndT = -1; }
   if (!r?.ok) {
     // 斷線：伺服器那邊還在「拉扯中」，不清掉之後會一直拋不出去
     if (fishNetErr(r?.err)) { staleLine = true; toast('連線中斷，這條魚跑掉了', '#ffb08a', 1.8); return; }
@@ -405,6 +424,9 @@ async function endFight(kind: 'landed' | 'snap' | 'unhook') {
   hold.push(fish);
   // 魚從最後線頭那個水面點破水、沿線被吊到竿尖（不是直接出現在竿尖）
   showCatch(fish, fightX, fightZ);
+  // 回放再錄到魚吊上來、掛在竿尖晃一下（約 2 秒）才收尾
+  recMeta = { sp: fish.sp, name: fish.name, kg: fish.kg, tier: fish.tier, player: '' };
+  recEndT = t + REPLAY_TAIL_S;
   const d = dex.get(fish.sp);
   dex.set(fish.sp, { kg: Math.max(d?.kg ?? 0, fish.kg), n: (d?.n ?? 0) + 1 });
   fishDexMerge([{ sp: fish.sp, ...dex.get(fish.sp)! }]);
@@ -420,6 +442,7 @@ async function endFight(kind: 'landed' | 'snap' | 'unhook') {
     if (giant) toastTop(`釣到巨物：${fish.name}！`, 3);
     rewardToast(`釣到${TIER[fish.tier] === '普通' ? '' : TIER[fish.tier] ?? ''} ${fish.name}${tag}`, `${fish.kg.toFixed(fish.kg < 10 ? 2 : 1)} kg・約 ${money(fish.val)}`, 'mine', `fish:${Date.now()}`, giant ? 6 : undefined);
     if (full) toast('魚獲滿了！回碼頭賣魚', '#ffd76a', 2);
+    showCatchCard(fish);
   }, Math.round(HOIST_S * HOIST_CARD_U * 1000));
 }
 async function sellFish() {
@@ -466,6 +489,12 @@ function renderPanel() {
 /** 回 true＝吃掉這個鍵（G＝釣魚／不釣；空白鍵＝拋竿（按住蓄力）／收線；J＝抽竿；Esc＝關面板） */
 export function fishKey(code: string): boolean {
   if (!C) return false;
+  // 回放中：Esc＝返回、空白鍵＝播放／暫停；其他釣魚鍵都吃掉（不會拋竿、不會收竿）
+  if (rp) {
+    if (code === 'Escape') { stopReplay(); return true; }
+    if (code === 'Space') { rpToggle(); return true; }
+    return code === 'KeyG' || code === 'KeyJ' || code === 'KeyR' || code === 'KeyF' || code === 'KeyX';
+  }
   if (code === 'KeyG') { if (sm.phase !== 'off' || (anyRod() && canFishHere() && (C.mode() !== 'walk' || C.canAct()))) { act = true; toggleFish(); return true; } return false; }
   if (sm.phase === 'off') return false;
   act = true;
@@ -486,6 +515,8 @@ function origin() {
 export function tickFish(dt: number, cam: THREE.Camera) {
   if (!C) return;
   t += dt; camRef = cam;
+  if (rec.on && recEndT > 0 && t >= recEndT) finishRec();
+  if (cardOn && t >= cardHideT) hideCatchCard();
   // 第一次進場：拿魚獲／圖鑑（舊伺服器就算了）
   if (!ok && !oldServer && fetchTries < 6) { fetchT -= dt; if (fetchT <= 0) { fetchT = 10; fetchTries++; void fetchState(); } }
   const mode = C.mode(); const b = C.myBoat();
@@ -633,14 +664,14 @@ function drawGfx(dt: number) {
       // 線頭接在魚嘴（沉在水下時線頭留在水面）
       _end.y = Math.max(wy - 0.02, _mouth.y);
       // 破水那一下：濺水花
-      if (dep < 0 && fishDep >= 0) C.splash(x, z, 0.2 + 0.3 * f.power);
+      if (dep < 0 && fishDep >= 0) spl(x, z, 0.2 + 0.3 * f.power);
       fishDep = dep;
       shTarget = 0.55 * (1 - 0.7 * fightCloseK(d));
     }
     gfx.shadow.position.set(x, wy - 0.01, z);
     gfx.shadow.rotation.z = Math.atan2(sx * f.run, sz * f.run) || 0;
     splashT -= dt;
-    if (splashT <= 0) { splashT = 0.45 + Math.random() * 0.3; C.splash(x, z, 0.15 + 0.25 * f.power); }
+    if (splashT <= 0) { splashT = 0.45 + Math.random() * 0.3; spl(x, z, 0.15 + 0.25 * f.power); }
   } else if (fishMesh && catchT > 0) {
     catchT -= dt;
     if (hoist.on) {
@@ -653,7 +684,7 @@ function drawGfx(dt: number) {
       fishMesh.rotation.set(0, yaw, pitch);
       _end.set(_mouth.x, _mouth.y, _mouth.z);
       // 魚身拖出水面時再滴一圈小水花
-      if (!hoistDrip && u >= 0.3) { hoistDrip = true; C.splash(hoist.wx, hoist.wz, 0.15); }
+      if (!hoistDrip && u >= 0.3) { hoistDrip = true; spl(hoist.wx, hoist.wz, 0.15); }
       if (hoistDone(hoist)) { hangYaw = yaw; hangT = 0; stopHoist(hoist); }
     } else {
       // 吊上來了：掛在竿尖下面晃（約 1.8 秒）
@@ -695,6 +726,285 @@ function drawGfx(dt: number) {
   shadowA += (shTarget - shadowA) * Math.min(1, dt * 3);
   gfx.shMat.opacity = shadowA;
   gfx.shadow.visible = shadowA > 0.02;
+  // 精彩回放：中魚→吊上來這段每秒記 ~25 格（只有數字，不配置）
+  if (rec.on && lineOn && recTick(rec, dt)) recPush(rec, recFill);
+}
+
+// ---------------- 精彩回放（最後 10 秒，自由視角） ----------------
+/** 錄影緩衝（預先配置 ~46 KB，重複用）；clip＝上一條釣上來的魚的片段（下一條會換掉） */
+const rec = newReplayRec();
+let clip: ReplayClip | null = null, recMeta: ReplayMeta | null = null, recEndT = -1, wantReplay = false, rpBtnOn = false;
+/** 濺水花（同時記進回放） */
+function spl(x: number, z: number, k: number) { C?.splash(x, z, k); recSplash(rec, k, x, z); }
+const _wq = new THREE.Vector3();
+/** 這一格要記的數字：都是現成的狀態，不配置 */
+function recFill(b: Float32Array, o: number) {
+  const rig = C?.me(), bt = C?.myBoat();
+  if (rig) {
+    rig.outer.updateWorldMatrix(true, false);
+    const m = rig.outer.matrixWorld.elements;
+    b[o + RF.px] = m[12]; b[o + RF.py] = m[13]; b[o + RF.pz] = m[14]; b[o + RF.pyaw] = Math.atan2(m[8], m[10]);
+  } else { const q = origin(); b[o + RF.px] = q.x; b[o + RF.py] = 0; b[o + RF.pz] = q.z; b[o + RF.pyaw] = castH; }
+  b[o + RF.boat] = bt ? 1 : 0; b[o + RF.bx] = bt?.x ?? 0; b[o + RF.bz] = bt?.z ?? 0; b[o + RF.bh] = bt?.h ?? 0;
+  b[o + RF.rx] = _tip.x; b[o + RF.ry] = _tip.y; b[o + RF.rz] = _tip.z;
+  const P = myPose;
+  b[o + RF.pitch] = P.pitch; b[o + RF.side] = P.side; b[o + RF.hx] = P.hx; b[o + RF.hy] = P.hy; b[o + RF.hz] = P.hz; b[o + RF.lean] = P.lean;
+  b[o + RF.bend] = P.bend; b[o + RF.crank] = P.crank; b[o + RF.brace] = P.brace; b[o + RF.steer] = P.steer; b[o + RF.steerK] = P.steerK;
+  b[o + RF.phase] = rpPhaseCode(poseIn.phase); b[o + RF.reel] = poseIn.reel ? 1 : 0; b[o + RF.lure] = poseIn.lure ? 1 : 0;
+  const fm = fishMesh;
+  if (fm) {
+    b[o + RF.fx] = fm.position.x; b[o + RF.fy] = fm.position.y; b[o + RF.fz] = fm.position.z;
+    b[o + RF.fyaw] = fm.rotation.y; b[o + RF.fpitch] = fm.rotation.z; b[o + RF.froll] = fm.rotation.x;
+    b[o + RF.fvis] = fm.visible ? 1 : 0;
+    b[o + RF.fst] = sm.fight && (sm.phase === 'fight' || sm.phase === 'land') ? RFISH.water : hoist.on ? RFISH.hoist : catchT > 0 ? RFISH.hang : RFISH.none;
+  } else { b[o + RF.fvis] = 0; b[o + RF.fst] = RFISH.none; b[o + RF.fx] = _end.x; b[o + RF.fy] = _end.y; b[o + RF.fz] = _end.z; }
+  b[o + RF.tail] = t;
+  b[o + RF.lx] = _end.x; b[o + RF.ly] = _end.y; b[o + RF.lz] = _end.z;
+  b[o + RF.ten] = sm.fight?.ten ?? 0; b[o + RF.sag] = lineOpt.sag;
+  b[o + RF.shadow] = shadowA;
+}
+/** 收尾：拷貝成片段（換掉上一條的） */
+function finishRec() {
+  if (recMeta) { const c = recClip(rec, recMeta); if (c) clip = c; }
+  recStop(rec); recEndT = -1; recMeta = null;
+  if (wantReplay) { wantReplay = false; startReplay(); }
+}
+
+// 釣到魚的卡片（每次都有「精彩回放」）
+let cardEl: HTMLDivElement | null = null, cardOn = false, cardHideT = 0;
+function mountCatchCard() {
+  cardEl?.remove();
+  const el = document.createElement('div'); el.id = 'fishCatchCard';
+  el.innerHTML = `<div class="fccTx"><b class="fccName"></b><small class="fccSub"></small></div><button type="button" class="fccRp" data-c="replay" aria-label="精彩回放">${ICON.replay}<span>精彩回放</span></button><button type="button" class="fccX" data-c="close" aria-label="關閉">${ICON.exit}</button>`;
+  el.addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-c]'); if (!b) return;
+    e.preventDefault(); act = true;
+    if (b.dataset.c === 'replay') askReplay(); else hideCatchCard();
+  });
+  el.addEventListener('click', e => e.stopPropagation());
+  document.body.append(el);
+  cardEl = el;
+}
+function showCatchCard(f: HoldFish) {
+  if (!cardEl || !C || rp) return;
+  const tier = TIER[f.tier] && TIER[f.tier] !== '普通' ? `${TIER[f.tier]}・` : '';
+  cardEl.querySelector('.fccName')!.textContent = `釣到 ${f.name}`;
+  cardEl.querySelector('.fccSub')!.textContent = `${tier}${f.kg.toFixed(f.kg < 10 ? 2 : 1)} kg・最後 10 秒可回放`;
+  setRpBusy(false);
+  cardEl.classList.add('on'); cardOn = true; cardHideT = t + 9;
+}
+function hideCatchCard() { cardOn = false; cardEl?.classList.remove('on'); }
+function setRpBusy(on: boolean) {
+  const s = cardEl?.querySelector('.fccRp span'); if (s) s.textContent = on ? '準備回放…' : '精彩回放';
+  cardEl?.classList.toggle('busy', on);
+}
+/** 按「精彩回放」：還在錄收尾（魚剛吊起來）就等錄完自動開始 */
+function askReplay() {
+  if (rp || !C) return;
+  if (rec.on && recEndT > 0) { wantReplay = true; setRpBusy(true); return; }
+  startReplay();
+}
+
+type Rp = {
+  c: ReplayClip; play: ReplayPlay; orbit: Orbit; fr: Float32Array;
+  focus: THREE.Vector3; snap: boolean; sep: number; fish: THREE.Mesh | null; el: HTMLDivElement;
+  fill: HTMLElement; knob: HTMLElement; time: HTMLElement; playB: HTMLElement; spdB: HTMLElement; hint: HTMLElement;
+  timeS: string; playS: boolean | null; ptr: Map<number, { x: number; y: number }>; pinch: number; scrub: boolean; scrubPlay: boolean; hintT: number;
+};
+let rp: Rp | null = null;
+const rpPose = newFishPose();
+const rpIn: FishPoseIn = { phase: 'hold', power: 0, reel: false, tension: 0, lure: false, twitch: 0, jerk: 0, steer: 0 };
+const _rpTg = new THREE.Vector3(), _rpCam = { x: 0, y: 0, z: 0 }, _rpP = new THREE.Vector3();
+/** 回放能不能繼續：還在釣魚模式（沒在拋／拉）、還連著線上、人還在 */
+function replayOk() { return !!C && !!rp && sm.phase === 'idle' && !!C.me() && !!C.net() && !C.localOnly(); }
+function startReplay() {
+  const c = clip;
+  if (!c || !C || rp) return;
+  if (sm.phase !== 'idle') { toast('收好竿子才能看回放', '#ffb08a', 1.4); return; }
+  if (!C.net() || C.localOnly()) { toast('連線中斷，暫時不能回放', '#ffb08a', 1.6); return; }
+  hideCatchCard(); closePanel();
+  // 現場那條掛在竿尖的魚先收掉（回放有自己的一條）
+  catchT = 0; dropFishMesh();
+  const el = document.createElement('div'); el.id = 'fishReplay';
+  const kg = c.meta.kg.toFixed(c.meta.kg < 10 ? 2 : 1);
+  el.innerHTML = `<div class="frTop"><span class="frTag">${ICON.replay}<span>精彩回放</span></span><span class="frName"></span><button type="button" class="frB frBack" data-r="exit" aria-label="返回">${ICON.back}<span>返回</span></button></div>`
+    + `<div class="frHint">拖曳轉視角・雙指或滾輪縮放</div>`
+    + `<div class="frBar"><button type="button" class="frB frPlay" data-r="play" aria-label="播放／暫停"></button><button type="button" class="frB" data-r="restart" aria-label="重播">${ICON.restart}<span>重播</span></button>`
+    + `<div class="frTrack" data-r="track"><div class="frRail"><div class="frFill"></div><div class="frKnob"></div></div></div><span class="frTime"></span>`
+    + `<button type="button" class="frB frSpd" data-r="speed" aria-label="播放速度">1×</button><button type="button" class="frB frZ" data-r="zin" aria-label="拉近">${ICON.plus}</button><button type="button" class="frB frZ" data-r="zout" aria-label="拉遠">${ICON.minus}</button></div>`;
+  el.querySelector('.frName')!.textContent = `${c.meta.name}・${kg} kg`;
+  const r: Rp = {
+    c, play: newReplayPlay(c.dur), orbit: orbitStart(c.f[RF.pyaw]), fr: new Float32Array(RF_STRIDE),
+    focus: new THREE.Vector3(), snap: true, sep: 4, fish: null, el,
+    fill: el.querySelector('.frFill')!, knob: el.querySelector('.frKnob')!, time: el.querySelector('.frTime')!, playB: el.querySelector('.frPlay')!, spdB: el.querySelector('.frSpd')!, hint: el.querySelector('.frHint')!,
+    timeS: '', playS: null, ptr: new Map(), pinch: 0, scrub: false, scrubPlay: false, hintT: 3.5,
+  };
+  rp = r;
+  bindReplayUi(r);
+  document.body.append(el);
+  document.body.classList.add('fishReplayOn');
+  reelHeld = false; reelFeel?.release();
+  const f = makeFishMesh(c.meta.sp);
+  if (f && gfx) { f.scale.setScalar(fishLenM(c.meta.kg)); f.visible = false; gfx.g.add(f); r.fish = f; }
+  rpUi(r);
+}
+export function stopReplay() {
+  const r = rp; if (!r) return;
+  rp = null; wantReplay = false;
+  r.el.remove();
+  document.body.classList.remove('fishReplayOn');
+  // 魚模型的幾何／材質是共用快取：拿掉 Mesh 就好（跟現場那條一樣）
+  r.fish?.removeFromParent(); r.fish = null;
+  r.ptr.clear();
+  // 回放改過的身體（側傾、弓步）還原；下一幀照常由釣魚姿勢／走路擺
+  const rig = C?.me();
+  if (rig) {
+    rig.torso.rotation.z = 0;
+    if (rpPose.braceW) { rpPose.braceW = false; rig.legL.rotation.set(0, 0, 0); rig.legR.rotation.set(0, 0, 0); rig.shinL.rotation.x = 0; rig.shinR.rotation.x = 0; rig.root.position.y = 0; }
+  }
+  rpPose.rollW = false;
+  if (gfx) { gfx.shMat.opacity = 0; gfx.shadow.visible = false; }
+}
+function rpToggle() { if (rp) { playToggle(rp.play); rpUi(rp); } }
+function bindReplayUi(r: Rp) {
+  const el = r.el, track = el.querySelector<HTMLElement>('.frTrack')!;
+  const seekX = (x: number) => { const b = track.getBoundingClientRect(); playSeek(r.play, ((x - b.left) / Math.max(1, b.width)) * r.play.dur); rpUi(r); };
+  el.addEventListener('pointerdown', e => {
+    e.stopPropagation(); e.preventDefault(); act = true;
+    const tg = e.target as HTMLElement;
+    const b = tg.closest<HTMLElement>('[data-r]');
+    if (b) {
+      const k = b.dataset.r;
+      if (k === 'track') { r.scrub = true; r.scrubPlay = r.play.playing; r.play.playing = false; try { track.setPointerCapture(e.pointerId); } catch { /* 不支援 */ } seekX(e.clientX); return; }
+      if (k === 'exit') { stopReplay(); return; }
+      if (k === 'play') playToggle(r.play);
+      else if (k === 'restart') playRestart(r.play);
+      else if (k === 'speed') playSpeed(r.play);
+      else if (k === 'zin') orbitZoom(r.orbit, 0.8);
+      else if (k === 'zout') orbitZoom(r.orbit, 1.25);
+      rpUi(r); return;
+    }
+    if (tg.closest('.frBar, .frTop')) return;
+    // 空白處：一指拖＝轉視角、兩指＝縮放
+    r.ptr.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { el.setPointerCapture(e.pointerId); } catch { /* 不支援 */ }
+    if (r.ptr.size === 2) { const [a, c] = [...r.ptr.values()]; r.pinch = Math.hypot(a.x - c.x, a.y - c.y); }
+    r.hintT = 0;
+  });
+  el.addEventListener('pointermove', e => {
+    if (r.scrub) { seekX(e.clientX); return; }
+    const p = r.ptr.get(e.pointerId); if (!p) return;
+    e.preventDefault();
+    if (r.ptr.size >= 2) {
+      p.x = e.clientX; p.y = e.clientY;
+      const [a, c] = [...r.ptr.values()];
+      const d = Math.hypot(a.x - c.x, a.y - c.y);
+      if (r.pinch > 1 && d > 1) orbitZoom(r.orbit, r.pinch / d);
+      r.pinch = d;
+      return;
+    }
+    orbitDrag(r.orbit, e.clientX - p.x, e.clientY - p.y);
+    p.x = e.clientX; p.y = e.clientY;
+  });
+  const up = (e: PointerEvent) => {
+    if (r.scrub) { r.scrub = false; if (r.scrubPlay && r.play.t < r.play.dur) r.play.playing = true; rpUi(r); return; }
+    r.ptr.delete(e.pointerId); r.pinch = 0;
+    if (r.ptr.size === 2) { const [a, c] = [...r.ptr.values()]; r.pinch = Math.hypot(a.x - c.x, a.y - c.y); }
+  };
+  for (const ev of ['pointerup', 'pointercancel'] as const) el.addEventListener(ev, up);
+  el.addEventListener('wheel', e => { e.preventDefault(); e.stopPropagation(); orbitZoom(r.orbit, Math.exp(Math.max(-60, Math.min(60, e.deltaY)) * 0.004)); r.hintT = 0; }, { passive: false });
+  el.addEventListener('click', e => e.stopPropagation());
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+/** 控制列：字變了才改 DOM */
+function rpUi(r: Rp) {
+  const u = r.play.dur > 0 ? r.play.t / r.play.dur : 0;
+  const pc = `${(u * 100).toFixed(2)}%`;
+  r.fill.style.width = pc; r.knob.style.left = pc;
+  const ts = `${fmtReplayT(r.play.t)} / ${fmtReplayT(r.play.dur)}`;
+  if (ts !== r.timeS) { r.timeS = ts; r.time.textContent = ts; }
+  if (r.playS !== r.play.playing) {
+    r.playS = r.play.playing;
+    r.playB.innerHTML = r.play.playing ? `${ICON.pause}<span>暫停</span>` : `${ICON.play}<span>播放</span>`;
+  }
+  const sp = r.play.speed === 1 ? '1×' : '0.5×';
+  if (r.spdB.textContent !== sp) { r.spdB.textContent = sp; r.spdB.classList.toggle('on', r.play.speed !== 1); }
+}
+/** 回放的世界座標：記錄時相對那一格的人，換到人現在站的位置／朝向（岸上＝原地；船上＝跟著船） */
+let rpDx = 0, rpDy = 0, rpDz = 0, rpCos = 1, rpSin = 0, rpPx = 0, rpPz = 0;
+function rpMap(x: number, y: number, z: number, out: { x: number; y: number; z: number }) {
+  const ax = x - rpPx, az = z - rpPz;
+  out.x = rpDx + ax * rpCos + az * rpSin;
+  out.z = rpDz - ax * rpSin + az * rpCos;
+  out.y = y + rpDy;
+  return out;
+}
+function drawReplay(dt: number) {
+  const r = rp!, c = r.c, fr = r.fr, rig = C!.me()!;
+  ffx?.tick(dt);
+  // 播放（0.5× 慢動作）；經過的水花在對的時間點濺起來（拖拉時間軸時不濺）
+  const t0 = r.play.t;
+  playStep(r.play, dt);
+  clipSample(c, r.play.t, fr);
+  // 人：岸上就轉回當時的朝向；換算位置用這一格的人當原點
+  if (C!.mode() === 'walk' && rig.outer.parent === C!.scene) rig.outer.rotation.y = fr[RF.pyaw];
+  rig.outer.updateWorldMatrix(true, false);
+  const m = rig.outer.matrixWorld.elements;
+  const d = Math.atan2(m[8], m[10]) - fr[RF.pyaw];
+  rpCos = Math.cos(d); rpSin = Math.sin(d); rpPx = fr[RF.px]; rpPz = fr[RF.pz];
+  rpDx = m[12]; rpDy = m[13] - fr[RF.py]; rpDz = m[14];
+  if (r.play.t > t0) clipSplashes(c, t0, r.play.t, (o, k) => { rpMap(c.f[o + RF.sx], 0, c.f[o + RF.sz], _rpCam); C!.splash(_rpCam.x, _rpCam.z, k); if (k >= 0.35) C!.sfx('splash'); });
+  // 竿子＋姿勢
+  const gear: Gear = fr[RF.lure] > 0.5 ? 'lure' : 'float';
+  if (!myRod || myRod.kind !== gear) { myRod?.dispose(); myRod = makeRod(gear); }
+  rpPose.pitch = fr[RF.pitch]; rpPose.side = fr[RF.side]; rpPose.hx = fr[RF.hx]; rpPose.hy = fr[RF.hy]; rpPose.hz = fr[RF.hz];
+  rpPose.lean = fr[RF.lean]; rpPose.bend = fr[RF.bend]; rpPose.crank = fr[RF.crank]; rpPose.brace = fr[RF.brace];
+  rpPose.steer = fr[RF.steer]; rpPose.steerK = fr[RF.steerK];
+  rpIn.phase = RP_PHASE[Math.round(fr[RF.phase])] ?? 'hold'; rpIn.reel = fr[RF.reel] > 0.5; rpIn.lure = gear === 'lure'; rpIn.tension = fr[RF.ten];
+  applyFishPose(rig, rpPose, myRod, rpIn);
+  rodTipWorld(myRod, _tip);
+  // 魚
+  const st = Math.round(fr[RF.fst]);
+  if (r.fish) {
+    r.fish.visible = fr[RF.fvis] > 0.5 && st !== RFISH.none;
+    if (r.fish.visible) {
+      rpMap(fr[RF.fx], fr[RF.fy], fr[RF.fz], _rpCam);
+      r.fish.position.set(_rpCam.x, _rpCam.y, _rpCam.z);
+      r.fish.rotation.set(fr[RF.froll], fr[RF.fyaw] + d, fr[RF.fpitch]);
+    }
+  }
+  // 線（竿尖→線頭／魚嘴；掛在竿尖時接竿尖下面）
+  if (gfx) {
+    gfx.g.visible = true; gfx.bob.visible = false;
+    rpMap(fr[RF.lx], fr[RF.ly], fr[RF.lz], _end);
+    if (st === RFISH.hang) _end.set(_tip.x, _tip.y - HOIST_TIP_DROP, _tip.z);
+    lineOpt.k = 1; lineOpt.settle = 1; lineOpt.sag = fr[RF.sag]; lineOpt.wy = PB.waterY + 0.04;
+    castLine(gfx.pos, CAST_LINE_SEGS, _tip, _tip, _end, _end, lineOpt);
+    (gfx.line.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    gfx.shMat.opacity = fr[RF.shadow]; gfx.shadow.visible = fr[RF.shadow] > 0.02 && st === RFISH.water;
+    gfx.shadow.position.set(_end.x, PB.waterY + 0.03, _end.z);
+  }
+  // 鏡頭：繞著人和魚中間轉（魚吊到竿尖時就是人身邊）
+  _rpP.set(m[12], m[13] + 1.15, m[14]);
+  if (r.fish?.visible) _rpTg.copy(r.fish.position); else _rpTg.copy(_end);
+  // 人和魚隔多遠（鏡頭自動拉遠拉近，平滑）
+  const sep = _rpTg.distanceTo(_rpP);
+  _rpTg.lerp(_rpP, 0.5);
+  if (r.snap) { r.focus.copy(_rpTg); r.sep = sep; r.snap = false; }
+  else { const k = 1 - Math.exp(-dt * 4); r.focus.lerp(_rpTg, k); r.sep += (sep - r.sep) * (1 - Math.exp(-dt * 2.2)); }
+  const cam = camRef;
+  if (cam) {
+    // 直式手機畫面比較窄：拉遠一點才框得到人和魚
+    const asp = (cam as THREE.PerspectiveCamera).aspect || 1.6;
+    const wide = Math.pow(Math.min(2.2, Math.max(1, 1.25 / asp)), 0.85);
+    orbitPos(r.orbit, r.focus.x, r.focus.y, r.focus.z, Math.max(PB.waterY, m[13]), _rpCam, orbitDist(r.orbit, r.sep) * wide);
+    cam.position.set(_rpCam.x, _rpCam.y, _rpCam.z);
+    cam.lookAt(r.focus);
+    cam.updateMatrixWorld();
+  }
+  if (r.hintT > 0) { r.hintT -= dt; if (r.hintT <= 0) r.hint.classList.add('off'); } else if (!r.hint.classList.contains('off')) r.hint.classList.add('off');
+  rpUi(r);
 }
 
 // ---------------- 人物動作＋釣竿（在人物擺好姿勢之後才呼叫） ----------------
@@ -735,7 +1045,7 @@ function showCatch(f: HoldFish, wx?: number, wz?: number) {
   startHoist(hoist, x, PB.waterY + 0.02, z, had ? fishYaw : Math.atan2(fz, -fx));
   hoistDrip = false;
   catchT = HOIST_S + HOIST_HANG_S;
-  C?.splash(x, z, 0.4 + 0.3 * Math.min(1, f.kg / 20)); C?.sfx('splash');
+  spl(x, z, 0.4 + 0.3 * Math.min(1, f.kg / 20)); C?.sfx('splash');
 }
 function dropRod() {
   if (!myRod) return;
@@ -793,12 +1103,14 @@ export function fishFaceYaw(): number | null {
   return null;
 }
 /** 能不能在船上走動：拿著竿等魚的時候可以；蓄力、甩竿、拉魚時站定 */
-export function fishCanWalk() { const ph = sm.phase; return ph === 'idle' || ph === 'wait' || ph === 'nibble'; }
+export function fishCanWalk() { const ph = sm.phase; return !rp && (ph === 'idle' || ph === 'wait' || ph === 'nibble'); }
 /**
  * 每幀在人物擺完姿勢之後呼叫（main.ts camTick 之後）：套釣魚動作、釣竿、再畫線（線要從竿尖出去）。
  */
 export function fishPostPose(dt: number) {
   if (!C) return;
+  // 精彩回放：人物竿子／魚／線／鏡頭都由回放片段擺（不送任何同步）
+  if (rp) { if (replayOk()) { drawReplay(dt); return; } stopReplay(); }
   const rig = C.me();
   if (sm.phase !== 'off' && rig) {
     if (!myRod || myRod.kind !== sm.gear) { myRod?.dispose(); myRod = makeRod(sm.gear); }
@@ -844,6 +1156,9 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
   ui.bar.classList.toggle('on', on);
   ui.hud.classList.toggle('on', on);
   ui.acts.classList.toggle('on', on);
+  // 回放按鈕：有上一條魚的片段、沒在拋／拉的時候
+  const rpCan = !!clip && sm.phase === 'idle' && !rp;
+  if (rpCan !== rpBtnOn) { rpBtnOn = rpCan; ui.acts.classList.toggle('hasRp', rpCan); }
   if (!on) { reelFeel?.release(); ui.meter.classList.remove('on'); ui.depth.classList.remove('on'); ui.depth.setAttribute('aria-hidden', 'true'); return; }
   const ph = sm.phase, lure = sm.gear === 'lure';
   ui.cast.classList.toggle('on', ph === 'idle' || ph === 'charge' || ph === 'cast');
@@ -942,6 +1257,19 @@ export const fishDbg = {
   /** 測試：噴一團墨（在現在的線頭位置） */
   ink() { ffx?.inkPuff(_end.x, PB.waterY + 0.05, _end.z, 1); return ffx?.ink.live() ?? 0; },
   /** 測試：假裝中魚（不經伺服器，只看拉扯畫面） */
-  fakeFight(power = 0.6, ms = 10000, lure = true, sp = '') { sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; fightD0 = castDst; sm.hooked(power, ms); if (sp) { hooked = { sp, name: sp, tier: 0, kg: 1.2, val: 0 }; ensureFishMesh(sp, 1.2); } document.body.classList.add('fishFight'); return sm.phase; },
+  /** 測試：回放跳到某秒並暫停 */
+  rpSeek(sec: number) { if (!rp) return null; playSeek(rp.play, sec); rp.play.playing = false; rpUi(rp); return rp.play.t; },
+  /** 測試：精彩回放（狀態／開始／關閉） */
+  replay(on?: boolean) { if (on === true) startReplay(); else if (on === false) stopReplay(); return { clip: clip ? { n: clip.n, dur: +clip.dur.toFixed(2), sp: clip.meta.sp, bytes: clip.f.byteLength } : null, rec: { on: rec.on, n: rec.n, bytes: rec.buf.byteLength }, on: !!rp, t: rp ? +rp.play.t.toFixed(2) : null, speed: rp?.play.speed ?? null, orbit: rp ? { ...rp.orbit } : null, fish: !!rp?.fish?.parent, card: cardOn, focus: rp ? rp.focus.toArray().map(v => +v.toFixed(2)) : null, cam: rp && camRef ? camRef.position.toArray().map(v => +v.toFixed(2)) : null, me: C?.me()?.outer.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(2)) ?? null, fishPos: rp?.fish ? rp.fish.position.toArray().map(v => +v.toFixed(2)) : null }; },
+  /** 測試：假裝釣上來（接在 fakeFight 後面；不經伺服器） */
+  fakeLand(sp = 'x', kg = 1.2) {
+    const f: HoldFish = { sp, name: sp, tier: 0, kg, val: 0 };
+    document.body.classList.remove('fishFight'); sm.reset(); hooked = null;
+    showCatch(f, fightX, fightZ);
+    recMeta = { sp, name: sp, kg, tier: 0, player: '' }; recEndT = t + REPLAY_TAIL_S;
+    showCatchCard(f);
+    return 'ok';
+  },
+  fakeFight(power = 0.6, ms = 10000, lure = true, sp = '') { const o0 = origin(); ox = o0.x; oz = o0.z; sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; fightD0 = castDst; sm.hooked(power, ms); recStart(rec); recEndT = -1; if (sp) { hooked = { sp, name: sp, tier: 0, kg: 1.2, val: 0 }; ensureFishMesh(sp, 1.2); } document.body.classList.add('fishFight'); return sm.phase; },
 };
 export type { BaitKey, LureKey };
