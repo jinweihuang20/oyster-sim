@@ -12,6 +12,7 @@ import {
   RACK, RACK_DRAW, RACK_PUSH_AABB, pickDrawnRacks, UP_LINES, UP_MAX, planUpTap, isMine, isPrivate, loadSlow, nearestRack, pushFromRack, rackNextSec, rackNow, rackRipe, rackCooling, rackAgePct, fmtWait, ripeViewR, stealFine, upCost,
   type RackDto, type RackSnap,
 } from './rackLogic';
+import { RACK_BEACON, RACK_RADAR, rackBeaconState, rackRadarCovered, buildRadarMarks, paintRackRadar } from './rackRadar';
 
 export type RackBoat = { id: number; x: number; z: number; h: number; v: number };
 export type RackCtx = {
@@ -52,7 +53,7 @@ const loads = new Map<number, number>();
 let ok = false;
 let holding = false, haulT = 0, busy = false, armSteal: { id: number; until: number } | null = null;
 const stealOk = new Set<number>();
-let ui: { bar: HTMLDivElement; haul: HTMLButtonElement; sell: HTMLButtonElement; place: HTMLButtonElement; up: HTMLButtonElement; cargo: HTMLDivElement; tag: HTMLDivElement; panel: HTMLDivElement } | null = null;
+let ui: { bar: HTMLDivElement; haul: HTMLButtonElement; sell: HTMLButtonElement; place: HTMLButtonElement; up: HTMLButtonElement; cargo: HTMLDivElement; tag: HTMLDivElement; panel: HTMLDivElement; radar: HTMLDivElement; radarCv: HTMLCanvasElement } | null = null;
 let panelRack = -1;
 /** 連按升級的排隊：每一下都排進去，一個一個送給伺服器（不會掉按、也不會一次扣兩次錢） */
 type UpJob = { id: number; line: number; cost: number };
@@ -63,7 +64,7 @@ const upPend = new Map<number, number[]>();
 let upPendCost = 0;
 const pendOf = (id: number) => { let a = upPend.get(id); if (!a) { a = [0, 0, 0, 0, 0, 0]; upPend.set(id, a); } return a; };
 function clearUpQ() { upQ = []; upPend.clear(); upPendCost = 0; }
-let t = 0, refetchT = 0, nearRack: { rack: RackDto; dist: number } | null = null;
+let t = 0, refetchT = 0, radarT = 0, nearRack: { rack: RackDto; dist: number } | null = null;
 const _p = new THREE.Vector3();
 
 const sNow = () => Date.now() + off;
@@ -93,6 +94,8 @@ export function openRacks(ctx: RackCtx, root: HTMLElement) {
   const cargoEl = document.createElement('div'); cargoEl.id = 'boatCargo';
   const tag = document.createElement('div'); tag.id = 'rackTag';
   const panel = document.createElement('div'); panel.id = 'rackUpPanel';
+  const radar = document.createElement('div'); radar.id = 'boatRadar'; radar.setAttribute('aria-hidden', 'true');
+  const radarCv = document.createElement('canvas'); radar.appendChild(radarCv);
   // 拉蚵串：按住一直拉（放開就停）
   haul.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); pressHaul(); });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave'] as const) haul.addEventListener(ev, () => { holding = false; });
@@ -100,13 +103,13 @@ export function openRacks(ctx: RackCtx, root: HTMLElement) {
   tap(sell, () => void sellCargo()); tap(place, () => void placeRack()); tap(up, () => openPanel());
   for (const b of [haul, sell, place, up]) b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
   panel.addEventListener('pointerdown', e => e.stopPropagation());
-  root.append(bar, cargoEl, tag, panel);
-  ui = { bar, haul, sell, place, up, cargo: cargoEl, tag, panel };
+  root.append(bar, cargoEl, tag, panel, radar);
+  ui = { bar, haul, sell, place, up, cargo: cargoEl, tag, panel, radar, radarCv };
 }
 export function closeRacks() {
-  ui?.bar.remove(); ui?.cargo.remove(); ui?.tag.remove(); ui?.panel.remove(); ui = null;
+  ui?.bar.remove(); ui?.cargo.remove(); ui?.tag.remove(); ui?.panel.remove(); ui?.radar.remove(); ui = null;
   document.body.classList.remove('rackPanelOpen');
-  C = null; racks = []; holding = false; clearUpQ();
+  C = null; racks = []; holding = false; radarT = 0; clearUpQ();
 }
 
 // ---------------- 伺服器事件 ----------------
@@ -329,12 +332,22 @@ export function tickRacks(dt: number, cam: THREE.Camera) {
       if (!sea.rack(r.x, r.z, r.h, bob, isPrivate(r) ? (isMine(r, me) ? 1 : 2) : 0)) continue;
       if (d <= RACK.strR) sea.strings(r.x, r.z, r.h, rackNow(r, now), r.max, t);
     }
+    // 自己的蚵棚：高空光柱（架子 75 m 外也畫，最遠約 200 m，出碼頭就能看見）
+    for (const r of racks) {
+      if (rackBeaconState(r, me, now) === 'none') continue;
+      const dCam = Math.hypot(r.x - cx, r.z - cz);
+      const dBoat = b ? Math.hypot(r.x - b.x, r.z - b.z) : dCam;
+      if (dCam > RACK_BEACON.viewR && dBoat > RACK_BEACON.viewR) continue;
+      const ripe = rackNow(r, now) > 0;
+      sea.beacon(r.x, r.z, ripe, ripe ? Math.sin(t * 1.7 + r.id * 0.7) : 0);
+    }
   }
   nearRack = b ? nearestRack(b.x, b.z, racks) : null;
   // 按住拉蚵串
   if (holding) { haulT -= dt; if (haulT <= 0) { haulT = RACK.haulEvery; void haulOnce(); } if (!target()) holding = false; }
   if (armSteal && t > armSteal.until) armSteal = null;
   syncRackUi(cam, b, now);
+  syncRadar(dt, b, now);
 }
 function syncRackUi(cam: THREE.Camera, b: RackBoat | null, now: number) {
   if (!ui || !C) return;
@@ -387,6 +400,25 @@ function syncRackUi(cam: THREE.Camera, b: RackBoat | null, now: number) {
     }
   } else ui.tag.classList.remove('on');
 }
+
+/** 開船時左上角海面小雷達（約 11 Hz 重畫；拉魚／面板打開時隱藏） */
+function syncRadar(dt: number, b: RackBoat | null, now: number) {
+  if (!ui) return;
+  const show = !!b && !rackRadarCovered(document.body.classList);
+  ui.radar.classList.toggle('on', show);
+  if (!show || !b) { radarT = 0; return; }
+  radarT += dt;
+  const css = ui.radar.clientWidth;
+  if (radarT < RACK_RADAR.interval && ui.radarCv.width && css) return;
+  radarT = 0;
+  if (!css) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const px = Math.max(1, Math.round(css * dpr));
+  if (ui.radarCv.width !== px) { ui.radarCv.width = px; ui.radarCv.height = px; }
+  const ctx = ui.radarCv.getContext('2d'); if (!ctx) return;
+  paintRackRadar(ctx, px, buildRadarMarks({ boat: b, racks, me, now, pier: pierNearest(b.x, b.z) }));
+}
+
 
 // ---------------- 除錯 ----------------
 export const rackDbg = {

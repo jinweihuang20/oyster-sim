@@ -10,6 +10,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { makeWater, makeRaft, makeFx, type Raft } from '../../sea/seaModels';
 import { PB, dockSlot } from './boatLogic';
 import { RACK_DRAW } from './rackLogic';
+import { RACK_BEACON } from './rackRadar';
 
 const lam = (c: number, o: THREE.MeshLambertMaterialParameters = {}) => new THREE.MeshLambertMaterial({ color: c, ...o });
 
@@ -23,7 +24,7 @@ const ALL_LAMPS = [...DOCK_LAMPS, ...PATH_LAMPS];
 const LAMP_H = 2.6;
 /** 同時畫幾個漂流箱：平常 2 個＋漂流潮 4 個（2026-11 降低頻率；舊伺服器 3＋8，留著餘裕） */
 const DRIFT_MAX = 14;
-/** 同時畫幾座蚵棚／幾串蚵串／幾盞熟了的燈：容量見 rackLogic RACK_DRAW（只畫鏡頭附近＋船邊，1 個 draw call） */
+/** 同時畫幾座蚵棚／幾串蚵串／幾盞熟了的燈：容量見 rackLogic RACK_DRAW；自己的高空光柱見 RACK_BEACON（各 1 個 draw call） */
 /** 蚵棚架子：長 5 m、寬 2.2 m；兩排吊蚵串，每排 12 格 */
 export const RACK_GEO = { len: 5, half: 1.1, slots: 12, topY: 1.25 };
 
@@ -148,6 +149,17 @@ export function rackStringGeo() {
   const out = mergeGeometries(parts); parts.forEach(p => p.dispose()); return out;
 }
 
+/** 自己蚵棚的高空識別標記：約 9 m 半透明光柱＋頂端菱形，遠距離也看得清楚（一個 InstancedMesh） */
+export function rackBeaconGeo() {
+  const H = 9, y0 = 1.22;
+  const pillar = box(0.14, H, 0.14, 0, y0 + H / 2, 0, 0x9ad4f0);
+  const dia = new THREE.OctahedronGeometry(0.46, 0);
+  dia.scale(1.15, 1.35, 1.15);
+  dia.translate(0, y0 + H + 0.12, 0);
+  const parts = [pillar, tint(dia, 0xffffff)];
+  const g = mergeGeometries(parts); parts.forEach(p => p.dispose()); return g;
+}
+
 /** 遠處的膠筏：幾個方塊（約 60 個三角形） */
 function farBoatGeo(trim: number) {
   const parts = [
@@ -233,7 +245,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   crates.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(DRIFT_MAX * 3).fill(1), 3); crates.instanceColor.setUsage(THREE.DynamicDrawUsage);
   const _gold = new THREE.Color(1.35, 1.05, 0.35), _white = new THREE.Color(1, 1, 1);
 
-  // ---------- 蚵棚：架子／蚵串／私人小旗／熟了的燈（各一個 InstancedMesh）----------
+  // ---------- 蚵棚：架子／蚵串／私人小旗／熟了的燈／自己的高空光柱（各一個 InstancedMesh）----------
   const rackFrames = new THREE.InstancedMesh(rackFrameGeo(), boatMat, RACK_DRAW.frames); rackFrames.name = 'plazaRacks';
   const rackStrs = new THREE.InstancedMesh(rackStringGeo(), boatMat, RACK_DRAW.strings); rackStrs.name = 'plazaRackStrings';
   const flagG = (() => { const p = [box(0.04, 1.1, 0.04, 0, 0.55, 0, 0xffffff), box(0.5, 0.3, 0.02, 0.27, 0.92, 0, 0xffffff)]; const g = mergeGeometries(p); p.forEach(x => x.dispose()); return g; })();
@@ -246,6 +258,12 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const rackRipe = new THREE.InstancedMesh(ripeG, ripeMat, RACK_DRAW.ripe); rackRipe.name = 'plazaRackRipe';
   for (const m of [rackFrames, rackStrs, rackFlags, rackRipe]) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
   const FLAG_MINE = new THREE.Color(0x2a5a86), FLAG_OTHER = new THREE.Color(0xd84a3a);
+  // 自己的蚵棚高空光柱：只畫主人的棚、不受霧與視錐裁掉，最遠約 200 m 也看得到
+  const beaconMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, fog: false });
+  const rackBeacons = new THREE.InstancedMesh(rackBeaconGeo(), beaconMat, RACK_BEACON.cap); rackBeacons.name = 'plazaRackBeacons';
+  rackBeacons.count = 0; rackBeacons.frustumCulled = false; rackBeacons.renderOrder = 2; rackBeacons.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  rackBeacons.setColorAt(0, new THREE.Color(1, 1, 1)); group.add(rackBeacons);
+  const BEACON_GROW = new THREE.Color(RACK_BEACON.grow), BEACON_RIPE = new THREE.Color(RACK_BEACON.ripe);
 
   // ---------- 航跡／水花 ----------
   const fx = makeFx(group, o.coarse ? 110 : 160, PB.waterY + 0.1);
@@ -275,14 +293,14 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const cones = new THREE.InstancedMesh(coneG, coneMat, PB.count); cones.count = 0; cones.frustumCulled = false; cones.renderOrder = 3; cones.name = 'plazaBoatCones'; group.add(cones);
 
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
-  let nearN = 0, farN = 0, coneN = 0, glowN = 0, crateN = 0, rackN = 0, strN = 0, flagN = 0, ripeN = 0;
+  let nearN = 0, farN = 0, coneN = 0, glowN = 0, crateN = 0, rackN = 0, strN = 0, flagN = 0, ripeN = 0, beaconN = 0;
   let night = 0;
   const lampOn = new THREE.Color(0xffd890), lampOff = new THREE.Color(0xd8d4c8);
 
   return {
     group, water, fx, near, far, dock,
     /** 每幀開頭：清空這幀要畫的船 */
-    begin() { nearN = farN = coneN = 0; glowN = 0; crateN = 0; rackN = strN = flagN = ripeN = 0; },
+    begin() { nearN = farN = coneN = 0; glowN = 0; crateN = 0; rackN = strN = flagN = ripeN = 0; beaconN = 0; },
     /** 蚵棚架子；priv：0 公共、1 自己的（藍旗）、2 別人的私人（紅旗） */
     rack(x: number, z: number, h: number, bob: number, priv: 0 | 1 | 2) {
       if (rackN >= RACK_DRAW.frames) return false;
@@ -314,6 +332,12 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
       _q.identity(); _s.setScalar(0.85 + pulse * 0.3); _m.compose(_p, _q, _s); _s.set(1, 1, 1);
       rackRipe.setMatrixAt(ripeN++, _m);
       this.glow(_p.x, _p.y + 0.15, _p.z, 1, 0.82, 0.3);
+    },
+    /** 自己蚵棚的高空光柱（ripe＝有串可收，會輕輕上下晃） */
+    beacon(x: number, z: number, ripe: boolean, bob: number) {
+      if (beaconN >= RACK_BEACON.cap) return;
+      _q.identity(); _p.set(x, PB.waterY + (ripe ? bob * 0.35 : 0), z); _s.set(1, 1, 1); _m.compose(_p, _q, _s);
+      rackBeacons.setMatrixAt(beaconN, _m); rackBeacons.setColorAt(beaconN++, ripe ? BEACON_RIPE : BEACON_GROW);
     },
     /** 漂流箱（水面上下晃）；夜晚加一點暖色光暈 */
     crate(x: number, y: number, z: number, h: number, rx: number, rz: number, gold = false) {
@@ -350,6 +374,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
       rackStrs.count = strN; rackStrs.visible = strN > 0; if (strN) rackStrs.instanceMatrix.needsUpdate = true;
       rackFlags.count = flagN; rackFlags.visible = flagN > 0; if (flagN) { rackFlags.instanceMatrix.needsUpdate = true; if (rackFlags.instanceColor) rackFlags.instanceColor.needsUpdate = true; }
       rackRipe.count = ripeN; rackRipe.visible = ripeN > 0; if (ripeN) rackRipe.instanceMatrix.needsUpdate = true;
+      rackBeacons.count = beaconN; rackBeacons.visible = beaconN > 0; if (beaconN) { rackBeacons.instanceMatrix.needsUpdate = true; if (rackBeacons.instanceColor) rackBeacons.instanceColor.needsUpdate = true; }
       cones.count = night > 0.05 ? coneN : 0; cones.instanceMatrix.needsUpdate = true;
       if (night > 0.05) for (const p of ALL_LAMPS) this.glow(p.x, LAMP_H - 0.12, p.z, 1, 0.82, 0.5);
       glows.visible = night > 0.05 && glowN > 0;

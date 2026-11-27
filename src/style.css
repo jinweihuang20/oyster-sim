@@ -4424,6 +4424,15 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 #rackTag.on{display:block}
 #rackTag.priv{border-color:#d84a3a;color:#ffd9d2}
 #rackTag.mine{border-color:#7fb2e0}
+/* 開船海面小雷達：左上、在頂列按鈕和船貨列下面，不擋觸控轉鏡頭；實心半透明、不用毛玻璃 */
+#boatRadar{position:absolute;z-index:1;left:calc(var(--sa-left,0px) + 10px);top:max(calc(var(--pz-fabs-top, calc(var(--sa-top,0px) + 58px)) + 48px), calc(var(--sa-top,0px) + 136px));width:108px;height:108px;border-radius:50%;background:rgba(12,22,36,.62);border:1px solid rgba(255,255,255,.22);box-shadow:0 2px 8px rgba(0,0,0,.28);pointer-events:none;display:none;overflow:hidden}
+#boatRadar.on{display:block}
+#boatRadar canvas{display:block;width:100%;height:100%;border-radius:50%;pointer-events:none}
+@media (min-width:700px){#boatRadar{width:120px;height:120px}}
+@media (max-height:500px){#boatRadar{width:96px;height:96px;left:calc(var(--sa-left,0px) + 8px);top:max(calc(var(--pz-fabs-top, calc(var(--sa-top,0px) + 52px)) + 44px), calc(var(--sa-top,0px) + 114px))}}
+@media (pointer:coarse) and (orientation:landscape){#boatRadar{width:96px;height:96px;top:max(calc(var(--pz-fabs-top, calc(var(--sa-top,0px) + 52px)) + 44px), calc(var(--sa-top,0px) + 114px))}}
+body.fishFight #boatRadar,body.rackPanelOpen #boatRadar,body.fishPanelOpen #boatRadar,body.fishReplayOn #boatRadar,body.plazaFishing #boatRadar,body.uiCovered #boatRadar{display:none!important}
+
 #rackUpPanel{position:absolute;right:calc(var(--sa-right,0px) + 16px);top:calc(var(--sa-top,0px) + 60px);display:none;flex-direction:column;gap:6px;width:min(340px,calc(100vw - 32px));max-height:calc(100vh - 120px);overflow:auto;padding:10px 12px;border-radius:14px;background:#f7fafd;color:#1d2b3a;box-shadow:0 6px 20px rgba(0,0,0,.35);pointer-events:auto;touch-action:pan-y}
 #rackUpPanel.on{display:flex}
 #rackUpPanel .rkHead{display:flex;align-items:center;gap:8px;font-size:15px}
@@ -4579,7 +4588,7 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 #fishPanel .fdxHost .fdxDet>*{grid-column:auto}
 #fishPanel .fdxHost .fdxCv,#fishPanel .fdxHost .fdxViewImg{aspect-ratio:16/10;height:auto}
 /* 釣魚中：右下換成釣魚按鈕，其他按鈕（丟殼／跳水／蚵棚／抽一口／走路的跳蹲躺）先收起來；面板打開時連釣魚按鈕也收起來 */
-body.plazaFishing #boatShell,body.plazaFishing #boatDive,body.plazaFishing #boatRackBar,body.plazaFishing #boatCargo,body.plazaFishing #boatAct,body.plazaFishing #rackTag,body.plazaFishing #boatDockInd{display:none!important}
+body.plazaFishing #boatShell,body.plazaFishing #boatDive,body.plazaFishing #boatRackBar,body.plazaFishing #boatCargo,body.plazaFishing #boatAct,body.plazaFishing #rackTag,body.plazaFishing #boatDockInd,body.plazaFishing #boatRadar{display:none!important}
 body.plazaFishing #jumpBtn,body.plazaFishing #crouchBtn,body.plazaFishing #lieBtn,body.plazaFishing #poseBtn,body.plazaFishing #standBtn,body.plazaFishing #throwBtn,body.plazaFishing #stealBtn,body.plazaFishing #umbBtn,body.plazaFishing #puffBtn,body.plazaFishing #seatCard{display:none!important}
 body.plazaFishing.plazaBoating.plazaBoatSmoke #puffBtn.on,body.plazaFishing.plazaRoam.plazaSmokeSit #puffBtn.on{display:none!important}
 body.fishPanelOpen #fishBar,body.fishPanelOpen #fishMeter,body.fishPanelOpen #fishHud,body.fishPanelOpen #fishActs{display:none!important}
@@ -4708,7 +4717,7 @@ body.plazaFishing #bcBanner,body.plazaFishing #rewardToasts{
 }
 /* 蚵棚升級面板打開：面板最上層；動作按鈕、碼頭箭頭、船貨條、名牌先收起來；面板放在頂列和「離開／地圖」那排下面 */
 body.rackPanelOpen #boatUi{z-index:13700}
-body.rackPanelOpen #boatRackBar,body.rackPanelOpen #boatUi>.boatBtn,body.rackPanelOpen #boatDockInd,body.rackPanelOpen #boatCargo,body.rackPanelOpen #rackTag,body.plazaBoating.rackPanelOpen #puffBtn.on,body.rackPanelOpen #puffBtn,body.rackPanelOpen #boatNote{display:none!important}
+body.rackPanelOpen #boatRackBar,body.rackPanelOpen #boatUi>.boatBtn,body.rackPanelOpen #boatDockInd,body.rackPanelOpen #boatCargo,body.rackPanelOpen #rackTag,body.plazaBoating.rackPanelOpen #puffBtn.on,body.rackPanelOpen #puffBtn,body.rackPanelOpen #boatNote,body.rackPanelOpen #boatRadar{display:none!important}
 #rackUpPanel{top:calc(var(--sa-top,0px) + 102px);max-height:calc(100vh - var(--sa-top,0px) - var(--sa-bottom,0px) - 112px);max-height:calc(100dvh - var(--sa-top,0px) - var(--sa-bottom,0px) - 112px);box-sizing:border-box;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 #rackUpPanel .rkTx{min-width:0}
 #rackUpPanel .rkTx small{overflow-wrap:anywhere;line-height:1.35}
@@ -4719,7 +4728,7 @@ body.rackPanelOpen #boatRackBar,body.rackPanelOpen #boatUi>.boatBtn,body.rackPan
 }
 /* 釣具／圖鑑面板：跟蚵棚面板一樣放最上層，放在頂列和「離開／地圖」那排下面 */
 body.fishPanelOpen #boatUi{z-index:13700}
-body.fishPanelOpen #boatUi>.boatBtn,body.fishPanelOpen #boatRackBar,body.fishPanelOpen #boatDockInd,body.fishPanelOpen #boatCargo,body.fishPanelOpen #rackTag,body.fishPanelOpen #puffBtn,body.plazaBoating.plazaBoatSmoke.fishPanelOpen #puffBtn.on{display:none!important}
+body.fishPanelOpen #boatUi>.boatBtn,body.fishPanelOpen #boatRackBar,body.fishPanelOpen #boatDockInd,body.fishPanelOpen #boatCargo,body.fishPanelOpen #rackTag,body.fishPanelOpen #puffBtn,body.plazaBoating.plazaBoatSmoke.fishPanelOpen #puffBtn.on,body.fishPanelOpen #boatRadar{display:none!important}
 #fishPanel{top:calc(var(--sa-top,0px) + 102px);max-height:calc(100vh - var(--sa-top,0px) - var(--sa-bottom,0px) - 112px);max-height:calc(100dvh - var(--sa-top,0px) - var(--sa-bottom,0px) - 112px);box-sizing:border-box;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 @media (max-height:500px){
   #fishPanel{top:calc(var(--sa-top,0px) + 54px);max-height:calc(100vh - var(--sa-top,0px) - var(--sa-bottom,0px) - 62px);max-height:calc(100dvh - var(--sa-top,0px) - var(--sa-bottom,0px) - 62px);width:min(380px,calc(100vw - 140px))}
