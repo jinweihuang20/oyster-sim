@@ -1202,6 +1202,10 @@ export function fishFaceYaw(): number | null {
 }
 /** 能不能在船上走動：拿著竿等魚的時候可以；蓄力、甩竿、拉魚時站定 */
 export function fishCanWalk() { const ph = sm.phase; return !rp && (ph === 'idle' || ph === 'wait' || ph === 'nibble'); }
+/** 正在收線：路亞等魚按住收線，或拉魚按住收線（浮標點一下收竿不算持續收線） */
+export function fishReeling() {
+  return reelHeld && (sm.phase === 'fight' || (sm.phase === 'wait' && !!sm.lure));
+}
 /**
  * 每幀在人物擺完姿勢之後呼叫（main.ts camTick 之後）：套釣魚動作、釣竿、再畫線（線要從竿尖出去）。
  */

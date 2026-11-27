@@ -477,9 +477,15 @@ export function standCam(x: number, y: number, z: number, camYaw: number, pos: V
   look.x = x + fx * STAND_CAM.ahead; look.z = z + fz * STAND_CAM.ahead; look.y = y + STAND_CAM.eye - 0.2;
 }
 /**
- * 站在甲板上該面向哪（船身座標，0＝船頭）：線在水裡／蓄力＝那個世界方向；走路＝走的方向；站著不動＝鏡頭方向（人跟著鏡頭轉）。
+ * 站在甲板上該面向哪（船身座標，0＝船頭）。
+ * 收線中（路亞按住收線、或拉魚按住收線）＝跟著鏡頭水平方向轉；走路＝走的方向；
+ * 剛收過線放開＝維持目前朝向（不瞬間轉回原來的拋竿方向）；線在水裡／蓄力＝那個世界方向；站著不動＝鏡頭方向。
+ * 假魚／魚在水裡的位置仍依拋竿方向，不跟人一起轉。
  */
-export function standWantYaw(fishYaw: number | null, moving: boolean, walkYaw: number, camYaw: number, boatH: number) {
+export type StandWantYawOpts = { reeling?: boolean; holdYaw?: number | null };
+export function standWantYaw(fishYaw: number | null, moving: boolean, walkYaw: number, camYaw: number, boatH: number, opts?: StandWantYawOpts) {
+  if (opts?.reeling) return camYaw - boatH;
+  if (opts?.holdYaw != null) return moving ? walkYaw : opts.holdYaw;
   if (fishYaw != null) return fishYaw - boatH;
   if (moving) return walkYaw;
   return camYaw - boatH;
