@@ -283,8 +283,10 @@ export function newFight(power: number, fightMs: number, lure: boolean, d0?: num
 }
 /** 魚把線拉出去的力道（相對 rate）：rate 改成「一直收剛好 fightMs」之前是 1.1／秒數，拉線力道維持跟以前一樣 */
 export const FIGHT_PULL_K = 1.1 / (1 - FIGHT_P0);
-/** 小魚（power 低）一直收線張力只會停在這裡（不會爆線）；power ≥ 0.48（ceil ≥ snapT）就跟以前一樣要一放一收 */
-export const fightTenCeil = (power: number) => 0.26 + 1.45 * power;
+/** 小魚一直收線張力只會停在這裡（不會爆線）。約 1 kg（power 0.26）ceil≈0.83，可到高張力但不斷線；約 1.5 kg（power 0.31）起 ceil ≥ snapT，硬拉或不反拉會進紅區並可能斷線 */
+export const fightTenCeil = (power: number) => 0.175 + 2.5 * power;
+/** 大魚（大約 20 kg、power ≥ 0.6）一定要一放一收；中型魚只要反拉正確，張力不會自己頂破斷線門檻 */
+export const FIGHT_BIG_P = 0.6;
 /** 路亞方向沒拉對時的收線倍率：小魚幾乎不減速（0.88），大魚維持 0.60 */
 export const lureBadGood = (power: number) => 0.88 - 0.28 * Math.max(0, Math.min(1, (power - 0.15) / 0.30));
 /** 這支竿中魚後要不要全套搏鬥（魚左右衝、搖桿反方向拉、太鬆脫鉤）：CR-34 起垂釣也跟路亞一樣 */
@@ -307,8 +309,11 @@ export function stepFight(f: Fight, reel: boolean, dir: number, dt: number, rnd:
   }
   if (reel) {
     const rise = (0.15 + 0.75 * f.power) * dt * (bad ? 1.5 : good > 1 ? 0.75 : 1), ceil = fightTenCeil(f.power);
-    if (ceil >= FISH.snapT) f.ten += rise;
-    else if (f.ten < ceil) f.ten = Math.min(ceil, f.ten + rise);
+    if (ceil >= FISH.snapT) {
+      f.ten += rise;
+      // 中型魚：收線且有在反拉（或魚沒衝）時，張力頂在斷線門檻底下；沒反拉仍會衝上去斷線。大魚維持一放一收。
+      if (!bad && f.power < FIGHT_BIG_P) f.ten = Math.min(f.ten, FISH.snapT - 0.02);
+    } else if (f.ten < ceil) f.ten = Math.min(ceil, f.ten + rise);
     else if (!bad) f.ten = Math.max(ceil, f.ten - 0.3 * dt);
     f.prog += Math.min(f.rate * (f.pump ?? 1) * good, f.cap ?? Infinity) * dt;
   } else {
@@ -321,7 +326,7 @@ export function stepFight(f: Fight, reel: boolean, dir: number, dt: number, rnd:
   if (reel) f.offT = 0;
   // 大魚在衝、搖桿沒往反方向拉：就算在收線也會被拉出去
   if (bad) f.prog -= 0.9 * bigPull(f.power) * f.rate * FIGHT_PULL_K * dt;
-  // 魚在衝、方向沒拉對：張力自己往上；小魚（ceil < 斷線門檻）不會因此進紅區或斷線
+  // 魚在衝、方向沒拉對：張力自己往上；小魚（ceil < 斷線門檻）不會因此進紅區或斷線；中型魚這裡可以衝破斷線門檻
   if (bad) {
     const add = 0.3 * f.power * dt, ceil = fightTenCeil(f.power);
     if (ceil < FISH.snapT) { const cap = Math.min(FISH.redT - 0.05, ceil + 0.08); if (f.ten < cap) f.ten = Math.min(cap, f.ten + add); }

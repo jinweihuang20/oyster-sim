@@ -82,9 +82,9 @@ describe('拉魚速度：距離 ÷ 收線速度（看實際公斤數）', () => 
     expect(p0).toBeCloseTo(0.11, 2);
     expect(p1).toBeGreaterThanOrEqual(p0);
     expect(p1).toBeLessThanOrEqual(0.16);
-    expect(fightTenCeil(p0)).toBeCloseTo(0.42, 2);
-    expect(fightTenCeil(fishPower(0.5, 0))).toBeCloseTo(0.55, 2);
-    expect(fightTenCeil(fishPower(3.5, 0))).toBeCloseTo(0.84, 2);
+    expect(fightTenCeil(p0)).toBeCloseTo(0.45, 2);
+    expect(fightTenCeil(fishPower(0.5, 0))).toBeCloseTo(0.675, 2);
+    expect(fightTenCeil(fishPower(3.5, 0))).toBeGreaterThanOrEqual(FISH.snapT);
     expect(lureBadGood(0.11)).toBeCloseTo(0.88, 5);
     expect(lureBadGood(0.45)).toBeCloseTo(0.6, 5);
     for (const [power, lure] of [[p0, false], [p0, true], [p1, true]] as const) {
@@ -97,7 +97,7 @@ describe('拉魚速度：距離 ÷ 收線速度（看實際公斤數）', () => 
       expect(r).toBe('landed');
       expect(tenMax).toBeGreaterThanOrEqual(0.35);
       expect(tenMax).toBeLessThan(FISH.redT);
-      expect(tenMax).toBeLessThanOrEqual(0.55);
+      expect(tenMax).toBeLessThanOrEqual(0.60);
     }
   });
   it('舊伺服器沒 mps、把 0.18 kg 稀有魚 power 給成 0.65 時，改用 fishPower 保持輕鬆', () => {
@@ -113,11 +113,12 @@ describe('拉魚速度：距離 ÷ 收線速度（看實際公斤數）', () => 
     }
     expect(r).toBe('landed');
     expect(tenMax).toBeLessThan(FISH.redT);
-    expect(tenMax).toBeLessThanOrEqual(0.55);
+    expect(tenMax).toBeLessThanOrEqual(0.60);
   });
-  it('中型魚張力會進紅區、大魚和巨物一直收會斷線', () => {
-    expect(fightTenCeil(fishPower(3.5, 0))).toBeGreaterThanOrEqual(FISH.redT);
-    expect(fightTenCeil(fishPower(3.5, 0))).toBeLessThan(FISH.snapT);
+  it('約 1.5 kg 起張力上限過斷線門檻，大魚和巨物一直收會斷線', () => {
+    expect(fightTenCeil(fishPower(1, 0))).toBeLessThan(FISH.snapT);
+    expect(fightTenCeil(fishPower(1.5, 0))).toBeGreaterThanOrEqual(FISH.snapT);
+    expect(fightTenCeil(fishPower(3.5, 0))).toBeGreaterThanOrEqual(FISH.snapT);
     expect(fightTenCeil(fishPower(20, 2))).toBeGreaterThanOrEqual(FISH.snapT);
     expect(fightTenCeil(fishPower(320, 3))).toBeGreaterThanOrEqual(FISH.snapT);
     for (const [kg, tier] of [[20, 2], [320, 3]] as const) {
