@@ -15,6 +15,7 @@ import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, in
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { castFlyPoint, castLine, CAST_LINE_SEGS, CAST_RELEASE_S, CAST_SETTLE_S, type CastLineOpt } from './castArc';
 import { makeFishMesh, FISH_TIER } from './fishModel';
+import { HOIST_S, HOIST_HANG_S, HOIST_TIP_DROP, HOIST_CARD_U, fishLenM, fightCloseK, fightFishDepth, fightFishYaw, newHoist, startHoist, stopHoist, stepHoist, hoistDone, hoistU, hoistMouth, hoistPitch, hoistYaw, fishCenterFromMouth } from './fishHoist';
 import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, steerablePhase, type FishPoseIn, type FishPhase } from './fishPose';
@@ -208,7 +209,7 @@ export function closeFish() {
   ffx?.dispose(); ffx = null;
   if (gfx) { gfx.g.removeFromParent(); gfx.line.geometry.dispose(); (gfx.line.material as THREE.Material).dispose(); gfx.bob.geometry.dispose(); gfx.bobMat.dispose(); gfx.shadow.geometry.dispose(); gfx.shMat.dispose(); gfx = null; }
   dexView?.stop(); dexView = null;
-  dropRod(); catchT = 0; catchMesh?.removeFromParent(); catchMesh = null;
+  dropRod(); catchT = 0; dropFishMesh();
   sm.exit(); C = null; reelHeld = false;
 }
 function onAnyInput() { act = true; }
@@ -282,7 +283,7 @@ export function exitFish(why = '') {
     else void n?.fish('FishReel', sm.sid);
   }
   sm.exit(); sm.sid = 0; reelHeld = false; reelFeel?.release(); hooked = null;
-  catchT = 0; catchMesh?.removeFromParent(); catchMesh = null;
+  catchT = 0; dropFishMesh();
   closePanel();
   document.body.classList.remove('plazaFishing', 'fishFight');
   if (why) toast(why, '#9fe0ff', 1.6);
@@ -360,6 +361,8 @@ async function doReel() {
   if (r.baitUsed) useItem(sm.item);
   if (kind === 'hooked') {
     hooked = normFish(r.fish);
+    // 中魚時伺服器就回了魚種：真的魚模型直接放進線頭的水裡（遠的時候沉在水下，拉近才浮上來翻騰）
+    if (hooked) ensureFishMesh(hooked.sp, hooked.kg);
     try { navigator.vibrate?.(70); } catch { /* 不支援 */ }
     C.sfx('hit');
     fightD0 = Math.max(1.5, lineNow());
@@ -382,6 +385,8 @@ async function endFight(kind: 'landed' | 'snap' | 'unhook') {
   const f = hooked; hooked = null;
   if (!C) return;
   sm.reset();
+  // 沒釣上來（線斷、脫鉤、斷線）：水裡那條魚濺一下就不見（拉上來的才接著吊出水面）
+  if (!(r?.ok && r.landed && !r.lureLost)) escapeFish();
   if (!r?.ok) {
     // 斷線：伺服器那邊還在「拉扯中」，不清掉之後會一直拋不出去
     if (fishNetErr(r?.err)) { staleLine = true; toast('連線中斷，這條魚跑掉了', '#ffb08a', 1.8); return; }
@@ -398,17 +403,24 @@ async function endFight(kind: 'landed' | 'snap' | 'unhook') {
   const fish = normFish(r.fish) ?? f;
   if (!fish) return;
   hold.push(fish);
-  showCatch(fish);
+  // 魚從最後線頭那個水面點破水、沿線被吊到竿尖（不是直接出現在竿尖）
+  showCatch(fish, fightX, fightZ);
   const d = dex.get(fish.sp);
   dex.set(fish.sp, { kg: Math.max(d?.kg ?? 0, fish.kg), n: (d?.n ?? 0) + 1 });
   fishDexMerge([{ sp: fish.sp, ...dex.get(fish.sp)! }]);
-  C.sfx('dock');
   const tag = r.first ? '・新魚種' : r.record ? '・最大紀錄' : '';
   if (isSquidSp(fish.sp)) ffx?.inkPuff(fightX, PB.waterY + 0.05, fightZ, 1.2);
   const giant = fish.tier >= 3;
-  if (giant) toastTop(`釣到巨物：${fish.name}！`, 3);
-  rewardToast(`釣到${TIER[fish.tier] === '普通' ? '' : TIER[fish.tier] ?? ''} ${fish.name}${tag}`, `${fish.kg.toFixed(fish.kg < 10 ? 2 : 1)} kg・約 ${money(fish.val)}`, 'mine', `fish:${Date.now()}`, giant ? 6 : undefined);
-  if (holdN >= FISH.holdMax) toast('魚獲滿了！回碼頭賣魚', '#ffd76a', 2);
+  const full = holdN >= FISH.holdMax;
+  // 先讓人看到魚破水被吊起來（約 0.45 秒），再跳釣到魚的卡片和收魚聲
+  if (cardTimer) clearTimeout(cardTimer);
+  cardTimer = setTimeout(() => {
+    cardTimer = 0;
+    C?.sfx('dock');
+    if (giant) toastTop(`釣到巨物：${fish.name}！`, 3);
+    rewardToast(`釣到${TIER[fish.tier] === '普通' ? '' : TIER[fish.tier] ?? ''} ${fish.name}${tag}`, `${fish.kg.toFixed(fish.kg < 10 ? 2 : 1)} kg・約 ${money(fish.val)}`, 'mine', `fish:${Date.now()}`, giant ? 6 : undefined);
+    if (full) toast('魚獲滿了！回碼頭賣魚', '#ffd76a', 2);
+  }, Math.round(HOIST_S * HOIST_CARD_U * 1000));
 }
 async function sellFish() {
   const n = C?.net(); if (!n || busy || !C) return;
@@ -539,7 +551,10 @@ function drawGfx(dt: number) {
   ffx?.tick(dt);
   if (!gfx || !C) return;
   const ph = sm.phase;
-  if (!((ph === 'fight' || ph === 'land') && sm.fight)) runS = 0;
+  const fightOn = (ph === 'fight' || ph === 'land') && !!sm.fight;
+  if (!fightOn) runS = 0;
+  // 魚模型只活在：拉扯中（水裡）、剛釣上來吊起／掛著（idle／蓄力）；其他時候（又拋出去、收竿）收掉
+  if (fishMesh && !fightOn && !(catchT > 0 && (ph === 'idle' || ph === 'charge'))) { dropFishMesh(); catchT = 0; }
   if (phaseOf() !== 'wait') reelS = 0;
   gfx.g.visible = sm.phase !== 'off';
   if (!gfx.g.visible) return;
@@ -604,18 +619,51 @@ function drawGfx(dt: number) {
     // 大軟絲／花枝：拉扯時每隔一下噴墨
     if (hooked && isSquidSp(hooked.sp) && ffx) { inkT -= dt; if (inkT <= 0) { inkT = 1.4 + Math.random() * 0.6; ffx.inkPuff(x, wy + 0.01, z, 0.8); } }
     shTarget = 0.55;
+    if (fishMesh) {
+      // 真的魚在線頭的水裡：遠＝沉在水下、近＝浮上來翻騰，最後幾公尺一下一下破水；魚頭朝人、往衝的那邊甩
+      const dep = fightFishDepth(d, f.ten, t);
+      const yaw = fightFishYaw(-fx, -fz, runS, t, f.power);
+      const pitch = dep < 0.02 ? Math.min(0.5, 0.08 + (0.02 - dep) * 2.6) : 0.06;
+      _mouth.x = x; _mouth.y = PB.waterY - dep; _mouth.z = z;
+      fishCenterFromMouth(_mouth, yaw, pitch, fishLen, _ctr);
+      fishMesh.position.set(_ctr.x, _ctr.y, _ctr.z);
+      fishMesh.rotation.set(0, yaw, pitch);
+      fishMesh.visible = true;
+      fishYaw = yaw;
+      // 線頭接在魚嘴（沉在水下時線頭留在水面）
+      _end.y = Math.max(wy - 0.02, _mouth.y);
+      // 破水那一下：濺水花
+      if (dep < 0 && fishDep >= 0) C.splash(x, z, 0.2 + 0.3 * f.power);
+      fishDep = dep;
+      shTarget = 0.55 * (1 - 0.7 * fightCloseK(d));
+    }
     gfx.shadow.position.set(x, wy - 0.01, z);
     gfx.shadow.rotation.z = Math.atan2(sx * f.run, sz * f.run) || 0;
     splashT -= dt;
     if (splashT <= 0) { splashT = 0.45 + Math.random() * 0.3; C.splash(x, z, 0.15 + 0.25 * f.power); }
-  } else if (catchMesh && catchT > 0) {
-    // 剛釣上來：魚掛在竿尖下面晃（約 1.8 秒）
+  } else if (fishMesh && catchT > 0) {
     catchT -= dt;
-    _end.set(_tip.x, _tip.y - 0.25, _tip.z);
-    const L = catchMesh.scale.x;
-    catchMesh.position.set(_end.x + Math.sin(t * 3.1) * 0.04, _end.y - L * 0.5, _end.z);
-    catchMesh.rotation.set(0, t * 1.6, Math.PI / 2 + Math.sin(t * 7) * 0.12);
-    if (catchT <= 0) { catchMesh.removeFromParent(); catchMesh = null; }
+    if (hoist.on) {
+      // 剛釣上來：魚從水面破水、沿弧線被吊到竿尖下（約 0.6 秒），邊吊邊甩尾，線一直接在竿尖→魚嘴
+      const u = stepHoist(hoist, dt);
+      hoistMouth(hoist.wx, hoist.wy, hoist.wz, _tip.x, _tip.y, _tip.z, u, _mouth);
+      const yaw = hoistYaw(hoist.yaw, u, t), pitch = hoistPitch(u, t);
+      fishCenterFromMouth(_mouth, yaw, pitch, fishLen, _ctr);
+      fishMesh.position.set(_ctr.x, _ctr.y, _ctr.z);
+      fishMesh.rotation.set(0, yaw, pitch);
+      _end.set(_mouth.x, _mouth.y, _mouth.z);
+      // 魚身拖出水面時再滴一圈小水花
+      if (!hoistDrip && u >= 0.3) { hoistDrip = true; C.splash(hoist.wx, hoist.wz, 0.15); }
+      if (hoistDone(hoist)) { hangYaw = yaw; hangT = 0; stopHoist(hoist); }
+    } else {
+      // 吊上來了：掛在竿尖下面晃（約 1.8 秒）
+      hangT += dt;
+      _end.set(_tip.x, _tip.y - HOIST_TIP_DROP, _tip.z);
+      fishMesh.position.set(_end.x + Math.sin(t * 3.1) * 0.04, _end.y - fishLen * 0.5, _end.z);
+      fishMesh.rotation.set(0, hangYaw + hangT * 1.6, Math.PI / 2 + Math.sin(t * 7) * 0.12);
+    }
+    fishMesh.visible = true;
+    if (catchT <= 0) { dropFishMesh(); catchT = 0; }
   } else lineOn = false;
   // 拋物線碰到水面：濺水花＋聲音（剛好落在落點那一幀）
   if (flying && ph !== 'fly') {
@@ -650,16 +698,44 @@ function drawGfx(dt: number) {
 }
 
 // ---------------- 人物動作＋釣竿（在人物擺好姿勢之後才呼叫） ----------------
-let catchMesh: THREE.Mesh | null = null, catchT = 0, catchSp = '', catchKg = 0;
-function showCatch(f: HoldFish) {
+let catchT = 0, catchSp = '', catchKg = 0;
+/**
+ * 魚模型（一條）：拉扯中在線頭水裡 → 釣上來從水面吊到竿尖 → 掛著晃 → 收掉。
+ * 魚種幾何／材質是共用快取（fishModel），這裡只 new 一個 Mesh、用完 removeFromParent，不會漏 GPU 記憶體。
+ */
+let fishMesh: THREE.Mesh | null = null, fishMeshSp = '', fishLen = 0.4, fishYaw = 0, fishDep = 1;
+let hangT = 0, hangYaw = 0, hoistDrip = false, cardTimer: ReturnType<typeof setTimeout> | 0 = 0;
+const hoist = newHoist();
+const _mouth = { x: 0, y: 0, z: 0 }, _ctr = { x: 0, y: 0, z: 0 };
+function ensureFishMesh(sp: string, kg: number) {
+  if (!gfx || !sp) return false;
+  fishLen = fishLenM(kg);
+  if (fishMesh && fishMeshSp === sp) { fishMesh.scale.setScalar(fishLen); return true; }
+  dropFishMesh();
+  const m = makeFishMesh(sp); if (!m) return false;
+  fishMesh = m; fishMeshSp = sp; fishDep = 1;
+  m.scale.setScalar(fishLen); m.visible = false;
+  gfx.g.add(m);
+  return true;
+}
+function dropFishMesh() { fishMesh?.removeFromParent(); fishMesh = null; fishMeshSp = ''; stopHoist(hoist); hoistDrip = false; }
+/** 魚跑掉：在魚的位置濺一下，模型收掉 */
+function escapeFish() {
+  if (fishMesh?.visible && C) C.splash(fishMesh.position.x, fishMesh.position.z, 0.35);
+  dropFishMesh();
+}
+/** 釣上來：從水面點 (wx, wz) 破水，吊到竿尖（沒給＝面前 1.8 m 的水面，測試用） */
+function showCatch(f: HoldFish, wx?: number, wz?: number) {
   if (!gfx) return;
   catchSp = f.sp; catchKg = +f.kg.toFixed(2);
-  const mesh = makeFishMesh(f.sp); if (!mesh) return;
-  catchMesh?.removeFromParent();
-  catchMesh = mesh;
-  // 魚長：約 0.45 m × kg^(1/3)（1 kg≈45 cm、100 kg≈2 m），手上看得到就好
-  catchMesh.scale.setScalar(Math.max(0.22, Math.min(2.2, 0.45 * Math.cbrt(Math.max(0.05, f.kg)))));
-  gfx.g.add(catchMesh); catchT = 1.8;
+  const had = !!fishMesh?.visible && fishMeshSp === f.sp;
+  if (!ensureFishMesh(f.sp, f.kg)) return;
+  const o = origin(), fx = -Math.sin(castH), fz = -Math.cos(castH);
+  const x = Number.isFinite(wx) ? wx! : o.x + fx * 1.8, z = Number.isFinite(wz) ? wz! : o.z + fz * 1.8;
+  startHoist(hoist, x, PB.waterY + 0.02, z, had ? fishYaw : Math.atan2(fz, -fx));
+  hoistDrip = false;
+  catchT = HOIST_S + HOIST_HANG_S;
+  C?.splash(x, z, 0.4 + 0.3 * Math.min(1, f.kg / 20)); C?.sfx('splash');
 }
 function dropRod() {
   if (!myRod) return;
@@ -852,6 +928,8 @@ export const fishDbg = {
   release(h?: number) { const cam = camRef; if (h != null) { camRef = null; castH = h; } releaseCast(); camRef = cam; return sm.phase; },
   /** 測試：假裝釣上一條魚（只看掛在竿上的樣子） */
   fakeCatch(sp = 'kurodai', kg = 1.2) { showCatch({ sp, name: sp, tier: 0, kg, val: 0 }); return catchT; },
+  /** 測試：魚模型現在在哪（拉扯水裡／吊起／掛著） */
+  fishMesh() { return fishMesh ? { sp: fishMeshSp, vis: fishMesh.visible, y: +fishMesh.position.y.toFixed(2), water: +PB.waterY.toFixed(2), hoist: hoist.on, u: +hoistU(hoist).toFixed(2), len: +fishLen.toFixed(2) } : null; },
   panel(tab: 'gear' | 'dex' = 'gear') { openPanel(tab); return 'ok'; },
   close() { closePanel(); return 'ok'; },
   pick(r: Gear, item?: ItemKey) { rod = r; if (item) pick[r] = item; sm.gear = rod; sm.item = pick[rod]; return { rod, item: sm.item }; },
@@ -864,6 +942,6 @@ export const fishDbg = {
   /** 測試：噴一團墨（在現在的線頭位置） */
   ink() { ffx?.inkPuff(_end.x, PB.waterY + 0.05, _end.z, 1); return ffx?.ink.live() ?? 0; },
   /** 測試：假裝中魚（不經伺服器，只看拉扯畫面） */
-  fakeFight(power = 0.6, ms = 10000, lure = true) { sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; fightD0 = castDst; sm.hooked(power, ms); document.body.classList.add('fishFight'); return sm.phase; },
+  fakeFight(power = 0.6, ms = 10000, lure = true, sp = '') { sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; fightD0 = castDst; sm.hooked(power, ms); if (sp) { hooked = { sp, name: sp, tier: 0, kg: 1.2, val: 0 }; ensureFishMesh(sp, 1.2); } document.body.classList.add('fishFight'); return sm.phase; },
 };
 export type { BaitKey, LureKey };

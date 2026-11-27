@@ -26,6 +26,7 @@ import { CAST_RELEASE_S } from './castArc';
 import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWorld, jerkFromSync, type FishPoseSt, type FishPoseIn } from './fishPose';
 import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishSyncLost, fishBadgeOf, fishLineOut, fishLineEnd, remoteFightSide, remoteReelSide, type FishSyncMsg } from './fishSync';
 import { makeFishMesh } from './fishModel';
+import { HOIST_S, HOIST_TIP_DROP, fishLenM, newHoist, startHoist, stopHoist, stepHoist, hoistDone, hoistMouth, hoistPitch, hoistYaw, fishCenterFromMouth, type Hoist } from './fishHoist';
 import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare, type DriftTide, type DriftPull } from './boatNet';
 
 export type BoatSfx = 'splash' | 'bump' | 'hit' | 'dock' | 'launch' | 'warn';
@@ -990,10 +991,12 @@ type Fisher = { rigRef?: PlayerRig;
   jerkN: number;
   at: number; moving: boolean; ph: number; boatH: number; splT: number;
   pose: FishPoseSt; inp: FishPoseIn; rod: Rod | null; line: THREE.LineSegments | null; bob: THREE.Mesh | null; fish: THREE.Mesh | null; fishSp: string;
+  /** 秀漁獲：魚從最後拉魚的線頭水面（lfx, lfz；lfT＝最後一次拉魚的時間）吊到竿尖，之後掛著晃 */
+  hoist: Hoist; lfx: number; lfz: number; lfT: number; hangT: number; hangYaw: number;
   post: (rig: PlayerRig, dt: number, hidden: boolean) => void;
 };
 const fishers = new Map<string, Fisher>();
-const _ft = new THREE.Vector3(), _fe = { x: 0, z: 0 }, _fly = { x: 0, y: 0, z: 0 };
+const _ft = new THREE.Vector3(), _fe = { x: 0, z: 0 }, _fly = { x: 0, y: 0, z: 0 }, _fm = { x: 0, y: 0, z: 0 }, _fc = { x: 0, y: 0, z: 0 };
 let fisherLineMat: THREE.LineBasicMaterial | null = null, fisherBobGeo: THREE.SphereGeometry | null = null, fisherFloatMat: THREE.MeshLambertMaterial | null = null, fisherLureMat: THREE.MeshLambertMaterial | null = null, frameDt = 0.016;
 /** 舊版客戶端（只有船上、沒有線長）：當成拋 7 m */
 function onFishPose(e: { connId: string; dx: number; dz: number; yaw: number; st: number }) {
@@ -1011,6 +1014,7 @@ function onFishSync(e: FishSyncMsg & { connId: string }) {
       st: 0, stT: t, ch: e.ch, cd: e.cd, cdS: e.cd, tn: e.tn, tnS: e.tn, sp: '', kg: 0, jerkN: 0,
       at: t, moving: false, ph: 0, boatH: 0, splT: 0,
       pose: newFishPose(), inp: { phase: 'off', power: 0, reel: false, tension: 0, lure: false, twitch: 0, jerk: 0 }, rod: null, line: null, bob: null, fish: null, fishSp: '',
+      hoist: newHoist(), lfx: 0, lfz: 0, lfT: -1e9, hangT: 0, hangYaw: 0,
       post: () => {},
     };
     nf.post = (rig, dt, hidden) => poseFisher(nf, rig, dt, hidden);
@@ -1059,7 +1063,7 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
     D.scene.add(f.bob);
   }
   if (f.bob) f.bob.visible = lineOn && (f.st & 15) !== 5;
-  updateFisherCatch(f, show);
+  updateFisherCatch(f, show, rig);
   if (!f.line) return;
   f.line.visible = lineOn || show;
   if (!lineOn && !show) return;
@@ -1068,10 +1072,22 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
   const arr = a.array as Float32Array;
   arr[0] = _ft.x; arr[1] = _ft.y; arr[2] = _ft.z;
   if (show) {
-    // 秀漁獲：魚掛在竿尖下面晃
     const L = f.fish ? f.fish.scale.x : 0.4;
-    arr[3] = _ft.x; arr[4] = _ft.y - 0.25; arr[5] = _ft.z;
-    if (f.fish) { f.fish.position.set(_ft.x + Math.sin(t * 3.1) * 0.04, _ft.y - 0.25 - L * 0.5, _ft.z); f.fish.rotation.set(0, t * 1.6, Math.PI / 2 + Math.sin(t * 7) * 0.12); }
+    if (f.fish && f.hoist.on) {
+      // 秀漁獲剛開始：魚從水面破水、沿弧線吊到竿尖下（跟對方自己畫面一樣），線接在竿尖→魚嘴
+      const h = f.hoist, u = stepHoist(h, dt);
+      hoistMouth(h.wx, h.wy, h.wz, _ft.x, _ft.y, _ft.z, u, _fm);
+      const yaw = hoistYaw(h.yaw, u, t), pitch = hoistPitch(u, t);
+      fishCenterFromMouth(_fm, yaw, pitch, L, _fc);
+      f.fish.position.set(_fc.x, _fc.y, _fc.z); f.fish.rotation.set(0, yaw, pitch);
+      arr[3] = _fm.x; arr[4] = _fm.y; arr[5] = _fm.z;
+      if (hoistDone(h)) { f.hangYaw = yaw; f.hangT = 0; stopHoist(h); }
+    } else {
+      // 吊上來了：魚掛在竿尖下面晃
+      f.hangT += dt;
+      arr[3] = _ft.x; arr[4] = _ft.y - HOIST_TIP_DROP; arr[5] = _ft.z;
+      if (f.fish) { f.fish.position.set(_ft.x + Math.sin(t * 3.1) * 0.04, _ft.y - HOIST_TIP_DROP - L * 0.5, _ft.z); f.fish.rotation.set(0, f.hangYaw + f.hangT * 1.6, Math.PI / 2 + Math.sin(t * 7) * 0.12); }
+    }
   } else {
     // 甩竿中：落點＝送來的拋竿距離（線頭沿拋物線飛過去）；之後線長跟著收線慢慢變
     if ((f.st & 15) === 3 && f.cd > 0) f.cdS = f.cd;
@@ -1085,6 +1101,8 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
       ex += Math.cos(heading) * side; ez -= Math.sin(heading) * side;
       f.splT -= dt;
       if (f.splT <= 0) { f.splT = 0.5 + Math.random() * 0.4; splash(ex, ez, 0.15 + 0.3 * f.tnS); }
+      // 記住最後拉魚的水面點：釣上來時魚從這裡破水被吊起來
+      f.lfx = ex; f.lfz = ez; f.lfT = t;
     } else if ((f.st & 15) === 6 || (f.st & 15) === 4) {
       // 收線左右帶竿：假魚跟著竿子輕輕偏過去（比拉魚的 2.2 m 小很多，看起來是在控線不是在搏鬥）；放開收線就跟著慢慢回正
       const side = remoteReelSide(f.pose.steer, (f.st & 16) !== 0, f.cdS);
@@ -1107,16 +1125,31 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
   }
   a.needsUpdate = true;
 }
-/** 秀漁獲的魚（魚種模型共用、材質共用；換魚種才換幾何） */
-function updateFisherCatch(f: Fisher, show: boolean) {
-  if (!show) { if (f.fish) { f.fish.removeFromParent(); f.fish = null; f.fishSp = ''; } return; }
+/**
+ * 秀漁獲的魚（魚種模型共用、材質共用；換魚種才換幾何）。
+ * 剛釣上來：從最後拉魚的線頭水面破水吊上來（沒看到拉魚＝面前 1.8 m 的水面）；
+ * 已經秀了一陣子才進視野：直接掛在竿尖（不重播吊魚）。
+ */
+function updateFisherCatch(f: Fisher, show: boolean, rig: PlayerRig) {
+  if (!show) { if (f.fish) { f.fish.removeFromParent(); f.fish = null; f.fishSp = ''; } stopHoist(f.hoist); return; }
   if (f.fish && f.fishSp === f.sp) return;
   const mesh = makeFishMesh(f.sp); if (!mesh || !D) return;
   f.fish?.removeFromParent();
   f.fish = mesh;
-  f.fish.scale.setScalar(Math.max(0.22, Math.min(2.2, 0.45 * Math.cbrt(Math.max(0.05, f.kg || 0.5)))));
+  f.fish.scale.setScalar(fishLenM(f.kg || 0.5));
   f.fishSp = f.sp;
   D.scene.add(f.fish);
+  const heading = f.boat ? f.boatH + f.ch : f.ch;
+  const fresh = t - f.lfT < 2.5;
+  f.hangT = 0;
+  if (fresh || t - f.stT < HOIST_S) {
+    let wx = f.lfx, wz = f.lfz;
+    if (!fresh) { fishLineEnd(rig.outer.position.x, rig.outer.position.z, heading, 1.8, _fe); wx = _fe.x; wz = _fe.z; }
+    const tx = rig.outer.position.x - wx, tz = rig.outer.position.z - wz;
+    startHoist(f.hoist, wx, PB.waterY + 0.02, wz, Math.atan2(-tz, tx));
+    f.lfT = -1e9;
+    splash(wx, wz, 0.4);
+  } else { stopHoist(f.hoist); f.hangYaw = heading; }
 }
 function dropFisher(c: string) {
   const f = fishers.get(c); if (!f) return;
