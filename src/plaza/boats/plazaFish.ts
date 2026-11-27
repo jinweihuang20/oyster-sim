@@ -835,10 +835,11 @@ function startReplay() {
   const kg = c.meta.kg.toFixed(c.meta.kg < 10 ? 2 : 1);
   el.innerHTML = `<div class="frTop"><span class="frTag">${ICON.replay}<span>精彩回放</span></span><span class="frName"></span><button type="button" class="frB frBack" data-r="exit" aria-label="返回">${ICON.back}<span>返回</span></button></div>`
     + `<div class="frHint">拖曳轉視角・雙指或滾輪縮放</div>`
-    + `<div class="frBar"><button type="button" class="frB frPlay" data-r="play" aria-label="播放／暫停"></button><button type="button" class="frB" data-r="restart" aria-label="重播">${ICON.restart}<span>重播</span></button>`
-    + `<div class="frTrack" data-r="track"><div class="frRail"><div class="frFill"></div><div class="frKnob"></div></div></div><span class="frTime"></span>`
-    + `<button type="button" class="frB frSpd" data-r="speed" aria-label="播放速度">1×</button><button type="button" class="frB frZ" data-r="zin" aria-label="拉近">${ICON.plus}</button><button type="button" class="frB frZ" data-r="zout" aria-label="拉遠">${ICON.minus}</button><button type="button" class="frB frVq" data-r="vq" aria-label="錄影畫質"></button><button type="button" class="frB frRec" data-r="rec" aria-label="錄製影片"></button></div>`
-    + `<div class="frSave"><button type="button" class="frB frSaveB" data-r="save" aria-label="儲存或分享影片">${ICON.save}<span></span></button><button type="button" class="frB frSaveX" data-r="savex" aria-label="不要這支影片">${ICON.exit}</button></div>`;
+    + `<div class="frDock"><div class="frSave"><button type="button" class="frB frSaveB" data-r="save" aria-label="儲存或分享影片">${ICON.save}<span></span></button><button type="button" class="frB frSaveX" data-r="savex" aria-label="不要這支影片">${ICON.exit}</button></div>`
+    + `<div class="frBar"><div class="frRow frRowT"><div class="frTrack" data-r="track"><div class="frRail"><div class="frFill"></div><div class="frKnob"></div></div></div><span class="frTime"></span></div>`
+    + `<div class="frRow frRowP"><button type="button" class="frB frPlay" data-r="play" aria-label="播放／暫停"></button><button type="button" class="frB frRe" data-r="restart" aria-label="重播">${ICON.restart}<span>重播</span></button><button type="button" class="frB frSpd" data-r="speed" aria-label="播放速度">1×</button>`
+    + `<button type="button" class="frB frZ frZo" data-r="zout" aria-label="拉遠">${ICON.minus}</button><button type="button" class="frB frZ" data-r="zin" aria-label="拉近">${ICON.plus}</button></div>`
+    + `<div class="frRow frRowR"><button type="button" class="frB frVq" data-r="vq" aria-label="錄影畫質"></button><button type="button" class="frB frRec" data-r="rec" aria-label="錄製影片"></button></div></div></div>`;
   el.querySelector('.frName')!.textContent = `${c.meta.name}・${kg} kg`;
   const r: Rp = {
     c, play: newReplayPlay(c.dur), orbit: orbitStart(c.f[RF.pyaw]), fr: new Float32Array(RF_STRIDE),
@@ -942,7 +943,7 @@ function bindReplayUi(r: Rp) {
       else if (k === 'zout') orbitZoom(r.orbit, 1.25);
       rpUi(r); return;
     }
-    if (tg.closest('.frBar, .frTop')) return;
+    if (tg.closest('.frDock, .frTop')) return;
     // 空白處：一指拖＝轉視角、兩指＝縮放
     r.ptr.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { el.setPointerCapture(e.pointerId); } catch { /* 不支援 */ }
@@ -999,11 +1000,12 @@ function rpUi(r: Rp) {
     r.vqB.setAttribute('aria-label', `錄影畫質：${VIDEO_QUALITY[q].label}（點一下切換）`);
     r.el.classList.toggle('recording', busy);
     r.recB.classList.toggle('on', vs === 'rec');
-    r.recB.innerHTML = vs === 'rec' ? `${ICON.recDot}<span>錄製中 ${fmtReplayT(r.play.t)} / ${fmtReplayT(r.play.dur)}（點此停止）</span>`
+    r.recB.innerHTML = vs === 'rec' ? `${ICON.recDot}<span>錄製中 ${fmtReplayT(r.play.t)} / ${fmtReplayT(r.play.dur)}・停止</span>`
       : vs === 'finishing' ? `${ICON.recDot}<span>影片處理中…</span>` : vs === 'arming' ? `${ICON.recDot}<span>準備錄影…</span>` : `${ICON.video}<span>錄製影片</span>`;
     r.el.classList.toggle('vidReady', vs === 'ready');
     const sv = r.el.querySelector('.frSaveB span');
-    if (sv) sv.textContent = vs === 'ready' ? `影片好了（${vrec!.quality === 'high' ? '高畫質・' : ''}${fmtMB(vrec!.size)}）— 儲存 / 分享` : '';
+    if (sv) sv.textContent = vs === 'ready' ? `儲存 / 分享影片・${fmtMB(vrec!.size)}` : '';
+    r.el.querySelector('.frSaveB')?.setAttribute('aria-label', vs === 'ready' ? `影片好了（${vrec!.quality === 'high' ? '高畫質・' : ''}${fmtMB(vrec!.size)}），儲存或分享` : '儲存或分享影片');
   }
 }
 /** 回放的世界座標：記錄時相對那一格的人，換到人現在站的位置／朝向（岸上＝原地；船上＝跟著船） */
