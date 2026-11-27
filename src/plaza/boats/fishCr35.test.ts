@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FISH, fishPower, fightTenCeil, FIGHT_BIG_P, newFight, stepFight, reelMps, reelFightMs, type FightEnd } from './fishLogic';
+import { FISH, fishPower, fightTenCeil, newFight, stepFight, reelMps, reelFightMs, type FightEnd } from './fishLogic';
 
 const DT = 1 / 60;
 /** 固定亂數：0.7 → 魚往右衝（run＝1），衝刺約 2.3 秒一輪 */
@@ -49,13 +49,13 @@ describe('CR-35 搏鬥張力上限：1 kg 以下輕鬆、1.5–2 kg 起硬拉會
     expect(fishPower(3.5, 0)).toBeCloseTo(0.40, 2);
     expect(fightTenCeil(fishPower(3.5, 0))).toBeGreaterThanOrEqual(FISH.snapT);
 
-    expect(fishPower(20, 0)).toBeGreaterThanOrEqual(FIGHT_BIG_P);
+    expect(fightTenCeil(fishPower(20, 0))).toBeGreaterThanOrEqual(FISH.snapT);
     expect(fightTenCeil(fishPower(20, 2))).toBeGreaterThanOrEqual(FISH.snapT);
     expect(fightTenCeil(fishPower(320, 3))).toBeGreaterThanOrEqual(FISH.snapT);
   });
 
-  it('0.2 kg、0.5 kg 小魚：一直按收線、不反拉也不會進紅區或斷線', () => {
-    for (const kg of [0.2, 0.5]) {
+  it('0.18 kg、0.2 kg、0.5 kg 小魚：一直按收線、不反拉也不會進紅區或斷線', () => {
+    for (const kg of [0.18, 0.2, 0.5]) {
       const r = play(kg, 0, 20, () => ({ reel: true, dir: 0 }));
       expect(r.end).toBe('landed');
       expect(r.tenMax).toBeGreaterThan(0.3);
@@ -81,11 +81,12 @@ describe('CR-35 搏鬥張力上限：1 kg 以下輕鬆、1.5–2 kg 起硬拉會
     }
   });
 
-  it('2 kg、3.5 kg：反拉正確，一直收線也可以拉上來（不必一放一收）', () => {
+  it('2 kg、3.5 kg：一直按收線，就算反拉正確也會斷線', () => {
     for (const kg of [2, 3.5]) {
-      const r = play(kg, 0, 16, (f) => ({ reel: true, dir: f.run === 0 ? 0 : -f.run }), rndDash, 30);
-      expect(r.end).toBe('landed');
-      expect(r.tenMax).toBeLessThan(FISH.snapT);
+      // 距離拉長一點，死按收線時張力一定先頂破斷線門檻
+      const r = play(kg, 0, 28, (f) => ({ reel: true, dir: f.run === 0 ? 0 : -f.run }), rndDash, 40);
+      expect(r.end).toBe('snap');
+      expect(r.tenMax).toBeGreaterThanOrEqual(FISH.snapT);
     }
   });
 
