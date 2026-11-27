@@ -62,7 +62,8 @@ export function jerkEnv(u: number) {
 }
 /** 抽竿疊在目標姿勢上的量：竿子猛往上、手往上往胸口收、身體往後仰一點、竿彎（竿尖被線拉住） */
 /** 拉魚往左右拉：平滑速度（越小越沉、越有重量）、竿子往那邊掃、右手往那邊、身體側傾、上身轉向 */
-export const STEER = { rate: 4.5, side: 0.55, hx: 0.12, roll: 0.17, twist: 0.24 };
+/** 幅度要從第三人稱、別人的畫面上一眼看得出來：竿尖左右掃約 2.5 m、上身側傾約 17°、胸口轉約 23° */
+export const STEER = { rate: 4.5, side: 0.8, hx: 0.18, roll: 0.3, twist: 0.4 };
 /** 拉魚左右拉疊上去的量（純數值，給 applyFishPose 和測試用）；s＝平滑後的 steer */
 export function steerPose(s: number) {
   return { side: STEER.side * s, hx: STEER.hx * s, roll: -STEER.roll * s, twist: -STEER.twist * s };

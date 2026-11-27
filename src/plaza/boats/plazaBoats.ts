@@ -23,7 +23,7 @@ import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onF
 import { DECK, FISH, chargePower, castFlyPoint, deckStart, deckClamp, stepDeck, yawOf, standCam, standWantYaw } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWorld, jerkFromSync, type FishPoseSt, type FishPoseIn } from './fishPose';
-import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishBadgeOf, fishLineOut, fishLineEnd, type FishSyncMsg } from './fishSync';
+import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishSyncLost, fishBadgeOf, fishLineOut, fishLineEnd, remoteFightSide, type FishSyncMsg } from './fishSync';
 import { makeFishMesh } from './fishModel';
 import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare, type DriftTide, type DriftPull } from './boatNet';
 
@@ -968,9 +968,14 @@ function tickFishSync(dt: number) {
     syncCur.boat = false; syncCur.dx = 0; syncCur.dz = 0; syncCur.yaw = +(fy ?? D?.me()?.outer.rotation.y ?? 0).toFixed(2);
   } else { syncCur.st = 0; syncCur.boat = false; syncCur.dx = syncCur.dz = syncCur.yaw = syncCur.ch = syncCur.cd = syncCur.tn = syncCur.kg = 0; syncCur.sp = ''; }
   if (!net || localOnly || !fishSyncDue(syncLast, syncCur, syncSent, syncSince)) return;
-  if (!net.fishSync(syncCur)) return;
+  if (!net.fishSync(syncCur, onFishSyncLost)) return;
   copyFishSync(syncCur, syncLast); syncSince = 0;
   syncSent = syncCur.st !== 0;
+}
+/** 上一筆被伺服器限速／送失敗：退避一下再重送目前狀態（含「不釣了」） */
+function onFishSyncLost() {
+  syncSince = fishSyncLost(syncLast);
+  syncSent = true;
 }
 /** 重新連上（新的 connId）：馬上再送一次，別人才看得到 */
 function fishSyncRejoined() { syncSent = false; syncSince = FISH_SYNC.keepAlive; }
@@ -1074,8 +1079,8 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
     fishLineEnd(rig.outer.position.x, rig.outer.position.z, heading, Math.max(0.8, f.cdS), _fe);
     let ex = _fe.x, ez = _fe.z;
     if ((f.st & 15) === 5) {
-      // 拉魚：魚左右衝、偶爾濺水花
-      const side = Math.sin(t * 1.3 + f.stT) * 1.4 * (0.5 + f.tnS);
+      // 拉魚：魚左右衝、偶爾濺水花；路亞往左右拉＝魚在另一邊衝（跟對方自己畫面一樣），線頭平順偏過去
+      const side = remoteFightSide(f.pose.steer, (f.st & 16) !== 0, Math.sin(t * 1.3 + f.stT), f.tnS);
       ex += Math.cos(heading) * side; ez -= Math.sin(heading) * side;
       f.splT -= dt;
       if (f.splT <= 0) { f.splT = 0.5 + Math.random() * 0.4; splash(ex, ez, 0.15 + 0.3 * f.tnS); }
@@ -1248,7 +1253,9 @@ export const plazaBoatsDbg = {
         c, boat: f.boat, x: +f.x.toFixed(2), z: +f.z.toFixed(2), yaw: +f.yaw.toFixed(2), st: f.st, phase: f.inp.phase, rod: f.rod?.kind ?? null,
         ch: f.ch, cd: f.cd, cdS: +f.cdS.toFixed(2), tn: f.tn, line: !!f.line?.visible, bob: !!f.bob?.visible, fish: f.fish ? f.fishSp : null,
         tip: a ? [+a[0].toFixed(2), +a[1].toFixed(2), +a[2].toFixed(2)] : null, end: a ? [+a[3].toFixed(2), +a[4].toFixed(2), +a[5].toFixed(2)] : null,
-        pose: { pitch: +f.pose.pitch.toFixed(2), bend: +f.pose.bend.toFixed(2), lean: +f.pose.lean.toFixed(2), crank: +f.pose.crank.toFixed(2), castT: +f.pose.castT.toFixed(2) },
+        pose: { pitch: +f.pose.pitch.toFixed(2), bend: +f.pose.bend.toFixed(2), lean: +f.pose.lean.toFixed(2), crank: +f.pose.crank.toFixed(2), castT: +f.pose.castT.toFixed(2), steer: +f.pose.steer.toFixed(2) },
+        torso: f.rigRef ? { ry: +f.rigRef.torso.rotation.y.toFixed(2), rz: +f.rigRef.torso.rotation.z.toFixed(2) } : null,
+        rodTip: f.rod?.g.parent ? (() => { const v = rodTipWorld(f.rod!, new THREE.Vector3()); const o = f.rigRef!.outer; o.worldToLocal(v); return [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(2)]; })() : null,
         gap: a && f.rod && f.line?.visible ? +rodTipWorld(f.rod, new THREE.Vector3()).distanceTo(new THREE.Vector3(a[0], a[1], a[2])).toFixed(3) : null,
         rods: f.rod?.g.parent ? f.rod.g.parent.children.filter(o => o.name === 'fishRod').length : 0,
         rodVis: f.rod ? f.rod.g.children.every(c => c.visible) : null,

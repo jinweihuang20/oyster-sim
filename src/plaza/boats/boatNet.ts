@@ -220,7 +220,7 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
      * 釣魚動作同步（給別人看）。回傳 true＝送出去了（上一筆還沒回來＝false，下一幀再試）。
      * 舊伺服器沒有 FishSync：船上改送舊的 FishPose（岸上舊伺服器沒辦法，就不送）。
      */
-    fishSync(m: FishSyncMsg): boolean {
+    fishSync(m: FishSyncMsg, onLost?: () => void): boolean {
       if (fishPoseBusy || !supported || !live()) return false;
       if (fishSyncOld) {
         if (fishPoseOld || !m.boat && m.st !== 0) return true;
@@ -229,7 +229,8 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
         return true;
       }
       fishPoseBusy = true;
-      void call('FishSync', m.st, m.boat, m.dx, m.dz, m.yaw, m.ch, m.cd, m.tn, m.sp, m.kg).then(r => { if (r?.err === 'old_server') fishSyncOld = true; }).finally(() => { fishPoseBusy = false; });
+      // 被限速（slow）／斷線失敗：別人沒收到，通知呼叫端重送（不然左右拉、停止等變化會一直卡在別人畫面上）
+      void call('FishSync', m.st, m.boat, m.dx, m.dz, m.yaw, m.ch, m.cd, m.tn, m.sp, m.kg).then(r => { if (r?.err === 'old_server') fishSyncOld = true; else if (!r?.ok) onLost?.(); }).finally(() => { fishPoseBusy = false; });
       return true;
     },
     close() { closed = true; },

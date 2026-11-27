@@ -33,6 +33,8 @@ export const FISH_SYNC = {
   jerkGap: 0.25,
   /** 拉魚左右拉方向換了的最短間隔：要快，別人看到側傾才跟得上；比姿勢轉換稍慢，以免洗爆伺服器 3 秒 16 筆 */
   steerGap: 0.2,
+  /** 伺服器回「太快」或送失敗：等這麼久再重送（別一直敲，限速窗才會退） */
+  retryGap: 0.7,
 };
 
 export const newFishSync = (): FishSyncMsg => ({ st: 0, boat: false, dx: 0, dz: 0, yaw: 0, ch: 0, cd: 0, tn: 0, sp: '', kg: 0 });
@@ -62,13 +64,22 @@ export function fishSyncChanged(last: FishSyncMsg, cur: FishSyncMsg) {
  */
 export function fishSyncDue(last: FishSyncMsg, cur: FishSyncMsg, sentOnce: boolean, since: number) {
   if (!sentOnce) return cur.st !== 0;
-  if (cur.st === 0) return last.st !== 0;
+  if (cur.st === 0) return last.st !== 0 && since >= 0;
   if (since >= FISH_SYNC.keepAlive) return true;
   // 姿勢／路亞 bit 換了走 phaseGap；只有左右拉方向換了走 steerGap（較慢，避免左右狂切洗爆限速）
   if ((last.st & 31) !== (cur.st & 31)) return since >= FISH_SYNC.phaseGap;
   if (((last.st ^ cur.st) & (32 | 64)) !== 0) return since >= FISH_SYNC.steerGap;
   if (jerkSt(cur.st) && jerkSt(last.st) && last.tn !== cur.tn) return since >= FISH_SYNC.jerkGap;
   return since >= FISH_SYNC.minGap && fishSyncChanged(last, cur);
+}
+
+/**
+ * 上一筆沒送到（伺服器限速回 slow、斷線、例外）：把「上次送出的」標成無效，下一次一定重送（含左右拉 bit、不釣了）。
+ * 回傳新的 since（負的＝退避 retryGap 秒才重送）。
+ */
+export function fishSyncLost(last: FishSyncMsg): number {
+  last.st = -1;
+  return FISH_SYNC.phaseGap - FISH_SYNC.retryGap;
 }
 
 const num = (v: unknown, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
@@ -84,6 +95,16 @@ export function normFishSync(x: any): (FishSyncMsg & { connId: string }) | null 
     cd: Math.max(0, Math.min(44, num(g(x, 'cd')))), tn: Math.max(0, Math.min(1, num(g(x, 'tn')))),
     sp: String(g(x, 'sp') ?? '').slice(0, 24), kg: Math.max(0, num(g(x, 'kg'))),
   };
+}
+
+/**
+ * 別人拉魚時，線在水裡那頭往左右偏多少（公尺，+＝對方的右邊）。wob＝-1～1 的慢速擺動。
+ * 路亞：對方往左右拉就是魚往反方向衝（對方自己畫面的線頭偏 ±2.2 m），左右拉越滿、隨機擺動越少；
+ * 垂釣：魚不衝，照舊小幅擺動。
+ */
+export function remoteFightSide(steer: number, lure: boolean, wob: number, tn: number) {
+  const s = lure ? Math.max(-1, Math.min(1, steer)) : 0;
+  return wob * 1.4 * (0.5 + tn) * (1 - Math.abs(s)) - s * 2.2;
 }
 
 /** 頭上的狀態牌：0 不顯示、1「釣魚中」、2「拉魚中！」、3「釣到了！」 */

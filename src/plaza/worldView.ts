@@ -2948,6 +2948,8 @@ function hashPid(pid: string) {
         const hk = farProxyHeight({ seated: r.seated, mounted: !!mount, mountStand: !!mount?.stand, phase: r.phase || '' });
         (st.kind === 'ama' ? impAma : impPlayer).push(r.rig.outer, hk, st.color);
       }
+      // 先套 LOD（切回近距會重擺動作姿勢），再擺釣魚／船上姿勢，才不會被蓋掉一幀
+      applyRemoteLod(r, lodS || tier === 'hide' || tier === 'far' || (LO && tier === 'mid'));
       // 身體有畫（海上視野近處、遠距檔也照畫）才擺手和竿；沒畫就跳過
       if (mount?.post) mount.post(r.rig, dt, !r.rig.outer.visible);
       else if (fishPosts.size && !r.seated) {
@@ -2957,7 +2959,6 @@ function hashPid(pid: string) {
           fp(r.rig, dt, !r.rig.outer.visible);
         }
       }
-      applyRemoteLod(r, lodS || tier === 'hide' || tier === 'far' || (LO && tier === 'mid'));
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
       if (show) {
         // 寵物逐幀：坐著→頭頂；走動→身後彈跳
