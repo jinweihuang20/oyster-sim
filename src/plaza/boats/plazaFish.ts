@@ -11,7 +11,7 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyDur, fishDistNow, fmtDistM, fightDistM, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, canFishAt, newNoRodHint, stepNoRodHint, NO_ROD_HINT, type Gear, type ItemKey, type BaitKey, type LureKey, type NoRodHintSt } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyDur, fishDistNow, fmtDistM, fightDistM, hookFightMs, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, canFishAt, newNoRodHint, stepNoRodHint, NO_ROD_HINT, type Gear, type ItemKey, type BaitKey, type LureKey, type NoRodHintSt } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { castFlyPoint, castLine, CAST_LINE_SEGS, CAST_RELEASE_S, CAST_SETTLE_S, type CastLineOpt } from './castArc';
 import { makeFishMesh, FISH_TIER } from './fishModel';
@@ -389,7 +389,9 @@ async function doReel() {
     try { navigator.vibrate?.(70); } catch { /* 不支援 */ }
     C.sfx('hit');
     fightD0 = Math.max(1.5, lineNow());
-    sm.hooked(num(r.power, 0.3), num(r.fightMs, 2500));
+    // 拉多久＝實際中魚距離 ÷ 收線速度（伺服器回 mps；舊伺服器沒有就照公斤數算，不比它的最短時間快）
+    const mps = num(g(r, 'mps'), 0);
+    sm.hooked(num(r.power, 0.3), hookFightMs(fightD0, hooked?.kg ?? 1, hooked?.tier ?? 0, mps > 0 ? mps : undefined, num(r.fightMs, 2500), num(r.power, 0.3)), fightD0);
     // 精彩回放：從中魚開始錄（只留最後 10 秒）；上一條的片段留著，釣上來才換掉
     recStart(rec); recEndT = -1; wantReplay = false;
     document.body.classList.add('fishFight');
@@ -1352,6 +1354,6 @@ export const fishDbg = {
     showCatchCard(f);
     return 'ok';
   },
-  fakeFight(power = 0.6, ms = 10000, lure = true, sp = '') { const o0 = origin(); ox = o0.x; oz = o0.z; sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; fightD0 = castDst; sm.hooked(power, ms); recStart(rec); recEndT = -1; if (sp) { hooked = { sp, name: sp, tier: 0, kg: 1.2, val: 0 }; ensureFishMesh(sp, 1.2); } document.body.classList.add('fishFight'); return sm.phase; },
+  fakeFight(power = 0.6, ms = 10000, lure = true, sp = '') { const o0 = origin(); ox = o0.x; oz = o0.z; sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; fightD0 = castDst; sm.hooked(power, ms, fightD0); recStart(rec); recEndT = -1; if (sp) { hooked = { sp, name: sp, tier: 0, kg: 1.2, val: 0 }; ensureFishMesh(sp, 1.2); } document.body.classList.add('fishFight'); return sm.phase; },
 };
 export type { BaitKey, LureKey };

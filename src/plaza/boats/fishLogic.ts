@@ -214,7 +214,34 @@ export function stepLure(s: LureSt, item: LureKey, reel: boolean, jerk: boolean,
 }
 
 // ---------------- 拉扯 ----------------
-export type Fight = { prog: number; ten: number; run: number; runT: number; hiT: number; loT: number; t: number; power: number; rate: number; lure: boolean; /** 連續沒收線幾秒 */ offT?: number };
+export type Fight = { prog: number; ten: number; run: number; runT: number; hiT: number; loT: number; t: number; power: number; rate: number; lure: boolean; /** 連續沒收線幾秒 */ offT?: number; /** 收線最快每秒多少 prog（＝REEL.capMps 公尺／秒） */ cap?: number; /** 按住收線時的速度倍率（大魚一放一收補回來，fightPumpK） */ pump?: number };
+/**
+ * 收線速度（跟伺服器 PlazaWorld.FishReelMps／FishFightMs 一樣）：拉扯時間＝中魚距離 ÷ 收線速度（公尺／秒）。
+ * 收線速度看實際公斤數（log 內插），稀有度每級只慢 5%；距離夾 4～45 m、時間夾 1.5～55 秒；畫面上最快 4.5 m/s。
+ */
+export const REEL = { minD: 4, maxD: 45, minMs: 1500, maxMs: 55_000, capMps: 4.5 } as const;
+const REEL_CURVE: readonly (readonly [number, number])[] = [[0.2, 4.2], [1, 3.5], [10, 2.0], [60, 1.15], [850, 0.63]];
+export function reelMps(kg: number, tier: number) {
+  const c = REEL_CURVE; let v: number;
+  if (!(kg > c[0][0])) v = c[0][1];
+  else if (kg >= c[c.length - 1][0]) v = c[c.length - 1][1];
+  else { let i = 1; while (kg > c[i][0]) i++; const t = Math.log(kg / c[i - 1][0]) / Math.log(c[i][0] / c[i - 1][0]); v = c[i - 1][1] + (c[i][1] - c[i - 1][1]) * t; }
+  return Math.round(v / (1 + 0.05 * Math.max(0, Math.min(3, Math.floor(tier) || 0))) * 1000) / 1000;
+}
+export function reelFightMs(distM: number, mps: number) {
+  const d = Math.max(REEL.minD, Math.min(REEL.maxD, Number.isFinite(distM) ? distM : REEL.maxD));
+  return Math.max(REEL.minMs, Math.min(REEL.maxMs, Math.round(d / Math.max(0.05, mps) * 1000)));
+}
+/**
+ * 中魚時要拉多久（毫秒）：d0＝實際中魚距離。新伺服器回 mps → 直接用；舊伺服器沒有 mps → 自己照公斤數算，
+ * 但不能比舊伺服器的最短時間（fightMs/2 − 延遲）快。
+ */
+export function hookFightMs(d0: number, kg: number, tier: number, srvMps?: number, srvFightMs?: number, power = 0.3) {
+  const newSrv = typeof srvMps === 'number' && Number.isFinite(srvMps) && srvMps > 0;
+  const ms = reelFightMs(d0, newSrv ? srvMps! : reelMps(kg, tier));
+  // 舊伺服器最短＝fightMs/2；客戶端最快＝時間 ÷（1.35 × 大魚收線倍率），多留 4%
+  return !newSrv && srvFightMs && srvFightMs > 0 ? Math.max(ms, Math.ceil(srvFightMs * 0.5 * 1.35 * fightPumpK(power) * 1.04)) : ms;
+}
 /** fightMs＝伺服器給的拉扯時間（越大隻越久）、power 0～1＝魚的力氣 */
 /** 拉扯一開始的進度（0.2＝已經拉近一點）；prog 最低到 FIGHT_PROG_MIN＝大魚把線拉出去（距離最多到中魚時的 1.8 倍） */
 export const FIGHT_P0 = 0.2, FIGHT_PROG_MIN = -0.44;
@@ -225,9 +252,21 @@ export function fightDistM(prog: number, d0: number) {
 }
 /** 大魚程度 0～1：power 0.45 以下＝0（小魚幾乎拉不走線），越大隻越猛（平方） */
 export const bigPull = (power: number) => { const k = Math.max(0, (power - 0.45) / 0.55); return Math.min(1, k * k); };
-export function newFight(power: number, fightMs: number, lure: boolean): Fight {
-  return { prog: FIGHT_P0, ten: 0.25, run: 0, runT: 1, hiT: 0, loT: 0, t: 0, power: Math.max(0.1, Math.min(1, power)), rate: 1.1 / Math.max(1, fightMs / 1000), lure };
+/**
+ * 大魚要一放一收（張力到紅區就得放、放的時候還會被拉走），按住收線那段收快一點補回來：
+ * 平均下來大約照伺服器的收線速度；最多 1.45 倍（×路亞 1.35 ＝ 1.96 → 最快＝時間 × 0.51；伺服器最短時間＝時間 × 0.4 − 延遲，不會誤判）
+ */
+export const fightPumpK = (power: number) => 1 + 0.45 * bigPull(Math.max(0.1, Math.min(1, power)));
+/** d0＝中魚距離（公尺）：一直收線（方向沒影響）剛好 fightMs 拉到腳邊；有給 d0 就限制畫面速度最多 REEL.capMps */
+export function newFight(power: number, fightMs: number, lure: boolean, d0?: number): Fight {
+  const f: Fight = { prog: FIGHT_P0, ten: 0.25, run: 0, runT: 1, hiT: 0, loT: 0, t: 0, power: Math.max(0.1, Math.min(1, power)), rate: (1 - FIGHT_P0) / Math.max(0.5, fightMs / 1000), lure, pump: fightPumpK(power) };
+  if (d0 && d0 > 0 && Number.isFinite(d0)) f.cap = REEL.capMps * (1 - FIGHT_P0) / d0;
+  return f;
 }
+/** 魚把線拉出去的力道（相對 rate）：rate 改成「一直收剛好 fightMs」之前是 1.1／秒數，拉線力道維持跟以前一樣 */
+export const FIGHT_PULL_K = 1.1 / (1 - FIGHT_P0);
+/** 小魚（power 低）一直收線張力只會停在這裡（不會爆線）；power ≥ 0.45 以上就跟以前一樣要一放一收 */
+export const fightTenCeil = (power: number) => 0.5 + power;
 export type FightEnd = 'landed' | 'snap' | 'unhook' | null;
 /**
  * 拉扯一步：reel＝按住收線；dir＝搖桿左右（-1～1）。
@@ -244,18 +283,21 @@ export function stepFight(f: Fight, reel: boolean, dir: number, dt: number, rnd:
     if (f.run !== 0) { if (dir * f.run < -0.3) good = 1.35; else { good = 0.6; bad = 1; } }
   }
   if (reel) {
-    f.ten += (0.15 + 0.75 * f.power) * dt * (bad ? 1.5 : good > 1 ? 0.75 : 1);
-    f.prog += f.rate * dt * good;
+    const rise = (0.15 + 0.75 * f.power) * dt * (bad ? 1.5 : good > 1 ? 0.75 : 1), ceil = fightTenCeil(f.power);
+    if (ceil >= FISH.snapT) f.ten += rise;
+    else if (f.ten < ceil) f.ten = Math.min(ceil, f.ten + rise);
+    else if (!bad) f.ten = Math.max(ceil, f.ten - 0.3 * dt);
+    f.prog += Math.min(f.rate * (f.pump ?? 1) * good, f.cap ?? Infinity) * dt;
   } else {
     f.ten -= 0.9 * dt;
     // 不收線：魚往回拉線；大魚放著越久拉得越猛（小魚幾乎不動）。一下一下放線（pump）不太會被拉走，一直放著才會
     f.offT = (f.offT ?? 0) + dt;
     const k = Math.max(0, Math.min(1, (f.offT - 0.35) / 0.8));
-    f.prog -= (0.25 * f.power + 1.6 * bigPull(f.power) * k * k * (3 - 2 * k)) * f.rate * dt;
+    f.prog -= (0.25 * f.power + 1.6 * bigPull(f.power) * k * k * (3 - 2 * k)) * f.rate * FIGHT_PULL_K * dt;
   }
   if (reel) f.offT = 0;
   // 大魚在衝、搖桿沒往反方向拉：就算在收線也會被拉出去
-  if (bad) f.prog -= 0.9 * bigPull(f.power) * f.rate * dt;
+  if (bad) f.prog -= 0.9 * bigPull(f.power) * f.rate * FIGHT_PULL_K * dt;
   // 魚在衝、方向沒拉對：張力自己往上
   if (bad) f.ten += 0.3 * f.power * dt;
   f.ten = Math.max(0, Math.min(1, f.ten)); f.prog = Math.max(FIGHT_PROG_MIN, Math.min(1, f.prog));
@@ -307,7 +349,7 @@ export class FishSM {
   }
   /** 按收竿：回傳要不要問伺服器（'reel'＝收回來／試著中魚） */
   pressReel(): boolean { if (this.phase === 'wait' || this.phase === 'nibble' || this.phase === 'sink') { this.phase = 'hook'; return true; } return false; }
-  hooked(power: number, fightMs: number) { this.phase = 'fight'; this.fight = newFight(power, fightMs, this.gear === 'lure'); this.lure = null; }
+  hooked(power: number, fightMs: number, d0?: number) { this.phase = 'fight'; this.fight = newFight(power, fightMs, this.gear === 'lure', d0); this.lure = null; }
   /** 收回來／太早／太慢／拉扯結束：回到準備好 */
   reset() { if (this.phase !== 'off') this.phase = 'idle'; this.lure = null; this.fight = null; this.twitch = 0; }
   /** 每幀；reel／jerk／dir＝玩家輸入。回傳事件（UI 處理） */
