@@ -4457,7 +4457,8 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
 @keyframes fishReelSpin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#boatUi #fishReel.pressed .boatIc svg{animation:none}}
 #boatUi #fishJerk{background:#fff!important;color:#2a5a86!important;border-color:#2a5a86!important}
-#boatUi #fishBar #fishSell{background:#1f6b45!important}
+/* 賣魚永遠排在動作鈕最下面（#fishBar 是 column-reverse，order:-1 會貼在底部，在拋竿／收線下面）；直式橫式同一套 */
+#boatUi #fishBar #fishSell{order:-1;background:#1f6b45!important}
 #boatUi #boatRackBar #fishSell{background:#1f6b45!important}
 /* 釣魚動作鈕：跟離開／地圖同一排右側；釣魚中才出現。實心深藍、線條圖示，不用毛玻璃 */
 #fishActs{position:absolute;z-index:2;top:var(--pz-fabs-top, calc(var(--sa-top,0px) + 58px));right:calc(var(--sa-right,0px) + 10px);display:none;align-items:center;gap:6px;pointer-events:none}

@@ -1229,8 +1229,8 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
   const showSell = net && holdN > 0 && atDock && !sm.lineOut && sm.phase !== 'fight';
   ui.sell.classList.toggle('on', showSell);
   if (showSell) { const s = `賣魚（${holdN} 條）`; const l = ui.sell.querySelector('.lbl')!; if (l.textContent !== s) l.textContent = s; }
-  // 釣魚模式 UI 放在右下（船上那一欄的位置）
-  if (showSell && on && ui.sell.parentElement !== ui.bar) ui.bar.append(ui.sell);
+  // 釣魚模式 UI 放在右下（船上那一欄的位置）。#fishBar 是 column-reverse，.prepend 讓「賣魚」排在最下面（拋竿／收線下面）
+  if (showSell && on && (ui.sell.parentElement !== ui.bar || ui.bar.firstElementChild !== ui.sell)) ui.bar.prepend(ui.sell);
   else if (!on && ui.sell.parentElement === ui.bar) (document.getElementById('boatRackBar') ?? ui.bar).append(ui.sell);
   ui.bar.classList.toggle('on', on);
   ui.hud.classList.toggle('on', on);
