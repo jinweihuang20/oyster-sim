@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FISH, castDist, fishDistNow, fmtDistM, fightDistM, newFight, stepFight, bigPull, FIGHT_P0, FIGHT_PROG_MIN, FIGHT_MAX_M, type FishDistIn } from './fishLogic';
+import { FISH, castDist, fishDistNow, fmtDistM, fmtFightLbl, fightDistM, newFight, stepFight, bigPull, FIGHT_P0, FIGHT_PROG_MIN, FIGHT_MAX_M, type FishDistIn } from './fishLogic';
 
 const base = (o: Partial<FishDistIn>): FishDistIn => ({ phase: 'idle', power: 0, item: 'shrimp', castDst: 20, flyT: 0, lureDist: null, floatDist: 0, prog: 0, fightD0: 20, ...o });
 
@@ -38,6 +38,17 @@ describe('HUD 一直顯示現在幾公尺', () => {
     expect(fmtDistM(24)).toBe('24 m'); expect(fmtDistM(23.6)).toBe('24 m');
     expect(fmtDistM(9.94)).toBe('9.9 m'); expect(fmtDistM(0.4)).toBe('0.4 m');
     expect(fmtDistM(0.01)).toBe('0 m'); expect(fmtDistM(-3)).toBe('0 m'); expect(fmtDistM(NaN)).toBe('');
+  });
+
+  it('拉魚進度文字：被拉遠不顯示負百分比，其餘夾在 0%～100%', () => {
+    expect(fmtFightLbl(FIGHT_PROG_MIN)).toBe('張力・被拉遠');
+    expect(fmtFightLbl(-0.01)).toBe('張力・被拉遠');
+    expect(fmtFightLbl(0)).toBe('張力・拉近 0%');
+    expect(fmtFightLbl(FIGHT_P0)).toBe('張力・拉近 20%');
+    expect(fmtFightLbl(0.994)).toBe('張力・拉近 99%');
+    expect(fmtFightLbl(0.995)).toBe('張力・拉近 100%');
+    expect(fmtFightLbl(1)).toBe('張力・拉近 100%');
+    expect(fmtFightLbl(1.2)).toBe('張力・拉近 100%');
   });
 });
 

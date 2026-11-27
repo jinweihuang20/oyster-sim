@@ -11,7 +11,7 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyDur, fishDistNow, fmtDistM, fightDistM, hookFightMs, hookPower, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, canFishAt, newNoRodHint, stepNoRodHint, NO_ROD_HINT, type Gear, type ItemKey, type BaitKey, type LureKey, type NoRodHintSt } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyDur, fishDistNow, fmtDistM, fmtFightLbl, fightDistM, hookFightMs, hookPower, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, canFishAt, newNoRodHint, stepNoRodHint, NO_ROD_HINT, type Gear, type ItemKey, type BaitKey, type LureKey, type NoRodHintSt } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { castFlyPoint, castLine, CAST_LINE_SEGS, CAST_RELEASE_S, CAST_SETTLE_S, type CastLineOpt } from './castArc';
 import { makeFishMesh, FISH_TIER } from './fishModel';
@@ -1370,7 +1370,7 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
     ui.fill.style.transform = `scaleX(${v.toFixed(3)})`;
     ui.meter.classList.toggle('charge', ph === 'charge');
     ui.meter.classList.toggle('red', ph === 'fight' && v >= FISH.redT);
-    const lbl = ph === 'charge' ? `力道 ${Math.round(castDist(sm.power, sm.item))} m` : `張力・拉近 ${Math.round((sm.fight?.prog ?? 0) * 100)}%`;
+    const lbl = ph === 'charge' ? `力道 ${Math.round(castDist(sm.power, sm.item))} m` : fmtFightLbl(sm.fight?.prog ?? 0);
     if (ui.mLbl.textContent !== lbl) ui.mLbl.textContent = lbl;
     const run = ph === 'fight' && sm.fight?.lure ? sm.fight.run : 0;
     ui.dirL.classList.toggle('on', run > 0); ui.dirR.classList.toggle('on', run < 0);

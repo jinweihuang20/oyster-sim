@@ -515,6 +515,12 @@ export function fmtDistM(m: number | null): string {
   const v = Math.max(0, m);
   return v < 0.05 ? '0 m' : v < 10 ? `${v.toFixed(1)} m` : `${Math.round(v)} m`;
 }
+/** 拉魚 HUD 進度：prog 負數（魚把線拉出超過中魚點）顯示「被拉遠」，其餘夾在 0%～100%。旁邊的公尺數才是真實距離。 */
+export function fmtFightLbl(prog: number): string {
+  if (!(prog >= 0)) return '張力・被拉遠';
+  const pct = Math.max(0, Math.min(100, Math.round(prog * 100)));
+  return `張力・拉近 ${pct}%`;
+}
 
 // ---------------- 能釣的地方／沒釣竿提示 ----------------
 /** 岸上可釣魚區的東界（碼頭岸線 -24 再往內 0.5 m）；西岸淺灘 |z| 跟 PB.shoreZ 一樣是 11。 */
