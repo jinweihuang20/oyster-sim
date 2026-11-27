@@ -4,7 +4,7 @@
  */
 
 export type FishSyncMsg = {
-  /** 姿勢代碼（fishPose.ts）：0 沒在釣、1 持竿、2 蓄力、3 甩竿、4 等待、5 拉魚、6 捲線、7 秀漁獲；+16 路亞竿；拉魚時 +32＝往左拉、+64＝往右拉 */
+  /** 姿勢代碼（fishPose.ts）：0 沒在釣、1 持竿、2 蓄力、3 甩竿、4 等待、5 拉魚、6 捲線、7 秀漁獲；+16 路亞竿；拉魚／捲線時 +32＝往左拉、+64＝往右拉 */
   st: number;
   /** 在船上（dx/dz/yaw＝船身座標）；岸上（yaw＝世界面向） */
   boat: boolean;
@@ -105,6 +105,17 @@ export function normFishSync(x: any): (FishSyncMsg & { connId: string }) | null 
 export function remoteFightSide(steer: number, lure: boolean, wob: number, tn: number) {
   const s = lure ? Math.max(-1, Math.min(1, steer)) : 0;
   return wob * 1.4 * (0.5 + tn) * (1 - Math.abs(s)) - s * 2.2;
+}
+
+/** 收線左右帶竿時，線頭（假魚）跟著竿子往同一邊偏多少（公尺，+＝對方的右邊）：只是控線走位，比搏鬥的 2.2 m 小很多 */
+export const REEL_SIDE_M = 0.75;
+/**
+ * 別人收線（捲線 st 6）時線在水裡那頭往左右偏多少：路亞跟著帶竿方向慢慢偏過去（假魚往竿子那邊游），
+ * 線收得很短時偏少一點（cd＝線長）；垂釣不偏。
+ */
+export function remoteReelSide(steer: number, lure: boolean, cd = 99) {
+  if (!lure) return 0;
+  return Math.max(-1, Math.min(1, steer)) * REEL_SIDE_M * Math.max(0, Math.min(1, cd / 4));
 }
 
 /** 頭上的狀態牌：0 不顯示、1「釣魚中」、2「拉魚中！」、3「釣到了！」 */

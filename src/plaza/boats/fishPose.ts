@@ -24,7 +24,7 @@ export type FishPoseIn = {
   twitch: number;
   /** 抽竿次數（每按一次 +1；跟上次不一樣＝這幀抽竿）。路亞等待／捲線中才有動作 */
   jerk?: number;
-  /** 拉魚時搖桿左右 -1～1（往左拉＜0、往右拉＞0）；別人的沒有就當 0 */
+  /** 拉魚／收線時搖桿左右 -1～1（往左拉＜0、往右拉＞0）；別人的沒有就當 0 */
   steer?: number;
 };
 export type FishPoseSt = {
@@ -41,8 +41,10 @@ export type FishPoseSt = {
   brace: number; braceW: boolean;
   /** 抽竿動作開始後經過的秒數（<0＝不在抽）；jerkN＝看過的抽竿次數 */
   jerkT: number; jerkN: number;
-  /** 拉魚往左右拉（平滑後 -1～1）；rollW＝torso 側傾被這裡改過（收掉時還原一次） */
+  /** 拉魚／收線往左右拉（平滑後 -1～1）；rollW＝torso 側傾被這裡改過（收掉時還原一次） */
   steer: number; rollW: boolean;
+  /** 左右拉的幅度：0＝收線輕輕帶竿（STEER_REEL）、1＝中魚搏鬥（STEER）；平滑切換 */
+  steerK: number;
   prev: FishPhase;
   t: number;
 };
@@ -65,13 +67,22 @@ export function jerkEnv(u: number) {
 /** 幅度要從第三人稱、別人的畫面上一眼看得出來：竿尖左右掃約 2.5 m、上身側傾約 17°、胸口轉約 23° */
 export const STEER = { rate: 4.5, side: 0.8, hx: 0.18, roll: 0.3, twist: 0.4 };
 /** 拉魚左右拉疊上去的量（純數值，給 applyFishPose 和測試用）；s＝平滑後的 steer */
-export function steerPose(s: number) {
-  return { side: STEER.side * s, hx: STEER.hx * s, roll: -STEER.roll * s, twist: -STEER.twist * s };
+/**
+ * 收線（沒中魚）時左右帶竿：只是輕輕把竿子往旁邊帶、控線走位，不像搏鬥那樣整個人甩過去。
+ * 竿尖左右約 0.9 m、上身側傾約 5°、轉身約 7°（搏鬥的 1/3 左右）。
+ */
+export const STEER_REEL = { side: 0.28, hx: 0.06, roll: 0.09, twist: 0.12 };
+/** 左右拉疊上去的量（純數值，給 applyFishPose 和測試用）；s＝平滑後的 steer；k＝1 搏鬥、0 收線（中間＝平滑過渡） */
+export function steerPose(s: number, k = 1) {
+  const m = (a: number, b: number) => b + (a - b) * k;
+  return { side: m(STEER.side, STEER_REEL.side) * s, hx: m(STEER.hx, STEER_REEL.hx) * s, roll: -m(STEER.roll, STEER_REEL.roll) * s, twist: -m(STEER.twist, STEER_REEL.twist) * s };
 }
+/** 這個姿勢能不能左右拉：拉魚（搏鬥）或收線中（等待時按住收線） */
+export const steerablePhase = (inp: { phase: FishPhase; reel: boolean }) => inp.phase === 'fight' || (inp.phase === 'wait' && inp.reel);
 export const JERK_AMP = { pitch: 0.78, hy: 0.14, hz: 0.1, lean: 0.13, bend: 0.3, side: -0.04 };
 
 export function newFishPose(): FishPoseSt {
-  return { pitch: 0.6, side: 0.1, hx: 0.14, hy: 0.02, hz: -0.3, lean: 0, bend: 0, bendV: 0, crank: 0, castT: -1, hookT: -1, brace: 0, braceW: false, jerkT: -1, jerkN: 0, steer: 0, rollW: false, prev: 'off', t: 0 };
+  return { pitch: 0.6, side: 0.1, hx: 0.14, hy: 0.02, hz: -0.3, lean: 0, bend: 0, bendV: 0, crank: 0, castT: -1, hookT: -1, brace: 0, braceW: false, jerkT: -1, jerkN: 0, steer: 0, rollW: false, steerK: 1, prev: 'off', t: 0 };
 }
 
 export type FishPoseTg = { pitch: number; hx: number; hy: number; hz: number; lean: number; bend: number; side: number; brace: number };
@@ -153,8 +164,12 @@ export function stepFishPose(st: FishPoseSt, inp: FishPoseIn, dt: number) {
     }
   } else if (st.jerkT >= 0) { st.jerkT += dt; if (st.jerkT >= JERK_T) st.jerkT = -1; }
   if (inp.phase !== 'wait') st.jerkT = -1;
-  // 拉魚往左右拉：有重量地慢慢轉過去，離開拉魚就慢慢回正
-  const sg = inp.phase === 'fight' ? Math.max(-1, Math.min(1, inp.steer ?? 0)) : 0;
+  // 拉魚／收線往左右拉：有重量地慢慢轉過去，不能拉了就慢慢回正；幅度看是搏鬥（大）還是收線（小）
+  const sg = steerablePhase(inp) ? Math.max(-1, Math.min(1, inp.steer ?? 0)) : 0;
+  const kg = inp.phase === 'fight' ? 1 : inp.phase === 'wait' ? 0 : st.steerK;
+  st.steerK += (kg - st.steerK) * (1 - Math.exp(-dt * 3));
+  // 沒在左右拉（正中）幅度看不出來：直接換；快到了也直接對齊
+  if (st.steer === 0 || Math.abs(kg - st.steerK) < 0.002) st.steerK = kg;
   st.steer += (sg - st.steer) * (1 - Math.exp(-dt * STEER.rate));
   if (sg === 0 && Math.abs(st.steer) < 0.002) st.steer = 0;
   st.prev = inp.phase;
@@ -184,7 +199,7 @@ export function stepFishPose(st: FishPoseSt, inp: FishPoseIn, dt: number) {
   return st;
 }
 
-/** 拉魚往左拉（st bit 5）／往右拉（st bit 6）。舊客戶端只看 code & 15 跟 code & 16，不受影響。 */
+/** 拉魚／收線往左拉（st bit 5）／往右拉（st bit 6）。舊客戶端只看 code & 15 跟 code & 16，不受影響。 */
 export const FISH_STEER_LEFT = 32;
 export const FISH_STEER_RIGHT = 64;
 /** 超過這個才編碼成左／右，避免搖桿在中間附近來回送 */
@@ -192,17 +207,19 @@ export const FISH_STEER_DEAD = 0.25;
 export function fishSteerBits(steer: number) {
   return steer <= -FISH_STEER_DEAD ? FISH_STEER_LEFT : steer >= FISH_STEER_DEAD ? FISH_STEER_RIGHT : 0;
 }
-/** 拉魚時解出左右方向（-1 左、0 中、+1 右）；不是拉魚或左右同時設＝0 */
+/** 有左右 bit 的代碼：5 拉魚、6 捲線 */
+const steerCode = (b: number) => b === 5 || b === 6;
+/** 拉魚／捲線時解出左右方向（-1 左、0 中、+1 右）；其他姿勢或左右同時設＝0 */
 export function fishSteerOf(code: number): -1 | 0 | 1 {
-  if ((code & 15) !== 5) return 0;
+  if (!steerCode(code & 15)) return 0;
   const L = (code & FISH_STEER_LEFT) !== 0, R = (code & FISH_STEER_RIGHT) !== 0;
   return L === R ? 0 : L ? -1 : 1;
 }
 
-/** 線上同步用的姿勢代碼：0 沒在釣、1 持竿、2 蓄力、3 甩竿、4 等待、5 拉魚、6 捲線、7 秀漁獲；+16＝路亞竿；拉魚時 +32＝往左拉、+64＝往右拉 */
+/** 線上同步用的姿勢代碼：0 沒在釣、1 持竿、2 蓄力、3 甩竿、4 等待、5 拉魚、6 捲線、7 秀漁獲；+16＝路亞竿；拉魚／捲線時 +32＝往左拉、+64＝往右拉 */
 export function fishPoseCode(phase: FishPhase, reel: boolean, lure: boolean, steer = 0) {
   const b = phase === 'off' ? 0 : phase === 'hold' ? 1 : phase === 'charge' ? 2 : phase === 'cast' ? 3 : phase === 'fight' ? 5 : phase === 'show' ? 7 : reel ? 6 : 4;
-  return b === 0 ? 0 : b + (lure ? 16 : 0) + (b === 5 ? fishSteerBits(steer) : 0);
+  return b === 0 ? 0 : b + (lure ? 16 : 0) + (steerCode(b) ? fishSteerBits(steer) : 0);
 }
 export function fishPoseDecode(code: number): FishPoseIn {
   const lure = (code & 16) !== 0, b = code & 15;
@@ -246,8 +263,8 @@ export function applyFishPose(rig: PlayerRig, st: FishPoseSt, rod: Rod, inp: Fis
   // 保險：竿子一定看得到（舊版合併人物網格會把它藏起來）
   for (const c of rod.g.children) if (!c.visible) c.visible = true;
   // 竿方向：仰角 pitch、往右外側偏 side
-  // 拉魚往左右拉：竿子往那邊掃、右手跟過去（左手握在竿上會跟著）
-  const sp = steerPose(st.steer), hx = st.hx + sp.hx;
+  // 拉魚／收線往左右拉：竿子往那邊掃、右手跟過去（左手握在竿上會跟著）
+  const sp = steerPose(st.steer, st.steerK), hx = st.hx + sp.hx;
   _dir.set(st.side + sp.side, Math.sin(st.pitch), -Math.cos(st.pitch)).normalize();
   // 竿彎的方向＝被線拉過去的那邊：線從竿尖往前下方的水面（torso 座標約 (0, -0.35, -1)），去掉沿竿分量。
   // 不要用「世界往下」：揚竿把竿子舉過頭（pitch > 90°）時，往下會變成往人身後，竿子反彎到背後

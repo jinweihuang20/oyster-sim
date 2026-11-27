@@ -13,11 +13,11 @@ import { makePlayerAvatar } from '../../dm/character';
 import { makeMeshHelpers } from '../../dm/mesh';
 
 const dt = 1 / 60;
-/** 跟伺服器 PlazaWorld.FishSyncClamp 一樣：只有拉魚（5）才留左右 bit，兩個都設＝都不留 */
+/** 跟伺服器 PlazaWorld.FishSyncClamp 一樣：拉魚（5）、捲線（6）才留左右 bit，兩個都設＝都不留 */
 const serverClamp = (st: number) => {
   const b = Math.min(st & 15, 7); if (!b) return 0;
   const L = (st & 32) !== 0, R = (st & 64) !== 0;
-  return b | (st & 16) | (b === 5 && L !== R ? (L ? 32 : 64) : 0);
+  return b | (st & 16) | ((b === 5 || b === 6) && L !== R ? (L ? 32 : 64) : 0);
 };
 /** 自己這邊：鍵盤／搖桿 → 送出去的 st */
 const localSt = (keys: string[], joyX = 0, lure = true, reel = true) => fishPoseCode('fight', reel, lure, steerDirFromPad(c => keys.includes(c), joyX));

@@ -24,7 +24,7 @@ import { DECK, FISH, chargePower, castFlyPoint, castFlyDur, deckStart, deckClamp
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { CAST_RELEASE_S } from './castArc';
 import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWorld, jerkFromSync, type FishPoseSt, type FishPoseIn } from './fishPose';
-import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishSyncLost, fishBadgeOf, fishLineOut, fishLineEnd, remoteFightSide, type FishSyncMsg } from './fishSync';
+import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishSyncLost, fishBadgeOf, fishLineOut, fishLineEnd, remoteFightSide, remoteReelSide, type FishSyncMsg } from './fishSync';
 import { makeFishMesh } from './fishModel';
 import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare, type DriftTide, type DriftPull } from './boatNet';
 
@@ -1085,6 +1085,10 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
       ex += Math.cos(heading) * side; ez -= Math.sin(heading) * side;
       f.splT -= dt;
       if (f.splT <= 0) { f.splT = 0.5 + Math.random() * 0.4; splash(ex, ez, 0.15 + 0.3 * f.tnS); }
+    } else if ((f.st & 15) === 6 || (f.st & 15) === 4) {
+      // 收線左右帶竿：假魚跟著竿子輕輕偏過去（比拉魚的 2.2 m 小很多，看起來是在控線不是在搏鬥）；放開收線就跟著慢慢回正
+      const side = remoteReelSide(f.pose.steer, (f.st & 16) !== 0, f.cdS);
+      ex += Math.cos(heading) * side; ez -= Math.sin(heading) * side;
     }
     let wy = PB.waterY + 0.03 + Math.sin(t * 2.2 + f.stT) * 0.015;
     if ((f.st & 15) === 3) {

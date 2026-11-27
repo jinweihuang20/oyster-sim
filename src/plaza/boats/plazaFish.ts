@@ -17,8 +17,8 @@ import { castFlyPoint, castLine, CAST_LINE_SEGS, CAST_RELEASE_S, CAST_SETTLE_S, 
 import { makeFishMesh, FISH_TIER } from './fishModel';
 import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
-import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, type FishPoseIn, type FishPhase } from './fishPose';
-import type { FishSyncMsg } from './fishSync';
+import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, steerablePhase, type FishPoseIn, type FishPhase } from './fishPose';
+import { remoteReelSide, type FishSyncMsg } from './fishSync';
 import { bindReelFeel, makeReelClickSfx, reelPressLabel, steerDirFromPad, type ReelFeel, type ReelSfxOut } from './fishReelFeel';
 
 export type FishBoat = { id: number; x: number; z: number; h: number; v: number };
@@ -89,8 +89,8 @@ let dexView: FishDexView | null = null;
 let dex = new Map<string, { kg: number; n: number }>();
 /** jerkN＝這次登入抽竿幾下（人物抽竿動作、送給別人看） */
 let jerkN = 0;
-/** 拉魚時搖桿左右（給人物動作）；runS＝魚往左右衝（平滑，線在水裡的那頭跟著偏） */
-let steerIn = 0, runS = 0;
+/** 拉魚／收線時搖桿左右（給人物動作）；runS＝魚往左右衝（平滑，線在水裡的那頭跟著偏）；reelS＝收線左右帶竿（平滑，假魚跟著輕輕偏） */
+let steerIn = 0, runS = 0, reelS = 0;
 /** 中魚那一刻魚離人幾公尺（拉扯距離從這裡開始算） */
 let fightD0 = 8;
 /** 拉扯中魚現在多遠（線、同步都用這個；線最多畫到 44 m，跟伺服器同步上限一樣） */
@@ -540,6 +540,7 @@ function drawGfx(dt: number) {
   if (!gfx || !C) return;
   const ph = sm.phase;
   if (!((ph === 'fight' || ph === 'land') && sm.fight)) runS = 0;
+  if (phaseOf() !== 'wait') reelS = 0;
   gfx.g.visible = sm.phase !== 'off';
   if (!gfx.g.visible) return;
   // 線從竿尖出去（竿子模型由 fishPostPose 擺好）
@@ -571,6 +572,12 @@ function drawGfx(dt: number) {
       gfx.shadow.position.set(castX + 0.3, wy - 0.01, castZ + 0.2);
     } else {
       const lp = lurePos(); const d = sm.lure.depth;
+      // 收線時左右帶竿：假魚跟著竿子輕輕往那邊偏（跟別人畫面同一個量，比拉魚小很多）
+      const rTg = reelHeld && phaseOf() === 'wait' ? steerIn : 0;
+      reelS += (rTg - reelS) * (1 - Math.exp(-dt * 2.5));
+      if (rTg === 0 && Math.abs(reelS) < 0.002) reelS = 0;
+      const rs = remoteReelSide(reelS, true, sm.lure.dist);
+      lp.x += Math.cos(castH) * rs; lp.z -= Math.sin(castH) * rs;
       _end.set(lp.x, wy - d * 0.5, lp.z);
       bobOn = d < 0.25;
       if (sm.lure.follow) shTarget = 0.38;
@@ -672,7 +679,8 @@ function fillPoseIn() {
   poseIn.tension = sm.fight?.ten ?? 0;
   poseIn.twitch = sm.phase === 'nibble' ? Math.max(0.4, sm.twitch) : sm.phase === 'sink' ? 1 : 0;
   poseIn.jerk = jerkN;
-  poseIn.steer = poseIn.phase === 'fight' ? steerIn : 0;
+  // 拉魚（搏鬥）或收線中都能左右拉；收線時動作小（fishPose 的 STEER_REEL）
+  poseIn.steer = steerablePhase(poseIn) ? steerIn : 0;
   return poseIn;
 }
 /**
