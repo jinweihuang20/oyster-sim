@@ -23,6 +23,7 @@ import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, je
 import { remoteReelSide, type FishSyncMsg } from './fishSync';
 import { ReplayVideoRec, browserVideoDeps, canRecordVideo, fmtMB, loadVideoQuality, saveVideoQuality, VIDEO_QUALITY, type VideoQuality } from './fishReplayRecord';
 import { RF, RF_STRIDE, RP_PHASE, RFISH, REPLAY_TAIL_S, newReplayRec, recStart, recStop, recReset, recTick, recPush, recSplash, recClip, clipSample, clipSplashes, newReplayPlay, playStep, playSeek, playToggle, playRestart, playSpeed, fmtReplayT, orbitStart, orbitDist, orbitDrag, orbitZoom, orbitPos, rpPhaseCode, type ReplayClip, type ReplayMeta, type ReplayPlay, type Orbit } from './fishReplay';
+import { newLineW, lineWStart, lineWDist, lineWYaw, takeSlack, stepLineW, dragLure, newFightW, fightWStart, stepFightW, FW } from './fishWorld';
 import { bindReelFeel, makeReelClickSfx, reelPressLabel, steerDirFromPad, type ReelFeel, type ReelSfxOut } from './fishReelFeel';
 
 export type FishBoat = { id: number; x: number; z: number; h: number; v: number };
@@ -109,8 +110,28 @@ let steerIn = 0, runS = 0, reelS = 0;
 /** 中魚那一刻魚離人幾公尺（拉扯距離從這裡開始算） */
 let fightD0 = 8;
 /** 拉扯中魚現在多遠（線、同步都用這個；線最多畫到 44 m，跟伺服器同步上限一樣） */
-const fightM = () => (sm.fight ? fightDistM(sm.fight.prog, fightD0) : 0);
-const lineNow = () => { const o = origin(); return sm.lure ? sm.lure.dist : Math.hypot(castX - o.x, castZ - o.z); };
+const fightM = () => (sm.fight ? (fw.on ? lineWDist(fw, ancX, ancZ) : fightDistM(sm.fight.prog, fightD0)) : 0);
+/** 浮標／假魚現在離人多遠（真實水平距離；CR-31） */
+const lineNow = () => { if (lw.on) return lineWDist(lw, ancX, ancZ); const o = origin(); return sm.lure ? sm.lure.dist : Math.hypot(castX - o.x, castZ - o.z); };
+/**
+ * CR-31 真實世界釣線：lw＝浮標／假魚在水裡的世界座標（線長：浮標 lw.len、假魚 sm.lure.dist）；fw＝上鉤的魚的世界座標。
+ * 錨點 (ancX, ancZ)＝現在人在哪（船在開就跟著船），每幀 tickFish 更新；收線往「現在」的竿子拉。
+ */
+const lw = newLineW(), fw = newFightW();
+let ancX = 0, ancZ = 0, wakeT = 0;
+const _anc = new THREE.Vector3();
+function anchorNow() {
+  const rig = C?.me();
+  if (rig) { rig.outer.getWorldPosition(_anc); ancX = _anc.x; ancZ = _anc.z; }
+  else if (C) { const o = origin(); ancX = o.x; ancZ = o.z; }
+}
+/** 線頭那邊（浮標／假魚／魚）在人的哪個方向（世界 h）；還沒落水＝拋竿方向 */
+function aimH() {
+  const ph = sm.phase;
+  if ((ph === 'fight' || ph === 'land') && fw.on) return lineWYaw(fw, ancX, ancZ, castH);
+  if ((ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook') && lw.on) return lineWYaw(lw, ancX, ancZ, castH);
+  return castH;
+}
 let reelHeld = false, jerkQ = false, act = false, castH = 0, castX = 0, castZ = 0, castDst = 8, ox = 0, oz = 0;
 let reelFeel: ReelFeel | null = null;
 let reelSfx = makeReelClickSfx(() => { try { return C?.sfxBus?.() ?? null; } catch { return null; } });
@@ -351,6 +372,9 @@ function releaseCast() {
     castX = num(r.x, castX); castZ = num(r.z, castZ); castDst = num(r.dist, castDst);
     // 竿子甩到放手點才讓線頭飛出去（伺服器回得快就等一下），落水＝拋物線碰到水面那一幀（drawGfx）
     sm.castOk(num(r.sid), castDst, castFlyDur(castDst), CAST_RELEASE_S - (t - relT));
+    // 落點＝真的世界座標；線長＝拋出去的距離（之後船開遠就沿線拖、收線往現在的竿子拉）
+    if (sm.phase === 'fly') { anchorNow(); lineWStart(lw, castX, castZ, ancX, ancZ, castDst); if (sm.lure) sm.lure.dist = lw.len; } else lw.on = false;
+    fw.on = false;
   });
 }
 /** 放棄伺服器那邊掛著的上一竿（斷線時丟掉的那條魚）；成功才清旗標 */
@@ -395,7 +419,12 @@ async function doReel() {
     if (hooked) ensureFishMesh(hooked.sp, hooked.kg);
     try { navigator.vibrate?.(70); } catch { /* 不支援 */ }
     C.sfx('hit');
+    anchorNow();
     fightD0 = Math.max(1.5, lineNow());
+    // 魚從線頭那個世界座標開始拉（太近就往外推到 1.5 m）
+    { const r0 = lw.on ? lineWDist(lw, ancX, ancZ) : 0; const h0 = aimH(); const k = r0 > 1e-3 ? fightD0 / r0 : 0;
+      const x0 = r0 > 1e-3 ? ancX + (lw.x - ancX) * k : ancX - Math.sin(h0) * fightD0, z0 = r0 > 1e-3 ? ancZ + (lw.z - ancZ) * k : ancZ - Math.cos(h0) * fightD0;
+      fightWStart(fw, x0, z0, ancX, ancZ, fightD0); runS = 0; }
     // 拉多久＝實際中魚距離 ÷ 收線速度（伺服器回 mps；舊伺服器沒有就照公斤數算，不比它的最短時間快）
     const mps = num(g(r, 'mps'), 0);
     const power = hookPower(hooked?.kg ?? 1, hooked?.tier ?? 0, num(r.power, 0.3), mps > 0 ? mps : undefined);
@@ -552,11 +581,17 @@ export function tickFish(dt: number, cam: THREE.Camera) {
     const troll = !!b && sm.gear === 'lure' && trollOk(C.mySeat(), sm.item, b.v);
     // 抽竿（路亞等待／捲線中才算）：人物甩一下竿
     if (jerkQ && sm.lure && sm.phase === 'wait') jerkN++;
-    const ev = sm.tick(dt, { reel: reelHeld, jerk: jerkQ, dir, troll });
-    if (jerkQ && sm.lure && gfx) C.splash(lurePos().x, lurePos().z, sm.item === 'popper' ? 0.3 : 0.12);
+    // CR-31：收線／抽竿前先把鬆掉的線捲起來（假魚往現在的竿子拉，不是拋竿的位置）
+    anchorNow();
+    const lureW = sm.phase === 'wait' && !!sm.lure && lw.on;
+    if (lureW && (reelHeld || jerkQ) && !troll) sm.lure!.dist = takeSlack(sm.lure!.dist, lw, ancX, ancZ);
+    const len0 = sm.lure?.dist ?? 0;
+    const ev = sm.tick(dt, { reel: reelHeld, jerk: jerkQ, dir, troll, drag: lureW ? lw.drag : 0 });
+    stepWorld(dt, len0, troll);
+    if (jerkQ && sm.lure && gfx) C.splash(lw.on ? lw.x : castX, lw.on ? lw.z : castZ, sm.item === 'popper' ? 0.3 : 0.12);
     jerkQ = false;
     reelFeel?.tick();
-    if (ev === 'sink') { C.sfx('warn'); C.splash(castX, castZ, 0.2); }
+    if (ev === 'sink') { C.sfx('warn'); C.splash(lw.on ? lw.x : castX, lw.on ? lw.z : castZ, 0.2); }
     else if (ev === 'missed') void doReel();
     else if (ev === 'back') { void C.net()?.fish('FishReel', sm.sid); sm.reset(); }
     else if (ev === 'landed' || ev === 'snap' || ev === 'unhook') void endFight(ev);
@@ -589,11 +624,26 @@ async function roll() {
   if (r.bite) sm.bite(num(r.sinkMs));
 }
 
-function lurePos() {
-  const b = C?.myBoat();
-  if (sm.lure && b && sm.gear === 'lure' && trollOk(C!.mySeat(), sm.item, b.v)) return { x: b.x + Math.sin(b.h) * 12, z: b.z + Math.cos(b.h) * 12 };
-  const d = sm.lure?.dist ?? castDst;
-  return { x: ox - Math.sin(castH) * d, z: oz - Math.cos(castH) * d };
+/**
+ * CR-31 每幀真實世界釣線（tickFish 的 sm.tick 之後）：
+ * 等魚／咬餌＝浮標／假魚夾在線長內（線鬆留原地、船開遠沿線拖、收線往現在的竿子拉；船拖快了深的假魚被抬高一點）；
+ * 拉魚＝魚在世界座標裡衝，船開走拉出線＋張力、船開過去線鬆距離變短；線鬆時魚到竿子邊就算拉上來。
+ */
+function stepWorld(dt: number, len0: number, troll: boolean) {
+  const ph = sm.phase;
+  if ((ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook') && lw.on) {
+    const s = sm.lure;
+    if (s) {
+      const v = stepLineW(lw, s.dist, ancX, ancZ, dt, Math.max(0, len0 - s.dist));
+      if (ph === 'wait' && isLure(sm.item)) dragLure(s, sm.item, v, dt, troll);
+    } else stepLineW(lw, lw.len, ancX, ancZ, dt);
+    // 被船拖著走：後面冒一串小水花
+    if (lw.drag > FW.wakeV && ffx) { wakeT -= dt; if (wakeT <= 0) { wakeT = FX.bubbleGap * 1.6; ffx.bubble(lw.x, PB.waterY + 0.04, lw.z); } }
+  } else if (ph === 'fight' && sm.fight && fw.on) {
+    const f = sm.fight;
+    runS += (f.run - runS) * (1 - Math.exp(-dt * 2.5));
+    if (stepFightW(fw, f, ancX, ancZ, runS * 2.2 * Math.min(1, f.t), dt) === 'landed') { sm.phase = 'land'; void endFight('landed'); }
+  }
 }
 function drawGfx(dt: number) {
   ffx?.tick(dt);
@@ -616,7 +666,7 @@ function drawGfx(dt: number) {
   const wy = PB.waterY + 0.04;
   let lineOn = true, bobOn = false, shTarget = 0;
   lineOpt.wy = wy; lineOpt.k = 1;
-  _land.set(castX, wy, castZ);
+  if (lw.on && ph !== 'fly') _land.set(lw.x, wy, lw.z); else _land.set(castX, wy, castZ);
   if (ph === 'fly') {
     // 竿子還沒甩到放手點：線頭貼在竿尖（放手點跟著竿尖走）；之後沿拋物線飛到落點
     const span = Math.max(0.05, sm.flyDur - sm.flyDelay);
@@ -629,39 +679,42 @@ function drawGfx(dt: number) {
   } else if (ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook') {
     if (sm.gear === 'float' || !sm.lure) {
       const dip = ph === 'sink' || (ph === 'hook' && sm.twitch >= 1) ? -0.16 : -sm.twitch * 0.06;
-      _end.set(castX, wy + Math.sin(t * 2.2) * 0.02 + dip, castZ);
+      _end.set(lw.on ? lw.x : castX, wy + Math.sin(t * 2.2) * 0.02 + dip, lw.on ? lw.z : castZ);
       bobOn = ph !== 'sink';
       if (ph === 'nibble' || ph === 'sink') shTarget = 0.35;
-      gfx.shadow.position.set(castX + 0.3, wy - 0.01, castZ + 0.2);
+      gfx.shadow.position.set(_end.x + 0.3, wy - 0.01, _end.z + 0.2);
     } else {
-      const lp = lurePos(); const d = sm.lure.depth;
+      const d = sm.lure.depth;
+      let lpx = lw.on ? lw.x : castX, lpz = lw.on ? lw.z : castZ;
+      const ah = aimH();
       // 收線時左右帶竿：假魚跟著竿子輕輕往那邊偏（跟別人畫面同一個量，比拉魚小很多）
       const rTg = reelHeld && phaseOf() === 'wait' ? steerIn : 0;
       reelS += (rTg - reelS) * (1 - Math.exp(-dt * 2.5));
       if (rTg === 0 && Math.abs(reelS) < 0.002) reelS = 0;
       const rs = remoteReelSide(reelS, true, sm.lure.dist);
-      lp.x += Math.cos(castH) * rs; lp.z -= Math.sin(castH) * rs;
-      _end.set(lp.x, wy - d * 0.5, lp.z);
+      lpx += Math.cos(ah) * rs; lpz -= Math.sin(ah) * rs;
+      _end.set(lpx, wy - d * 0.5, lpz);
       bobOn = d < 0.25;
       if (sm.lure.follow) shTarget = 0.38;
       // 船拖裙尾假餌：拖釣或快收時，假魚後面拉出一條氣泡
       if (sm.item === 'trollskirt' && ffx) {
         const b = C.myBoat();
-        if ((b && trollOk(C.mySeat(), sm.item, b.v)) || sm.lure.spd >= 1.6) { bubbleT -= dt; if (bubbleT <= 0) { bubbleT = FX.bubbleGap; ffx.bubble(lp.x, wy, lp.z); } }
+        if ((b && trollOk(C.mySeat(), sm.item, b.v)) || sm.lure.spd >= 1.6) { bubbleT -= dt; if (bubbleT <= 0) { bubbleT = FX.bubbleGap; ffx.bubble(lpx, wy, lpz); } }
       }
       // 魚影跟在假魚後面一點
-      const bx = lp.x - ox, bz = lp.z - oz, bl = Math.hypot(bx, bz) || 1;
-      gfx.shadow.position.set(lp.x + bx / bl * 1.1, wy - 0.01, lp.z + bz / bl * 1.1);
+      const bx = lpx - ancX, bz = lpz - ancZ, bl = Math.hypot(bx, bz) || 1;
+      gfx.shadow.position.set(lpx + bx / bl * 1.1, wy - 0.01, lpz + bz / bl * 1.1);
       gfx.shadow.rotation.z = Math.atan2(bx, bz);
     }
   } else if ((ph === 'fight' || ph === 'land') && sm.fight) {
     const f = sm.fight;
-    const d = Math.min(44, Math.max(1.5, fightM()));
-    // 魚往左右衝：落點慢慢偏過去（不要一下跳過去）
-    runS += (f.run - runS) * (1 - Math.exp(-dt * 2.5));
-    const side = runS * 2.2 * Math.min(1, f.t);
-    const sx = Math.cos(castH), sz = -Math.sin(castH);
-    const x = ox + fx * d + sx * side + Math.sin(t * 5) * 0.2, z = oz + fz * d + sz * side + Math.cos(t * 4) * 0.2;
+    // CR-31：魚在真的世界座標（tickFish 的 stepWorld 算好：往左右衝、船開走被拖、收線往現在的竿子拉）；這裡只加一點晃動
+    if (!fw.on) fightWStart(fw, ancX + fx * fightD0, ancZ + fz * fightD0, ancX, ancZ, fightD0);
+    const rr = lineWDist(fw, ancX, ancZ) || 1e-3;
+    const d = Math.min(44, Math.max(1.5, rr));
+    const ux = (fw.x - ancX) / rr, uz = (fw.z - ancZ) / rr;
+    const sx = -uz, sz = ux;
+    const x = fw.x + Math.sin(t * 5) * 0.2, z = fw.z + Math.cos(t * 4) * 0.2;
     _end.set(x, wy, z);
     fightX = x; fightZ = z;
     // 大軟絲／花枝：拉扯時每隔一下噴墨
@@ -670,7 +723,7 @@ function drawGfx(dt: number) {
     if (fishMesh) {
       // 真的魚在線頭的水裡：遠＝沉在水下、近＝浮上來翻騰，最後幾公尺一下一下破水；魚頭朝人、往衝的那邊甩
       const dep = fightFishDepth(d, f.ten, t);
-      const yaw = fightFishYaw(-fx, -fz, runS, t, f.power);
+      const yaw = fightFishYaw(-ux, -uz, runS, t, f.power);
       const pitch = dep < 0.02 ? Math.min(0.5, 0.08 + (0.02 - dep) * 2.6) : 0.06;
       _mouth.x = x; _mouth.y = PB.waterY - dep; _mouth.z = z;
       fishCenterFromMouth(_mouth, yaw, pitch, fishLen, _ctr);
@@ -1175,9 +1228,10 @@ export function fishSyncFill(out: FishSyncMsg) {
   if (sm.phase === 'off') { out.st = 0; out.ch = 0; out.cd = 0; out.tn = 0; out.sp = ''; out.kg = 0; return out; }
   fillPoseIn();
   out.st = fishPoseCode(poseIn.phase, poseIn.reel, poseIn.lure, poseIn.steer);
-  out.ch = +castH.toFixed(2);
+  // 線頭的真實方向／距離（船在開也對：別人畫面線從人拉到同一個地方）；甩竿中＝拋竿方向、落點距離
+  out.ch = +aimH().toFixed(2);
   const ph = sm.phase;
-  const d = (ph === 'fight' || ph === 'land') && sm.fight ? Math.min(44, Math.max(1.5, fightM())) : sm.lure ? sm.lure.dist : castDst;
+  const d = (ph === 'fight' || ph === 'land') && sm.fight ? Math.min(44, Math.max(1.5, fightM())) : ph === 'fly' || ph === 'cast' ? castDst : lw.on ? lineNow() : sm.lure ? sm.lure.dist : castDst;
   // 甩竿一放開就送落點距離（別人畫面的線頭才會跟自己一樣飛到同一個地方）
   out.cd = sm.lineOut || ph === 'fight' || ph === 'land' || ph === 'cast' || ph === 'fly' ? Math.round(d * 2) / 2 : 0;
   // 拉魚＝張力；路亞等待／捲線＝抽竿計數（別人看到抽竿動作；伺服器 tn 照樣夾 0～1，不用改）
@@ -1196,7 +1250,7 @@ export function fishFaceYaw(): number | null {
   const ph = sm.phase;
   if (ph === 'off') return null;
   if (faceTest != null) return faceTest;
-  if (sm.lineOut || ph === 'fight' || ph === 'land' || ph === 'cast' || ph === 'fly') return castH;
+  if (sm.lineOut || ph === 'fight' || ph === 'land' || ph === 'cast' || ph === 'fly') return aimH();
   if (ph === 'charge' && camRef) { camRef.getWorldDirection(_dir); return yawOf(_dir.x, _dir.z); }
   return null;
 }
@@ -1285,7 +1339,9 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
   if (ui.hudTx.textContent !== main) ui.hudTx.textContent = main;
   // 現在幾公尺：一直顯示（蓄力、飛出去、等魚、拉魚都即時變）
   const o = origin();
-  const dm = fmtDistM(fishDistNow({ phase: ph, power: sm.power, item: sm.item, castDst, flyT: sm.flyT, flyDur: sm.flyDur, lureDist: sm.lure ? sm.lure.dist : null, floatDist: Math.hypot(castX - o.x, castZ - o.z), prog: sm.fight?.prog ?? 0, fightD0 }));
+  // CR-31：剩餘距離＝現在的人到浮標／假魚／魚的真實水平距離（船在開也對）
+  const real = lw.on && (ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook') ? lineNow() : null;
+  const dm = fmtDistM(fishDistNow({ phase: ph, power: sm.power, item: sm.item, castDst, flyT: sm.flyT, flyDur: sm.flyDur, lureDist: real ?? (sm.lure ? sm.lure.dist : null), floatDist: Math.hypot(castX - o.x, castZ - o.z), prog: sm.fight?.prog ?? 0, fightD0, fightM: fw.on && sm.fight ? fightM() : undefined }));
   if (ui.hudDist.textContent !== dm) { ui.hudDist.textContent = dm; ui.hudDist.classList.toggle('on', !!dm); }
   const troll = !!b && lure && trollOk(C.mySeat(), sm.item, b.v);
   const tip = ph === 'idle' ? (C.mySeat() === 0 && b && Math.abs(b.v) > FISH.driverMaxV ? '先停船才能拋竿' : '按住「拋竿」蓄力，放開拋出去')
@@ -1400,6 +1456,6 @@ export const fishDbg = {
     showCatchCard(f);
     return 'ok';
   },
-  fakeFight(power = 0.6, ms = 10000, lure = true, sp = '') { const o0 = origin(); ox = o0.x; oz = o0.z; sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; fightD0 = castDst; sm.hooked(power, ms, fightD0); recStart(rec); recEndT = -1; if (sp) { hooked = { sp, name: sp, tier: 0, kg: 1.2, val: 0 }; ensureFishMesh(sp, 1.2); } document.body.classList.add('fishFight'); return sm.phase; },
+  fakeFight(power = 0.6, ms = 10000, lure = true, sp = '') { const o0 = origin(); ox = o0.x; oz = o0.z; sm.phase = 'hook'; sm.gear = lure ? 'lure' : 'float'; fightD0 = castDst; sm.hooked(power, ms, fightD0); anchorNow(); fightWStart(fw, ancX - Math.sin(castH) * fightD0, ancZ - Math.cos(castH) * fightD0, ancX, ancZ, fightD0); runS = 0; recStart(rec); recEndT = -1; if (sp) { hooked = { sp, name: sp, tier: 0, kg: 1.2, val: 0 }; ensureFishMesh(sp, 1.2); } document.body.classList.add('fishFight'); return sm.phase; },
 };
 export type { BaitKey, LureKey };

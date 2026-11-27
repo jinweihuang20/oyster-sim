@@ -183,7 +183,8 @@ export function rhythmOk(item: LureKey, s: LureSt) {
 }
 
 /** 路亞每幀：reel＝按住收線、jerk＝這幀抽竿；troll＝在拖釣（假魚跟在船後、自動算節奏對）。回傳 true＝假魚收回來了 */
-export function stepLure(s: LureSt, item: LureKey, reel: boolean, jerk: boolean, dt: number, troll = false): boolean {
+/** drag＝被船拖著在水裡走的速度（m/s，CR-31）：跟收線一樣算假魚在游（節奏判斷的速度取兩者大的） */
+export function stepLure(s: LureSt, item: LureKey, reel: boolean, jerk: boolean, dt: number, troll = false, drag = 0): boolean {
   if (troll) {
     s.depth = ema(s.depth, item === 'jig' ? 0.5 : item === 'trollskirt' ? 0.08 : item === 'vib' ? 0.45 : item === 'deepcrank' ? 0.55 : 0.2, dt, 1);
     s.okT += dt; s.follow = s.okT >= FISH.followS;
@@ -205,7 +206,7 @@ export function stepLure(s: LureSt, item: LureKey, reel: boolean, jerk: boolean,
     s.depth = Math.max(0, Math.min(1, s.depth));
   }
   s.hold = ema(s.hold, reel ? 1 : 0, dt, 2);
-  s.spd = ema(s.spd, v, dt, 1.2);
+  s.spd = ema(s.spd, Math.max(v, drag), dt, 1.2);
   // 抽竿次數：每次 +1，大約 3 秒衰減（≈ 最近 3 秒抽了幾下）
   s.jerk = s.jerk * Math.exp(-dt / 3) + (jerk ? 1 : 0);
   if (rhythmOk(item, s)) s.okT += dt; else s.okT = Math.max(0, s.okT - dt * 2);
@@ -376,13 +377,13 @@ export class FishSM {
   /** 收回來／太早／太慢／拉扯結束：回到準備好 */
   reset() { if (this.phase !== 'off') this.phase = 'idle'; this.lure = null; this.fight = null; this.twitch = 0; }
   /** 每幀；reel／jerk／dir＝玩家輸入。回傳事件（UI 處理） */
-  tick(dt: number, inp: { reel: boolean; jerk: boolean; dir: number; troll?: boolean }, rnd: () => number = Math.random): FishEv {
+  tick(dt: number, inp: { reel: boolean; jerk: boolean; dir: number; troll?: boolean; drag?: number }, rnd: () => number = Math.random): FishEv {
     this.t += dt;
     switch (this.phase) {
       case 'charge': this.chargeT += dt; this.power = chargePower(this.chargeT); return null;
       case 'fly': this.flyT -= dt; if (this.flyT <= 0) this.phase = 'wait'; return null;
       case 'wait':
-        if (this.lure && isLure(this.item) && stepLure(this.lure, this.item, inp.reel, inp.jerk, dt, inp.troll)) return 'back';
+        if (this.lure && isLure(this.item) && stepLure(this.lure, this.item, inp.reel, inp.jerk, dt, inp.troll, inp.drag)) return 'back';
         return null;
       case 'nibble':
         this.twitch = Math.max(0, Math.sin(this.t * 11)) * 0.6;
@@ -480,7 +481,7 @@ export function standCam(x: number, y: number, z: number, camYaw: number, pos: V
  * 站在甲板上該面向哪（船身座標，0＝船頭）。
  * 收線中（路亞按住收線、或拉魚按住收線）＝跟著鏡頭水平方向轉；走路＝走的方向；
  * 剛收過線放開＝維持目前朝向（不瞬間轉回原來的拋竿方向）；線在水裡／蓄力＝那個世界方向；站著不動＝鏡頭方向。
- * 假魚／魚在水裡的位置仍依拋竿方向，不跟人一起轉。
+ * 假魚／魚在水裡是真的世界座標（CR-31，fishWorld.ts），不跟人一起轉。
  */
 export type StandWantYawOpts = { reeling?: boolean; holdYaw?: number | null };
 export function standWantYaw(fishYaw: number | null, moving: boolean, walkYaw: number, camYaw: number, boatH: number, opts?: StandWantYawOpts) {
@@ -495,13 +496,13 @@ export function standWantYaw(fishYaw: number | null, moving: boolean, walkYaw: n
  * HUD 一直顯示的「現在幾公尺」：蓄力＝這個力道會拋多遠、甩出去＝線頭飛到哪、等魚／咬餌＝浮標或假魚離人多遠（船漂、收線、抽竿都即時變）、
  * 拉魚＝魚還有多遠（拉近 prog 到 1 就是 0 m；大魚把線拉出去會比中魚時還遠）。沒在用線（準備好、沒在釣）回 null。
  */
-export type FishDistIn = { phase: Phase; power: number; item: ItemKey; castDst: number; flyT: number; flyDur?: number; lureDist: number | null; floatDist: number; prog: number; fightD0: number };
+export type FishDistIn = { phase: Phase; power: number; item: ItemKey; castDst: number; flyT: number; flyDur?: number; lureDist: number | null; floatDist: number; prog: number; fightD0: number; /** 拉魚時魚的真實距離（CR-31，船在開也對）；沒給就照拉扯進度算 */ fightM?: number };
 export function fishDistNow(s: FishDistIn): number | null {
   switch (s.phase) {
     case 'charge': case 'cast': return castDist(s.power, s.item);
     case 'fly': return Math.max(0, s.castDst * (1 - Math.max(0, Math.min(1, s.flyT / (s.flyDur || FISH.flyS)))));
     case 'wait': case 'nibble': case 'sink': case 'hook': return Math.max(0, s.lureDist ?? s.floatDist);
-    case 'fight': case 'land': return fightDistM(s.prog, s.fightD0);
+    case 'fight': case 'land': return s.fightM != null && Number.isFinite(s.fightM) ? Math.max(0, s.fightM) : fightDistM(s.prog, s.fightD0);
     default: return null;
   }
 }
