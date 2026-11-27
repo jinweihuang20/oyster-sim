@@ -98,11 +98,12 @@ describe('拉魚左右拉：別人畫面看得出來', () => {
     expect(rig.torso.rotation.z).toBeLessThan(-0.25);
     rod.dispose();
   });
-  it('路亞：別人畫面的線頭跟拉的方向相反（魚往另一邊衝），垂釣照舊小擺', () => {
+  it('別人畫面的線頭跟拉的方向相反（魚往另一邊衝）：路亞、垂釣都一樣（CR-34）', () => {
     expect(remoteFightSide(-1, true, 0.7, 0.5)).toBeCloseTo(2.2, 6);
     expect(remoteFightSide(1, true, -0.7, 0.5)).toBeCloseTo(-2.2, 6);
     expect(Math.abs(remoteFightSide(0, true, 1, 0.5))).toBeLessThan(1.5);
-    expect(remoteFightSide(1, false, 0.5, 0.5)).toBeCloseTo(remoteFightSide(0, false, 0.5, 0.5), 6);
+    expect(remoteFightSide(1, false, 0.5, 0.5)).toBeCloseTo(remoteFightSide(1, true, 0.5, 0.5), 6);
+    expect(remoteFightSide(-1, false, 0.7, 0.5)).toBeCloseTo(2.2, 6);
   });
 });
 

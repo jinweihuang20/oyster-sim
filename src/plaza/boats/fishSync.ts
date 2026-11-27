@@ -99,11 +99,11 @@ export function normFishSync(x: any): (FishSyncMsg & { connId: string }) | null 
 
 /**
  * 別人拉魚時，線在水裡那頭往左右偏多少（公尺，+＝對方的右邊）。wob＝-1～1 的慢速擺動。
- * 路亞：對方往左右拉就是魚往反方向衝（對方自己畫面的線頭偏 ±2.2 m），左右拉越滿、隨機擺動越少；
- * 垂釣：魚不衝，照舊小幅擺動。
+ * 對方往左右拉就是魚往反方向衝（對方自己畫面的線頭偏 ±2.2 m），左右拉越滿、隨機擺動越少。
+ * CR-34 起垂釣中魚也會左右衝，所以不分竿子（lure 參數留著相容舊呼叫）。
  */
-export function remoteFightSide(steer: number, lure: boolean, wob: number, tn: number) {
-  const s = lure ? Math.max(-1, Math.min(1, steer)) : 0;
+export function remoteFightSide(steer: number, _lure: boolean, wob: number, tn: number) {
+  const s = Math.max(-1, Math.min(1, steer));
   return wob * 1.4 * (0.5 + tn) * (1 - Math.abs(s)) - s * 2.2;
 }
 

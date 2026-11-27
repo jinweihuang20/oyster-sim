@@ -439,7 +439,7 @@ async function doReel() {
     document.body.classList.add('fishFight');
     // 頭足類一上鉤就噴墨（位置在 drawGfx 拉扯那段算）
     inkT = hooked && isSquidSp(hooked.sp) ? 0 : 1e9;
-    toastTop(hooked && hooked.tier >= 3 ? '中魚！力道大得不得了……是巨物！穩住張力慢慢拉' : hooked && hooked.tier >= 2 ? '中魚！好重……是大傢伙！' : '中魚！按住「收線」，張力別到紅色' + (sm.gear === 'lure' ? '；魚往哪邊衝，搖桿就往反方向拉' : ''), 2.4);
+    toastTop(hooked && hooked.tier >= 3 ? '中魚！力道大得不得了……是巨物！穩住張力慢慢拉' : hooked && hooked.tier >= 2 ? '中魚！好重……是大傢伙！' : '中魚！按住「收線」，張力別到紅色' + (sm.fight?.lure ? '；魚往哪邊衝，搖桿就往反方向拉' : ''), 2.4);
     return;
   }
   sm.reset();
@@ -1360,7 +1360,7 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
     : ph === 'charge' ? '放開就拋出去' : ph === 'cast' || ph === 'fly' ? '' 
     : ph === 'wait' ? (troll ? '拖釣中：船慢慢開，假魚跟在後面' : lure ? (sm.lure?.follow ? '有魚跟上來了，節奏保持住' : LURE_TIP[sm.item as LureKey]) : '等魚咬…')
     : ph === 'nibble' ? '有魚在試吃，還不要收' : ph === 'sink' ? '浮標沉下去了！快收竿' : ph === 'hook' ? '' 
-    : ph === 'fight' ? (lure && sm.fight && sm.fight.run !== 0 ? `魚往${sm.fight.run < 0 ? '左' : '右'}衝，搖桿往${sm.fight.run < 0 ? '右' : '左'}拉` : '按住收線，張力別到紅色') : '';
+    : ph === 'fight' ? (sm.fight?.lure && sm.fight.run !== 0 ? `魚往${sm.fight.run < 0 ? '左' : '右'}衝，搖桿往${sm.fight.run < 0 ? '右' : '左'}拉` : '按住收線，張力別到紅色') : '';
   if (tip !== tipS) { tipS = tip; ui.hudTip.textContent = tip; ui.hudTip.classList.toggle('on', !!tip); }
   // 力道條／張力條
   const meterOn = ph === 'charge' || ph === 'fight';
@@ -1372,7 +1372,7 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
     ui.meter.classList.toggle('red', ph === 'fight' && v >= FISH.redT);
     const lbl = ph === 'charge' ? `力道 ${Math.round(castDist(sm.power, sm.item))} m` : `張力・拉近 ${Math.round((sm.fight?.prog ?? 0) * 100)}%`;
     if (ui.mLbl.textContent !== lbl) ui.mLbl.textContent = lbl;
-    const run = ph === 'fight' && lure ? sm.fight?.run ?? 0 : 0;
+    const run = ph === 'fight' && sm.fight?.lure ? sm.fight.run : 0;
     ui.dirL.classList.toggle('on', run > 0); ui.dirR.classList.toggle('on', run < 0);
   }
   // 路亞水深條：假魚在水裡才顯示（等魚／試吃／沉／等伺服器）；蓄力、飛線、拉魚、垂釣竿都藏起來

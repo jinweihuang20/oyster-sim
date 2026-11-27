@@ -48,8 +48,8 @@ export function shopMeds(save: FishShopSave): Record<string, number> {
 
 export function fishShopRows(): FishShopRow[] {
   return [
-    { id: FISH.rods.float.id, n: FISH.rods.float.n, price: FISH.rods.float.price, kind: 'rod', good: '掛餌拋出去等魚咬：浮標整個沉下去再收竿，好上手', once: true },
-    { id: FISH.rods.lure.id, n: FISH.rods.lure.n, price: FISH.rods.lure.price, kind: 'rod', good: '拋假魚、靠收線節奏引魚：比較難，但大魚和稀有魚比較多；坐船還能拖釣', bad: '拉扯比較難：魚會左右衝，張力太高斷線、太低脫鉤', once: true },
+    { id: FISH.rods.float.id, n: FISH.rods.float.n, price: FISH.rods.float.price, kind: 'rod', good: '掛餌拋出去等魚咬：浮標整個沉下去再收竿，好上手', bad: '中魚後一樣要搏鬥：魚會左右衝，張力太高斷線、太低脫鉤', once: true },
+    { id: FISH.rods.lure.id, n: FISH.rods.lure.n, price: FISH.rods.lure.price, kind: 'rod', good: '拋假魚、靠收線節奏引魚：比較難，但大魚和稀有魚比較多；坐船還能拖釣', bad: '引魚要抓節奏，假魚斷線就沒了', once: true },
     ...FISH.baits.filter(b => b.id).map(b => ({
       id: b.id, n: `${b.n}（${b.pack} 個）`, price: b.price, kind: 'bait' as const, pack: b.pack, tk: b.k,
       good: b.k === 'shrimp' ? '垂釣用，什麼魚都吃一點' : b.k === 'worm' ? '垂釣用，魚比較愛咬，也比較容易釣到大魚' : '垂釣用，晚上特別有效，白帶魚愛吃',

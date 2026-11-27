@@ -287,10 +287,13 @@ export const FIGHT_PULL_K = 1.1 / (1 - FIGHT_P0);
 export const fightTenCeil = (power: number) => 0.26 + 1.45 * power;
 /** 路亞方向沒拉對時的收線倍率：小魚幾乎不減速（0.88），大魚維持 0.60 */
 export const lureBadGood = (power: number) => 0.88 - 0.28 * Math.max(0, Math.min(1, (power - 0.15) / 0.30));
+/** 這支竿中魚後要不要全套搏鬥（魚左右衝、搖桿反方向拉、太鬆脫鉤）：CR-34 起垂釣也跟路亞一樣 */
+export const fullFight = (_gear: Gear) => true;
 export type FightEnd = 'landed' | 'snap' | 'unhook' | null;
 /**
  * 拉扯一步：reel＝按住收線；dir＝搖桿左右（-1～1）。
- * 垂釣：只管張力別爆。路亞：魚會往左／右衝，搖桿往反方向拉才收得快、張力也比較低；張力太低魚會脫鉤。
+ * 全套搏鬥（f.lure＝true；CR-34 起垂釣和路亞中魚後都是）：魚會往左／右衝，搖桿往反方向拉才收得快、張力也比較低；張力太低魚會脫鉤。
+ * f.lure＝false 只留給舊測試／簡化拉扯：只管張力別爆。
  * 大魚：不收線（或魚在衝、方向沒拉對）就會一直把線拉出去（prog 往負的走、距離變遠）；收線＋反方向拉就收得回來。
  * rnd＝0～1 亂數（測試可固定）。
  */
@@ -373,7 +376,8 @@ export class FishSM {
   }
   /** 按收竿：回傳要不要問伺服器（'reel'＝收回來／試著中魚） */
   pressReel(): boolean { if (this.phase === 'wait' || this.phase === 'nibble' || this.phase === 'sink') { this.phase = 'hook'; return true; } return false; }
-  hooked(power: number, fightMs: number, d0?: number) { this.phase = 'fight'; this.fight = newFight(power, fightMs, this.gear === 'lure', d0); this.lure = null; }
+  /** 中魚：垂釣（浮標沉下去收竿）和路亞一樣進全套搏鬥（魚左右衝、張力、脫鉤、斷線；CR-34） */
+  hooked(power: number, fightMs: number, d0?: number) { this.phase = 'fight'; this.fight = newFight(power, fightMs, fullFight(this.gear), d0); this.lure = null; }
   /** 收回來／太早／太慢／拉扯結束：回到準備好 */
   reset() { if (this.phase !== 'off') this.phase = 'idle'; this.lure = null; this.fight = null; this.twitch = 0; }
   /** 每幀；reel／jerk／dir＝玩家輸入。回傳事件（UI 處理） */
