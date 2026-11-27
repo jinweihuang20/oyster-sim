@@ -11,6 +11,7 @@ import { makeWater, makeRaft, makeFx, type Raft } from '../../sea/seaModels';
 import { PB, dockSlot } from './boatLogic';
 import { RACK_DRAW } from './rackLogic';
 import { RACK_BEACON } from './rackRadar';
+import { promenadeParts } from './promenadeGeo';
 
 const lam = (c: number, o: THREE.MeshLambertMaterialParameters = {}) => new THREE.MeshLambertMaterial({ color: c, ...o });
 
@@ -218,6 +219,8 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   for (let i = 0; i < PB.count; i++) { const d = dockSlot(i); parts.push(cyl(0.09, 0.32, d.x, 0.13, Math.sign(d.z) * (PB.pierHalfW - 0.2), 0x2a2a2a, 8)); }
   // 燈柱：桿＋燈罩（燈頭另外用自發光材質）
   for (const p of ALL_LAMPS) { parts.push(cyl(0.05, LAMP_H, p.x, LAMP_H / 2, p.z, 0x3a3e44, 6)); parts.push(box(0.36, 0.08, 0.36, p.x, LAMP_H + 0.02, p.z, 0x2a2e34)); }
+  // 西南角海堤步道＋白色觀景台（CR-38）：一起合進這個 mesh，不多 draw call
+  for (const g of promenadeParts()) parts.push(g);
   const dockGeo = mergeGeometries(parts); parts.forEach(p => p.dispose());
   const dock = new THREE.Mesh(dockGeo, new THREE.MeshLambertMaterial({ vertexColors: true }));
   dock.name = 'plazaDock'; group.add(dock);

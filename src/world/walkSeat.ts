@@ -21,7 +21,7 @@ export type WalkSeatDeps = {
   plazaWalkBound: () => number;
   plazaWalkRect?: () => { minX: number; maxX: number; minZ: number; maxZ: number };
   /** 矩形夾限後再套區域（東延僅咖啡前庭） */
-  plazaWalkClamp?: (p: { x: number; z: number }) => void;
+  plazaWalkClamp?: (p: { x: number; z: number }, prevX?: number, prevZ?: number) => void;
   /** 廣場地面高度（高台／樓梯） */
   plazaGroundY?: (x: number, z: number) => number;
   plazaNearSeat: () => { pileId: number; slot: number } | null;
@@ -279,7 +279,7 @@ export function walkStep(dt: number) {
     const b = D.plazaWalkRect();
     walkPos.x = D.clamp(walkPos.x, b.minX, b.maxX);
     walkPos.z = D.clamp(walkPos.z, b.minZ, b.maxZ);
-    D.plazaWalkClamp?.(walkPos);
+    D.plazaWalkClamp?.(walkPos, prevX, prevZ);
   } else {
     const bound = D.isPlazaMode() ? D.plazaWalkBound() : 3.25;
     walkPos.x = D.clamp(walkPos.x, -bound, bound); walkPos.z = D.clamp(walkPos.z, -bound, bound);

@@ -4,6 +4,7 @@
  * 船頭方向 h：前進向量 = (-sin h, -cos h)，跟出海採蚵同一套。
  */
 import { SEA } from '../../sea/seaLogic';
+import { promPushOut } from '../promenade';
 
 /** 調整用數字（改這裡就好） */
 export const PB = {
@@ -104,7 +105,8 @@ export function hullPts(o: { x: number; z: number; h: number }) {
   return [[o.x + fx * k, o.z + fz * k], [o.x - fx * k, o.z - fz * k]] as const;
 }
 
-/** 推出碼頭／岸線／海面範圍；回傳有沒有撞到（撞到會減速） */
+const _hp = { x: 0, z: 0 };
+/** 推出碼頭／岸線／觀景台／海面範圍；回傳有沒有撞到（撞到會減速） */
 export function pushStatic(b: Hull) {
   const r = PB.hullR; let hit = false;
   for (let it = 0; it < 2; it++) for (const [px, pz] of hullPts(b)) {
@@ -117,6 +119,9 @@ export function pushStatic(b: Hull) {
       else { const s = pz >= 0 ? 1 : -1; b.z += s * (PB.pierHalfW + r - Math.abs(pz)); }
       hit = true;
     }
+    // 西南角海堤步道外的消波塊、觀景台（CR-38）
+    _hp.x = px; _hp.z = pz;
+    if (promPushOut(_hp, r)) { b.x += _hp.x - px; b.z += _hp.z - pz; hit = true; }
   }
   const S = PB.sea;
   b.x = clamp(b.x, S.x0, S.x1); b.z = clamp(b.z, S.z0, S.z1);
@@ -150,6 +155,7 @@ export function stepSwim(s: Swimmer, thr: number, steer: number, dt: number) {
   const q = pierNearest(s.x, s.z), dx = s.x - q.x, dz = s.z - q.z, d = Math.hypot(dx, dz), r = 0.45;
   if (d < r) { if (d > 1e-4) { s.x = q.x + dx / d * r; s.z = q.z + dz / d * r; } else s.z = (s.z >= 0 ? 1 : -1) * (PB.pierHalfW + r); }
   if (s.x > PB.shoreX - 0.4) s.x = PB.shoreX - 0.4;
+  promPushOut(s, 0.45);
   const S = PB.sea;
   s.x = clamp(s.x, S.x0, S.x1); s.z = clamp(s.z, S.z0, S.z1);
 }

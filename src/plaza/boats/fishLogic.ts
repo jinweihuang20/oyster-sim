@@ -5,7 +5,8 @@
  */
 
 import { PLAZA_WALK_SPD } from '../../world/walkSpeed';
-import { PB } from './boatLogic';
+import { PB, onLand } from './boatLogic';
+import { promFishable, promSolidAt } from '../promenade';
 
 export type Gear = 'float' | 'lure';
 export type BaitKey = 'oyster' | 'shrimp' | 'worm' | 'squid';
@@ -536,7 +537,14 @@ export function canFishAt(mode: string, walk?: { x: number; z: number } | null, 
   if (mode !== 'walk' || !walk) return false;
   const onPier = walk.x <= FISH_SHORE_X && walk.x >= PB.pierX1 - 0.3 && Math.abs(walk.z) <= PB.pierHalfW + 0.3;
   const onShore = walk.x <= FISH_SHORE_X && Math.abs(walk.z) <= PB.shoreZ;
-  return onPier || onShore;
+  // 西南角海堤步道靠海欄杆邊、觀景台上下層靠海那一側（CR-38）
+  return onPier || onShore || promFishable(walk.x, walk.z);
+}
+
+/** 拋到這裡算「打到岸上」（伺服器回 land）：岸上／碼頭、觀景台、步道外消波塊，或出了海面範圍。跟伺服器 FishCastHitsLand 一致。 */
+export function castHitsLand(x: number, z: number): boolean {
+  const S = PB.sea;
+  return onLand(x, z) || promSolidAt(x, z) || x > S.x1 + 0.5 || x < S.x0 || z < S.z0 || z > S.z1;
 }
 
 export type NoRodHintSt = { inZone: boolean; lastAt: number };

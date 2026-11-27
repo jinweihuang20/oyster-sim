@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { promGroundY } from './promenade';
 
 export const PILE_COUNT = 16;
 export const SLOTS_PER_PILE = 4;
@@ -141,7 +142,8 @@ export function plazaGroundY(x: number, z: number): number {
     const t = (z - s.z0) / Math.max(1e-5, s.z1 - s.z0);
     return Math.max(0, Math.min(1, t)) * p.y;
   }
-  return 0;
+  // 西南角海堤步道＋觀景台（CR-38）
+  return promGroundY(x, z);
 }
 export const SEAFOOD_TABLE_X = 12.3;
 export const SEAFOOD_TABLE_Z: readonly number[] = [-0.45, 1.5, 3.45];
