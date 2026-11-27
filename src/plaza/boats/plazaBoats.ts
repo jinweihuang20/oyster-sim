@@ -107,8 +107,8 @@ let ui: { root: HTMLDivElement; act: HTMLButtonElement; shell: HTMLButtonElement
 let resyncT = 0;
 // 漂流箱（伺服器給位置；撈到由伺服器判定）
 let drifts: DriftBox[] = [];
-/** 漂流箱金額（伺服器會送；2026-11 砍半 $2,500～$10,000） */
-let driftPay = { min: 2500, max: 10000 };
+/** 漂流箱金額（伺服器會送；2026-11-28 $2,500～$5,000；進場前先用這個顯示） */
+let driftPay = { min: 2500, max: 5000 };
 /** 最新一包漂流箱設定（漂流潮、金箱、今日加碼） */
 let driftCfg: DriftSnap | null = null;
 /** 金箱子：上次提示「要幾個人一起拉」的時間（別一直跳） */
