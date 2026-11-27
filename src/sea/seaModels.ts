@@ -200,9 +200,9 @@ export function makeFarms(scene: THREE.Scene, L: Layout, rng: () => number): Far
       g.translate(r.ax + (r.bx - r.ax) * f, 1.36, r.az + (r.bz - r.az) * f); bars.push(g);
     }
   });
-  const pm = new THREE.InstancedMesh(poleGeo, poleM, poles.length); poles.forEach((m, i) => pm.setMatrixAt(i, m)); scene.add(pm);
+  const pm = new THREE.InstancedMesh(poleGeo, poleM, poles.length); poles.forEach((m, i) => pm.setMatrixAt(i, m)); pm.frustumCulled = false; scene.add(pm);
   if (bars.length) { const bm = new THREE.Mesh(mergeGeometries(bars), poleM); scene.add(bm); bars.forEach(g => g.dispose()); }
-  const fm = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 8, 6), lam(0xf2f2ee), floats.length); floats.forEach((m, i) => fm.setMatrixAt(i, m)); scene.add(fm);
+  const fm = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 8, 6), lam(0xf2f2ee), floats.length); floats.forEach((m, i) => fm.setMatrixAt(i, m)); fm.frustumCulled = false; scene.add(fm);
   // 蚵串：一條繩＋一坨坨蚵（拉走後整串藏起來）
   const strFirst: number[] = [], strN: number[] = [];
   let total = 0; L.strs.forEach(s => { strFirst.push(total); const n = 2 + s.w * 2; strN.push(n); total += n; });
@@ -221,6 +221,7 @@ export function makeFarms(scene: THREE.Scene, L: Layout, rng: () => number): Far
       const g = 0.35 + rng() * 0.15 - s.w * 0.04; lumps.setColorAt(strFirst[si] + j, col.setRGB(g * 1.05, g, g * 0.85));
     }
   });
+  lumps.frustumCulled = false; ropes.frustumCulled = false;
   scene.add(lumps, ropes);
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
   return {

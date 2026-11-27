@@ -152,3 +152,55 @@ describe('連按升級蚵棚', () => {
     expect(planUpTap([1, 1, 1, 1, 1, 1], 0, 0, 10000, 7000, costs)).toEqual({ ok: false, err: 'money' });
   });
 });
+
+import { readFileSync } from 'node:fs';
+import { pickDrawnRacks, RACK_DRAW, RACK_PUSH_AABB, RACK_MUST_DRAW_R } from './rackLogic';
+describe('畫得出來的蚵棚：膠筏撞得到的一定在畫面裡', () => {
+  const at = (id: number, x: number, z: number) => ({ id, x, z });
+  it('鏡頭附近由近到遠，超出 viewR 的不畫，最多 cap 座', () => {
+    const list = [at(1, 80, 0), at(2, 10, 0), at(3, 30, 0), at(4, 20, 0)];
+    expect(pickDrawnRacks(list, 0, 0, 75, 2).map(r => r.id)).toEqual([2, 4]);
+  });
+  it('陣列後面、離鏡頭較遠的蚵棚，只要膠筏撞得到就一定先畫（舊邏輯會先畫前 24 座而漏掉它）', () => {
+    const cluster = Array.from({ length: 30 }, (_, i) => at(i + 1, 50, (i - 14.5) * 2));
+    const hit = at(99, -6, 0); // 船在原點旁邊，這座會撞到；鏡頭也在附近但這座排在陣列最後
+    const boat = { x: 0, z: 0 };
+    const drawn = pickDrawnRacks([...cluster, hit], 0, 0, 75, 24, boat);
+    expect(drawn).toHaveLength(24);
+    expect(drawn.some(r => r.id === 99)).toBe(true);
+    // 沒有船優先時，這座比那 30 座更近鏡頭，也會入選；改用鏡頭在群集中心、船在另一側
+    const cam = { x: 50, z: 0 };
+    const farBoat = { x: -6, z: 0 };
+    const drawn2 = pickDrawnRacks([...cluster, hit], cam.x, cam.z, 75, 24, farBoat);
+    expect(drawn2.some(r => r.id === 99)).toBe(true);
+    // 舊邏輯（陣列順序＋只看鏡頭距離）會漏掉它：群集 30 座都在 viewR 內且排在前面
+    const old = [...cluster, hit].filter(r => Math.hypot(r.x - cam.x, r.z - cam.z) <= 75).slice(0, 24);
+    expect(old.some(r => r.id === 99)).toBe(false);
+  });
+  it('鏡頭遠超過 viewR 時，船旁邊能撞到的蚵棚還是會畫', () => {
+    const r = at(1, 0, 0);
+    expect(pickDrawnRacks([r], 200, 0, 75, 24)).toEqual([]);
+    expect(pickDrawnRacks([r], 200, 0, 75, 24, { x: 1, z: 0 }).map(x => x.id)).toEqual([1]);
+    expect(Math.hypot(0 - 1, 0 - 0)).toBeLessThanOrEqual(RACK_MUST_DRAW_R);
+  });
+  it('碰撞粗篩半徑被必畫距離蓋住，容量夠裝一圈能撞到的蚵棚', () => {
+    expect(RACK_MUST_DRAW_R).toBeGreaterThanOrEqual(RACK_PUSH_AABB * Math.SQRT2);
+    expect(RACK_DRAW.frames).toBeGreaterThanOrEqual(24);
+    expect(RACK_DRAW.strings).toBeGreaterThanOrEqual(RACK_DRAW.frames * 12);
+    expect(RACK_DRAW.ripe).toBe(RACK_DRAW.frames);
+  });
+  it('每幀選取和 InstancedMesh 容量對得上；出海採蚵竹架也不用預設視錐裁切', () => {
+    const tick = readFileSync('src/plaza/boats/plazaRacks.ts', 'utf8');
+    const scene = readFileSync('src/plaza/boats/boatScene.ts', 'utf8');
+    const sea = readFileSync('src/sea/seaModels.ts', 'utf8');
+    expect(tick).toContain('pickDrawnRacks(racks, cx, cz, RACK.viewR, RACK_DRAW.frames, b)');
+    expect(tick).toContain('RACK_PUSH_AABB');
+    expect(scene).toContain('RACK_DRAW.frames');
+    expect(scene).toContain('frustumCulled = false');
+    expect(sea).toMatch(/pm\.frustumCulled = false/);
+    expect(sea).toMatch(/fm\.frustumCulled = false/);
+    expect(sea).toMatch(/lumps\.frustumCulled = false/);
+    expect(sea).toMatch(/ropes\.frustumCulled = false/);
+  });
+});
+

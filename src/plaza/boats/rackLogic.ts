@@ -33,6 +33,40 @@ export const RACK = {
   /** 雜貨店「蚵棚」組合包 */
   kitPrice: 15_000, kitId: 'rackKit',
 };
+/** 同時畫幾座蚵棚／幾串蚵串／幾盞熟了的燈（InstancedMesh 各 1 個 draw call；實際只畫 count） */
+export const RACK_DRAW = { frames: 64, strings: 768, ripe: 64 } as const;
+/** 膠筏碰撞粗篩（軸對齊，跟 rackPush 一樣） */
+export const RACK_PUSH_AABB = 6;
+/** 船旁邊一定要畫出來的距離（蓋過 AABB 對角＋船身，避免撞得到卻看不見） */
+export const RACK_MUST_DRAW_R = 9;
+
+/**
+ * 這幀要畫的蚵棚：鏡頭 viewR 內由近到遠，最多 cap 座。
+ * 膠筏碰撞範圍內的一定優先保留（就算陣列排在後面、或鏡頭稍遠），不會出現「撞得到卻看不見」。
+ */
+export function pickDrawnRacks<T extends { x: number; z: number }>(
+  racks: readonly T[],
+  camX: number, camZ: number,
+  viewR: number,
+  cap: number,
+  boat?: { x: number; z: number } | null,
+  mustR = RACK_MUST_DRAW_R,
+): T[] {
+  if (cap <= 0 || !racks.length) return [];
+  const viewR2 = viewR * viewR, mustR2 = mustR * mustR;
+  const scored: { r: T; dCam2: number; must: boolean }[] = [];
+  for (const r of racks) {
+    const dCam2 = (r.x - camX) * (r.x - camX) + (r.z - camZ) * (r.z - camZ);
+    const must = !!boat && (r.x - boat.x) * (r.x - boat.x) + (r.z - boat.z) * (r.z - boat.z) <= mustR2;
+    if (!must && dCam2 > viewR2) continue;
+    scored.push({ r, dCam2, must });
+  }
+  scored.sort((a, b) => (a.must === b.must ? a.dCam2 - b.dCam2 : a.must ? -1 : 1));
+  const n = scored.length <= cap ? scored.length : cap;
+  const out: T[] = [];
+  for (let i = 0; i < n; i++) out.push(scored[i].r);
+  return out;
+}
 
 const num = (v: unknown, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
 const g = (o: any, k: string) => o?.[k] ?? o?.[k[0].toUpperCase() + k.slice(1)];

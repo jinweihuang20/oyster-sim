@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { makeWater, makeRaft, makeFx, type Raft } from '../../sea/seaModels';
 import { PB, dockSlot } from './boatLogic';
+import { RACK_DRAW } from './rackLogic';
 
 const lam = (c: number, o: THREE.MeshLambertMaterialParameters = {}) => new THREE.MeshLambertMaterial({ color: c, ...o });
 
@@ -22,8 +23,7 @@ const ALL_LAMPS = [...DOCK_LAMPS, ...PATH_LAMPS];
 const LAMP_H = 2.6;
 /** 同時畫幾個漂流箱：平常 2 個＋漂流潮 4 個（2026-11 降低頻率；舊伺服器 3＋8，留著餘裕） */
 const DRIFT_MAX = 14;
-/** 同時畫幾座蚵棚（只畫鏡頭附近）、幾串蚵串、幾盞熟了的燈 */
-const RACK_DRAW = 24, STR_DRAW = 320, RIPE_DRAW = 24;
+/** 同時畫幾座蚵棚／幾串蚵串／幾盞熟了的燈：容量見 rackLogic RACK_DRAW（只畫鏡頭附近＋船邊，1 個 draw call） */
 /** 蚵棚架子：長 5 m、寬 2.2 m；兩排吊蚵串，每排 12 格 */
 export const RACK_GEO = { len: 5, half: 1.1, slots: 12, topY: 1.25 };
 
@@ -234,16 +234,16 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const _gold = new THREE.Color(1.35, 1.05, 0.35), _white = new THREE.Color(1, 1, 1);
 
   // ---------- 蚵棚：架子／蚵串／私人小旗／熟了的燈（各一個 InstancedMesh）----------
-  const rackFrames = new THREE.InstancedMesh(rackFrameGeo(), boatMat, RACK_DRAW); rackFrames.name = 'plazaRacks';
-  const rackStrs = new THREE.InstancedMesh(rackStringGeo(), boatMat, STR_DRAW); rackStrs.name = 'plazaRackStrings';
+  const rackFrames = new THREE.InstancedMesh(rackFrameGeo(), boatMat, RACK_DRAW.frames); rackFrames.name = 'plazaRacks';
+  const rackStrs = new THREE.InstancedMesh(rackStringGeo(), boatMat, RACK_DRAW.strings); rackStrs.name = 'plazaRackStrings';
   const flagG = (() => { const p = [box(0.04, 1.1, 0.04, 0, 0.55, 0, 0xffffff), box(0.5, 0.3, 0.02, 0.27, 0.92, 0, 0xffffff)]; const g = mergeGeometries(p); p.forEach(x => x.dispose()); return g; })();
   const flagMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-  const rackFlags = new THREE.InstancedMesh(flagG, flagMat, RACK_DRAW); rackFlags.name = 'plazaRackFlags';
+  const rackFlags = new THREE.InstancedMesh(flagG, flagMat, RACK_DRAW.frames); rackFlags.name = 'plazaRackFlags';
   rackFlags.setColorAt(0, new THREE.Color(1, 1, 1));
   // 熟了：竿頂一顆自己發光的燈（不受光照，白天也看得出來；霧會蓋掉遠的）
   const ripeG = new THREE.SphereGeometry(0.16, 8, 6); ripeG.translate(0, 0.16, 0);
   const ripeMat = new THREE.MeshBasicMaterial({ color: 0xffd84a });
-  const rackRipe = new THREE.InstancedMesh(ripeG, ripeMat, RIPE_DRAW); rackRipe.name = 'plazaRackRipe';
+  const rackRipe = new THREE.InstancedMesh(ripeG, ripeMat, RACK_DRAW.ripe); rackRipe.name = 'plazaRackRipe';
   for (const m of [rackFrames, rackStrs, rackFlags, rackRipe]) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
   const FLAG_MINE = new THREE.Color(0x2a5a86), FLAG_OTHER = new THREE.Color(0xd84a3a);
 
@@ -252,7 +252,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
 
   // ---------- 夜燈（假光）：光暈 Points、光池貼花、船頭光錐 ----------
   const glowT = glowTex(), coneT = coneTex();
-  const N_GLOW = ALL_LAMPS.length + PB.count + DRIFT_MAX + RIPE_DRAW + 8;
+  const N_GLOW = ALL_LAMPS.length + PB.count + DRIFT_MAX + RACK_DRAW.ripe + 8;
   const gPos = new Float32Array(N_GLOW * 3), gCol = new Float32Array(N_GLOW * 3);
   const glowGeo = new THREE.BufferGeometry();
   glowGeo.setAttribute('position', new THREE.BufferAttribute(gPos, 3).setUsage(THREE.DynamicDrawUsage));
@@ -285,10 +285,10 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
     begin() { nearN = farN = coneN = 0; glowN = 0; crateN = 0; rackN = strN = flagN = ripeN = 0; },
     /** 蚵棚架子；priv：0 公共、1 自己的（藍旗）、2 別人的私人（紅旗） */
     rack(x: number, z: number, h: number, bob: number, priv: 0 | 1 | 2) {
-      if (rackN >= RACK_DRAW) return false;
+      if (rackN >= RACK_DRAW.frames) return false;
       _e.set(0, h, bob * 0.02); _q.setFromEuler(_e); _p.set(x, PB.waterY + bob * 0.04, z); _m.compose(_p, _q, _s);
       rackFrames.setMatrixAt(rackN++, _m);
-      if (priv && flagN < RACK_DRAW) {
+      if (priv && flagN < RACK_DRAW.frames) {
         _p.set(x + Math.cos(h) * RACK_GEO.len / 2, PB.waterY + RACK_GEO.topY + 0.1, z - Math.sin(h) * RACK_GEO.len / 2); _m.compose(_p, _q, _s);
         rackFlags.setMatrixAt(flagN, _m); rackFlags.setColorAt(flagN++, priv === 1 ? FLAG_MINE : FLAG_OTHER);
       }
@@ -298,7 +298,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
     strings(x: number, z: number, h: number, n: number, max: number, t: number) {
       const per = Math.ceil(Math.max(1, max) / 2), step = (RACK_GEO.len - 0.6) / Math.max(1, per - 1);
       const c = Math.cos(h), sn = Math.sin(h);
-      for (let i = 0; i < n && strN < STR_DRAW; i++) {
+      for (let i = 0; i < n && strN < RACK_DRAW.strings; i++) {
         const row = i % 2, k = Math.floor(i / 2);
         const lx = -RACK_GEO.len / 2 + 0.3 + k * step, lz = row ? RACK_GEO.half - 0.05 : -RACK_GEO.half + 0.05;
         const sw = Math.sin(t * 1.3 + i * 0.9 + x) * 0.05;
@@ -309,7 +309,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
     },
     /** 長滿了：竿頂的燈（夜晚加光暈） */
     ripe(x: number, z: number, h: number, pulse: number) {
-      if (ripeN >= RIPE_DRAW) return;
+      if (ripeN >= RACK_DRAW.ripe) return;
       _p.set(x - Math.cos(h) * RACK_GEO.len / 2, PB.waterY + RACK_GEO.topY + 0.12, z + Math.sin(h) * RACK_GEO.len / 2);
       _q.identity(); _s.setScalar(0.85 + pulse * 0.3); _m.compose(_p, _q, _s); _s.set(1, 1, 1);
       rackRipe.setMatrixAt(ripeN++, _m);

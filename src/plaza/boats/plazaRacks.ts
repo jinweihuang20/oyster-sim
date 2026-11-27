@@ -9,7 +9,7 @@ import { PB, distToLand, pierNearest, hullPts } from './boatLogic';
 import type { PlazaSea } from './boatScene';
 import type { BoatNet } from './boatNet';
 import {
-  RACK, UP_LINES, UP_MAX, planUpTap, isMine, isPrivate, loadSlow, nearestRack, pushFromRack, rackNextSec, rackNow, rackRipe, rackCooling, rackAgePct, fmtWait, ripeViewR, stealFine, upCost,
+  RACK, RACK_DRAW, RACK_PUSH_AABB, pickDrawnRacks, UP_LINES, UP_MAX, planUpTap, isMine, isPrivate, loadSlow, nearestRack, pushFromRack, rackNextSec, rackNow, rackRipe, rackCooling, rackAgePct, fmtWait, ripeViewR, stealFine, upCost,
   type RackDto, type RackSnap,
 } from './rackLogic';
 
@@ -146,7 +146,7 @@ export function rackSlow(boatId: number) { return loadSlow(loads.get(boatId) ?? 
 export function rackPush(b: { x: number; z: number; h: number; v: number }) {
   let hit = false;
   for (const r of racks) {
-    if (Math.abs(r.x - b.x) > 6 || Math.abs(r.z - b.z) > 6) continue;
+    if (Math.abs(r.x - b.x) > RACK_PUSH_AABB || Math.abs(r.z - b.z) > RACK_PUSH_AABB) continue;
     if (pushFromRack(b, r, hullPts(b), PB.hullR)) hit = true;
   }
   return hit;
@@ -319,12 +319,12 @@ export function tickRacks(dt: number, cam: THREE.Camera) {
   refetchT += dt; if (refetchT > 60) { refetchT = 0; if (ok && !C.localOnly()) void C.net()?.fetchRacks(); }
   const now = sNow(), cx = cam.position.x, cz = cam.position.z;
   if (sea && racks.length) {
-    for (const r of racks) {
+    // 熟了的燈：遠一點也看得到；由近到遠，船邊優先，避免名額被遠處先佔走
+    const ripeList = pickDrawnRacks(racks.filter(r => rackRipe(r, now) && Math.hypot(r.x - cx, r.z - cz) <= ripeViewR(r, me)), cx, cz, 1e9, RACK_DRAW.ripe, b);
+    for (const r of ripeList) sea.ripe(r.x, r.z, r.h, 0.5 + 0.5 * Math.sin(t * 3 + r.id));
+    // 架子：鏡頭附近由近到遠；膠筏旁邊能撞到的一定先畫
+    for (const r of pickDrawnRacks(racks, cx, cz, RACK.viewR, RACK_DRAW.frames, b)) {
       const d = Math.hypot(r.x - cx, r.z - cz);
-      const ripe = rackRipe(r, now);
-      // 熟了的燈：遠一點也看得到（主人自己升級警示燈看得更遠），架子只畫附近
-      if (ripe && d <= ripeViewR(r, me)) sea.ripe(r.x, r.z, r.h, 0.5 + 0.5 * Math.sin(t * 3 + r.id));
-      if (d > RACK.viewR) continue;
       const bob = Math.sin(t * 1.1 + r.id * 0.7);
       if (!sea.rack(r.x, r.z, r.h, bob, isPrivate(r) ? (isMine(r, me) ? 1 : 2) : 0)) continue;
       if (d <= RACK.strR) sea.strings(r.x, r.z, r.h, rackNow(r, now), r.max, t);
