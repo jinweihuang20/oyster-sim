@@ -20,6 +20,7 @@ import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, steerablePhase, type FishPoseIn, type FishPhase } from './fishPose';
 import { remoteReelSide, type FishSyncMsg } from './fishSync';
+import { ReplayVideoRec, browserVideoDeps, canRecordVideo, fmtMB } from './fishReplayRecord';
 import { RF, RF_STRIDE, RP_PHASE, RFISH, REPLAY_TAIL_S, newReplayRec, recStart, recStop, recReset, recTick, recPush, recSplash, recClip, clipSample, clipSplashes, newReplayPlay, playStep, playSeek, playToggle, playRestart, playSpeed, fmtReplayT, orbitStart, orbitDist, orbitDrag, orbitZoom, orbitPos, rpPhaseCode, type ReplayClip, type ReplayMeta, type ReplayPlay, type Orbit } from './fishReplay';
 import { bindReelFeel, makeReelClickSfx, reelPressLabel, steerDirFromPad, type ReelFeel, type ReelSfxOut } from './fishReelFeel';
 
@@ -67,6 +68,9 @@ const ICON = {
   back: '<svg viewBox="0 0 24 24"><path d="M10 6l-6 6 6 6"/><path d="M4 12h11a5 5 0 0 1 5 5v1"/></svg>',
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   minus: '<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>',
+  video: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/></svg>',
+  recDot: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" style="fill:#ff4d4f;stroke:none"/></svg>',
+  save: '<svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 19h14"/></svg>',
 };
 const ERR = FISH_ERR;
 const err = fishErr;
@@ -809,7 +813,7 @@ function askReplay() {
 type Rp = {
   c: ReplayClip; play: ReplayPlay; orbit: Orbit; fr: Float32Array;
   focus: THREE.Vector3; snap: boolean; sep: number; fish: THREE.Mesh | null; el: HTMLDivElement;
-  fill: HTMLElement; knob: HTMLElement; time: HTMLElement; playB: HTMLElement; spdB: HTMLElement; hint: HTMLElement;
+  fill: HTMLElement; knob: HTMLElement; time: HTMLElement; playB: HTMLElement; spdB: HTMLElement; hint: HTMLElement; recB: HTMLElement; recS: string;
   timeS: string; playS: boolean | null; ptr: Map<number, { x: number; y: number }>; pinch: number; scrub: boolean; scrubPlay: boolean; hintT: number;
 };
 let rp: Rp | null = null;
@@ -832,12 +836,13 @@ function startReplay() {
     + `<div class="frHint">拖曳轉視角・雙指或滾輪縮放</div>`
     + `<div class="frBar"><button type="button" class="frB frPlay" data-r="play" aria-label="播放／暫停"></button><button type="button" class="frB" data-r="restart" aria-label="重播">${ICON.restart}<span>重播</span></button>`
     + `<div class="frTrack" data-r="track"><div class="frRail"><div class="frFill"></div><div class="frKnob"></div></div></div><span class="frTime"></span>`
-    + `<button type="button" class="frB frSpd" data-r="speed" aria-label="播放速度">1×</button><button type="button" class="frB frZ" data-r="zin" aria-label="拉近">${ICON.plus}</button><button type="button" class="frB frZ" data-r="zout" aria-label="拉遠">${ICON.minus}</button></div>`;
+    + `<button type="button" class="frB frSpd" data-r="speed" aria-label="播放速度">1×</button><button type="button" class="frB frZ" data-r="zin" aria-label="拉近">${ICON.plus}</button><button type="button" class="frB frZ" data-r="zout" aria-label="拉遠">${ICON.minus}</button><button type="button" class="frB frRec" data-r="rec" aria-label="錄製影片"></button></div>`
+    + `<div class="frSave"><button type="button" class="frB frSaveB" data-r="save" aria-label="儲存或分享影片">${ICON.save}<span></span></button><button type="button" class="frB frSaveX" data-r="savex" aria-label="不要這支影片">${ICON.exit}</button></div>`;
   el.querySelector('.frName')!.textContent = `${c.meta.name}・${kg} kg`;
   const r: Rp = {
     c, play: newReplayPlay(c.dur), orbit: orbitStart(c.f[RF.pyaw]), fr: new Float32Array(RF_STRIDE),
     focus: new THREE.Vector3(), snap: true, sep: 4, fish: null, el,
-    fill: el.querySelector('.frFill')!, knob: el.querySelector('.frKnob')!, time: el.querySelector('.frTime')!, playB: el.querySelector('.frPlay')!, spdB: el.querySelector('.frSpd')!, hint: el.querySelector('.frHint')!,
+    fill: el.querySelector('.frFill')!, knob: el.querySelector('.frKnob')!, time: el.querySelector('.frTime')!, playB: el.querySelector('.frPlay')!, spdB: el.querySelector('.frSpd')!, hint: el.querySelector('.frHint')!, recB: el.querySelector('.frRec')!, recS: '',
     timeS: '', playS: null, ptr: new Map(), pinch: 0, scrub: false, scrubPlay: false, hintT: 3.5,
   };
   rp = r;
@@ -852,6 +857,8 @@ function startReplay() {
 export function stopReplay() {
   const r = rp; if (!r) return;
   rp = null; wantReplay = false;
+  // 錄到一半／錄好沒存：丟掉（停串流、釋放網址，不會跳出下載）
+  if (vrec) { vrec.onChange = null; vrec.abort(); vrec = null; }
   r.el.remove();
   document.body.classList.remove('fishReplayOn');
   // 魚模型的幾何／材質是共用快取：拿掉 Mesh 就好（跟現場那條一樣）
@@ -866,16 +873,53 @@ export function stopReplay() {
   rpPose.rollW = false;
   if (gfx) { gfx.shMat.opacity = 0; gfx.shadow.visible = false; }
 }
-function rpToggle() { if (rp) { playToggle(rp.play); rpUi(rp); } }
+function rpToggle() { if (rp && !vrecBusy()) { playToggle(rp.play); rpUi(rp); } }
+// ---------------- 回放存成影片（純畫面） ----------------
+let vrec: ReplayVideoRec | null = null;
+const vrecBusy = () => !!vrec && (vrec.st === 'rec' || vrec.st === 'finishing');
+/** 按「錄製影片」：從 0 秒用目前的速度重播、開始錄；錄影中再按＝提早停止 */
+function rpRecTap(r: Rp) {
+  if (vrec?.st === 'rec') { vrec.stop(); rpUi(r); return; }
+  if (vrec?.st === 'finishing') return;
+  const cv = document.getElementById('c') as HTMLCanvasElement | null;
+  if (!cv || !canRecordVideo(globalThis, cv)) { toast('此瀏覽器不支援錄製影片', '#ffb08a', 2); return; }
+  if (!vrec) {
+    vrec = new ReplayVideoRec(browserVideoDeps(cv));
+    vrec.onChange = st => {
+      if (rp !== r) return;
+      if (st === 'error') toast('錄影失敗，再試一次', '#ffb08a', 1.8);
+      rpUi(r);
+    };
+  }
+  playRestart(r.play);
+  r.scrub = false;
+  if (!vrec.start(r.c.meta.sp, r.c.meta.kg)) { if (vrec.st !== 'error') toast('此瀏覽器不支援錄製影片', '#ffb08a', 2); rpUi(r); return; }
+  r.hintT = 2.5; r.hint.textContent = '錄影中也可以拖曳轉視角、縮放'; r.hint.classList.remove('off');
+  rpUi(r);
+}
+/** 按「儲存／分享」：在這個點擊裡同步叫分享面板或下載（Safari／手機才不會擋） */
+function rpSaveTap() {
+  if (!vrec || vrec.st !== 'ready') return;
+  const how = vrec.save();
+  if (how === 'download') toast('影片已下載', '#9fe0ff', 1.6);
+}
 function bindReplayUi(r: Rp) {
   const el = r.el, track = el.querySelector<HTMLElement>('.frTrack')!;
   const seekX = (x: number) => { const b = track.getBoundingClientRect(); playSeek(r.play, ((x - b.left) / Math.max(1, b.width)) * r.play.dur); rpUi(r); };
+  // 儲存／分享用 click（真正的使用者點擊，分享面板和下載才不會被瀏覽器擋）
+  el.querySelector('.frSaveB')!.addEventListener('click', e => { e.stopPropagation(); rpSaveTap(); });
+  el.querySelector('.frSaveX')!.addEventListener('click', e => { e.stopPropagation(); vrec?.clear(); rpUi(r); });
   el.addEventListener('pointerdown', e => {
-    e.stopPropagation(); e.preventDefault(); act = true;
+    e.stopPropagation(); act = true;
     const tg = e.target as HTMLElement;
     const b = tg.closest<HTMLElement>('[data-r]');
+    if (b && (b.dataset.r === 'save' || b.dataset.r === 'savex')) return;
+    e.preventDefault();
     if (b) {
       const k = b.dataset.r;
+      if (k === 'rec') { rpRecTap(r); return; }
+      // 錄影中：不能拖時間軸、暫停、重播、換速度（影片才會連續）；轉視角、縮放照樣可以
+      if (vrecBusy() && (k === 'track' || k === 'play' || k === 'restart' || k === 'speed')) return;
       if (k === 'track') { r.scrub = true; r.scrubPlay = r.play.playing; r.play.playing = false; try { track.setPointerCapture(e.pointerId); } catch { /* 不支援 */ } seekX(e.clientX); return; }
       if (k === 'exit') { stopReplay(); return; }
       if (k === 'play') playToggle(r.play);
@@ -930,6 +974,20 @@ function rpUi(r: Rp) {
   }
   const sp = r.play.speed === 1 ? '1×' : '0.5×';
   if (r.spdB.textContent !== sp) { r.spdB.textContent = sp; r.spdB.classList.toggle('on', r.play.speed !== 1); }
+  // 錄影按鈕／錄影中提示／影片好了
+  const vs = vrec?.st ?? 'idle';
+  const rs = vs === 'rec' ? `rec|${fmtReplayT(r.play.t)}` : vs === 'finishing' ? 'fin' : vs === 'ready' ? `ready|${vrec!.size}` : 'idle';
+  if (rs !== r.recS) {
+    r.recS = rs;
+    const busy = vs === 'rec' || vs === 'finishing';
+    r.el.classList.toggle('recording', busy);
+    r.recB.classList.toggle('on', vs === 'rec');
+    r.recB.innerHTML = vs === 'rec' ? `${ICON.recDot}<span>錄製中 ${fmtReplayT(r.play.t)} / ${fmtReplayT(r.play.dur)}（點此停止）</span>`
+      : vs === 'finishing' ? `${ICON.recDot}<span>影片處理中…</span>` : `${ICON.video}<span>錄製影片</span>`;
+    r.el.classList.toggle('vidReady', vs === 'ready');
+    const sv = r.el.querySelector('.frSaveB span');
+    if (sv) sv.textContent = vs === 'ready' ? `影片好了（${fmtMB(vrec!.size)}）— 儲存 / 分享` : '';
+  }
 }
 /** 回放的世界座標：記錄時相對那一格的人，換到人現在站的位置／朝向（岸上＝原地；船上＝跟著船） */
 let rpDx = 0, rpDy = 0, rpDz = 0, rpCos = 1, rpSin = 0, rpPx = 0, rpPz = 0;
@@ -1003,6 +1061,8 @@ function drawReplay(dt: number) {
     cam.lookAt(r.focus);
     cam.updateMatrixWorld();
   }
+  // 錄影：播到尾巴自動停
+  if (vrec?.st === 'rec' && !r.play.playing && r.play.t >= r.play.dur) vrec.stop();
   if (r.hintT > 0) { r.hintT -= dt; if (r.hintT <= 0) r.hint.classList.add('off'); } else if (!r.hint.classList.contains('off')) r.hint.classList.add('off');
   rpUi(r);
 }
@@ -1257,6 +1317,8 @@ export const fishDbg = {
   /** 測試：噴一團墨（在現在的線頭位置） */
   ink() { ffx?.inkPuff(_end.x, PB.waterY + 0.05, _end.z, 1); return ffx?.ink.live() ?? 0; },
   /** 測試：假裝中魚（不經伺服器，只看拉扯畫面） */
+  /** 測試：錄影片狀態 */
+  vrec() { return vrec ? { st: vrec.st, size: vrec.size, name: vrec.name, type: vrec.type, url: !!vrec.url } : null; },
   /** 測試：回放跳到某秒並暫停 */
   rpSeek(sec: number) { if (!rp) return null; playSeek(rp.play, sec); rp.play.playing = false; rpUi(rp); return rp.play.t; },
   /** 測試：精彩回放（狀態／開始／關閉） */
