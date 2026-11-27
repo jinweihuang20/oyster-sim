@@ -4364,7 +4364,7 @@ body.tideOn #tidePill{display:flex}
 
 /* ---------- 廣場海面：上船／下船／丟殼／跳水 ---------- */
 #boatUi{position:fixed;inset:0;pointer-events:none;z-index:8600}
-#boatUi .boatBtn{position:absolute;display:none;align-items:center;gap:8px;pointer-events:auto;touch-action:none;padding:12px 18px!important;border-radius:16px!important;border:2px solid #fff!important;background:#2a5a86!important;color:#fff!important;font-size:16px;font-weight:700;letter-spacing:0;box-shadow:0 3px 12px rgba(0,0,0,.28)!important;-webkit-tap-highlight-color:transparent;user-select:none;white-space:nowrap;flex-shrink:0;width:auto!important;height:auto!important;min-width:0!important;min-height:0!important;line-height:1.2;writing-mode:horizontal-tb}
+#boatUi .boatBtn{position:absolute;display:none;align-items:center;gap:8px;pointer-events:auto;touch-action:none;padding:12px 18px!important;border-radius:16px!important;border:2px solid #fff!important;background:#2a5a86!important;color:#fff!important;font-size:16px;font-weight:700;letter-spacing:0;box-shadow:0 3px 12px rgba(0,0,0,.28)!important;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;white-space:nowrap;flex-shrink:0;width:auto!important;height:auto!important;min-width:0!important;min-height:0!important;line-height:1.2;writing-mode:horizontal-tb}
 #boatUi .boatBtn .lbl,#boatUi .boatBtn .key{white-space:nowrap}
 #boatUi .boatBtn.on{display:flex}
 #boatUi .boatBtn.dis{opacity:.55}
@@ -4446,8 +4446,9 @@ body.plazaBoatSmoke #boatRackBar{bottom:calc(var(--sa-bottom,0px) + 278px)}
   #rackUpPanel .rkRow{padding:4px 0}
 }
 /* ---------- 廣場海面釣魚：右下「拋竿／收線／抽竿」、上方狀態卡、力道／張力條、換餌／圖鑑面板（實心、不用毛玻璃） ---------- */
-#fishBar{position:absolute;z-index:3;right:calc(var(--sa-right,0px) + 18px);bottom:calc(var(--sa-bottom,0px) + 86px);display:none;flex-direction:column-reverse;align-items:flex-end;gap:10px;pointer-events:none}
+#fishBar{position:absolute;z-index:3;right:calc(var(--sa-right,0px) + 18px);bottom:calc(var(--sa-bottom,0px) + 86px);display:none;flex-direction:column-reverse;align-items:flex-end;gap:10px;pointer-events:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 #fishBar.on{display:flex}
+#fishBar .boatBtn,#fishBar .boatBtn *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;touch-action:none}
 #boatUi #fishBar .boatBtn{position:static}
 #boatUi #fishCast,#boatUi #fishReel{padding:15px 22px!important;font-size:18px;border-radius:18px!important}
 #boatUi #fishReel.hot{background:#c8401a!important;border-color:#ffd76a!important}

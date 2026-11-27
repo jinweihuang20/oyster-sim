@@ -11,7 +11,7 @@ import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
 import type { BoatNet } from './boatNet';
-import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyDur, fishDistNow, fmtDistM, fightDistM, hookFightMs, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, canFishAt, newNoRodHint, stepNoRodHint, NO_ROD_HINT, type Gear, type ItemKey, type BaitKey, type LureKey, type NoRodHintSt } from './fishLogic';
+import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyDur, fishDistNow, fmtDistM, fightDistM, hookFightMs, hookPower, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, canFishAt, newNoRodHint, stepNoRodHint, NO_ROD_HINT, type Gear, type ItemKey, type BaitKey, type LureKey, type NoRodHintSt } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { castFlyPoint, castLine, CAST_LINE_SEGS, CAST_RELEASE_S, CAST_SETTLE_S, type CastLineOpt } from './castArc';
 import { makeFishMesh, FISH_TIER } from './fishModel';
@@ -196,6 +196,11 @@ export function openFish(ctx: FishCtx, root: HTMLElement) {
     getTension: () => sm.phase === 'fight' ? (sm.fight?.ten ?? 0) : -1,
   });
   for (const b of [entry, sell, jerk, reel, cast]) b.addEventListener('click', stop);
+  // iOS 長按會跳出原生放大鏡選字泡泡：這三顆是按住操作（用 pointerdown／pointerup，不是 click），擋掉 touchstart 預設行為不會影響收線
+  for (const b of [jerk, reel, cast]) {
+    b.addEventListener('contextmenu', e => e.preventDefault());
+    b.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+  }
   acts.addEventListener('pointerdown', e => {
     e.stopPropagation();
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-f]'); if (!b) return;
@@ -393,7 +398,8 @@ async function doReel() {
     fightD0 = Math.max(1.5, lineNow());
     // 拉多久＝實際中魚距離 ÷ 收線速度（伺服器回 mps；舊伺服器沒有就照公斤數算，不比它的最短時間快）
     const mps = num(g(r, 'mps'), 0);
-    sm.hooked(num(r.power, 0.3), hookFightMs(fightD0, hooked?.kg ?? 1, hooked?.tier ?? 0, mps > 0 ? mps : undefined, num(r.fightMs, 2500), num(r.power, 0.3)), fightD0);
+    const power = hookPower(hooked?.kg ?? 1, hooked?.tier ?? 0, num(r.power, 0.3), mps > 0 ? mps : undefined);
+    sm.hooked(power, hookFightMs(fightD0, hooked?.kg ?? 1, hooked?.tier ?? 0, mps > 0 ? mps : undefined, num(r.fightMs, 2500), power), fightD0);
     // 精彩回放：從中魚開始錄（只留最後 10 秒）；上一條的片段留著，釣上來才換掉
     recStart(rec); recEndT = -1; wantReplay = false;
     document.body.classList.add('fishFight');

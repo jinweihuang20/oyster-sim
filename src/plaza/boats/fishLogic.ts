@@ -242,6 +242,23 @@ export function hookFightMs(d0: number, kg: number, tier: number, srvMps?: numbe
   // 舊伺服器最短＝fightMs/2；客戶端最快＝時間 ÷（1.35 × 大魚收線倍率），多留 4%
   return !newSrv && srvFightMs && srvFightMs > 0 ? Math.max(ms, Math.ceil(srvFightMs * 0.5 * 1.35 * fightPumpK(power) * 1.04)) : ms;
 }
+/** 魚的力氣曲線（跟伺服器 PlazaWorld.FishPower 一樣，log 內插）：0.1 kg≈0.08、0.5≈0.20、3.5≈0.40、20≈0.62、320+≈0.95～1 */
+const POWER_CURVE: readonly (readonly [number, number])[] = [[0.1, 0.08], [0.2, 0.12], [0.5, 0.20], [1, 0.26], [3.5, 0.40], [20, 0.62], [100, 0.82], [320, 0.95], [850, 1]];
+/** 魚的力氣 0～1：主要看實際公斤數，1 kg 以下會降到很輕；稀有度加成也隨重量縮小（小魚不會因為稀有就猛） */
+export function fishPower(kg: number, tier: number) {
+  const c = POWER_CURVE; const w = Math.max(0.01, kg); let p: number;
+  if (!(w > c[0][0])) p = c[0][1];
+  else if (w >= c[c.length - 1][0]) p = c[c.length - 1][1];
+  else { let i = 1; while (w > c[i][0]) i++; const t = Math.log(w / c[i - 1][0]) / Math.log(c[i][0] / c[i - 1][0]); p = c[i - 1][1] + (c[i][1] - c[i - 1][1]) * t; }
+  p += 0.06 * Math.max(0, Math.min(3, Math.floor(Number.isFinite(tier) ? tier : 0))) * Math.max(0.2, Math.min(1, w / 1.5));
+  return Math.round(Math.max(0.06, Math.min(1, p)) * 100) / 100;
+}
+/** 中魚力氣：新伺服器回 mps 就用它給的 power；舊伺服器沒有 mps（舊公式會把小魚／稀有魚算太猛）就自己照公斤數重算 */
+export function hookPower(kg: number, tier: number, srvPower?: number, srvMps?: number) {
+  const newSrv = typeof srvMps === 'number' && Number.isFinite(srvMps) && srvMps > 0;
+  if (newSrv && typeof srvPower === 'number' && Number.isFinite(srvPower)) return Math.max(0.05, Math.min(1, srvPower));
+  return fishPower(kg, tier);
+}
 /** fightMs＝伺服器給的拉扯時間（越大隻越久）、power 0～1＝魚的力氣 */
 /** 拉扯一開始的進度（0.2＝已經拉近一點）；prog 最低到 FIGHT_PROG_MIN＝大魚把線拉出去（距離最多到中魚時的 1.8 倍） */
 export const FIGHT_P0 = 0.2, FIGHT_PROG_MIN = -0.44;
@@ -256,17 +273,19 @@ export const bigPull = (power: number) => { const k = Math.max(0, (power - 0.45)
  * 大魚要一放一收（張力到紅區就得放、放的時候還會被拉走），按住收線那段收快一點補回來：
  * 平均下來大約照伺服器的收線速度；最多 1.45 倍（×路亞 1.35 ＝ 1.96 → 最快＝時間 × 0.51；伺服器最短時間＝時間 × 0.4 − 延遲，不會誤判）
  */
-export const fightPumpK = (power: number) => 1 + 0.45 * bigPull(Math.max(0.1, Math.min(1, power)));
+export const fightPumpK = (power: number) => 1 + 0.45 * bigPull(Math.max(0.05, Math.min(1, power)));
 /** d0＝中魚距離（公尺）：一直收線（方向沒影響）剛好 fightMs 拉到腳邊；有給 d0 就限制畫面速度最多 REEL.capMps */
 export function newFight(power: number, fightMs: number, lure: boolean, d0?: number): Fight {
-  const f: Fight = { prog: FIGHT_P0, ten: 0.25, run: 0, runT: 1, hiT: 0, loT: 0, t: 0, power: Math.max(0.1, Math.min(1, power)), rate: (1 - FIGHT_P0) / Math.max(0.5, fightMs / 1000), lure, pump: fightPumpK(power) };
+  const f: Fight = { prog: FIGHT_P0, ten: 0.25, run: 0, runT: 1, hiT: 0, loT: 0, t: 0, power: Math.max(0.05, Math.min(1, power)), rate: (1 - FIGHT_P0) / Math.max(0.5, fightMs / 1000), lure, pump: fightPumpK(power) };
   if (d0 && d0 > 0 && Number.isFinite(d0)) f.cap = REEL.capMps * (1 - FIGHT_P0) / d0;
   return f;
 }
 /** 魚把線拉出去的力道（相對 rate）：rate 改成「一直收剛好 fightMs」之前是 1.1／秒數，拉線力道維持跟以前一樣 */
 export const FIGHT_PULL_K = 1.1 / (1 - FIGHT_P0);
-/** 小魚（power 低）一直收線張力只會停在這裡（不會爆線）；power ≥ 0.45 以上就跟以前一樣要一放一收 */
-export const fightTenCeil = (power: number) => 0.5 + power;
+/** 小魚（power 低）一直收線張力只會停在這裡（不會爆線）；power ≥ 0.48（ceil ≥ snapT）就跟以前一樣要一放一收 */
+export const fightTenCeil = (power: number) => 0.26 + 1.45 * power;
+/** 路亞方向沒拉對時的收線倍率：小魚幾乎不減速（0.88），大魚維持 0.60 */
+export const lureBadGood = (power: number) => 0.88 - 0.28 * Math.max(0, Math.min(1, (power - 0.15) / 0.30));
 export type FightEnd = 'landed' | 'snap' | 'unhook' | null;
 /**
  * 拉扯一步：reel＝按住收線；dir＝搖桿左右（-1～1）。
@@ -280,7 +299,7 @@ export function stepFight(f: Fight, reel: boolean, dir: number, dt: number, rnd:
   if (f.lure) {
     f.runT -= dt;
     if (f.runT <= 0) { const r = rnd(); f.run = r < 0.2 ? 0 : r < 0.6 ? -1 : 1; f.runT = 1.2 + rnd() * 1.6; }
-    if (f.run !== 0) { if (dir * f.run < -0.3) good = 1.35; else { good = 0.6; bad = 1; } }
+    if (f.run !== 0) { if (dir * f.run < -0.3) good = 1.35; else { good = lureBadGood(f.power); bad = 1; } }
   }
   if (reel) {
     const rise = (0.15 + 0.75 * f.power) * dt * (bad ? 1.5 : good > 1 ? 0.75 : 1), ceil = fightTenCeil(f.power);
@@ -298,8 +317,12 @@ export function stepFight(f: Fight, reel: boolean, dir: number, dt: number, rnd:
   if (reel) f.offT = 0;
   // 大魚在衝、搖桿沒往反方向拉：就算在收線也會被拉出去
   if (bad) f.prog -= 0.9 * bigPull(f.power) * f.rate * FIGHT_PULL_K * dt;
-  // 魚在衝、方向沒拉對：張力自己往上
-  if (bad) f.ten += 0.3 * f.power * dt;
+  // 魚在衝、方向沒拉對：張力自己往上；小魚（ceil < 斷線門檻）不會因此進紅區或斷線
+  if (bad) {
+    const add = 0.3 * f.power * dt, ceil = fightTenCeil(f.power);
+    if (ceil < FISH.snapT) { const cap = Math.min(FISH.redT - 0.05, ceil + 0.08); if (f.ten < cap) f.ten = Math.min(cap, f.ten + add); }
+    else f.ten += add;
+  }
   f.ten = Math.max(0, Math.min(1, f.ten)); f.prog = Math.max(FIGHT_PROG_MIN, Math.min(1, f.prog));
   f.hiT = f.ten >= FISH.snapT ? f.hiT + dt : 0;
   f.loT = f.lure && f.t > 1 && f.ten <= FISH.slackT ? f.loT + dt : 0;
