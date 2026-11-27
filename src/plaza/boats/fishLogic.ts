@@ -80,11 +80,11 @@ export const LURE_TIP: Record<LureKey, string> = {
   stickbait: '中快速收線、每隔一下抽竿：在水面下左右滑，整天都有效',
   trollskirt: '坐船拖釣最強；拋出去就要一直快收',
   slowjig: '讓它沉到深處，輕輕抽一下、停一下，讓它慢慢飄落',
-  egi: '抽一下、停一下讓它沉：專釣軟絲和花枝，別一直快收',
+  egi: '抽一下、停一下讓它沉：專釣軟絲、花枝和章魚，別一直快收',
   vib: '先讓它沉到中層，再中快速一直收：不用抽竿，靠震動引魚',
   tairubber: '沉到底，再慢慢等速收：收收停停別抽竿，貼底魚愛吃',
   deepcrank: '按住一直收就會自己潛下去：中速收線最好上手',
-  squidjig: '沉到底層，輕輕抽一下、停一下：專釣透抽和章魚',
+  squidjig: '沉到中底層，輕輕抽一下、停一下：專釣軟絲、花枝、章魚，白帶魚也愛',
 };
 export const LURE_KEYS: readonly LureKey[] = ['minnow', 'jig', 'soft', 'popper', 'stickbait', 'trollskirt', 'slowjig', 'egi', 'vib', 'tairubber', 'deepcrank', 'squidjig'];
 export const isLure = (k: string): k is LureKey => (LURE_KEYS as readonly string[]).includes(k);

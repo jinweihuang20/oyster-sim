@@ -4712,3 +4712,11 @@ body.fishPanelOpen #boatUi>.boatBtn,body.fishPanelOpen #boatRackBar,body.fishPan
 #fishPanel .fpTabs .fpLb svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
 @media (max-width:380px){#fishPanel .fpTabs button{padding:6px 8px!important;font-size:13px}#fishPanel .fpTabs .fpLb span{display:none}}
 #lb .lbV .lbFishSp{color:#2a5a86;font-weight:800;margin-right:4px}
+/* CR-23 釣魚提示：雜貨店釣具卡片、換餌面板、圖鑑（實底、不用模糊） */
+.fhHint{display:block;margin-top:3px;font-size:12px;line-height:1.45;color:#1d2b3a;overflow-wrap:anywhere}
+.fhHint b{display:block;color:#2a5a86;font-weight:800}
+.fhHint>span{display:block;color:#3a4b5c}
+#fishPanel .fpPick small.fpTag{color:#2a5a86;font-weight:700}
+#fishPanel .fpHint{margin:8px 0 0;padding:7px 10px;border-radius:10px;background:#fff;border:1.5px solid #dbe4ec;border-left:4px solid #2a5a86}
+.fdxHost .fdxHint{margin:0;padding:7px 10px;border-radius:10px;background:#fff;border:1.5px solid #dbe4ec;border-left:4px solid #2a5a86;color:#1d2b3a;font-size:13px;line-height:1.5;font-weight:700;overflow-wrap:anywhere}
+.fdxHost .fdxHint.fdxClue{font-weight:600;color:#3a4b5c}

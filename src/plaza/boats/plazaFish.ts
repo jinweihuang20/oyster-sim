@@ -18,6 +18,7 @@ import { makeFishMesh, FISH_TIER } from './fishModel';
 import { HOIST_S, HOIST_HANG_S, HOIST_TIP_DROP, HOIST_CARD_U, fishLenM, fightCloseK, fightFishDepth, fightFishYaw, newHoist, startHoist, stopHoist, stepHoist, hoistDone, hoistU, hoistMouth, hoistPitch, hoistYaw, fishCenterFromMouth } from './fishHoist';
 import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
+import { ITEM_HINT, itemHintHtml } from './fishHints';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, steerablePhase, type FishPoseIn, type FishPhase } from './fishPose';
 import { remoteReelSide, type FishSyncMsg } from './fishSync';
 import { ReplayVideoRec, browserVideoDeps, canRecordVideo, fmtMB, loadVideoQuality, saveVideoQuality, VIDEO_QUALITY, type VideoQuality } from './fishReplayRecord';
@@ -475,9 +476,9 @@ function renderPanel() {
   if (panelTab === 'gear') {
     const rodRow = (['float', 'lure'] as Gear[]).map(gr => `<button type="button" data-rod="${gr}" class="fpPick ${rod === gr ? 'on' : ''}" ${owns(gr) ? '' : 'disabled'}><b>${FISH.rods[gr].n}</b><small>${owns(gr) ? (gr === 'float' ? '掛餌等魚咬' : '操控假魚') : '雜貨店有賣'}</small></button>`).join('');
     const items: { k: ItemKey; n: string }[] = rod === 'float' ? FISH.baits.map(b => ({ k: b.k, n: b.n })) : FISH.lures.map(l => ({ k: l.k, n: l.n }));
-    const itemRow = items.map(it => { const c = countOf(it.k); return `<button type="button" data-item="${it.k}" class="fpPick ${pick[rod] === it.k ? 'on' : ''}" ${c > 0 ? '' : 'disabled'}><b>${it.n}</b><small>${it.k === 'oyster' ? `今天剩 ${c} 塊` : `剩 ${c}`}</small></button>`; }).join('');
+    const itemRow = items.map(it => { const c = countOf(it.k); return `<button type="button" data-item="${it.k}" class="fpPick ${pick[rod] === it.k ? 'on' : ''}" ${c > 0 ? '' : 'disabled'}><b>${it.n}</b><small class="fpTag">${ITEM_HINT[it.k].tag}</small><small>${it.k === 'oyster' ? `今天剩 ${c} 塊` : `剩 ${c}`}</small></button>`; }).join('');
     const cr = castRange(pick[rod]);
-    const tip = (rod === 'lure' ? `<p class="fpTip">${LURE_TIP[pick.lure as LureKey]}</p>` : '<p class="fpTip">浮標小小抖動是魚在試吃，等整個沉下去再收竿</p>') + `<p class="fpTip">拋竿距離 ${cr.min}～${cr.max} m${rod === 'lure' ? '（越重的假魚拋越遠）' : ''}</p>`;
+    const tip = itemHintHtml(pick[rod], 'fhHint fpHint') + (rod === 'lure' ? `<p class="fpTip">${LURE_TIP[pick.lure as LureKey]}</p>` : '<p class="fpTip">浮標小小抖動是魚在試吃，等整個沉下去再收竿</p>') + `<p class="fpTip">拋竿距離 ${cr.min}～${cr.max} m${rod === 'lure' ? '（越重的假魚拋越遠）' : ''}</p>`;
     body = `<h4>釣竿</h4><div class="fpRow">${rodRow}</div><h4>${rod === 'float' ? '餌' : '假魚'}</h4><div class="fpRow">${itemRow}</div>${tip}<p class="fpFoot">魚獲 ${holdN}／${FISH.holdMax}・約 ${money(holdVal)}（到碼頭全部賣得掉）</p>`;
   }
   dexView?.stop(false); dexView = null;

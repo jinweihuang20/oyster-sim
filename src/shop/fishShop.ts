@@ -5,6 +5,7 @@
  */
 import { FISH, type LureKey } from '../plaza/boats/fishLogic';
 import type { TackleKey } from './tackleModel';
+import { itemHintHtml } from '../plaza/boats/fishHints';
 
 export const FISH_BUY_ATTR = 'data-fishbuy';
 
@@ -17,11 +18,11 @@ export const LURE_GOOD: Record<LureKey, string> = {
   stickbait: '進階大物：水面下 S 字滑行，整天都能引出水面大物',
   trollskirt: '進階大物：坐船拖釣專用，外海高速大魚最愛',
   slowjig: '進階大物：拋最遠、沉最深，慢抽飄落引出深海巨物',
-  egi: '進階大物：抽一下沉一下，專釣軟絲和花枝',
+  egi: '抽一下沉一下，專釣軟絲、花枝和章魚',
   vib: '路亞：沉到中層一直收，靠高頻震動引魚，不用抽竿',
   tairubber: '路亞：沉到底慢慢等速收，貼底的魚最愛',
   deepcrank: '路亞：按住收線就自己潛到中深層，最好上手',
-  squidjig: '路亞：底層輕抽短停，專釣透抽、章魚和白帶魚',
+  squidjig: '路亞：中底層輕抽短停，專釣軟絲、花枝、章魚，白帶魚也愛',
 };
 
 export type FishShopRow = {
@@ -81,7 +82,7 @@ export function fishCardHtml(r: FishShopRow, save: FishShopSave, svg: string, fm
   const btn = r.once && own > 0
     ? `<span class="shopOwnPx"><i class="ic ic-check" aria-hidden="true"></i> 已擁有</span>`
     : `${r.once ? '' : fmt.qtyHtml(k)}<button ${FISH_BUY_ATTR}="${r.id}" ${save.money < fmt.px(k, r.price) ? 'disabled' : ''}>${fmt.pxHtml(k, r.price)}</button>`;
-  return `<div class="itemCard">${tackleIcHtml(r, svg, thumb)}<div class="itemTx"><b>${r.n}</b><small style="color:#9be37a">${r.good}</small>${r.bad ? `<small style="color:#ff8a7a">${r.bad}</small>` : ''}<small>${r.once ? (own > 0 ? '已擁有' : '一次買斷') : `持有 ${own}`}</small>${fmt.pxCd(k)}</div><div class="buyRow">${btn}</div></div>`;
+  return `<div class="itemCard">${tackleIcHtml(r, svg, thumb)}<div class="itemTx"><b>${r.n}</b><small style="color:#9be37a">${r.good}</small>${r.tk ? itemHintHtml(r.tk, 'fhHint shopHint') : ''}${r.bad ? `<small style="color:#ff8a7a">${r.bad}</small>` : ''}<small>${r.once ? (own > 0 ? '已擁有' : '一次買斷') : `持有 ${own}`}</small>${fmt.pxCd(k)}</div><div class="buyRow">${btn}</div></div>`;
 }
 
 export function fishShopHtml(save: FishShopSave, svgs: { rod: string; bait: string; lure: string }, fmt: FishShopFmt, thumb?: (k: TackleKey) => string | undefined) {

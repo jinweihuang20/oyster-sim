@@ -1,10 +1,11 @@
 /**
  * 魚類圖鑑（廣場釣魚的面板、主選單的「圖鑑」頁共用）：魚種卡片（3D 縮圖，韓國魚用照片）＋點進去看可以轉的 3D 模型（照片魚顯示 2D 圖）。
- * 沒釣過的只顯示灰色剪影和「？？？」，不寫在哪裡、用什麼釣。
+ * 沒釣過的只顯示灰色剪影和「？？？」，不寫魚名，只給「出沒線索」（照伺服器標籤，fishHints.ts）；釣過的另外顯示推薦假餌／餌料。
  * 資料：本機快取（localStorage）＋廣場伺服器 FishState＋REST /s/fishdex，取最大值合併。
  */
 import { FISH_SPECIES, FISH_DESC, FISH_TIER, FISH_PHOTO } from './fishModel';
 import { fishThumb, mountFishViewer, releaseFish3d } from './fish3d';
+import { fishClue, fishRecLine } from './fishHints';
 
 export type FishDexRow = { kg: number; n: number };
 const LS_KEY = 'oysterFishDex1';
@@ -74,7 +75,7 @@ export function mountFishDex(host: HTMLElement, opts: { onOpenDetail?: (id: stri
         <div class="fdxNav"><span class="fdxBack" role="button" tabindex="0">返回圖鑑</span><span class="fdxTier">${TIER[s.tier] ?? ''}</span></div>
         ${view}
         <h3 class="fdxName">${d ? esc(s.name) : '？？？'}</h3>
-        ${d ? `<p class="fdxStat">最大 ${kgS(d.kg)} kg・釣過 ${d.n} 條</p><p class="fdxDesc">${esc(FISH_DESC[s.id] ?? '')}</p>` : '<p class="fdxDesc">還沒釣過。釣到之後才看得到牠的樣子和介紹。</p>'}
+        ${d ? `<p class="fdxStat">最大 ${kgS(d.kg)} kg・釣過 ${d.n} 條</p><p class="fdxHint fdxRec">${esc(fishRecLine(s.id))}</p><p class="fdxHint fdxClue">${esc(fishClue(s.id).replace('線索：', '出沒：'))}</p><p class="fdxDesc">${esc(FISH_DESC[s.id] ?? '')}</p>` : `<p class="fdxHint fdxClue">${esc(fishClue(s.id))}</p><p class="fdxDesc">還沒釣過。釣到之後才看得到牠的樣子、介紹和推薦假餌。</p>`}
       </div>`;
       const back = host.querySelector<HTMLElement>('.fdxBack')!;
       const go = (e: Event) => { e.preventDefault(); e.stopPropagation(); detail = null; opts.onOpenDetail?.(null); render(); };
