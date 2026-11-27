@@ -135,32 +135,90 @@ export async function reportAmaScore(combo: number, score: number, showAfterMs =
   }
 }
 
-/* ───────── 輪詢 ───────── */
-let last = -1, timer = 0, polling = false;
+/* ───────── 輪詢 ─────────
+ * 連線中每 12 秒抓一次新廣播並排隊顯示。
+ * 剛開遊戲、輪詢失敗、離線、分頁被背景太久、或距離上次成功超過 BC_STALE_MS：
+ * 用 since=-1 只把遊標追到最新（舊伺服器也支援），斷線期間的提示全部丟棄，
+ * 尚未跳出的橫幅也清掉；恢復之後才發生的新廣播照常顯示。
+ */
+/** 距上次成功輪詢超過此時長，視為斷線或背景太久（比 12 秒間隔多一點緩衝） */
+export const BC_STALE_MS = 20_000;
+export const BC_POLL_MS = 12_000;
+
+export type CookBcCursor = { last: number; lastOkAt: number; skipBacklog: boolean };
+export const cookBcCursorInit = (): CookBcCursor => ({ last: -1, lastOkAt: 0, skipBacklog: false });
+
+export function cookBcMarkDisconnected(cur: CookBcCursor): CookBcCursor {
+  return { ...cur, skipBacklog: true };
+}
+
+/** 要不要把這次回傳當「追遊標、不播舊的」，以及該問伺服器的 since */
+export function cookBcPlan(cur: CookBcCursor, now: number): { recover: boolean; since: number } {
+  const recover = cur.last < 0 || cur.skipBacklog || (cur.lastOkAt > 0 && now - cur.lastOkAt > BC_STALE_MS);
+  return { recover, since: recover ? -1 : cur.last };
+}
+
+export type CookBcBanner = { kind: 'first' | 'ama'; nick: string; tag: string; combo: number; score: number; ts: number };
+
+export function cookBcParseItems(raw: unknown, now: number): CookBcBanner[] {
+  const out: CookBcBanner[] = [];
+  for (const e of Array.isArray(raw) ? raw : []) {
+    const kind = e?.kind === 'first' ? 'first' : e?.kind === 'ama' ? 'ama' : null;
+    const combo = Number(e?.combo), score = Number(e?.score) || 0;
+    if (!kind || !Number.isInteger(combo)) continue;
+    out.push({ kind, nick: String(e?.nick ?? ''), tag: String(e?.tag ?? ''), combo, score, ts: Number(e?.ts) || now });
+  }
+  return out;
+}
+
+export type CookBcApply = { cursor: CookBcCursor; discard: boolean; items: CookBcBanner[] };
+
+/** response 無效＝維持失敗標記並丟棄；recover 或請求期間又斷線＝追最新、不播。 */
+export function cookBcApplyPoll(
+  cur: CookBcCursor,
+  response: { last?: unknown; items?: unknown } | null | undefined,
+  now: number,
+  recover: boolean,
+): CookBcApply {
+  if (!response || typeof response.last !== 'number') {
+    return { cursor: cookBcMarkDisconnected(cur), discard: true, items: [] };
+  }
+  const skip = recover || cur.skipBacklog;
+  const next: CookBcCursor = { last: response.last, lastOkAt: now, skipBacklog: false };
+  if (skip) return { cursor: next, discard: true, items: [] };
+  return { cursor: next, discard: false, items: cookBcParseItems(response.items, now) };
+}
+
+let cursor = cookBcCursorInit(), timer = 0, polling = false;
+
+function clearPending() { queue.length = 0; }
+
+function onDisconnect() {
+  cursor = cookBcMarkDisconnected(cursor);
+  clearPending();
+}
+
 async function poll() {
   if (polling || document.hidden) return;
   polling = true;
   try {
-    const r = await socialGet(`/bc?since=${last}${tq2()}`);
-    if (!r || typeof r.last !== 'number') return;
-    const first = last < 0;
-    last = r.last;
-    if (first) return; // 剛開遊戲不補播
+    const planned = cookBcPlan(cursor, Date.now());
+    const r = await socialGet(`/bc?since=${planned.since}${tq2()}`);
+    // 請求期間若已 offline／切到背景，skipBacklog 可能已被設起來，一樣不補播
+    const res = cookBcApplyPoll(cursor, r, Date.now(), planned.recover);
+    cursor = res.cursor;
+    if (res.discard) { clearPending(); return; }
     const now = Date.now();
     for (const [k, t] of mine) if (now - t > 120_000) mine.delete(k);
-    for (const e of Array.isArray(r.items) ? r.items : []) {
-      const kind = e?.kind === 'first' ? 'first' : e?.kind === 'ama' ? 'ama' : null;
-      const combo = Number(e?.combo), score = Number(e?.score) || 0;
-      if (!kind || !Number.isInteger(combo)) continue;
-      const key = `${kind}|${combo}|${kind === 'ama' ? score : 0}`;
-      if (mine.has(key) && String(e?.nick ?? '') === socialNick()) { mine.delete(key); continue; }
-      if (kind === 'first' && !firsts.has(combo)) firsts.set(combo, { nick: String(e?.nick ?? ''), tag: String(e?.tag ?? ''), ts: Number(e?.ts) || now });
-      push({ kind, nick: String(e?.nick ?? ''), tag: String(e?.tag ?? ''), combo, score });
+    for (const it of res.items) {
+      const key = `${it.kind}|${it.combo}|${it.kind === 'ama' ? it.score : 0}`;
+      if (mine.has(key) && it.nick === socialNick()) { mine.delete(key); continue; }
+      if (it.kind === 'first' && !firsts.has(it.combo)) firsts.set(it.combo, { nick: it.nick, tag: it.tag, ts: it.ts });
+      push({ kind: it.kind, nick: it.nick, tag: it.tag, combo: it.combo, score: it.score });
     }
   } finally { polling = false; }
 }
 
-/** 開遊戲時呼叫一次：每 12 秒看有沒有新的全服廣播（主選單、工寮、廣場都會收到） */
 /**
  * 圖鑑收集榜：這版之前煎過的款式一次補登到伺服器（伺服器每人只收一次、只收有食材的組合）。
  * 本機圖鑑是空的就先不送（雲端存檔還沒載回來時不會白白用掉這一次）；舊伺服器沒有這條路徑時下次開遊戲再試。
@@ -176,9 +234,15 @@ export function syncCookDexOnce(ids: number[]) {
   }, 6000);
 }
 
+/** 開遊戲時呼叫一次：每 12 秒看有沒有新的全服廣播（主選單、工寮、廣場都會收到） */
 export function initCookBroadcast() {
   if (timer) return;
   window.setTimeout(poll, 4000);
-  timer = window.setInterval(poll, 12_000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) void poll(); });
+  timer = window.setInterval(poll, BC_POLL_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) onDisconnect();
+    else void poll();
+  });
+  window.addEventListener('offline', onDisconnect);
+  window.addEventListener('online', () => { onDisconnect(); void poll(); });
 }
