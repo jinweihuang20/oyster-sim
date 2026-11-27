@@ -479,14 +479,13 @@ export function standCam(x: number, y: number, z: number, camYaw: number, pos: V
 }
 /**
  * 站在甲板上該面向哪（船身座標，0＝船頭）。
- * 收線中（路亞按住收線、或拉魚按住收線）＝跟著鏡頭水平方向轉；走路＝走的方向；
- * 剛收過線放開＝維持目前朝向（不瞬間轉回原來的拋竿方向）；線在水裡／蓄力＝那個世界方向；站著不動＝鏡頭方向。
+ * followCam（船上釣魚）＝沒在走就跟著鏡頭水平方向轉（不管有沒有按收線），走路＝走的方向；
+ * 未指定 followCam 時：線在水裡／蓄力＝那個世界方向；走路＝走的方向；站著不動＝鏡頭方向。
  * 假魚／魚在水裡是真的世界座標（CR-31，fishWorld.ts），不跟人一起轉。
  */
-export type StandWantYawOpts = { reeling?: boolean; holdYaw?: number | null };
+export type StandWantYawOpts = { followCam?: boolean };
 export function standWantYaw(fishYaw: number | null, moving: boolean, walkYaw: number, camYaw: number, boatH: number, opts?: StandWantYawOpts) {
-  if (opts?.reeling) return camYaw - boatH;
-  if (opts?.holdYaw != null) return moving ? walkYaw : opts.holdYaw;
+  if (opts?.followCam) return moving ? walkYaw : camYaw - boatH;
   if (fishYaw != null) return fishYaw - boatH;
   if (moving) return walkYaw;
   return camYaw - boatH;

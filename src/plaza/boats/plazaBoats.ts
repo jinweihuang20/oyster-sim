@@ -19,7 +19,7 @@ import {
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
-import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishFaceYaw, fishCanWalk, fishReeling, fishPostPose, fishRejoined, fishSyncFill, fishBodyVerts } from './plazaFish';
+import { openFish, closeFish, tickFish, fishKey, fishHoldsInput, fishActive, onFishBig, fishDbg, fishFaceYaw, fishCanWalk, fishPostPose, fishRejoined, fishSyncFill, fishBodyVerts } from './plazaFish';
 import { DECK, FISH, chargePower, castFlyPoint, castFlyDur, deckStart, deckClamp, stepDeck, yawOf, standCam, standWantYaw } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
 import { CAST_RELEASE_S } from './castArc';
@@ -907,16 +907,16 @@ function dockInsets(W: number, H: number) {
 // ---------------- 船上站著釣魚 ----------------
 type RemoteMountLike = Parameters<NonNullable<ReturnType<PlazaBoatDeps['view']>>['setRemoteMount']>[1] & object;
 /** 自己：站在甲板上的位置（船身座標）、面向、走路相位 */
-const stand = { on: false, x: 0, z: 0, yaw: 0, ph: 0, moving: false, hinted: false, spd: DECK.walkSpd, reelFollow: false };
+const stand = { on: false, x: 0, z: 0, yaw: 0, ph: 0, moving: false, hinted: false, spd: DECK.walkSpd };
 function standUp() {
   const S = SEATS[mySeat]; if (!S) return;
   const p = deckStart(S.x, S.z);
-  stand.on = true; stand.x = p.x; stand.z = p.z; stand.yaw = 0; stand.moving = false; stand.reelFollow = false; justStood = true;
+  stand.on = true; stand.x = p.x; stand.z = p.z; stand.yaw = 0; stand.moving = false; justStood = true;
   if (!stand.hinted) { stand.hinted = true; toastTop(mySeat === 0 ? '站起來釣魚了：搖桿可以在船上走；要開船先按「不釣了」坐回去' : '站起來釣魚了：搖桿可以在船上走動', 3); }
 }
 function standDown() {
   if (!stand.on) return;
-  stand.on = false; stand.moving = false; stand.reelFollow = false;
+  stand.on = false; stand.moving = false;
   const rig = D?.me(); if (rig) { posePlazaStand(rig); rig.torso.rotation.set(0, 0, 0); }
 }
 const _stp = { x: 0, z: 0, yaw: 0 };
@@ -945,13 +945,8 @@ function tickStand(dt: number, cam: THREE.Camera, b: BoatSt) {
   stand.spd = plazaWalkSpeedNow();
   stand.moving = fishCanWalk() && stepDeck(_stp, mx, mz, cy, b.h, dt, stand.spd);
   if (stand.moving) { stand.x = _stp.x; stand.z = _stp.z; }
-  // 面向：船上收線＝跟著鏡頭轉；放開收線後維持朝向（不瞬間轉回拋竿方向）；線在水裡／蓄力＝那個方向；走路＝走的方向；站著＝鏡頭方向
-  const reeling = fishReeling();
-  if (reeling) stand.reelFollow = true;
-  else if (!fishActive() || fishFaceYaw() == null) stand.reelFollow = false;
-  const want = standWantYaw(fishFaceYaw(), stand.moving, _stp.yaw, cy, b.h, {
-    reeling, holdYaw: stand.reelFollow && !reeling ? stand.yaw : null,
-  });
+  // 面向：船上釣魚且沒在走＝跟著鏡頭轉（不管有沒有按收線）；走路＝走的方向
+  const want = standWantYaw(fishFaceYaw(), stand.moving, _stp.yaw, cy, b.h, { followCam: true });
   let d = want - stand.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
   stand.yaw += d * (1 - Math.exp(-10 * dt));
 }
