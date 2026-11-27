@@ -35,6 +35,8 @@ export default defineConfig({
           readFileSync('src/dm/weapons.ts', 'utf8'),
           readFileSync('src/shop/pets.ts', 'utf8'),
           readFileSync('src/food/ingredients.ts', 'utf8'),
+          readFileSync('src/plaza/boats/fishLogic.ts', 'utf8'),
+          readFileSync('src/plaza/boats/rackLogic.ts', 'utf8'),
         )),
       });
     },

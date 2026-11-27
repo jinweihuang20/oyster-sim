@@ -1,4 +1,5 @@
 /** 工寮雜貨：刀／傘／碗／槍與伺服器價格（從 main.ts 拆出，行為不變） */
+import { pxIn, pxLiveIn, type ShopPx } from './shopPx';
 import type { Save } from '../core';
 import { $ } from '../ui';
 import {
@@ -133,7 +134,6 @@ export const knifeNow = () => { const save = D.getSave(); return KNIVES.find(k =
 
 function pctTxt(v: number, goodHigh: boolean) { if (v === 1) return '<span style="opacity:.6">—</span>'; const p = Math.round((v - 1) * 100), good = goodHigh ? p > 0 : p < 0; return `<b style="color:${good ? '#9be37a' : '#ff8a7a'}">${p > 0 ? '+' : ''}${p}%</b>`; }
 // 商店價格：每次打開雜貨店向伺服器拿一次（後台「商店價格」可改價、打折）；拿不到就照內建價格
-type ShopPx = { price: number; base: number; sale?: boolean; endsAt?: number | null };
 const PX_URL = 'https://game-status.gwtech.org/s/shop/prices?game=oyster-sim';
 /** 後台「標為新品」的物品 key（給雜貨店新品標記用） */
 let shopNewIds: string[] = [];
@@ -149,8 +149,8 @@ export async function fetchPrices(ms = 2000) {
   } catch { return false; } finally { clearTimeout(t); }
 }
 const pxNow = () => Date.now() + shopSkew;
-const pxLive = (k: string) => { const p = shopPx[k]; return p && p.price > 0 && !(p.endsAt && pxNow() >= p.endsAt) ? p : null; };
-export const px = (k: string, base: number) => { const p = pxLive(k); if (p) return p.price; const q = shopPx[k]; return q && q.base > 0 ? q.base : base; };
+const pxLive = (k: string) => pxLiveIn(shopPx, k, pxNow());
+export const px = (k: string, base: number) => pxIn(shopPx, k, base, pxNow());
 function cdTxt(ms: number) { if (ms <= 0) return '特價已結束'; const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `剩 ${d} 天 ${h} 小時` : `剩 ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
 /** 價格標示：特價時原價劃掉＋新價＋「特價」＋倒數 */
 export function pxHtml(k: string, base: number, pre = '') {

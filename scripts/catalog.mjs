@@ -31,7 +31,43 @@ function fxStats(fx) {
   return o;
 }
 
-export function buildCatalog(src, version = '', oddSrc = src, wpnSrc = '', petSrc = '', foodSrc = '') {
+/** 從原始碼字串抓 `{ ... id: 'xxx', ... }` 物件字面值的欄位（id／n／price／pack），給釣具用 */
+function litRows(src, idRe) {
+  const out = [];
+  for (const m of src.matchAll(/\{[^{}]*\}/g)) {
+    const t = m[0];
+    const id = /\bid:\s*'([^']+)'/.exec(t)?.[1];
+    if (!id || !idRe.test(id)) continue;
+    const n = /\bn:\s*'([^']+)'/.exec(t)?.[1] ?? id;
+    const price = Number((/\bprice:\s*([\d_]+)/.exec(t)?.[1] ?? '0').replace(/_/g, ''));
+    const pack = Number((/\bpack:\s*([\d_]+)/.exec(t)?.[1] ?? '0').replace(/_/g, ''));
+    out.push({ id, n, price, pack });
+  }
+  return out;
+}
+
+/**
+ * 雜貨店「釣具」與「蚵棚」商品（後台商店價格用）。key 跟遊戲裡 px('item-' + id) 一樣：
+ * 釣竿 fishRod*、餌 fishBait*、假魚 fishLure*（FISH，src/plaza/boats/fishLogic.ts）；蚵棚組合包 RACK.kitId（src/plaza/boats/rackLogic.ts）。
+ */
+export function fishRackItems(fishSrc = '', rackSrc = '') {
+  const items = [];
+  if (fishSrc) {
+    const seen = new Set();
+    for (const r of litRows(fishSrc, /^fish(Rod|Bait|Lure)[A-Z]/)) {
+      if (seen.has(r.id) || !(r.price > 0)) continue; seen.add(r.id);
+      items.push({ id: 'item-' + r.id, name: r.pack > 0 ? `${r.n}（${r.pack} 個）` : r.n, category: 'fish', price: r.price, limited: false });
+    }
+  }
+  if (rackSrc) {
+    const price = Number((/\bkitPrice:\s*([\d_]+)/.exec(rackSrc)?.[1] ?? '0').replace(/_/g, ''));
+    const id = /\bkitId:\s*'([^']+)'/.exec(rackSrc)?.[1];
+    if (id && price > 0) items.push({ id: 'item-' + id, name: '蚵棚', category: 'rack', price, limited: false });
+  }
+  return items;
+}
+
+export function buildCatalog(src, version = '', oddSrc = src, wpnSrc = '', petSrc = '', foodSrc = '', fishSrc = '', rackSrc = '') {
   const DIFF_W = ev(src, 'DIFF_W');
   const items = [];
   ev(src, 'RAR').forEach((p, i) => items.push({ id: `pearl-${i}`, name: p.name, category: 'pearl', rarity: rarOf(p.w), weight: p.w, price: p.price, limited: false }));
@@ -95,6 +131,7 @@ export function buildCatalog(src, version = '', oddSrc = src, wpnSrc = '', petSr
       items.push({ id: w.id, name: w.name, category: 'weapon', price: w.price, limited: false });
     });
   }
+  items.push(...fishRackItems(fishSrc, rackSrc));
   const sets = ev(src, 'SETS').map(s => ({ id: s.id, name: s.n, need: s.need, stats: { n: s.n, eff: s.eff, ...fxStats(s.fx) } }));
   return { schema: 2, version, generated: new Date().toISOString(), items, sets };
 }
@@ -110,6 +147,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const wpn = readFileSync(new URL('../src/dm/weapons.ts', import.meta.url), 'utf8');
   const pet = readFileSync(new URL('../src/shop/pets.ts', import.meta.url), 'utf8');
   const food = readFileSync(new URL('../src/food/ingredients.ts', import.meta.url), 'utf8');
-  const c = buildCatalog(main, '', odd, wpn, pet, food);
+  const fish = readFileSync(new URL('../src/plaza/boats/fishLogic.ts', import.meta.url), 'utf8');
+  const rack = readFileSync(new URL('../src/plaza/boats/rackLogic.ts', import.meta.url), 'utf8');
+  const c = buildCatalog(main, '', odd, wpn, pet, food, fish, rack);
   console.log(JSON.stringify(c, null, 1));
 }
