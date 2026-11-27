@@ -224,6 +224,7 @@ export function closeFish() {
   removeEventListener('keyup', onKeyUp);
   removeEventListener('pointerdown', onAnyInput);
   document.body.classList.remove('plazaFishing', 'fishPanelOpen', 'fishFight');
+  clearFishToastTop();
   ffx?.dispose(); ffx = null;
   if (gfx) { gfx.g.removeFromParent(); gfx.line.geometry.dispose(); (gfx.line.material as THREE.Material).dispose(); gfx.bob.geometry.dispose(); gfx.bobMat.dispose(); gfx.shadow.geometry.dispose(); gfx.shMat.dispose(); gfx = null; }
   dexView?.stop(); dexView = null;
@@ -290,6 +291,7 @@ function enterFish() {
   sm.gear = rod; sm.item = pick[rod];
   sm.enter();
   document.body.classList.add('plazaFishing');
+  if (ui) { ui.hud.classList.add('on'); ui.acts.classList.add('on'); syncFishToastTop(); }
   if (!ok) void fetchState();
   toastTop(rod === 'float' ? '按住「拋竿」蓄力，放開就拋出去；浮標整個沉下去再按「收竿」' : `按住「拋竿」蓄力；收線節奏：${LURE_TIP[pick.lure as LureKey]}`, 4);
 }
@@ -442,7 +444,7 @@ async function endFight(kind: 'landed' | 'snap' | 'unhook') {
   if (isSquidSp(fish.sp)) ffx?.inkPuff(fightX, PB.waterY + 0.05, fightZ, 1.2);
   const giant = fish.tier >= 3;
   const full = holdN >= FISH.holdMax;
-  // 先讓人看到魚破水被吊起來（約 0.45 秒），再跳釣到魚的卡片和收魚聲
+  // 先讓人看到魚破水被吊起來（約 0.45 秒），再響起收魚聲、讓上方「回放」鈕亮起來
   if (cardTimer) clearTimeout(cardTimer);
   cardTimer = setTimeout(() => {
     cardTimer = 0;
@@ -525,6 +527,7 @@ export function tickFish(dt: number, cam: THREE.Camera) {
   t += dt; camRef = cam;
   if (rec.on && recEndT > 0 && t >= recEndT) finishRec();
   if (cardOn && t >= cardHideT) hideCatchCard();
+  if (rpFreshT && t >= rpFreshT) clearReplayFresh();
   // 第一次進場：拿魚獲／圖鑑（舊伺服器就算了）
   if (!ok && !oldServer && fetchTries < 6) { fetchT -= dt; if (fetchT <= 0) { fetchT = 10; fetchTries++; void fetchState(); } }
   const mode = C.mode(); const b = C.myBoat();
@@ -778,8 +781,8 @@ function finishRec() {
   if (wantReplay) { wantReplay = false; startReplay(); }
 }
 
-// 釣到魚的卡片（每次都有「精彩回放」）
-let cardEl: HTMLDivElement | null = null, cardOn = false, cardHideT = 0;
+// 釣到魚後不再跳出白底回放卡；改點亮上方「回放」鈕，仍可開同一套回放畫面
+let cardEl: HTMLDivElement | null = null, cardOn = false, cardHideT = 0, rpFreshT = 0;
 function mountCatchCard() {
   cardEl?.remove();
   const el = document.createElement('div'); el.id = 'fishCatchCard';
@@ -794,15 +797,22 @@ function mountCatchCard() {
   document.body.append(el);
   cardEl = el;
 }
-function showCatchCard(f: HoldFish) {
-  if (!cardEl || !C || rp) return;
-  const tier = TIER[f.tier] && TIER[f.tier] !== '普通' ? `${TIER[f.tier]}・` : '';
-  cardEl.querySelector('.fccName')!.textContent = `釣到 ${f.name}`;
-  cardEl.querySelector('.fccSub')!.textContent = `${tier}${f.kg.toFixed(f.kg < 10 ? 2 : 1)} kg・最後 10 秒可回放`;
-  setRpBusy(false);
-  cardEl.classList.add('on'); cardOn = true; cardHideT = t + 9;
+function showCatchCard(_f: HoldFish) {
+  // 不再跳出白底「精彩回放」卡；改讓上方「回放」鈕亮起來提醒
+  hideCatchCard();
+  markReplayFresh();
 }
 function hideCatchCard() { cardOn = false; cardEl?.classList.remove('on'); }
+function rpBtn() { return ui?.acts.querySelector('.fhRp') ?? null; }
+function markReplayFresh() {
+  const b = rpBtn(); if (!b) return;
+  b.classList.add('fresh');
+  rpFreshT = t + 4;
+}
+function clearReplayFresh() {
+  rpFreshT = 0;
+  rpBtn()?.classList.remove('fresh');
+}
 function setRpBusy(on: boolean) {
   const s = cardEl?.querySelector('.fccRp span'); if (s) s.textContent = on ? '準備回放…' : '精彩回放';
   cardEl?.classList.toggle('busy', on);
@@ -831,7 +841,7 @@ function startReplay() {
   if (!c || !C || rp) return;
   if (sm.phase !== 'idle') { toast('收好竿子才能看回放', '#ffb08a', 1.4); return; }
   if (!C.net() || C.localOnly()) { toast('連線中斷，暫時不能回放', '#ffb08a', 1.6); return; }
-  hideCatchCard(); closePanel();
+  hideCatchCard(); clearReplayFresh(); closePanel();
   // 現場那條掛在竿尖的魚先收掉（回放有自己的一條）
   catchT = 0; dropFishMesh();
   const el = document.createElement('div'); el.id = 'fishReplay';
@@ -1238,10 +1248,16 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
   ui.bar.classList.toggle('on', on);
   ui.hud.classList.toggle('on', on);
   ui.acts.classList.toggle('on', on);
-  // 回放按鈕：有上一條魚的片段、沒在拋／拉的時候
-  const rpCan = !!clip && sm.phase === 'idle' && !rp;
+  // 回放按鈕：有上一條魚的片段（或剛釣到還在錄收尾）、沒在拋／拉的時候才是可按
+  const rpCan = !rp && sm.phase === 'idle' && (!!clip || (rec.on && recEndT > 0));
   if (rpCan !== rpBtnOn) { rpBtnOn = rpCan; ui.acts.classList.toggle('hasRp', rpCan); }
-  if (!on) { reelFeel?.release(); ui.meter.classList.remove('on'); ui.depth.classList.remove('on'); ui.depth.setAttribute('aria-hidden', 'true'); return; }
+  const rpEl = rpBtn();
+  if (rpEl) {
+    rpEl.setAttribute('aria-disabled', rpCan ? 'false' : 'true');
+    const lab = rpCan ? '觀看精彩回放' : '還沒有可看的回放';
+    if (rpEl.getAttribute('aria-label') !== lab) rpEl.setAttribute('aria-label', lab);
+  }
+  if (!on) { reelFeel?.release(); ui.meter.classList.remove('on'); ui.depth.classList.remove('on'); ui.depth.setAttribute('aria-hidden', 'true'); clearFishToastTop(); return; }
   const ph = sm.phase, lure = sm.gear === 'lure';
   ui.cast.classList.toggle('on', ph === 'idle' || ph === 'charge' || ph === 'cast');
   ui.cast.classList.toggle('dis', ph === 'cast');
@@ -1295,6 +1311,26 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
     ui.depthDot.classList.toggle('in', okD);
     ui.depthDot.classList.toggle('follow', okD && sm.lure.follow);
   }
+  syncFishToastTop();
+}
+
+/** 上方提示排在換餌列和狀態條下面（量實際底緣，直式／橫式都不會蓋住按鈕） */
+let fishToastTopKey = '';
+function clearFishToastTop() {
+  if (!fishToastTopKey) return;
+  fishToastTopKey = '';
+  document.documentElement.style.removeProperty('--fish-toast-top');
+}
+function syncFishToastTop() {
+  if (!ui) { clearFishToastTop(); return; }
+  const hud = ui.hud, acts = ui.acts;
+  if (!hud.classList.contains('on') && !acts.classList.contains('on')) { clearFishToastTop(); return; }
+  const bottom = Math.max(acts.getBoundingClientRect().bottom, hud.getBoundingClientRect().bottom);
+  const top = Math.round(bottom + 8);
+  const key = String(top);
+  if (key === fishToastTopKey) return;
+  fishToastTopKey = key;
+  document.documentElement.style.setProperty('--fish-toast-top', `${top}px`);
 }
 
 // ---------------- 除錯 ----------------
