@@ -113,6 +113,7 @@ import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type 
 import { GOLD_SMOKE_TINT, encodeCosmetics } from './plaza/cosmetics';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { registerBrightRenderer, setSceneBrightness, clampBright, BRIGHT_DEF } from './world/sceneBrightness';
+import { renderDprBoost, onRenderDprChange } from './world/renderDpr';
 import { seaStart, seaActive, seaDbg, type SeaHaul, type SeaSfx } from './sea/seaRun';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
@@ -6858,7 +6859,8 @@ function updBaseFov() {
 function resize() {
   const { w, h } = viewSize();
   // 回前景時 DPR 偶爾變；與手機／省電上限對齊
-  const dpr = Math.min(window.devicePixelRatio || 1, mobileDprCap(mix.eco));
+  // 錄高畫質回放影片時暫時拉高（錄完馬上還原）
+  const dpr = renderDprBoost() ?? Math.min(window.devicePixelRatio || 1, mobileDprCap(mix.eco));
   if (Math.abs(renderer.getPixelRatio() - dpr) > 1e-3) renderer.setPixelRatio(dpr);
   const bufW = renderer.domElement.width, bufH = renderer.domElement.height;
   const wantW = Math.max(1, Math.floor(w * dpr)), wantH = Math.max(1, Math.floor(h * dpr));
@@ -6900,6 +6902,7 @@ function refreshYardBowlPose() {
   if (state === 'play' && !walking && !plazaOnGrill()) applyBowl();
 }
 addEventListener('resize', () => { resize(); refreshYardBowlPose(); });
+onRenderDprChange(() => resize());
 window.visualViewport?.addEventListener('resize', () => { resize(); refreshYardBowlPose(); });
 window.visualViewport?.addEventListener('scroll', () => { resize(); });
 addEventListener('orientationchange', () => {

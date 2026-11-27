@@ -20,7 +20,7 @@ import { makeFishFx, FX, type FishFx } from './fishFx';
 import { mountFishDex, fishDexMerge, type FishDexView } from './fishDex';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, steerablePhase, type FishPoseIn, type FishPhase } from './fishPose';
 import { remoteReelSide, type FishSyncMsg } from './fishSync';
-import { ReplayVideoRec, browserVideoDeps, canRecordVideo, fmtMB } from './fishReplayRecord';
+import { ReplayVideoRec, browserVideoDeps, canRecordVideo, fmtMB, loadVideoQuality, saveVideoQuality, VIDEO_QUALITY, type VideoQuality } from './fishReplayRecord';
 import { RF, RF_STRIDE, RP_PHASE, RFISH, REPLAY_TAIL_S, newReplayRec, recStart, recStop, recReset, recTick, recPush, recSplash, recClip, clipSample, clipSplashes, newReplayPlay, playStep, playSeek, playToggle, playRestart, playSpeed, fmtReplayT, orbitStart, orbitDist, orbitDrag, orbitZoom, orbitPos, rpPhaseCode, type ReplayClip, type ReplayMeta, type ReplayPlay, type Orbit } from './fishReplay';
 import { bindReelFeel, makeReelClickSfx, reelPressLabel, steerDirFromPad, type ReelFeel, type ReelSfxOut } from './fishReelFeel';
 
@@ -70,6 +70,7 @@ const ICON = {
   minus: '<svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>',
   video: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/></svg>',
   recDot: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" style="fill:#ff4d4f;stroke:none"/></svg>',
+  hd: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9v6M7 12h4M11 9v6"/><path d="M14 9v6h1.5a3 3 0 0 0 0-6z"/></svg>',
   save: '<svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 19h14"/></svg>',
 };
 const ERR = FISH_ERR;
@@ -813,7 +814,7 @@ function askReplay() {
 type Rp = {
   c: ReplayClip; play: ReplayPlay; orbit: Orbit; fr: Float32Array;
   focus: THREE.Vector3; snap: boolean; sep: number; fish: THREE.Mesh | null; el: HTMLDivElement;
-  fill: HTMLElement; knob: HTMLElement; time: HTMLElement; playB: HTMLElement; spdB: HTMLElement; hint: HTMLElement; recB: HTMLElement; recS: string;
+  fill: HTMLElement; knob: HTMLElement; time: HTMLElement; playB: HTMLElement; spdB: HTMLElement; hint: HTMLElement; recB: HTMLElement; recS: string; vqB: HTMLElement;
   timeS: string; playS: boolean | null; ptr: Map<number, { x: number; y: number }>; pinch: number; scrub: boolean; scrubPlay: boolean; hintT: number;
 };
 let rp: Rp | null = null;
@@ -836,13 +837,13 @@ function startReplay() {
     + `<div class="frHint">拖曳轉視角・雙指或滾輪縮放</div>`
     + `<div class="frBar"><button type="button" class="frB frPlay" data-r="play" aria-label="播放／暫停"></button><button type="button" class="frB" data-r="restart" aria-label="重播">${ICON.restart}<span>重播</span></button>`
     + `<div class="frTrack" data-r="track"><div class="frRail"><div class="frFill"></div><div class="frKnob"></div></div></div><span class="frTime"></span>`
-    + `<button type="button" class="frB frSpd" data-r="speed" aria-label="播放速度">1×</button><button type="button" class="frB frZ" data-r="zin" aria-label="拉近">${ICON.plus}</button><button type="button" class="frB frZ" data-r="zout" aria-label="拉遠">${ICON.minus}</button><button type="button" class="frB frRec" data-r="rec" aria-label="錄製影片"></button></div>`
+    + `<button type="button" class="frB frSpd" data-r="speed" aria-label="播放速度">1×</button><button type="button" class="frB frZ" data-r="zin" aria-label="拉近">${ICON.plus}</button><button type="button" class="frB frZ" data-r="zout" aria-label="拉遠">${ICON.minus}</button><button type="button" class="frB frVq" data-r="vq" aria-label="錄影畫質"></button><button type="button" class="frB frRec" data-r="rec" aria-label="錄製影片"></button></div>`
     + `<div class="frSave"><button type="button" class="frB frSaveB" data-r="save" aria-label="儲存或分享影片">${ICON.save}<span></span></button><button type="button" class="frB frSaveX" data-r="savex" aria-label="不要這支影片">${ICON.exit}</button></div>`;
   el.querySelector('.frName')!.textContent = `${c.meta.name}・${kg} kg`;
   const r: Rp = {
     c, play: newReplayPlay(c.dur), orbit: orbitStart(c.f[RF.pyaw]), fr: new Float32Array(RF_STRIDE),
     focus: new THREE.Vector3(), snap: true, sep: 4, fish: null, el,
-    fill: el.querySelector('.frFill')!, knob: el.querySelector('.frKnob')!, time: el.querySelector('.frTime')!, playB: el.querySelector('.frPlay')!, spdB: el.querySelector('.frSpd')!, hint: el.querySelector('.frHint')!, recB: el.querySelector('.frRec')!, recS: '',
+    fill: el.querySelector('.frFill')!, knob: el.querySelector('.frKnob')!, time: el.querySelector('.frTime')!, playB: el.querySelector('.frPlay')!, spdB: el.querySelector('.frSpd')!, hint: el.querySelector('.frHint')!, recB: el.querySelector('.frRec')!, recS: '', vqB: el.querySelector('.frVq')!,
     timeS: '', playS: null, ptr: new Map(), pinch: 0, scrub: false, scrubPlay: false, hintT: 3.5,
   };
   rp = r;
@@ -876,11 +877,19 @@ export function stopReplay() {
 function rpToggle() { if (rp && !vrecBusy()) { playToggle(rp.play); rpUi(rp); } }
 // ---------------- 回放存成影片（純畫面） ----------------
 let vrec: ReplayVideoRec | null = null;
-const vrecBusy = () => !!vrec && (vrec.st === 'rec' || vrec.st === 'finishing');
+const vrecBusy = () => !!vrec && (vrec.st === 'arming' || vrec.st === 'rec' || vrec.st === 'finishing');
+/** 錄影畫質（記在 localStorage，下一條魚也一樣） */
+let vq: VideoQuality | null = null;
+const vqNow = (): VideoQuality => (vq ??= loadVideoQuality((() => { try { return localStorage; } catch { return null; } })()));
+function vqToggle() {
+  vq = vqNow() === 'high' ? 'standard' : 'high';
+  try { saveVideoQuality(localStorage, vq); } catch { /* 不能存就算了 */ }
+}
 /** 按「錄製影片」：從 0 秒用目前的速度重播、開始錄；錄影中再按＝提早停止 */
 function rpRecTap(r: Rp) {
   if (vrec?.st === 'rec') { vrec.stop(); rpUi(r); return; }
   if (vrec?.st === 'finishing') return;
+  if (vrec?.st === 'arming') { vrec.abort(); rpUi(r); return; }
   const cv = document.getElementById('c') as HTMLCanvasElement | null;
   if (!cv || !canRecordVideo(globalThis, cv)) { toast('此瀏覽器不支援錄製影片', '#ffb08a', 2); return; }
   if (!vrec) {
@@ -888,12 +897,15 @@ function rpRecTap(r: Rp) {
     vrec.onChange = st => {
       if (rp !== r) return;
       if (st === 'error') toast('錄影失敗，再試一次', '#ffb08a', 1.8);
+      // 畫布拉好解析度、真的開始錄了：才從 0 秒播
+      if (st === 'rec') playRestart(r.play);
       rpUi(r);
     };
   }
-  playRestart(r.play);
+  // 先停在 0 秒（高畫質要等畫布拉好解析度畫完一幀，開始錄才從頭播）
+  playSeek(r.play, 0); r.play.playing = false;
   r.scrub = false;
-  if (!vrec.start(r.c.meta.sp, r.c.meta.kg)) { if (vrec.st !== 'error') toast('此瀏覽器不支援錄製影片', '#ffb08a', 2); rpUi(r); return; }
+  if (!vrec.start(r.c.meta.sp, r.c.meta.kg, vqNow())) { if (vrec.st !== 'error') toast('此瀏覽器不支援錄製影片', '#ffb08a', 2); rpUi(r); return; }
   r.hintT = 2.5; r.hint.textContent = '錄影中也可以拖曳轉視角、縮放'; r.hint.classList.remove('off');
   rpUi(r);
 }
@@ -918,6 +930,7 @@ function bindReplayUi(r: Rp) {
     if (b) {
       const k = b.dataset.r;
       if (k === 'rec') { rpRecTap(r); return; }
+      if (k === 'vq') { if (!vrecBusy()) { vqToggle(); rpUi(r); } return; }
       // 錄影中：不能拖時間軸、暫停、重播、換速度（影片才會連續）；轉視角、縮放照樣可以
       if (vrecBusy() && (k === 'track' || k === 'play' || k === 'restart' || k === 'speed')) return;
       if (k === 'track') { r.scrub = true; r.scrubPlay = r.play.playing; r.play.playing = false; try { track.setPointerCapture(e.pointerId); } catch { /* 不支援 */ } seekX(e.clientX); return; }
@@ -976,17 +989,21 @@ function rpUi(r: Rp) {
   if (r.spdB.textContent !== sp) { r.spdB.textContent = sp; r.spdB.classList.toggle('on', r.play.speed !== 1); }
   // 錄影按鈕／錄影中提示／影片好了
   const vs = vrec?.st ?? 'idle';
-  const rs = vs === 'rec' ? `rec|${fmtReplayT(r.play.t)}` : vs === 'finishing' ? 'fin' : vs === 'ready' ? `ready|${vrec!.size}` : 'idle';
+  const q = vqNow();
+  const rs = `${q}|` + (vs === 'rec' ? `rec|${fmtReplayT(r.play.t)}` : vs === 'finishing' ? 'fin' : vs === 'arming' ? 'arm' : vs === 'ready' ? `ready|${vrec!.size}` : 'idle');
   if (rs !== r.recS) {
     r.recS = rs;
-    const busy = vs === 'rec' || vs === 'finishing';
+    const busy = vs === 'rec' || vs === 'finishing' || vs === 'arming';
+    r.vqB.innerHTML = `${ICON.hd}<span>${VIDEO_QUALITY[q].label}</span>`;
+    r.vqB.classList.toggle('on', q === 'high');
+    r.vqB.setAttribute('aria-label', `錄影畫質：${VIDEO_QUALITY[q].label}（點一下切換）`);
     r.el.classList.toggle('recording', busy);
     r.recB.classList.toggle('on', vs === 'rec');
     r.recB.innerHTML = vs === 'rec' ? `${ICON.recDot}<span>錄製中 ${fmtReplayT(r.play.t)} / ${fmtReplayT(r.play.dur)}（點此停止）</span>`
-      : vs === 'finishing' ? `${ICON.recDot}<span>影片處理中…</span>` : `${ICON.video}<span>錄製影片</span>`;
+      : vs === 'finishing' ? `${ICON.recDot}<span>影片處理中…</span>` : vs === 'arming' ? `${ICON.recDot}<span>準備錄影…</span>` : `${ICON.video}<span>錄製影片</span>`;
     r.el.classList.toggle('vidReady', vs === 'ready');
     const sv = r.el.querySelector('.frSaveB span');
-    if (sv) sv.textContent = vs === 'ready' ? `影片好了（${fmtMB(vrec!.size)}）— 儲存 / 分享` : '';
+    if (sv) sv.textContent = vs === 'ready' ? `影片好了（${vrec!.quality === 'high' ? '高畫質・' : ''}${fmtMB(vrec!.size)}）— 儲存 / 分享` : '';
   }
 }
 /** 回放的世界座標：記錄時相對那一格的人，換到人現在站的位置／朝向（岸上＝原地；船上＝跟著船） */
@@ -1318,7 +1335,7 @@ export const fishDbg = {
   ink() { ffx?.inkPuff(_end.x, PB.waterY + 0.05, _end.z, 1); return ffx?.ink.live() ?? 0; },
   /** 測試：假裝中魚（不經伺服器，只看拉扯畫面） */
   /** 測試：錄影片狀態 */
-  vrec() { return vrec ? { st: vrec.st, size: vrec.size, name: vrec.name, type: vrec.type, url: !!vrec.url } : null; },
+  vrec() { const cv = document.getElementById('c') as HTMLCanvasElement | null; return { st: vrec?.st ?? null, size: vrec?.size ?? 0, name: vrec?.name ?? '', type: vrec?.type ?? '', url: !!vrec?.url, q: vqNow(), canvas: cv ? [cv.width, cv.height] : null }; },
   /** 測試：回放跳到某秒並暫停 */
   rpSeek(sec: number) { if (!rp) return null; playSeek(rp.play, sec); rp.play.playing = false; rpUi(rp); return rp.play.t; },
   /** 測試：精彩回放（狀態／開始／關閉） */

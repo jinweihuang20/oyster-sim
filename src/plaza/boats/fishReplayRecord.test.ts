@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { pickVideoMime, extOfMime, videoFileName, canRecordVideo, fmtMB, ReplayVideoRec, VIDEO_BPS, type VideoRecDeps } from './fishReplayRecord';
+import { VIDEO_QUALITY, VQ_KEY, loadVideoQuality, saveVideoQuality, hdDpr, pickVideoMime, extOfMime, videoFileName, canRecordVideo, fmtMB, ReplayVideoRec, VIDEO_BPS, type VideoRecDeps } from './fishReplayRecord';
 
 describe('錄影片：格式挑選', () => {
   it('MP4 優先於 WebM', () => {
@@ -128,5 +128,108 @@ describe('錄影片：狀態機', () => {
     const v = new ReplayVideoRec(f.d);
     expect(v.start('aji', 1)).toBe(false);
     expect(v.st).toBe('error');
+  });
+});
+
+describe('錄影片：畫質', () => {
+  it('標準 30 fps／3.5 Mbps 不拉解析度；高畫質 60 fps／10 Mbps 拉解析度', () => {
+    expect(VIDEO_QUALITY.standard).toMatchObject({ fps: 30, bps: 3_500_000, boost: false, label: '標準' });
+    expect(VIDEO_QUALITY.high).toMatchObject({ fps: 60, bps: 10_000_000, boost: true, label: '高畫質' });
+  });
+  it('高畫質倍率：最多 2 倍、不超過 1080p、不比原本差', () => {
+    // 手機橫向 844×390：2 倍＝1688×780
+    expect(hdDpr(844, 390, 1)).toBe(2);
+    // 電腦 1280×720：1.5 倍＝1920×1080
+    expect(hdDpr(1280, 720, 1)).toBeCloseTo(1.5, 5);
+    // 直式 390×844：2 倍＝780×1688（長邊沒超過 1920）
+    expect(hdDpr(390, 844, 1.5)).toBe(2);
+    // 平板 1024×768：短邊卡 1080（1440×1080）
+    expect(hdDpr(1024, 768, 1)).toBeCloseTo(1080 / 768, 5);
+    expect(844 * hdDpr(390, 844, 1)).toBeLessThanOrEqual(1920 + 1e-6);
+    // 1920×1080 的螢幕：維持 1；原本 3 倍的就不降
+    expect(hdDpr(1920, 1080, 1)).toBe(1);
+    expect(hdDpr(390, 844, 3)).toBe(3);
+    expect(Number.isFinite(hdDpr(NaN, 0, NaN))).toBe(true);
+  });
+  it('記住選擇；沒有／壞掉／讀不到＝標準', () => {
+    const m = new Map<string, string>();
+    const st = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); } };
+    expect(loadVideoQuality(st)).toBe('standard');
+    saveVideoQuality(st, 'high'); expect(m.get(VQ_KEY)).toBe('high'); expect(loadVideoQuality(st)).toBe('high');
+    m.set(VQ_KEY, 'ultra'); expect(loadVideoQuality(st)).toBe('standard');
+    expect(loadVideoQuality(null)).toBe('standard');
+    expect(loadVideoQuality({ getItem: () => { throw new Error('x'); }, setItem: () => { } })).toBe('standard');
+    expect(() => saveVideoQuality({ getItem: () => null, setItem: () => { throw new Error('full'); } }, 'high')).not.toThrow();
+  });
+  it('高畫質用 60 fps／10 Mbps 開串流和錄影機', () => {
+    const f = fakes();
+    const v = new ReplayVideoRec(f.d);
+    v.start('aji', 1, 'high');
+    expect(f.d.stream).toHaveBeenCalledWith(60);
+    expect(f.rec().opt.videoBitsPerSecond).toBe(10_000_000);
+    v.abort();
+    v.start('aji', 1);
+    expect(f.d.stream).toHaveBeenLastCalledWith(30);
+    expect(f.rec().opt.videoBitsPerSecond).toBe(3_500_000);
+  });
+});
+
+describe('錄影片：解析度一定還原', () => {
+  const setup = (frame = false) => {
+    const f = fakes();
+    const restore = vi.fn();
+    const prepare = vi.fn(() => restore);
+    f.d.prepare = prepare;
+    let pend: (() => void) | null = null;
+    if (frame) f.d.nextFrame = cb => { pend = cb; };
+    return { f, restore, prepare, flush: () => { const p = pend; pend = null; p?.(); } };
+  };
+  it('先拉解析度、等一幀，才開串流和錄影機', () => {
+    const { f, prepare, flush } = setup(true);
+    const v = new ReplayVideoRec(f.d);
+    v.start('aji', 1, 'high');
+    expect(prepare).toHaveBeenCalledWith('high');
+    expect(v.st).toBe('arming');
+    expect(f.d.stream).not.toHaveBeenCalled();
+    flush();
+    expect(f.d.stream).toHaveBeenCalled();
+    expect(v.st).toBe('rec');
+    expect((prepare.mock.invocationCallOrder[0])).toBeLessThan((f.d.stream as any).mock.invocationCallOrder[0]);
+  });
+  it('正常錄完：停止那一刻就還原（只一次）', async () => {
+    const { f, restore } = setup();
+    const v = new ReplayVideoRec(f.d);
+    v.start('aji', 1, 'high');
+    expect(restore).not.toHaveBeenCalled();
+    v.stop();
+    expect(restore).toHaveBeenCalledTimes(1);
+    await tick();
+    expect(v.st).toBe('ready');
+    expect(restore).toHaveBeenCalledTimes(1);
+  });
+  it('離開回放（錄到一半／還在等第一幀）：還原', () => {
+    const a = setup(); const v = new ReplayVideoRec(a.f.d);
+    v.start('aji', 1, 'high'); v.abort(); expect(a.restore).toHaveBeenCalledTimes(1);
+    const b = setup(true); const w = new ReplayVideoRec(b.f.d);
+    w.start('aji', 1, 'high'); w.abort(); expect(b.restore).toHaveBeenCalledTimes(1);
+    b.flush(); expect(b.f.d.stream).not.toHaveBeenCalled();
+    // 等第一幀時按停止＝取消
+    const c = setup(true); const x = new ReplayVideoRec(c.f.d);
+    x.start('aji', 1, 'high'); x.stop(); expect(c.restore).toHaveBeenCalledTimes(1); expect(x.st).toBe('idle');
+  });
+  it('出錯（串流拿不到／錄影機出錯／空檔）：還原', async () => {
+    const a = setup(); a.f.d.stream = () => { throw new Error('no'); };
+    const v = new ReplayVideoRec(a.f.d);
+    expect(v.start('aji', 1, 'high')).toBe(false); expect(a.restore).toHaveBeenCalledTimes(1); expect(v.st).toBe('error');
+    const b = setup(); const w = new ReplayVideoRec(b.f.d);
+    w.start('aji', 1, 'high'); b.f.rec().onerror?.(new Error('x'));
+    expect(b.restore).toHaveBeenCalledTimes(1); expect(w.st).toBe('error');
+  });
+  it('再錄一支：上一支的還原先做', () => {
+    const { f, restore } = setup();
+    const v = new ReplayVideoRec(f.d);
+    v.start('aji', 1, 'high'); v.start('aji', 1, 'high');
+    expect(restore).toHaveBeenCalledTimes(1);
+    v.clear(); expect(restore).toHaveBeenCalledTimes(2);
   });
 });

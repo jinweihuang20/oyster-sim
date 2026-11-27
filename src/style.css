@@ -4606,6 +4606,9 @@ body.fishReplayOn #fishCatchCard,body.fishReplayOn #fishBar,body.fishReplayOn #f
 #fishReplay .frSpd.on{background:#fff!important;color:#2a5a86!important}
 #fishReplay .frZ{min-width:42px!important;padding:0!important}
 #fishReplay .frRec{min-width:44px}
+#fishReplay .frVq{min-width:44px}
+#fishReplay .frVq.on{background:#fff!important;color:#2a5a86!important}
+#fishReplay.recording .frVq{opacity:.45;pointer-events:none}
 #fishReplay .frRec.on{background:#fff!important;color:#b3261e!important;border:2px solid #b3261e!important}
 #fishReplay.recording :is(.frPlay,[data-r=restart],.frSpd){display:none}
 #fishReplay.recording .frTrack{pointer-events:none;opacity:.75}
@@ -4622,7 +4625,7 @@ body.fishReplayOn #fishCatchCard,body.fishReplayOn #fishBar,body.fishReplayOn #f
 #fishReplay .frFill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:3px;background:#7fb6e6}
 #fishReplay .frKnob{position:absolute;top:50%;left:0;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:#fff;border:3px solid #2a5a86;box-sizing:border-box}
 #fishReplay .frTime{flex:none;min-width:88px;text-align:center;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
-@media (max-width:560px){#fishReplay .frBar{flex-wrap:wrap;gap:6px}#fishReplay .frTrack{order:-1;flex-basis:100%;height:30px}#fishReplay .frB span{display:none}#fishReplay .frBack span,#fishReplay .frRec span{display:inline}#fishReplay .frSave{bottom:calc(var(--sa-bottom,0px) + 118px)}#fishReplay .frTime{min-width:76px}#fishCatchCard{bottom:calc(var(--sa-bottom,0px) + 210px)}}
+@media (max-width:560px){#fishReplay .frBar{flex-wrap:wrap;gap:6px}#fishReplay .frTrack{order:-1;flex-basis:100%;height:30px}#fishReplay .frB span{display:none}#fishReplay .frBack span,#fishReplay .frRec span,#fishReplay .frVq span{display:inline}#fishReplay .frSave{bottom:calc(var(--sa-bottom,0px) + 118px)}#fishReplay .frTime{min-width:76px}#fishCatchCard{bottom:calc(var(--sa-bottom,0px) + 210px)}}
 @media (max-height:500px){
   #fishBar{bottom:calc(var(--sa-bottom,0px) + 20px);gap:8px}
   #boatUi #fishCast,#boatUi #fishReel{padding:11px 18px!important;font-size:16px}
