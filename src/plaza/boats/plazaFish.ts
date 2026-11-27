@@ -22,11 +22,12 @@ import { ITEM_HINT, itemHintHtml } from './fishHints';
 import { newFishPose, stepFishPose, applyFishPose, rodTipWorld, fishPoseCode, jerkTn, steerablePhase, type FishPoseIn, type FishPhase } from './fishPose';
 import { remoteReelSide, type FishSyncMsg } from './fishSync';
 import { ReplayVideoRec, browserVideoDeps, canRecordVideo, fmtMB, loadVideoQuality, saveVideoQuality, VIDEO_QUALITY, type VideoQuality } from './fishReplayRecord';
+import { rpPlaceOf, newRpPlace, rpPlaceBoat, newRigStash, rigStage, rigPlace, rigRestore } from './fishReplayStage';
 import { RF, RF_STRIDE, RP_PHASE, RFISH, REPLAY_TAIL_S, newReplayRec, recStart, recStop, recReset, recTick, recPush, recSplash, recClip, clipSample, clipSplashes, newReplayPlay, playStep, playSeek, playToggle, playRestart, playSpeed, fmtReplayT, orbitStart, orbitDist, orbitDrag, orbitZoom, orbitPos, rpPhaseCode, type ReplayClip, type ReplayMeta, type ReplayPlay, type Orbit } from './fishReplay';
 import { newLineW, lineWStart, lineWDist, lineWYaw, takeSlack, stepLineW, dragLure, newFightW, fightWStart, stepFightW, FW } from './fishWorld';
 import { bindReelFeel, makeReelClickSfx, reelPressLabel, steerDirFromPad, type ReelFeel, type ReelSfxOut } from './fishReelFeel';
 
-export type FishBoat = { id: number; x: number; z: number; h: number; v: number };
+export type FishBoat = { id: number; x: number; z: number; h: number; v: number; /** 船身高度／傾斜（有就記進回放） */ y?: number; rx?: number; rz?: number };
 export type FishCtx = {
   net: () => BoatNet | null;
   scene: THREE.Object3D;
@@ -48,6 +49,10 @@ export type FishCtx = {
   /** 蚵仔肉：今天還能帶幾塊、用掉一塊 */
   oyster?: () => number;
   useOyster?: () => void;
+  /** 精彩回放：藏起現場的其他玩家／船（true）、照原樣還原（false）；重複呼叫沒事 */
+  replayStage?: (on: boolean) => void;
+  /** 精彩回放用的替身船（第一次才建，之後重複用；平常藏著） */
+  replayBoat?: () => THREE.Object3D | null;
 };
 
 const ICON = {
@@ -801,7 +806,7 @@ function drawGfx(dt: number) {
 }
 
 // ---------------- 精彩回放（最後 10 秒，自由視角） ----------------
-/** 錄影緩衝（預先配置 ~46 KB，重複用）；clip＝上一條釣上來的魚的片段（下一條會換掉） */
+/** 錄影緩衝（預先配置 ~49 KB，重複用）；clip＝上一條釣上來的魚的片段（下一條會換掉） */
 const rec = newReplayRec();
 let clip: ReplayClip | null = null, recMeta: ReplayMeta | null = null, recEndT = -1, wantReplay = false, rpBtnOn = false;
 /** 濺水花（同時記進回放） */
@@ -815,7 +820,9 @@ function recFill(b: Float32Array, o: number) {
     const m = rig.outer.matrixWorld.elements;
     b[o + RF.px] = m[12]; b[o + RF.py] = m[13]; b[o + RF.pz] = m[14]; b[o + RF.pyaw] = Math.atan2(m[8], m[10]);
   } else { const q = origin(); b[o + RF.px] = q.x; b[o + RF.py] = 0; b[o + RF.pz] = q.z; b[o + RF.pyaw] = castH; }
+  // 船：每一格的真實位置／船頭／浪晃（中魚時船在開，回放替身船照這條路線走）
   b[o + RF.boat] = bt ? 1 : 0; b[o + RF.bx] = bt?.x ?? 0; b[o + RF.bz] = bt?.z ?? 0; b[o + RF.bh] = bt?.h ?? 0;
+  b[o + RF.by] = bt?.y ?? PB.waterY; b[o + RF.brx] = bt?.rx ?? 0; b[o + RF.brz] = bt?.rz ?? 0;
   b[o + RF.rx] = _tip.x; b[o + RF.ry] = _tip.y; b[o + RF.rz] = _tip.z;
   const P = myPose;
   b[o + RF.pitch] = P.pitch; b[o + RF.side] = P.side; b[o + RF.hx] = P.hx; b[o + RF.hy] = P.hy; b[o + RF.hz] = P.hz; b[o + RF.lean] = P.lean;
@@ -920,6 +927,8 @@ function startReplay() {
     timeS: '', playS: null, ptr: new Map(), pinch: 0, scrub: false, scrubPlay: false, hintT: 3.5,
   };
   rp = r;
+  // 回放舞台：現場的其他玩家／船先藏起來；人掛到舞台照當時的世界座標擺（現場的位置、船、同步都不動）
+  C.replayStage?.(true);
   bindReplayUi(r);
   document.body.append(el);
   document.body.classList.add('fishReplayOn');
@@ -938,6 +947,11 @@ export function stopReplay() {
   // 魚模型的幾何／材質是共用快取：拿掉 Mesh 就好（跟現場那條一樣）
   r.fish?.removeFromParent(); r.fish = null;
   r.ptr.clear();
+  // 人掛回原本的地方（船上座位／岸上）、替身船藏起來、現場的人和船照原樣顯示
+  rigRestore(rpRig, rpStageG);
+  rpStageG.removeFromParent();
+  if (rpBoatG) rpBoatG.visible = false;
+  C?.replayStage?.(false);
   // 回放改過的身體（側傾、弓步）還原；下一幀照常由釣魚姿勢／走路擺
   const rig = C?.me();
   if (rig) {
@@ -1080,15 +1094,13 @@ function rpUi(r: Rp) {
     r.el.querySelector('.frSaveB')?.setAttribute('aria-label', vs === 'ready' ? `影片好了（${vrec!.quality === 'high' ? '高畫質・' : ''}${fmtMB(vrec!.size)}），儲存或分享` : '儲存或分享影片');
   }
 }
-/** 回放的世界座標：記錄時相對那一格的人，換到人現在站的位置／朝向（岸上＝原地；船上＝跟著船） */
-let rpDx = 0, rpDy = 0, rpDz = 0, rpCos = 1, rpSin = 0, rpPx = 0, rpPz = 0;
-function rpMap(x: number, y: number, z: number, out: { x: number; y: number; z: number }) {
-  const ax = x - rpPx, az = z - rpPz;
-  out.x = rpDx + ax * rpCos + az * rpSin;
-  out.z = rpDz - ax * rpSin + az * rpCos;
-  out.y = y + rpDy;
-  return out;
-}
+/**
+ * 回放舞台（CR-32）：全部照當時錄下的世界座標重播，不再換算到人「現在」站的位置／開的船。
+ * 人暫時掛到舞台上（矩陣直接擺），替身船照每一格錄到的船位置／船頭／傾斜走；結束時都還原。
+ */
+const rpStageG = new THREE.Group(); rpStageG.name = 'fishReplayStage';
+const rpRig = newRigStash(), rpAt = newRpPlace();
+let rpBoatG: THREE.Object3D | null = null;
 function drawReplay(dt: number) {
   const r = rp!, c = r.c, fr = r.fr, rig = C!.me()!;
   ffx?.tick(dt);
@@ -1096,14 +1108,15 @@ function drawReplay(dt: number) {
   const t0 = r.play.t;
   playStep(r.play, dt);
   clipSample(c, r.play.t, fr);
-  // 人：岸上就轉回當時的朝向；換算位置用這一格的人當原點
-  if (C!.mode() === 'walk' && rig.outer.parent === C!.scene) rig.outer.rotation.y = fr[RF.pyaw];
-  rig.outer.updateWorldMatrix(true, false);
-  const m = rig.outer.matrixWorld.elements;
-  const d = Math.atan2(m[8], m[10]) - fr[RF.pyaw];
-  rpCos = Math.cos(d); rpSin = Math.sin(d); rpPx = fr[RF.px]; rpPz = fr[RF.pz];
-  rpDx = m[12]; rpDy = m[13] - fr[RF.py]; rpDz = m[14];
-  if (r.play.t > t0) clipSplashes(c, t0, r.play.t, (o, k) => { rpMap(c.f[o + RF.sx], 0, c.f[o + RF.sz], _rpCam); C!.splash(_rpCam.x, _rpCam.z, k); if (k >= 0.35) C!.sfx('splash'); });
+  rpPlaceOf(fr, rpAt);
+  // 人：掛到舞台，擺到這一格錄到的世界位置／朝向（現場的船開到哪都不影響）
+  if (rpStageG.parent !== C!.scene) C!.scene.add(rpStageG);
+  rigStage(rpRig, rig.outer, rpStageG);
+  rigPlace(rig.outer, rpAt);
+  // 船：當時在船上＝替身船照這一格的船走；岸上＝不出現
+  const bg = rpAt.boat ? (rpBoatG ??= C!.replayBoat?.() ?? null) : rpBoatG;
+  if (bg) rpPlaceBoat(bg, rpAt);
+  if (r.play.t > t0) clipSplashes(c, t0, r.play.t, (o, k) => { C!.splash(c.f[o + RF.sx], c.f[o + RF.sz], k); if (k >= 0.35) C!.sfx('splash'); });
   // 竿子＋姿勢
   const gear: Gear = fr[RF.lure] > 0.5 ? 'lure' : 'float';
   if (!myRod || myRod.kind !== gear) { myRod?.dispose(); myRod = makeRod(gear); }
@@ -1118,15 +1131,14 @@ function drawReplay(dt: number) {
   if (r.fish) {
     r.fish.visible = fr[RF.fvis] > 0.5 && st !== RFISH.none;
     if (r.fish.visible) {
-      rpMap(fr[RF.fx], fr[RF.fy], fr[RF.fz], _rpCam);
-      r.fish.position.set(_rpCam.x, _rpCam.y, _rpCam.z);
-      r.fish.rotation.set(fr[RF.froll], fr[RF.fyaw] + d, fr[RF.fpitch]);
+      r.fish.position.set(fr[RF.fx], fr[RF.fy], fr[RF.fz]);
+      r.fish.rotation.set(fr[RF.froll], fr[RF.fyaw], fr[RF.fpitch]);
     }
   }
   // 線（竿尖→線頭／魚嘴；掛在竿尖時接竿尖下面）
   if (gfx) {
     gfx.g.visible = true; gfx.bob.visible = false;
-    rpMap(fr[RF.lx], fr[RF.ly], fr[RF.lz], _end);
+    _end.set(fr[RF.lx], fr[RF.ly], fr[RF.lz]);
     if (st === RFISH.hang) _end.set(_tip.x, _tip.y - HOIST_TIP_DROP, _tip.z);
     lineOpt.k = 1; lineOpt.settle = 1; lineOpt.sag = fr[RF.sag]; lineOpt.wy = PB.waterY + 0.04;
     castLine(gfx.pos, CAST_LINE_SEGS, _tip, _tip, _end, _end, lineOpt);
@@ -1135,7 +1147,7 @@ function drawReplay(dt: number) {
     gfx.shadow.position.set(_end.x, PB.waterY + 0.03, _end.z);
   }
   // 鏡頭：繞著人和魚中間轉（魚吊到竿尖時就是人身邊）
-  _rpP.set(m[12], m[13] + 1.15, m[14]);
+  _rpP.set(rpAt.x, rpAt.y + 1.15, rpAt.z);
   if (r.fish?.visible) _rpTg.copy(r.fish.position); else _rpTg.copy(_end);
   // 人和魚隔多遠（鏡頭自動拉遠拉近，平滑）
   const sep = _rpTg.distanceTo(_rpP);
@@ -1147,7 +1159,7 @@ function drawReplay(dt: number) {
     // 直式手機畫面比較窄：拉遠一點才框得到人和魚
     const asp = (cam as THREE.PerspectiveCamera).aspect || 1.6;
     const wide = Math.pow(Math.min(2.2, Math.max(1, 1.25 / asp)), 0.85);
-    orbitPos(r.orbit, r.focus.x, r.focus.y, r.focus.z, Math.max(PB.waterY, m[13]), _rpCam, orbitDist(r.orbit, r.sep) * wide);
+    orbitPos(r.orbit, r.focus.x, r.focus.y, r.focus.z, Math.max(PB.waterY, rpAt.y), _rpCam, orbitDist(r.orbit, r.sep) * wide);
     cam.position.set(_rpCam.x, _rpCam.y, _rpCam.z);
     cam.lookAt(r.focus);
     cam.updateMatrixWorld();

@@ -201,6 +201,8 @@ export type PlazaWorldView = {
   remoteList: () => { connId: string; nick: string; isNpc: boolean; x: number; z: number }[];
   /** 自己在船上／水裡：關掉遠距隱形（遠處用一個 InstancedMesh 小人代替），回岸上恢復 */
   setSeaView: (on: boolean) => void;
+  /** 精彩回放：其他玩家（含名牌、聊天泡泡、狀態牌、遠處小人、船上／岸上釣線）先不畫；false＝下一幀照常 */
+  setReplayHide?: (on: boolean) => void;
   seaViewStats: () => { on: boolean; impostors: number; fullFar: number };
   dispose: () => void;
 };
@@ -275,6 +277,8 @@ export function createPlazaWorldView(
   }
   // 遠端玩家 LOD：岸上、海上都一樣。REMOTE_FULL_R 內畫完整角色，更遠改畫 1 個 draw call 的共用小人（不隱形）
   let seaView = false;
+  /** 精彩回放中：其他玩家先不畫（阿婆照常） */
+  let replayHide = false;
   // 小人池：一般玩家／阿伯一池、阿婆一池，各 1 個 draw call（沒人在遠處就不畫）
   const impPlayer = new FarProxyPool('player', root), impAma = new FarProxyPool('ama', root);
   let impFullFar = 0;
@@ -2941,8 +2945,11 @@ function hashPid(pid: string) {
       // 遠距（省電從中距起）的完整角色另外藏臉盆、手上刀蚵與服飾細節
       const hideFar = lodS;
       if (hideFar) r.rig.outer.visible = false;
+      // 精彩回放：其他玩家整個不畫（身體、遠處小人、名牌、泡泡、釣線）；位置照樣內插，回放完不會跳
+      const rpHid = replayHide && !r.isNpc;
+      if (rpHid) r.rig.outer.visible = false;
       if (!lodS && tier === 'hide') impFullFar++;
-      if (hideFar && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon') {
+      if (hideFar && !rpHid && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon') {
         // 坐著／坐船／蹲：小人壓矮；躺：更扁（不擺關節，只縮高度）。池滿了就只剩名牌
         const st = remoteProxyStyle(r);
         const hk = farProxyHeight({ seated: r.seated, mounted: !!mount, mountStand: !!mount?.stand, phase: r.phase || '' });
@@ -2960,6 +2967,7 @@ function hashPid(pid: string) {
         }
       }
       const show = r.rig.outer.visible && !r.awaitingPose && !rj.mh;
+      if (rpHid) { const pb = rj._petBub as { sprite: THREE.Sprite } | undefined; if (pb?.sprite.visible) pb.sprite.visible = false; }
       if (show) {
         // 寵物逐幀：坐著→頭頂；走動→身後彈跳
         updateRemotePet(r, dt);
@@ -2979,7 +2987,7 @@ function hashPid(pid: string) {
       }
       // 太遠不畫身體時名牌照樣顯示（只剩一個 sprite，便宜）；低畫質在人非常多時才收遠處名牌
       const crowdCut = !seaView && LO && remotes.size > 40 && (tier === 'far' || tier === 'hide');
-      const tagOnly = hideFar && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon' && !crowdCut;
+      const tagOnly = hideFar && !rpHid && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon' && !crowdCut;
       r.tag.sprite.visible = (show && !crowdCut) || tagOnly;
       {
         const wantA = tagOnly ? PLAZA_TAG_A * 0.7 : PLAZA_TAG_A;
@@ -3313,6 +3321,7 @@ function hashPid(pid: string) {
       return out;
     },
     setSeaView: (on) => { seaView = on; },
+    setReplayHide: (on) => { replayHide = on; },
     seaViewStats: () => ({ on: seaView, impostors: impPlayer.n + impAma.n, fullFar: impFullFar }),
     remoteList: () => { const out: { connId: string; nick: string; isNpc: boolean; x: number; z: number }[] = []; for (const r of remotes.values()) out.push({ connId: r.connId, nick: r.nick, isNpc: !!r.isNpc, x: r.x, z: r.z }); return out; },
     tickTpOcclude: (dt, camera, focus, snap) => applyTpOcclude(dt, camera, focus, snap),

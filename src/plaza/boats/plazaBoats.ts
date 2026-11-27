@@ -27,6 +27,7 @@ import { newFishPose, stepFishPose, applyFishPose, fishPoseDecodeInto, rodTipWor
 import { FISH_SYNC, newFishSync, copyFishSync, fishSyncDue, fishSyncLost, fishBadgeOf, fishLineOut, fishLineEnd, remoteFightSide, remoteReelSide, type FishSyncMsg } from './fishSync';
 import { makeFishMesh } from './fishModel';
 import { HOIST_S, HOIST_TIP_DROP, fishLenM, newHoist, startHoist, stopHoist, stepHoist, hoistDone, hoistMouth, hoistPitch, hoistYaw, fishCenterFromMouth, type Hoist } from './fishHoist';
+import { newVisStash, visHide, visRestore } from './fishReplayStage';
 import { makeBoatNet, type BoatNet, type BoatDto, type SwimDto, type RamDto, type BoatPosesDto, type BoatsSnap, type DriftBox, type DriftSnap, type DriftClaimed, type DriftShare, type DriftTide, type DriftPull } from './boatNet';
 
 export type BoatSfx = 'splash' | 'bump' | 'hit' | 'dock' | 'launch' | 'warn';
@@ -95,6 +96,9 @@ let myBoat = -1, mySeat = -1;
 const mySwim = { x: 0, z: 0, h: 0 };
 let mySwimK = 0;
 let own: Raft | null = null;
+/** 精彩回放（CR-32）：現場的船／其他玩家藏起來（rpHide）；替身船（第一次回放才建，之後重複用） */
+let rpHide = false, rpRaft: Raft | null = null;
+const rpVis = newVisStash();
 let ownAnchors: THREE.Object3D[] = [];
 let localOnly = false, localNoticed = false;
 let driveAcc = 0, swimAcc = 0, ramCd = 0, throwCd = 0, throwAnim = 0, mySway = 0, busy = false, splashT = 0, t = 0;
@@ -198,8 +202,29 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
     walkPos: () => D?.walkPos ?? { x: 0, z: 0 }, canAct: () => !!D?.canAct(), me: () => D?.me() ?? null, localOnly: () => localOnly || !net,
     splash: (x, z, k) => splash(x, z, k), sfx: k => D?.sfx(k), sfxBus: () => D?.sfxBus?.() ?? null, grantMoney: (n, via) => D?.grantMoney?.(n, via),
     gear: id => D?.fishGear?.(id) ?? 0, addGear: (id, d) => D?.addFishGear?.(id, d), oyster: () => D?.fishOyster?.() ?? 0, useOyster: () => D?.useFishOyster?.(),
+    replayStage: setReplayStage, replayBoat,
   }, ui!.root);
   syncUi();
+}
+/** 精彩回放：藏起現場的船（instanced 船、自己開的那艘、船頭燈）與其他玩家；false＝照原樣還原 */
+function setReplayStage(on: boolean) {
+  if (on === rpHide) return;
+  rpHide = on;
+  D?.view()?.setReplayHide?.(on);
+  if (on) {
+    if (sea) { visHide(rpVis, sea.near); visHide(rpVis, sea.far); }
+    for (const r of fakeRigs.values()) visHide(rpVis, r.outer);
+    if (own) own.g.visible = false;
+  } else {
+    visRestore(rpVis);
+    if (rpRaft) rpRaft.g.visible = false;
+    if (own) own.g.visible = mode === 'boat';
+  }
+}
+/** 回放替身船：跟自己開的那艘同一個模型，平常藏著 */
+function replayBoat() {
+  if (!rpRaft && sea) { rpRaft = sea.makeOwnRaft(); rpRaft.g.name = 'fishReplayBoat'; rpRaft.g.visible = false; }
+  return rpRaft?.g ?? null;
 }
 export function closePlazaBoats() {
   if (!D) return;
@@ -213,10 +238,11 @@ export function closePlazaBoats() {
   fakeRigs.clear();
   closeRacks();
   closeFish();
+  setReplayStage(false);
   for (const c of [...fishers.keys()]) dropFisher(c);
   stand.on = false;
   net?.close(); net = null;
-  sea?.dispose(); sea = null; own = null; ownAnchors = [];
+  sea?.dispose(); sea = null; own = null; ownAnchors = []; rpRaft = null;
   ui?.root.remove(); ui = null;
   document.body.classList.remove('plazaBoating', 'plazaSwimming');
   mode = 'walk'; myBoat = mySeat = -1; boats = []; swimmers.clear(); drifts = [];
@@ -762,6 +788,8 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
   sea.begin();
   for (const b of boats) {
     const mine = mode === 'boat' && b.id === myBoat;
+    // 精彩回放中：現場的船都不畫（回放有自己的替身船）
+    if (rpHide) { if (mine && own) own.g.visible = false; continue; }
     if (mine && own) {
       own.g.visible = true;
       own.g.position.set(b.x, b.y, b.z); own.g.rotation.set(b.rx, b.h, b.rz + mySway * Math.sin(t * 14) * 0.08);
@@ -773,7 +801,7 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
     }
     if (b.seats[0]) sea.headlight(b.x, b.z, b.h);
   }
-  if (own && !(mode === 'boat')) own.g.visible = false;
+  if (own && (mode !== 'boat' || rpHide)) own.g.visible = false;
   tickDrift(dt);
   tickRacks(dt, cam);
   sea.end();
