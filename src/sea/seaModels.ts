@@ -365,7 +365,9 @@ export function makeRaft(scene: THREE.Scene | THREE.Object3D, opts: { trim: numb
   return { g, body, prop, arm, stack, flash, motor, tillerEnd, seat };
 }
 
-// ---------- 水花／航跡（一池平面粒子，additive） ----------
+// ---------- 水花／航跡（固定物件池 InstancedMesh，additive；不 push／shift／splice 觸發 GC） ----------
+type FxP = { x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; life: number; s0: number; s1: number; a: number; on: boolean };
+
 export function makeFx(scene: THREE.Scene | THREE.Object3D, max = 160, y0 = 0.12) {
   const cv = document.createElement('canvas'); cv.width = cv.height = 64; const c = cv.getContext('2d')!;
   const gr = c.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
@@ -373,19 +375,36 @@ export function makeFx(scene: THREE.Scene | THREE.Object3D, max = 160, y0 = 0.12
   const tex = new THREE.CanvasTexture(cv);
   const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2);
   const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }), max);
-  mesh.renderOrder = 3; mesh.frustumCulled = false; scene.add(mesh);
-  type P = { x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; life: number; s0: number; s1: number; a: number };
-  const ps: P[] = []; const d = new THREE.Object3D(), col = new THREE.Color(), tint = new THREE.Color(1, 1, 1);
+  mesh.renderOrder = 3; mesh.frustumCulled = false; mesh.count = 0; scene.add(mesh);
+  const ps: FxP[] = Array.from({ length: max }, () => ({
+    x: 0, y: y0, z: 0, vx: 0, vy: 0, vz: 0, age: 0, life: 0, s0: 0.6, s1: 2.2, a: 0.45, on: false,
+  }));
+  let cursor = 0;
+  const d = new THREE.Object3D(), col = new THREE.Color(), tint = new THREE.Color(1, 1, 1);
   for (let i = 0; i < max; i++) mesh.setColorAt(i, col.setRGB(0, 0, 0));
   return {
     mesh,
     /** 粒子顏色（夜光藻：偏藍綠）；只改顏色，不加燈 */
     setTint(r: number, g: number, b: number) { tint.setRGB(r, g, b); },
-    spawn(x: number, z: number, o: Partial<P> = {}) { if (ps.length >= max) ps.shift(); ps.push({ x, y: y0, z, vx: 0, vy: 0, vz: 0, age: 0, life: 1.4, s0: 0.6, s1: 2.2, a: 0.45, ...o }); },
+    spawn(x: number, z: number, o: Partial<Omit<FxP, 'on'>> = {}) {
+      const p = ps[cursor];
+      cursor = (cursor + 1) % max;
+      p.x = x; p.z = z;
+      p.y = o.y ?? y0;
+      p.vx = o.vx ?? 0; p.vy = o.vy ?? 0; p.vz = o.vz ?? 0;
+      p.age = 0;
+      p.life = o.life ?? 1.4;
+      p.s0 = o.s0 ?? 0.6; p.s1 = o.s1 ?? 2.2;
+      p.a = o.a ?? 0.45;
+      p.on = true;
+    },
     tick(dt: number) {
       let n = 0;
-      for (let i = ps.length - 1; i >= 0; i--) { const p = ps[i]; p.age += dt; if (p.age >= p.life) ps.splice(i, 1); }
-      for (const p of ps) {
+      for (let i = 0; i < max; i++) {
+        const p = ps[i];
+        if (!p.on) continue;
+        p.age += dt;
+        if (p.age >= p.life) { p.on = false; continue; }
         p.x += p.vx * dt; p.y = Math.max(y0, p.y + p.vy * dt); p.vy -= 9 * dt; p.z += p.vz * dt;
         const f = p.age / p.life, s = p.s0 + (p.s1 - p.s0) * f;
         d.position.set(p.x, p.y, p.z); d.scale.set(s, 1, s); d.updateMatrix(); mesh.setMatrixAt(n, d.matrix);

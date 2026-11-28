@@ -687,10 +687,18 @@ export function plazaBoatsSway(connId: string) {
 const swayConn = new Map<string, number>();
 
 // ---------------- 水花 ----------------
+/** 手機少噴幾顆；物件池已無 GC，仍降每幀寫入量 */
 function splash(x: number, z: number, k: number) {
   const fx = sea?.fx; if (!fx) return;
-  const n = Math.round(6 + 6 * k);
-  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; fx.spawn(x, z, { vx: Math.cos(a) * 2.4 * k, vz: Math.sin(a) * 2.4 * k, vy: 3 + Math.random() * 2.5 * k, y: PB.waterY + 0.2, life: 0.8, s0: 0.35, s1: 1.1, a: 0.7 }); }
+  const base = D?.coarse ? 3 : 6;
+  const n = Math.round(base + base * k);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    fx.spawn(x, z, {
+      vx: Math.cos(a) * 2.4 * k, vz: Math.sin(a) * 2.4 * k, vy: 3 + Math.random() * 2.5 * k,
+      y: PB.waterY + 0.2, life: 0.8, s0: 0.35, s1: 1.1, a: 0.7,
+    });
+  }
   fx.spawn(x, z, { life: 1.1, s0: 0.8, s1: 2.6 * k + 1, a: 0.5 });
 }
 function wake(b: BoatSt) {
@@ -1156,7 +1164,8 @@ function poseFisher(f: Fisher, rig: PlayerRig, dt: number, hidden: boolean) {
       const side = remoteFightSide(f.pose.steer, (f.st & 16) !== 0, Math.sin(t * 1.3 + f.stT), f.tnS);
       ex += Math.cos(heading) * side; ez -= Math.sin(heading) * side;
       f.splT -= dt;
-      if (f.splT <= 0) { f.splT = 0.5 + Math.random() * 0.4; splash(ex, ez, 0.15 + 0.3 * f.tnS); }
+      // 遠端拉魚水花降頻：避免多人同場時 makeFx 寫爆
+      if (f.splT <= 0) { f.splT = 1.0 + Math.random() * 0.5; splash(ex, ez, 0.12 + 0.22 * f.tnS); }
       // 記住最後拉魚的水面點：釣上來時魚從這裡破水被吊起來
       f.lfx = ex; f.lfz = ez; f.lfT = t;
     } else if ((f.st & 15) === 6 || (f.st & 15) === 4) {

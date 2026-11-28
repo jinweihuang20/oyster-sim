@@ -414,9 +414,10 @@ const renderer = new THREE.WebGLRenderer({
   precision: mobileLite ? 'mediump' : 'highp',
   preserveDrawingBuffer: !!SHOT,
 });
-/** 手機 DPR 上限：省電 1.0／一般 1.25（iPhone 原生 3x 會讓填色爆熱）；外海／船上再壓一檔（海面填色最重） */
+/** 手機 DPR 上限：省電 1.0／一般 1.25；外海／船上／釣魚（含岸釣）再壓一檔（海面填色最重） */
 function mobileDprCap(eco: boolean) {
-  const atSea = plazaMode && plazaBoatsActive();
+  // 岸邊釣魚也算「看海」：與船上同檔，避免岸釣 DPR 偏高越釣越燙（fps 不變）
+  const atSea = plazaMode && (plazaBoatsActive() || plazaFishing());
   if (COARSE) {
     if (eco || atSea) return 1;
     return 1.25;
@@ -8229,14 +8230,15 @@ function camTick(dt: number) {
   // 廣場海面：在船上／水裡一律用追船鏡頭（人由 plazaBoats 擺）
   // 海上：霧拉遠（遠處的船和人看得到）；回岸上還原廣場的 20／64。霧只是著色，不增加 draw call
   {
-    const f = scene.fog as THREE.Fog | null, want = plazaMode && (plazaBoatsActive() || camera.position.x < -80);
+    const f = scene.fog as THREE.Fog | null;
+    const want = plazaMode && (plazaBoatsActive() || plazaFishing() || camera.position.x < -80);
     if (f && want !== seaFogOn) {
       seaFogOn = want;
       if (want) { f.near = 36; f.far = 130; camera.far = 140; tpCam.far = Math.max(tpCam.far, 140); }
       else { f.near = 20; f.far = 64; if (plazaMode) { camera.far = 90; tpCam.far = 120; } }
       camera.updateProjectionMatrix(); tpCam.updateProjectionMatrix();
       plazaBoatsFog(f);
-      // 上船／靠外海：立刻套更低 DPR（海面填色）；上岸還原
+      // 上船／釣魚／靠外海：立刻套更低 DPR（海面填色）；上岸／收竿還原
       try { applyEcoGfx(); resize(); } catch { /* */ }
     }
   }

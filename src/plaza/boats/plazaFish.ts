@@ -156,6 +156,8 @@ const poseIn: FishPoseIn = { phase: 'off', power: 0, reel: false, tension: 0, lu
 let ffx: FishFx | null = null, bubbleT = 0, inkT = 0, fightX = 0, fightZ = 0;
 let gfx: { g: THREE.Group; line: THREE.Line; pos: Float32Array; bob: THREE.Mesh; bobMat: THREE.MeshBasicMaterial; shadow: THREE.Mesh; shMat: THREE.MeshBasicMaterial } | null = null;
 const _tip = new THREE.Vector3(), _end = new THREE.Vector3(), _dir = new THREE.Vector3();
+const _lineTip0 = new THREE.Vector3(1e9, 0, 0), _lineEnd0 = new THREE.Vector3(1e9, 0, 0);
+let lineWasOn = false;
 /** 拋竿弧線：放手點、落點、鬆線計時（落水後線慢慢鬆成懸垂）、放開拋竿的時間 */
 const _rel = new THREE.Vector3(), _land = new THREE.Vector3();
 const lineOpt: CastLineOpt = { k: 1, settle: 1, sag: 0, wy: 0 };
@@ -747,7 +749,8 @@ function drawGfx(dt: number) {
     gfx.shadow.position.set(x, wy - 0.01, z);
     gfx.shadow.rotation.z = Math.atan2(sx * f.run, sz * f.run) || 0;
     splashT -= dt;
-    if (splashT <= 0) { splashT = 0.45 + Math.random() * 0.3; spl(x, z, 0.15 + 0.25 * f.power); }
+    // 拉魚週期水花降頻（約 1s）：減 GPU 寫入／發熱，視覺仍有濺水
+    if (splashT <= 0) { splashT = 0.95 + Math.random() * 0.35; spl(x, z, 0.12 + 0.2 * f.power); }
   } else if (fishMesh && catchT > 0) {
     catchT -= dt;
     if (hoist.on) {
@@ -790,7 +793,11 @@ function drawGfx(dt: number) {
     lineOpt.settle = ph === 'fly' ? 0 : ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook' ? settleT / CAST_SETTLE_S : 1;
     castLine(p, CAST_LINE_SEGS, _tip, _rel, _land, _end, lineOpt);
   } else { for (let i = 0; i < p.length; i += 3) { p[i] = _tip.x; p[i + 1] = _tip.y; p[i + 2] = _tip.z; } }
-  (gfx.line.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+  // 釣線位移很小時跳過 GPU 上傳（靜置等咬時很常見）
+  if (lineOn !== lineWasOn || _tip.distanceToSquared(_lineTip0) > 1e-4 || _end.distanceToSquared(_lineEnd0) > 1e-4) {
+    (gfx.line.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    _lineTip0.copy(_tip); _lineEnd0.copy(_end); lineWasOn = lineOn;
+  }
   gfx.bob.visible = bobOn && lineOn;
   if (gfx.bob.visible) {
     gfx.bob.position.copy(_end);
@@ -1395,15 +1402,21 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
 
 /** 上方提示排在換餌列和狀態條下面（量實際底緣，直式／橫式都不會蓋住按鈕） */
 let fishToastTopKey = '';
+let fishToastMeasureAt = 0;
 function clearFishToastTop() {
   if (!fishToastTopKey) return;
   fishToastTopKey = '';
+  fishToastMeasureAt = 0;
   document.documentElement.style.removeProperty('--fish-toast-top');
 }
-function syncFishToastTop() {
+function syncFishToastTop(force = false) {
   if (!ui) { clearFishToastTop(); return; }
   const hud = ui.hud, acts = ui.acts;
   if (!hud.classList.contains('on') && !acts.classList.contains('on')) { clearFishToastTop(); return; }
+  // 每幀 getBoundingClientRect 會逼 layout；約 0.4s 量一次即可
+  const now = performance.now();
+  if (!force && now - fishToastMeasureAt < 400) return;
+  fishToastMeasureAt = now;
   const bottom = Math.max(acts.getBoundingClientRect().bottom, hud.getBoundingClientRect().bottom);
   const top = Math.round(bottom + 8);
   const key = String(top);
