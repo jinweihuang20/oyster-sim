@@ -6984,10 +6984,9 @@ function frameBody(ts?: number) {
   }
   const now = performance.now();
   const paused = isPaused();
-  // 選單／暫停約 15fps；遊玩 60（手機靜止 1.5 秒後 30 降溫）。外海／船上手機一律 30（海面填色最重）
-  const atSeaHeavy = plazaMode && plazaBoatsActive();
+  // 選單／暫停約 15fps；遊玩 60（手機靜止 1.5 秒後 30 降溫）。外海不強制 30——玩家習慣 60，砍幀會明顯不順；降熱帶靠 DPR／海面降面
   const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15
-    : (COARSE && (atSeaHeavy || !mobileBusy(now)) ? 1000 / 30 : 1000 / 60);
+    : (COARSE && !mobileBusy(now) ? 1000 / 30 : 1000 / 60);
   // 限幀用 rAF 時間戳（對齊 vsync）：performance.now() 會受回呼延遲抖動，60Hz 螢幕上偶爾被誤判「太早」而多掉一幀
   const fts = typeof ts === 'number' && ts > 0 ? ts : now;
   const since = fts - lastDrawAt;
