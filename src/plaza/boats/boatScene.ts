@@ -248,12 +248,13 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const boatMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const near = new THREE.InstancedMesh(nearGeo, boatMat, PB.count); near.name = 'plazaBoatsNear';
   const far = new THREE.InstancedMesh(farBoatGeo(0x2a5a86), boatMat, PB.count); far.name = 'plazaBoatsFar';
-  for (const m of [near, far]) { m.count = 0; m.frustumCulled = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
+  // InstancedMesh 幾何邊界在原點：開 frustumCulled 會整批被裁掉（船／棚「消失」）
+  for (const m of [near, far]) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
 
   // ---------- 漂流箱：一個 InstancedMesh（木條拼的木箱，約 600 三角形，一個 draw call）----------
   const crateGeo = driftCrateGeo();
   const crates = new THREE.InstancedMesh(crateGeo, boatMat, DRIFT_MAX); crates.name = 'plazaDriftCrates';
-  crates.count = 0; crates.frustumCulled = true; crates.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(crates);
+  crates.count = 0; crates.frustumCulled = false; crates.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(crates);
   // 金色大箱子：同一個 instanced mesh、只換顏色（不多 draw call）
   crates.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(DRIFT_MAX * 3).fill(1), 3); crates.instanceColor.setUsage(THREE.DynamicDrawUsage);
   const _gold = new THREE.Color(1.35, 1.05, 0.35), _white = new THREE.Color(1, 1, 1);
@@ -269,7 +270,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const ripeG = new THREE.SphereGeometry(0.16, 8, 6); ripeG.translate(0, 0.16, 0);
   const ripeMat = new THREE.MeshBasicMaterial({ color: 0xffd84a });
   const rackRipe = new THREE.InstancedMesh(ripeG, ripeMat, RACK_DRAW.ripe); rackRipe.name = 'plazaRackRipe';
-  for (const m of [rackFrames, rackStrs, rackFlags, rackRipe]) { m.count = 0; m.frustumCulled = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
+  for (const m of [rackFrames, rackStrs, rackFlags, rackRipe]) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); }
   const FLAG_MINE = new THREE.Color(0x2a5a86), FLAG_OTHER = new THREE.Color(0xd84a3a);
   // 自己的蚵棚高空光柱：只畫主人的棚、不受霧與視錐裁掉，最遠約 200 m 也看得到
   const beaconMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, fog: false });
