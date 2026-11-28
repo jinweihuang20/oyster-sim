@@ -156,8 +156,6 @@ const poseIn: FishPoseIn = { phase: 'off', power: 0, reel: false, tension: 0, lu
 let ffx: FishFx | null = null, bubbleT = 0, inkT = 0, fightX = 0, fightZ = 0;
 let gfx: { g: THREE.Group; line: THREE.Line; pos: Float32Array; bob: THREE.Mesh; bobMat: THREE.MeshBasicMaterial; shadow: THREE.Mesh; shMat: THREE.MeshBasicMaterial } | null = null;
 const _tip = new THREE.Vector3(), _end = new THREE.Vector3(), _dir = new THREE.Vector3();
-const _lineTip0 = new THREE.Vector3(1e9, 0, 0), _lineEnd0 = new THREE.Vector3(1e9, 0, 0);
-let lineWasOn = false;
 /** 拋竿弧線：放手點、落點、鬆線計時（落水後線慢慢鬆成懸垂）、放開拋竿的時間 */
 const _rel = new THREE.Vector3(), _land = new THREE.Vector3();
 const lineOpt: CastLineOpt = { k: 1, settle: 1, sag: 0, wy: 0 };
@@ -793,11 +791,7 @@ function drawGfx(dt: number) {
     lineOpt.settle = ph === 'fly' ? 0 : ph === 'wait' || ph === 'nibble' || ph === 'sink' || ph === 'hook' ? settleT / CAST_SETTLE_S : 1;
     castLine(p, CAST_LINE_SEGS, _tip, _rel, _land, _end, lineOpt);
   } else { for (let i = 0; i < p.length; i += 3) { p[i] = _tip.x; p[i + 1] = _tip.y; p[i + 2] = _tip.z; } }
-  // 釣線位移很小時跳過 GPU 上傳（靜置等咬時很常見）
-  if (lineOn !== lineWasOn || _tip.distanceToSquared(_lineTip0) > 1e-4 || _end.distanceToSquared(_lineEnd0) > 1e-4) {
-    (gfx.line.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-    _lineTip0.copy(_tip); _lineEnd0.copy(_end); lineWasOn = lineOn;
-  }
+  (gfx.line.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
   gfx.bob.visible = bobOn && lineOn;
   if (gfx.bob.visible) {
     gfx.bob.position.copy(_end);
