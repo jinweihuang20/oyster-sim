@@ -193,10 +193,33 @@ function buildBbqStand(
   fires.push(fire);
   if (fire.light) lights.push(fire.light);
   const grate = M(0x6a6a70, { metalness: 0.55, roughness: 0.45 });
-  for (let i = 0; i < 6; i++) add(rboxEnv(1.1, 0.015, 0.02), grate, [0, 0.86, -0.12 + i * 0.06], g, false);
+  {
+    const bar = rboxEnv(1.1, 0.015, 0.02);
+    const im = new THREE.InstancedMesh(bar, grate, 6);
+    im.frustumCulled = false;
+    const d = new THREE.Object3D();
+    for (let i = 0; i < 6; i++) {
+      d.position.set(0, 0.86, -0.12 + i * 0.06);
+      d.updateMatrix();
+      im.setMatrixAt(i, d.matrix);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    g.add(im);
+  }
   const meat = M(0x8a3a22, { roughness: 0.7 });
-  for (let i = 0; i < (lowDetail ? 3 : 5); i++) {
-    add(rboxEnv(0.16, 0.03, 0.07), meat, [-0.35 + i * 0.18, 0.9, 0.02], g, false);
+  {
+    const n = lowDetail ? 3 : 5;
+    const slab = rboxEnv(0.16, 0.03, 0.07);
+    const im = new THREE.InstancedMesh(slab, meat, n);
+    im.frustumCulled = false;
+    const d = new THREE.Object3D();
+    for (let i = 0; i < n; i++) {
+      d.position.set(-0.35 + i * 0.18, 0.9, 0.02);
+      d.updateMatrix();
+      im.setMatrixAt(i, d.matrix);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    g.add(im);
   }
   add(rboxEnv(0.7, 0.06, 0.55), wood, [-0.15, 0.62, -0.95], g, false);
   for (const sx of [-0.55, 0.25] as const) {

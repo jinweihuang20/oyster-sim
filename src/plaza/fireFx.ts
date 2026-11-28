@@ -38,10 +38,10 @@ export type CharcoalFireOpts = {
   seed?: number;
 };
 
-type Flame = { mesh: THREE.Mesh; bx: number; bz: number; phase: number; h: number; s: number };
-type Ember = { mesh: THREE.Mesh; bx: number; bz: number; phase: number; amp: number };
+type Flame = { i: number; tip: boolean; bx: number; bz: number; phase: number; h: number; s: number };
+type Ember = { i: number; bx: number; bz: number; phase: number; amp: number };
 type Smoke = {
-  mesh: THREE.Mesh;
+  i: number;
   age: number;
   life: number;
   vx: number;
@@ -52,13 +52,26 @@ type Smoke = {
   bz: number;
 };
 type HotChunk = {
-  mesh: THREE.Mesh;
-  glow: THREE.Mesh | null;
-  mat: THREE.MeshLambertMaterial;
-  glowMat: THREE.MeshBasicMaterial | null;
+  i: number;
+  glowI: number;
+  px: number; py: number; pz: number;
+  rx: number; ry: number; rz: number;
+  sx: number; sz: number;
   baseY: number;
   phase: number;
+  hasGlow: boolean;
 };
+
+const _d = new THREE.Object3D();
+const _hide = new THREE.Matrix4().makeScale(0, 0, 0);
+
+function setInst(_im: THREE.InstancedMesh, i: number, x: number, y: number, z: number, sx: number, sy: number, sz: number, rx = 0, ry = 0, rz = 0) {
+  _d.position.set(x, y, z);
+  _d.rotation.set(rx, ry, rz);
+  _d.scale.set(sx, sy, sz);
+  _d.updateMatrix();
+  _im.setMatrixAt(i, _d.matrix);
+}
 
 /** 共用幾何／冷炭材質（多台烤爐共用） */
 const flameGeo = new THREE.ConeGeometry(0.045, 0.14, 5, 1, true);
@@ -114,7 +127,7 @@ function makeHotCoalMat(_lo: boolean) {
 
 /**
  * 炭火／燒紅木炭：不規則炭塊、可選火舌／煙／點光。
- * 供共烤台／夜市烤肉攤共用。
+ * 重複零件一律 InstancedMesh（每種 1 個 draw call）。
  */
 export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
   const w = opts.width ?? 0.9;
@@ -130,126 +143,153 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
   const rn = rng(opts.seed ?? 42);
 
   const group = new THREE.Group();
-  group.userData.noLod = true; // 自己控制顯示，遠景細節裁切不要碰
+  group.userData.noLod = true;
   group.name = 'charcoalFire';
 
-  // 底炭層（flat：薄層，鋼盤與烤網之間）
-  const bedMat = coalMat;
-  const bed = new THREE.Mesh(rboxEnv(w, flat ? 0.022 : 0.045, d), bedMat);
+  const bed = new THREE.Mesh(rboxEnv(w, flat ? 0.022 : 0.045, d), coalMat);
   bed.position.y = 0;
   bed.userData.sharedMat = true;
   group.add(bed);
 
-  // 不規則炭塊（燒紅者各自材質，可獨立脈動）；LO 共用一顆熱炭材質少改 GPU state
+  // 先抽樣：冷／熱炭各進一個 InstancedMesh
+  type Cold = { px: number; py: number; pz: number; rx: number; ry: number; rz: number; sx: number; sy: number; sz: number };
+  const colds: Cold[] = [];
   const hotChunks: HotChunk[] = [];
-  const sharedHot = lo ? makeHotCoalMat(true) : null;
+  const hotMat = makeHotCoalMat(lo);
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: 0xff4a18, transparent: true, opacity: flat ? 0.35 : 0.4, depthWrite: false,
+  });
   for (let i = 0; i < nChunk; i++) {
     const hot = rn() < hotRatio;
-    const mat = hot ? (sharedHot ?? makeHotCoalMat(false)) : bedMat;
-    const m = new THREE.Mesh(coalChunkGeo, mat);
-    m.userData.sharedGeo = true;
-    m.userData.sharedMat = !hot;
-    // flat：炭貼床面、高度壓在烤網下（約 0.06～0.07 淨空）
     const cy = flat ? (0.008 + rn() * 0.012) : (0.018 + rn() * 0.028);
-    m.position.set((rn() - 0.5) * w * 0.84, cy, (rn() - 0.5) * d * 0.84);
-    m.rotation.set(rn() * (flat ? 0.4 : 1.2), rn() * 6.28, rn() * (flat ? 0.4 : 1.2));
+    const px = (rn() - 0.5) * w * 0.84, pz = (rn() - 0.5) * d * 0.84;
+    const rx = rn() * (flat ? 0.4 : 1.2), ry = rn() * 6.28, rz = rn() * (flat ? 0.4 : 1.2);
     const s = flat ? (0.6 + rn() * 0.75) : (0.65 + rn() * 1.15);
     const sy = flat ? (0.32 + rn() * 0.28) : (0.5 + rn() * 0.75);
-    m.scale.set(s * (0.7 + rn() * 0.65), sy, s * (0.7 + rn() * 0.55));
-    group.add(m);
-
-    let glow: THREE.Mesh | null = null;
-    let glowMat: THREE.MeshBasicMaterial | null = null;
-    if (hot) {
-      glowMat = new THREE.MeshBasicMaterial({
-        color: 0xff4a18,
-        transparent: true,
-        opacity: flat ? 0.35 : 0.4,
-        depthWrite: false,
-      });
-      glow = new THREE.Mesh(coalGlowGeo, glowMat);
-      glow.userData.sharedGeo = true;
-      glow.position.copy(m.position);
-      glow.position.y += flat ? 0.008 : 0.02;
-      glow.scale.setScalar((flat ? 0.35 : 0.55) + rn() * (flat ? 0.3 : 0.55));
-      glow.renderOrder = 2;
-      group.add(glow);
-      // LO：多數熱炭不掛 glow 球，少透明 overdraw
-      if (lo && glow && rn() > 0.35) {
-        group.remove(glow);
-        glow = null;
-        glowMat = null;
-      }
-      hotChunks.push({ mesh: m, glow, mat, glowMat, baseY: sy, phase: rn() * 6.28 });
+    const sx = s * (0.7 + rn() * 0.65), sz = s * (0.7 + rn() * 0.55);
+    if (!hot) {
+      colds.push({ px, py: cy, pz, rx, ry, rz, sx, sy, sz });
+      continue;
     }
+    const hasGlow = !(lo && rn() > 0.35);
+    hotChunks.push({
+      i: hotChunks.length, glowI: -1, px, py: cy, pz, rx, ry, rz, sx, sz,
+      baseY: sy, phase: rn() * 6.28, hasGlow,
+    });
   }
 
-  // 火舌（可關）
+  let coldIM: THREE.InstancedMesh | null = null;
+  if (colds.length) {
+    coldIM = new THREE.InstancedMesh(coalChunkGeo, coalMat, colds.length);
+    coldIM.userData.sharedGeo = true;
+    coldIM.userData.sharedMat = true;
+    coldIM.frustumCulled = false;
+    colds.forEach((c, i) => setInst(coldIM!, i, c.px, c.py, c.pz, c.sx, c.sy, c.sz, c.rx, c.ry, c.rz));
+    coldIM.instanceMatrix.needsUpdate = true;
+    group.add(coldIM);
+  }
+
+  let hotIM: THREE.InstancedMesh | null = null;
+  let glowIM: THREE.InstancedMesh | null = null;
+  if (hotChunks.length) {
+    hotIM = new THREE.InstancedMesh(coalChunkGeo, hotMat, hotChunks.length);
+    hotIM.userData.sharedGeo = true;
+    hotIM.frustumCulled = false;
+    let glowN = 0;
+    for (const c of hotChunks) if (c.hasGlow) c.glowI = glowN++;
+    if (glowN) {
+      glowIM = new THREE.InstancedMesh(coalGlowGeo, glowMat, glowN);
+      glowIM.userData.sharedGeo = true;
+      glowIM.frustumCulled = false;
+      glowIM.renderOrder = 2;
+      group.add(glowIM);
+    }
+    for (const c of hotChunks) {
+      setInst(hotIM, c.i, c.px, c.py, c.pz, c.sx, c.baseY, c.sz, c.rx, c.ry, c.rz);
+      if (glowIM && c.hasGlow) {
+        const gs = (flat ? 0.35 : 0.55) + (c.phase % 1) * (flat ? 0.3 : 0.55);
+        setInst(glowIM, c.glowI, c.px, c.py + (flat ? 0.008 : 0.02), c.pz, gs, gs, gs);
+      }
+    }
+    hotIM.instanceMatrix.needsUpdate = true;
+    if (glowIM) glowIM.instanceMatrix.needsUpdate = true;
+    group.add(hotIM);
+  }
+
+  // 火舌：橙／黃各一個 InstancedMesh
   const flames: Flame[] = [];
+  let flameIM: THREE.InstancedMesh | null = null;
+  let flameTipIM: THREE.InstancedMesh | null = null;
   if (wantFlames) {
     const nFlame = lo ? 2 : 7;
+    // tip＝偶數索引 → ceil；base＝奇數 → floor
+    const tipN = Math.ceil(nFlame / 2), baseN = Math.floor(nFlame / 2);
+    if (baseN) {
+      flameIM = new THREE.InstancedMesh(flameGeo, flameMat, baseN);
+      flameIM.userData.sharedGeo = true; flameIM.userData.sharedMat = true;
+      flameIM.frustumCulled = false; flameIM.renderOrder = 2; group.add(flameIM);
+    }
+    if (tipN) {
+      flameTipIM = new THREE.InstancedMesh(flameGeo, flameTipMat, tipN);
+      flameTipIM.userData.sharedGeo = true; flameTipIM.userData.sharedMat = true;
+      flameTipIM.frustumCulled = false; flameTipIM.renderOrder = 2; group.add(flameTipIM);
+    }
+    let bi = 0, ti = 0;
     for (let i = 0; i < nFlame; i++) {
       const tip = i % 2 === 0;
-      const mesh = new THREE.Mesh(flameGeo, tip ? flameTipMat : flameMat);
-      mesh.userData.sharedGeo = true;
-      mesh.userData.sharedMat = true;
-      mesh.renderOrder = 2;
-      const bx = (rn() - 0.5) * w * 0.55;
-      const bz = (rn() - 0.5) * d * 0.55;
-      mesh.position.set(bx, 0.02, bz);
-      group.add(mesh);
-      flames.push({ mesh, bx, bz, phase: rn() * 6.28, h: 0.7 + rn() * 0.7, s: 0.55 + rn() * 0.55 });
+      const bx = (rn() - 0.5) * w * 0.55, bz = (rn() - 0.5) * d * 0.55;
+      const f: Flame = {
+        i: tip ? ti++ : bi++, tip, bx, bz,
+        phase: rn() * 6.28, h: 0.7 + rn() * 0.7, s: 0.55 + rn() * 0.55,
+      };
+      flames.push(f);
+      setInst(tip ? flameTipIM! : flameIM!, f.i, bx, 0.02, bz, f.s, f.h, f.s);
     }
+    if (flameIM) flameIM.instanceMatrix.needsUpdate = true;
+    if (flameTipIM) flameTipIM.instanceMatrix.needsUpdate = true;
   }
 
-  // 炭火星
   const embers: Ember[] = [];
+  let emberIM: THREE.InstancedMesh | null = null;
   if (wantSparks) {
+    emberIM = new THREE.InstancedMesh(emberGeo, emberMat, 6);
+    emberIM.userData.sharedGeo = true; emberIM.userData.sharedMat = true;
+    emberIM.frustumCulled = false; emberIM.renderOrder = 3; group.add(emberIM);
     for (let i = 0; i < 6; i++) {
-      const mesh = new THREE.Mesh(emberGeo, emberMat);
-      mesh.userData.sharedGeo = true;
-      mesh.userData.sharedMat = true;
-      mesh.renderOrder = 3;
-      const bx = (rn() - 0.5) * w * 0.5;
-      const bz = (rn() - 0.5) * d * 0.5;
-      mesh.position.set(bx, 0.06, bz);
-      group.add(mesh);
-      embers.push({ mesh, bx, bz, phase: rn() * 6.28, amp: 0.04 + rn() * 0.08 });
+      const bx = (rn() - 0.5) * w * 0.5, bz = (rn() - 0.5) * d * 0.5;
+      embers.push({ i, bx, bz, phase: rn() * 6.28, amp: 0.04 + rn() * 0.08 });
+      setInst(emberIM, i, bx, 0.06, bz, 1, 1, 1);
     }
+    emberIM.instanceMatrix.needsUpdate = true;
   }
 
-  // 煙（物件池循環）
   const smokes: Smoke[] = [];
-  for (let i = 0; i < smokeN; i++) {
-    const mesh = new THREE.Mesh(smokeGeo, smokeMat.clone());
-    mesh.userData.sharedGeo = true;
-    mesh.renderOrder = 1;
-    mesh.visible = false;
-    group.add(mesh);
-    smokes.push({
-      mesh,
-      age: rn() * 2.5,
-      life: 1.6 + rn() * 1.8,
-      vx: (rn() - 0.5) * 0.12,
-      vz: (rn() - 0.5) * 0.12,
-      speed: 0.22 + rn() * 0.28,
-      base: 0.14 + rn() * 0.12,
-      bx: (rn() - 0.5) * w * 0.4,
-      bz: (rn() - 0.5) * d * 0.4,
-    });
+  let smokeIM: THREE.InstancedMesh | null = null;
+  const smokeOwnMat = smokeMat.clone();
+  if (smokeN > 0) {
+    smokeIM = new THREE.InstancedMesh(smokeGeo, smokeOwnMat, smokeN);
+    smokeIM.userData.sharedGeo = true;
+    smokeIM.frustumCulled = false; smokeIM.renderOrder = 1; group.add(smokeIM);
+    for (let i = 0; i < smokeN; i++) {
+      smokes.push({
+        i, age: rn() * 2.5, life: 1.6 + rn() * 1.8,
+        vx: (rn() - 0.5) * 0.12, vz: (rn() - 0.5) * 0.12,
+        speed: 0.22 + rn() * 0.28, base: 0.14 + rn() * 0.12,
+        bx: (rn() - 0.5) * w * 0.4, bz: (rn() - 0.5) * d * 0.4,
+      });
+    }
   }
 
   let light: THREE.PointLight | null = null;
   const baseI = opts.lightIntensity ?? 3.6;
   if (opts.withLight !== false && !lo) {
-    // 無火時偏暗紅炭光；有火時偏橙
     light = new THREE.PointLight(wantFlames ? 0xff7a30 : 0xff5520, baseI, opts.lightDistance ?? 4.5, 1.65);
     light.position.set(0, wantFlames ? 0.42 : 0.22, 0);
     light.castShadow = false;
     group.add(light);
   }
 
-  function resetSmoke(s: Smoke, t: number) {
+  function resetSmoke(s: Smoke) {
     s.age = 0;
     s.life = 1.5 + rn() * 2;
     s.vx = (rn() - 0.5) * 0.14;
@@ -258,10 +298,6 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
     s.base = 0.12 + rn() * 0.14;
     s.bx = (rn() - 0.5) * w * 0.45;
     s.bz = (rn() - 0.5) * d * 0.45;
-    s.mesh.position.set(s.bx, 0.08, s.bz);
-    s.mesh.scale.setScalar(s.base);
-    s.mesh.visible = true;
-    void t;
   }
 
   function tick(tSec: number, dt: number) {
@@ -270,75 +306,71 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
     const flicker = 0.82 + 0.18 * Math.sin(t * 11.3) + 0.08 * Math.sin(t * 23.7 + 1.2);
     const flicker2 = 0.75 + 0.25 * Math.sin(t * 17.1 + 0.7);
 
-    if (sharedHot) {
-      // LO：單一熱炭材質脈動一次，mesh 只改 scale
+    if (hotIM && hotChunks.length) {
       const pulse = 0.55 + 0.45 * Math.sin(t * 5.5);
       const pulse2 = 0.5 + 0.5 * Math.sin(t * 13.2);
-      sharedHot.emissiveIntensity = 0.45 + 0.75 * pulse * pulse2;
-      sharedHot.emissive.setRGB(1, 0.18 + 0.12 * pulse, 0.04 + 0.03 * pulse2);
+      hotMat.emissiveIntensity = 0.45 + 0.75 * pulse * pulse2;
+      hotMat.emissive.setRGB(1, 0.18 + 0.12 * pulse, 0.04 + 0.03 * pulse2);
+      glowMat.opacity = (flat ? 0.14 : 0.22) + (flat ? 0.22 : 0.38) * pulse * pulse2;
+      glowMat.color.setRGB(1, 0.22 + 0.2 * pulse, 0.06);
       for (const c of hotChunks) {
-        c.mesh.scale.y = c.baseY * (flat ? (0.96 + 0.04 * pulse) : (0.9 + 0.12 * pulse));
-        if (c.glow && c.glowMat) {
-          c.glow.position.x = c.mesh.position.x;
-          c.glow.position.z = c.mesh.position.z;
-          c.glow.position.y = c.mesh.position.y + (flat ? 0.004 : 0.015) + pulse * (flat ? 0.003 : 0.01);
-          c.glow.scale.setScalar(((flat ? 0.32 : 0.5) + pulse * (flat ? 0.22 : 0.55)) * (0.7 + c.baseY * 0.35));
-          c.glowMat.opacity = (flat ? 0.14 : 0.22) + (flat ? 0.22 : 0.38) * pulse * pulse2;
+        const sy = c.baseY * (flat ? (0.96 + 0.04 * pulse) : (0.9 + 0.12 * pulse));
+        setInst(hotIM, c.i, c.px, c.py, c.pz, c.sx, sy, c.sz, c.rx, c.ry, c.rz);
+        if (glowIM && c.hasGlow) {
+          const gs = ((flat ? 0.32 : 0.5) + pulse * (flat ? 0.22 : 0.55)) * (0.7 + c.baseY * 0.35);
+          const gy = c.py + (flat ? 0.004 : 0.015) + pulse * (flat ? 0.003 : 0.01);
+          setInst(glowIM, c.glowI, c.px, gy, c.pz, gs, gs, gs);
         }
       }
-    } else {
-      for (const c of hotChunks) {
-        const pulse = 0.55 + 0.45 * Math.sin(t * (5.5 + c.phase * 0.4) + c.phase);
-        const pulse2 = 0.5 + 0.5 * Math.sin(t * 13.2 + c.phase * 1.7);
-        c.mat.emissiveIntensity = 0.45 + 0.75 * pulse * pulse2;
-        c.mat.emissive.setRGB(1, 0.18 + 0.12 * pulse, 0.04 + 0.03 * pulse2);
-        c.mesh.scale.y = c.baseY * (flat ? (0.96 + 0.04 * pulse) : (0.9 + 0.12 * pulse));
-        if (c.glow && c.glowMat) {
-          c.glow.position.x = c.mesh.position.x;
-          c.glow.position.z = c.mesh.position.z;
-          c.glow.position.y = c.mesh.position.y + (flat ? 0.004 : 0.015) + pulse * (flat ? 0.003 : 0.01);
-          const gs = (flat ? 0.32 : 0.5) + pulse * (flat ? 0.22 : 0.55);
-          c.glow.scale.setScalar(gs * (0.7 + c.baseY * 0.35));
-          c.glowMat.opacity = (flat ? 0.14 : 0.22) + (flat ? 0.22 : 0.38) * pulse * pulse2;
-          c.glowMat.color.setRGB(1, 0.22 + 0.2 * pulse, 0.06);
-        }
+      hotIM.instanceMatrix.needsUpdate = true;
+      if (glowIM) glowIM.instanceMatrix.needsUpdate = true;
+    }
+
+    if (flames.length) {
+      for (const f of flames) {
+        const wave = 0.55 + 0.45 * Math.sin(t * (7 + f.h * 3) + f.phase);
+        const lean = Math.sin(t * 2.4 + f.phase) * 0.12;
+        const mesh = f.tip ? flameTipIM! : flameIM!;
+        setInst(
+          mesh, f.i,
+          f.bx + lean * 0.04, 0.02, f.bz + Math.cos(t * 1.8 + f.phase) * 0.03,
+          f.s * (0.75 + wave * 0.35), f.h * (0.65 + wave * 0.7), f.s * (0.75 + wave * 0.3),
+          Math.sin(t * 3.1 + f.phase) * 0.15, 0, lean,
+        );
       }
+      if (flameIM) flameIM.instanceMatrix.needsUpdate = true;
+      if (flameTipIM) flameTipIM.instanceMatrix.needsUpdate = true;
     }
 
-    for (const f of flames) {
-      const wave = 0.55 + 0.45 * Math.sin(t * (7 + f.h * 3) + f.phase);
-      const lean = Math.sin(t * 2.4 + f.phase) * 0.12;
-      f.mesh.position.x = f.bx + lean * 0.04;
-      f.mesh.position.z = f.bz + Math.cos(t * 1.8 + f.phase) * 0.03;
-      f.mesh.scale.set(f.s * (0.75 + wave * 0.35), f.h * (0.65 + wave * 0.7), f.s * (0.75 + wave * 0.3));
-      f.mesh.rotation.z = lean;
-      f.mesh.rotation.x = Math.sin(t * 3.1 + f.phase) * 0.15;
+    if (emberIM) {
+      for (const e of embers) {
+        const u = (t * 0.55 + e.phase) % 1;
+        if (u >= 0.92) { emberIM.setMatrixAt(e.i, _hide); continue; }
+        const rise = u * e.amp * 4;
+        const sc = Math.max(0.05, (1 - u) * 1.15);
+        setInst(
+          emberIM, e.i,
+          e.bx + Math.sin(t * 4 + e.phase) * 0.03, 0.05 + rise, e.bz + Math.cos(t * 3.2 + e.phase) * 0.03,
+          sc, sc, sc,
+        );
+      }
+      emberIM.instanceMatrix.needsUpdate = true;
     }
 
-    for (const e of embers) {
-      const u = (t * 0.55 + e.phase) % 1;
-      const rise = u * e.amp * 4;
-      e.mesh.position.set(
-        e.bx + Math.sin(t * 4 + e.phase) * 0.03,
-        0.05 + rise,
-        e.bz + Math.cos(t * 3.2 + e.phase) * 0.03,
-      );
-      e.mesh.scale.setScalar(Math.max(0.05, (1 - u) * 1.15));
-      e.mesh.visible = u < 0.92;
-    }
-
-    for (const s of smokes) {
-      s.age += step;
-      if (s.age >= s.life) resetSmoke(s, tSec);
-      const u = s.age / s.life;
-      const y = 0.1 + u * 0.95 * s.speed * 4.2;
-      const drift = u * u;
-      s.mesh.position.set(s.bx + s.vx * drift * 2.2, y, s.bz + s.vz * drift * 2.2);
-      const sc = s.base * (1 + u * 2.4);
-      s.mesh.scale.set(sc * 1.15, sc * 0.85, sc * 1.15);
-      const mat = s.mesh.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.28 * (1 - u) * (0.7 + 0.3 * flicker2);
-      s.mesh.visible = true;
+    if (smokeIM && smokes.length) {
+      let avgOp = 0;
+      for (const s of smokes) {
+        s.age += step;
+        if (s.age >= s.life) resetSmoke(s);
+        const u = s.age / s.life;
+        const y = 0.1 + u * 0.95 * s.speed * 4.2;
+        const drift = u * u;
+        const sc = s.base * (1 + u * 2.4);
+        setInst(smokeIM, s.i, s.bx + s.vx * drift * 2.2, y, s.bz + s.vz * drift * 2.2, sc * 1.15, sc * 0.85, sc * 1.15);
+        avgOp += 0.28 * (1 - u) * (0.7 + 0.3 * flicker2);
+      }
+      smokeOwnMat.opacity = avgOp / smokes.length;
+      smokeIM.instanceMatrix.needsUpdate = true;
     }
 
     if (light) {
@@ -347,18 +379,21 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
     }
   }
 
-  for (const s of smokes) {
-    s.age = rn() * s.life;
-    s.mesh.visible = true;
-  }
+  for (const s of smokes) s.age = rn() * s.life;
+  if (smokeIM) tick(0, 0);
 
   function dispose() {
     group.removeFromParent();
-    for (const s of smokes) (s.mesh.material as THREE.Material).dispose();
-    for (const c of hotChunks) {
-      c.mat.dispose();
-      c.glowMat?.dispose();
-    }
+    smokeOwnMat.dispose();
+    hotMat.dispose();
+    glowMat.dispose();
+    coldIM?.dispose();
+    hotIM?.dispose();
+    glowIM?.dispose();
+    flameIM?.dispose();
+    flameTipIM?.dispose();
+    emberIM?.dispose();
+    smokeIM?.dispose();
     if (light) { light.dispose(); light = null; }
   }
 
@@ -375,29 +410,18 @@ export function makeCigSmoke(opts: { count?: number; seed?: number; scale?: numb
   const defaultTint = 0x9a9894;
   let tintHex = opts.tint ?? defaultTint;
   const group = new THREE.Group();
-  group.userData.noLod = true; // 自己控制顯示，遠景細節裁切不要碰
+  group.userData.noLod = true;
   group.name = 'cigSmoke';
-  type S = { mesh: THREE.Mesh; age: number; life: number; vx: number; vz: number; speed: number; base: number };
+  type S = { i: number; age: number; life: number; vx: number; vz: number; speed: number; base: number; x: number; y: number; z: number };
+  const mat = smokeMat.clone();
+  mat.opacity = 0.16;
+  mat.color.setHex(tintHex);
+  const im = new THREE.InstancedMesh(smokeGeo, mat, n);
+  im.userData.sharedGeo = true;
+  im.frustumCulled = false;
+  im.renderOrder = 2;
+  group.add(im);
   const smokes: S[] = [];
-  for (let i = 0; i < n; i++) {
-    const mat = smokeMat.clone();
-    mat.opacity = 0.16;
-    mat.color.setHex(tintHex);
-    const mesh = new THREE.Mesh(smokeGeo, mat);
-    mesh.userData.sharedGeo = true;
-    mesh.renderOrder = 2;
-    mesh.visible = false;
-    group.add(mesh);
-    smokes.push({
-      mesh,
-      age: rn() * 2,
-      life: 1.2 + rn() * 1.4,
-      vx: (rn() - 0.5) * 0.06,
-      vz: (rn() - 0.5) * 0.06,
-      speed: 0.18 + rn() * 0.22,
-      base: 0.08 * sc + rn() * 0.06 * sc,
-    });
-  }
   function reset(s: S) {
     s.age = 0;
     s.life = 1.1 + rn() * 1.5;
@@ -405,39 +429,43 @@ export function makeCigSmoke(opts: { count?: number; seed?: number; scale?: numb
     s.vz = (rn() - 0.5) * 0.07;
     s.speed = 0.16 + rn() * 0.24;
     s.base = 0.07 * sc + rn() * 0.07 * sc;
-    s.mesh.position.set((rn() - 0.5) * 0.04, 0.02, (rn() - 0.5) * 0.04);
-    s.mesh.scale.setScalar(s.base);
-    s.mesh.visible = true;
-    const m = s.mesh.material as THREE.MeshBasicMaterial;
-    m.opacity = 0.18;
+    s.x = (rn() - 0.5) * 0.04;
+    s.y = 0.02;
+    s.z = (rn() - 0.5) * 0.04;
   }
-  for (const s of smokes) reset(s);
+  for (let i = 0; i < n; i++) {
+    const s: S = { i, age: 0, life: 1, vx: 0, vz: 0, speed: 0.2, base: 0.08 * sc, x: 0, y: 0.02, z: 0 };
+    reset(s);
+    s.age = rn() * s.life;
+    smokes.push(s);
+  }
   return {
     group,
     light: null,
     tick: (_t, dt) => {
       const step = Math.min(0.05, Math.max(0, dt));
+      let avgOp = 0;
       for (const s of smokes) {
         s.age += step;
-        if (s.age >= s.life) { reset(s); continue; }
+        if (s.age >= s.life) reset(s);
         const u = s.age / s.life;
-        s.mesh.position.x += s.vx * step;
-        s.mesh.position.z += s.vz * step;
-        s.mesh.position.y += s.speed * step;
-        s.mesh.scale.setScalar(s.base * (1 + u * 1.8));
-        const m = s.mesh.material as THREE.MeshBasicMaterial;
-        m.opacity = 0.18 * (1 - u);
+        s.x += s.vx * step;
+        s.z += s.vz * step;
+        s.y += s.speed * step;
+        const sz = s.base * (1 + u * 1.8);
+        setInst(im, s.i, s.x, s.y, s.z, sz, sz, sz);
+        avgOp += 0.18 * (1 - u);
       }
+      mat.opacity = avgOp / smokes.length;
+      im.instanceMatrix.needsUpdate = true;
     },
     setTint: (hex?: number) => {
       tintHex = hex ?? defaultTint;
-      for (const s of smokes) (s.mesh.material as THREE.MeshBasicMaterial).color.setHex(tintHex);
+      mat.color.setHex(tintHex);
     },
     dispose: () => {
-      for (const s of smokes) {
-        const m = s.mesh.material as THREE.Material;
-        if (!s.mesh.userData.sharedMat) m.dispose();
-      }
+      mat.dispose();
+      im.dispose();
       group.clear();
     },
   };

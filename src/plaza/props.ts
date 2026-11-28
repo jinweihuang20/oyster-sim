@@ -211,11 +211,33 @@ export function makePlazaGrill(
   fire.group.position.set(0, steelTop + 0.012, 0);
   g.add(fire.group);
   g.userData.fireFx = fire;
-  // 烤網
+  // 烤網：橫／直各一個 InstancedMesh（18 根鐵條 → 2 draw call）
   const grate = new THREE.MeshLambertMaterial({ color: 0x6a6a70 });
-  for (let i = 0; i < 9; i++) {
-    add(rboxEnv(1.2, 0.012, 0.022), grate, [0, gy, -0.48 + i * 0.12], false);
-    add(rboxEnv(0.022, 0.012, 1.2), grate, [-0.48 + i * 0.12, gy + 0.004, 0], false);
+  {
+    const _d = new THREE.Object3D();
+    const hGeo = rboxEnv(1.2, 0.012, 0.022);
+    const vGeo = rboxEnv(0.022, 0.012, 1.2);
+    const hIM = new THREE.InstancedMesh(hGeo, grate, 9);
+    const vIM = new THREE.InstancedMesh(vGeo, grate, 9);
+    for (const m of [hIM, vIM]) {
+      m.frustumCulled = false;
+      m.castShadow = false;
+      m.receiveShadow = true;
+      m.userData.pileId = pileId;
+    }
+    for (let i = 0; i < 9; i++) {
+      _d.position.set(0, gy, -0.48 + i * 0.12);
+      _d.rotation.set(0, 0, 0);
+      _d.scale.set(1, 1, 1);
+      _d.updateMatrix();
+      hIM.setMatrixAt(i, _d.matrix);
+      _d.position.set(-0.48 + i * 0.12, gy + 0.004, 0);
+      _d.updateMatrix();
+      vIM.setMatrixAt(i, _d.matrix);
+    }
+    hIM.instanceMatrix.needsUpdate = true;
+    vIM.instanceMatrix.needsUpdate = true;
+    g.add(hIM, vIM);
   }
   // 邊框
   add(rboxEnv(1.28, 0.03, 0.05), steel, [0, gy + 0.02, -0.62], false);
