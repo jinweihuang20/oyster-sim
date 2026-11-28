@@ -86,6 +86,7 @@ export function mergeStaticMeshes(
   dest.name = opts?.name ?? 'mergedStatic';
   dest.userData.mergedStatic = true;
   const invRoot = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const _xf = new THREE.Matrix4();
   let merged = 0;
   let created = 0;
 
@@ -95,7 +96,7 @@ export function mergeStaticMeshes(
     for (const m of b.meshes) {
       const src = m.geometry;
       const g = src.index ? src.toNonIndexed() : src.clone();
-      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(invRoot, m.matrixWorld));
+      g.applyMatrix4(_xf.multiplyMatrices(invRoot, m.matrixWorld));
       geos.push(g);
     }
     let combined: THREE.BufferGeometry | null = null;

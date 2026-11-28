@@ -162,14 +162,20 @@ export function buildMgMounts(root: THREE.Object3D, lo = false): THREE.Group[] {
   return out;
 }
 
-export function mgMuzzleWorld(mount: THREE.Object3D, out = new THREE.Vector3()) {
+const _mgMuzzleOut = new THREE.Vector3();
+const _mgEjectOut = new THREE.Vector3();
+const _mgRightOut = new THREE.Vector3();
+const _mgNegZ = new THREE.Vector3(0, 0, -1);
+const _mgFwd = new THREE.Vector3();
+
+export function mgMuzzleWorld(mount: THREE.Object3D, out = _mgMuzzleOut) {
   const m = mount.getObjectByName('mgMuzzle');
   if (m) m.getWorldPosition(out);
   else mount.getWorldPosition(out);
   return out;
 }
 
-export function mgEjectWorld(mount: THREE.Object3D, out = new THREE.Vector3()) {
+export function mgEjectWorld(mount: THREE.Object3D, out = _mgEjectOut) {
   const m = mount.getObjectByName('mgEject');
   if (m) m.getWorldPosition(out);
   else {
@@ -180,7 +186,7 @@ export function mgEjectWorld(mount: THREE.Object3D, out = new THREE.Vector3()) {
 }
 
 const _mgQ = new THREE.Quaternion();
-export function mgMountRight(mount: THREE.Object3D, out = new THREE.Vector3()) {
+export function mgMountRight(mount: THREE.Object3D, out = _mgRightOut) {
   mount.getWorldQuaternion(_mgQ);
   out.set(1, 0, 0).applyQuaternion(_mgQ).normalize();
   return out;
@@ -312,17 +318,17 @@ export class MgFxSystem {
   }) {
     const mesh = new THREE.Mesh(this.meatGeo, this.meatMat);
     mesh.position.copy(opts.from);
-    const d = opts.dir.clone().normalize();
+    this._tmp.copy(opts.dir).normalize();
     // 讓扁平肉塊長軸大致朝飛行方向
-    mesh.quaternion.setFromUnitVectors(this._zAxis, d);
+    mesh.quaternion.setFromUnitVectors(this._zAxis, this._tmp);
     mesh.rotateX(Math.PI * 0.5);
     this.root.add(mesh);
     this.bullets.push({
       id: opts.id,
       mesh,
-      vx: d.x * BULLET_SPEED,
-      vy: d.y * BULLET_SPEED,
-      vz: d.z * BULLET_SPEED,
+      vx: this._tmp.x * BULLET_SPEED,
+      vy: this._tmp.y * BULLET_SPEED,
+      vz: this._tmp.z * BULLET_SPEED,
       life: BULLET_LIFE,
       fromConn: opts.fromConn,
       local: opts.local,
@@ -335,7 +341,7 @@ export class MgFxSystem {
     g.position.copy(at);
     if (dir && dir.lengthSq() > 1e-6) {
       this._tmp.copy(dir).normalize();
-      this._q.setFromUnitVectors(new THREE.Vector3(0, 0, -1), this._tmp);
+      this._q.setFromUnitVectors(_mgNegZ, this._tmp);
       g.quaternion.copy(this._q);
     }
     const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), this.flashMat.clone());
@@ -351,7 +357,8 @@ export class MgFxSystem {
     g.add(core);
     this.root.add(g);
     this.flashes.push({ mesh: g, life: FLASH_LIFE, maxLife: FLASH_LIFE });
-    const fwd = dir && dir.lengthSq() > 1e-6 ? dir.clone().normalize() : new THREE.Vector3(0, 0, -1);
+    if (dir && dir.lengthSq() > 1e-6) _mgFwd.copy(dir).normalize();
+    else _mgFwd.copy(_mgNegZ);
     const nSpark = 1 + (Math.random() < 0.5 ? 1 : 0);
     for (let i = 0; i < nSpark; i++) {
       const m = new THREE.Mesh(this.sparkGeo, this.sparkMat.clone());
@@ -361,9 +368,9 @@ export class MgFxSystem {
       this.sparks.push({
         mesh: m,
         life: 0.04 + Math.random() * 0.04,
-        vx: fwd.x * (1.2 + Math.random() * 1.5) + (Math.random() - 0.5) * 1.2,
-        vy: fwd.y * (1 + Math.random()) + 0.6 + Math.random() * 1.2,
-        vz: fwd.z * (1.2 + Math.random() * 1.5) + (Math.random() - 0.5) * 1.2,
+        vx: _mgFwd.x * (1.2 + Math.random() * 1.5) + (Math.random() - 0.5) * 1.2,
+        vy: _mgFwd.y * (1 + Math.random()) + 0.6 + Math.random() * 1.2,
+        vz: _mgFwd.z * (1.2 + Math.random() * 1.5) + (Math.random() - 0.5) * 1.2,
       });
     }
   }
@@ -416,11 +423,11 @@ export class MgFxSystem {
         0.02,
         prev.z + (cur.z - prev.z) * t,
       );
-      return { at: this._hit.clone(), n: new THREE.Vector3(0, 1, 0) };
+      return { at: this._hit.clone(), n: this._up };
     }
     if (cur.y <= 0.02) {
       this._hit.set(cur.x, 0.02, cur.z);
-      return { at: this._hit.clone(), n: new THREE.Vector3(0, 1, 0) };
+      return { at: this._hit.clone(), n: this._up };
     }
     // 牆／蚵堆等直立面（略過槍座）；貼圖只留在貼地附近，避免「打到天空」假彈痕
     for (const [ox, oz, r] of obs) {
@@ -436,7 +443,7 @@ export class MgFxSystem {
       const nx = (cur.x - ox) / Math.max(1e-6, d1);
       const nz = (cur.z - oz) / Math.max(1e-6, d1);
       this._hit.set(ox + nx * r, cur.y, oz + nz * r);
-      return { at: this._hit.clone(), n: new THREE.Vector3(nx, 0, nz) };
+      return { at: this._hit.clone(), n: this._n.set(nx, 0, nz) };
     }
     return null;
   }

@@ -516,7 +516,8 @@ export function plazaHitPile(raycaster: THREE.Raycaster): number | null {
   return view?.hitPile(raycaster) ?? null;
 }
 /** 自己坐下的那堆中心（補蚵飛出起點） */
-export function plazaMyPileOrigin(out = new THREE.Vector3()) {
+const _pileOrigin = new THREE.Vector3();
+export function plazaMyPileOrigin(out = _pileOrigin) {
   if (myPile == null || isLeisurePile(myPile)) return null;
   return pileCenter(myPile, out);
 }

@@ -135,6 +135,10 @@ const SIT_ROOT_Y = PLAZA_SIT_ROOT_Y;
 const _hangDir = new THREE.Vector3();
 const _hangX = new THREE.Vector3();
 const _hangZ = new THREE.Vector3();
+/** tick 熱路徑暫存：彈烟灰／吐煙嘴位／貓拳目標（避免每幀 new Vector3） */
+const _ashLocal = new THREE.Vector3(0.02, 0.02, -0.2);
+const _mouthLocal = new THREE.Vector3();
+const _punchTo = new THREE.Vector3();
 const _hangMat = new THREE.Matrix4();
 
 export type PlazaWorldView = {
@@ -1085,7 +1089,7 @@ export function createPlazaWorldView(
           if (sn.ashCD <= 0 && sn.flickT <= 0) {
             sn.flickT = 1;
             sn.ashCD = 6 + (Math.abs(hashPid('ash') + (now | 0)) % 40) / 10;
-            if (cig) sn.ashes.push(spawnAshSpeck(cig.group, new THREE.Vector3(0.02, 0.02, -0.2)));
+            if (cig) sn.ashes.push(spawnAshSpeck(cig.group, _ashLocal));
           }
         }
       }
@@ -1118,7 +1122,7 @@ export function createPlazaWorldView(
             reach: strength,
           });
           sn.rig.head.updateMatrixWorld(true);
-          const mouth = sn.rig.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
+          const mouth = sn.rig.head.localToWorld(_mouthLocal.set(0, -0.08, -0.16));
           const yaw = sn.rig.outer.rotation.y;
           fx.group.position.copy(mouth);
           fx.group.rotation.y = yaw;
@@ -1817,7 +1821,7 @@ function hashPid(pid: string) {
     st.cd -= dt;
     if (st.cd <= 0) {
       st.cd = 6 + Math.random() * 5;
-      st.ashes.push(spawnAshSpeck(cig.group, new THREE.Vector3(0.02, 0.02, -0.2)));
+      st.ashes.push(spawnAshSpeck(cig.group, _ashLocal));
     }
     for (let i = st.ashes.length - 1; i >= 0; i--) {
       if (!st.ashes[i].tick(dt)) { st.ashes[i].dispose(); st.ashes.splice(i, 1); }
@@ -1849,7 +1853,7 @@ function hashPid(pid: string) {
     const gold = !r.isNpc && parseCosmetics(r.cosmetics).goldSmoke;
     const fx = makeExhalePuff({ scale: sc, count: Math.round(6 + strength * 8), seed: 6100 + Math.floor(Math.random() * 4000), reach: strength, tint: gold ? GOLD_SMOKE_TINT : undefined });
     r.rig.head.updateMatrixWorld(true);
-    const mouth = r.rig.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
+    const mouth = r.rig.head.localToWorld(_mouthLocal.set(0, -0.08, -0.16));
     const yaw = r.rig.outer.rotation.y;
     fx.group.position.copy(mouth);
     fx.group.rotation.y = yaw;
@@ -2549,11 +2553,10 @@ function hashPid(pid: string) {
       ?? mesh
       ?? src.rig.outer;
     const getTo = () => {
-      const to = new THREE.Vector3();
-      if (tgt.rig.head) tgt.rig.head.getWorldPosition(to);
-      else tgt.rig.outer.getWorldPosition(to);
-      to.y += 0.08;
-      return to;
+      if (tgt.rig.head) tgt.rig.head.getWorldPosition(_punchTo);
+      else tgt.rig.outer.getWorldPosition(_punchTo);
+      _punchTo.y += 0.08;
+      return _punchTo;
     };
     const rj = src as any;
     try { rj._apoPunchStop?.(); } catch { /* */ }

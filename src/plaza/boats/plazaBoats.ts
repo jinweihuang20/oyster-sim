@@ -654,25 +654,26 @@ function myHead(out: THREE.Vector3) {
   if (rig) { rig.head.getWorldPosition(out); return out; }
   const b = boats[myBoat]; return out.set(b?.x ?? 0, PB.waterY + 1.6, b?.z ?? 0);
 }
+const _throwFrom = new THREE.Vector3(), _throwTo = new THREE.Vector3(), _throwBest = new THREE.Vector3();
 function throwFromBoat() {
   if (!D || mode !== 'boat' || throwCd > 0) return;
   const b = boats[myBoat]; if (!b) return;
-  const from = myHead(new THREE.Vector3()); from.y += 0.15;
+  const from = myHead(_throwFrom); from.y += 0.15;
   // 瞄準：鏡頭前方 ±40°、18 m 內最近的人（船上、水裡、岸上都算）
   const [fx, fz] = fwd(b.h);
-  let best: { connId: string; nick: string; p: THREE.Vector3 } | null = null, bestD = 18;
+  let best: { connId: string; nick: string } | null = null, bestD = 18;
   for (const r of D.view()?.remoteList() ?? []) {
     if (r.isNpc) continue;
     const h = D.view()?.remoteHead(r.connId); if (!h) continue;
     const dx = h.x - from.x, dz = h.z - from.z, d = Math.hypot(dx, dz);
     if (d < 1 || d > bestD) continue;
     if ((dx * fx + dz * fz) / d < Math.cos(0.7)) continue;
-    best = { connId: r.connId, nick: r.nick, p: new THREE.Vector3(h.x, h.y, h.z) }; bestD = d;
+    _throwBest.set(h.x, h.y, h.z); best = { connId: r.connId, nick: r.nick }; bestD = d;
   }
-  const to = best ? best.p : new THREE.Vector3(b.x + fx * 9, PB.waterY + 0.1, b.z + fz * 9);
+  const to = best ? _throwTo.copy(_throwBest) : _throwTo.set(b.x + fx * 9, PB.waterY + 0.1, b.z + fz * 9);
   if (!D.throwShell(from, best ? { connId: best.connId, nick: best.nick } : null, to)) return;
   throwCd = 0.45; throwAnim = 0.45;
-  if (!best) later(0.6, () => splash(to.x, to.z, 0.5));
+  if (!best) { const sx = to.x, sz = to.z; later(0.6, () => splash(sx, sz, 0.5)); }
 }
 const timers: { t: number; f: () => void }[] = [];
 function later(s: number, f: () => void) { timers.push({ t: s, f }); }

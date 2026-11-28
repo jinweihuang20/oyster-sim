@@ -1152,6 +1152,7 @@ const GRILL_OY0 = new THREE.Vector3(0, GRILL_GRATE_Y + 0.04, 0.55);
 const GRILL_HINGE_Z = 0.055;
 const GRILL_OPEN_MAX = (18 * Math.PI) / 180; // 與共烤可掀縫對齊，勿開到像已掀
 const _grillHit = new THREE.Vector3();
+const _grillUp = new THREE.Vector3(0, 1, 0);
 const _grillPlane = new THREE.Plane();
 const plazaOnGrill = () => {
   const s = plazaMySeat();
@@ -1235,7 +1236,7 @@ function oysterToGrill(cx?: number, cy?: number) {
       const cam = viewCam();
       cam.updateMatrixWorld();
       ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), cam);
-      _grillPlane.set(new THREE.Vector3(0, 1, 0), -(origin.y + GRILL_GRATE_Y));
+      _grillPlane.set(_grillUp, -(origin.y + GRILL_GRATE_Y));
       if (ray.ray.intersectPlane(_grillPlane, _grillHit)) {
         seatRig.worldToLocal(_grillHit);
         const dx = _grillHit.x - pileL.x, dz = _grillHit.z - pileL.z;
@@ -1260,12 +1261,15 @@ const flyers: { m: THREE.Object3D; p0: THREE.Vector3; p1: THREE.Vector3 | (() =>
 /** 每幀依 dt 內插（見主迴圈）；t0＞0＝從弧線中段接著飛（收到網路封包時殼已飛了一段），dur 仍是整段飛行秒數 */
 const fly = (m: THREE.Object3D, p0: THREE.Vector3, p1: THREE.Vector3 | (() => THREE.Vector3), dur: number, h: number, end?: () => void, t0 = 0) => {
   scene.add(m);
+  // 複製起點／終點，避免呼叫端重用暫存 Vector3 時飛行動畫被改壞
+  const start = p0.clone();
+  const goal: THREE.Vector3 | (() => THREE.Vector3) = typeof p1 === 'function' ? p1 : p1.clone();
   const k = Math.min(0.95, Math.max(0, t0));
   if (k > 0) {
-    const q = typeof p1 === 'function' ? p1() : p1;
-    m.position.lerpVectors(p0, q, k); m.position.y += Math.sin(k * Math.PI) * h;
-  } else m.position.copy(p0);
-  flyers.push({ m, p0, p1, t: k, dur, h, end });
+    const q = typeof goal === 'function' ? goal() : goal;
+    m.position.lerpVectors(start, q, k); m.position.y += Math.sin(k * Math.PI) * h;
+  } else m.position.copy(start);
+  flyers.push({ m, p0: start, p1: goal, t: k, dur, h, end });
 };
 const gauge = $('gauge'), fill = $('fill'), zone = $('zone'), label = $('label'), hint = $('hint'), toastEl = $('toast');
 initDomToast(toastEl, {
@@ -1467,7 +1471,7 @@ function grillPlaceOnNet(cx?: number, cy?: number) {
         const cam = viewCam();
         cam.updateMatrixWorld();
         ray.setFromCamera(new THREE.Vector2(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1), cam);
-        _grillPlane.set(new THREE.Vector3(0, 1, 0), -(origin.y + GRILL_GRATE_Y));
+        _grillPlane.set(_grillUp, -(origin.y + GRILL_GRATE_Y));
         if (ray.ray.intersectPlane(_grillPlane, _grillHit)) {
           lx = _grillHit.x - origin.x;
           lz = _grillHit.z - origin.z;
@@ -1920,7 +1924,9 @@ function updHud() {
       cell('偷／被抓', 'run', `${steals}/${caught}`, caught > 0);
   }
 }
-function worldOf(o: THREE.Object3D) { return o.getWorldPosition(new THREE.Vector3()); }
+const _worldOf = new THREE.Vector3();
+/** 世界座標：重用暫存，避免 animate 每幀 new Vector3 觸發 GC */
+function worldOf(o: THREE.Object3D, out = _worldOf) { return o.getWorldPosition(out); }
 function nagFrom(n: Npc, lines: string[], dur = 3) { let t = pick(lines); if (t === lastNag && lines.length > 1) t = lines[(lines.indexOf(t) + 1) % lines.length]; lastNag = t; n.look = dur; say(n, t, dur); }
 // ----- 血 -----
 const drops: { m: THREE.Mesh; v: THREE.Vector3 }[] = [], decals: { m: THREE.Mesh; t: number }[] = [];
@@ -5081,7 +5087,7 @@ async function tryApoPunch(): Promise<boolean> {
     if (!isPlazaActive()) return false;
     const t = plazaApoTarget();
     if (!t) return false;
-    const getTo = () => new THREE.Vector3(t.head.x, t.head.y, t.head.z);
+    const getTo = () => _apoPunchTo.set(t.head.x, t.head.y, t.head.z);
     const wantSteal = t.count > 0;
     const scold = pickApoScold();
     // 先出拳並立刻回傳，避免 invoke 卡住後計時停在 PENDING、後面都不再出拳
@@ -5550,7 +5556,7 @@ function spawnExhalePuff(strength: number) {
   puffExhaleHeadT = 1;
   if ((tpv || boatSmoke) && plazaMe) {
     plazaMe.head.updateMatrixWorld(true);
-    const mouth = plazaMe.head.localToWorld(new THREE.Vector3(0, -0.08, -0.16));
+    const mouth = plazaMe.head.localToWorld(_mouthLocal.set(0, -0.08, -0.16));
     const yaw = plazaMe.outer.rotation.y;
     fx.group.position.copy(mouth);
     fx.group.rotation.y = yaw;
@@ -5650,10 +5656,9 @@ function spawnPuffAsh() {
   if ((tpv || boatSmoke) && plazaMe) {
     const cig = getPlazaSmokeCig(plazaMe);
     if (!cig) return;
-    const local = new THREE.Vector3(0.02, 0.02, -0.2);
-    puffAshes.push(spawnAshSpeck(cig.group, local));
+    puffAshes.push(spawnAshSpeck(cig.group, _ashLocalTp));
   } else if (fpCig && !tpv) {
-    puffAshes.push(spawnAshSpeck(fpCig.group, new THREE.Vector3(0, 0.01, -0.09)));
+    puffAshes.push(spawnAshSpeck(fpCig.group, _ashLocalFp));
   }
 }
 /** 吸菸座 FP：左手下垂；右手分階段抽烟 */
@@ -7358,7 +7363,7 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
   camera.updateMatrixWorld(); camTick(dt);
   // 釣魚動作／釣竿／釣線：人物姿勢都擺好之後才套（釣線從竿尖出去）
   if (plazaMode && plazaBoatsOpen()) { try { plazaFishPostPose(rdt); } catch (e) { if (!boatTickLogged) { boatTickLogged = true; console.error('plaza fish pose', e); } } }
-  umbArm(); if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
+  umbArm(); if (shake > 0) camera.position.add(_shakeV.set((Math.random() - .5), (Math.random() - .5), 0).multiplyScalar(shake * 0.03));
   tickMgFireAfterCam();
   // 第三人稱透視：僅淡化「鏡頭與玩家之間」的物件；焦點＝玩家胸口（失敗不可中斷渲染）
   try {
@@ -8069,6 +8074,13 @@ for (const sx of [-0.09, 0.09]) { mesh(rcyl(0.055, 0.045, 0.32, 6), pm.legs, [sx
 // 站著走路用的腿：髖關節為軸，前後擺
 const meLeg = (sx: number) => { const g = new THREE.Group(); g.position.set(sx, 0.86, 0); me3.add(g); mesh(rcyl(0.065, 0.05, 0.8, 6), pm.legs, [0, -0.4, 0], g); mesh(rbox(0.11, 0.06, 0.22), pm.feet, [0, -0.83, -0.05], g); g.visible = false; return g; };
 const meLegL = meLeg(-0.09), meLegR = meLeg(0.09); let walkPh = 0; const lastWalk = new THREE.Vector3(); let tpWas = false; let tpCamSnap = false; const tpLook = new THREE.Vector3(); const tpOccFocus = new THREE.Vector3(); let tpOccOuterLogged = false;
+const _tpCp = new THREE.Vector3(), _tpLt = new THREE.Vector3(), _tpSeatFallback = new THREE.Vector3();
+const _tpHand = new THREE.Vector3(), _tpHandOff = new THREE.Vector3(0, 0.24, 0.42);
+const _shakeV = new THREE.Vector3();
+const _mouthLocal = new THREE.Vector3();
+const _ashLocalTp = new THREE.Vector3(0.02, 0.02, -0.2);
+const _ashLocalFp = new THREE.Vector3(0, 0.01, -0.09);
+const _apoPunchTo = new THREE.Vector3();
 const meHead = new THREE.Group(); meHead.position.set(0, 1.02, 0); meTorso.add(meHead);
 mesh(new THREE.SphereGeometry(0.15, 10, 8), pm.skin, [0, 0, 0], meHead);
 mesh(new THREE.SphereGeometry(0.16, 10, 8, 0, Math.PI * 2, 0, 1.3), pm.head, [0, 0.03, 0], meHead);
@@ -8284,10 +8296,10 @@ function camTick(dt: number) {
       // 機關槍高台／樓梯：鏡頭跟著地面高度，避免人上去了相機還留在 y≈1.4
       const gy = plazaGroundY(walkPos.x, walkPos.z);
       const eyeY = (wideView ? 1.55 : 1.4) + gy;
-      const cp = new THREE.Vector3(walkPos.x - fx * hd, eyeY + dist * Math.sin(el) + jumpY * 0.35 - poseK * (lastPose === 'lie' ? 0.7 : 0.35), walkPos.z - fz * hd);
+      const cp = _tpCp.set(walkPos.x - fx * hd, eyeY + dist * Math.sin(el) + jumpY * 0.35 - poseK * (lastPose === 'lie' ? 0.7 : 0.35), walkPos.z - fz * hd);
       { const CAP = 2.7 + gy, R = 10.9, hy = eyeY; if (cp.y > CAP) { const k = (CAP - hy) / (cp.y - hy); const ix = walkPos.x + (cp.x - walkPos.x) * k, iz = walkPos.z + (cp.z - walkPos.z) * k; if (Math.abs(ix) < R && Math.abs(iz) < R) { cp.x = ix; cp.z = iz; cp.y = CAP; } } }
       if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
-      { const lookY = (wideView && camera.aspect <= 1.6 ? 1.15 : 1.0) + gy; const lt = new THREE.Vector3(walkPos.x + fx * 1.2, lookY, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
+      { const lookY = (wideView && camera.aspect <= 1.6 ? 1.15 : 1.0) + gy; const lt = _tpLt.set(walkPos.x + fx * 1.2, lookY, walkPos.z + fz * 1.2); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
       { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
       tpCam.updateMatrixWorld(); return;
     }
@@ -8315,9 +8327,9 @@ function camTick(dt: number) {
     const z = tpDist * tpDistK() / 3.6;
     const ltx = walkPos.x + fx * 1.2, lty = jumpY + 0.9, ltz = walkPos.z + fz * 1.2;
     const cx0 = walkPos.x - fx * 2.9, cy0 = jumpY + 2.5, cz0 = walkPos.z - fz * 2.9;
-    const cp = new THREE.Vector3(ltx + (cx0 - ltx) * z, lty + (cy0 - lty) * z, ltz + (cz0 - ltz) * z);
+    const cp = _tpCp.set(ltx + (cx0 - ltx) * z, lty + (cy0 - lty) * z, ltz + (cz0 - ltz) * z);
     if (enter) tpCam.position.copy(cp); else tpCam.position.lerp(cp, kk);
-    { const lt = new THREE.Vector3(ltx, lty, ltz); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
+    { const lt = _tpLt.set(ltx, lty, ltz); if (enter) tpLook.copy(lt); else tpLook.lerp(lt, kk); tpCam.lookAt(tpLook); }
     { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     tpCam.updateMatrixWorld(); return;
   }
@@ -8327,7 +8339,7 @@ function camTick(dt: number) {
     // 廣場坐下：與走動同一 plazaMe／裝備；只套坐姿（吸菸座另套抽烟手勢）
     const rig = ensurePlazaMe();
     const mine = plazaMySeat();
-    const pose = mine ? seatPose(mine.pileId, mine.slot) : { pos: new THREE.Vector3(SEAT.x, 0, SEAT.z), yaw: seatYaw };
+    const pose = mine ? seatPose(mine.pileId, mine.slot) : { pos: _tpSeatFallback.set(SEAT.x, 0, SEAT.z), yaw: seatYaw };
     const onMg = mgActive || !!(mine && isMgPile(mine.pileId));
     // 機關槍：站高台（遠端同款）；一般座位才略往前貼椅
     const back = onMg ? 0 : -0.08;
@@ -8366,14 +8378,14 @@ function camTick(dt: number) {
     if (onMg) {
       // 跟廣場走動同一套：鏡頭繞站立角色，人在甲板上入鏡
       const eyeY = (wideView ? 1.55 : 1.4) + feetY;
-      const cp = new THREE.Vector3(pose.pos.x - fx * hd, eyeY + dist * Math.sin(el), pose.pos.z - fz * hd);
+      const cp = _tpCp.set(pose.pos.x - fx * hd, eyeY + dist * Math.sin(el), pose.pos.z - fz * hd);
       const lookY = (wideView && camera.aspect <= 1.6 ? 1.15 : 1.0) + feetY;
-      const lt = new THREE.Vector3(pose.pos.x + fx * 1.2, lookY, pose.pos.z + fz * 1.2);
+      const lt = _tpLt.set(pose.pos.x + fx * 1.2, lookY, pose.pos.z + fz * 1.2);
       if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
       { const f = tpFovFor('walk'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     } else {
-      const cp = new THREE.Vector3(SEAT.x - fx * hd, SEAT.y + 0.4 + dist * Math.sin(el), SEAT.z - fz * hd);
-      const lt = new THREE.Vector3(SEAT.x + fx * 0.2, SEAT.y - 0.15, SEAT.z + fz * 0.2);
+      const cp = _tpCp.set(SEAT.x - fx * hd, SEAT.y + 0.4 + dist * Math.sin(el), SEAT.z - fz * hd);
+      const lt = _tpLt.set(SEAT.x + fx * 0.2, SEAT.y - 0.15, SEAT.z + fz * 0.2);
       if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
       { const f = tpFovFor('plazaSit'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     }
@@ -8406,14 +8418,18 @@ function camTick(dt: number) {
     const z = tpDist * tpDistK() / 3.6;
     const ltx = SEAT.x + fx * 0.8 + rx * 0.35, lty = SEAT.y - 0.2, ltz = SEAT.z + fz * 0.8 + rz * 0.35;
     const cx0 = SEAT.x - fx * 2.6 - rx * 1.5, cy0 = SEAT.y + 0.85, cz0 = SEAT.z - fz * 2.6 - rz * 1.5;
-    const cp = new THREE.Vector3(ltx + (cx0 - ltx) * z, lty + (cy0 - lty) * z, ltz + (cz0 - ltz) * z);
-    const lt = new THREE.Vector3(ltx, lty, ltz);
+    const cp = _tpCp.set(ltx + (cx0 - ltx) * z, lty + (cy0 - lty) * z, ltz + (cz0 - ltz) * z);
+    const lt = _tpLt.set(ltx, lty, ltz);
     if (enter) { tpCam.position.copy(cp); tpLook.copy(lt); } else { tpCam.position.lerp(cp, kk); tpLook.lerp(lt, kk); }
     { const f = tpFovFor('shedSit'); if (tpCam.fov !== f) { tpCam.fov = f; tpCam.updateProjectionMatrix(); } }
     tpCam.lookAt(tpLook); tpCam.updateMatrixWorld();
   }
   // 蚵仔與刀跟著角色的手（handRig 掛在 camera 底下，換算到角色胸前）
-  camera.updateMatrixWorld(); const hp = new THREE.Vector3(SEAT.x + fx * 0.45, SEAT.y - 0.55 + up * 0.4, SEAT.z + fz * 0.45); camera.worldToLocal(hp); handRig.position.copy(hp).add(new THREE.Vector3(0, 0.24, 0.42)); handRig.scale.setScalar(0.6);
+  camera.updateMatrixWorld();
+  const hp = _tpHand.set(SEAT.x + fx * 0.45, SEAT.y - 0.55 + up * 0.4, SEAT.z + fz * 0.45);
+  camera.worldToLocal(hp);
+  handRig.position.copy(hp).add(_tpHandOff);
+  handRig.scale.setScalar(0.6);
 }
 tpv = !!save.tpv; applyOutfit3(); drawCamBtn(); tpReady = true;
 $('camBtn').onclick = () => setTpv(!tpv);

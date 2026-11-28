@@ -838,8 +838,12 @@ ${isTouch
     if (f.isPlayer && was < f.wpn.def.maxAmmo) SND.reload();
     return true;
   }
-  function eyeOf(f: Fighter) { return new THREE.Vector3(f.pos.x, f.pos.y + EYE, f.pos.z); }
-  function dirOf(yaw: number, pitch: number) { return new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)); }
+  const _eyeA = new THREE.Vector3(), _eyeB = new THREE.Vector3();
+  const _dirA = new THREE.Vector3(), _dirB = new THREE.Vector3();
+  function eyeOf(f: Fighter, out = _eyeA) { return out.set(f.pos.x, f.pos.y + EYE, f.pos.z); }
+  function dirOf(yaw: number, pitch: number, out = _dirA) {
+    return out.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
+  }
   const shotAt = new Map<Fighter, number>();
   function throwShell(f: Fighter, yaw = f.yaw, pitch = f.pitch) {
     if (introT > 0 || f.dead) return false;
@@ -852,17 +856,20 @@ ${isTouch
     const n = Math.max(1, w.def.pelletCount | 0);
     const spr = Math.max(0, w.def.spread);
     f.throwA = 0.35; w.kick = 1; SND.throw(f);
-    const aim0 = dirOf(yaw, pitch);
-    emitMuzzleFlash(f, aim0);
+    dirOf(yaw, pitch, _dirA);
+    emitMuzzleFlash(f, _dirA);
     for (let i = 0; i < n; i++) {
       const yy = yaw + (spr ? (Math.random() - 0.5) * 2 * spr : 0);
       const pp = pitch + (spr ? (Math.random() - 0.5) * 2 * spr : 0);
-      const d = dirOf(yy, pp);
-      const p = eyeOf(f).addScaledVector(aim0, 0.4);
+      dirOf(yy, pp, _dirB);
+      const p = eyeOf(f, _eyeA).addScaledVector(_dirA, 0.4);
       const m = shellMesh(); m.position.copy(p); scene.add(m);
-      const vel = f.isPlayer ? d.multiplyScalar(spd) : d.multiplyScalar(spd).add(f.vel.clone().multiplyScalar(0.5));
+      const vel = f.isPlayer
+        ? _dirB.multiplyScalar(spd)
+        : _dirB.multiplyScalar(spd).add(_eyeB.copy(f.vel).multiplyScalar(0.5));
       if (!f.isPlayer && i === 0) emitAsh(p, vel, LO ? 2 : 4, 0.85);
-      shells.push({ pos: p, vel, owner: f, mesh: m, life: 6, trail: 0, damage: w.def.damage });
+      // 事件路徑：clone 成殼自己的 pos/vel，暫存會被下一發覆寫
+      shells.push({ pos: p.clone(), vel: vel.clone(), owner: f, mesh: m, life: 6, trail: 0, damage: w.def.damage });
     }
     if (f.isPlayer && w.def.adsBreakOnFire) { adsNeedRelease = true; setAds(false); }
     return true;
@@ -929,8 +936,8 @@ ${isTouch
         for (const f of fighters) {
           if (f.dead || !isHostile(s.owner, f)) continue;
           if (umbUp(f) && Math.hypot(_sp.x - f.pos.x, _sp.z - f.pos.z) < 0.9 && _sp.y > f.pos.y + 0.3 && _sp.y < f.pos.y + 2.2) {
-            const fwd = dirOf(f.yaw, 0); _inc.copy(s.vel).setY(0).normalize();
-            if (-fwd.dot(_inc) > Math.cos(Math.PI / 3) && Math.random() < U.umb.cover) { SND.block(_sp); emitAsh(_sp, s.vel, LO ? 2 : 4, 1.0); if (f.isPlayer || s.owner.isPlayer) popAt(_sp, ico(I.umb, 28)); done = true; break; }
+            dirOf(f.yaw, 0, _dirA); _inc.copy(s.vel).setY(0).normalize();
+            if (-_dirA.dot(_inc) > Math.cos(Math.PI / 3) && Math.random() < U.umb.cover) { SND.block(_sp); emitAsh(_sp, s.vel, LO ? 2 : 4, 1.0); if (f.isPlayer || s.owner.isPlayer) popAt(_sp, ico(I.umb, 28)); done = true; break; }
           }
           const part = hitPart(f, _sp); if (part) { damage(s.owner, f, part, _sp, s.damage, _dir.copy(s.vel).normalize()); emitAsh(_sp, s.vel, LO ? 3 : 5, 1.1); done = true; break; } }
         if (!done) {
@@ -960,10 +967,18 @@ ${isTouch
   function launchPitch(d: number, dy: number) {
     return Math.atan2(dy, d); // 直線彈道
   }
+  const _botRel = new THREE.Vector3(), _botSvel = new THREE.Vector3(), _botTo = new THREE.Vector3(), _botAim = new THREE.Vector3();
   function botThink(f: Fighter, dt: number) {
     if (now < f.idleUntil) { f.vel.set(0, 0, 0); return; }
     if (f.umbHeld) { if (!shells.some(s => isHostile(s.owner, f) && s.pos.distanceTo(f.pos) < 8)) closeUmb(f); }
-    else if (f.cd > 0.4) for (const s of shells) { if (!isHostile(s.owner, f)) continue; const rel = f.pos.clone().sub(s.pos); rel.y = 0; if (rel.length() < 8 && rel.normalize().dot(s.vel.clone().setY(0).normalize()) > 0.95 && Math.random() < 0.02) { f.yaw = Math.atan2(s.pos.x - f.pos.x, s.pos.z - f.pos.z) + Math.PI; openUmb(f); break; } }
+    else if (f.cd > 0.4) for (const s of shells) {
+      if (!isHostile(s.owner, f)) continue;
+      _botRel.copy(f.pos).sub(s.pos); _botRel.y = 0;
+      _botSvel.copy(s.vel).setY(0).normalize();
+      if (_botRel.length() < 8 && _botRel.normalize().dot(_botSvel) > 0.95 && Math.random() < 0.02) {
+        f.yaw = Math.atan2(s.pos.x - f.pos.x, s.pos.z - f.pos.z) + Math.PI; openUmb(f); break;
+      }
+    }
     const targets = fighters.filter(o => isHostile(f, o) && !o.dead);
     let tgt: Fighter | null = null, best = 1e9;
     for (const o of targets) { const d = o.pos.distanceTo(f.pos) * (o.isPlayer ? 0.8 : 1); if (d < best) { best = d; tgt = o; } }
@@ -973,18 +988,22 @@ ${isTouch
       f.pickT = 0; const base = tgt ? tgt.pos : nearOpenPile(f.pos); const a = Math.random() * 6.28, r = 7 + Math.random() * 6;
       f.goal.set(base.x + Math.cos(a) * r, 0, base.z + Math.sin(a) * r);
     }
-    const to = f.goal.clone().sub(f.pos); to.y = 0;
+    _botTo.copy(f.goal).sub(f.pos); _botTo.y = 0;
     const spd = WALK * 0.72 * (isHorde ? agr.spdMul : 1);
-    if (to.length() > 0.3) f.vel.copy(to.normalize().multiplyScalar(spd)); else f.vel.set(0, 0, 0);
+    if (_botTo.length() > 0.3) f.vel.copy(_botTo.normalize().multiplyScalar(spd)); else f.vel.set(0, 0, 0);
     if (tgt && !f.umbHeld) {
       // 預判：用飛行時間估計目標位置
       const pspd = f.wpn.def.bulletSpeed;
-      let aim = tgt.pos.clone(); for (let k = 0; k < 3; k++) { const t = eyeOf(f).distanceTo(aim) / (pspd * 0.95); aim = tgt.pos.clone().addScaledVector(tgt.vel, t); }
+      _botAim.copy(tgt.pos);
+      for (let k = 0; k < 3; k++) {
+        const t = eyeOf(f, _eyeA).distanceTo(_botAim) / (pspd * 0.95);
+        _botAim.copy(tgt.pos).addScaledVector(tgt.vel, t);
+      }
       // 圍毆後期較常瞄頭
       const headP = isHorde ? Math.min(0.42, 0.1 + wave * 0.03) : 0.15;
-      aim.y += 1.15 + (Math.random() < headP ? 0.45 : 0);
-      const e = eyeOf(f), dx = aim.x - e.x, dz = aim.z - e.z, d = Math.hypot(dx, dz);
-      f.yaw = Math.atan2(-dx, -dz); f.pitch = launchPitch(d, aim.y - e.y);
+      _botAim.y += 1.15 + (Math.random() < headP ? 0.45 : 0);
+      const e = eyeOf(f, _eyeA), dx = _botAim.x - e.x, dz = _botAim.z - e.z, d = Math.hypot(dx, dz);
+      f.yaw = Math.atan2(-dx, -dz); f.pitch = launchPitch(d, _botAim.y - e.y);
       f.cd -= dt;
       if (f.wpn.ammo > 0 && f.cd <= 0 && d < 22) {
         const err = (0.02 + d * 0.0025) * (isHorde ? agr.errMul : 1);
