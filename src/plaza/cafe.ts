@@ -158,8 +158,8 @@ export function makePlazaCafe(
   const stoneTex = stoneTexture(LO); textures.push(stoneTex);
   const stoneSide = stoneTex.clone(); stoneSide.repeat.set(W / 1.8, B.h / 1.8); stoneSide.needsUpdate = true; textures.push(stoneSide);
   stoneTex.repeat.set(D / 1.8, B.h / 1.8);
-  const stoneFront = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.9 });
-  const stoneSideMat = new THREE.MeshStandardMaterial({ map: stoneSide, roughness: 0.9 });
+  const stoneFront = new THREE.MeshLambertMaterial({ map: stoneTex });
+  const stoneSideMat = new THREE.MeshLambertMaterial({ map: stoneSide });
   const roofMat = M(0x9c9a94, { roughness: 0.95 });
   {
     // BoxGeometry 面序：+x,-x,+y,-y,+z,-z
@@ -175,9 +175,7 @@ export function makePlazaCafe(
   const plinth = M(0xa9a08e, { roughness: 0.92 });
   const dark = M(0x262a2e, { roughness: 0.55, metalness: 0.35 });
   const metal = M(0x5c6268, { roughness: 0.45, metalness: 0.55 });
-  const glass = LO
-    ? new THREE.MeshBasicMaterial({ color: 0x2a3238, transparent: true, opacity: 0.32, depthWrite: false })
-    : new THREE.MeshStandardMaterial({ color: 0x2a3238, roughness: 0.08, metalness: 0.7, transparent: true, opacity: 0.32, depthWrite: false });
+  const glass = new THREE.MeshBasicMaterial({ color: 0x2a3238, transparent: true, opacity: 0.32, depthWrite: false });
 
   // 女兒牆壓頂＋屋頂設備
   add(rboxEnv(W + 0.24, 0.16, D + 0.24, 0.05), trim, [(B.x0 + B.x1) / 2, B.h + 0.08, cz], root, false);
@@ -196,7 +194,7 @@ export function makePlazaCafe(
   {
     const tex = signTexture('多那芝咖啡', LO ? 512 : 1024, LO ? 96 : 192, `800 ${LO ? 70 : 140}px "Noto Serif TC","PMingLiU",serif`);
     textures.push(tex);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.6), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.6, metalness: 0.2 }));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.6), new THREE.MeshLambertMaterial({ map: tex, transparent: true }));
     sign.rotation.y = -Math.PI / 2;
     sign.position.set(fx - 0.27, 3.34, doorZ);
     root.add(sign);

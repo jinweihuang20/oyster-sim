@@ -12,9 +12,6 @@ const bootShellLo = (() => {
   return false;
 })();
 
-const mat = (c: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
-  new THREE.MeshStandardMaterial({ color: c, roughness: 0.78, flatShading: false, ...o });
-
 const shellLo = () => bootShellLo || geoLowDetail();
 
 /** 蚵殼：灰色為主，偶爾帶烏（頂點色） */
@@ -63,28 +60,16 @@ export const HALF_GEOS = [0, 1, 2, 3, 4, 5].map(i => mkShell(0.38, i + 11));
 export const GREYS = [0xffffff, 0xeae4e0, 0xd6d0cc, 0xc2bab8, 0xa8a0a0];
 export const greyPick = () => GREYS[Math.min(4, Math.floor(Math.random() * Math.random() * 6.2))];
 export const shellM = (c: number) => {
-  if (shellLo()) {
-    const m = new THREE.MeshLambertMaterial({ color: c, vertexColors: true, map: SHELL_TEX });
-    m.emissive.setHex(0x0a0c10);
-    m.emissiveIntensity = 0.12;
-    return m;
-  }
-  const m = mat(c, { vertexColors: true, roughness: 0.55, metalness: 0, map: SHELL_TEX });
+  const m = new THREE.MeshLambertMaterial({ color: c, vertexColors: true, map: SHELL_TEX });
   m.emissive.setHex(0x0a0c10);
-  m.emissiveIntensity = 0.15;
+  m.emissiveIntensity = shellLo() ? 0.12 : 0.15;
   return m;
 };
 /** 臉盆生蚵：比殼堆略濕亮、偏暖乳白，跟乾灰殼堆一眼可分 */
 export const basinShellM = (c: number) => {
-  if (shellLo()) {
-    const m = new THREE.MeshLambertMaterial({ color: c, vertexColors: true, map: SHELL_TEX });
-    m.emissive.setHex(0x142028);
-    m.emissiveIntensity = 0.16;
-    return m;
-  }
-  const m = mat(c, { vertexColors: true, roughness: 0.36, metalness: 0.06, map: SHELL_TEX });
+  const m = new THREE.MeshLambertMaterial({ color: c, vertexColors: true, map: SHELL_TEX });
   m.emissive.setHex(0x142028);
-  m.emissiveIntensity = 0.2;
+  m.emissiveIntensity = shellLo() ? 0.16 : 0.2;
   return m;
 };
 /** 盆內難度色（偏暖濕潤，勿用殼堆 GREYS） */

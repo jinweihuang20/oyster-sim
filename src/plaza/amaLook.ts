@@ -92,13 +92,13 @@ export function amaShirtHex(look: AmaFarmLook): number {
 }
 
 const floralTexCache = new Map<string, THREE.CanvasTexture>();
-const floralMatCache = new Map<string, THREE.MeshStandardMaterial>();
-const sleeveMatCache = new Map<string, THREE.MeshStandardMaterial>();
-const hairMatCache = new Map<number, THREE.MeshStandardMaterial>();
+const floralMatCache = new Map<string, THREE.MeshLambertMaterial>();
+const sleeveMatCache = new Map<string, THREE.MeshLambertMaterial>();
+const hairMatCache = new Map<number, THREE.MeshLambertMaterial>();
 const checkTexCache = new Map<string, THREE.CanvasTexture>();
 
-let sharedApronM: THREE.MeshStandardMaterial | null = null;
-let sharedStrapM: THREE.MeshStandardMaterial | null = null;
+let sharedApronM: THREE.MeshLambertMaterial | null = null;
+let sharedStrapM: THREE.MeshLambertMaterial | null = null;
 let sharedSleeveGeo: THREE.BufferGeometry | null = null;
 let sharedBunGeo: THREE.BufferGeometry | null = null;
 let sharedBunBaseGeo: THREE.BufferGeometry | null = null;
@@ -141,15 +141,13 @@ function getFloralTexture(p: FloralPal): THREE.CanvasTexture {
   return t;
 }
 
-function getFloralMat(p: FloralPal): THREE.MeshStandardMaterial {
+function getFloralMat(p: FloralPal): THREE.MeshLambertMaterial {
   const k = floralKey(p);
   let m = floralMatCache.get(k);
   if (m) return m;
-  m = new THREE.MeshStandardMaterial({
+  m = new THREE.MeshLambertMaterial({
     map: getFloralTexture(p),
     color: 0xffffff,
-    roughness: 0.84,
-    metalness: 0.02,
   });
   floralMatCache.set(k, m);
   return m;
@@ -180,42 +178,41 @@ function getCheckTexture(a: number, b: number): THREE.CanvasTexture {
   return t;
 }
 
-function getSleeveMat(look: AmaFarmLook): THREE.MeshStandardMaterial {
+function getSleeveMat(look: AmaFarmLook): THREE.MeshLambertMaterial {
   const k = look.sleeveCheck
     ? `c:${look.sleeveCheck[0].toString(16)}:${look.sleeveCheck[1].toString(16)}`
     : `s:${look.sleeve.toString(16)}`;
   let m = sleeveMatCache.get(k);
   if (m) return m;
   if (look.sleeveCheck) {
-    m = new THREE.MeshStandardMaterial({
+    m = new THREE.MeshLambertMaterial({
       map: getCheckTexture(look.sleeveCheck[0], look.sleeveCheck[1]),
       color: 0xffffff,
-      roughness: 0.88,
     });
   } else {
-    m = new THREE.MeshStandardMaterial({ color: look.sleeve, roughness: 0.88 });
+    m = new THREE.MeshLambertMaterial({ color: look.sleeve });
   }
   sleeveMatCache.set(k, m);
   return m;
 }
 
-function getHairMat(color: number): THREE.MeshStandardMaterial {
+function getHairMat(color: number): THREE.MeshLambertMaterial {
   let m = hairMatCache.get(color);
   if (m) return m;
-  m = new THREE.MeshStandardMaterial({ color, roughness: 0.86 });
+  m = new THREE.MeshLambertMaterial({ color });
   hairMatCache.set(color, m);
   return m;
 }
 
 function retargetMats(
   root: THREE.Object3D,
-  from: THREE.MeshStandardMaterial[],
-  to: THREE.MeshStandardMaterial,
+  from: THREE.Material[],
+  to: THREE.MeshLambertMaterial,
 ) {
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
-    if (from.includes(mesh.material as THREE.MeshStandardMaterial)) mesh.material = to;
+    if (from.includes(mesh.material as THREE.Material)) mesh.material = to;
   });
 }
 
@@ -265,7 +262,7 @@ function dressAmaHat(rig: PlayerRig, ama: AmaFarmLook) {
   const tint = new THREE.Color(ama.headTint);
   rig.hatG.traverse((o) => {
     const mesh = o as THREE.Mesh;
-    const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
+    const mat = mesh.material as THREE.MeshLambertMaterial | THREE.MeshStandardMaterial | undefined;
     if (mesh.isMesh && mat?.color) mat.color.copy(tint);
   });
   // 帽子略往臉側挪，讓後腦白髮包髻露出
@@ -327,8 +324,9 @@ export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook, pid?: string) {
   const flor = getFloralMat(pal);
   retargetMats(rig.torso, mats.body, flor);
   retargetMats(rig.torso, mats.sleeve, flor);
-  mats.body[0] = flor;
-  if (mats.sleeve[0]) mats.sleeve[0] = flor;
+  // 阿婆花布用 Lambert；outfitMats 型別仍含 Standard（玩家服飾）
+  mats.body[0] = flor as unknown as THREE.MeshStandardMaterial;
+  if (mats.sleeve[0]) mats.sleeve[0] = flor as unknown as THREE.MeshStandardMaterial;
 
   paintAmaHair(rig, ama);
 
@@ -356,8 +354,8 @@ export function dressPlazaAma(rig: PlayerRig, ama: AmaFarmLook, pid?: string) {
   dressAmaHat(rig, ama);
 
   if (ama.apron && !rig.torso.userData.amaApron) {
-    if (!sharedApronM) sharedApronM = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.92 });
-    if (!sharedStrapM) sharedStrapM = new THREE.MeshStandardMaterial({ color: 0xe4ddd0, roughness: 0.9 });
+    if (!sharedApronM) sharedApronM = new THREE.MeshLambertMaterial({ color: 0xf2efe6 });
+    if (!sharedStrapM) sharedStrapM = new THREE.MeshLambertMaterial({ color: 0xe4ddd0 });
     const apron = new THREE.Mesh(rboxEnv(0.26, 0.34, 0.03), sharedApronM);
     apron.position.set(0, 0.02, -0.13);
     rig.torso.add(apron);

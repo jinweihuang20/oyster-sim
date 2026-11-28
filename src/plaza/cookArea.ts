@@ -41,9 +41,9 @@ function disposeSprite(sp: THREE.Sprite) { sp.material.map?.dispose(); sp.materi
 
 export function makeCookArea() {
   const root = new THREE.Group(); root.name = 'cookArea';
-  const steel = new THREE.MeshStandardMaterial({ color: 0xa4acb4, roughness: 0.45, metalness: 0.35 });
-  const plateTop = new THREE.MeshStandardMaterial({ color: 0x33373b, roughness: 0.55, metalness: 0.4 });
-  const knobM = new THREE.MeshStandardMaterial({ color: 0x1f2a35, roughness: 0.6 });
+  const steel = new THREE.MeshLambertMaterial({ color: 0xa4acb4 });
+  const plateTop = new THREE.MeshLambertMaterial({ color: 0x33373b });
+  const knobM = new THREE.MeshLambertMaterial({ color: 0x1f2a35 });
   const h = COOK_TABLE.h, R = COOK_TABLE.r;
   // 第 5 堆、中央堆原地換成圓形鐵板煎台（座位＝原本椅子位置）
   for (const id of COOK_PILE_IDS) {
@@ -56,7 +56,7 @@ export function makeCookArea() {
     const lip = new THREE.Mesh(new THREE.TorusGeometry(R - 0.02, 0.025, 8, 48), steel);
     lip.rotation.x = Math.PI / 2; lip.position.set(c.x, h + 0.005, c.z); root.add(lip);
     // 中間醬料罐
-    const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.2, 14), new THREE.MeshStandardMaterial({ color: 0xc8502e, roughness: 0.5 }));
+    const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.2, 14), new THREE.MeshLambertMaterial({ color: 0xc8502e }));
     jar.position.set(c.x, h + 0.1, c.z); root.add(jar);
   }
   // 每個位子前面一顆旋鈕

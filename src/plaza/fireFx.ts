@@ -54,7 +54,7 @@ type Smoke = {
 type HotChunk = {
   mesh: THREE.Mesh;
   glow: THREE.Mesh | null;
-  mat: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+  mat: THREE.MeshLambertMaterial;
   glowMat: THREE.MeshBasicMaterial | null;
   baseY: number;
   phase: number;
@@ -69,7 +69,6 @@ const coalChunkGeo = rboxEnv(0.1, 0.05, 0.08);
 const coalGlowGeo = new THREE.SphereGeometry(0.04, 5, 4);
 
 const coalMat = new THREE.MeshLambertMaterial({ color: 0x1a120e });
-const coalMatStd = new THREE.MeshStandardMaterial({ color: 0x1a120e, roughness: 1, metalness: 0 });
 const flameMat = new THREE.MeshBasicMaterial({
   color: 0xff6a22,
   transparent: true,
@@ -105,18 +104,9 @@ function rng(seed: number) {
   };
 }
 
-function makeHotCoalMat(lo: boolean) {
-  if (lo) {
-    return new THREE.MeshLambertMaterial({
-      color: 0x2a1410,
-      emissive: 0xff3a10,
-      emissiveIntensity: 0.85,
-    });
-  }
-  return new THREE.MeshStandardMaterial({
+function makeHotCoalMat(_lo: boolean) {
+  return new THREE.MeshLambertMaterial({
     color: 0x2a1410,
-    roughness: 0.92,
-    metalness: 0.08,
     emissive: 0xff3a10,
     emissiveIntensity: 0.85,
   });
@@ -144,7 +134,7 @@ export function makeCharcoalFire(opts: CharcoalFireOpts = {}): CharcoalFireFx {
   group.name = 'charcoalFire';
 
   // 底炭層（flat：薄層，鋼盤與烤網之間）
-  const bedMat = lo ? coalMat : coalMatStd;
+  const bedMat = coalMat;
   const bed = new THREE.Mesh(rboxEnv(w, flat ? 0.022 : 0.045, d), bedMat);
   bed.position.y = 0;
   bed.userData.sharedMat = true;
@@ -473,26 +463,24 @@ export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette
   // 沿 -Z 伸出（相機前方），右手握著
   const filter = new THREE.Mesh(
     new THREE.CylinderGeometry(0.0055, 0.0055, 0.028, 6),
-    new THREE.MeshStandardMaterial({ color: 0xd4a574, roughness: 0.9, metalness: 0 }),
+    new THREE.MeshLambertMaterial({ color: 0xd4a574 }),
   );
   filter.rotation.x = Math.PI / 2;
   filter.position.z = 0.014;
   group.add(filter);
   const stick = new THREE.Mesh(
     new THREE.CylinderGeometry(0.0048, 0.0048, 0.09, 6),
-    new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.95, metalness: 0 }),
+    new THREE.MeshLambertMaterial({ color: 0xf2efe8 }),
   );
   stick.rotation.x = Math.PI / 2;
   stick.position.z = -0.04;
   group.add(stick);
   const tip = new THREE.Mesh(
     new THREE.SphereGeometry(0.0062, 6, 5),
-    new THREE.MeshStandardMaterial({
+    new THREE.MeshLambertMaterial({
       color: 0x3a1810,
       emissive: 0xff4a12,
       emissiveIntensity: 0.95,
-      roughness: 0.6,
-      metalness: 0.05,
     }),
   );
   tip.position.z = -0.088;
@@ -510,7 +498,7 @@ export function makeFpCigarette(opts: { lowDetail?: boolean } = {}): FpCigarette
     setSmokeTint: (hex?: number) => { smoke.setTint?.(hex); },
     tick: (tSec, dt) => {
       // 菸頭微微閃爍；吸一口時更亮
-      const m = tip.material as THREE.MeshStandardMaterial;
+      const m = tip.material as THREE.MeshLambertMaterial;
       m.emissiveIntensity = 0.7 + Math.sin(tSec * 7.5) * 0.18 + tipBoost * (0.9 + Math.sin(tSec * 3.2) * 0.25);
       smoke.tick(tSec, dt);
     },
@@ -539,26 +527,24 @@ export function makeAvatarCigarette(opts: { lowDetail?: boolean } = {}): FpCigar
   const L = 0.95; // 長度（原本跟粗細同倍率，太長）
   const filter = new THREE.Mesh(
     new THREE.CylinderGeometry(0.0055 * sc, 0.0055 * sc, 0.028 * L, opts.lowDetail ? 5 : 6),
-    new THREE.MeshStandardMaterial({ color: 0xd4a574, roughness: 0.9, metalness: 0 }),
+    new THREE.MeshLambertMaterial({ color: 0xd4a574 }),
   );
   filter.rotation.x = Math.PI / 2;
   filter.position.z = 0.014 * L;
   group.add(filter);
   const stick = new THREE.Mesh(
     new THREE.CylinderGeometry(0.0048 * sc, 0.0048 * sc, 0.09 * L, opts.lowDetail ? 5 : 6),
-    new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.95, metalness: 0 }),
+    new THREE.MeshLambertMaterial({ color: 0xf2efe8 }),
   );
   stick.rotation.x = Math.PI / 2;
   stick.position.z = -0.04 * L;
   group.add(stick);
   const tip = new THREE.Mesh(
     new THREE.SphereGeometry(0.0065 * sc, opts.lowDetail ? 5 : 6, 4),
-    new THREE.MeshStandardMaterial({
+    new THREE.MeshLambertMaterial({
       color: 0x3a1810,
       emissive: 0xff4a12,
       emissiveIntensity: 0.95,
-      roughness: 0.6,
-      metalness: 0.05,
     }),
   );
   tip.position.z = -0.088 * L;
@@ -575,7 +561,7 @@ export function makeAvatarCigarette(opts: { lowDetail?: boolean } = {}): FpCigar
     setTipBoost: (v) => { tipBoost = Math.max(0, v); },
     setSmokeTint: (hex?: number) => { smoke.setTint?.(hex); },
     tick: (tSec, dt) => {
-      const m = tip.material as THREE.MeshStandardMaterial;
+      const m = tip.material as THREE.MeshLambertMaterial;
       m.emissiveIntensity = 0.7 + Math.sin(tSec * 7.5) * 0.18 + tipBoost * (0.9 + Math.sin(tSec * 3.2) * 0.25);
       smoke.tick(tSec, dt);
     },

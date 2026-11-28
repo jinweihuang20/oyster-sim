@@ -37,15 +37,9 @@ export function makeMgMount(lo = false): THREE.Group {
   const g = new THREE.Group();
   g.name = 'mgMount';
   g.userData.noMerge = true;
-  const steel = lo
-    ? new THREE.MeshLambertMaterial({ color: 0x4a5560 })
-    : new THREE.MeshStandardMaterial({ color: 0x4a5560, metalness: 0.55, roughness: 0.4 });
-  const dark = lo
-    ? new THREE.MeshLambertMaterial({ color: 0x2a3038 })
-    : new THREE.MeshStandardMaterial({ color: 0x2a3038, metalness: 0.4, roughness: 0.55 });
-  const wood = lo
-    ? new THREE.MeshLambertMaterial({ color: 0x6a4a28 })
-    : new THREE.MeshStandardMaterial({ color: 0x6a4a28, roughness: 0.85 });
+  const steel = new THREE.MeshLambertMaterial({ color: 0x4a5560 });
+  const dark = new THREE.MeshLambertMaterial({ color: 0x2a3038 });
+  const wood = new THREE.MeshLambertMaterial({ color: 0x6a4a28 });
   // 底座
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.18, lo ? 8 : 12), wood);
   base.position.y = 0.09;
@@ -99,15 +93,9 @@ export function buildMgPlatform(lo = false): THREE.Group {
   const g = new THREE.Group();
   g.name = 'mgPlatform';
   g.userData.noMerge = true;
-  const wood = lo
-    ? new THREE.MeshLambertMaterial({ color: 0x6a5238 })
-    : new THREE.MeshStandardMaterial({ color: 0x6a5238, roughness: 0.88 });
-  const plank = lo
-    ? new THREE.MeshLambertMaterial({ color: 0x7a6340 })
-    : new THREE.MeshStandardMaterial({ color: 0x7a6340, roughness: 0.82 });
-  const steel = lo
-    ? new THREE.MeshLambertMaterial({ color: 0x4a5560 })
-    : new THREE.MeshStandardMaterial({ color: 0x4a5560, metalness: 0.45, roughness: 0.5 });
+  const wood = new THREE.MeshLambertMaterial({ color: 0x6a5238 });
+  const plank = new THREE.MeshLambertMaterial({ color: 0x7a6340 });
+  const steel = new THREE.MeshLambertMaterial({ color: 0x4a5560 });
   const p = MG_PLATFORM;
   const segs = lo ? 5 : 8;
   // 四腳
@@ -277,13 +265,13 @@ export class MgFxSystem {
   private marks: MarkFx[] = [];
   private sparks: SparkFx[] = [];
   private meatGeo: THREE.BufferGeometry;
-  private meatMat: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+  private meatMat: THREE.MeshLambertMaterial;
   private flashTex: THREE.CanvasTexture;
   private flashMat: THREE.MeshBasicMaterial;
   private markTex: THREE.CanvasTexture;
   private markMat: THREE.MeshBasicMaterial;
   private markGeo: THREE.CircleGeometry;
-  private casingMat: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+  private casingMat: THREE.MeshLambertMaterial;
   private sparkMat: THREE.MeshBasicMaterial;
   private sparkGeo: THREE.SphereGeometry;
   private _hit = new THREE.Vector3();
@@ -299,9 +287,7 @@ export class MgFxSystem {
     // 簡單版蚵仔肉：扁平橢球
     this.meatGeo = new THREE.SphereGeometry(0.04, lo ? 6 : 8, lo ? 5 : 6);
     this.meatGeo.scale(1.35, 0.55, 1.05);
-    this.meatMat = lo
-      ? new THREE.MeshLambertMaterial({ color: 0xd8cbb0 })
-      : new THREE.MeshStandardMaterial({ color: 0xd8cbb0, roughness: 0.35, metalness: 0.05 });
+    this.meatMat = new THREE.MeshLambertMaterial({ color: 0xd8cbb0 });
     this.flashTex = makeMuzzleGlowTex();
     this.flashMat = new THREE.MeshBasicMaterial({
       map: this.flashTex, transparent: true, opacity: 1, depthWrite: false,
@@ -313,9 +299,7 @@ export class MgFxSystem {
       side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     });
     this.markGeo = new THREE.CircleGeometry(1, lo ? 10 : 16);
-    this.casingMat = lo
-      ? new THREE.MeshLambertMaterial({ color: 0xd4a84a })
-      : new THREE.MeshStandardMaterial({ color: 0xd4a84a, metalness: 0.6, roughness: 0.35 });
+    this.casingMat = new THREE.MeshLambertMaterial({ color: 0xd4a84a });
     this.sparkMat = new THREE.MeshBasicMaterial({
       color: 0xffc060, transparent: true, opacity: 1, depthWrite: false,
       blending: THREE.AdditiveBlending,

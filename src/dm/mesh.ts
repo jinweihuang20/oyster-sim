@@ -8,22 +8,13 @@ const LO_STRIP = [
 
 /**
  * 死鬥／廣場共用材質 helper。
- * LO：Lambert＋關陰影（對齊工寮 mat）；角色貼圖請自行用 Standard（見 makePlayerAvatar）。
+ * 環境一律 Lambert（避開 Standard 的 PBR 光照）；角色貼圖請自行用 Standard（見 makePlayerAvatar）。
  */
 export function makeMeshHelpers(scene: THREE.Scene, LO: boolean): { M: MatFn; add: MeshAdd } {
   const M: MatFn = (c, o = {}) => {
-    if (LO) {
-      const rest = { ...o } as Record<string, unknown>;
-      for (const k of LO_STRIP) delete rest[k];
-      return new THREE.MeshLambertMaterial({ color: c, ...rest });
-    }
-    return new THREE.MeshStandardMaterial({
-      color: c,
-      roughness: 0.8,
-      metalness: o.metalness ?? 0,
-      flatShading: false,
-      ...o,
-    });
+    const rest = { ...o } as Record<string, unknown>;
+    for (const k of LO_STRIP) delete rest[k];
+    return new THREE.MeshLambertMaterial({ color: c, ...rest });
   };
   const add: MeshAdd = (g, m, p, parent = scene, shadow = true) => {
     const x = new THREE.Mesh(g, m);

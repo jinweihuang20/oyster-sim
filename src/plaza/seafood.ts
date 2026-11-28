@@ -199,9 +199,7 @@ export function makePlazaSeafood(
   const red = M(0xb8322a, { roughness: 0.5, metalness: 0.4 });
   const dark = M(0x2b2f33, { roughness: 0.55, metalness: 0.35 });
   const white = M(0xeeeae2, { roughness: 0.8 });
-  const glass = LO
-    ? new THREE.MeshBasicMaterial({ color: 0x2a3238, transparent: true, opacity: 0.3, depthWrite: false })
-    : new THREE.MeshStandardMaterial({ color: 0x2a3238, roughness: 0.08, metalness: 0.7, transparent: true, opacity: 0.3, depthWrite: false });
+  const glass = new THREE.MeshBasicMaterial({ color: 0x2a3238, transparent: true, opacity: 0.3, depthWrite: false });
 
   const facadePlane = (w: number, h: number, mat: THREE.Material, x: number, y: number, z: number) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
@@ -260,12 +258,12 @@ export function makePlazaSeafood(
     const tex = signboardTexture(LO); textures.push(tex);
     const sw = D + 0.2, sh = 1.25, sy = 3.75;
     add(new THREE.BoxGeometry(0.12, sh, sw), M(0x34383c, { roughness: 0.7, metalness: 0.3 }), [fx - 0.08, sy, cz], root, true);
-    facadePlane(sw - 0.04, sh - 0.04, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.65, metalness: 0.15 }), fx - 0.15, sy, cz);
+    facadePlane(sw - 0.04, sh - 0.04, new THREE.MeshLambertMaterial({ map: tex }), fx - 0.15, sy, cz);
   }
   // 小招牌「歡迎光臨 樸子腳」掛在紅樑下、正對門口
   {
     const tex = subSignTexture(); textures.push(tex);
-    const m = facadePlane(1.9, 0.36, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6, side: THREE.DoubleSide }), AX - 0.1, 2.66, doorZ);
+    const m = facadePlane(1.9, 0.36, new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }), AX - 0.1, 2.66, doorZ);
     m.renderOrder = 1;
     for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.02, 0.1, 0.02), dark, [AX - 0.1, 2.8, doorZ + s * 0.8], root, false);
   }
@@ -296,9 +294,7 @@ export function makePlazaSeafood(
       add(rboxEnv(0.48, 0.55, 0.6, 0.03), dark, [p.x, 0.275, p.z], root, true);
       const tank = new THREE.Mesh(
         new THREE.BoxGeometry(0.46, 0.48, 0.58),
-        LO
-          ? new THREE.MeshBasicMaterial({ color: 0x6a90a0, transparent: true, opacity: 0.55, depthWrite: false })
-          : new THREE.MeshStandardMaterial({ color: 0x8fb4b8, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.45, depthWrite: false }),
+        new THREE.MeshBasicMaterial({ color: LO ? 0x6a90a0 : 0x8fb4b8, transparent: true, opacity: LO ? 0.55 : 0.45, depthWrite: false }),
       );
       tank.position.set(p.x, 0.8, p.z);
       root.add(tank);

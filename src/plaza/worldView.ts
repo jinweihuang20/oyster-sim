@@ -356,8 +356,8 @@ export function createPlazaWorldView(
   function makeSeatCushion() {
     const g = new THREE.Group();
     g.name = 'seatCushion';
-    const fabric = new THREE.MeshStandardMaterial({ color: 0x8a1820, roughness: 0.82, metalness: 0.08 });
-    const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.38, metalness: 0.55, emissive: 0x3a2808, emissiveIntensity: 0.18 });
+    const fabric = new THREE.MeshLambertMaterial({ color: 0x8a1820 });
+    const gold = new THREE.MeshLambertMaterial({ color: 0xd4af37, emissive: 0x3a2808, emissiveIntensity: 0.18 });
     const pad = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.034, 0.38), fabric);
     g.add(pad);
     const tw = 0.016, th = 0.01;
@@ -404,15 +404,7 @@ export function createPlazaWorldView(
 
   // 水泥廣場貼皮（分格對齊蚵堆）
   const floorMaps = makePlazaFloorMaps(LO ? 256 : 512);
-  const floorMat: THREE.Material = LO
-    ? new THREE.MeshLambertMaterial({ map: floorMaps.map, color: 0xffffff })
-    : new THREE.MeshStandardMaterial({
-      map: floorMaps.map,
-      roughnessMap: floorMaps.rough,
-      roughness: 0.92,
-      metalness: 0.02,
-      color: 0xffffff,
-    });
+  const floorMat: THREE.Material = new THREE.MeshLambertMaterial({ map: floorMaps.map, color: 0xffffff });
   const raceCenter = pileCenter(0);
   const partyCenter = pileCenter(CENTER_PILE_ID);
   const arenaOnly = raceArena || partyArena;
@@ -1477,12 +1469,8 @@ function hashPid(pid: string) {
   }
 
   /** 遠端雨傘共用材質／幾何（每人一份會在第一次開傘入鏡時卡） */
-  const remoteUmbPoleMat = LO
-    ? new THREE.MeshLambertMaterial({ color: 0x6a4a2a })
-    : new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.85, flatShading: true });
-  const remoteUmbCanopyMat = LO
-    ? new THREE.MeshLambertMaterial({ color: 0xc0392b, side: THREE.FrontSide })
-    : new THREE.MeshStandardMaterial({ color: 0xc0392b, side: THREE.DoubleSide, roughness: 0.7, flatShading: true });
+  const remoteUmbPoleMat = new THREE.MeshLambertMaterial({ color: 0x6a4a2a });
+  const remoteUmbCanopyMat = new THREE.MeshLambertMaterial({ color: 0xc0392b, side: LO ? THREE.FrontSide : THREE.DoubleSide });
   const remoteUmbPoleGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.72, LO ? 4 : 5);
   const remoteUmbCanopyGeo = new THREE.ConeGeometry(0.45, 0.2, LO ? 6 : 10, 1, true);
   /** 遠端雨傘：跟本機一樣「往前開」擋殼，不是頭頂撐雨 */
@@ -1517,14 +1505,10 @@ function hashPid(pid: string) {
     hideHold(r);
   }
 
-  const remoteHoldWood = LO ? new THREE.MeshLambertMaterial({ color: 0x7a4a20 }) : new THREE.MeshStandardMaterial({ color: 0x7a4a20, roughness: 0.85 });
-  const remoteHoldSteel = LO ? new THREE.MeshLambertMaterial({ color: 0xd0d0d8 }) : new THREE.MeshStandardMaterial({ color: 0xd0d0d8, metalness: 0.7, roughness: 0.3 });
-  const remoteHoldShell = LO
-    ? new THREE.MeshLambertMaterial({ color: 0xe0dcd8 })
-    : new THREE.MeshStandardMaterial({ color: 0xe0dcd8, roughness: 0.85, flatShading: true });
-  const remoteHoldShellTop = LO
-    ? new THREE.MeshLambertMaterial({ color: 0xf0ecea })
-    : new THREE.MeshStandardMaterial({ color: 0xf0ecea, roughness: 0.85, flatShading: true });
+  const remoteHoldWood = new THREE.MeshLambertMaterial({ color: 0x7a4a20 });
+  const remoteHoldSteel = new THREE.MeshLambertMaterial({ color: 0xd0d0d8 });
+  const remoteHoldShell = new THREE.MeshLambertMaterial({ color: 0xe0dcd8 });
+  const remoteHoldShellTop = new THREE.MeshLambertMaterial({ color: 0xf0ecea });
   const remoteHoldSeg = LO ? 5 : 7;
   const remoteHoldBotGeo = new THREE.SphereGeometry(0.055, remoteHoldSeg, LO ? 4 : 5);
   const remoteHoldTopGeo = new THREE.SphereGeometry(0.05, remoteHoldSeg, LO ? 4 : 5);

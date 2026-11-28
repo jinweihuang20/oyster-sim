@@ -298,7 +298,7 @@ export function makePlazaHq(
   // 正面鋼板貼圖
   {
     const tex = facadeTexture(LO); textures.push(tex);
-    facadePlane(D, B.h - 0.1, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, metalness: 0.1 }), fx - 0.01, (B.h - 0.1) / 2, cz);
+    facadePlane(D, B.h - 0.1, new THREE.MeshLambertMaterial({ map: tex }), fx - 0.01, (B.h - 0.1) / 2, cz);
     // 屋簷水槽
     add(new THREE.BoxGeometry(0.22, 0.14, D + 0.1), steel, [fx - 0.1, B.h + 0.02, cz], root, true);
   }
@@ -308,7 +308,7 @@ export function makePlazaHq(
   {
     const tex = bannerTexture(LO); textures.push(tex);
     add(new THREE.BoxGeometry(0.06, BH, D + 0.1), M(0x1d5a36, { roughness: 0.85 }), [fx - 0.05, by, cz], root, true);
-    facadePlane(D + 0.06, BH - 0.04, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }), fx - 0.09, by, cz);
+    facadePlane(D + 0.06, BH - 0.04, new THREE.MeshLambertMaterial({ map: tex }), fx - 0.09, by, cz);
     // 背後鋼架（立柱＋斜撐）
     const n = LO ? 3 : 4;
     for (let i = 0; i < n; i++) {
@@ -335,7 +335,7 @@ export function makePlazaHq(
         const t = flagTexture(texts[i]); textures.push(t);
         const flag = new THREE.Mesh(
           new THREE.PlaneGeometry(0.4, 1.0),
-          new THREE.MeshStandardMaterial({ map: t, roughness: 0.85, side: THREE.DoubleSide }),
+          new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }),
         );
         flag.position.set(x - 0.01, h - 0.55, z + 0.21);
         flag.rotation.y = -Math.PI / 2 + (i - 1) * 0.35;

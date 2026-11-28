@@ -168,9 +168,9 @@ export function makePlazaGrill(
   g.userData.pileId = pileId;
   g.userData.grill = true;
   const segs = lowDetail ? 6 : 10;
-  const wood = new THREE.MeshStandardMaterial({ color: 0x5a4a32, roughness: 0.9 });
-  const steel = new THREE.MeshStandardMaterial({ color: 0x4a4a4e, metalness: 0.45, roughness: 0.55 });
-  const brick = new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.88 });
+  const wood = new THREE.MeshLambertMaterial({ color: 0x5a4a32 });
+  const steel = new THREE.MeshLambertMaterial({ color: 0x4a4a4e });
+  const brick = new THREE.MeshLambertMaterial({ color: 0x8a6a4a });
   const gy = GRILL_GRATE_Y;
 
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number], cast = true) => {
@@ -212,7 +212,7 @@ export function makePlazaGrill(
   g.add(fire.group);
   g.userData.fireFx = fire;
   // 烤網
-  const grate = new THREE.MeshStandardMaterial({ color: 0x6a6a70, metalness: 0.55, roughness: 0.4 });
+  const grate = new THREE.MeshLambertMaterial({ color: 0x6a6a70 });
   for (let i = 0; i < 9; i++) {
     add(rboxEnv(1.2, 0.012, 0.022), grate, [0, gy, -0.48 + i * 0.12], false);
     add(rboxEnv(0.022, 0.012, 1.2), grate, [-0.48 + i * 0.12, gy + 0.004, 0], false);

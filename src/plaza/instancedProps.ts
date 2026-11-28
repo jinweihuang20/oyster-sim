@@ -17,9 +17,8 @@ function instMat(src: THREE.Material) {
 /** 選位墊：一個 InstancedMesh，用 instanceColor／instanceOpacity 對應佔用與高亮 */
 export function makeInstancedPads(poses: ChairPose[], M: MatFn, lo: boolean) {
   const geo = new THREE.CylinderGeometry(0.28, 0.28, 0.025, 16);
-  const mat = lo
-    ? new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false })
-    : new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 1, roughness: 0.2, depthWrite: false });
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false });
+  void lo;
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float instanceOpacity;\nvarying float vInstOp;')

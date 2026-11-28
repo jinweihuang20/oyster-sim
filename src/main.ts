@@ -441,13 +441,11 @@ const SEAT0 = new THREE.Vector3(0, 1.05, 2.0), SEAT = SEAT0.clone();
 camera.position.copy(SEAT);
 
 type SurfMat = THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
+/** 場景／道具預設 Lambert（避開 Standard PBR）；需金屬光澤的單件另開 Standard */
 const mat = (c: number, o: Partial<THREE.MeshStandardMaterialParameters> = {}): SurfMat => {
-  if (bootEco || COARSE) {
-    const rest = { ...o } as Record<string, unknown>;
-    for (const k of ['roughness', 'metalness', 'flatShading', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'bumpMap', 'displacementMap', 'envMap', 'envMapIntensity']) delete rest[k];
-    return new THREE.MeshLambertMaterial({ color: c, ...rest });
-  }
-  return new THREE.MeshStandardMaterial({ color: c, roughness: 0.78, flatShading: false, ...o });
+  const rest = { ...o } as Record<string, unknown>;
+  for (const k of ['roughness', 'metalness', 'flatShading', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'bumpMap', 'displacementMap', 'envMap', 'envMapIntensity']) delete rest[k];
+  return new THREE.MeshLambertMaterial({ color: c, ...rest });
 };
 function mesh(g: THREE.BufferGeometry, m: THREE.Material, p?: [number, number, number], parent: THREE.Object3D = scene) {
   const x = new THREE.Mesh(g, m); if (p) x.position.set(...p); x.castShadow = true; x.receiveShadow = parent === scene; parent.add(x); return x;
@@ -469,11 +467,7 @@ const yardFloor = makeYardFloorMaps(matchMedia('(pointer: coarse)').matches ? 25
   yardFloor.map.anisotropy = aniso;
   yardFloor.rough.anisotropy = aniso;
 }
-const ground = mesh(new THREE.PlaneGeometry(14, 14), bootEco || COARSE
-  ? new THREE.MeshLambertMaterial({ map: yardFloor.map, color: 0xd8d2c4 })
-  : new THREE.MeshStandardMaterial({
-    map: yardFloor.map, roughnessMap: yardFloor.rough, color: 0xd8d2c4, roughness: 0.92, metalness: 0.02,
-  })); ground.rotation.x = -Math.PI / 2; // 水泥地（貼皮）
+const ground = mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshLambertMaterial({ map: yardFloor.map, color: 0xd8d2c4 })); ground.rotation.x = -Math.PI / 2; // 水泥地（貼皮）
 ground.castShadow = false;
 // 柱仔頂的指針時鐘（跟著裝置時間）
 const clockG = new THREE.Group(); clockG.position.set(3.5, 2.35, -3.5); scene.add(clockG); clockG.lookAt(0, 2.0, 2.0); clockG.translateZ(0.09);
@@ -490,9 +484,7 @@ updClock(); setInterval(updClock, 1000);
 const harborDock = mesh(rboxEnv(14, 0.32, 5.2), mat(0x8a9088), [0, -0.2, -6.8]);
 harborDock.castShadow = false;
 // 海水近緣離開水泥地（舊：近緣 z=-7 貼地板邊 → 轉視角海／地搶深度）；由碼頭蓋住過渡
-const water = mesh(new THREE.PlaneGeometry(80, 36), bootEco || COARSE
-  ? new THREE.MeshLambertMaterial({ color: 0x4a98b8 })
-  : new THREE.MeshStandardMaterial({ color: 0x4a98b8, roughness: 0.24, metalness: 0.18 }), [0, -0.55, -27.8]);
+const water = mesh(new THREE.PlaneGeometry(80, 36), new THREE.MeshLambertMaterial({ color: 0x4a98b8 }), [0, -0.55, -27.8]);
 water.rotation.x = -Math.PI / 2;
 water.castShadow = false;
 water.receiveShadow = false;

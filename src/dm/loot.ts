@@ -21,12 +21,10 @@ export function makeOddLootMesh(i: number, LO: boolean): THREE.Group {
   const g = new THREE.Group();
   const ball = new THREE.Mesh(
     new THREE.SphereGeometry(0.2, LO ? 6 : 12, LO ? 5 : 10),
-    new THREE.MeshStandardMaterial({
+    new THREE.MeshLambertMaterial({
       color: col,
       emissive: col,
       emissiveIntensity: 0.55,
-      roughness: 0.35,
-      metalness: 0.2,
     }),
   );
   ball.castShadow = !LO;

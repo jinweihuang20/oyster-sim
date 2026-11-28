@@ -45,7 +45,7 @@ export function makeCareerMarquee(lowDetail: boolean): CareerMarquee {
   const zScreen = WALK_BOUND - 0.08;
   const zFrame = WALK_BOUND + 0.02;
 
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x1c1c20, metalness: 0.55, roughness: 0.48 });
+  const frameMat = new THREE.MeshLambertMaterial({ color: 0x1c1c20 });
   const frameGeo = new THREE.BoxGeometry(boardW + 0.16, boardH + 0.16, 0.08);
   const frame = new THREE.Mesh(frameGeo, frameMat);
   frame.position.set(midX, y, zFrame);
@@ -53,7 +53,7 @@ export function makeCareerMarquee(lowDetail: boolean): CareerMarquee {
   frame.receiveShadow = false;
   group.add(frame);
 
-  const bracketMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.5, roughness: 0.55 });
+  const bracketMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2e });
   const bracketGeo = new THREE.BoxGeometry(0.08, 0.36, 0.1);
   for (const sx of [-boardW * 0.42, boardW * 0.42]) {
     const b = new THREE.Mesh(bracketGeo, bracketMat);

@@ -37,9 +37,9 @@ export function makeSmokeLabelTexture(text: string, w = 256, h = 96) {
 }
 
 
-const buttFilterMat = new THREE.MeshStandardMaterial({ color: 0xc99a62, roughness: 0.95, metalness: 0 });
-const buttPaperMat = new THREE.MeshStandardMaterial({ color: 0xe6e2da, roughness: 0.95, metalness: 0 });
-const buttAshMat = new THREE.MeshStandardMaterial({ color: 0x4a4644, roughness: 1, metalness: 0 });
+const buttFilterMat = new THREE.MeshLambertMaterial({ color: 0xc99a62 });
+const buttPaperMat = new THREE.MeshLambertMaterial({ color: 0xe6e2da });
+const buttAshMat = new THREE.MeshLambertMaterial({ color: 0x4a4644 });
 /** 菸灰缸裡的菸蒂：平躺、方向隨機，部分略斜靠；一個菸灰缸合併成 3 個 mesh */
 export function makeCigButts(n: number, rMin: number, rMax: number, seed: number): THREE.Group {
   let r = (seed >>> 0) || 1;

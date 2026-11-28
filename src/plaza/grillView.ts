@@ -37,7 +37,7 @@ export function createGrillView(parent: THREE.Object3D) {
   const byId = new Map<string, GrillMesh>();
   const botMat = shellM(0xe0dcd8);
   const topMat = shellM(0xf0ecea);
-  const meatMat = new THREE.MeshStandardMaterial({ color: 0xd8cbb0, roughness: 0.35, metalness: 0.08 });
+  const meatMat = new THREE.MeshLambertMaterial({ color: 0xd8cbb0 });
   const meatGeo = new THREE.SphereGeometry(0.04, 8, 6);
 
   function syncHint(g: GrillMesh) {
