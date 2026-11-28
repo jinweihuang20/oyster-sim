@@ -114,6 +114,7 @@ import { GOLD_SMOKE_TINT, encodeCosmetics } from './plaza/cosmetics';
 import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { registerBrightRenderer, setSceneBrightness, clampBright, BRIGHT_DEF } from './world/sceneBrightness';
 import { renderDprBoost, onRenderDprChange } from './world/renderDpr';
+import { postFxAllowed } from './world/postFx';
 import { seaStart, seaActive, seaDbg, type SeaHaul, type SeaSfx } from './sea/seaRun';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
@@ -402,6 +403,7 @@ const bootEco = (() => {
 setGeoLowDetail(bootEco || COARSE);
 const canvas = $('c') as HTMLCanvasElement;
 // 手機／省電（見 mobile.txt）：關 AA、mediump、low-power；填色與著色器降載最省熱
+// 後製 EffectComposer（Bloom／SSAO／DOF）預設關：多次全螢幕渲染是手機發熱主因（postFxAllowed）
 const mobileLite = COARSE || bootEco;
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -921,6 +923,8 @@ function applyEcoGfx() {
   try { updSky(); } catch { /* 啟動時 sky／mix 尚未就緒 */ }
 }
 applyEcoGfx();
+/** 後製開關查詢（手機／省電／預設皆 false；見 world/postFx.ts） */
+(window as any).__postFx = () => postFxAllowed({ coarse: COARSE, eco: mix.eco });
 registerBrightRenderer(renderer);
 setSceneBrightness(mix.bright);
 // ---------- 匿名統計（無個資；可於設定關閉） ----------
@@ -6753,7 +6757,7 @@ for (const [id, key] of [['v_invX', 'invX'], ['v_invY', 'invY']] as const) { con
 { const sv = $('v_sens') as HTMLInputElement; sv.value = String(mix.sens); sv.oninput = () => { mix.sens = +sv.value; applyMix(); }; }
 document.addEventListener('pointerlockchange', () => { const l = document.pointerLockElement === canvas; on('lockHint', !l && state === 'play' && !matchMedia('(pointer: coarse)').matches); setPhase(phase); });
 { const m = $('v_mute') as HTMLInputElement; m.checked = mix.mute; m.onchange = () => { mix.mute = m.checked; applyMix(); }; }
-{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toastTop(mix.eco ? '已開省電：降解析・關陰影・簡材質／少燈・降面（重新整理後 AA／精度／GPU／網格才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU／網格才會變）', TOP_SEC.long); }; }
+{ const e = $('v_eco') as HTMLInputElement; e.checked = mix.eco; e.onchange = () => { mix.eco = e.checked; applyEcoGfx(); resize(); applyMix(); toastTop(mix.eco ? '已開省電：降解析・關陰影・簡材質／少燈・降面・無後製（重新整理後 AA／精度／GPU／網格才會變）' : '已關省電：柔和陰影（重新整理後抗鋸齒／GPU／網格才會變；後製仍預設關）', TOP_SEC.long); }; }
 { const b = $('v_boot') as HTMLSelectElement; b.value = mix.boot; b.onchange = () => { mix.boot = b.value === 'plaza' ? 'plaza' : 'menu'; applyMix(); toastTop(mix.boot === 'plaza' ? '下次開遊戲會進廣場' : '下次開遊戲會進主畫面', TOP_SEC.mid); }; }
 { const el = $('v_bright') as HTMLInputElement; const pct = $('v_brightPct'); const syncBrightUi = () => { el.value = String(Math.round(mix.bright * 100)); pct.textContent = `${Math.round(mix.bright * 100)}%`; };
   const applyBright = (n: number, save: boolean) => { mix.bright = setSceneBrightness(n); syncBrightUi(); if (save) applyMix(); };

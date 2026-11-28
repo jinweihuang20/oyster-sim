@@ -77,6 +77,7 @@ CPU 與 GPU 之間的通訊（Draw Calls）過多會讓 A18 處理器與匯流�
 
 5. 渲染迴圈（Render Loop）與後處理（Post-processing）控制
 審慎使用後處理（EffectComposer）：手機上跑 Bloom（泛光）、SSAO、DOF（景深）或抗鋸齒（SMAA/MSAA）非常吃效能。若必須使用，確保 EffectComposer 的 RenderTarget 也是低解析度，且避免多層 Pass 疊加。此外，在初始化 WebGLRenderer 時，若已限制 DPR 到 1.5~2，可測試關閉原生 antialias: false 觀察發熱改善程度。
+✓ 已實作：本專案不掛 EffectComposer（主迴圈單次 renderer.render）；src/world/postFx.ts 的 postFxAllowed 在手機／省電／預設品質皆 false；mobileLite 啟動時 antialias: false。
 
 分頁隱藏時暫停渲染：務必監聽 visibilitychange 事件，當玩家切換分頁或鎖定螢幕時停止 requestAnimationFrame 與物理運算，避免在背景空轉發熱。
 
