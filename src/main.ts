@@ -410,9 +410,14 @@ const renderer = new THREE.WebGLRenderer({
   precision: mobileLite ? 'mediump' : 'highp',
   preserveDrawingBuffer: !!SHOT,
 });
-/** 手機 DPR 上限：省電 1.0／一般 1.25（iPhone 原生 3x 會讓填色爆熱） */
+/** 手機 DPR 上限：省電 1.0／一般 1.25（iPhone 原生 3x 會讓填色爆熱）；外海／船上再壓一檔（海面填色最重） */
 function mobileDprCap(eco: boolean) {
-  if (COARSE) return eco ? 1 : 1.25;
+  const atSea = plazaMode && plazaBoatsActive();
+  if (COARSE) {
+    if (eco || atSea) return 1;
+    return 1.25;
+  }
+  if (atSea) return eco ? 1.25 : 1.5;
   return eco ? 1.5 : 2;
 }
 renderer.setPixelRatio(Math.min(devicePixelRatio, mobileDprCap(bootEco)));
@@ -6979,9 +6984,10 @@ function frameBody(ts?: number) {
   }
   const now = performance.now();
   const paused = isPaused();
-  // 選單／暫停約 15fps；遊玩 60（手機靜止 1.5 秒後 30 降溫）。發熱改靠降 DPR／關陰影（mobile.txt）
+  // 選單／暫停約 15fps；遊玩 60（手機靜止 1.5 秒後 30 降溫）。外海／船上手機一律 30（海面填色最重）
+  const atSeaHeavy = plazaMode && plazaBoatsActive();
   const minMs = ((state !== 'play' && !isRoomActive()) || paused) ? 1000 / 15
-    : (COARSE && !mobileBusy(now) ? 1000 / 30 : 1000 / 60);
+    : (COARSE && (atSeaHeavy || !mobileBusy(now)) ? 1000 / 30 : 1000 / 60);
   // 限幀用 rAF 時間戳（對齊 vsync）：performance.now() 會受回呼延遲抖動，60Hz 螢幕上偶爾被誤判「太早」而多掉一幀
   const fts = typeof ts === 'number' && ts > 0 ? ts : now;
   const since = fts - lastDrawAt;
@@ -8218,6 +8224,8 @@ function camTick(dt: number) {
       else { f.near = 20; f.far = 64; if (plazaMode) { camera.far = 90; tpCam.far = 120; } }
       camera.updateProjectionMatrix(); tpCam.updateProjectionMatrix();
       plazaBoatsFog(f);
+      // 上船／靠外海：立刻套更低 DPR（海面填色）；上岸還原
+      try { applyEcoGfx(); resize(); } catch { /* */ }
     }
   }
   if (plazaMode && plazaBoatsActive()) {

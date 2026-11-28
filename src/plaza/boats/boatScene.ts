@@ -198,8 +198,12 @@ export type PlazaSea = ReturnType<typeof makePlazaSea>;
 export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?: THREE.Fog | null; plazaLamps?: readonly (readonly [number, number])[] }) {
   const group = new THREE.Group(); group.name = 'plazaSea'; parent.add(group);
   const fog = o.fog ?? new THREE.Fog(0xc8dce8, 20, 64);
+  // 水面是外海發熱主因：手機再降分段；外圈地平線只留粗網格（波浪細節看不清）
   const water = makeWater(group, heightMap(), o.coarse, { c: fog.color.clone(), n: fog.near, f: fog.far }, {
-    rect: RECT, y: PB.waterY, seg: o.coarse ? [58, 75] : [96, 124], outer: { x: -330, z: 0, size: 600 },
+    rect: RECT, y: PB.waterY,
+    seg: o.coarse ? [36, 46] : [72, 92],
+    outer: { x: -330, z: 0, size: 520 },
+    outerSeg: o.coarse ? 6 : 10,
   });
   water.inner.name = 'plazaSeaWater';
 
@@ -304,10 +308,19 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
   let nearN = 0, farN = 0, coneN = 0, glowN = 0, crateN = 0, rackN = 0, strN = 0, flagN = 0, ripeN = 0, beaconN = 0;
   let night = 0;
+  /** 省電／鏡頭：夜間假光距離裁、省電關掉光池／光暈 */
+  let perfEco = !!o.coarse, perfCx = 0, perfCz = 0, perfFogFar = 0;
   const lampOn = new THREE.Color(0xffd890), lampOff = new THREE.Color(0xd8d4c8);
 
   return {
     group, water, fx, near, far, dock, islet,
+    /** 每幀：eco、鏡頭、霧遠（夜間光暈超出霧就不畫） */
+    setPerf(p: { eco?: boolean; x?: number; z?: number; fogFar?: number }) {
+      if (p.eco != null) perfEco = p.eco;
+      if (p.x != null) perfCx = p.x;
+      if (p.z != null) perfCz = p.z;
+      if (p.fogFar != null) perfFogFar = p.fogFar;
+    },
     /** 每幀開頭：清空這幀要畫的船 */
     begin() { nearN = farN = coneN = 0; glowN = 0; crateN = 0; rackN = strN = flagN = ripeN = 0; beaconN = 0; },
     /** 蚵棚架子；priv：0 公共、1 自己的（藍旗）、2 別人的私人（紅旗） */
@@ -373,6 +386,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
     },
     glow(x: number, y: number, z: number, r: number, g: number, b: number) {
       if (glowN >= N_GLOW) return;
+      if (perfFogFar > 0 && Math.hypot(x - perfCx, z - perfCz) > perfFogFar) return;
       gPos[glowN * 3] = x; gPos[glowN * 3 + 1] = y; gPos[glowN * 3 + 2] = z;
       gCol[glowN * 3] = r * night; gCol[glowN * 3 + 1] = g * night; gCol[glowN * 3 + 2] = b * night; glowN++;
     },
@@ -384,9 +398,11 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
       rackFlags.count = flagN; rackFlags.visible = flagN > 0; if (flagN) { rackFlags.instanceMatrix.needsUpdate = true; if (rackFlags.instanceColor) rackFlags.instanceColor.needsUpdate = true; }
       rackRipe.count = ripeN; rackRipe.visible = ripeN > 0; if (ripeN) rackRipe.instanceMatrix.needsUpdate = true;
       rackBeacons.count = beaconN; rackBeacons.visible = beaconN > 0; if (beaconN) { rackBeacons.instanceMatrix.needsUpdate = true; if (rackBeacons.instanceColor) rackBeacons.instanceColor.needsUpdate = true; }
-      cones.count = night > 0.05 ? coneN : 0; cones.instanceMatrix.needsUpdate = true;
-      if (night > 0.05) for (const p of ALL_LAMPS) this.glow(p.x, LAMP_H - 0.12, p.z, 1, 0.82, 0.5);
-      glows.visible = night > 0.05 && glowN > 0;
+      // 省電：夜間光暈／光錐整關（additive 填色很吃 GPU）；船頭燈錐仍留一點方向感
+      const nightFx = night > 0.05 && !perfEco;
+      cones.count = night > 0.05 ? (perfEco ? Math.min(coneN, 1) : coneN) : 0; cones.instanceMatrix.needsUpdate = true;
+      if (nightFx) for (const p of ALL_LAMPS) this.glow(p.x, LAMP_H - 0.12, p.z, 1, 0.82, 0.5);
+      glows.visible = nightFx && glowN > 0;
       glowGeo.setDrawRange(0, glowN);
       (glowGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true; (glowGeo.attributes.color as THREE.BufferAttribute).needsUpdate = true;
     },
@@ -395,7 +411,8 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
       night = k;
       water.setNight(k, sky);
       lampHeadMat.color.copy(lampOff).lerp(lampOn, k);
-      pools.visible = k > 0.05; poolMat.opacity = 0.42 * k;
+      // 省電不畫光池貼花（整片 additive 超吃 fill-rate）
+      pools.visible = k > 0.05 && !perfEco; poolMat.opacity = 0.42 * k;
       fx.setTint(1 - 0.62 * k, 1 - 0.1 * k, 1 + 0.2 * k);
     },
     nightK: () => night,

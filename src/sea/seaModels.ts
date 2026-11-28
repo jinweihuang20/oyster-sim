@@ -113,6 +113,8 @@ export type WaterOpts = {
   /** 水面高度（預設 0） */
   y?: number;
   seg?: [number, number];
+  /** 外圈地平線海面分段（預設 24；廣場外海可降到 6～8 省 vertex shader） */
+  outerSeg?: number;
 };
 export function makeWater(scene: THREE.Scene | THREE.Object3D, map: THREE.Texture, coarse: boolean, fog: { c: THREE.Color; n: number; f: number }, o: WaterOpts = {}) {
   const R = o.rect ?? MAP, y = o.y ?? 0;
@@ -130,7 +132,8 @@ export function makeWater(scene: THREE.Scene | THREE.Object3D, map: THREE.Textur
   const oo = o.outer === undefined ? { x: 0, z: -60, size: 900 } : o.outer;
   let outer: THREE.Mesh | null = null;
   if (oo) {
-    const og = new THREE.PlaneGeometry(oo.size, oo.size, 24, 24); og.rotateX(-Math.PI / 2);
+    const os = Math.max(2, o.outerSeg ?? 24);
+    const og = new THREE.PlaneGeometry(oo.size, oo.size, os, os); og.rotateX(-Math.PI / 2);
     outer = new THREE.Mesh(og, mat); outer.position.set(oo.x, y - 0.25, oo.z); scene.add(outer);
   }
   return {

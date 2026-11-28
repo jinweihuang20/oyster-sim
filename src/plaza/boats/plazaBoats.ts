@@ -807,6 +807,7 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
   // 3) 畫：5 艘 instanced（我在的那艘用完整模型）＋船頭燈；霧遠平面外不畫
   const fogFar = D.fog()?.far ?? 0;
   const cx = cam.position.x, cz = cam.position.z;
+  sea.setPerf({ eco: !!D.coarse, x: cx, z: cz, fogFar });
   isletFogHid = fogCullHidden(Math.hypot(ISLET.cx - cx, ISLET.cz - cz), fogFar, isletFogHid);
   if (sea.islet.visible === isletFogHid) sea.islet.visible = !isletFogHid;
   sea.begin();
