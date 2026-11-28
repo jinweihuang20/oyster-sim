@@ -96,10 +96,12 @@ export function makePlayerAvatar(
   flatBox = false,
 ): PlayerRig {
   const box = flatBox ? rboxNpc : rbox;
-  // 角色永遠 Standard（服飾貼圖／metalness）；環境 M 在 LO 會變 Lambert
+  // 手機：Lambert 降 PBR；桌機 Standard（服飾貼圖／metalness）
   void M;
   const boxy = { flatShading: false as const, roughness: 0.78 };
-  const std = (c: number) => new THREE.MeshStandardMaterial({ color: c, ...boxy });
+  const std = (c: number) => (_LO
+    ? new THREE.MeshLambertMaterial({ color: c, flatShading: false }) as unknown as THREE.MeshStandardMaterial
+    : new THREE.MeshStandardMaterial({ color: c, ...boxy }));
   const outer = new THREE.Group();
   const root = new THREE.Group(); outer.add(root);
 

@@ -200,6 +200,8 @@ let snap: PlazaSnapshot | null = null;
 let seatWishes: PlazaSeatWish[] = [];
 const paidWishIds = new Set<string>();
 let phaseTimer = 0;
+/** 廣場地圖重畫累積（開著才跑） */
+let mapRedrawAcc = 0;
 let deps: PlazaDeps | null = null;
 let seated = false;
 let shiftStarted = false;
@@ -3128,7 +3130,11 @@ export function tickPlaza(dt: number) {
   if (view) for (const d of SHED_DOORS) view.setShedDoorState(d.loc, { locked: !(deps.shedUnlocked?.(d.loc) ?? true), active: nearShed === d.loc });
   placePlazaChat();
   syncPlazaHudLayout();
-  if (plazaMapIsOpen()) refreshPlazaMap();
+  // 地圖開著：約 8Hz 重畫（每幀全清 canvas 很燙）
+  if (plazaMapIsOpen()) {
+    mapRedrawAcc += dt;
+    if (mapRedrawAcc >= 0.12) { mapRedrawAcc = 0; refreshPlazaMap(); }
+  } else mapRedrawAcc = 0;
   if (!client?.connected) return;
   phaseTimer += dt;
   // ~10Hz 同步位置＋動作

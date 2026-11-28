@@ -45,7 +45,7 @@ type Run = {
   me: Raft; rv: Raft; farm: Farm; ring: THREE.Mesh; water: ReturnType<typeof makeWater>; fx: ReturnType<typeof makeFx>; mfx: ReturnType<typeof makeMortarFx>;
   rival: Rival; rivalOn: boolean; mortarOn: boolean; shells: Shell[]; shellCd: number; throwT: number; wakeT: number; bumpT: number; hitT: number; perf: number[]; tt: number; av: PlayerRig | null; steerS: number; pulling: boolean; hitAnim: number; rope: THREE.Line | null;
   root: HTMLElement; el: Record<string, HTMLElement>; map: HTMLCanvasElement; mapT: number;
-  raf: number; last: number; toastT: number; abortArm: number;
+  raf: number; last: number; drawAt: number; toastT: number; abortArm: number; coarse: boolean;
   onKey: (e: KeyboardEvent) => void; onKeyUp: (e: KeyboardEvent) => void; onResize: () => void; onBlur: () => void;
 };
 
@@ -116,21 +116,24 @@ export function seaStart(o: SeaOpts) {
   for (const id of ['seaRv', 'seaSlow', 'seaSlowT', 'seaHitFx', 'seaTime', 'seaTideF', 'seaLoad', 'seaLoadF', 'seaLim', 'seaSum', 'seaToast', 'seaBanner', 'seaJoy', 'seaDrop', 'seaAct', 'seaActT', 'seaEnd', 'seaQuit', 'seaKeys']) el[id] = q(id);
   const cv = q('seaCv') as HTMLCanvasElement;
   const coarse = matchMedia('(pointer: coarse)').matches;
-  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: !coarse, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, coarse ? 1.5 : 2));
+  const eco = (() => { try { return !!JSON.parse(localStorage.getItem('oyster-mix') || '{}').eco; } catch { return false; } })();
+  // 出海海水填色最重：手機一律 low-power；DPR／分段跟著 eco
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: !coarse && !eco, powerPreference: coarse || eco ? 'low-power' : 'high-performance' });
+  const dprCap = coarse ? (eco ? 1 : 1.25) : (eco ? 1.5 : 2);
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, dprCap));
   const scene = new THREE.Scene();
   scene.background = skyTexture(); scene.fog = new THREE.Fog(SKY.getHex(), 55, 135);
   const cam = new THREE.PerspectiveCamera(55, 1, 0.1, 300);
   scene.add(new THREE.HemisphereLight(0xeaf6ff, 0x8a9a80, 2.2));
   const sun = new THREE.DirectionalLight(0xfff2d8, 2.4); sun.position.set(30, 60, 20); scene.add(sun);
 
-  const built = buildWorld(scene, L, rng, coarse);
+  const built = buildWorld(scene, L, rng, coarse, eco);
   S = {
     o, rng, L, b, t: 0, loads: [], fine: 0, stolen: 0, lost: 0, warned: false, ended: false,
     pullOn: false, pullP: 0, pullTarget: null, wave: 0, waveNext: SEA.waveMin + rng() * (SEA.waveMax - SEA.waveMin), waveDir: 0, shoalNow: false,
     keys: new Set(), joy: null, renderer, scene, cam, ...built,
     rival: newRival(rng), rivalOn: true, mortarOn: true, shells: [], shellCd: SEA.mortarStart, throwT: 0, wakeT: 0, bumpT: 0, hitT: 0, perf: [], tt: 0, av: null, steerS: 0, pulling: false, hitAnim: 0, rope: null as THREE.Line | null,
-    root, el, map: q('seaMap') as HTMLCanvasElement, mapT: 0, raf: 0, last: performance.now(), toastT: 0, abortArm: 0,
+    root, el, map: q('seaMap') as HTMLCanvasElement, mapT: 0, raf: 0, last: performance.now(), drawAt: 0, toastT: 0, abortArm: 0, coarse,
     onKey: () => {}, onKeyUp: () => {}, onResize: () => {}, onBlur: () => {},
   };
   S.av = mountAvatar(S);
@@ -144,13 +147,20 @@ export function seaStart(o: SeaOpts) {
 function resize() {
   if (!S) return;
   const w = innerWidth, h = innerHeight;
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const eco = (() => { try { return !!JSON.parse(localStorage.getItem('oyster-mix') || '{}').eco; } catch { return false; } })();
+  const dprCap = coarse ? (eco ? 1 : 1.25) : (eco ? 1.5 : 2);
+  S.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, dprCap));
   S.renderer.setSize(w, h, false); S.cam.aspect = w / Math.max(1, h); S.cam.fov = w < h ? 70 : 55; S.cam.updateProjectionMatrix();
 }
 
 // ---------- 場景 ----------
-function buildWorld(scene: THREE.Scene, L: Layout, rng: Rng, coarse: boolean) {
+function buildWorld(scene: THREE.Scene, L: Layout, rng: Rng, coarse: boolean, eco = false) {
   const fog = scene.fog as THREE.Fog;
-  const water = makeWater(scene, makeHeightMap(L, rng), coarse, { c: fog.color, n: fog.near, f: fog.far });
+  const water = makeWater(scene, makeHeightMap(L, rng), coarse, { c: fog.color, n: fog.near, f: fog.far }, {
+    seg: coarse ? (eco ? [40, 48] : [56, 68]) : (eco ? [100, 120] : [160, 192]),
+    outerSeg: coarse ? 4 : (eco ? 8 : 16),
+  });
   makeShore(scene, rng);
   const farm = makeFarms(scene, L, rng);
   makeFlags(scene, L);
@@ -278,6 +288,10 @@ function loop(now: number) {
   const R = S; if (!R) return;
   R.raf = requestAnimationFrame(loop);
   if (document.hidden) { R.last = now; return; }
+  // 手機出海限 30fps（海面填色）；桌機仍跟 vsync
+  const minMs = R.coarse ? 1000 / 30 : 0;
+  if (minMs && now - R.drawAt < minMs - 3) return;
+  R.drawAt = now;
   const dt = Math.min(0.05, Math.max(0, (now - R.last) / 1000)); R.last = now;
   if (!R.ended) tick(R, dt);
   draw(R, now / 1000);

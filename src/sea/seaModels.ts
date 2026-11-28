@@ -126,7 +126,8 @@ export function makeWater(scene: THREE.Scene | THREE.Object3D, map: THREE.Textur
       uNight: { value: 0 }, uMoon: { value: new THREE.Vector3(-0.5, 0.35, -0.6).normalize() },
     },
   });
-  const seg = o.seg ?? (coarse ? [110, 132] : [160, 192]);
+  // 預設分段已壓過一輪；呼叫端可再傳 seg（出海／廣場）
+  const seg = o.seg ?? (coarse ? [56, 68] : [160, 192]);
   const g = new THREE.PlaneGeometry(R.w, R.h, seg[0], seg[1]); g.rotateX(-Math.PI / 2);
   const inner = new THREE.Mesh(g, mat); inner.position.set(R.x0 + R.w / 2, y, R.z0 + R.h / 2); scene.add(inner);
   const oo = o.outer === undefined ? { x: 0, z: -60, size: 900 } : o.outer;
@@ -203,9 +204,9 @@ export function makeFarms(scene: THREE.Scene, L: Layout, rng: () => number): Far
       g.translate(r.ax + (r.bx - r.ax) * f, 1.36, r.az + (r.bz - r.az) * f); bars.push(g);
     }
   });
-  const pm = new THREE.InstancedMesh(poleGeo, poleM, poles.length); poles.forEach((m, i) => pm.setMatrixAt(i, m)); pm.frustumCulled = false; scene.add(pm);
+  const pm = new THREE.InstancedMesh(poleGeo, poleM, poles.length); poles.forEach((m, i) => pm.setMatrixAt(i, m)); pm.frustumCulled = true; scene.add(pm);
   if (bars.length) { const bm = new THREE.Mesh(mergeGeometries(bars), poleM); scene.add(bm); bars.forEach(g => g.dispose()); }
-  const fm = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 8, 6), lam(0xf2f2ee), floats.length); floats.forEach((m, i) => fm.setMatrixAt(i, m)); fm.frustumCulled = false; scene.add(fm);
+  const fm = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 8, 6), lam(0xf2f2ee), floats.length); floats.forEach((m, i) => fm.setMatrixAt(i, m)); fm.frustumCulled = true; scene.add(fm);
   // 蚵串：一條繩＋一坨坨蚵（拉走後整串藏起來）
   const strFirst: number[] = [], strN: number[] = [];
   let total = 0; L.strs.forEach(s => { strFirst.push(total); const n = 2 + s.w * 2; strN.push(n); total += n; });
@@ -224,7 +225,7 @@ export function makeFarms(scene: THREE.Scene, L: Layout, rng: () => number): Far
       const g = 0.35 + rng() * 0.15 - s.w * 0.04; lumps.setColorAt(strFirst[si] + j, col.setRGB(g * 1.05, g, g * 0.85));
     }
   });
-  lumps.frustumCulled = false; ropes.frustumCulled = false;
+  lumps.frustumCulled = true; ropes.frustumCulled = true;
   scene.add(lumps, ropes);
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
   return {

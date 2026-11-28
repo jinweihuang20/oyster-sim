@@ -1,4 +1,5 @@
 import { isDeathmatchActive } from '../deathmatch';
+import { sfxOn, musicOn, ambienceOn } from './synthGate';
 
 export type MixAudio = { master: number; amb: number; sfx: number; mute: boolean; music: number };
 
@@ -16,30 +17,86 @@ const D = () => { if (!_deps) throw new Error('audio not init'); return _deps; }
 export let ac: AudioContext | null = null;
 let masterG: GainNode, ambG: GainNode, musG: GainNode;
 export let sfxG: GainNode;
+/** 音效還會不會真的合成（給 sfxBus／收線棘輪等） */
+export const isSfxOn = () => sfxOn(D().getMix());
+const musOk = () => musicOn(D().getMix());
+const ambOk = () => ambienceOn(D().getMix(), isDeathmatchActive());
 // 環境音（海浪、漁船引擎、海鷗、收音機都走 ambG）：死鬥模式中靜音，離開後照使用者設定恢復
-const ambLevel = () => (isDeathmatchActive() ? 0 : D().getMix().amb);
-export function duckAmb() { if (!ac) return; const t = ac.currentTime; ambG.gain.cancelScheduledValues(t); ambG.gain.setValueAtTime(ambG.gain.value, t); ambG.gain.linearRampToValueAtTime(ambLevel(), t + 0.4); }
-export function applyMix() { const mix = D().getMix(); if (!ac) { D().persistMix(); return; } masterG.gain.value = mix.mute ? 0 : mix.master; ambG.gain.value = ambLevel(); sfxG.gain.value = mix.sfx; musG.gain.value = mix.music * 0.5; D().persistMix(); }
+const ambLevel = () => (ambOk() ? D().getMix().amb : 0);
+export function duckAmb() {
+  if (!ac) return;
+  const t = ac.currentTime;
+  ambG.gain.cancelScheduledValues(t);
+  ambG.gain.setValueAtTime(ambG.gain.value, t);
+  ambG.gain.linearRampToValueAtTime(ambLevel(), t + 0.4);
+  syncSynth();
+}
+export function applyMix() {
+  const mix = D().getMix();
+  if (!ac) { D().persistMix(); return; }
+  masterG.gain.value = mix.mute ? 0 : mix.master;
+  ambG.gain.value = ambLevel();
+  sfxG.gain.value = mix.sfx;
+  musG.gain.value = mix.music * 0.5;
+  syncSynth();
+  D().persistMix();
+}
 function noiseBuf(a: AudioContext, sec: number) { const n = a.sampleRate * sec, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return b; }
-function lfo(a: AudioContext, rate: number, depth: number, target: AudioParam) { const o = a.createOscillator(), g = a.createGain(); o.frequency.value = rate; g.gain.value = depth; o.connect(g).connect(target); o.start(); }
-function startAmbience(a: AudioContext) {
-  const nb = noiseBuf(a, 4);
+function lfo(a: AudioContext, rate: number, depth: number, target: AudioParam) { const o = a.createOscillator(), g = a.createGain(); o.frequency.value = rate; g.gain.value = depth; o.connect(g).connect(target); o.start(); return o; }
+/** 持續環境音節點（靜音時 stop，恢復再開，避免 mute 還在算波形） */
+let ambKeep: AudioScheduledSourceNode[] = [];
+let ambRunning = false;
+let ambNb: AudioBuffer | null = null;
+function stopAmbienceLoops() {
+  for (const s of ambKeep) { try { s.stop(); } catch { /* */ } try { s.disconnect(); } catch { /* */ } }
+  ambKeep = [];
+  ambRunning = false;
+}
+function startAmbienceLoops(a: AudioContext) {
+  if (ambRunning) return;
+  ambRunning = true;
+  const nb = ambNb ??= noiseBuf(a, 4);
+  const keep = (s: AudioScheduledSourceNode) => { ambKeep.push(s); return s; };
   const loopNoise = (type: BiquadFilterType, f: number, vol: number, lrate: number, ldepth: number) => {
     const s = a.createBufferSource(); s.buffer = nb; s.loop = true; const fl = a.createBiquadFilter(); fl.type = type; fl.frequency.value = f; const g = a.createGain(); g.gain.value = vol;
-    s.connect(fl).connect(g).connect(ambG); s.start(); if (lrate) lfo(a, lrate, ldepth, g.gain); return fl;
+    s.connect(fl).connect(g).connect(ambG); keep(s).start(); if (lrate) keep(lfo(a, lrate, ldepth, g.gain)); return fl;
   };
   loopNoise('lowpass', 500, 0.35, 0.12, 0.25);   // 海湧
-  const wind = loopNoise('highpass', 3000, 0.03, 0.07, 0.02); lfo(a, 0.05, 800, wind.frequency); // 風
+  const wind = loopNoise('highpass', 3000, 0.03, 0.07, 0.02); keep(lfo(a, 0.05, 800, wind.frequency)); // 風
   const eng = a.createOscillator(); eng.type = 'sawtooth'; eng.frequency.value = 42; const ef = a.createBiquadFilter(); ef.type = 'lowpass'; ef.frequency.value = 160; const eg = a.createGain(); eg.gain.value = 0.05;
-  eng.connect(ef).connect(eg).connect(ambG); eng.start(); lfo(a, 7, 0.02, eg.gain); // 遠遠的漁船引擎
-  const gull = () => { if (document.hidden) { setTimeout(gull, 4000); return; } const t = a.currentTime; for (let k = 0; k < 2 + Math.floor(Math.random() * 3); k++) { const o = a.createOscillator(), g = a.createGain(), s0 = t + k * 0.28; o.type = 'triangle';
+  eng.connect(ef).connect(eg).connect(ambG); keep(eng).start(); keep(lfo(a, 7, 0.02, eg.gain)); // 遠遠的漁船引擎
+}
+function startAmbience(a: AudioContext) {
+  if (ambOk()) startAmbienceLoops(a);
+  const gull = () => {
+    if (!ac || ac !== a) return;
+    if (document.hidden || !ambOk()) { setTimeout(gull, 4000); return; }
+    const t = a.currentTime;
+    for (let k = 0; k < 2 + Math.floor(Math.random() * 3); k++) {
+      const o = a.createOscillator(), g = a.createGain(), s0 = t + k * 0.28; o.type = 'triangle';
       o.frequency.setValueAtTime(1500, s0); o.frequency.exponentialRampToValueAtTime(900, s0 + 0.22); g.gain.setValueAtTime(0, s0); g.gain.linearRampToValueAtTime(0.04, s0 + 0.03); g.gain.linearRampToValueAtTime(0, s0 + 0.24);
-      o.connect(g).connect(ambG); o.start(s0); o.stop(s0 + 0.3); } setTimeout(gull, 5000 + Math.random() * 9000); };
+      o.connect(g).connect(ambG); o.start(s0); o.stop(s0 + 0.3);
+    }
+    setTimeout(gull, 5000 + Math.random() * 9000);
+  };
   setTimeout(gull, 2000);
-  const radio = () => { if (document.hidden) { setTimeout(radio, 4000); return; } const t = a.currentTime, s = a.createBufferSource(); s.buffer = nb; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1200; f.Q.value = 3; const g = a.createGain();
+  const radio = () => {
+    if (!ac || ac !== a) return;
+    if (document.hidden || !ambOk()) { setTimeout(radio, 4000); return; }
+    const nb = ambNb ??= noiseBuf(a, 4);
+    const t = a.currentTime, s = a.createBufferSource(); s.buffer = nb; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1200; f.Q.value = 3; const g = a.createGain();
     g.gain.value = 0; for (let k = 0; k < 12; k++) g.gain.setValueAtTime(Math.random() < 0.6 ? 0.03 : 0, t + k * 0.12); g.gain.setValueAtTime(0, t + 1.5);
-    s.connect(f).connect(g).connect(ambG); s.start(t); s.stop(t + 1.6); setTimeout(radio, 9000 + Math.random() * 12000); };
+    s.connect(f).connect(g).connect(ambG); s.start(t); s.stop(t + 1.6); setTimeout(radio, 9000 + Math.random() * 12000);
+  };
   setTimeout(radio, 6000);
+}
+/** 依 mute／各軌道音量：停或重開合成（gain×0 仍會燒 CPU） */
+function syncSynth() {
+  if (!ac) return;
+  if (ambOk()) startAmbienceLoops(ac);
+  else stopAmbienceLoops();
+  if (!musOk()) silenceMusic(ac);
+  rescheduleMusicTimer();
 }
 // ===== 音樂引擎：每個場景一首 BGM、收音機三個台，全部 WebAudio 即時合成 =====
 // 同一時間只排程正在播（或正在淡出）的曲子；切換時 0.8 秒交叉淡入淡出
@@ -230,8 +287,36 @@ function setupRadioBus(a: AudioContext) {
 }
 function pickTrack(): string { return D().pickTrack(); }
 const BGM_FADE = 1.2;
+function silenceMusic(a: AudioContext) {
+  const now = a.currentTime;
+  if (!curTrack && !live.some(l => !l.dead)) {
+    live = live.filter(l => { if (l.dead && now > l.dead) { setTimeout(() => { try { l.g.disconnect(); } catch { /* */ } }, 500); return false; } return true; });
+    if (radioNoise && radioNoise.gain.value > 0.001) {
+      radioNoise.gain.cancelScheduledValues(now);
+      radioNoise.gain.setValueAtTime(Math.max(0.0001, radioNoise.gain.value), now);
+      radioNoise.gain.linearRampToValueAtTime(0.0001, now + BGM_FADE);
+    }
+    return;
+  }
+  curTrack = '';
+  for (const l of live) if (!l.dead) {
+    l.g.gain.cancelScheduledValues(now);
+    l.g.gain.setValueAtTime(Math.max(0.0001, l.g.gain.value), now);
+    l.g.gain.linearRampToValueAtTime(0.0001, now + BGM_FADE);
+    l.dead = now + BGM_FADE + 0.05;
+  }
+  if (radioNoise) {
+    radioNoise.gain.cancelScheduledValues(now);
+    radioNoise.gain.setValueAtTime(Math.max(0.0001, radioNoise.gain.value), now);
+    radioNoise.gain.linearRampToValueAtTime(0.0001, now + BGM_FADE);
+  }
+  live = live.filter(l => { if (l.dead && now > l.dead) { setTimeout(() => { try { l.g.disconnect(); } catch { /* */ } }, 500); return false; } return true; });
+}
 function musicTick(a: AudioContext) {
-  const k = pickTrack(), now = a.currentTime;
+  const now = a.currentTime;
+  // 靜音／音樂音量 0：停排程，不再合成新音符
+  if (!musOk()) { silenceMusic(a); return; }
+  const k = pickTrack();
   if (k !== curTrack) {
     const had = !!curTrack && live.some(l => !l.dead);
     curTrack = k;
@@ -265,9 +350,25 @@ function musicTick(a: AudioContext) {
     while (l.next < now + 0.25) { l.fn(l.step, l.next, l.st); l.next += l.st; l.step++; }
   }
 }
+let musicTimer: ReturnType<typeof setInterval> | null = null;
 function startMusic(a: AudioContext) {
   setupRadioBus(a); musicTick(a);
-  setInterval(() => { if (!document.hidden && a.state === 'running') musicTick(a); }, 60);
+  if (musicTimer) clearInterval(musicTimer);
+  // 靜音時降到 1Hz 只做清理；有音樂才 60ms 排程
+  musicTimer = setInterval(() => {
+    if (document.hidden || a.state !== 'running') return;
+    musicTick(a);
+  }, musOk() ? 60 : 1000);
+}
+/** applyMix 後重設音樂 timer 間隔 */
+function rescheduleMusicTimer() {
+  if (!ac || !musicTimer) return;
+  clearInterval(musicTimer);
+  const a = ac;
+  musicTimer = setInterval(() => {
+    if (document.hidden || a.state !== 'running') return;
+    musicTick(a);
+  }, musOk() ? 60 : 1000);
 }
 document.addEventListener('visibilitychange', () => { if (!ac) return; if (document.hidden) ac.suspend().catch(() => {}); else ac.resume().catch(() => {}); });
 export function audio() {
@@ -275,14 +376,29 @@ export function audio() {
   if (ac.state === 'suspended') ac.resume();
   return ac;
 }
+/** 共用白噪音 buffer（避免每次 SFX 配置新 AudioBuffer） */
+let sfxNoiseBuf: AudioBuffer | null = null;
+function sfxNoise(a: AudioContext) {
+  if (sfxNoiseBuf && sfxNoiseBuf.sampleRate === a.sampleRate) return sfxNoiseBuf;
+  const n = a.sampleRate; // 1 秒
+  const b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+  return (sfxNoiseBuf = b);
+}
 export function noise(dur: number, freq: number, vol: number, sweepTo = 0) {
-  const a = audio(), n = Math.floor(a.sampleRate * dur), b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0);
-  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 4);
-  const s = a.createBufferSource(); s.buffer = b; const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 0.8;
+  if (!isSfxOn()) return;
+  const a = audio();
+  const s = a.createBufferSource(); s.buffer = sfxNoise(a);
+  const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 0.8;
   if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, a.currentTime + dur);
-  const g = a.createGain(); g.gain.value = vol; s.connect(f).connect(g).connect(sfxG); s.start();
+  const g = a.createGain(); g.gain.value = vol;
+  // 共用 1s buffer：從頭播、到 dur 停；envelope 靠 gain
+  g.gain.setValueAtTime(vol, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + Math.max(0.02, dur));
+  s.connect(f).connect(g).connect(sfxG); s.start(); s.stop(a.currentTime + dur + 0.05);
 }
 export function tone(freq: number, dur: number, vol: number, type: OscillatorType = 'sine', delay = 0, glideTo = 0) {
+  if (!isSfxOn()) return;
   const a = audio(), o = a.createOscillator(), g = a.createGain(), t = a.currentTime + delay;
   o.type = type; o.frequency.setValueAtTime(freq, t); if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + dur);
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + dur);

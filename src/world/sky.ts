@@ -26,7 +26,7 @@ export function createSkyDome(opts?: { radius?: number; lo?: boolean }): SkyDome
     nadir: { value: new THREE.Color(0x8ab0c8) },
     sunDir: { value: sunDir.clone() },
     sunStr: { value: 0.85 },
-    cloudAmt: { value: 0.55 },
+    cloudAmt: { value: lo ? 0.15 : 0.55 },
     time: { value: 0 },
   };
   const mat = new THREE.ShaderMaterial({

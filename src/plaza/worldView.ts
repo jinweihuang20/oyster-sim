@@ -28,7 +28,6 @@ import {
   type PlazaSeatRef,
 } from './layout';
 import { makeYardLikePile, makePlazaGrill, makePlazaFloorMaps, makePlazaBigShed, CHAIR_SEAT_Y, PLAZA_ROOF_Y } from './props';
-import { makeCareerMarquee } from './careerMarquee';
 import { makeInstancedPlazaChairs, makeInstancedPads, type ChairPose } from './instancedProps';
 import { bakeStaticLighting } from './bakeLighting';
 import { mergeStaticMeshes, countMeshes } from './mergeStatic';
@@ -464,11 +463,8 @@ export function createPlazaWorldView(
   // 廣場大棚（鏽鐵皮＋外圈木柱；厝頂／高樑可第三人稱半透明）— 進場必建（競速擂台隱藏）
   const bigShed = makePlazaBigShed(M, add, LO);
   root.add(bigShed.group);
-  const careerMarquee = makeCareerMarquee(LO);
-  root.add(careerMarquee.group);
   if (raceArena || partyArena) {
     bigShed.group.visible = false;
-    careerMarquee.group.visible = false;
   }
   const tpOccludeMats = bigShed.tpOccludeMats;
   let tpOccludeK = 0;
@@ -2779,8 +2775,8 @@ function hashPid(pid: string) {
     const cullS = eco ? CULL_ECO_SCALE : 1;
     const FIRE2 = (CULL_NEAR * cullS * 0.78) ** 2;
     // 燈數固定，只調亮度，不開關 visible（three.js 增減燈會重編著色器）
-    // 省電：吊燈改靠外觀球自發光，關掉動態點光
-    for (const pl of roofLamps) pl.intensity = roofLampBaseI;
+    // 省電：關掉動態點光（靠外觀球自發光），否則手機片狀 Lambert 被 PointLight 重算超燙
+    for (const pl of roofLamps) pl.intensity = eco ? 0 : roofLampBaseI;
     tickDetailLod(dt, cx, cz, eco);
 
     const k = Math.min(1, dt * 10);
@@ -3137,8 +3133,6 @@ function hashPid(pid: string) {
       if (!eco) bigShed.tick(fdt);
       tickRemoteExhales(fdt);
     }
-    // 跑馬燈每幀只改一個 uniform（不重畫貼圖），不必跟著特效降頻，捲動才平順
-    careerMarquee.tick(dt);
     // 遠端吸菸：手持菸（掛腕）＋菸頭薄煙；不再用頭側飄煙以免看起來沒拿菸
     smokeJobs.length = 0;
     let smokeN = 0;
@@ -3287,7 +3281,6 @@ function hashPid(pid: string) {
     disposePileDiffSigns();
     flags.dispose();
     grill.dispose();
-    try { careerMarquee.dispose(); } catch { /* */ }
     for (const f of fireFx) f.dispose();
     fireFx.length = 0;
     try { smokeArea?.ambientSmoke.dispose(); } catch { /* */ }

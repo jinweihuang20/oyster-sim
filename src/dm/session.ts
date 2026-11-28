@@ -218,7 +218,7 @@ ${isTouch
   // 手機／粗指標：降畫質（陰影、抗鋸齒、像素比、燈數、蚵殼密度）
   const LO = isTouch || matchMedia('(max-width: 900px)').matches;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LO, powerPreference: LO ? 'low-power' : 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, LO ? 1.25 : 2));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, LO ? 1 : 2));
   const unregBright = registerBrightRenderer(renderer);
   // 陰影：手機關；桌機僅 arena Directional 單燈（PCF ≤1024，非 Soft）
   renderer.shadowMap.enabled = !LO;
@@ -240,7 +240,7 @@ ${isTouch
     const bl: THREE.Object3D[] = []; for (let i = 0; i < BARN_N; i++) { const b = new THREE.Mesh(U.barnGeo, U.barnMat); m.add(b); bl.push(b); } U.placeBarn(bl, 2); return m;
   }
   // 蚵殼灰燼：半透明薄片（對相機 billboard），避免大方塊飄滿畫面
-  const AN = LO ? 80 : 180;
+  const AN = LO ? 40 : 180;
   const ash = new THREE.InstancedMesh(
     new THREE.PlaneGeometry(0.05, 0.032),
     new THREE.MeshBasicMaterial({ color: 0xd8d0c4, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide }),

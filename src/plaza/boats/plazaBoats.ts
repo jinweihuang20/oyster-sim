@@ -18,6 +18,7 @@ import {
 } from './boatLogic';
 import { onIsletWalk, isletDiveSpot, ISLET } from '../islet';
 import { fogCullHidden, beyondFogFar, fogDrawRange } from '../fogCull';
+import { plazaSfxAudible } from '../sfxHear';
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
@@ -306,7 +307,8 @@ function onDrift(s: DriftSnap) {
 /** 漂流潮開始（台北整點）：大字提示，不說在哪 */
 function onDriftTide(e: DriftTide) {
   if (!D) return;
-  D.sfx('launch');
+  // 岸上的人只看字、不播海上音效（反之船上才聽到）
+  if (mode !== 'walk') D.sfx('launch');
   toastTop(`漂流潮來了！接下來 10 分鐘海上多了 ${e.n} 個漂流箱${e.gold ? '，還有一個金色大箱子（要 2 個人以上一起拉）' : ''}`, 4);
 }
 /** 有人在拉金箱子：附近的人看得到，叫人來幫忙 */
@@ -448,12 +450,16 @@ function endSwim(connId: string) {
 }
 function onRam(r: RamDto) {
   const tb = boats[r.target]; if (!D || !tb) return;
-  splash(r.x, r.z, 2);
-  D.sfx('hit');
+  const me = myId();
+  const involvesMe = r.by === me || r.knocked.some(k => k.connId === me);
+  // 跟自己無關且聽不見：不噴水花／不播撞船音（岸上不聽外海互撞）
+  if (involvesMe || canHearSea(r.x, r.z)) {
+    splash(r.x, r.z, 2);
+    D.sfx('hit');
+  }
   tb.v = tb.tv = 0; tb.sway = 1;
   // 對方船被撞得往外推一點（只是畫面，下一筆位置會校正）
   tb.x += r.ix * 0.8; tb.z += r.iz * 0.8;
-  const me = myId();
   for (const k of r.knocked) {
     if (k.connId === me) {
       becomeSwimmer(k.x, k.z, k.h);
@@ -721,6 +727,13 @@ function input() {
 }
 
 let lastCam: THREE.Camera | null = null;
+/** 遠端海上事件音效：聽者＝鏡頭；外海／廣場互不串音 */
+function canHearSea(x: number, z: number) {
+  const cam = lastCam;
+  const lx = cam?.position.x ?? D?.walkPos.x ?? 0;
+  const lz = cam?.position.z ?? D?.walkPos.z ?? 0;
+  return plazaSfxAudible(x, z, lx, lz, D?.fog()?.far ?? 0);
+}
 /** 主迴圈每幀呼叫（在廣場、不論在不在船上）；cam＝目前畫面用的相機（判斷遠近 LOD） */
 export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
   if (!D || !sea) return;
@@ -733,9 +746,12 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
 
   // 1) 船的位置：我開的＝本機物理；別人的＝內插＋航位推算；假船＝繞圈
   const kk = 1 - Math.exp(-8 * dt);
+  const fogFarEarly = D.fog()?.far ?? 0;
+  const cx0 = cam.position.x, cz0 = cam.position.z;
   for (const b of boats) {
     b.sway = Math.max(0, b.sway - dt / PB.swayT); b.bumpT = Math.max(0, b.bumpT - dt);
-    if (mode === 'boat' && b.id === myBoat && mySeat === 0) {
+    const mine = mode === 'boat' && b.id === myBoat;
+    if (mine && mySeat === 0) {
       const v0 = b.v;
       stepPlazaBoat(b, thr, steer, dt, rackSlow(b.id));
       b.steer += (steer - b.steer) * Math.min(1, dt * 6);
@@ -774,6 +790,10 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
       let dh = b.th - b.h; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
       b.steer += (Math.max(-1, Math.min(1, -dh * 3)) - b.steer) * Math.min(1, dt * 4);
       b.h += dh * kk; b.v += (b.tv - b.v) * kk;
+    }
+    // 霧外遠船：位置仍更新（進視野才準），跳過 bob／尾浪省 CPU
+    if (!mine && beyondFogFar(Math.hypot(b.x - cx0, b.z - cz0), fogFarEarly)) {
+      b.y = PB.waterY; b.rx = b.rz = 0; continue;
     }
     const bob = boatBob(b.x, b.z, t, b.v, b.sway);
     b.y = bob.y; b.rx = bob.rx; b.rz = bob.rz;

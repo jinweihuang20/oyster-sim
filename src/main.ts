@@ -107,6 +107,7 @@ import {
 import { mgMuzzleWorld, mgEjectWorld, mgMountRight } from './plaza/mgGun';
 import { pickThrowTarget, type ThrowPickCand } from './plaza/throwPick';
 import { PLAZA_NPC_WINDUP, PLAZA_NPC_FLY, plazaFlyTime, plazaEventFlyTime, plazaLatencyEst, plazaCatchUp } from './plaza/shellTiming';
+import { plazaSfxAudible } from './plaza/sfxHear';
 import type { PlazaMgFireEvent, PlazaMgHitEvent } from './plaza/hubClient';
 import { openShedDoorPanel, closeShedDoorPanel } from './plaza/shedDoorUi';
 import { makeFpCigarette, makeExhalePuff, spawnAshSpeck, type FpCigarette, type CharcoalFireFx } from './plaza/fireFx';
@@ -118,7 +119,7 @@ import { postFxAllowed } from './world/postFx';
 import { initKtx2Loader } from './world/loadTex';
 import { applyShadowPolicy } from './world/shadowPolicy';
 import { seaStart, seaActive, seaDbg, type SeaHaul, type SeaSfx } from './sea/seaRun';
-import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
+import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, isSfxOn, hasBgmTrack, musDebug } from './audio';
 import {
   $, on, toast, toastTop, dismissToast, initDomToast, tickToast, TOP_SEC,
   esc, bootQuiet, menuModalBusy, calTipOff, calTipCheck, initMenu, newDecor, newDots, newAnnounce,
@@ -416,8 +417,8 @@ const renderer = new THREE.WebGLRenderer({
 });
 /** 手機 DPR 上限：省電 1.0／一般 1.25；外海／船上／釣魚（含岸釣）再壓一檔（海面填色最重） */
 function mobileDprCap(eco: boolean) {
-  // 岸邊釣魚也算「看海」：與船上同檔，避免岸釣 DPR 偏高越釣越燙（fps 不變）
-  const atSea = plazaMode && (plazaBoatsActive() || plazaFishing());
+  // 上船／釣魚／鏡頭已靠外海：海面填色最重，與船上同檔壓 DPR
+  const atSea = plazaMode && (plazaBoatsActive() || plazaFishing() || camera.position.x < -80);
   if (COARSE) {
     if (eco || atSea) return 1;
     return 1.25;
@@ -472,7 +473,8 @@ applyShadowPolicy(renderer, { coarse: COARSE, eco: bootEco }, sun, [lamp]);
 const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff4dc });
 const yardFloor = makeYardFloorMaps(matchMedia('(pointer: coarse)').matches ? 256 : 384);
 {
-  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 4);
+  const maxA = renderer.capabilities.getMaxAnisotropy?.() || 4;
+  const aniso = COARSE || bootEco ? Math.min(2, maxA) : Math.min(8, maxA);
   yardFloor.map.anisotropy = aniso;
   yardFloor.rough.anisotropy = aniso;
 }
@@ -2906,6 +2908,12 @@ const plazaWarns: PlazaWarn[] = [];
 let plazaThrowToMe: { e: PlazaShellEvent; at: number } | null = null;
 /** 封包從丟殼者到自己估計已經過了幾秒 */
 function plazaLatNow() { return plazaLatencyEst(plazaRttMs()); }
+/** 同步音效：聽者＝目前鏡頭；外海／廣場互不串音（硬上限見 plazaSfxAudible） */
+function plazaCanHear(x: number, z: number) {
+  const f = (scene.fog as THREE.Fog | null)?.far ?? 0;
+  const c = viewCam();
+  return plazaSfxAudible(x, z, c.position.x, c.position.z, f);
+}
 function plazaWarnStart(e: PlazaShellEvent) {
   const fly = plazaEventFlyTime(e);
   const npc = plazaRemoteIsNpc(e.fromConnId) === true;
@@ -2964,7 +2972,10 @@ function plazaFlyShell(e: PlazaShellEvent, onArrive?: () => void, dur = plazaEve
     : atMeTp ? () => plazaSelfBleedPos(_flyMeTp)
       : e.toConnId ? () => { const h = plazaRemoteHead(e.toConnId); return h ? track.set(h.x, h.y, h.z) : fixed; }
         : fixed;
-  try { SFX.whoosh(); } catch { /* */ }
+  // 打向自己：一定播；旁觀只聽得見可聽範圍內（外海不聽到廣場、岸上不聽到遠海）
+  if (atMeFp || atMeTp || plazaCanHear(e.fromX, e.fromZ)) {
+    try { SFX.whoosh(); } catch { /* */ }
+  }
   fly(sh, from, to, dur, arc ?? (atMeFp ? 0.4 : 0.35), () => { try { scene.remove(sh); onArrive?.(); } catch { /* */ } }, t0);
 }
 function resolvePlazaInbound(e: PlazaShellEvent) {
@@ -3065,6 +3076,7 @@ function resolvePlazaShellHitFx(e: PlazaShellHitEvent) {
     try { SFX.hitNpc(); } catch { /* */ }
     return;
   }
+  if (!selfHit && !plazaCanHear(e.x, e.z)) return;
   plazaBleedBurst(new THREE.Vector3(e.x, e.y, e.z));
   try { SFX.hitNpc(); } catch { /* */ }
 }
@@ -3178,6 +3190,7 @@ function resolvePlazaMgFireFx(e: PlazaMgFireEvent) {
   if (!plazaMode || !isPlazaActive()) return;
   const me = plazaConnId();
   if (me && e.connId === me) return; // 本機開火已播過
+  if (!plazaCanHear(e.fromX, e.fromZ)) return;
   _mgFrom.set(e.fromX, e.fromY, e.fromZ);
   _mgDir.set(e.dirX, e.dirY, e.dirZ);
   spawnMgShotFx(_mgFrom, _mgDir, e.id, e.connId, false, e.slot);
@@ -6001,7 +6014,7 @@ function startPlazaBoats() {
       getYaw: () => yaw,
       canAct: () => state === 'play' && walking && !plazaSeated() && !plazaSittingBusy() && !mgActive && !plazaCarrying(),
       sfx: (k) => seaSfx(k),
-      sfxBus: () => { try { const a = audio(); return a && sfxG ? { ac: a, dest: sfxG } : null; } catch { return null; } },
+      sfxBus: () => { try { if (!isSfxOn()) return null; const a = audio(); return a && sfxG ? { ac: a, dest: sfxG } : null; } catch { return null; } },
       // 漂流箱：伺服器已記在 income（AddIncome），這裡跟其他廣場獎勵一樣入帳
       grantMoney: (amount, via) => { const n = Math.max(0, Math.floor(amount)); if (!n) return; save.money += n; persist(); updHud(); track('plaza_reward', { amount: n, via, money: save.money }); },
       // 蚵棚：升級扣錢（伺服器確認後）、偷拉罰款（有多少扣多少）、雜貨店買的組合包
@@ -6170,6 +6183,8 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
           later(0.15, () => { if (gen !== plazaShellGen || plazaThrowToMe !== rec) return; plazaThrowToMe = null; plazaPlayThrowFx(e.fromConnId); plazaFlyShell(e); });
           return;
         }
+        // 旁觀太遠（外海聽廣場／岸上聽外海）：不播飛殼畫面與音效
+        if (!plazaCanHear(e.fromX, e.fromZ) && !plazaCanHear(e.toX, e.toZ)) return;
         // 旁觀：殼在丟出當下就在飛，收到時從弧線對應進度接著飛（扣掉估計延遲），和丟的人、被丟的人同時落地。
         // 阿婆主動丟玩家（被丟者有蓄力預警）：等蓄力完才飛。
         const fly = plazaEventFlyTime(e);
@@ -6230,6 +6245,10 @@ function launchPlaza(opts?: RaceMatched | { party?: { code?: string; create?: bo
       // 本地發射者已在 plazaMoonFire 播過飛彈／提示，略過回聲避免重播
       if (performance.now() < localMoonFxUntil) return;
       if (me && byId && byId === me) return;
+      const fx = Number(e?.fromX), fz = Number(e?.fromZ);
+      const tx = Number(e?.toX), tz = Number(e?.toZ);
+      // 外海／太遠：不播飛彈音效與畫面
+      if (![fx, fz, tx, tz].every(Number.isFinite) || (!plazaCanHear(fx, fz) && !plazaCanHear(tx, tz))) return;
       plazaMissileFx(new THREE.Vector3(e.fromX, e.fromY, e.fromZ), new THREE.Vector3(e.toX, e.toY, e.toZ));
       if (e.by) toast(`${e.by} 把阿婆送上月球了`, '#ffd25a');
     },
@@ -7006,8 +7025,8 @@ function frameBody(ts?: number) {
   if (shedAnim.length) { const t = now / 1000; for (const f of shedAnim) f(t); }
   if (paused) {
     clock.getDelta(); if (!pauseAt) { pauseAt = now; holding = false; stopSteal(); closeUmbrella(); down = null; flRelease(); joy.x = joy.y = 0; $('pauseTag').classList.add('on'); }
-    skyDome.tick(viewCam(), now / 1000);
-    renderSceneWithLocalAvatarOnTop(renderer, scene, viewCam(), plazaMe?.outer); scheduleFrame(); return;
+    // 暫停凍幀：不重畫 3D（15Hz 全場景 render 仍燙），只維持排程
+    scheduleFrame(); return;
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
   const rdt = Math.min(clock.getDelta(), 0.05);

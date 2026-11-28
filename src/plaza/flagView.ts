@@ -243,7 +243,7 @@ export function createPlazaFlagView(parent: THREE.Object3D) {
       pos.setX(i, x0 - amp * u * u * 0.04);
     }
     pos.needsUpdate = true;
-    g.computeVertexNormals();
+    // 旗布波浪不重算法線（手機上 computeVertexNormals 很燙；Lambert 平坦也夠）
   }
 
   function hashSeed(k: string) {
