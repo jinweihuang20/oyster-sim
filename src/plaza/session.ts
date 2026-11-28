@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { PB } from './boats/boatLogic';
-import { PROM_MAX_Z, promWalkClamp } from './promenade';
+import { PROM_MAX_Z, PROM_MIN_Z, promWalkClamp } from './promenade';
 import { PlazaClient } from './hubClient';
 import {
-  PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds, plazaClampWalk, plazaCafeObstacles,
+  PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds, plazaClampWalk, plazaCafeObstacles, NORTH_DOCK,
   seatPose, seatKey, nearestFreeSeat, nearestFreePlaceSeat, pileObstacles, pileCenter, randomWalkSpawn, resolveWalkSpawn,
   isSmokePile, isLeisurePile, isRestPile, isMgPile, plazaSmokeObstacles, isPlazaAber, SMOKE_PILE_ID, SMOKE_ABER_SLOT,
   MG_PILE_ID, MG_SIT_PRICE, MG_SIT_AMMO, MG_SIT_MS, CENTER_PILE_ID, CENTER_SEAT_COUNT,
@@ -305,8 +305,8 @@ export function plazaWalkRect() {
     return { minX: c.x - h, maxX: c.x + h, minZ: c.z - h, maxZ: c.z + h };
   }
   // 一般廣場：西側長碼頭可以走到尾端（出了西緣只准在碼頭寬度內，見 plazaWalkClamp）
-  // 南緣外：西南角海堤步道＋觀景台（CR-38，見 promWalkClamp）
-  return { ...plazaWalkBounds(), minX: PB.pierX1 + 0.35, maxZ: PROM_MAX_Z };
+  // 南／北緣外：西南、西北角海堤步道＋觀景台（CR-38，見 promWalkClamp）
+  return { ...plazaWalkBounds(), minX: PB.pierX1 + 0.35, minZ: PROM_MIN_Z, maxZ: PROM_MAX_Z };
 }
 /** 西側碼頭：出了廣場西緣只准在碼頭木板上（往位移較小的方向推回） */
 function pierWalkClamp(p: { x: number; z: number }) {
@@ -324,9 +324,13 @@ export function plazaWalkClamp(p: { x: number; z: number }, prevX = p.x, prevZ =
     p.z = Math.max(r.minZ, Math.min(r.maxZ, p.z));
     return;
   }
-  // 出了廣場南緣只准在海堤步道／觀景台上（欄杆、上下層不會一步掉下去）
-  if (!promWalkClamp(p, prevX, prevZ)) pierWalkClamp(p);
-  plazaClampWalk(p);
+  // 出了廣場南／北緣、在步道那條西岸帶上：只准在海堤步道／觀景台上（欄杆、上下層不會一步掉下去）
+  // 走在步道上就不要再套工寮街夾限（不然西北角會被推回 |x|≤10.5）
+  if (!promWalkClamp(p, prevX, prevZ)) {
+    pierWalkClamp(p);
+    plazaClampWalk(p);
+    if (p.z < NORTH_DOCK.zMin) p.z = NORTH_DOCK.zMin;
+  }
   foodPinWalk(p);
   if (mySeat != null) { const sp = cookSeatPos(mySeat); p.x = sp.x; p.z = sp.z; }
 }
