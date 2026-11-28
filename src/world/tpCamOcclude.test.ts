@@ -44,3 +44,22 @@ test('snap 關閉時立刻恢復不透明', () => {
   expect(opacityOf(mesh)).toBe(1);
   clearTpCamOcclude();
 });
+
+test('廣場開啟時也掃 plazaSea（碼頭／步道），釣魚第三人稱才透得過場景', () => {
+  clearTpCamOcclude();
+  const scene = new THREE.Scene();
+  const plaza = new THREE.Group(); plaza.name = 'plazaWorld'; scene.add(plaza);
+  const sea = new THREE.Group(); sea.name = 'plazaSea'; scene.add(sea);
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.05, 50);
+  camera.position.set(0, 1.5, 5);
+  camera.updateMatrixWorld();
+  const focus = new THREE.Vector3(0, 1, 0);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2, 0.2), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  mesh.name = 'plazaDock';
+  mesh.position.set(0, 1, 2.5);
+  sea.add(mesh);
+  scene.updateMatrixWorld(true);
+  tickTpCamOcclude(1 / 60, scene, camera, focus, true, true);
+  expect(opacityOf(mesh)).toBeCloseTo(0.2, 5);
+  clearTpCamOcclude();
+});

@@ -44,6 +44,8 @@ const SKIP_NAME = new Set([
   'skyDome', 'sky', 'cigSmoke', 'charcoalFire', 'avatarCigarette', 'seatCushion',
   'shedRing', 'shedLock', 'shedWheel', 'mgFx', 'mgBullet', 'mgCasing', 'mgFlash',
   'plazaPad', 'worldLabel', 'handRig', 'petAnchor', 'plazaTpOcclude', 'plazaFloor',
+  // 海面／燈光特效：透視只淡實心場景（碼頭、步道、觀景台），不要把水面弄成半透明
+  'plazaSeaWater', 'plazaSeaGlows', 'plazaSeaPools', 'plazaBoatCones',
 ]);
 
 export function setTpCamOccludeIgnore(roots: THREE.Object3D[]) {
@@ -186,8 +188,15 @@ export function tickTpCamOcclude(
 }
 
 function collectRoots(scene: THREE.Scene, camera: THREE.Camera): THREE.Object3D[] {
+  // plazaSea 掛在 scene 下、與 plazaWorld 同層（碼頭／護岸／步道／沙洲）；只掃 plazaWorld 會讓釣魚第三人稱穿不過這些場景
   const plaza = scene.getObjectByName('plazaWorld');
-  if (plaza) return [plaza];
+  const sea = scene.getObjectByName('plazaSea');
+  if (plaza || sea) {
+    const roots: THREE.Object3D[] = [];
+    if (plaza) roots.push(plaza);
+    if (sea) roots.push(sea);
+    return roots;
+  }
   const roots: THREE.Object3D[] = [];
   for (const c of scene.children) {
     if (c === camera || underIgnored(c)) continue;

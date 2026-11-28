@@ -7356,8 +7356,8 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
     camRoll = sy * 0.007 * w + Math.max(-1, Math.min(1, walkMotion.strafe / walkRef)) * 0.018 * Math.min(1, walkMotion.bobW + 0.2);
   } else if (!walking) { walkMotion.bobW = 0; walkMotion.bobPh = 0; }
   camera.rotation.set(camPitch, yaw + flYaw + (walking ? 0 : seatYaw), camRoll);
-  // 岸上釣魚：一律第三人稱（要看得到人拿竿、甩竿）
-  if (plazaMode && walking && !tpv && plazaBoatsOpen() && plazaFishing()) plazaEnsureTpView();
+  // 釣魚（岸上／船上）一律第三人稱（要看得到人拿竿、甩竿）
+  if (plazaMode && !tpv && plazaBoatsOpen() && plazaFishing()) plazaEnsureTpView();
   camera.updateMatrixWorld(); camTick(dt);
   // 釣魚動作／釣竿／釣線：人物姿勢都擺好之後才套（釣線從竿尖出去）
   if (plazaMode && plazaBoatsOpen()) { try { plazaFishPostPose(rdt); } catch (e) { if (!boatTickLogged) { boatTickLogged = true; console.error('plaza fish pose', e); } } }
@@ -7366,7 +7366,8 @@ if (poseK > 0.001 && lastPose === 'lie' && plazaMode && walking && !tpv) camPitc
   // 第三人稱透視：僅淡化「鏡頭與玩家之間」的物件；焦點＝玩家胸口（失敗不可中斷渲染）
   try {
     const cam = viewCam();
-    const tpOnNow = tpv && state === 'play';
+    // 用 tpOn（實際第三人稱鏡頭），船上／釣魚 camTick 會開 tpOn，不可只看存檔偏好 tpv
+    const tpOnNow = tpOn && state === 'play';
     const occFocus = tpOccFocus;
     if (tpOnNow && plazaMe?.outer?.visible) {
       const p = plazaMe.outer.position;
