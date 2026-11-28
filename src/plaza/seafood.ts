@@ -119,7 +119,7 @@ function subSignTexture() {
 
 /** 一樓店內（暖光、模糊桌椅色塊，假的） */
 function interiorTexture(lowDetail: boolean) {
-  const W = lowDetail ? 128 : 256, H = lowDetail ? 96 : 192;
+  const W = lowDetail ? 128 : 256, H = lowDetail ? 64 : 128;
   return canvasTex(W, H, c => {
     c.fillStyle = '#d9cdb4';
     c.fillRect(0, 0, W, H);

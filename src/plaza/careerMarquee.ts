@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { WALK_BOUND, CAFE_SOUTH_WALL_END } from './layout';
 import { fetchCareerTop3 } from '../meta/social';
+import { potCeil, TEX_MAX } from '../world/texBudget';
 
 const REFRESH_SEC = 180;
 /** 捲動速度（公尺／秒，跟舊版 2048px 板 180px/s 一樣） */
@@ -30,7 +31,7 @@ export function composeMarqueeText(lines: (string | null)[], prev: (string | nul
   return { text: null, keep };
 }
 
-export function makeCareerMarquee(lowDetail: boolean): CareerMarquee {
+export function makeCareerMarquee(_lowDetail: boolean): CareerMarquee {
   const group = new THREE.Group();
   group.name = 'careerMarquee';
   group.userData.noMerge = true;
@@ -63,17 +64,19 @@ export function makeCareerMarquee(lowDetail: boolean): CareerMarquee {
 
   const screenW = boardW - 0.04, screenH = boardH - 0.04;
   // 貼圖解析度：列高（px）＝螢幕高；水平 px/m 跟垂直一樣，字才不會變形
-  const rowH = lowDetail ? 64 : 96;
-  const rowW = lowDetail ? 1024 : 2048;
+  // ≤1024 且 2 的次方（mobile.txt：禁 2K 貼圖）
+  const rowH = 64;
+  const rowW = TEX_MAX - PAD * 2;
   const pxPerM = rowH / screenH;
   const labelW = Math.round(LABEL_FRAC * screenW * pxPerM);
   const winW = (1 - LABEL_FRAC) * screenW * pxPerM;
   const gapPx = Math.round(96 * rowH / 128);
   const rowStride = rowH + PAD * 2;
+  const maxRows = Math.max(1, Math.min(MAX_ROWS, Math.floor(TEX_MAX / rowStride) - 1));
 
   const canvas = document.createElement('canvas');
-  canvas.width = rowW + PAD * 2;
-  canvas.height = rowStride * 2;
+  canvas.width = TEX_MAX;
+  canvas.height = potCeil(rowStride * 2);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -155,10 +158,10 @@ uniform vec2 uTexSize;`)
     const font = `bold ${fontPx}px ${FONT}`;
     ctx.font = font;
     const textW = Math.max(1, Math.ceil(ctx.measureText(text).width));
-    const rows = Math.min(MAX_ROWS, Math.ceil((textW + 8) / rowW));
-    const h = rowStride * (rows + 1);
+    const rows = Math.min(maxRows, Math.ceil((textW + 8) / rowW));
+    const h = potCeil(rowStride * (rows + 1));
     if (canvas.height !== h) {
-      canvas.height = h; // 尺寸變了：舊 GPU 貼圖作廢重建
+      canvas.height = Math.min(TEX_MAX, h); // ≤1024、2 的次方
       tex.dispose();
     }
     ctx.font = font;

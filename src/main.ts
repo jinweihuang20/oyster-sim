@@ -115,6 +115,7 @@ import { makeYardFloorMaps, GRILL_GRATE_Y, GRILL_NET_R } from './plaza/props';
 import { registerBrightRenderer, setSceneBrightness, clampBright, BRIGHT_DEF } from './world/sceneBrightness';
 import { renderDprBoost, onRenderDprChange } from './world/renderDpr';
 import { postFxAllowed } from './world/postFx';
+import { initKtx2Loader } from './world/loadTex';
 import { seaStart, seaActive, seaDbg, type SeaHaul, type SeaSfx } from './sea/seaRun';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
@@ -425,6 +426,8 @@ function mobileDprCap(eco: boolean) {
 renderer.setPixelRatio(Math.min(devicePixelRatio, mobileDprCap(bootEco)));
 renderer.shadowMap.enabled = !COARSE && !bootEco;
 renderer.shadowMap.type = mobileLite ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+// KTX2 / Basis：檔案貼圖 GPU 壓縮；手機 ≤1024 見 texBudget／loadTex
+initKtx2Loader(renderer);
 // 名牌 Canvas 預先 upload，避免準心第一次對準某人才卡
 bindWorldLabelRenderer(renderer);
 const scene = new THREE.Scene();

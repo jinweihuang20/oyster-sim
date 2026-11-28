@@ -80,7 +80,7 @@ function signTexture(text: string, w: number, h: number, font: string) {
 
 /** 麵包櫥窗內景（暖光層架＋糕點色塊，假的） */
 function bakeryTexture(lowDetail: boolean, dim = false) {
-  const W = lowDetail ? 128 : 256, H = lowDetail ? 160 : 320;
+  const W = lowDetail ? 128 : 256, H = lowDetail ? 128 : 256;
   return canvasTex(W, H, c => {
     c.fillStyle = dim ? '#5a4f43' : '#f1d9a8';
     c.fillRect(0, 0, W, H);

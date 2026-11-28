@@ -641,7 +641,7 @@ const puffTexs: THREE.Texture[] = [];
 function getPuffTex(i: number): THREE.Texture {
   if (!puffTexs.length) {
     for (let v = 0; v < 3; v++) {
-      const N = 96, c = document.createElement('canvas'); c.width = c.height = N;
+      const N = 64, c = document.createElement('canvas'); c.width = c.height = N;
       const g = c.getContext('2d')!;
       const img = g.createImageData(N, N);
       const rn = rng(4242 + v * 977);

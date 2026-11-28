@@ -70,8 +70,10 @@ CPU 與 GPU 之間的通訊（Draw Calls）過多會讓 A18 處理器與匯流�
 高解析度貼圖會佔用大量記憶體頻寬（RAM 讀寫也是發熱源之一）。
 
 限制貼圖解析度：手機端貼圖長寬盡量控制在 512x512 或 1024x1024 以內，避免 2K/4K 貼圖。
+✓ 已實作：src/world/texBudget.ts（TEX_MAX=1024、小物件 256／512、potCeil）；生涯看板／煎台名牌／旗布／HQ 看板已壓到 ≤1024 且 2 的次方。
 
 使用壓縮紋理（KTX2 / Basis Universal）：相較於 PNG/JPG 解壓後佔用龐大 VRAM，KTX2 格式能直接在手機 GPU 上硬體解碼，大幅降低頻寬與耗電。
+✓ 已實作：KTX2Loader + public/basis transcoder；loadGameTextureAsync 優先 .ktx2；韓國魚 hanguoyu.ktx2（256² ETC1S）。
 
 關閉不必要的 Mipmap 或調整過濾：對不需要縮放的 UI 或像素貼圖關閉 generateMipmaps = false。
 

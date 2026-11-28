@@ -135,7 +135,7 @@ function drawMascot(c: CanvasRenderingContext2D, cx: number, cy: number, s: numb
 
 /** 綠色大看板（全為虛構：標語、標誌、候選人皆非真實） */
 function bannerTexture(lowDetail: boolean) {
-  const W = lowDetail ? 512 : 1024, H = lowDetail ? 232 : 464;
+  const W = lowDetail ? 512 : 1024, H = lowDetail ? 256 : 512;
   return canvasTex(W, H, c => {
     c.fillStyle = GREEN_DARK;
     c.fillRect(0, 0, W, H);
@@ -240,18 +240,18 @@ function facadeTexture(lowDetail: boolean) {
   });
 }
 
-/** 小旗：綠底白字 */
+/** 小旗：綠底白字（64×128，2 的次方） */
 function flagTexture(text: string) {
-  return canvasTex(64, 160, c => {
+  return canvasTex(64, 128, c => {
     c.fillStyle = GREEN_MID;
-    c.fillRect(0, 0, 64, 160);
+    c.fillRect(0, 0, 64, 128);
     c.fillStyle = GREEN_LIME;
-    c.fillRect(0, 140, 64, 20);
+    c.fillRect(0, 112, 64, 16);
     c.fillStyle = '#ffffff';
-    c.font = `900 34px ${FONT}`;
+    c.font = `900 28px ${FONT}`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    [...text].forEach((ch, i) => c.fillText(ch, 32, 30 + i * 40));
+    [...text].forEach((ch, i) => c.fillText(ch, 32, 24 + i * 32));
   });
 }
 

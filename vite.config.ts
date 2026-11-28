@@ -10,6 +10,8 @@ const d = new Date(Date.now() + 8 * 3600e3).toISOString();
 const preview = process.env.PREVIEW === '1';
 export default defineConfig({
   base: preview ? '/oyster-sim-preview/' : '/oyster-sim/',
+  // KTX2 當靜態資源 URL（給 KTX2Loader）
+  assetsInclude: ['**/*.ktx2'],
   // CF tunnel 會帶公開 Host；Vite 預設擋非 localhost（與 tunnel 無關，重啟後才生效）
   server: {
     host: true,

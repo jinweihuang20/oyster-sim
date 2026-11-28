@@ -13,8 +13,9 @@ const DISH_SCALE = 0.115;
  * 第一行深色（料理名／玩家名），第二行 #2a5a86。
  */
 function tagSprite(lines: string[]) {
-  const S = Math.min(3, Math.max(2, Math.ceil(window.devicePixelRatio || 1)));
-  const W = 512, H = lines.length > 1 ? 150 : 90;
+  // 手機貼圖 ≤1024、對齊 2 的次方：512×256 足夠字清楚
+  const S = Math.min(2, Math.max(1, Math.ceil(window.devicePixelRatio || 1)));
+  const W = 512, H = lines.length > 1 ? 128 : 64;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const c = cv.getContext('2d')!;
   c.scale(S, S);

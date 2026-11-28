@@ -8,8 +8,9 @@ import {
 const WAVE_NEAR = 28;
 const SHIMMER_NEAR = 22;
 const FX3_NEAR = 18;
+/** 旗布貼圖：256×128（2 的次方；小物件預算） */
 export const TEX_W = 256;
-export const TEX_H = 160;
+export const TEX_H = 128;
 
 type FlagObj = {
   k: string;

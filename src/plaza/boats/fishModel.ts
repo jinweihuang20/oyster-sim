@@ -6,6 +6,9 @@
  */
 import * as THREE from 'three';
 import hanguoyuImg from '../../assets/hanguoyu.jpg';
+import hanguoyuKtx2 from '../../assets/hanguoyu.ktx2';
+import { loadGameTextureAsync } from '../../world/loadTex';
+import { matchMediaCoarse } from '../../world/texDevice';
 
 export type FishSpInfo = { id: string; name: string; tier: number };
 /** 跟伺服器 PlazaWorld.FishTable 同順序 */
@@ -72,6 +75,8 @@ export const FISH_DESC: Record<string, string> = {
 
 /** 用照片顯示的魚（不建 3D 模型）；Vite 會把路徑編成對應 base（正式／預覽）的 URL */
 export const FISH_PHOTO: Readonly<Record<string, string>> = { hanguoyu: hanguoyuImg };
+/** 同圖 KTX2（Basis）：GPU 保持壓縮，手機少 VRAM／頻寬 */
+export const FISH_PHOTO_KTX2: Readonly<Record<string, string>> = { hanguoyu: hanguoyuKtx2 };
 export const isPhotoFish = (id: string) => !!FISH_PHOTO[id];
 
 type Prof = readonly (readonly [number, number, number, number?])[]; // [t, 半高, 半寬, 中心 y]
@@ -819,15 +824,28 @@ export function fishPhotoMaterial(id: string): THREE.MeshBasicMaterial | null {
   if (!FISH_PHOTO[id]) return null;
   let m = photoMats.get(id);
   if (m) return m;
-  try {
-    const tex = new THREE.TextureLoader().load(FISH_PHOTO[id]);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    photoTexs.set(id, tex);
-    m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-  } catch {
-    m = new THREE.MeshBasicMaterial({ color: 0x8899aa, side: THREE.DoubleSide, transparent: true });
-  }
+  m = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
   photoMats.set(id, m);
+  const coarse = matchMediaCoarse();
+  void loadGameTextureAsync({
+    url: FISH_PHOTO[id],
+    ktx2Url: FISH_PHOTO_KTX2[id] ?? null,
+    coarse,
+    kind: 'small',
+  }).then(
+    (tex) => {
+      photoTexs.get(id)?.dispose();
+      photoTexs.set(id, tex);
+      m!.map = tex;
+      m!.needsUpdate = true;
+    },
+    () => { m!.color.setHex(0x8899aa); m!.needsUpdate = true; },
+  );
   return m;
 }
 
