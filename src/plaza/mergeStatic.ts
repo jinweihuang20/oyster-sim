@@ -36,7 +36,19 @@ function matKey(mat: THREE.Material): string | null {
   return null;
 }
 
-/** 把同一棵樹上、材質相同的靜態 mesh 合成較少的繪製單位（略過互動／動畫／貼圖 LOD） */
+function underNoMerge(o: THREE.Object3D): boolean {
+  let p: THREE.Object3D | null = o;
+  while (p) {
+    if (p.userData.noMerge || p.userData.noLod) return true;
+    p = p.parent;
+  }
+  return false;
+}
+
+/**
+ * 不會動的背景建築／地形：同材質 mesh 用 mergeGeometries 合成單一 Mesh，少 draw call。
+ * 略過 InstancedMesh、多材質、動畫（userData.noMerge／noLod）、以及 skip()。
+ */
 export function mergeStaticMeshes(
   root: THREE.Object3D,
   opts?: { skip?: (mesh: THREE.Mesh) => boolean; name?: string },
@@ -49,7 +61,7 @@ export function mergeStaticMeshes(
     if (!m.isMesh || !m.geometry) return;
     if ((m as THREE.InstancedMesh).isInstancedMesh) return;
     if (Array.isArray(m.material)) return;
-    if (m.userData.sharedGeo || m.userData.noLod) return;
+    if (underNoMerge(m)) return;
     const mat = m.material as THREE.Material;
     if (!mat || mat.visible === false) return;
     if (!matKey(mat)) return;
@@ -104,8 +116,9 @@ export function mergeStaticMeshes(
     for (const m of b.meshes) {
       const mat = m.material as THREE.Material;
       m.parent?.remove(m);
+      // sharedGeo：幾何可能仍被 InstancedMesh／他處共用，只丟自己 clone 出來的那份
       if (!m.userData.sharedGeo) m.geometry.dispose();
-      if (mat !== b.mat) mat.dispose();
+      if (mat !== b.mat && !m.userData.sharedMat) mat.dispose();
     }
   }
 

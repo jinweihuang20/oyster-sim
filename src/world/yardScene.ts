@@ -1,6 +1,7 @@
 /** 工寮遠景地標與各地點蚵寮本體（從 main.ts 拆出，行為不變） */
 import * as THREE from 'three';
 import { rboxEnv, rcyl } from '../core';
+import { mergeStaticMeshes } from '../plaza/mergeStatic';
 
 export type YardSceneDeps = {
   scene: THREE.Scene;
@@ -62,8 +63,8 @@ function buildLandmarks() {
     D.mesh(rcyl(0.22, 0.22, 0.4, 8), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }), [lx, 7.45, lz], ws);
   }
   for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++) { const x = 4 + c * 0.9, z = -12.5 - r * 0.9; D.mesh(rcyl(0.035, 0.04, 0.7, 4), D.mat(0x7a6a4a), [x, -0.1, z], ws); if (c < 5) { const b = D.mesh(rcyl(0.02, 0.02, 0.9, 4), D.mat(0x8a7a5a), [x + 0.45, 0.1, z], ws); b.rotation.z = Math.PI / 2; } }
-  { // 漁筏：開工時從外海開進來靠岸
-    const boat = new THREE.Group(); ws.add(boat); waisanBoat = boat;
+  { // 漁筏：開工時從外海開進來靠岸（會動，不併進靜態 mesh）
+    const boat = new THREE.Group(); boat.userData.noMerge = true; ws.add(boat); waisanBoat = boat;
     B(4.2, 0.35, 1.6, 0x3a7ab8, [0, 0, 0], boat); B(4.0, 0.06, 1.4, 0xd8c8a0, [0, 0.2, 0], boat);
     B(1.3, 0.9, 1.2, 0xf2f2ee, [-0.9, 0.65, 0], boat); B(1.5, 0.08, 1.4, 0x2a5a86, [-0.9, 1.14, 0], boat);
     D.mesh(rcyl(0.18, 0.2, 0.45, 8), D.mat(0x333333), [2.25, 0.2, 0], boat);
@@ -73,6 +74,8 @@ function buildLandmarks() {
   // 自家：竹竿曬衣 + 小漁船
   const hm = G('home');
   B(3, 0.5, 1.2, 0x2a6aa0, [6, -0.25, -22], hm); B(1, 0.8, 0.8, 0xf0f0e8, [6.5, 0.4, -22], hm);
+  // 遠景地標不會動：同色同材質合併成單一 Mesh
+  for (const id of Object.keys(LAND)) mergeStaticMeshes(LAND[id], { name: `landMerged_${id}` });
 }
 // ---------- 外傘頂洲漁筏進港 ----------
 let waisanBoat: THREE.Group | null = null, boatAt = -99;
@@ -156,7 +159,8 @@ export function buildShed(id: string) {
     // 節慶燈串（垂墜弧線，彩色燈泡會閃）
     const cols = [0xff4a3a, 0xffd040, 0x40d0ff, 0x60ff80, 0xff80d0];
     const bulbs: THREE.MeshBasicMaterial[] = [];
-    for (const [z0, z1] of [[-3.4, 3.2]] as const) for (const x of [-2.4, 0, 2.4]) for (let i = 0; i <= 12; i++) { const f = i / 12, z = z0 + (z1 - z0) * f, y = 2.75 - Math.sin(f * Math.PI) * 0.35; const m = glow(cols[(i + Math.round(x)) % 5]); bulbs.push(m); D.mesh(new THREE.SphereGeometry(0.045, 6, 5), m, [x, y, z], g).castShadow = false; }
+    const bulbG = new THREE.Group(); bulbG.userData.noMerge = true; g.add(bulbG);
+    for (const [z0, z1] of [[-3.4, 3.2]] as const) for (const x of [-2.4, 0, 2.4]) for (let i = 0; i <= 12; i++) { const f = i / 12, z = z0 + (z1 - z0) * f, y = 2.75 - Math.sin(f * Math.PI) * 0.35; const m = glow(cols[(i + Math.round(x)) % 5]); bulbs.push(m); D.mesh(new THREE.SphereGeometry(0.045, 6, 5), m, [x, y, z], bulbG).castShadow = false; }
     shedAnim.push(t => bulbs.forEach((m, i) => m.color.setHex(cols[(i + Math.floor(t * 2)) % 5])));
     // 招牌
     const sign = B(1.6, 0.6, 0.06, M(0xc83a2a), [2.2, 2.05, -3.5]); void sign;
@@ -211,8 +215,9 @@ export function buildShed(id: string) {
     const beltM = M(0x2a2c2e, { roughness: 0.7 });
     B(4.0, 0.08, 0.7, beltM, [0, 0.72, -4.2]); B(4.1, 0.14, 0.08, ss, [0, 0.74, -3.84]); B(4.1, 0.14, 0.08, ss, [0, 0.74, -4.56]);
     for (const x of [-1.9, 0, 1.9]) for (const z of [-3.9, -4.5]) C(0.03, 0.03, 0.7, ss, [x, 0.35, z], 6);
-    const ridges: THREE.Mesh[] = []; for (let k = 0; k < 10; k++) ridges.push(B(0.04, 0.02, 0.66, M(0x4a4c4e), [-1.9 + k * 0.4, 0.77, -4.2]));
-    const beltOy: THREE.Mesh[] = []; for (let k = 0; k < 6; k++) beltOy.push(D.mesh(new THREE.DodecahedronGeometry(0.07, 0), M(0x8a8a86), [-1.8 + k * 0.7, 0.82, -4.2], g));
+    const beltG = new THREE.Group(); beltG.userData.noMerge = true; g.add(beltG);
+    const ridges: THREE.Mesh[] = []; for (let k = 0; k < 10; k++) { const r = D.mesh(rboxEnv(0.04, 0.02, 0.66), M(0x4a4c4e), [-1.9 + k * 0.4, 0.77, -4.2], beltG); ridges.push(r); }
+    const beltOy: THREE.Mesh[] = []; for (let k = 0; k < 6; k++) beltOy.push(D.mesh(new THREE.DodecahedronGeometry(0.07, 0), M(0x8a8a86), [-1.8 + k * 0.7, 0.82, -4.2], beltG));
     shedAnim.push(t => { ridges.forEach((r, k) => r.position.x = -1.9 + ((k * 0.4 + t * 0.3) % 4)); beltOy.forEach((r, k) => r.position.x = -1.9 + ((k * 0.7 + t * 0.3) % 3.9)); });
     // 黃色安全線
     const yel = M(0xf0c020, { roughness: 0.6 });
@@ -224,7 +229,13 @@ export function buildShed(id: string) {
     const sack = M(0xc8b088, { roughness: 1 });
     for (let i = 0; i < 6; i++) { const s = D.mesh(new THREE.SphereGeometry(0.3, 8, 6), sack, [-5.3 + (i % 3) * 0.55, 0.25 + Math.floor(i / 3) * 0.4, 2.8], g); s.scale.set(1, 0.75, 0.8); }
     // 壁扇（扇葉會轉）
-    for (const z of [-2, 2]) { const fg = new THREE.Group(); fg.position.set(5.85, 3.2, z); fg.rotation.y = -Math.PI / 2; g.add(fg); D.mesh(new THREE.TorusGeometry(0.35, 0.02, 4, 16), M(0xdddddd), [0, 0, 0.05], fg); const bl = new THREE.Group(); fg.add(bl); for (let k = 0; k < 3; k++) { const b = D.mesh(rboxEnv(0.1, 0.32, 0.01), M(0x8ac0e0), [0, 0.16, 0.05], new THREE.Group()); const h = b.parent!; h.rotation.z = k * 2.094; bl.add(h); } shedAnim.push(t => bl.rotation.z = t * 12); }
+    for (const z of [-2, 2]) {
+      const fg = new THREE.Group(); fg.position.set(5.85, 3.2, z); fg.rotation.y = -Math.PI / 2; g.add(fg);
+      D.mesh(new THREE.TorusGeometry(0.35, 0.02, 4, 16), M(0xdddddd), [0, 0, 0.05], fg);
+      const bl = new THREE.Group(); bl.userData.noMerge = true; fg.add(bl);
+      for (let k = 0; k < 3; k++) { const b = D.mesh(rboxEnv(0.1, 0.32, 0.01), M(0x8ac0e0), [0, 0.16, 0.05], new THREE.Group()); const h = b.parent!; h.rotation.z = k * 2.094; bl.add(h); }
+      shedAnim.push(t => { bl.rotation.z = t * 12; });
+    }
   } else {
     // 自家：鏽鐵皮厝頂 + 木柱
     const rust = [0x8a5a3a, 0x9a6a48, 0x7a6a5e];
@@ -263,6 +274,8 @@ export function buildShed(id: string) {
     D.mesh(rcyl(0.02, 0.02, 0.6, 5), M(0x888888), [0, 1.15, -0.55], sc).rotation.x = Math.PI / 2 - 0.1;
     D.mesh(rcyl(0.015, 0.015, 0.6, 5), M(0x333333), [0, 1.15, -0.55], sc).rotation.z = Math.PI / 2;
   }
+  // 蚵寮裝飾不會動的部分合併（燈串／輸送帶／壁扇已標 noMerge）
+  mergeStaticMeshes(g, { name: `shedMerged_${id}` });
 }
 export function applyShedLook() {
   const id = D.locNow().id; if (id !== shedId) buildShed(id);

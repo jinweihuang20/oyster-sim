@@ -762,9 +762,16 @@ export function createPlazaWorldView(
       for (let i = 0; i < mgMounts.length; i++) {
         const pad = mgMounts[i].children.find(c => (c as THREE.Mesh).isMesh && (c as THREE.Mesh).geometry.type === 'CircleGeometry') as THREE.Mesh | undefined;
         if (pad) { seatMeshes.set(seatKey(MG_PILE_ID, i), pad); padSet.add(pad); }
+        // 槍管會轉：標 noMerge；底座／彈藥箱等靜態再合併
+        const barrel = mgMounts[i].getObjectByName('mgBarrel');
+        if (barrel) barrel.userData.noMerge = true;
+        mergeStaticMeshes(mgMounts[i], { skip: skipMerge, name: `mgMountMerged_${i}` });
       }
+      const platform = root.getObjectByName('mgPlatform');
+      if (platform) mergeStaticMeshes(platform, { skip: skipMerge, name: 'mgPlatformMerged' });
       flushPadsToInstances();
       const grillObjs: THREE.Object3D[] = [...mgMounts];
+      if (platform) grillObjs.push(platform);
       for (const pid of southGrillPiles()) {
         const g = pileGroups.find(p => p.userData.pileId === pid);
         if (g) grillObjs.push(g);
