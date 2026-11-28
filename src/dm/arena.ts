@@ -27,7 +27,13 @@ export function buildArena(deps: ArenaDeps): { sky: SkyDome } {
   sky.setClouds(0.55);
   scene.add(sky.mesh);
   sun.position.set(-12, 16, -18); sun.castShadow = !LO;
-  if (!LO) { Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, far: 60 }); sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.002; }
+  // 唯一投影光：≤1024、縮視錐；不用 2048／PCFSoft
+  if (!LO) {
+    Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 60 });
+    sun.shadow.camera.updateProjectionMatrix();
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.bias = -0.002;
+  }
   scene.add(sun);
   // ---- 場地：蚵寮沙地（程序紋理＋濕沙／殼屑） ----
   {

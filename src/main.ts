@@ -116,6 +116,7 @@ import { registerBrightRenderer, setSceneBrightness, clampBright, BRIGHT_DEF } f
 import { renderDprBoost, onRenderDprChange } from './world/renderDpr';
 import { postFxAllowed } from './world/postFx';
 import { initKtx2Loader } from './world/loadTex';
+import { applyShadowPolicy } from './world/shadowPolicy';
 import { seaStart, seaActive, seaDbg, type SeaHaul, type SeaSfx } from './sea/seaRun';
 import { initAudio, audio, applyMix, duckAmb, SFX, crackSound, ding, STATIONS, tone, noise, ac, sfxG, hasBgmTrack, musDebug } from './audio';
 import {
@@ -424,8 +425,8 @@ function mobileDprCap(eco: boolean) {
   return eco ? 1.5 : 2;
 }
 renderer.setPixelRatio(Math.min(devicePixelRatio, mobileDprCap(bootEco)));
-renderer.shadowMap.enabled = !COARSE && !bootEco;
-renderer.shadowMap.type = mobileLite ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+// 陰影類型先套上；主光在建完 sun／lamp 後再 applyShadowPolicy
+applyShadowPolicy(renderer, { coarse: COARSE, eco: bootEco });
 // KTX2 / Basis：檔案貼圖 GPU 壓縮；手機 ≤1024 見 texBudget／loadTex
 initKtx2Loader(renderer);
 // 名牌 Canvas 預先 upload，避免準心第一次對準某人才卡
@@ -460,11 +461,13 @@ const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // ---------- 場景：漁港邊的工寮（明亮溫暖） ----------
 const hemi = new THREE.HemisphereLight(0xfff2e4, 0x7a9a78, 1.05); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffe8c4, 1.15); sun.position.set(-3, 11, -5); scene.add(sun);
-const lamp = new THREE.PointLight(0xffe8c8, 14, 10, 1.6); lamp.position.set(0, 2.55, 0); lamp.castShadow = true;
-// 地板大面積收影時 bias 太負會在轉視角時陰影痘／閃；略收斂
-lamp.shadow.bias = -0.001; lamp.shadow.normalBias = 0.04;
-// 手機陰影圖最多 512（PointLight 陰影在行動 GPU 很燒）
-lamp.shadow.mapSize.set(COARSE || bootEco ? 512 : 1024, COARSE || bootEco ? 512 : 1024); scene.add(lamp);
+sun.shadow.bias = -0.001;
+sun.shadow.normalBias = 0.04;
+Object.assign(sun.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8, near: 0.5, far: 28 });
+sun.shadow.camera.updateProjectionMatrix();
+const lamp = new THREE.PointLight(0xffe8c8, 14, 10, 1.6); lamp.position.set(0, 2.55, 0); scene.add(lamp);
+// 即時陰影只給 1 盞 Directional；PointLight 六面陰影關（mobile.txt）
+applyShadowPolicy(renderer, { coarse: COARSE, eco: bootEco }, sun, [lamp]);
 const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff4dc });
 const yardFloor = makeYardFloorMaps(matchMedia('(pointer: coarse)').matches ? 256 : 384);
 {
@@ -914,14 +917,13 @@ function applyPlazaShadowMode() {
 function applyEcoGfx() {
   const dprCap = mobileDprCap(mix.eco);
   renderer.setPixelRatio(Math.min(devicePixelRatio, dprCap));
-  // 手機／省電／廣場：關整條 shadow pipeline（填色取樣與 depth pass 是發熱主因）
-  renderer.shadowMap.enabled = !mix.eco && !plazaMode && !COARSE;
-  renderer.shadowMap.type = mix.eco || COARSE ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
-  lamp.castShadow = !mix.eco && !plazaMode && !COARSE;
-  const map = mix.eco || COARSE ? 512 : 1024;
-  lamp.shadow.mapSize.set(map, map);
-  lamp.shadow.map?.dispose();
-  lamp.shadow.map = null;
+  // 廣場已烘焙靜態光影 → bakedScene；否則桌機僅 sun 投影（PCF ≤1024）
+  applyShadowPolicy(
+    renderer,
+    { coarse: COARSE, eco: mix.eco, bakedScene: plazaMode },
+    sun,
+    [lamp],
+  );
   applyPlazaShadowMode();
   try { updSky(); } catch { /* 啟動時 sky／mix 尚未就緒 */ }
 }
@@ -7008,7 +7010,7 @@ function frameBody(ts?: number) {
   }
   if (pauseAt) { const d = performance.now() - pauseAt; pauseAt = 0; needleStart += d; npcs.forEach(n => { if (n.gAt) n.gAt += d; }); lastMoveT += d; $('pauseTag').classList.remove('on'); clock.getDelta(); }
   const rdt = Math.min(clock.getDelta(), 0.05);
-  // 陰影：走動約 4 次／秒；坐下凍結＋地板不收影（PointLight 軟影在水泥地轉視角會閃）
+  // 陰影：走動約 4 次／秒手動 needsUpdate；坐下凍結＋地板不收影（Directional 視錐內）
   // 坐下關蚵山投影（對座＝堆心，instance depth 很重）
   if (!mix.eco && renderer.shadowMap.enabled) {
     const pileSh = !!(walking || plazaMode);

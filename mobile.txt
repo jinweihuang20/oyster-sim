@@ -57,6 +57,8 @@ PBR 材質（MeshStandardMaterial、MeshPhysicalMaterial）與即時陰影在手
 
 角色腳底陰影可用一張簡單的半透明黑圓圈貼圖（Blob Shadow）代替即時投影。
 
+✓ 已實作：src/world/shadowPolicy.ts — 手機／省電／廣場（已 bake）關即時陰影；桌機工寮／死鬥僅 1 盞 Directional castShadow（PointLight 不投影）；map ≤1024（手機 512）；Basic／PCF，禁用 PCFSoft；廣場靜態用 bakeStaticLighting 頂點色。
+
 3. 控制 Draw Calls 與幾何體複雜度
 CPU 與 GPU 之間的通訊（Draw Calls）過多會讓 A18 處理器與匯流排持續高頻運作。
 

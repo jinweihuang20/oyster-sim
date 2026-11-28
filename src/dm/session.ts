@@ -220,7 +220,9 @@ ${isTouch
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LO, powerPreference: LO ? 'low-power' : 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, LO ? 1.25 : 2));
   const unregBright = registerBrightRenderer(renderer);
+  // 陰影：手機關；桌機僅 arena Directional 單燈（PCF ≤1024，非 Soft）
   renderer.shadowMap.enabled = !LO;
+  renderer.shadowMap.type = LO ? THREE.BasicShadowMap : THREE.PCFShadowMap;
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0xa8d0e8); scene.fog = new THREE.Fog(0xc0d8e0, LO ? 16 : 20, LO ? 55 : 70);
   const FOV0 = 70;
   const cam = new THREE.PerspectiveCamera(FOV0, 1, 0.05, LO ? 80 : 100); cam.rotation.order = 'YXZ';
