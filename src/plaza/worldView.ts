@@ -34,6 +34,7 @@ import { bakeStaticLighting } from './bakeLighting';
 import { mergeStaticMeshes, countMeshes } from './mergeStatic';
 import { makePlazaAmbiance, PLAZA_STALL_SITES } from './ambiance';
 import { FarProxyPool, farLodStep, farProxyKind, farProxyHeight, type FarProxyKind } from './farProxy';
+import { fogCullHidden, distToPlazaFogFocus } from './fogCull';
 import { makePlazaSmokeArea } from './smokeArea';
 import { makePlazaTidalFlat } from './tidalFlat';
 import { buildMgMounts, aimMgMount, MgFxSystem, type MgHitTarget } from './mgGun';
@@ -279,6 +280,26 @@ export function createPlazaWorldView(
   let seaView = false;
   /** 精彩回放中：其他玩家先不畫（阿婆照常） */
   let replayHide = false;
+  /** 整座廣場地景被霧蓋住時藏靜態物（外海遠看）；遠端角色／小人另用距離霧裁，不整棵 root 關掉 */
+  let plazaFogHid = false;
+  let plazaFogHidApplied = false;
+  function applyPlazaFogHide(hid: boolean) {
+    if (hid === plazaFogHidApplied) return;
+    plazaFogHidApplied = hid;
+    for (const ch of root.children) {
+      // 遠端角色、遠處小人、名牌／泡泡：外海近處的船友還要看得到
+      if (ch.userData?.keepInFog) continue;
+      const n = ch.name || '';
+      if (n === 'plazaFarImpostors' || n === 'plazaFarAmaProxies') continue;
+      if (hid) {
+        if (ch.userData._fogWas === undefined) ch.userData._fogWas = ch.visible;
+        ch.visible = false;
+      } else if (ch.userData._fogWas !== undefined) {
+        ch.visible = !!ch.userData._fogWas;
+        delete ch.userData._fogWas;
+      }
+    }
+  }
   // 小人池：一般玩家／阿伯一池、阿婆一池，各 1 個 draw call（沒人在遠處就不畫）
   const impPlayer = new FarProxyPool('player', root), impAma = new FarProxyPool('ama', root);
   let impFullFar = 0;
@@ -1387,6 +1408,7 @@ function hashPid(pid: string) {
   const selfBubble = makeWorldLabel(' ', 'bubble', { worldH: LO ? 0.44 : 0.38, depthTest: true });
   selfBubble.setOpacity(PLAZA_BUB_A);
   selfBubble.sprite.visible = false;
+  selfBubble.sprite.userData.keepInFog = true;
   root.add(selfBubble.sprite);
   let selfBubUntil = 0;
   let selfX = 0, selfZ = 0, selfYaw = 0, selfSeated = false, selfSmoke = false;
@@ -1403,6 +1425,7 @@ function hashPid(pid: string) {
     });
     tag.setOpacity(PLAZA_TAG_A);
     tag.sprite.visible = false;
+    tag.sprite.userData.keepInFog = true;
     root.add(tag.sprite);
     return tag;
   }
@@ -1429,6 +1452,7 @@ function hashPid(pid: string) {
     });
     el.setOpacity(PLAZA_BUB_A);
     el.sprite.visible = false;
+    el.sprite.userData.keepInFog = true;
     root.add(el.sprite);
     return el;
   }
@@ -1442,6 +1466,7 @@ function hashPid(pid: string) {
     });
     el.setOpacity(PLAZA_BUB_A);
     el.sprite.visible = false;
+    el.sprite.userData.keepInFog = true;
     root.add(el.sprite);
     return el;
   }
@@ -2120,6 +2145,7 @@ function hashPid(pid: string) {
       }
       root.add(rig.outer);
       rig.outer.userData.skipTpOcclude = true; // 遠端角色不參與鏡頭透視淡化
+      rig.outer.userData.keepInFog = true; // 廣場地景霧裁時仍保留（外海近處船友）
       const x = p.x ?? 0, z = p.z ?? 0, yaw = p.yaw ?? 0;
       rig.outer.scale.setScalar(isNpc && !aber ? AMA_SCALE : AVATAR_SCALE);
       const umbMesh = makeRemoteUmb();
@@ -2746,6 +2772,12 @@ function hashPid(pid: string) {
     // 分區串流依腳下 walkPos（非鏡頭），避免轉頭觸發狂建
     tickZoneStreamer(dt, walkX, walkZ, selfSeated);
     const cx = camera.position.x, cz = camera.position.z;
+    // 外海：整座廣場地景被霧完全蓋住就不畫；靠回來再亮（遲滯防抖）
+    {
+      const fogFar = (scene.fog as THREE.Fog | null)?.far ?? 0;
+      plazaFogHid = fogCullHidden(distToPlazaFogFocus(cx, cz), fogFar, plazaFogHid);
+      applyPlazaFogHide(plazaFogHid);
+    }
     // 木牆淡化改由 tickTpOcclude 在 camTick 之後呼叫（否則 focus／鏡頭是上一幀）
     shedRow?.tick(dt, eco);
     tickPileDiffSigns(cx, cz);
@@ -2762,11 +2794,28 @@ function hashPid(pid: string) {
     for (const r of remotes.values()) if (r.carriedBy) carrierIds.add(r.carriedBy);
     carrierFresh = true;
     impBegin(); impFullFar = 0;
+    const fogFar = (scene.fog as THREE.Fog | null)?.far ?? 0;
     try {
     for (const r of remotes.values()) {
       const mount = mounts.size ? mounts.get(r.connId) : undefined;
       if (mount) { r.x = r.tx = mount.x; r.z = r.tz = mount.z; r.yaw = r.tyaw = mount.yaw; }
       snapRemoteIfFar(r);
+      // 被霧完全蓋住：身體／小人／名牌都不畫（岸上看外海、外海看廣場都一樣）
+      {
+        const dFog = Math.hypot(r.x - cx, r.z - cz);
+        const rjFog = r as any;
+        rjFog._fogHid = fogCullHidden(dFog, fogFar, !!rjFog._fogHid);
+        if (rjFog._fogHid) {
+          r.rig.outer.visible = false;
+          r.tag.sprite.visible = false;
+          if (r.bubble.sprite.visible) r.bubble.sprite.visible = false;
+          const pb = rjFog._petBub as { sprite: THREE.Sprite } | undefined;
+          if (pb?.sprite.visible) pb.sprite.visible = false;
+          const bs = rjFog._fishBadge as THREE.Sprite | undefined;
+          if (bs?.visible) bs.visible = false;
+          continue;
+        }
+      }
       r.x += (r.tx - r.x) * k;
       r.z += (r.tz - r.z) * k;
       let dy = r.tyaw - r.yaw;
@@ -3012,7 +3061,7 @@ function hashPid(pid: string) {
       if (fishBadges.size || rj._fishBadge) {
         const kind = fishBadges.get(r.connId) ?? 0;
         let bs = rj._fishBadge as THREE.Sprite | undefined;
-        if (kind && !bs) { bs = rj._fishBadge = makeFishBadge(kind); root.add(bs); }
+        if (kind && !bs) { bs = rj._fishBadge = makeFishBadge(kind); bs.userData.keepInFog = true; root.add(bs); }
         if (bs) {
           if (kind && bs.userData.fishBadge !== kind) setFishBadge(bs, kind);
           const on = !!kind && r.tag.sprite.visible && !(r.bubUntil > t && show);

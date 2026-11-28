@@ -193,7 +193,8 @@ describe('畫得出來的蚵棚：膠筏撞得到的一定在畫面裡', () => {
     const tick = readFileSync('src/plaza/boats/plazaRacks.ts', 'utf8');
     const scene = readFileSync('src/plaza/boats/boatScene.ts', 'utf8');
     const sea = readFileSync('src/sea/seaModels.ts', 'utf8');
-    expect(tick).toContain('pickDrawnRacks(racks, cx, cz, RACK.viewR, RACK_DRAW.frames, b)');
+    expect(tick).toContain('pickDrawnRacks(racks, cx, cz, drawFar, RACK_DRAW.frames, b)');
+    expect(tick).toContain('fogDrawRange(RACK.viewR');
     expect(tick).toContain('RACK_PUSH_AABB');
     expect(scene).toContain('RACK_DRAW.frames');
     expect(scene).toContain('frustumCulled = false');

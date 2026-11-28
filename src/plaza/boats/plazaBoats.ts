@@ -16,7 +16,8 @@ import {
   PB, SEATS, dockSlot, stepPlazaBoat, pushStatic, pushFromBoat, isHardRam, stepSwim, freePassengerSeat, boatEmpty,
   distToLand, landSpot, hullPts, knockSpot, boatBob, pierNearest, dockEdge, avoidBoxes, nearestDrift, type ScreenBox, DRIFT, type Hull,
 } from './boatLogic';
-import { onIsletWalk, isletDiveSpot } from '../islet';
+import { onIsletWalk, isletDiveSpot, ISLET } from '../islet';
+import { fogCullHidden, beyondFogFar, fogDrawRange } from '../fogCull';
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
@@ -121,6 +122,8 @@ const mounted = new Set<string>();
 const fakeRigs = new Map<string, PlayerRig>();
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), _cp = { x: 0, y: 0, z: 0 }, _cl = { x: 0, y: 0, z: 0 };
 let camSnap = true;
+/** 沙洲被霧蓋住時不畫（獨立 mesh） */
+let isletFogHid = false;
 const _o = new THREE.Object3D(), _v = new THREE.Vector3(), _e = new THREE.Euler();
 
 const fwd = (h: number) => [-Math.sin(h), -Math.cos(h)] as const;
@@ -178,7 +181,7 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
   D = deps;
   sea = makePlazaSea(deps.scene, { coarse: deps.coarse, fog: deps.fog(), plazaLamps: deps.plazaLamps });
   boats = Array.from({ length: PB.count }, (_, i) => newBoat(i));
-  drifts = []; driftBusy = false; driftCd = 0;
+  drifts = []; driftBusy = false; driftCd = 0; isletFogHid = false;
   swimmers.clear(); mode = 'walk'; myBoat = mySeat = -1; localOnly = false; localNoticed = false; prompt = null; busy = false; camSnap = true;
   buildUi();
   const c = deps.client();
@@ -191,7 +194,7 @@ export function openPlazaBoats(deps: PlazaBoatDeps) {
     });
   } else localOnly = true;
   openRacks({
-    net: () => net, sea: () => sea,
+    net: () => net, sea: () => sea, fogFar: () => D?.fog()?.far ?? 0,
     myBoat: () => (mode === 'boat' ? boats[myBoat] ?? null : null), mySeat: () => mySeat, localOnly: () => localOnly || !net,
     splash: (x, z, k) => splash(x, z, k), sfx: k => D?.sfx(k),
     grantMoney: (n, via) => D?.grantMoney?.(n, via), getMoney: () => D?.getMoney?.() ?? 0, spendMoney: (n, via) => D?.spendMoney?.(n, via) ?? false,
@@ -347,10 +350,11 @@ function driftHint() {
   later(1.8, () => toastTop(`海上藏著漂流箱（${money(driftPay.min)}～${money(driftPay.max)}），位置會換，要自己找；每個整點有 10 分鐘「漂流潮」。西邊海上的公共蚵棚熟了會亮燈，靠近可以拉蚵串回碼頭賣`));
 }
 /** 靠近漂流箱：請伺服器判定（伺服器用自己知道的船／泳者位置），成功才入帳 */
-function tickDrift(dt: number) {
+function tickDrift(dt: number, fogFar: number, cx: number, cz: number) {
   driftCd = Math.max(0, driftCd - dt);
   if (!D || !sea) return;
   for (const d of drifts) {
+    if (beyondFogFar(Math.hypot(d.x - cx, d.z - cz), fogFar)) continue;
     const ph = t * DRIFT.bobHz + d.key * 1.3;
     sea.crate(d.x, PB.waterY + 0.02 + Math.sin(ph) * 0.07, d.z, d.key * 0.7 + Math.sin(ph * 0.4) * 0.3, Math.sin(ph * 0.8) * 0.08, Math.cos(ph * 0.9) * 0.08, !!d.gold);
   }
@@ -800,25 +804,31 @@ export function tickPlazaBoats(dt: number, cam: THREE.Camera) {
     let dh = w.th - w.h; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); w.h += dh * kk;
   }
 
-  // 3) 畫：5 艘 instanced（我在的那艘用完整模型）＋船頭燈
+  // 3) 畫：5 艘 instanced（我在的那艘用完整模型）＋船頭燈；霧遠平面外不畫
+  const fogFar = D.fog()?.far ?? 0;
+  const cx = cam.position.x, cz = cam.position.z;
+  isletFogHid = fogCullHidden(Math.hypot(ISLET.cx - cx, ISLET.cz - cz), fogFar, isletFogHid);
+  if (sea.islet.visible === isletFogHid) sea.islet.visible = !isletFogHid;
   sea.begin();
   for (const b of boats) {
     const mine = mode === 'boat' && b.id === myBoat;
     // 精彩回放中：現場的船都不畫（回放有自己的替身船）
     if (rpHide) { if (mine && own) own.g.visible = false; continue; }
+    const dCam = Math.hypot(b.x - cx, b.z - cz);
+    if (!mine && beyondFogFar(dCam, fogFar)) continue;
     if (mine && own) {
       own.g.visible = true;
       own.g.position.set(b.x, b.y, b.z); own.g.rotation.set(b.rx, b.h, b.rz + mySway * Math.sin(t * 14) * 0.08);
       own.prop.rotation.z += b.v * 0.12;
       own.motor.rotation.y += (b.steer * 0.4 - own.motor.rotation.y) * 0.2;
     } else {
-      const far = Math.hypot(b.x - cam.position.x, b.z - cam.position.z) > PB.lodFar;
+      const far = dCam > PB.lodFar;
       sea.put(b.x, b.y, b.z, b.h, b.rx, b.rz, far);
     }
-    if (b.seats[0]) sea.headlight(b.x, b.z, b.h);
+    if (b.seats[0] && !beyondFogFar(dCam, fogFar)) sea.headlight(b.x, b.z, b.h);
   }
   if (own && (mode !== 'boat' || rpHide)) own.g.visible = false;
-  tickDrift(dt);
+  tickDrift(dt, fogFar, cx, cz);
   tickRacks(dt, cam);
   sea.end();
   tickFish(dt, cam);

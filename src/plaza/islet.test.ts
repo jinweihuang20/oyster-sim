@@ -37,7 +37,7 @@ describe('CR-39 沙洲平台：位置', () => {
       cx: -132, cz: 0, rTop: 3.4, r: 4.6, jetX0: -127.6, jetX1: -124, sellX: -133.2, sellZ: 1.8,
     });
   });
-  it('外觀合進碼頭 mesh：格式一致、三角形有上限', () => {
+  it('外觀頂點色格式一致、三角形有上限（獨立 plazaIslet mesh）', () => {
     const parts = isletParts();
     let tris = 0;
     for (const g of parts) {

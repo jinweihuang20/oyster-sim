@@ -220,12 +220,16 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   for (let i = 0; i < PB.count; i++) { const d = dockSlot(i); parts.push(cyl(0.09, 0.32, d.x, 0.13, Math.sign(d.z) * (PB.pierHalfW - 0.2), 0x2a2a2a, 8)); }
   // 燈柱：桿＋燈罩（燈頭另外用自發光材質）
   for (const p of ALL_LAMPS) { parts.push(cyl(0.05, LAMP_H, p.x, LAMP_H / 2, p.z, 0x3a3e44, 6)); parts.push(box(0.36, 0.08, 0.36, p.x, LAMP_H + 0.02, p.z, 0x2a2e34)); }
-  // 西南角海堤步道＋白色觀景台（CR-38）、西邊沙洲（CR-39）：一起合進這個 mesh，不多 draw call
+  // 西南／西北海堤步道＋觀景台（CR-38）合進碼頭 mesh；沙洲（CR-39）獨立 mesh，才能依霧遠平面整座不畫
   for (const g of promenadeParts()) parts.push(g);
-  for (const g of isletParts()) parts.push(g);
+  const dockMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const dockGeo = mergeGeometries(parts); parts.forEach(p => p.dispose());
-  const dock = new THREE.Mesh(dockGeo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const dock = new THREE.Mesh(dockGeo, dockMat);
   dock.name = 'plazaDock'; group.add(dock);
+  const isletBits = isletParts();
+  const isletGeo = mergeGeometries(isletBits); isletBits.forEach(p => p.dispose());
+  const islet = new THREE.Mesh(isletGeo, dockMat.clone());
+  islet.name = 'plazaIslet'; group.add(islet);
   // 燈頭（白天是霧白燈罩、晚上自發光）：一個 mesh
   const headParts = ALL_LAMPS.map(p => { const g = new THREE.SphereGeometry(0.15, 10, 6); g.translate(p.x, LAMP_H - 0.12, p.z); return g; });
   const lampHeadMat = new THREE.MeshBasicMaterial({ color: 0xd8d4c8 });
@@ -303,7 +307,7 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
   const lampOn = new THREE.Color(0xffd890), lampOff = new THREE.Color(0xd8d4c8);
 
   return {
-    group, water, fx, near, far, dock,
+    group, water, fx, near, far, dock, islet,
     /** 每幀開頭：清空這幀要畫的船 */
     begin() { nearN = farN = coneN = 0; glowN = 0; crateN = 0; rackN = strN = flagN = ripeN = 0; beaconN = 0; },
     /** 蚵棚架子；priv：0 公共、1 自己的（藍旗）、2 別人的私人（紅旗） */
@@ -401,8 +405,8 @@ export function makePlazaSea(parent: THREE.Object3D, o: { coarse: boolean; fog?:
     makeOwnRaft(): Raft { return makeRaft(group, { trim: 0x2a5a86, crew: [] }); },
     stats() {
       let tris = 0; const per = (g: THREE.BufferGeometry) => (g.index ? g.index.count : g.attributes.position.count) / 3;
-      tris += per(water.inner.geometry) + (water.outer ? per(water.outer.geometry) : 0) + per(dock.geometry) + per(lampHeads.geometry);
-      return { nearTris: per(nearGeo), farTris: per(far.geometry), staticTris: Math.round(tris), dockMeshes: 2, water: water.outer ? 2 : 1 };
+      tris += per(water.inner.geometry) + (water.outer ? per(water.outer.geometry) : 0) + per(dock.geometry) + per(islet.geometry) + per(lampHeads.geometry);
+      return { nearTris: per(nearGeo), farTris: per(far.geometry), staticTris: Math.round(tris), dockMeshes: 3, water: water.outer ? 2 : 1 };
     },
     dispose() {
       group.removeFromParent();

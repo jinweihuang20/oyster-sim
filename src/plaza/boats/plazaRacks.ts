@@ -13,11 +13,14 @@ import {
   type RackDto, type RackSnap,
 } from './rackLogic';
 import { RACK_BEACON, RACK_RADAR, rackBeaconState, rackRadarCovered, buildRadarMarks, paintRackRadar } from './rackRadar';
+import { beyondFogFar, fogDrawRange } from '../fogCull';
 
 export type RackBoat = { id: number; x: number; z: number; h: number; v: number };
 export type RackCtx = {
   net: () => BoatNet | null;
   sea: () => PlazaSea | null;
+  /** 目前場景霧遠平面（公尺）；沒有就不当裁剪 */
+  fogFar?: () => number;
   /** 我在船上：那艘船（不在船上＝null）、座位 */
   myBoat: () => RackBoat | null;
   mySeat: () => number;
@@ -321,23 +324,33 @@ export function tickRacks(dt: number, cam: THREE.Camera) {
   // 定期對帳（便宜：一分鐘一次）
   refetchT += dt; if (refetchT > 60) { refetchT = 0; if (ok && !C.localOnly()) void C.net()?.fetchRacks(); }
   const now = sNow(), cx = cam.position.x, cz = cam.position.z;
+  // 霧遠平面（岸上 64／海上 130）：蚵棚與光柱都不畫出霧外（光柱材質 fog:false，要靠距離裁）
+  const fogFar = C.fogFar?.() ?? 0;
+  const drawFar = fogDrawRange(RACK.viewR, fogFar || 1e9);
+  const beaconFar = fogDrawRange(RACK_BEACON.viewR, fogFar || 1e9);
+  const strFar = fogDrawRange(RACK.strR, fogFar || 1e9);
   if (sea && racks.length) {
     // 熟了的燈：遠一點也看得到；由近到遠，船邊優先，避免名額被遠處先佔走
-    const ripeList = pickDrawnRacks(racks.filter(r => rackRipe(r, now) && Math.hypot(r.x - cx, r.z - cz) <= ripeViewR(r, me)), cx, cz, 1e9, RACK_DRAW.ripe, b);
+    const ripeList = pickDrawnRacks(
+      racks.filter(r => rackRipe(r, now) && !beyondFogFar(Math.hypot(r.x - cx, r.z - cz), fogFar) && Math.hypot(r.x - cx, r.z - cz) <= ripeViewR(r, me)),
+      cx, cz, 1e9, RACK_DRAW.ripe, b,
+    );
     for (const r of ripeList) sea.ripe(r.x, r.z, r.h, 0.5 + 0.5 * Math.sin(t * 3 + r.id));
-    // 架子：鏡頭附近由近到遠；膠筏旁邊能撞到的一定先畫
-    for (const r of pickDrawnRacks(racks, cx, cz, RACK.viewR, RACK_DRAW.frames, b)) {
+    // 架子：鏡頭附近由近到遠；膠筏旁邊能撞到的一定先畫（仍不得超出霧遠）
+    for (const r of pickDrawnRacks(racks, cx, cz, drawFar, RACK_DRAW.frames, b)) {
       const d = Math.hypot(r.x - cx, r.z - cz);
+      if (beyondFogFar(d, fogFar)) continue;
       const bob = Math.sin(t * 1.1 + r.id * 0.7);
       if (!sea.rack(r.x, r.z, r.h, bob, isPrivate(r) ? (isMine(r, me) ? 1 : 2) : 0)) continue;
-      if (d <= RACK.strR) sea.strings(r.x, r.z, r.h, rackNow(r, now), r.max, t);
+      if (d <= strFar) sea.strings(r.x, r.z, r.h, rackNow(r, now), r.max, t);
     }
-    // 自己的蚵棚：高空光柱（架子 75 m 外也畫，最遠約 200 m，出碼頭就能看見）
+    // 自己的蚵棚：高空光柱（霧外不畫）
     for (const r of racks) {
       if (rackBeaconState(r, me, now) === 'none') continue;
       const dCam = Math.hypot(r.x - cx, r.z - cz);
       const dBoat = b ? Math.hypot(r.x - b.x, r.z - b.z) : dCam;
-      if (dCam > RACK_BEACON.viewR && dBoat > RACK_BEACON.viewR) continue;
+      if (dCam > beaconFar && dBoat > beaconFar) continue;
+      if (beyondFogFar(dCam, fogFar) && beyondFogFar(dBoat, fogFar)) continue;
       const ripe = rackNow(r, now) > 0;
       sea.beacon(r.x, r.z, ripe, ripe ? Math.sin(t * 1.7 + r.id * 0.7) : 0);
     }
