@@ -42,19 +42,29 @@ export const CULL_ECO_SCALE = 0.75;
  * 遠端玩家兩段 LOD：門檻內畫完整角色（舊版 20 m／省電 15 m 外整個隱形），
  * 門檻外改畫共用的簡易小人（1 個 instanced draw call），不再隱形。
  * 加遲滯：進簡模要超過 R+H、回完整要小於 R−H，邊界附近不會每幀切來切去。
+ *
+ * 人多時縮短完整角色半徑：廣場直徑約 23 m，預設 34 m 幾乎人人都是完整骨骼＋走路動畫 → 人一多就卡。
  */
 export const REMOTE_FULL_R = 34;
 export const REMOTE_FULL_R_ECO = 26;
 export const REMOTE_LOD_HYST = 3.5;
+/** 遠端人數門檻：超過就開始縮完整角色距離 */
+export const REMOTE_CROWD_SOFT = 16;
+export const REMOTE_CROWD_MID = 28;
+export const REMOTE_CROWD_HARD = 40;
 
-export function remoteFullR(eco: boolean): number {
-  return eco ? REMOTE_FULL_R_ECO : REMOTE_FULL_R;
+export function remoteFullR(eco: boolean, crowd = 0): number {
+  let r = eco ? REMOTE_FULL_R_ECO : REMOTE_FULL_R;
+  if (crowd >= REMOTE_CROWD_HARD) r *= 0.55;
+  else if (crowd >= REMOTE_CROWD_MID) r *= 0.7;
+  else if (crowd >= REMOTE_CROWD_SOFT) r *= 0.85;
+  return r;
 }
 
 /** 遠端玩家這幀要不要用簡易小人（prevSimple＝上一幀狀態；pinned＝被抱／抱人中，一律完整） */
-export function remoteLodSimple(prevSimple: boolean, dist: number, eco: boolean, pinned = false): boolean {
+export function remoteLodSimple(prevSimple: boolean, dist: number, eco: boolean, pinned = false, crowd = 0): boolean {
   if (pinned || !Number.isFinite(dist)) return false;
-  const r = remoteFullR(eco);
+  const r = remoteFullR(eco, crowd);
   return prevSimple ? dist > r - REMOTE_LOD_HYST : dist > r + REMOTE_LOD_HYST;
 }
 

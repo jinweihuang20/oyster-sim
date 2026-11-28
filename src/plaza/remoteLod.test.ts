@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
   CULL_FAR, CULL_ECO_SCALE, REMOTE_FULL_R, REMOTE_FULL_R_ECO, REMOTE_LOD_HYST,
+  REMOTE_CROWD_SOFT, REMOTE_CROWD_MID, REMOTE_CROWD_HARD,
   remoteFullR, remoteLodSimple,
 } from './zones';
 
 /** 模擬玩家一路走遠再走回來，回傳每一步是否為簡易小人 */
-function walk(dists: number[], eco = false, pinned = false) {
+function walk(dists: number[], eco = false, pinned = false, crowd = 0) {
   let s = false;
-  return dists.map(d => (s = remoteLodSimple(s, d, eco, pinned)));
+  return dists.map(d => (s = remoteLodSimple(s, d, eco, pinned, crowd)));
 }
 
 describe('遠端玩家兩段 LOD', () => {
@@ -49,5 +50,15 @@ describe('遠端玩家兩段 LOD', () => {
   it('被抱／抱人中一律完整角色；距離異常不當成遠', () => {
     expect(walk([100, 200], false, true)).toEqual([false, false]);
     expect(remoteLodSimple(true, NaN, false)).toBe(false);
+  });
+
+  it('人多時完整角色半徑縮短（廣場內較早改小人）', () => {
+    expect(remoteFullR(false, 0)).toBe(REMOTE_FULL_R);
+    expect(remoteFullR(false, REMOTE_CROWD_SOFT)).toBeCloseTo(REMOTE_FULL_R * 0.85, 5);
+    expect(remoteFullR(false, REMOTE_CROWD_MID)).toBeCloseTo(REMOTE_FULL_R * 0.7, 5);
+    expect(remoteFullR(false, REMOTE_CROWD_HARD)).toBeCloseTo(REMOTE_FULL_R * 0.55, 5);
+    // 25 m：人少仍完整；人多（40）改小人
+    expect(remoteLodSimple(false, 25, false, false, 0)).toBe(false);
+    expect(remoteLodSimple(false, 25, false, false, REMOTE_CROWD_HARD)).toBe(true);
   });
 });

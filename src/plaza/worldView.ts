@@ -54,7 +54,7 @@ import { createPlazaFlagView } from './flagView';
 import type { PlazaFlagState } from './flags';
 import {
   type PlazaZoneId, ZONE_LOAD_R, ZONE_UNLOAD_R, ZONE_PIN_R, ZONE_DISPOSE,
-  CULL_NEAR, CULL_MID, CULL_ECO_SCALE,
+  CULL_NEAR, CULL_MID, CULL_ECO_SCALE, REMOTE_CROWD_SOFT, REMOTE_CROWD_MID,
   zoneAt, zonesWanted, zoneShouldUnload, distToZone, cullTier,
   corePilesInQuadrant, southGrillPiles, quadrantCenter,
 } from './zones';
@@ -2177,7 +2177,8 @@ function hashPid(pid: string) {
       hangArms(r, r.seated);
       if (awaitingPose) { rig.outer.visible = false; r.tag.sprite.visible = false; }
       // visible=false 的臉盆／人 compile 會跳過 → 強制打開預熱，避免準心第一次瞄到才卡
-      if (opts.warmGpu) {
+      // 人已多時跳過：連續 warmGpu 會讓進場瞬間卡死
+      if (opts.warmGpu && remotes.size < REMOTE_CROWD_SOFT) {
         const wasOuter = rig.outer.visible;
         const wasProps = r.props.visible;
         const wasTag = r.tag.sprite.visible;
@@ -2795,6 +2796,9 @@ function hashPid(pid: string) {
     carrierFresh = true;
     impBegin(); impFullFar = 0;
     const fogFar = (scene.fog as THREE.Fog | null)?.far ?? 0;
+    const crowdN = remotes.size;
+    // 人多時提早收遠處名牌（不只低畫質）；門檻隨省電／手機再嚴
+    const crowdTagCutAt = (MOBILE || eco || LO) ? REMOTE_CROWD_SOFT + 4 : REMOTE_CROWD_MID;
     try {
     for (const r of remotes.values()) {
       const mount = mounts.size ? mounts.get(r.connId) : undefined;
@@ -2826,11 +2830,12 @@ function hashPid(pid: string) {
       r.pitch += (r.tPitch - r.pitch) * Math.min(1, dt * 10);
       const rj = r as any;
       const dist2 = (r.x - cx) * (r.x - cx) + (r.z - cz) * (r.z - cz);
-      const tier = cullTier(Math.sqrt(dist2), eco);
-      // 兩段 LOD（含遲滯）：太遠改畫共用小人，完整角色不擺四肢、不畫寵物／釣竿／傘
-      const lodS = farLodStep(!!rj._lodS, Math.sqrt(dist2), eco, {
+      const dist = Math.sqrt(dist2);
+      const tier = cullTier(dist, eco);
+      // 兩段 LOD（含遲滯）：太遠改畫共用小人；人多時半徑縮短，避免廣場內人人完整骨骼
+      const lodS = farLodStep(!!rj._lodS, dist, eco, {
         carried: !!r.carriedBy, carrying: anyoneCarriedBy(r.connId), phase: r.phase || '', moonFlight: !!rj.mt || !!rj.mh,
-      });
+      }, crowdN);
       rj._lodS = lodS;
       // mid+：停甩殼／頭瞄等細動畫；不隱形。腳步／跳躍在完整角色範圍內都播
       const far = tier === 'mid' || tier === 'far' || tier === 'hide';
@@ -3034,8 +3039,8 @@ function hashPid(pid: string) {
           r.rig.head.rotation.z += Math.sin(t * 0.05) * 0.4 * left;
         }
       }
-      // 太遠不畫身體時名牌照樣顯示（只剩一個 sprite，便宜）；低畫質在人非常多時才收遠處名牌
-      const crowdCut = !seaView && LO && remotes.size > 40 && (tier === 'far' || tier === 'hide');
+      // 太遠不畫身體時名牌照樣顯示；人多時收遠處／小人名牌，減少 Canvas sprite 過繪
+      const crowdCut = crowdN > crowdTagCutAt && (tier === 'far' || tier === 'hide' || (hideFar && crowdN >= REMOTE_CROWD_MID));
       const tagOnly = hideFar && !rpHid && !r.awaitingPose && !rj.mh && (r.phase || '') !== 'moon' && !crowdCut;
       r.tag.sprite.visible = (show && !crowdCut) || tagOnly;
       {

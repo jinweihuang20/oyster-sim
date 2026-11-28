@@ -22,9 +22,9 @@ export function lodPinned(s: LodState): boolean {
   return !!s.carried || !!s.carrying || s.phase === 'moon' || !!s.moonFlight;
 }
 
-/** 這幀要不要換成簡易小人（含遲滯，玩家與 NPC 共用同一套門檻） */
-export function farLodStep(prevSimple: boolean, dist: number, eco: boolean, s: LodState): boolean {
-  return remoteLodSimple(prevSimple, dist, eco, lodPinned(s));
+/** 這幀要不要換成簡易小人（含遲滯，玩家與 NPC 共用同一套門檻；crowd＝遠端人數，人多縮半徑） */
+export function farLodStep(prevSimple: boolean, dist: number, eco: boolean, s: LodState, crowd = 0): boolean {
+  return remoteLodSimple(prevSimple, dist, eco, lodPinned(s), crowd);
 }
 
 /** 阿婆用阿婆小人；阿伯、玩家用一般小人 */
