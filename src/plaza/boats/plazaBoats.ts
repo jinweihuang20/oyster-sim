@@ -16,6 +16,7 @@ import {
   PB, SEATS, dockSlot, stepPlazaBoat, pushStatic, pushFromBoat, isHardRam, stepSwim, freePassengerSeat, boatEmpty,
   distToLand, landSpot, hullPts, knockSpot, boatBob, pierNearest, dockEdge, avoidBoxes, nearestDrift, type ScreenBox, DRIFT, type Hull,
 } from './boatLogic';
+import { onIsletWalk, isletDiveSpot } from '../islet';
 import { poseRider, swimPetSpot } from './boatPose';
 import { makePlazaSea, type PlazaSea } from './boatScene';
 import { openRacks, closeRacks, onRackSnap, onRackUpd, onRackGone, onRackStolen, onCargo, onLoad, rackSpill, rackSlow, rackPush, rackBeforeLeave, rackKey, tickRacks, rackDbg } from './plazaRacks';
@@ -74,7 +75,7 @@ export type PlazaBoatDeps = {
 type Mode = 'walk' | 'boat' | 'swim';
 type BoatSt = Hull & { id: number; seats: string[]; tx: number; tz: number; th: number; tv: number; netT: number; sway: number; steer: number; wakeT: number; bumpT: number; y: number; rx: number; rz: number; fake?: { t: number; r: number; cx: number; cz: number } };
 type SwimSt = { connId: string; x: number; z: number; h: number; tx: number; tz: number; th: number; fake?: boolean; /** 0～1：在游（自由式）／踩水，平滑 */ k?: number };
-type Prompt = { kind: 'board' | 'ride' | 'leave' | 'rescue' | 'climb' | 'out' | 'full'; label: string; boat?: number; conn?: string };
+type Prompt = { kind: 'board' | 'ride' | 'leave' | 'rescue' | 'climb' | 'out' | 'full' | 'dive'; label: string; boat?: number; conn?: string };
 
 const ICON = {
   boat: '<svg viewBox="0 0 24 24"><path d="M3 15h18l-3 4H6z"/><path d="M12 15V5l5 7h-5"/></svg>',
@@ -149,7 +150,7 @@ function buildUi() {
   dock.innerHTML = `<i class="dockArrow"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M13 8.5l3.5 3.5-3.5 3.5"/></svg></i><span class="dockLbl"></span>`;
   root.appendChild(dock);
   const tap = (b: HTMLButtonElement, f: () => void) => b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); f(); });
-  tap(act, () => doPrompt()); tap(shell, () => throwFromBoat()); tap(dive, () => void jumpIn());
+  tap(act, () => doPrompt()); tap(shell, () => throwFromBoat()); tap(dive, () => { if (mode === 'walk') void diveFromIslet(); else void jumpIn(); });
   for (const b of [act, shell, dive]) b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
   document.body.appendChild(root);
   ui = { root, act, shell, dive, note, dock, dockArrow: dock.querySelector('.dockArrow') as HTMLElement, dockLbl: dock.querySelector('.dockLbl') as HTMLSpanElement };
@@ -159,13 +160,13 @@ function syncUi() {
   const p = prompt;
   ui.act.classList.toggle('on', !!p);
   if (p) {
-    const ic = p.kind === 'leave' || p.kind === 'out' ? ICON.dock : p.kind === 'rescue' ? ICON.rescue : p.kind === 'climb' ? ICON.climb : p.kind === 'ride' ? ICON.seat : ICON.boat;
+    const ic = p.kind === 'leave' || p.kind === 'out' ? ICON.dock : p.kind === 'dive' ? ICON.dive : p.kind === 'rescue' ? ICON.rescue : p.kind === 'climb' ? ICON.climb : p.kind === 'ride' ? ICON.seat : ICON.boat;
     const lbl = ui.act.querySelector('.lbl')!;
     if (lbl.textContent !== p.label) { lbl.textContent = p.label; (ui.act.querySelector('.boatIc') as HTMLElement).innerHTML = ic; }
     ui.act.classList.toggle('dis', p.kind === 'full' || busy);
   }
   ui.shell.classList.toggle('on', mode === 'boat');
-  ui.dive.classList.toggle('on', mode === 'boat');
+  ui.dive.classList.toggle('on', mode === 'boat' || (mode === 'walk' && !!D && onIsletWalk(D.walkPos.x, D.walkPos.z)));
   document.body.classList.toggle('plazaBoating', mode !== 'walk');
   document.body.classList.toggle('plazaSwimming', mode === 'swim');
 }
@@ -535,11 +536,11 @@ async function board(id: number, seat: number) {
 }
 const ERR: Record<string, string> = {
   far: '離船太遠了', taken: '這艘已經有人在開了', full: '船上坐滿了', on_boat: '你已經在船上了', seated: '先站起來再上船', carrying: '抱著人不能上船',
-  fast: '船開太快，等它慢下來', far_shore: '離岸太遠，靠近碼頭或岸邊再下船', not_near_land: '離岸太遠，靠近碼頭或岸邊再下船', bad_spot: '這裡站不住，換個位置下船', slow: '慢一點', no_seat: '船上沒有空位了',
+  fast: '船開太快，等它慢下來', far_shore: '離岸太遠，靠近碼頭、岸邊或沙洲再下船', not_near_land: '離岸太遠，靠近碼頭、岸邊或沙洲再下船', bad_spot: '這裡站不住，換個位置下船', slow: '慢一點', no_seat: '船上沒有空位了',
 };
 async function leaveBoat() {
   const b = boats[myBoat]; if (!b || !D || busy) return;
-  const spot = landSpot(b.x, b.z); if (!spot) { toast('靠近碼頭或岸邊再下船', '#ffb08a'); return; }
+  const spot = landSpot(b.x, b.z); if (!spot) { toast('靠近碼頭、岸邊或沙洲再下船', '#ffb08a'); return; }
   const yaw = Math.atan2(-(spot.x - b.x), -(spot.z - b.z));
   if (mySeat === 0) { b.v = 0; b.tv = 0; }
   // 身上有蚵串：下船前先在碼頭賣掉
@@ -567,6 +568,19 @@ async function jumpIn() {
   if (r.boat) onSeats(r.boat);
   rackSpill(r);
   const s = r.swim; becomeSwimmer(s?.x ?? x, s?.z ?? z, s?.h ?? b.h);
+}
+
+async function diveFromIslet() {
+  if (mode !== 'walk' || !D || busy) return;
+  const p = D.walkPos;
+  const spot = isletDiveSpot(p.x, p.z); if (!spot) { toast('走到沙洲邊上再下水', '#ffb08a'); return; }
+  const h = Math.atan2(-(spot.x - p.x), -(spot.z - p.z));
+  if (localOnly) { becomeSwimmer(spot.x, spot.z, h); return; }
+  if (!net?.swimDive) { toast('伺服器還沒更新，暫時不能從沙洲下水', '#ffb08a'); return; }
+  busy = true;
+  const r = await net.swimDive(spot.x, spot.z).finally(() => { busy = false; });
+  if (!r.ok) { toast(ERR[r.err ?? ''] ?? '跳不下去', '#ffb08a'); return; }
+  const s = r.swim; becomeSwimmer(s?.x ?? spot.x, s?.z ?? spot.z, s?.h ?? h);
 }
 async function swimOut() {
   if (!D || busy) return;
@@ -612,6 +626,7 @@ function doPrompt() {
   else if (p.kind === 'rescue') void rescue(p.conn!);
   else if (p.kind === 'climb') void climbBoat(p.boat!);
   else if (p.kind === 'out') void swimOut();
+  else if (p.kind === 'dive') void diveFromIslet();
 }
 
 /** 鍵盤：回 true＝吃掉這個鍵。E＝上船／下船／救人／上岸、F＝丟殼、X＝跳水；在船上／水裡擋掉跳／蹲／躺 */
@@ -619,6 +634,7 @@ export function plazaBoatsKey(code: string): boolean {
   if (!D) return false;
   if (fishKey(code)) return true;
   if (code === 'KeyE' && prompt && D.canAct()) { doPrompt(); return true; }
+  if (code === 'KeyX' && mode === 'walk' && onIsletWalk(D.walkPos.x, D.walkPos.z)) { void diveFromIslet(); return true; }
   if (mode === 'walk') return false;
   if (code === 'KeyF' && mode === 'boat') { throwFromBoat(); return true; }
   if (code === 'KeyX' && mode === 'boat') { void jumpIn(); return true; }
@@ -1201,7 +1217,10 @@ function findPrompt(): Prompt | null {
     const p = D.walkPos; let best: BoatSt | null = null, bd: number = PB.boardR;
     // 伺服器量船中心（4.6 m）；這裡略嚴，免得按了被拒
     for (const b of boats) { const d = Math.hypot(p.x - b.x, p.z - b.z); if (d < bd) { bd = d; best = b; } }
-    if (!best) return null;
+    if (!best) {
+      if (onIsletWalk(p.x, p.z)) return { kind: 'dive', label: '下水' };
+      return null;
+    }
     if (!best.seats[0]) return { kind: 'board', label: '上船開', boat: best.id };
     if (freePassengerSeat(best.seats) >= 0) return { kind: 'ride', label: '搭這艘', boat: best.id };
     return { kind: 'full', label: '船上坐滿了', boat: best.id };

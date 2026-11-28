@@ -8210,8 +8210,14 @@ function camTick(dt: number) {
   // 廣場海面：在船上／水裡一律用追船鏡頭（人由 plazaBoats 擺）
   // 海上：霧拉遠（遠處的船和人看得到）；回岸上還原廣場的 20／64。霧只是著色，不增加 draw call
   {
-    const f = scene.fog as THREE.Fog | null, want = plazaMode && plazaBoatsActive();
-    if (f && want !== seaFogOn) { seaFogOn = want; if (want) { f.near = 36; f.far = 115; } else { f.near = 20; f.far = 64; } plazaBoatsFog(f); }
+    const f = scene.fog as THREE.Fog | null, want = plazaMode && (plazaBoatsActive() || camera.position.x < -80);
+    if (f && want !== seaFogOn) {
+      seaFogOn = want;
+      if (want) { f.near = 36; f.far = 130; camera.far = 140; tpCam.far = Math.max(tpCam.far, 140); }
+      else { f.near = 20; f.far = 64; if (plazaMode) { camera.far = 90; tpCam.far = 120; } }
+      camera.updateProjectionMatrix(); tpCam.updateProjectionMatrix();
+      plazaBoatsFog(f);
+    }
   }
   if (plazaMode && plazaBoatsActive()) {
     tpOn = true; tpWas = false; me3.visible = false; handRig.visible = false;

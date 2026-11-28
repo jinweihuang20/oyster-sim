@@ -196,6 +196,7 @@ export function makeBoatNet(client: PlazaClient, ev: BoatNetEvents) {
       void call('SwimSync', x, z, h).finally(() => { swimBusy = false; });
     },
     swimOut: async (x: number, z: number) => res(await call('SwimOut', x, z)),
+    swimDive: async (x: number, z: number) => res(await call('SwimDive', x, z)),
     rescue: async (connId: string) => res(await call('BoatRescue', connId)),
     fetchDrift,
     fetchRacks,

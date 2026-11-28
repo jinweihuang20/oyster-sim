@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PB } from './boats/boatLogic';
 import { PROM_MAX_Z, PROM_MIN_Z, promWalkClamp } from './promenade';
+import { ISLET, isletWalkClamp } from './islet';
 import { PlazaClient } from './hubClient';
 import {
   PILE_COUNT, SLOTS_PER_PILE, PLAZA_CAPACITY, WALK_BOUND, SIT_DIST, plazaWalkBounds, plazaClampWalk, plazaCafeObstacles, NORTH_DOCK,
@@ -305,14 +306,18 @@ export function plazaWalkRect() {
     return { minX: c.x - h, maxX: c.x + h, minZ: c.z - h, maxZ: c.z + h };
   }
   // 一般廣場：西側長碼頭可以走到尾端（出了西緣只准在碼頭寬度內，見 plazaWalkClamp）
-  // 南／北緣外：西南、西北角海堤步道＋觀景台（CR-38，見 promWalkClamp）
-  return { ...plazaWalkBounds(), minX: PB.pierX1 + 0.35, minZ: PROM_MIN_Z, maxZ: PROM_MAX_Z };
+  // 南／北緣外：海堤步道＋觀景台（CR-38）。西緣外：碼頭，以及更西的沙洲（CR-39，見 isletWalkClamp）
+  return { ...plazaWalkBounds(), minX: ISLET.cx - ISLET.r - 0.8, minZ: PROM_MIN_Z, maxZ: PROM_MAX_Z };
 }
 /** 西側碼頭：出了廣場西緣只准在碼頭木板上（往位移較小的方向推回） */
 function pierWalkClamp(p: { x: number; z: number }) {
   if (p.x >= PB.shoreX) return;
   const hw = PB.pierHalfW - 0.3;
-  if (Math.abs(p.z) <= hw) return;
+  if (Math.abs(p.z) <= hw) {
+    // 碼頭中線不再延伸到海裡（沙洲是獨立的一塊，不從碼頭走過去）
+    if (p.x < PB.pierX1 + 0.35) p.x = PB.pierX1 + 0.35;
+    return;
+  }
   const dx = PB.shoreX - p.x, dz = Math.abs(p.z) - hw;
   if (dx <= dz) p.x = PB.shoreX; else p.z = Math.sign(p.z) * hw;
 }
@@ -322,6 +327,12 @@ export function plazaWalkClamp(p: { x: number; z: number }, prevX = p.x, prevZ =
     const r = plazaWalkRect();
     p.x = Math.max(r.minX, Math.min(r.maxX, p.x));
     p.z = Math.max(r.minZ, Math.min(r.maxZ, p.z));
+    return;
+  }
+  // 沙洲上：只准留在沙洲／棧橋（不要再套碼頭夾限，免得被拉回碼頭西端）
+  if (isletWalkClamp(p, prevX, prevZ)) {
+    foodPinWalk(p);
+    if (mySeat != null) { const sp = cookSeatPos(mySeat); p.x = sp.x; p.z = sp.z; }
     return;
   }
   // 出了廣場南／北緣、在步道那條西岸帶上：只准在海堤步道／觀景台上（欄杆、上下層不會一步掉下去）

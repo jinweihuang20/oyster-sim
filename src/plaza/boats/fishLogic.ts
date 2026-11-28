@@ -7,6 +7,7 @@
 import { PLAZA_WALK_SPD } from '../../world/walkSpeed';
 import { PB, onLand } from './boatLogic';
 import { promFishable, promSolidAt } from '../promenade';
+import { isletFishable, onIsletLand } from '../islet';
 
 export type Gear = 'float' | 'lure';
 export type BaitKey = 'oyster' | 'shrimp' | 'worm' | 'squid';
@@ -411,7 +412,7 @@ export class FishSM {
 /** ''＝不用提示（自己會處理／太頻繁） */
 export const FISH_ERR: Record<string, string> = {
   not_at_water: '站到碼頭或岸邊才能釣', moving: '船在開：先停船才能拋竿', swimming: '游泳時不能釣魚', land: '那邊是岸上，轉向海面再拋',
-  hold_full: '魚獲滿了，先回碼頭賣魚', bad_gear: '這個餌配不上這支竿', slow: '', far_dock: '靠近碼頭再賣', empty: '還沒有魚可以賣',
+  hold_full: '魚獲滿了，先回碼頭賣魚', bad_gear: '這個餌配不上這支竿', slow: '', far_dock: '靠近碼頭或沙洲賣魚攤再賣', empty: '還沒有魚可以賣',
   daily_cap: '伺服器還沒更新：今天賣魚到舊的上限了', old_server: '伺服器還沒更新，暫時不能釣魚', offline: '還沒連上線', no_cast: '', too_fast: '魚跑掉了',
   fighting: '上一竿還沒收好，再拋一次', not_joined: '重新連線中，等一下再拋', fail: '連線不穩，再拋一次',
 };
@@ -537,14 +538,14 @@ export function canFishAt(mode: string, walk?: { x: number; z: number } | null, 
   if (mode !== 'walk' || !walk) return false;
   const onPier = walk.x <= FISH_SHORE_X && walk.x >= PB.pierX1 - 0.3 && Math.abs(walk.z) <= PB.pierHalfW + 0.3;
   const onShore = walk.x <= FISH_SHORE_X && Math.abs(walk.z) <= PB.shoreZ;
-  // 西南角海堤步道靠海欄杆邊、觀景台上下層靠海那一側（CR-38）
-  return onPier || onShore || promFishable(walk.x, walk.z);
+  // 海堤步道靠海欄杆邊、觀景台靠海側（CR-38）；西邊沙洲／棧橋（CR-39）
+  return onPier || onShore || promFishable(walk.x, walk.z) || isletFishable(walk.x, walk.z);
 }
 
 /** 拋到這裡算「打到岸上」（伺服器回 land）：岸上／碼頭、觀景台、步道外消波塊，或出了海面範圍。跟伺服器 FishCastHitsLand 一致。 */
 export function castHitsLand(x: number, z: number): boolean {
   const S = PB.sea;
-  return onLand(x, z) || promSolidAt(x, z) || x > S.x1 + 0.5 || x < S.x0 || z < S.z0 || z > S.z1;
+  return onLand(x, z) || promSolidAt(x, z) || onIsletLand(x, z) || x > S.x1 + 0.5 || x < S.x0 || z < S.z0 || z > S.z1;
 }
 
 export type NoRodHintSt = { inZone: boolean; lastAt: number };

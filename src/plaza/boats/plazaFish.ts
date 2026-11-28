@@ -10,6 +10,7 @@ import { rewardToast } from '../../ui/rewardToast';
 import { walkKeys, joy } from '../../world/walkSeat';
 import type { PlayerRig } from '../../dm/character';
 import { PB, pierNearest } from './boatLogic';
+import { isletSellNear } from '../islet';
 import type { BoatNet } from './boatNet';
 import { FISH, FishSM, ITEM_NAME, LURE_TIP, isLure, isSquidSp, lureDepthZone, inDepthZone, castPoint, castDist, castRange, castFlyDur, fishDistNow, fmtDistM, fmtFightLbl, fightDistM, hookFightMs, hookPower, yawOf, trollOk, FISH_ERR, fishErr, fishNetErr, canFishAt, newNoRodHint, stepNoRodHint, NO_ROD_HINT, type Gear, type ItemKey, type BaitKey, type LureKey, type NoRodHintSt } from './fishLogic';
 import { makeRod, makeFishLineMat, type Rod } from './fishRod';
@@ -1313,8 +1314,8 @@ function syncUi(mode: 'walk' | 'boat' | 'swim', b: FishBoat | null) {
   ui.entry.classList.toggle('on', canEnter);
   // 賣魚：有魚、在碼頭邊
   let atDock = false;
-  if (b) { const q = pierNearest(b.x, b.z); atDock = Math.hypot(q.x - b.x, q.z - b.z) <= 6; }
-  else if (mode === 'walk') { const p = C.walkPos(); atDock = (p.x <= -23 && Math.abs(p.z) <= 11) || (p.x <= -23 && p.x >= PB.pierX1 - 0.3 && Math.abs(p.z) <= 2); }
+  if (b) { const q = pierNearest(b.x, b.z); atDock = Math.hypot(q.x - b.x, q.z - b.z) <= 6 || isletSellNear(b.x, b.z); }
+  else if (mode === 'walk') { const p = C.walkPos(); atDock = (p.x <= -23 && Math.abs(p.z) <= 11) || (p.x <= -23 && p.x >= PB.pierX1 - 0.3 && Math.abs(p.z) <= 2) || isletSellNear(p.x, p.z); }
   const showSell = net && holdN > 0 && atDock && !sm.lineOut && sm.phase !== 'fight';
   ui.sell.classList.toggle('on', showSell);
   if (showSell) { const s = `賣魚（${holdN} 條）`; const l = ui.sell.querySelector('.lbl')!; if (l.textContent !== s) l.textContent = s; }

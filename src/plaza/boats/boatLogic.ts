@@ -5,6 +5,7 @@
  */
 import { SEA } from '../../sea/seaLogic';
 import { promPushOut } from '../promenade';
+import { distToIslet, isletLandSpot, isletPushOut, onIsletLand } from '../islet';
 
 /** 調整用數字（改這裡就好） */
 export const PB = {
@@ -79,22 +80,25 @@ export function pierNearest(x: number, z: number) {
 export function distToPier(x: number, z: number) {
   const q = pierNearest(x, z); return Math.hypot(x - q.x, z - q.z);
 }
-/** 到可上岸地方（碼頭或廣場西緣）的距離 */
+/** 到可上岸地方（碼頭、廣場西緣、或西邊沙洲）的距離 */
 export function distToLand(x: number, z: number) {
   const shore = Math.abs(z) <= PB.shoreZ ? Math.max(0, PB.shoreX - x) : 999;
-  return Math.min(shore, distToPier(x, z));
+  return Math.min(shore, distToPier(x, z), distToIslet(x, z));
 }
-/** 站得住的岸上位置（碼頭上或廣場裡） */
+/** 站得住的岸上位置（碼頭上、廣場裡、或西邊沙洲／棧橋） */
 export function onLand(x: number, z: number) {
-  return x >= PB.shoreX - 0.05 || (x >= PB.pierX1 - 0.05 && Math.abs(z) <= PB.pierHalfW + 0.05);
+  return x >= PB.shoreX - 0.05 || (x >= PB.pierX1 - 0.05 && Math.abs(z) <= PB.pierHalfW + 0.05) || onIsletLand(x, z);
 }
-/** 從船／水裡上岸的落點：碼頭上（離邊 0.35）或廣場西緣；太遠回 null */
+/** 從船／水裡上岸的落點：碼頭上（離邊 0.35）、廣場西緣、或沙洲／棧橋；太遠回 null */
 export function landSpot(x: number, z: number, maxD: number = PB.landR): { x: number; z: number } | null {
   const m = 0.35;
   const pier = { x: clamp(x, PB.pierX1 + m, PB.pierX0 - m), z: clamp(z, -PB.pierHalfW + m, PB.pierHalfW - m) };
   const dp = distToPier(x, z);
   const ds = Math.abs(z) <= PB.shoreZ ? Math.max(0, PB.shoreX - x) : 999;
-  if (Math.min(dp, ds) > maxD) return null;
+  const islet = isletLandSpot(x, z, maxD);
+  const di = distToIslet(x, z);
+  if (Math.min(dp, ds, di) > maxD) return null;
+  if (di <= dp && di <= ds && islet) return islet;
   if (dp <= ds) return pier;
   return { x: PB.shoreX + 0.6, z: clamp(z, -PB.shoreZ + 0.5, PB.shoreZ - 0.5) };
 }
@@ -123,6 +127,9 @@ export function pushStatic(b: Hull) {
     _hp.x = px; _hp.z = pz;
     if (promPushOut(_hp, r)) { b.x += _hp.x - px; b.z += _hp.z - pz; hit = true; }
   }
+  // 西邊沙洲（CR-39）：用船心＋船長半徑一次推，避免兩頭對向互抵、船卡在沙洲中間
+  _hp.x = b.x; _hp.z = b.z;
+  if (isletPushOut(_hp, r + PB.hullHalf)) { b.x = _hp.x; b.z = _hp.z; hit = true; }
   const S = PB.sea;
   b.x = clamp(b.x, S.x0, S.x1); b.z = clamp(b.z, S.z0, S.z1);
   if (hit) b.v *= PB.pierBump;
@@ -156,6 +163,7 @@ export function stepSwim(s: Swimmer, thr: number, steer: number, dt: number) {
   if (d < r) { if (d > 1e-4) { s.x = q.x + dx / d * r; s.z = q.z + dz / d * r; } else s.z = (s.z >= 0 ? 1 : -1) * (PB.pierHalfW + r); }
   if (s.x > PB.shoreX - 0.4) s.x = PB.shoreX - 0.4;
   promPushOut(s, 0.45);
+  isletPushOut(s, 0.45);
   const S = PB.sea;
   s.x = clamp(s.x, S.x0, S.x1); s.z = clamp(s.z, S.z0, S.z1);
 }
